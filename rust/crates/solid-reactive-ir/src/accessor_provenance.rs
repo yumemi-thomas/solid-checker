@@ -62,6 +62,7 @@ pub(super) struct Resolver<'a, 'facts> {
     blocked_contexts: HashSet<Location>,
     unkeyed_provider: bool,
     member_stability: MemberStability,
+    mutated_objects: HashSet<Location>,
 }
 
 /// ADR 0273: absence of a visible veto is an assumption, not a closed census.
@@ -69,6 +70,13 @@ pub(super) struct Resolver<'a, 'facts> {
 pub(crate) struct MemberStability {
     written: HashMap<String, Location>,
     all: Option<Location>,
+    /// Every wildcard site, retained so ADR 0300 can discharge one only by
+    /// proving its target is a different fresh literal.
+    wildcard_sites: Vec<Location>,
+    /// Dynamic-key syntax on a receiver whose literal identity can still be
+    /// derived. It cannot escape the old exact-receiver veto just because the
+    /// package integrity premise permits other receiver uses.
+    unknown_receivers: Vec<Location>,
     /// ADR 0284: the wildcard vetoes written inside a package analyzed as
     /// source, by its root. Dependency internals are outside ADR 0273's
     /// premise, as when only the package's declarations are seen, so a write
@@ -90,6 +98,12 @@ pub(crate) enum Stability<'a> {
 }
 
 impl MemberStability {
+    fn wildcard(&mut self, site: Location) {
+        self.all.get_or_insert_with(|| site.clone());
+        if !self.wildcard_sites.contains(&site) {
+            self.wildcard_sites.push(site);
+        }
+    }
     fn state(&self, name: &str) -> Stability<'_> {
         match self.all.as_ref().or_else(|| self.written.get(name)) {
             Some(site) => Stability::Vetoed(site),
@@ -131,7 +145,7 @@ impl MemberStability {
                 // supply target, key and value at once), so no key position is
                 // known: it could write any member.
                 if call.arguments.iter().any(|argument| argument.spread) {
-                    index.all.get_or_insert(site);
+                    index.wildcard(site);
                     continue;
                 }
                 match method {
@@ -153,7 +167,7 @@ impl MemberStability {
                                 index.written.entry(name).or_insert(site);
                             }
                             None => {
-                                index.all.get_or_insert(site);
+                                index.wildcard(site);
                             }
                         }
                     }
@@ -188,7 +202,7 @@ impl MemberStability {
                                 }
                             }
                             None => {
-                                index.all.get_or_insert(site);
+                                index.wildcard(site);
                             }
                         }
                     }
@@ -196,7 +210,7 @@ impl MemberStability {
                         for (position, argument) in call.arguments.iter().enumerate() {
                             // A first-slot spread can supply both target and sources.
                             if argument.spread {
-                                index.all.get_or_insert_with(|| site.clone());
+                                index.wildcard(site.clone());
                                 continue;
                             }
                             if position == 0 {
@@ -207,7 +221,7 @@ impl MemberStability {
                                     && shape.closed
                             });
                             if shape.is_none() {
-                                index.all.get_or_insert_with(|| site.clone());
+                                index.wildcard(site.clone());
                             } else if let Some(shape) = shape {
                                 for property in &shape.properties {
                                     index
@@ -261,6 +275,9 @@ impl MemberStability {
                 self.written
                     .entry(name.to_owned())
                     .or_insert_with(|| location(file.path.shared(), member.span));
+            } else {
+                self.unknown_receivers
+                    .push(location(file.path.shared(), member.object));
             }
         }
     }
@@ -399,6 +416,7 @@ impl Resolver<'_, '_> {
             blocked_contexts: HashSet::new(),
             unkeyed_provider: false,
             member_stability: MemberStability::index(facts, lookup),
+            mutated_objects: HashSet::new(),
         };
         for file in &facts.files {
             for binding in &file.ast.bindings {
@@ -540,24 +558,46 @@ impl Resolver<'_, '_> {
                     context_tags.extend(element.closing_name);
                 }
             }
-            let context_reads = file
-                .ast
-                .calls
-                .iter()
-                .filter(|c| resolver.role(file, c) == Some(ContextRole::Read))
-                .filter_map(|c| c.arguments.first())
-                .map(|a| file.ast.peel_ts_sugar_span(a.span))
-                .collect::<HashSet<_>>();
-            // In a closed program, a local `export { name }` publishes the
-            // binding exactly as an `export const` declaration does: every
-            // importer is itself a censused reference. It is therefore
+            let mut context_reads = HashSet::new();
+            for call in &file.ast.calls {
+                if resolver.role(file, call) == Some(ContextRole::Read)
+                    && call.arguments.len() == 1
+                    && !call.arguments[0].spread
+                {
+                    context_reads.insert(file.ast.peel_ts_sugar_span(call.arguments[0].span));
+                    continue;
+                }
+                for (position, argument) in call.arguments.iter().enumerate() {
+                    let span = file.ast.peel_ts_sugar_span(argument.span);
+                    let context = exact_identifier(file, span)
+                        && resolver
+                            .lookup
+                            .binding_at_reference(file.path.as_str(), span)
+                            .is_some_and(|(context_file, binding, _)| {
+                                binding
+                                    .call_initializer
+                                    .and_then(|created| context_file.ast.call_at(created))
+                                    .is_some_and(|created| {
+                                        resolver.role(context_file, created)
+                                            == Some(ContextRole::Create)
+                                    })
+                            });
+                    if context && resolver.context_read_only_argument(file, call, position, 8) {
+                        context_reads.insert(span);
+                    }
+                }
+            }
+            // In a closed program, an exact export or re-export publishes the
+            // binding: every visible importer is itself a censused reference.
+            // Binding resolution below still has to identify its exact root.
+            // It is therefore
             // censused as an export rather than as an escaping reference.
             // An open program keeps the specifier an escape.
             let export_specifiers = file
                 .ast
                 .exports
                 .iter()
-                .filter(|e| lookup.program_closed && e.module.is_none() && !e.type_only)
+                .filter(|e| lookup.program_closed && !e.type_only)
                 .flat_map(|e| e.specifiers.iter().filter(|s| !s.type_only))
                 .map(|s| s.local.span)
                 .collect::<HashSet<_>>();
@@ -824,6 +864,34 @@ impl Resolver<'_, '_> {
             }
         }
         resolver.blocked_contexts = blocked_contexts;
+        let mut mutated = Vec::new();
+        for receiver in resolver.member_stability.unknown_receivers.iter().chain(
+            resolver
+                .member_stability
+                .dependencies
+                .values()
+                .flat_map(|package| &package.unknown_receivers),
+        ) {
+            let Some(file) = resolver.lookup.file_by_path(receiver.path.as_ref()) else {
+                continue;
+            };
+            let (Ok(start), Ok(end)) = (
+                u32::try_from(receiver.start_byte),
+                u32::try_from(receiver.end_byte),
+            ) else {
+                continue;
+            };
+            resolver.derived_mutation_objects(
+                file,
+                Span::new(start, end),
+                32,
+                &mut HashSet::new(),
+                &mut mutated,
+            );
+        }
+        resolver
+            .mutated_objects
+            .extend(mutated.into_iter().map(|(path, span)| location(path, span)));
         resolver
     }
 
@@ -1280,6 +1348,80 @@ impl Resolver<'_, '_> {
             .context_role(self.lookup.dialect.name_of(primitive)?)
     }
 
+    /// Every use of this exact parameter only reads a context, directly or
+    /// through another current source function with the same complete census.
+    /// A provider, mutation, alias, export, return or opaque handoff refuses.
+    fn context_read_only_argument(
+        &self,
+        file: &FileFacts,
+        call: &ast::CallFact,
+        position: usize,
+        depth: usize,
+    ) -> bool {
+        if depth == 0
+            || call.construct
+            || call.arguments.iter().take(position + 1).any(|a| a.spread)
+        {
+            return false;
+        }
+        if self.role(file, call) == Some(ContextRole::Read) {
+            return position == 0 && call.arguments.len() == 1;
+        }
+        let Some((target_file, function)) = self
+            .lookup
+            .function_called_at(file.path.as_str(), file.ast.peel_ts_sugar_span(call.callee))
+        else {
+            return false;
+        };
+        let Some(parameter) = function.parameters.get(position) else {
+            return false;
+        };
+        if function.rest_parameter
+            || function.r#async
+            || function.generator
+            || !self.lookup.function_value_is_current(target_file, function)
+            || parameter.initializer.is_some()
+            || parameter.shape != ast::BindingShape::Identifier
+            || parameter.names.len() != 1
+            || crate::indexes::binding_written(target_file, parameter.pattern)
+            || target_file.ast.identifiers.iter().any(|id| {
+                function.body.contains(id.span)
+                    && id.role == ast::IdentifierRole::Reference
+                    && matches!(target_file.source_text(id.span), Some("arguments" | "eval"))
+            })
+        {
+            return false;
+        }
+        let mut references = target_file
+            .ast
+            .identifiers
+            .iter()
+            .filter(|id| {
+                id.role == ast::IdentifierRole::Reference
+                    && target_file.ast.reference_declaration(id.span)
+                        == Some(parameter.names[0].span)
+            })
+            .peekable();
+        references.peek().is_some()
+            && references.all(|id| {
+                target_file.ast.calls.iter().any(|inner| {
+                    inner
+                        .arguments
+                        .iter()
+                        .enumerate()
+                        .any(|(position, argument)| {
+                            target_file.ast.peel_ts_sugar_span(argument.span) == id.span
+                                && self.context_read_only_argument(
+                                    target_file,
+                                    inner,
+                                    position,
+                                    depth - 1,
+                                )
+                        })
+                })
+            })
+    }
+
     fn value(
         &self,
         file: &FileFacts,
@@ -1689,17 +1831,12 @@ impl Resolver<'_, '_> {
         let (context_file, binding, _) = self
             .lookup
             .binding_at_reference(file.path.as_str(), argument)?;
-        // ADR 0289 review round 1: a context a package analyzed as source
-        // creates can be imported, provided and written by any package that
-        // is not analyzed, so its provider census is never closed.
+        // ADR 0300 excludes unseen providers of selected-package contexts.
+        // Visible providers, escapes and writes still participate below.
         if !binding.immutable
             || binding.shape != ast::BindingShape::Identifier
             || binding.names.len() != 1
             || crate::indexes::binding_written(context_file, binding.names[0].span)
-            || self
-                .facts
-                .dependency_source_root(context_file.path.as_str())
-                .is_some()
         {
             return None;
         }
@@ -1790,6 +1927,315 @@ impl Resolver<'_, '_> {
         let (bound_file, binding, _) =
             self.lookup.binding_at_reference(file.path.as_str(), span)?;
         self.context_origin(bound_file, binding.initializer?, depth - 1)
+    }
+
+    /// ADR 0300: every visible value must carry the same reactive member
+    /// claim. Unlike `dependency_getters`, this walk refuses open literals,
+    /// unknown providers, mutable bindings and visible member/descriptor
+    /// writes. The package integrity premise replaces the receiver escape
+    /// census only for objects created by a selected package.
+    pub fn proven_dependency_getters(
+        &self,
+        file: &FileFacts,
+        span: Span,
+        name: &str,
+    ) -> Option<Vec<Location>> {
+        let objects = self.closed_dependency_objects(file, span, 32)?;
+        let mut getters = Vec::new();
+        for (path, object) in objects {
+            self.facts.dependency_source_root(&path)?;
+            if !self.dependency_member_stable(&path, object, name) {
+                return None;
+            }
+            let file = self.lookup.file_by_path(&path)?;
+            let shape = file
+                .ast
+                .object_get_shapes
+                .iter()
+                .find(|s| s.span == object && s.closed)?;
+            let property = shape.properties.iter().find(|p| p.key.as_str() == name)?;
+            let getter = property.getter?;
+            // The normalized entry call executes before any branch or user
+            // operation, not merely somewhere in the getter's body.
+            let call = file.ast.call_at(property.entry_call?)?;
+            let source = self.source_call(file, call.callee)?;
+            if !self.has_runtime_source_origin(&source) {
+                return None;
+            }
+            let site = location(file.path.shared(), getter);
+            if !getters.contains(&site) {
+                getters.push(site);
+            }
+        }
+        (!getters.is_empty()).then_some(getters)
+    }
+
+    fn closed_dependency_objects(
+        &self,
+        file: &FileFacts,
+        span: Span,
+        depth: usize,
+    ) -> Option<Vec<(String, Span)>> {
+        if depth == 0 {
+            return None;
+        }
+        let span = file.ast.peel_ts_sugar_span(span);
+        if let Some(shape) = file.ast.object_get_shapes.iter().find(|s| s.span == span) {
+            return shape.closed.then(|| vec![(file.path.to_string(), span)]);
+        }
+        if let Some(member) = file.ast.members.iter().find(|m| m.span == span) {
+            if file.ast.computed_members.contains(&span) {
+                return None;
+            }
+            let name = file.source_text(member.property)?;
+            let mut values = Vec::new();
+            for (path, object) in self.closed_dependency_objects(file, member.object, depth - 1)? {
+                if !self.dependency_member_stable(&path, object, name) {
+                    return None;
+                }
+                let object_file = self.lookup.file_by_path(&path)?;
+                let property = direct_data_properties(object_file, object)
+                    .into_iter()
+                    .find(|p| {
+                        object_file
+                            .source_text(p.key)
+                            .map(|s| s.trim_matches(['\'', '"']))
+                            == Some(name)
+                    })?;
+                values.extend(self.closed_dependency_objects(
+                    object_file,
+                    property.shorthand_binding.unwrap_or(property.value),
+                    depth - 1,
+                )?);
+            }
+            return (!values.is_empty()).then_some(values);
+        }
+        if let Some(call) = file.ast.call_at(span) {
+            // This proves the value if this expression is evaluated, not
+            // that the containing function always invokes it. A preceding
+            // guard/throw cannot supply a different successful return value.
+            if call.construct {
+                return None;
+            }
+            if self.role(file, call) == Some(ContextRole::Read) {
+                if !self.lookup.program_closed
+                    || self.unkeyed_provider
+                    || call.arguments.len() != 1
+                    || call.arguments[0].spread
+                {
+                    return None;
+                }
+                let argument = file.ast.peel_ts_sugar_span(call.arguments[0].span);
+                if !exact_identifier(file, argument) {
+                    return None;
+                }
+                let (context_file, binding, _) = self
+                    .lookup
+                    .binding_at_reference(file.path.as_str(), argument)?;
+                self.facts
+                    .dependency_source_root(context_file.path.as_str())?;
+                if !binding.immutable
+                    || binding.shape != ast::BindingShape::Identifier
+                    || binding.names.len() != 1
+                    || crate::indexes::binding_written(context_file, binding.names[0].span)
+                {
+                    return None;
+                }
+                let created = context_file.ast.call_at(binding.call_initializer?)?;
+                if self.role(context_file, created) != Some(ContextRole::Create)
+                    || !created.arguments.is_empty()
+                {
+                    return None;
+                }
+                let key = location(context_file.path.shared(), binding.pattern);
+                if self.uses.get(&key).is_some_and(|uses| uses.context_escaped) {
+                    return None;
+                }
+                let providers = self.providers.get(&key)?;
+                let mut values = Vec::new();
+                for provider in providers {
+                    let (path, value) = provider.as_ref()?;
+                    values.extend(self.closed_dependency_objects(
+                        self.lookup.file_by_path(path)?,
+                        *value,
+                        depth - 1,
+                    )?);
+                }
+                return (!values.is_empty()).then_some(values);
+            }
+            let callee = file.ast.peel_ts_sugar_span(call.callee);
+            let (target_file, function) = self
+                .lookup
+                .function_called_at(file.path.as_str(), callee)
+                .or_else(|| self.lookup.namespace_member_function(file, callee))?;
+            if function.r#async
+                || function.generator
+                || !self.lookup.function_value_is_current(target_file, function)
+            {
+                return None;
+            }
+            let returned = single_return(target_file, function)?;
+            let returned = target_file.ast.peel_ts_sugar_span(returned);
+            if let Some(position) =
+                target_file
+                    .ast
+                    .reference_declaration(returned)
+                    .and_then(|declaration| {
+                        function.parameters.iter().position(|p| {
+                            p.pattern == declaration && p.shape == ast::BindingShape::Identifier
+                        })
+                    })
+            {
+                let parameter = &function.parameters[position];
+                if parameter.initializer.is_some()
+                    || function.rest_parameter
+                    || crate::indexes::binding_written(target_file, parameter.pattern)
+                    || target_file.ast.identifiers.iter().any(|id| {
+                        function.body.contains(id.span)
+                            && id.role == ast::IdentifierRole::Reference
+                            && matches!(
+                                target_file.source_text(id.span),
+                                Some("arguments" | "eval")
+                            )
+                    })
+                {
+                    return None;
+                }
+                let argument = call.arguments.get(position).filter(|a| !a.spread)?;
+                if call.arguments.iter().take(position).any(|a| a.spread) {
+                    return None;
+                }
+                return self.closed_dependency_objects(file, argument.span, depth - 1);
+            }
+            return self.closed_dependency_objects(target_file, returned, depth - 1);
+        }
+        if !exact_identifier(file, span) {
+            return None;
+        }
+        let (bound_file, binding, symbol) =
+            self.lookup.binding_at_reference(file.path.as_str(), span)?;
+        if !binding.immutable
+            || binding.shape != ast::BindingShape::Identifier
+            || binding.names.len() != 1
+            || crate::indexes::binding_written(bound_file, binding.names[0].span)
+            || crate::value_identity::binding_has_write(bound_file, self.lookup.entities(), &symbol)
+        {
+            return None;
+        }
+        let values = self.closed_dependency_objects(bound_file, binding.initializer?, depth - 1)?;
+        // Project-owned values retain ADR 0273's ordinary receiver census.
+        if values
+            .iter()
+            .any(|(path, _)| self.facts.dependency_source_root(path).is_none())
+            && !self.binding_is_closed(bound_file, binding, true)
+        {
+            return None;
+        }
+        Some(values)
+    }
+
+    fn dependency_member_stable(&self, path: &str, object: Span, name: &str) -> bool {
+        // Named writes anywhere retain their veto. A project wildcard is
+        // considered for every object; a package wildcard only for its own
+        // objects (ADR 0284). Either needs an exact disjoint target to waive it.
+        if self.member_stability.written.contains_key(name) {
+            return false;
+        }
+        if self.mutated_objects.contains(&location(path, object)) {
+            return false;
+        }
+        let package = self
+            .facts
+            .dependency_source_root(path)
+            .and_then(|root| self.member_stability.dependencies.get(root));
+        let object = location(path, object);
+        self.member_stability
+            .wildcard_sites
+            .iter()
+            .chain(
+                package
+                    .into_iter()
+                    .flat_map(|package| &package.wildcard_sites),
+            )
+            .all(|site| {
+                let Some(file) = self.lookup.file_by_path(site.path.as_ref()) else {
+                    return false;
+                };
+                let Some(call) = file.ast.calls.iter().find(|call| {
+                    u64::from(call.span.start) == site.start_byte
+                        && u64::from(call.span.end) == site.end_byte
+                }) else {
+                    return false;
+                };
+                // A target spread can supply the getter object itself.
+                let Some(target) = call.arguments.first().filter(|a| !a.spread) else {
+                    return false;
+                };
+                mutation_target_is_distinct(
+                    file,
+                    target.span,
+                    &object,
+                    self.lookup,
+                    32,
+                    &mut HashSet::new(),
+                )
+            })
+    }
+
+    /// A veto can join several known callers; it need not prove a unique
+    /// parameter input as positive accessor transport does. Unknown callers
+    /// add no identity, and a found caller can only withhold the getter proof.
+    fn derived_mutation_objects(
+        &self,
+        file: &FileFacts,
+        span: Span,
+        depth: usize,
+        visited: &mut HashSet<Location>,
+        objects: &mut Vec<(String, Span)>,
+    ) {
+        self.derived_objects(file, span, depth, &mut HashSet::new(), objects);
+        let span = file.ast.peel_ts_sugar_span(span);
+        if depth == 0
+            || !visited.insert(location(file.path.shared(), span))
+            || !exact_identifier(file, span)
+        {
+            return;
+        }
+        let declaration = file.ast.reference_declaration(span).unwrap_or(span);
+        if let Some((function, position)) = file.ast.functions.iter().find_map(|function| {
+            function
+                .parameters
+                .iter()
+                .position(|p| p.pattern == declaration && p.shape == ast::BindingShape::Identifier)
+                .map(|position| (function, position))
+        }) {
+            for caller in &self.facts.files {
+                for call in &caller.ast.calls {
+                    let target = self.lookup.function_called_at(
+                        caller.path.as_str(),
+                        caller.ast.peel_ts_sugar_span(call.callee),
+                    );
+                    if target.is_some_and(|(target_file, target)| {
+                        target_file.path == file.path && target.span == function.span
+                    }) && !call.arguments.iter().take(position + 1).any(|a| a.spread)
+                        && let Some(argument) = call.arguments.get(position)
+                    {
+                        self.derived_mutation_objects(
+                            caller,
+                            argument.span,
+                            depth - 1,
+                            visited,
+                            objects,
+                        );
+                    }
+                }
+            }
+        } else if let Some((bound_file, binding, _)) =
+            self.lookup.binding_at_reference(file.path.as_str(), span)
+            && let Some(initializer) = binding.initializer
+        {
+            self.derived_mutation_objects(bound_file, initializer, depth - 1, visited, objects);
+        }
     }
 
     /// ADR 0289: derivation only, like [`Self::context_origin`]. The getters
@@ -2058,6 +2504,135 @@ impl Resolver<'_, '_> {
             }
         })
     }
+}
+
+/// Whether `span` is exactly one identifier, as opposed to an expression an
+/// identifier merely begins.
+/// ADR 0300: a wildcard target whose complete local identity comes from
+/// other literal allocation sites cannot replace this literal's descriptor.
+/// Unknown inputs never count as distinct. Cyclic local assignments are
+/// checked as a graph: every non-cyclic input must be a distinct allocation
+/// (or an uninitialized local's undefined); no source edge is skipped.
+fn mutation_target_is_distinct(
+    file: &FileFacts,
+    span: Span,
+    object: &Location,
+    lookup: &SemanticLookup<'_>,
+    depth: usize,
+    visited: &mut HashSet<Span>,
+) -> bool {
+    if depth == 0 {
+        return false;
+    }
+    let span = file.ast.peel_ts_sugar_span(span);
+    if file
+        .ast
+        .object_get_shapes
+        .iter()
+        .any(|shape| shape.span == span)
+    {
+        return location(file.path.shared(), span) != *object;
+    }
+    if let Some(logical) = file.ast.logical_expressions.iter().find(|e| e.span == span) {
+        return mutation_target_is_distinct(file, logical.left, object, lookup, depth - 1, visited)
+            && mutation_target_is_distinct(
+                file,
+                logical.right,
+                object,
+                lookup,
+                depth - 1,
+                visited,
+            );
+    }
+    if let Some(call) = file.ast.call_at(span) {
+        // Object.assign returns the exact target. No other call is guessed.
+        return mutation_builtin(file, call, lookup) == Some("assign")
+            && call.arguments.first().is_some_and(|target| {
+                !target.spread
+                    && mutation_target_is_distinct(
+                        file,
+                        target.span,
+                        object,
+                        lookup,
+                        depth - 1,
+                        visited,
+                    )
+            });
+    }
+    if !exact_identifier(file, span) {
+        return false;
+    }
+    let Some(declaration) = file.ast.reference_declaration(span) else {
+        return false;
+    };
+    let Some(binding) = file.ast.bindings.iter().find(|b| {
+        b.shape == ast::BindingShape::Identifier
+            && b.names.len() == 1
+            && b.names[0].span == declaration
+    }) else {
+        return false;
+    };
+    if file.ast.identifiers.iter().any(|id| {
+        id.role == ast::IdentifierRole::Reference
+            && matches!(file.source_text(id.span), Some("eval" | "arguments"))
+    }) || file.ast.exports.iter().any(|export| {
+        file.ast
+            .exported_bindings(export)
+            .any(|exported| exported.pattern == binding.pattern)
+    }) {
+        return false;
+    }
+    if !visited.insert(declaration) {
+        return true;
+    }
+    let refers = |target: Span| {
+        let target = file.ast.peel_ts_sugar_span(target);
+        target == declaration || file.ast.reference_declaration(target) == Some(declaration)
+    };
+    let initial = binding.initializer.is_none_or(|initial| {
+        mutation_target_is_distinct(file, initial, object, lookup, depth - 1, visited)
+    });
+    let writes = file
+        .ast
+        .write_targets
+        .iter()
+        .chain(&file.ast.iteration_targets)
+        .chain(&file.ast.deleted_targets)
+        .filter(|target| refers(**target))
+        .all(|target| {
+            file.ast
+                .assignments
+                .iter()
+                .find(|a| a.target == *target && !a.reads_target)
+                .is_some_and(|assignment| {
+                    mutation_target_is_distinct(
+                        file,
+                        assignment.value_span,
+                        object,
+                        lookup,
+                        depth - 1,
+                        visited,
+                    )
+                })
+        });
+    let assignments = file
+        .ast
+        .assignments
+        .iter()
+        .filter(|a| refers(a.target))
+        .all(|a| {
+            !a.reads_target
+                && mutation_target_is_distinct(
+                    file,
+                    a.value_span,
+                    object,
+                    lookup,
+                    depth - 1,
+                    visited,
+                )
+        });
+    visited.remove(&declaration);
+    initial && writes && assignments
 }
 
 /// Whether `span` is exactly one identifier, as opposed to an expression an
@@ -2407,6 +2982,142 @@ mod tests {
             index.syntax(&file);
             assert!(
                 matches!(index.state("rows"), Stability::Assumed),
+                "{source}"
+            );
+        }
+    }
+
+    #[test]
+    fn wildcard_target_requires_every_local_identity_input_to_be_distinct() {
+        for (source, distinct) in [
+            (
+                "const location = {}; const other = {}; Object.assign(other, input);",
+                true,
+            ),
+            (
+                "const location = {}; const other = {}; const alias = other; Object.assign(alias, input);",
+                true,
+            ),
+            (
+                "const location = {}; const other = {}; Object.assign((other as object), input);",
+                true,
+            ),
+            (
+                "const location = {}; let target; target = {}; target = target; Object.assign(target, input);",
+                true,
+            ),
+            (
+                "const location = {}; Object.assign(location, input);",
+                false,
+            ),
+            (
+                "const location = {}; const other = location; Object.assign(other, input);",
+                false,
+            ),
+            (
+                "const location = {}; const other = input; Object.assign(other, input);",
+                false,
+            ),
+            (
+                "const location = {}; let other = {}; other = input; Object.assign(other, input);",
+                false,
+            ),
+            (
+                "const location = {}; let other = {}; ({ x: other } = input); Object.assign(other, input);",
+                false,
+            ),
+            (
+                "const location = {}; let other = {}; for (other of input) {} Object.assign(other, input);",
+                false,
+            ),
+            (
+                "const location = {}; export const other = {}; Object.assign(other, input);",
+                false,
+            ),
+            (
+                "const location = {}; const other = {}; eval(input); Object.assign(other, input);",
+                false,
+            ),
+            (
+                "const location = {}; function patch(other) { Object.assign(other, input); }",
+                false,
+            ),
+            (
+                "const location = {}; const other = {}; Object.assign(other || {}, input);",
+                true,
+            ),
+            (
+                "const location = {}; Object.assign(location || {}, input);",
+                false,
+            ),
+            ("const location = {}; Object.assign(make(), input);", false),
+        ] {
+            let file = file(source);
+            let object = location(
+                file.path.shared(),
+                file.ast.bindings[0].initializer.unwrap(),
+            );
+            let target = file
+                .ast
+                .calls
+                .iter()
+                .find(|call| file.source_text(call.callee) == Some("Object.assign"))
+                .unwrap()
+                .arguments[0]
+                .span;
+            let facts = ProjectFacts {
+                generation: file.generation,
+                project_id: "fixture".into(),
+                files: vec![file.clone()],
+                typescript: solid_facts::TypeScriptTable::from_parts(
+                    3,
+                    1,
+                    "fixture",
+                    vec![],
+                    vec![],
+                    vec![],
+                    vec![],
+                ),
+                typescript_changes: None,
+                resolved_imports: None,
+                runtime_resolutions: None,
+                runtime_symbol_redirects: HashMap::new(),
+                dependency_source_roots: Vec::new(),
+            };
+            let entities = crate::EntitySymbols {
+                by_path: HashMap::new(),
+            };
+            let ast_indexes = HashMap::new();
+            let names = HashMap::new();
+            let contracts = crate::contracts::ResolvedContracts {
+                bindings: vec![],
+                by_symbol: HashMap::new(),
+                direct_returns: HashMap::new(),
+                callee_bindings: HashMap::new(),
+                returned_callable_bindings: HashSet::new(),
+                missing_exports: vec![],
+                counts: Default::default(),
+            };
+            let dialect = solid_dialect::Solid2;
+            let lookup = SemanticLookup::new(
+                &facts,
+                &ast_indexes,
+                &entities,
+                &names,
+                &dialect,
+                &contracts,
+                true,
+            );
+            assert_eq!(
+                mutation_target_is_distinct(
+                    &file,
+                    target,
+                    &object,
+                    &lookup,
+                    32,
+                    &mut HashSet::new()
+                ),
+                distinct,
                 "{source}"
             );
         }

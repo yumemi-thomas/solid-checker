@@ -10,6 +10,11 @@
 - Extends ADR 0284 (dependency source mode). Keeps ADR 0153, ADR 0272 and
   ADR 0273 unchanged.
 
+ADR 0300 (2026-10-14) extends this decision with an explicit package integrity
+premise and a separate getter proof. The derivation below remains the
+uncertifiable fallback. The review and recovery investigation record the
+boundary before the owner accepted that premise.
+
 ## Context
 
 ADR 0284 lists one loss against contract mode as "a context-provided value
@@ -219,3 +224,34 @@ neither proof: it is a may-derivation that deliberately ignores these
 requirements. Promoting its result, removing the dependency-root refusal,
 or exempting the router's open writes would loosen the accepted boundary.
 This investigation stops without any of those changes.
+
+## Recovery under ADR 0300 (2026-10-14)
+
+The owner now accepts the package integrity premise verbatim in ADR 0300.
+Unseen providers and writes are excluded conditionally; every provider and
+write in the analyzed program still participates. A separate proof follows
+exact immutable bindings, one unconditional return, returned-parameter
+identity guards and closed data members, joining every visible provider of a
+default-less selected-package context. Open/spread provider values refuse.
+
+The descriptor proof keeps global named vetoes and project wildcard scope. A
+wildcard, with its existing project-wide or package scope, may be discharged when all of
+its target's local identity inputs are other fresh literal allocation sites.
+The router's `obj`, `params` and schema-merge result have those other origins;
+an unknown parameter target does not. Dynamic-key writes whose receivers
+derive to the location literal veto too. No package or API name is trusted.
+
+The getter must read an exact runtime accessor at entry, and the existing
+execution analysis must prove the Get's role. Failed proof stays SC9012;
+helper-only getters, open values, project-created getter objects and
+unsupported invocation channels retain their earlier limits. Reports state
+the conditional premise explicitly.
+
+The final rc.13 browser sweep adds two unique violations: kui
+TopicsRoute.tsx:425:75 (observed in shell and feature-topics) and donegeon
+WaitlistRoute.tsx:33:108. Both invoke the installed router's memo-backed
+search getter in an untracked component body. Total violations 562 → 565,
+uncertifiable 3,248 → 3,245; no errors or removed violation. The execution
+holes at kui ClustersRoute.tsx:351:25 and TopicsRoute.tsx:802:41, and
+donegeon WaitlistRoute.tsx:52:25 remain uncertifiable, now SC1001 about the
+proven getter read's execution rather than SC9012 about its backing.

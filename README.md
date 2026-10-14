@@ -42,6 +42,15 @@ kinds:
 - **uncertifiable** — the analyzer could not prove the code correct, and the
   rule page explains how to make it provable.
 
+Reports state their runtime premises. The [standard runtime configuration
+premise](docs/adr/0266-standard-runtime-configuration-premise.md), amended by
+ADR 0268, assumes Solid's standard configuration and hydration host. Dependency
+source mode also uses the [package integrity premise](docs/adr/0300-the-package-integrity-premise.md):
+code outside the analyzed program neither provides selected packages' exported
+contexts nor rewrites objects those packages create. Visible providers and
+member or descriptor writes still withhold a proof. These assumptions are
+conditions of certification; an absent visible veto does not establish them.
+
 For example, `SC1002` [reactive-read-after-await](docs/rules/reactive-read-after-await.md):
 
 ```tsx

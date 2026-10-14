@@ -20,6 +20,10 @@ use crate::{BackendError, SemanticDemandOptions, SourceFile};
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
+    /// Conditional runtime assumptions used by this analysis (ADRs 0266,
+    /// 0268, 0300). These are premises, not facts established by the census.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub premises: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub feedback_facts: Vec<solid_reactive_ir::DevelopmentFile>,
     pub status: String,
@@ -439,6 +443,14 @@ impl DiagnosticSession {
             findings,
         );
         snapshot.feedback_facts = program.development_feedback.clone();
+        if program.runtime_configuration.permits_proof() {
+            snapshot
+                .premises
+                .push("standard runtime configuration (ADRs 0266/0268)".into());
+        }
+        if !facts.dependency_source_roots.is_empty() {
+            snapshot.premises.push("package integrity (ADR 0300): code outside the analyzed program neither provides selected packages' exported contexts nor rewrites objects those packages create".into());
+        }
         let analysis = Arc::new(DiagnosticAnalysis { program, snapshot });
         self.retained = Some(RetainedDiagnostic {
             identity,
@@ -747,6 +759,7 @@ pub fn unsupported_runtime_snapshot(
         ),
     };
     Snapshot {
+        premises: Vec::new(),
         feedback_facts: Vec::new(),
         status: "uncertifiable".into(),
         findings: vec![SnapshotFinding {
@@ -859,6 +872,7 @@ fn snapshot_with_package_summaries(
         })
         .collect();
     Snapshot {
+        premises: Vec::new(),
         feedback_facts: Vec::new(),
         status: status.into(),
         findings,

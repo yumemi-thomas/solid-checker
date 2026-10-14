@@ -30478,3 +30478,84 @@ IR library tests: 379 passed. Ownership gate: 42 cases, zero pending rows.
 The rc.13 release/browser sweep has 49 projects, zero errors, 562 violations and
 3287 uncertifiable findings, identical at every site to sweep-m-all.json;
 there are zero added violations to hand-review (sweep-sol-members.json).
+
+## Package integrity in dependency source mode (2026-10-14, ADR 0300)
+
+The owner accepted the package integrity premise: code outside the analyzed
+program neither provides selected packages' exported contexts nor rewrites
+objects those packages create. This supersedes the unseen-provider and
+unseen-write blockers in the recovery investigation above, conditionally;
+it does not discard a provider or write whose source the program contains.
+Reports state it in `premises` beside standard runtime configuration.
+
+Selected-package contexts no longer have a blanket dependency-root refusal.
+A separate getter proof joins every visible provider value through exact
+immutable bindings, unconditional returns, unchanged returned parameters and
+closed data members. Every resulting member must be a closed own getter that
+calls an exact runtime accessor at entry. A spread/copy provider is judged as
+its visible value and refuses this proof. Execution remains the existing
+semantic role proof; the ADR 0289 may-derivation remains an obligation.
+
+Named writes stay global. Project wildcard writes are considered globally, and
+package wildcards keep ADR 0284 decision 8's package scope. An exact target proof may
+discharge either only when every local target identity input is another
+fresh literal allocation; Object.assign forwards only its exactly identified
+standard-library target. Unknown parameters, other calls, exported targets,
+eval, missing identities and unsupported writes do not discharge it.
+Dynamic-key writes/deletes with derived receiver identity also veto, through
+aliases and several exact callers of a visible helper. That join supplies
+only a veto, never reactive origin.
+
+Eight `dependency-source-integrity-*` fixtures pin 8 SC1001 violations and
+24 SC9012 obligations: unchanged getter values, several visible package
+providers, unrelated wildcard targets, project spread replacement, project
+descriptor replacement, selected-package replacement, alias and helper
+dynamic-key deletion, and visible versus unseen non-selected providers.
+Tracked JSX/memo/event, inert, shadowed and project-created getter controls
+stay clean. The existing unknown-target wildcard fixture stays SC9012; the
+existing re-provided regression now selects its wrapper explicitly so the
+inert provider remains visible, and stays clean. No existing snapshot moved;
+only the eight new snapshots were generated.
+
+All eight fixtures pass tsc --noEmit. The read, spread-provider and descriptor
+examples also pass TypeScript 5.9.3 against the installed published
+solid-js/@solidjs/web 2.0.0-rc.13 and router 2.0.0-next.26 typings, without
+fixture stubs. Verification: 379 IR library tests, 5 report-format tests,
+293-project coverage comparison, 42-case ownership gate, touched-crate
+all-target Clippy with -D warnings, formatting, schema and dialect validation.
+
+Remaining refusals: open programs, defaulted or unkeyed/escaping contexts,
+unknown provider values, spreads/copies, mutable or unresolved identities,
+multiple/conditional factory returns, non-entry/helper-only getter reads,
+unknown wildcard targets and visible member/descriptor vetoes. Project-made
+getter objects retain ADR 0289's prior gap. ADR 0273's unsupported reflection
+and obfuscated/unresolved channels retain their stated premise exclusions;
+this is not a complete runtime alias or callback mutation proof. Ordinary
+callable context transport retains its single-provider and receiver census.
+
+The final 49-project rc.13 browser sweep moves violations 562 → 565 and
+uncertifiable 3,248 → 3,245, with zero errors and no removed violation.
+There are two unique added sites (kui is observed in two projects):
+
+- kui `TopicsRoute.tsx:425:75`: `listLocation.search` is evaluated before
+  `queryFromAddress` and the signal initializer, in `TopicsScreen`'s body.
+  Router 2.0.0-next.26 provides createRouterContext's location; routing.js
+  514-516 reads the search memo and factory.jsx:227 supplies the context.
+- donegeon `WaitlistRoute.tsx:33:108`: `location.search` is evaluated before
+  applyLocalOpenBetaOverride and the signal initializer in WaitlistRoute.
+  Router 2.0.0-next.16's routing.js:461-463 reads its search memo; factory.jsx
+  124 supplies that value. Its separate preferredPlan/source memos track
+  their location reads and acquire no violation.
+
+Both are actual untracked memo reads under the strict-read model; an intended
+one-time seed can use explicit untrack. Each expression passes TypeScript
+5.9.3 against its installed published router and Solid 2.0.0-rc.13 typings.
+Every added violation was hand-reviewed against project and package source.
+Three other unique sites remain uncertifiable about execution: kui
+ClustersRoute.tsx:351:25 and TopicsRoute.tsx:802:41, and donegeon
+WaitlistRoute.tsx:52:25. Across duplicate project views, five rows change from
+SC9012 to SC1001 uncertifiable; their execution hole is preserved.
+
+CLI verification also passed: 494 tests (4 intentionally skipped) and the
+adapter type check. Full make verify is deferred to the lead's integration
+pass; no bundled contract or checked-in binary changed.

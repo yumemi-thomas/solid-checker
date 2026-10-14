@@ -41,7 +41,7 @@ use crate::cache::{
 };
 use crate::execution_role::{
     callee_callback_timing, control_flow_execution_role, direct_callback_contains,
-    host_callback_timing, missing_jsx_census, named_callback_execution_role,
+    host_callback_timing, missing_jsx_census, named_callback_execution_role, read_analysis_context,
     runs_outside_owner_call,
 };
 use crate::indexes::ComponentStatus;
@@ -7433,18 +7433,17 @@ pub(crate) fn site_on_every_completion(
 /// no such proof.
 /// ADR 0289: a project Get, in a role that reports an untracked read, of a
 /// member a package analyzed as source (ADR 0284) defines as a getter that
-/// reads an accessor. No proof transports a getter through that package
-/// (only callables are projected, never through a nested member, and the
-/// package's own open writes veto the members of the objects it creates), so
-/// the Get is an uncertifiable obligation rather than silence. Contract mode
-/// states the same Get through the contract's getter rows (ADR 0272).
+/// reads an accessor. ADR 0300 proves a Get only when every visible provider
+/// supplies the getter and the visible member/descriptor vetoes permit it.
+/// The may-derivation remains an obligation when that proof refuses.
 fn dependency_getter_obligations(
     facts: &ProjectFacts,
     lookup: &SemanticLookup<'_>,
     provenance: &accessor_provenance::Resolver<'_, '_>,
     entities: &EntitySymbols,
     symbol_names: &HashMap<SymbolId, SymbolId>,
-) -> Vec<StaticDefect> {
+) -> (Vec<ReactiveRead>, Vec<StaticDefect>) {
+    let mut reads = Vec::new();
     let mut obligations = Vec::new();
     for file in &facts.files {
         if facts.dependency_source_root(file.path.as_str()).is_some() {
@@ -7471,10 +7470,37 @@ fn dependency_getter_obligations(
             .iter()
             .map(|call| file.ast.peel_ts_sugar_span(call.callee))
             .collect::<HashSet<_>>();
-        let mut push = |span: Span, getters: &[Location]| {
+        let mut push = |span: Span, getters: &[Location], proven: bool| {
             let Some(getter) = getters.first() else {
                 return;
             };
+            if proven {
+                let allowed = allowed_callback_spans(file, lookup);
+                let execution =
+                    semantic_execution_role(file, span, &allowed, entities, symbol_names, lookup);
+                reads.push(ReactiveRead {
+                    package_internal: false,
+                    summary_attributed: false,
+                    transported: true,
+                    kind: "reactive-getter".into(),
+                    accessor: file.source_text(span).unwrap_or("returned getter").into(),
+                    location: location(file.path.shared(), span),
+                    declaration: getter.clone(),
+                    execution,
+                    context: read_analysis_context(file, span, execution, lookup).into(),
+                    via: "returned object Get".into(),
+                    origin: Some(getter.clone()),
+                    origin_context: "selected package getter (package integrity premise, ADR 0300)"
+                        .into(),
+                    uncertain: lookup.inside_possible_component(file, span),
+                    missing_jsx_census: missing_jsx_census(file, span, execution),
+                    host_callback_timing: host_callback_timing(file, span, execution, lookup),
+                    callee_callback_timing: callee_callback_timing(file, span, execution, lookup),
+                    project_consumer_non_strict: false,
+                    callback_invocation_unproven: false,
+                });
+                return;
+            }
             let package =
                 facts
                     .dependency_source_root(getter.path.as_ref())
@@ -7523,7 +7549,12 @@ fn dependency_getter_obligations(
             };
             let getters = provenance.dependency_getters(file, member.object, name);
             if !getters.is_empty() && untracked(member.span) {
-                push(member.span, &getters);
+                let proven = provenance.proven_dependency_getters(file, member.object, name);
+                push(
+                    member.span,
+                    proven.as_deref().unwrap_or(&getters),
+                    proven.is_some(),
+                );
             }
         }
         for binding in &file.ast.bindings {
@@ -7533,19 +7564,32 @@ fn dependency_getter_obligations(
             }) else {
                 continue;
             };
-            let getters = binding
-                .object_slots
-                .iter()
-                .flat_map(|slot| {
-                    provenance.dependency_getters(file, initializer, slot.property.as_str())
-                })
-                .collect::<Vec<_>>();
-            if !getters.is_empty() && untracked(binding.pattern) {
-                push(binding.pattern, &getters);
+            for slot in &binding.object_slots {
+                let getters =
+                    provenance.dependency_getters(file, initializer, slot.property.as_str());
+                if !getters.is_empty() && untracked(binding.pattern) {
+                    // Defaults, rest, nested patterns and computed keys have
+                    // execution beyond the simple Get this proof describes.
+                    let proven = (binding.object_slots.len() == binding.names.len()
+                        && slot.plain_identifier_key)
+                        .then(|| {
+                            provenance.proven_dependency_getters(
+                                file,
+                                initializer,
+                                slot.property.as_str(),
+                            )
+                        })
+                        .flatten();
+                    push(
+                        binding.pattern,
+                        proven.as_deref().unwrap_or(&getters),
+                        proven.is_some(),
+                    );
+                }
             }
         }
     }
-    obligations
+    (reads, obligations)
 }
 
 /// The one-based line of `site` in its analyzed file, for an obligation's
@@ -9146,13 +9190,15 @@ fn interprocedural_reads(
     // ADR 0289: computed fresh on every analysis, never retained per file:
     // the derivation reads other files' literals and the provider census.
     if !facts.dependency_source_roots.is_empty() {
-        dispatch_obligations.extend(dependency_getter_obligations(
+        let (getter_reads, getter_obligations) = dependency_getter_obligations(
             facts,
             context.lookup,
             &provenance,
             entities,
             symbol_names,
-        ));
+        );
+        result.extend(getter_reads);
+        dispatch_obligations.extend(getter_obligations);
     }
     // Keep definition-site obligations even when one consumer is proven.
     // Another instance or opaque consumer of the same callable can remain

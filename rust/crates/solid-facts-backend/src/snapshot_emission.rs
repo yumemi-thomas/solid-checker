@@ -40,6 +40,7 @@ pub(crate) fn emit(
         }
         "text" => {
             let mut output = format!("{project_id}: {}\n", snapshot.status).into_bytes();
+            output.extend_from_slice(&render_premises(snapshot));
             for finding in &snapshot.findings {
                 output.extend_from_slice(
                     format!("{} [{}] {}\n", finding.id, finding.kind, finding.message).as_bytes(),
@@ -70,6 +71,13 @@ const COVERAGE_RULES: &[&str] = &[
 /// How many coverage groups the default output lists before summarizing.
 const COVERAGE_GROUPS_SHOWN: usize = 20;
 
+fn render_premises(snapshot: &Snapshot) -> Vec<u8> {
+    if snapshot.premises.is_empty() {
+        return Vec::new();
+    }
+    format!("Premises: {}.\n", snapshot.premises.join("; ")).into_bytes()
+}
+
 fn render_default(
     dialect: &'static Dialect,
     project_id: &str,
@@ -79,7 +87,7 @@ fn render_default(
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let project = Path::new(project_id);
     let cwd = project.parent().unwrap_or_else(|| Path::new("."));
-    let mut output = Vec::new();
+    let mut output = render_premises(snapshot);
     if tiered {
         // ADR 0202: violations, then uncertifiable findings about the user's
         // code, then the analysis-coverage gaps grouped by root cause.
@@ -409,6 +417,7 @@ mod tests {
 
     fn snapshot(status: &str) -> Snapshot {
         Snapshot {
+            premises: Vec::new(),
             feedback_facts: Vec::new(),
             status: status.into(),
             findings: Vec::new(),
@@ -420,6 +429,35 @@ mod tests {
                 cached_summaries: 4,
                 unresolved_obligations: 0,
             },
+        }
+    }
+
+    #[test]
+    fn every_report_format_states_the_runs_premises() {
+        let mut snapshot = snapshot("certified");
+        snapshot.premises = vec![
+            "standard runtime configuration (ADRs 0266/0268)".into(),
+            "package integrity (ADR 0300)".into(),
+        ];
+        for format in ["json", "text", "default", "full"] {
+            let output = emit(
+                solid_facts_backend::dialect::default_dialect(),
+                format,
+                "project",
+                &snapshot,
+                false,
+                Duration::ZERO,
+            )
+            .unwrap()
+            .output;
+            let output = String::from_utf8(output).unwrap();
+            for premise in &snapshot.premises {
+                assert!(output.contains(premise), "{format}: {output}");
+            }
+            if format == "json" {
+                let decoded: Snapshot = serde_json::from_str(&output).unwrap();
+                assert_eq!(decoded.premises, snapshot.premises);
+            }
         }
     }
 
