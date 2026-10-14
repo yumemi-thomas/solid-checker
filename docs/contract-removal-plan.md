@@ -134,6 +134,11 @@ refactor, five individually green commits, no finding moving:
 7. `packageSummaries` and notes stay byte-identical through P3; P7 decides,
    with a changelog.
 
+P3 landed four of its five slices on branch `p3-boundary` with no finding
+moving. Slice 4, extracting the host index from the contract views, touches
+every IR consumer, so it becomes the first commit of P4, under the same
+byte-identity gate.
+
 P3 starts after the P1b allowlist merges. It runs in parallel with ADR 0309
 once both agree on the shared analysis-input and `SemanticLookup` seam.
 
