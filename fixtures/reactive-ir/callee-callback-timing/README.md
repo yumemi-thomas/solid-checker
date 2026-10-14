@@ -38,7 +38,8 @@ with `render(() => createComponent(...))`:
 | an async callee that calls it after an `await` | `SC1001` uncertifiable | an async body may call it after the call returns |
 | `eager([() => n()])`, which calls the elements during the call | `SC1001` uncertifiable, **not proven** | a true defect, but element iteration has no fact here |
 | `now(() => n())`, whose body calls it | `SC1001` violation | the callee calls the parameter during the call |
-| the same through a cross-file import, a namespace import, and a project object's method | `SC1001` violation | the callee is resolved by symbol either way |
+| the same through a cross-file or namespace import | `SC1001` violation | the callee is resolved by symbol either way |
+| a project object's method (`InvokedByMethod`) | `SC1001` uncertifiable | this project's ambient Solid namespace import has no attested module landing; ADR 0299 withholds module-literal targets, including the older callback-timing fallback |
 | `subscribe(() => n())` from a package seen only through declarations, with no contract (`External.tsx`) | `SC1001` uncertifiable | no body and no accepted `inline` row say it runs the literal during the call |
 
 Remaining approximations: a literal stored in a local array or object

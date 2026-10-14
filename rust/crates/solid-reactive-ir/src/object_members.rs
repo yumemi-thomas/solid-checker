@@ -26,6 +26,7 @@ pub(crate) fn index(facts: &ProjectFacts, lookup: &SemanticLookup<'_>) -> Target
         return HashMap::new();
     }
     let stability = MemberStability::index(facts, lookup);
+    let modules = ModuleCensus::new(facts, lookup);
     let mut targets = HashMap::new();
     let mut closed = HashMap::new();
     for file in &facts.files {
@@ -54,7 +55,9 @@ pub(crate) fn index(facts: &ProjectFacts, lookup: &SemanticLookup<'_>) -> Target
             };
             let stable = *closed
                 .entry((owner.path.to_string(), declaration, symbol.clone()))
-                .or_insert_with(|| receiver_closed(owner, literal, declaration, symbol, lookup));
+                .or_insert_with(|| {
+                    receiver_closed(facts, owner, literal, declaration, symbol, lookup, &modules)
+                });
             if !stable {
                 continue;
             }
@@ -97,6 +100,310 @@ fn identifier(file: &FileFacts, span: Span) -> bool {
         .identifiers
         .iter()
         .any(|id| id.span == span && id.role == ast::IdentifierRole::Reference)
+}
+
+/// The older accessor-transport route must not bypass this receiver census.
+/// This predicate only claims jurisdiction over an exact literal binding;
+/// it does not decide that the receiver or any of its members is callable.
+pub(crate) fn literal_receiver_call(
+    file: &FileFacts,
+    callee: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let callee = file.ast.peel_ts_sugar_span(callee);
+    let Some(member) = file.ast.members.iter().find(|member| member.span == callee) else {
+        return false;
+    };
+    let receiver = file.ast.peel_ts_sugar_span(member.object);
+    identifier(file, receiver)
+        && lookup
+            .entities()
+            .at(file.path.as_str(), receiver)
+            .is_some_and(|symbol| receiver_literal(file, receiver, symbol, lookup).is_some())
+}
+
+pub(crate) fn call_withheld(file: &FileFacts, callee: Span, lookup: &SemanticLookup<'_>) -> bool {
+    literal_receiver_call(file, callee, lookup)
+        && !lookup
+            .object_member_targets()
+            .contains_key(&location(file.path.shared(), callee))
+}
+
+fn receiver_symbols(facts: &ProjectFacts, symbol: &SymbolId) -> HashSet<String> {
+    let mut symbols = HashSet::from([symbol.to_string()]);
+    loop {
+        let mut changed = false;
+        for (declaration, runtime) in &facts.runtime_symbol_redirects {
+            if symbols.contains(declaration) || symbols.contains(runtime) {
+                changed |= symbols.insert(declaration.clone());
+                changed |= symbols.insert(runtime.clone());
+            }
+        }
+        if !changed {
+            return symbols;
+        }
+    }
+}
+
+/// Namespace bindings and module loads are separate export channels: their
+/// references need not contain a receiver identifier at all. Until those uses
+/// can be censused exactly, refuse the entire exposed module (and its barrels).
+#[derive(Default)]
+struct ModuleCensus {
+    exposed: HashSet<String>,
+    cyclic: HashSet<String>,
+    unknown_load: bool,
+}
+
+impl ModuleCensus {
+    fn new(facts: &ProjectFacts, lookup: &SemanticLookup<'_>) -> Self {
+        let mut redirects = HashMap::<String, HashSet<String>>::new();
+        for (declaration, runtime) in &facts.runtime_symbol_redirects {
+            let (Some(declarations), Some(implementations)) = (
+                lookup.symbol_declarations(declaration),
+                lookup.symbol_declarations(runtime),
+            ) else {
+                continue;
+            };
+            for declaration in declarations {
+                for implementation in implementations {
+                    redirects
+                        .entry(declaration.location.path.to_string())
+                        .or_default()
+                        .insert(implementation.location.path.to_string());
+                }
+            }
+        }
+        let landing = |file: &FileFacts, span, module: &str| -> Option<HashSet<String>> {
+            let path = if let Some(imports) = lookup.resolved_imports() {
+                let solid_facts::SpecifierAttestation::Attested(row) =
+                    imports.specifier(file.path.as_str(), span, module)
+                else {
+                    return None;
+                };
+                if row.resolved_path.is_empty() {
+                    return None;
+                }
+                if row.included_path.is_empty() {
+                    row.resolved_path.to_string()
+                } else {
+                    row.included_path.to_string()
+                }
+            } else {
+                solid_facts::resolve_relative_module_path(
+                    file.path.as_str(),
+                    module,
+                    lookup.files().iter().map(|file| file.path.as_str()),
+                )?
+                .to_string()
+            };
+            let mut paths = HashSet::from([path.clone()]);
+            if let Some(runtime) = redirects.get(&path) {
+                paths.extend(runtime.iter().cloned());
+            }
+            Some(paths)
+        };
+        let mut result = Self::default();
+        let mut graph = HashMap::<String, HashSet<String>>::new();
+        let mut barrels = HashMap::<String, HashSet<String>>::new();
+        for file in lookup.files() {
+            let path = file.path.to_string();
+            for import in file.ast.imports.iter().filter(|import| !import.type_only) {
+                let namespace = import.bindings.iter().any(|binding| {
+                    !binding.type_only && binding.kind == ast::ImportKind::Namespace
+                });
+                if let Some(targets) = landing(file, import.span, &import.module) {
+                    graph
+                        .entry(path.clone())
+                        .or_default()
+                        .extend(targets.iter().cloned());
+                    // Also covers `import { receiver }; export { receiver }`.
+                    // Over-including other imports of a barrel only withholds.
+                    if file.ast.module_level_exports().next().is_some() {
+                        barrels
+                            .entry(path.clone())
+                            .or_default()
+                            .extend(targets.iter().cloned());
+                    }
+                    if namespace {
+                        result.exposed.extend(targets);
+                    }
+                } else {
+                    // A missing project-module edge cannot prove absence of
+                    // a cycle in the analyzed source graph. External modules
+                    // without followed source remain outside that graph, as
+                    // they do for the other source-owned proofs here.
+                    if import.module.starts_with('.') || import.module.starts_with('/') {
+                        result.cyclic.insert(path.clone());
+                    }
+                    result.unknown_load |= namespace;
+                }
+            }
+            for export in file
+                .ast
+                .module_level_exports()
+                .filter(|export| !export.type_only)
+            {
+                let Some(module) = export.module.as_deref() else {
+                    continue;
+                };
+                if let Some(targets) = landing(file, export.span, module) {
+                    graph
+                        .entry(path.clone())
+                        .or_default()
+                        .extend(targets.iter().cloned());
+                    barrels
+                        .entry(path.clone())
+                        .or_default()
+                        .extend(targets.iter().cloned());
+                    if export.namespace.is_some() {
+                        result.exposed.extend(targets);
+                    }
+                } else {
+                    result.cyclic.insert(path.clone());
+                    result.unknown_load = true;
+                }
+            }
+            for load in &file.ast.module_loads {
+                if let Some(targets) = load
+                    .specifier
+                    .as_deref()
+                    .and_then(|module| landing(file, load.span, module))
+                {
+                    result.exposed.extend(targets);
+                } else {
+                    result.unknown_load = true;
+                }
+            }
+            for import in file
+                .ast
+                .import_equals
+                .iter()
+                .filter(|import| !import.type_only)
+            {
+                if let Some(targets) = landing(file, import.span, &import.module) {
+                    result.exposed.extend(targets);
+                } else {
+                    result.unknown_load = true;
+                }
+            }
+            result.unknown_load |= file
+                .ast
+                .module_hazards
+                .iter()
+                .any(|hazard| hazard.kind == ast::ModuleHazardKind::NonliteralDynamicLoading);
+        }
+        loop {
+            let mut changed = false;
+            for (barrel, targets) in &barrels {
+                if result.exposed.contains(barrel) {
+                    for target in targets {
+                        changed |= result.exposed.insert(target.clone());
+                    }
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+        for root in graph.keys() {
+            let mut visited = HashSet::new();
+            let mut pending = graph[root].iter().collect::<Vec<_>>();
+            while let Some(path) = pending.pop() {
+                if path == root {
+                    result.cyclic.insert(root.clone());
+                    break;
+                }
+                if visited.insert(path)
+                    && let Some(targets) = graph.get(path)
+                {
+                    pending.extend(targets);
+                }
+            }
+        }
+        loop {
+            let mut changed = false;
+            for (path, targets) in &graph {
+                if targets.iter().any(|target| result.cyclic.contains(target)) {
+                    changed |= result.cyclic.insert(path.clone());
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+        result
+    }
+}
+
+fn enclosing_function(file: &FileFacts, span: Span) -> Option<Span> {
+    file.ast
+        .functions
+        .iter()
+        .filter(|function| function.span.contains(span))
+        .min_by_key(|function| function.span.end - function.span.start)
+        .map(|function| function.span)
+}
+
+fn module_initialization_closed(
+    owner: &FileFacts,
+    literal: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    // A hoisted function can run before a module-scope const too, without an
+    // import cycle. Refuse an executable prefix whose callbacks/entry order
+    // are unmodeled. The existing dialect axiom for a signal with only literal
+    // data, and the exact standard-library freeze of a literal, enter no user
+    // function. Function bodies written in the prefix are deferred.
+    owner.ast.calls.iter().enumerate().all(|(index, call)| {
+        if call.span.start >= literal.start || enclosing_function(owner, call.span).is_some() {
+            return true;
+        }
+        let data_signal = !call.construct
+            && matches!(
+                lookup.primitives(owner).calls[index],
+                Some(crate::PrimitiveName::Known(
+                    solid_dialect::Primitive::CreateSignal,
+                    _
+                ))
+            )
+            && call.arguments.len() <= 1
+            && call.arguments.iter().all(|argument| {
+                !argument.spread
+                    && matches!(
+                        argument.literal_value,
+                        ast::ArgumentLiteralFact::Null
+                            | ast::ArgumentLiteralFact::Boolean(_)
+                            | ast::ArgumentLiteralFact::Integer(_)
+                            | ast::ArgumentLiteralFact::String(_)
+                    )
+            });
+        data_signal || (!call.construct && object_literal(owner, call.span, lookup).is_some())
+    })
+}
+
+fn initialized_use(
+    owner: &FileFacts,
+    literal: Span,
+    declaration: Span,
+    file: &FileFacts,
+    reference: Span,
+    modules: &ModuleCensus,
+) -> bool {
+    let declared_function = enclosing_function(owner, declaration);
+    let used_function = enclosing_function(file, reference);
+    if let Some(function) = declared_function {
+        // A captured binding has no entry-order proof. A switch's shared case
+        // scope has no lexical dominance proof either; source text only vetoes.
+        file.path == owner.path
+            && used_function == Some(function)
+            && reference.start >= literal.end
+            && owner
+                .source_text(function)
+                .is_some_and(|text| !text.contains("switch"))
+    } else {
+        used_function.is_some() && !modules.cyclic.contains(owner.path.as_str())
+    }
 }
 
 fn object_literal(
@@ -202,12 +509,22 @@ fn receiver_literal<'a>(
 }
 
 fn receiver_closed<'a>(
+    facts: &ProjectFacts,
     owner: &'a FileFacts,
     literal: Span,
     declaration: Span,
     symbol: &SymbolId,
     lookup: &SemanticLookup<'a>,
+    modules: &ModuleCensus,
 ) -> bool {
+    let symbols = receiver_symbols(facts, symbol);
+    if enclosing_function(owner, declaration).is_none()
+        && (modules.unknown_load
+            || modules.exposed.contains(owner.path.as_str())
+            || !module_initialization_closed(owner, literal, lookup))
+    {
+        return false;
+    }
     let mut references = HashSet::new();
     // Binder references remain essential when a dependency import's Type
     // Facts references still name its .d.ts symbol before runtime redirects.
@@ -218,7 +535,11 @@ fn receiver_closed<'a>(
         }
         for import in &file.ast.imports {
             for binding in &import.bindings {
-                if lookup.entities().at(file.path.as_str(), binding.local.span) == Some(symbol) {
+                if lookup
+                    .entities()
+                    .at(file.path.as_str(), binding.local.span)
+                    .is_some_and(|symbol| symbols.contains(symbol.as_str()))
+                {
                     if binding.imported.is_none() {
                         return false;
                     }
@@ -227,7 +548,10 @@ fn receiver_closed<'a>(
             }
         }
         for (reference, bound) in &file.ast.reference_declarations {
-            if lookup.entities().at(file.path.as_str(), *reference) == Some(symbol)
+            if lookup
+                .entities()
+                .at(file.path.as_str(), *reference)
+                .is_some_and(|symbol| symbols.contains(symbol.as_str()))
                 && file.ast.imports.iter().any(|import| {
                     import
                         .bindings
@@ -245,14 +569,19 @@ fn receiver_closed<'a>(
         }
         for id in &file.ast.identifiers {
             if id.role == ast::IdentifierRole::Reference
-                && lookup.entities().at(file.path.as_str(), id.span) == Some(symbol)
+                && lookup
+                    .entities()
+                    .at(file.path.as_str(), id.span)
+                    .is_some_and(|symbol| symbols.contains(symbol.as_str()))
             {
                 references.insert(location(file.path.shared(), id.span));
             }
         }
     }
-    if let Some(semantic) = lookup.symbol_references_if_present(symbol.as_str()) {
-        references.extend(semantic);
+    for symbol in symbols {
+        if let Some(semantic) = lookup.symbol_references_if_present(&symbol) {
+            references.extend(semantic);
+        }
     }
     for reference in references {
         let Some(file) = lookup.file_by_path(reference.path.as_ref()) else {
@@ -292,6 +621,9 @@ fn receiver_closed<'a>(
         }
         if file.path == owner.path && span == declaration {
             continue;
+        }
+        if !initialized_use(owner, literal, declaration, file, span, modules) {
+            return false;
         }
         let Some(member) = file.ast.members.iter().find(|member| {
             file.ast.peel_ts_sugar_span(member.object) == span

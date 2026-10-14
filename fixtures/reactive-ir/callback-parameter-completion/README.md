@@ -16,7 +16,8 @@
 | `ReassignedPassed`, `ReassignedArrow` | `SC1001` uncertifiable | the helper replaces its parameter before calling it (ADR 0278) |
 | `SpreadBefore` | `SC1001` uncertifiable | an earlier spread may fill the parameter the helper calls (ADR 0278) |
 | `CallMember` | `SC1001` uncertifiable | `f.call(thisArg, …)` shifts every argument by one (ADR 0278) |
-| `LocalBus`, `ExactInstance` | `SC1001` violation | an unexported, never-escaping object-literal method and an exact `new Base()` run the declared method (ADR 0279) |
+| `LocalBus` | `SC1001` uncertifiable | ADR 0299's shared member veto sees the visible `Object.assign(..., { run: ... })`; the older local-method fallback cannot bypass that veto |
+| `ExactInstance` | `SC1001` violation | an exact `new Base()` runs the declared class method (ADR 0279) |
 | `ExportedBus`, `AssignedBus` | `SC1001` uncertifiable | an importer may patch an exported object; `Object.assign` replaces `run` without an assignment by name (ADR 0280 review round 4) |
 | `MaybeOverride` | `SC1001` uncertifiable | `makeBase(true)` may return a subclass whose `run` never calls the callback (ADR 0279) |
 | `ReplacedRunner` | `SC1001` uncertifiable | the `let` helper binding may have been replaced (ADR 0221, ADR 0278) |

@@ -70,6 +70,46 @@ and ADR 0273's visible-write premise retain their existing scope.
   `sweep-m-all.json`. `diff.jq` / `comm -3` has no rows. There are no added
   violations to hand-review. Result: `experiments/sweep-sol-members.json`.
 
+## Review round 1
+
+Two false-violation paths, both fixed:
+
+- A namespace exposed the receiver without an identifier reference to it.
+  String access in project source and dot access through a dependency barrel
+  escaped the census. Module namespace, dynamic-import, require and namespace
+  re-export channels now withhold literal targets, including through named and
+  star barrels. Runtime redirects join declaration and implementation references.
+- A closure called a function-local receiver before its initializer. Its Get
+  throws, so the original method never runs. Local uses now require the same
+  function and a position after initialization; captures and switch-containing
+  functions are refused. Module uses require a function, no static source cycle,
+  and no unmodeled top-level call before the initializer.
+
+The base SC1001 at reader.readCount predates this commit's owner edges. It came
+from the symbol-based method-summary path, which followed the selected property
+declaration without receiver closure. Both that path and older accessor transport
+now respect the shared literal target census; callback timing's older local
+method fallback also refuses withheld targets. Unknown callback arguments retain
+their obligations. The direct dependency namespace reproducer was already
+refused by ADR 0297 selection; an export-star barrel reproduces both violations
+with dependency source selected. No selection or package-integrity code changed.
+
+Fixtures: object-member-namespace-escape, dependency-source-object-escape and
+object-member-initialization. All pass TypeScript 5.9.3 against real published
+Solid 2.0.0-rc.13 typings. The same-function initialized control remains a
+violation; withheld targets stay silent or retain definition-site obligations.
+
+Validation: 379 IR library tests; coverage 291 projects / 2,012 findings;
+ownership gate 42 cases, zero pending rows; formatting, diff, schema, dialect
+manifests and IR Clippy (all targets, warnings denied) pass. Three snapshots are
+new; four existing snapshots lose two read proofs and demote two callback reads
+whose older paths bypassed an existing shared veto. The final release/browser
+sweep (`experiments/sweep-sol-r0299.json`) has 49 projects, zero errors and
+562 violations. `diff.jq` / `comm -3` against sweep-0297r.json has no rows, so
+there are no moved violations to hand-review. Uncertifiable findings are
+3,248 → 3,211. Full make verify and workspace-wide Clippy were deferred for
+this focused IR change; no contracts or manifests changed.
+
 ## Limits
 
 This is one literal receiver level. Structural types, let bindings, namespace
@@ -77,3 +117,12 @@ receiver chains, conditional/nullish initializers, extracted functions,
 unresolved identities and arbitrary object-producing calls remain refused.
 Refusal supplies neither an owner edge nor a new read summary; existing
 definition-site obligations remain.
+Namespace uses are withheld wholesale, including harmless reads: no namespace
+use census is claimed. An unresolved load withholds module-scope literal targets
+throughout the analyzed source set. Barrels conservatively include every import
+of an exporting file. Static cycle checks use the analyzed source graph and
+exact declaration/runtime redirects; missing project-module edges and modules
+depending on a cyclic module are refused. Unfollowed external implementations
+remain outside that graph. The switch and receiver-inertness spelling vetoes may
+also withhold on comments or strings. Function-local captures stay refused even
+when a particular caller runs them after initialization.

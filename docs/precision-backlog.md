@@ -30452,6 +30452,41 @@ boundary; the uncertifiable result is retained.
 
 ## Exact exported object members (ADR 0299, 2026-10-14)
 
+Review round 1 closes two false-violation paths: namespace receiver escapes
+(including string access and dependency-source export-star barrels), and
+function-local closure uses before initialization. Declaration/runtime receiver
+symbols now share one census. Namespace, dynamic-import, require and namespace
+re-export channels refuse their module's targets, transitively through barrels;
+unresolved loads conservatively refuse module-scope literal targets across the
+source set. Local uses must follow initialization in the same function, with
+captures and switch-containing functions refused. Module uses require function
+execution, no static source cycle and no unmodeled top-level call before the
+initializer. The cycle
+graph is the analyzed source graph; missing project-module edges refuse, while
+unfollowed external implementations remain outside it. These are conservative
+withholdings, not a complete namespace or closure-entry analysis.
+
+The pre-existing reader.readCount SC1001 followed the property declaration's
+method summary even after receiver escape; it was already false before the new
+owner edges. Symbol-based summary projection, older accessor transport and
+callback timing's older local-method fallback now respect the same withheld
+literal target. Unknown callback arguments retain their obligations. The review's
+direct dependency namespace import is already
+refused by ADR 0297 selection; an export-star barrel reproduces both false
+violations while preserving dependency-source selection. The three review
+fixtures pass tsc with real published rc.13 typings; their initialized local
+control stays a violation, while the false sites are silent or uncertifiable.
+
+Review verification: 379 IR tests; coverage 291 projects / 2,012 findings;
+42 ownership cases, zero pending rows; IR all-targets Clippy, formatting,
+diff, schema and manifest checks pass. Three new and four changed snapshots
+record the shared-census corrections; no contract or manifest artifacts moved.
+The final release/browser corpus has 49 projects and zero errors. All 562
+violation sites match sweep-0297r.json (`diff.jq` / `comm -3`: no rows), so no
+moved violation needs hand review. Uncertifiable findings drop 3,248 → 3,211.
+Result: experiments/sweep-sol-r0299.json. Full make verify and workspace-wide
+Clippy were intentionally deferred for this focused IR slice.
+
 Owner attribution and read summaries now share exact function locations for
 const object literals carried through named/default imports, including
 Object.freeze and anonymous default literals. A complete configured receiver

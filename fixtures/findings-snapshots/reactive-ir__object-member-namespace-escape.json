@@ -1,0 +1,25 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/object-member-namespace-escape/Callback.tsx",
+      "start": 180,
+      "end": 192,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/object-member-namespace-escape/source.ts",
+      "start": 122,
+      "end": 131,
+      "fixes": 0
+    }
+  ]
+}

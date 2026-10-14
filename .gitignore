@@ -496,3 +496,9 @@ docs/package-contract-v2/phase21/*measurement.json
 !fixtures/reactive-ir/dependency-source-integrity-computed-delete/node_modules/**
 !fixtures/reactive-ir/dependency-source-integrity-helper-delete/node_modules/
 !fixtures/reactive-ir/dependency-source-integrity-helper-delete/node_modules/**
+!fixtures/reactive-ir/object-member-namespace-escape/node_modules/
+!fixtures/reactive-ir/object-member-namespace-escape/node_modules/**
+!fixtures/reactive-ir/dependency-source-object-escape/node_modules/
+!fixtures/reactive-ir/dependency-source-object-escape/node_modules/**
+!fixtures/reactive-ir/object-member-initialization/node_modules/
+!fixtures/reactive-ir/object-member-initialization/node_modules/**

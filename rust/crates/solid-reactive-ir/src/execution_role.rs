@@ -2825,6 +2825,11 @@ pub(crate) fn project_callee_at_parameter<'a>(
     &'a solid_facts::ast::FunctionFact,
     bool,
 )> {
+    // A local method declaration cannot bypass ADR 0299's receiver escape
+    // and initialization census when deciding callback timing either.
+    if crate::object_members::call_withheld(file, call.callee, lookup) {
+        return None;
+    }
     if let Some((file, function)) = lookup.object_member_function(file, call.callee) {
         return Some((
             file,

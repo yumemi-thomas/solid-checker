@@ -5178,55 +5178,143 @@ mod tests {
     #[test]
     fn exact_object_member_calls_require_a_closed_const_receiver() {
         for (source, admitted) in [
-            ("export const obj = { run() {} }; obj.run();", true),
-            ("const obj = { run: () => 1 }; obj.run();", true),
-            ("const obj = { 'run': () => 1 }; obj.run();", true),
-            ("function run() {} const obj = { run }; obj.run();", true),
             (
-                "function bad() { keep(this); } const obj = { run() {}, bad }; obj.bad(); obj.run();",
-                false,
-            ),
-            ("const obj = { *run() {} }; obj.run();", false),
-            ("const obj = { run: function () {} }; obj.run();", true),
-            ("const obj = { run() {} }; obj?.run?.();", true),
-            (
-                "const obj = { run() {} }; (obj as unknown as typeof obj).run();",
+                "export const obj = { run() {} }; function use() { obj.run(); }",
                 true,
             ),
-            ("let obj = { run() {} }; obj.run();", false),
-            ("const obj = { run() {} }; obj = other; obj.run();", false),
             (
-                "const obj = { run() {} }; obj.run = other; obj.run();",
+                "const obj = { run: () => 1 }; function use() { obj.run(); }",
+                true,
+            ),
+            (
+                "const obj = { 'run': () => 1 }; function use() { obj.run(); }",
+                true,
+            ),
+            (
+                "function run() {} const obj = { run }; function use() { obj.run(); }",
+                true,
+            ),
+            (
+                "function use() { function bad() { keep(this); } const obj = { run() {}, bad }; obj.bad(); obj.run(); }",
                 false,
             ),
             (
-                "const obj = { run() {} }; alias.run = other; obj.run();",
+                "function use() { const obj = { *run() {} }; obj.run(); }",
                 false,
             ),
             (
-                "const obj = { run() {} }; Object.assign(obj, other); obj.run();",
-                false,
-            ),
-            ("const obj = { run() {} }; keep(obj); obj.run();", false),
-            (
-                "const obj = { run() {} }; const alias = obj; obj.run();",
-                false,
+                "const obj = { run: function () {} }; function use() { obj.run(); }",
+                true,
             ),
             (
-                "const obj = { run() {} }; const f = obj.run; obj.run();",
-                false,
+                "const obj = { run() {} }; function use() { obj?.run?.(); }",
+                true,
             ),
-            ("const obj = { [key]() {} }; obj.run();", false),
-            ("const obj = { get run() { return f; } }; obj.run();", false),
-            ("const obj = { run() {}, ...other }; obj.run();", false),
-            ("const obj = { ...other, run() {} }; obj.run();", false),
-            ("const obj = { run() { keep(this); } }; obj.run();", false),
             (
-                "const obj = { run() {} }; eval('obj.run = other'); obj.run();",
+                "const obj = { run() {} }; function use() { (obj as unknown as typeof obj).run(); }",
+                true,
+            ),
+            (
+                "function use() { const obj = { run() {} }; obj.run(); }",
+                true,
+            ),
+            ("const obj = { run() {} }; obj.run();", false),
+            (
+                "function early() { obj.run(); } try { early(); } catch {} const obj = { run() {} };",
                 false,
             ),
-            ("const obj = flag ? { run() {} } : null; obj?.run();", false),
-            ("const obj = { run() {} }; obj['run']();", false),
+            (
+                "import * as ns from './unknown'; const obj = { run() {} }; function use() { obj.run(); }",
+                false,
+            ),
+            (
+                "export * from './unknown'; const obj = { run() {} }; function use() { obj.run(); }",
+                false,
+            ),
+            (
+                "const obj = { run() {} }; function use() { obj.run(); } function load() { return import('./unknown'); }",
+                false,
+            ),
+            (
+                "const obj = { run() {} }; function use() { obj.run(); } require('./unknown');",
+                false,
+            ),
+            (
+                "function use() { function enter() { obj.run(); } enter(); const obj = { run() {} }; }",
+                false,
+            ),
+            (
+                "function use() { const obj = { run() {} }; function enter() { obj.run(); } enter(); }",
+                false,
+            ),
+            (
+                "function use(v) { switch(v) { case 0: const obj = { run() {} }; case 1: obj.run(); } }",
+                false,
+            ),
+            (
+                "function use() { let obj = { run() {} }; obj.run(); }",
+                false,
+            ),
+            (
+                "function use() { const obj = { run() {} }; obj = other; obj.run(); }",
+                false,
+            ),
+            (
+                "function use() { const obj = { run() {} }; obj.run = other; obj.run(); }",
+                false,
+            ),
+            (
+                "function use() { const obj = { run() {} }; alias.run = other; obj.run(); }",
+                false,
+            ),
+            (
+                "function use() { const obj = { run() {} }; Object.assign(obj, other); obj.run(); }",
+                false,
+            ),
+            (
+                "function use() { const obj = { run() {} }; keep(obj); obj.run(); }",
+                false,
+            ),
+            (
+                "function use() { const obj = { run() {} }; const alias = obj; obj.run(); }",
+                false,
+            ),
+            (
+                "function use() { const obj = { run() {} }; const f = obj.run; obj.run(); }",
+                false,
+            ),
+            (
+                "function use() { const obj = { [key]() {} }; obj.run(); }",
+                false,
+            ),
+            (
+                "function use() { const obj = { get run() { return f; } }; obj.run(); }",
+                false,
+            ),
+            (
+                "function use() { const obj = { run() {}, ...other }; obj.run(); }",
+                false,
+            ),
+            (
+                "function use() { const obj = { ...other, run() {} }; obj.run(); }",
+                false,
+            ),
+            (
+                "function use() { const obj = { run() { keep(this); } }; obj.run(); }",
+                false,
+            ),
+            (
+                "function use() { const obj = { run() {} }; eval('obj.run = other'); obj.run(); }",
+                false,
+            ),
+            (
+                "function use() { const obj = flag ? { run() {} } : null; obj?.run(); }",
+                false,
+            ),
+            (
+                "function use() { const obj = { run() {} }; obj['run'](); }",
+                false,
+            ),
         ] {
             let ast = solid_facts::ast::extract(PATH, source).unwrap();
             let spans = ast

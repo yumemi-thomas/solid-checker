@@ -26,3 +26,11 @@
 `methodCall`'s own `o.m()` keeps its existing `SC9012` dispatch obligation in `helpers.tsx`.
 
 `solid-js.d.ts`, `tsconfig.json` and `node_modules` are copied byte for byte from `summary-completion-read` (rc.9 signatures, see the header of `solid-js.d.ts`). Every helper signature is project code. `tsc --noEmit -p tsconfig.json` passes.
+
+## ADR 0299 review
+
+ObjectMethod's direct api.read proof is now withheld: this project contains
+visible eval, which already vetoed the shared literal target map. The older
+symbol-based summary path cannot bypass that veto. The getter callback's
+existing invocation-context obligation remains. Other getter paths retain
+their results.

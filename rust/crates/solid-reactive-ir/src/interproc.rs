@@ -1539,6 +1539,22 @@ fn discover_interprocedural_graph(
         ) else {
             continue;
         };
+        // A selected property declaration does not establish that this
+        // receiver still holds that function (ADR 0299 review). Preserve
+        // unknown argument behavior instead of certifying an empty callback
+        // summary when the receiver's implementation cannot be followed.
+        if crate::object_members::call_withheld(file, call.callee, lookup) {
+            push_unresolved_callee_callback_obligations(
+                &mut contribution,
+                file,
+                call,
+                nodes,
+                &function_lookup,
+                lookup,
+                symbols.entities,
+            );
+            continue;
+        }
         let owner_span = nodes[owner].span;
         let call_completes = site_on_every_completion(lookup, file, owner_span, call.span);
         let in_owner_body = containing_ast_function(&file.ast, call.span)
@@ -5875,6 +5891,9 @@ fn interprocedural_result_reads_for_file(
         if !enclosing_render_function(file, call.span, lookup) {
             continue;
         }
+        if crate::object_members::call_withheld(file, call.callee, lookup) {
+            continue;
+        }
         let obligations_before = dispatch_obligations.len();
         let callee = location(file.path.shared(), call.callee);
         let transported = transported_calls.get(&callee);
@@ -8269,6 +8288,20 @@ fn interprocedural_reads(
             .collect(),
     );
     let (mut transported_calls, unavailable_calls) = provenance.calls();
+    // ADR 0299 review: accessor transport predates the shared exact object
+    // target map. An escaped or uninitialized literal must not regain its
+    // read summary through that older path after the owner edge is withheld.
+    transported_calls.retain(|site, _| {
+        let Some(file) = lookup.file_by_path(site.path.as_ref()) else {
+            return false;
+        };
+        let (Ok(start), Ok(end)) = (u32::try_from(site.start_byte), u32::try_from(site.end_byte))
+        else {
+            return false;
+        };
+        !crate::object_members::literal_receiver_call(file, Span::new(start, end), lookup)
+            || lookup.object_member_targets().contains_key(site)
+    });
     for (site, (path, span)) in lookup.object_member_targets() {
         transported_calls.insert(
             site.clone(),
