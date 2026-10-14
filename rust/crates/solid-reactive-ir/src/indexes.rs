@@ -2738,7 +2738,7 @@ impl<'a> SemanticLookup<'a> {
         if function.expression_body {
             return function.expression_return.as_ref().is_some_and(proven);
         }
-        crate::returns_walk::own_returns(&file.ast, function).all(proven)
+        file.ast.own_returns(function).all(proven)
     }
 
     /// A reviewed ECMAScript primitive return, not a TypeScript return type.
@@ -2997,7 +2997,9 @@ impl<'a> SemanticLookup<'a> {
                     else {
                         return false;
                     };
-                    let returns_value = crate::returns_walk::own_returns(&file.ast, constructor)
+                    let returns_value = file
+                        .ast
+                        .own_returns(constructor)
                         .any(|returned| returned.argument.is_some());
                     let parameter_property = file.ast.parameter_properties.iter().any(|name| {
                         constructor.span.contains(*name)

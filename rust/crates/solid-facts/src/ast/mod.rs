@@ -7255,3 +7255,108 @@ async function* body(items: AsyncIterable<number>, inner: () => AsyncGenerator<n
         );
     }
 }
+
+/// Characterization pins for `own_returns`, fixed at the baseline before the
+/// query moved here from the generator. Every expectation is a literal source slice: the
+/// function is selected by the exact text of its span, and each expected return
+/// is the text of its `ReturnFact` span, in the order the table holds them.
+#[cfg(test)]
+mod own_return_pins {
+    use crate::ast::{AstFacts, FunctionFact, extract};
+
+    fn function_at<'a>(facts: &'a AstFacts, source: &str, span_text: &str) -> &'a FunctionFact {
+        let mut found = facts.functions.iter().filter(|function| {
+            &source[function.span.start as usize..function.span.end as usize] == span_text
+        });
+        let function = found
+            .next()
+            .unwrap_or_else(|| panic!("no function spans {span_text:?}"));
+        assert!(found.next().is_none(), "two functions span {span_text:?}");
+        function
+    }
+
+    fn own<'s>(source: &'s str, function_text: &str) -> Vec<&'s str> {
+        let facts = extract("pins.ts", source).unwrap();
+        let function = function_at(&facts, source, function_text);
+        facts
+            .own_returns(function)
+            .map(|returned| &source[returned.span.start as usize..returned.span.end as usize])
+            .collect()
+    }
+
+    // P1: a value return is its argument's span, a bare return its statement's;
+    // a nested declaration's return is skipped even between two outer returns.
+    #[test]
+    fn flat_returns_keep_source_order_and_skip_a_nested_declaration() {
+        let source =
+            "function f(a){ if (a) return 1; return 2; function g(){ return 3; } return; }";
+        assert_eq!(own(source, source), ["1", "2", "return;"]);
+        assert_eq!(own(source, "function g(){ return 3; }"), ["3"]);
+    }
+
+    // P2: nested declaration, function expression and block-bodied arrow.
+    #[test]
+    fn nested_declarations_expressions_and_block_arrows_own_their_returns() {
+        let source = "function outer(){ function d(){ return 1; } const e = function(){ return 2; }; const a = () => { return 3; }; return 4; }";
+        assert_eq!(own(source, source), ["4"]);
+        assert_eq!(own(source, "function d(){ return 1; }"), ["1"]);
+        assert_eq!(own(source, "function(){ return 2; }"), ["2"]);
+        assert_eq!(own(source, "() => { return 3; }"), ["3"]);
+    }
+
+    // P3: a returned callable is the outer function's value although its span
+    // equals the fact's span (equal is not strictly nested); the callable's own
+    // body return stays its own, and the callable owns neither.
+    #[test]
+    fn a_returned_callable_belongs_to_the_outer_function_not_to_itself() {
+        let arrow = "function outer(){ return () => 4; }";
+        assert_eq!(own(arrow, arrow), ["() => 4"]);
+        assert!(own(arrow, "() => 4").is_empty());
+        let expression = "function outer2(){ return function(){ return 1; }; }";
+        assert_eq!(own(expression, expression), ["function(){ return 1; }"]);
+        assert_eq!(own(expression, "function(){ return 1; }"), ["1"]);
+    }
+
+    // P4: an expression-bodied arrow completes with its expression, which is not
+    // in `ast.returns`; a function with no `return` owns none.
+    #[test]
+    fn expression_completions_and_returnless_functions_own_nothing() {
+        let source = "const x = () => y; function n(){ const z = 1; }";
+        assert!(own(source, "() => y").is_empty());
+        assert!(own(source, "function n(){ const z = 1; }").is_empty());
+    }
+
+    // P5: constructors are executable functions.
+    #[test]
+    fn a_constructor_owns_its_returned_object() {
+        let with = "class C { constructor(){ return {}; } }";
+        assert_eq!(own(with, "(){ return {}; }"), ["{}"]);
+        let without = "class D { constructor(){ this.a = 1; } }";
+        assert!(own(without, "(){ this.a = 1; }").is_empty());
+    }
+
+    // P6: object and class methods are functions of their own, so the enclosing
+    // function owns none of their returns.
+    #[test]
+    fn object_and_class_methods_own_their_returns() {
+        let source =
+            "function outer(){const o={m(){return 1;}}; class C{m(){return 2;}}; return 9; }";
+        assert_eq!(own(source, source), ["9"]);
+        assert_eq!(own(source, "(){return 1;}"), ["1"]);
+        assert_eq!(own(source, "(){return 2;}"), ["2"]);
+    }
+
+    // P7: order across several nesting levels, and a returned block arrow whose
+    // own return is nested one level further.
+    #[test]
+    fn mixed_nesting_keeps_the_table_order() {
+        let source = "function a(){ if (x) { return 1; } const b = () => { return 2; }; function c(){ return () => { return 3; }; } return 4; }";
+        assert_eq!(own(source, source), ["1", "4"]);
+        assert_eq!(own(source, "() => { return 2; }"), ["2"]);
+        assert_eq!(
+            own(source, "function c(){ return () => { return 3; }; }"),
+            ["() => { return 3; }"]
+        );
+        assert_eq!(own(source, "() => { return 3; }"), ["3"]);
+    }
+}

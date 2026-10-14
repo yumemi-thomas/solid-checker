@@ -106,8 +106,8 @@ The rich, wire-independent semantic representation produced by the single contra
 _Avoid_: Expanded JSON, decoded schema, contract AST
 
 **Export summary**:
-The ordinary analysis's description of one export: reads, returned shape, callbacks, owner requirements. It is produced from project or dependency source and, until contract consumption is removed, also projected from accepted contracts. Its callback and returned-shape rows are shared summary vocabulary (`summary_semantics`: `CallbackSummary`, `ReturnSummary`, `InvokeProtocol`, `CallbackSchedule`), not contract-owned; the whole summary is not yet contract-free, because its current carrier `ContractExport` still mixes ordinary fields with contract-only state, and `ReturnSummary` keeps one receipt-projected prototype recipe.
-_Avoid_: Contract summary (the carrier's current name, not what the data is), package summary (the `packageSummaries` output)
+What an accepted contract or the generator states about one export: reads, returned shape, callbacks and owner requirements, each with its open domains. Its current carrier, `ContractExport`, belongs to accepted-contract consumption and to emission and is removed with them (D2/D3, compile-driven), not renamed. Source analysis does not use it: `SummaryNode` identifies a function, `SummaryRead` / `SummaryReads` and per-function propagation carry its reads, and its callback and returned-shape tables use the shared rows in `summary_semantics` (`CallbackSummary`, `ReturnSummary`, `InvokeProtocol`, `CallbackSchedule`), which are not contract-owned; `ReturnSummary` keeps one receipt-projected prototype recipe. Owner requirements (`OwnerRequirement`, `OwnerRequirementOperation`, with their primitive and model-derived sources and uncertainty) and open source behavior are ordinary and remain.
+_Avoid_: Contract summary (the carrier's current name, not what source analysis uses), package summary (the `packageSummaries` output)
 
 **Artifact case**:
 One exact package-entrypoint resolution outcome, including its resolution trace, runtime artifact, declarations, and dependency closure. Artifact cases are selected exclusively and never merged.

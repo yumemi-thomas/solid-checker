@@ -217,6 +217,36 @@ impl AstFacts {
         self.span_index().functions_by_body.contains_any(span)
     }
 
+    /// The return facts `function`'s *own* body writes, in the order the table
+    /// holds them (source order for extracted facts). This is a syntactic
+    /// containment query over these facts' functions and returns; it does not
+    /// check that `function` belongs to this table.
+    pub fn own_returns<'a>(
+        &'a self,
+        function: &'a FunctionFact,
+    ) -> impl Iterator<Item = &'a ReturnFact> + 'a {
+        let body = function.body;
+        self.returns.iter().filter(move |returned| {
+            if returned.span.start < body.start || returned.span.end > body.end {
+                return false;
+            }
+            // Owned by a nested callable: some *other* function whose span lies
+            // inside this body and *strictly* contains the return fact. Strict,
+            // because a return fact's span is its argument's span when it has one:
+            // `return () => …` yields a fact whose span *is* the arrow's, and that
+            // arrow does not own the return — it is the value returned.
+            !self.functions.iter().any(|other| {
+                other.span != function.span
+                    && other.span.start >= body.start
+                    && other.span.end <= body.end
+                    && (other.span.start < returned.span.start
+                        || returned.span.end < other.span.end)
+                    && other.span.start <= returned.span.start
+                    && returned.span.end <= other.span.end
+            })
+        })
+    }
+
     /// JSX elements whose span contains `span`, in original array order.
     pub fn jsx_containing(&self, span: Span) -> impl Iterator<Item = &JsxElementFact> {
         self.span_index()

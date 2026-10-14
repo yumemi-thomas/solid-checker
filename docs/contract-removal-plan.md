@@ -255,32 +255,44 @@ These constraints are fixed:
 
 ### P2 status
 
-P2 is not complete; only its first slice, the shared callback and return
+P2 is not complete. Two pure moves have landed. The shared callback and return
 summary vocabulary (`summary_semantics`: `InvokeProtocol`,
 `enumeration_get_is_guaranteed`, `CallbackSchedule`, `CallbackSummary`,
-`ReturnSummary`), has moved. It is a pure move with the old spellings kept as
-aliases and re-exports, so a rebase onto any held branch needs no rename.
-Recorded for the remaining P2 slices:
+`ReturnSummary`) moved first, with the old spellings kept as aliases and
+re-exports. Then `own_returns`, the pure syntactic query for the returns a
+function's own body writes, moved to `AstFacts::own_returns` in `solid-facts`:
+`returns_walk::own_returns` forwards to it, its two ordinary readers in
+`indexes.rs` call it directly, and it keeps the original table order and strict
+nesting test. Completing that helper does not complete P2 or inventory row 13.
+Recorded for what remains:
 
-- the ordinary export summary (`ContractExport`, `ContractClaim`,
-  `ContractReactiveRead`, `ContractOwnerRequirement`) mixes ordinary fields
-  with contract-only ones (`capture_sources`, `captured_arguments`,
-  `event_handler_props`, `open_claims`, `leaf_forbidden_operations`,
-  `callback_results`, `*_closed_empty`); it needs field pruning, not a rename,
-  and the ordinary owner requirements must survive it;
-- `own_returns` is a pure AST helper with ordinary readers and belongs with a
-  returns-walk or facts-side slice;
+- the `ContractExport` family (`ContractClaim`, `ContractReactiveRead`,
+  `ContractReadContext`, `ContractOwnerRequirement`, `ContractCallbackResult`,
+  the artifact wrappers) belongs to accepted-contract consumption (the
+  `ResolvedContracts` store that `indexes`, `source_discovery`, `owners` and
+  `static_rules` read) and to emission (`contract_export_summaries`,
+  `Program.contract_exports`, the backend). It is not the solver's ordinary
+  carrier, so it is neither renamed nor pruned now; its contract state is
+  deleted with its consumers at D2/D3, compile-driven. What survives is
+  ordinary: `SummaryNode` (function identity), `SummaryRead` / `SummaryReads`
+  and per-function propagation, the shared callback and returned-shape rows,
+  `OwnerRequirement` / `OwnerRequirementOperation` with the primitive and
+  model-derived requirements and their uncertainty, and every open source
+  unknown;
 - the contract-side `wire_name` and `enumeration_cardinality`, the
   `ReturnSummary::prototype` edge to `PrototypeInstanceRecipe` and
   `prototype_instance.rs`, the escape/stability helpers and the return-kind
   constants stay while contract emission or consumption exists. The
-  contract-removal inventory allocates the prototype model to D3 while this
+  contract-removal inventory allocates the prototype model to D3 while the first
   slice's design placed it at D2; the disposition is compile-driven, not an
   unconditional deletion at D2;
 - the `ContractCallback` / `ContractReturn` aliases and the
   `contract_semantics::InvokeProtocol` re-export stay through the rollback
   release and leave when their last reader migrates (a count ratchet:
-  `rg -w "ContractCallback|ContractReturn"` must not grow).
+  `rg -w "ContractCallback|ContractReturn"` must not grow). Migrating the old
+  spellings is the remaining spelling work; it is not evidence that the shared
+  fields, row 13 or P2 are finished. P4 inference, P5 and P7 remain open, and
+  D1–D8 wait for one actual release after P7.
 
 ## Risks
 

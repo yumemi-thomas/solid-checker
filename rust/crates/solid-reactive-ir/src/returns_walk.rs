@@ -658,30 +658,13 @@ pub fn literal_structural_returns(
     shapes
 }
 
-/// The return facts `function`'s *own* body writes, in source order.
+/// The return facts `function`'s *own* body writes, in source order: the
+/// generator's spelling of [`AstFacts::own_returns`], which owns the query.
 pub(crate) fn own_returns<'a>(
     ast: &'a AstFacts,
     function: &'a FunctionFact,
 ) -> impl Iterator<Item = &'a ReturnFact> + 'a {
-    let body = function.body;
-    ast.returns.iter().filter(move |returned| {
-        if returned.span.start < body.start || returned.span.end > body.end {
-            return false;
-        }
-        // Owned by a nested callable: some *other* function whose span lies
-        // inside this body and *strictly* contains the return fact. Strict,
-        // because a return fact's span is its argument's span when it has one:
-        // `return () => …` yields a fact whose span *is* the arrow's, and that
-        // arrow does not own the return — it is the value returned.
-        !ast.functions.iter().any(|other| {
-            other.span != function.span
-                && other.span.start >= body.start
-                && other.span.end <= body.end
-                && (other.span.start < returned.span.start || returned.span.end < other.span.end)
-                && other.span.start <= returned.span.start
-                && returned.span.end <= other.span.end
-        })
-    })
+    ast.own_returns(function)
 }
 
 /// One value an export's return hands back that is its caller's own argument,
@@ -1634,5 +1617,34 @@ mod tests {
             answers("function* f() { return 1; }"),
             (Err(ReturnsDecline::Generator), false)
         );
+    }
+
+    /// The forwarder answers exactly what the facts-side query does; the
+    /// query's own pins live beside it in `solid-facts`.
+    #[test]
+    fn own_returns_forwards_to_the_facts_query() {
+        let source =
+            "function f(a){ if (a) return 1; return () => 2; function g(){ return 3; } return; }";
+        let facts = ast::extract("test.js", source).unwrap();
+        // The outer function is the one whose span is the whole source, exactly one.
+        let mut outer = facts.functions.iter().filter(|function| {
+            source[function.span.start as usize..function.span.end as usize] == *source
+        });
+        let function = outer.next().expect("one function spans the whole source");
+        assert!(
+            outer.next().is_none(),
+            "two functions span the whole source"
+        );
+        let texts = |returns: Vec<&ast::ReturnFact>| {
+            returns
+                .into_iter()
+                .map(|returned| {
+                    source[returned.span.start as usize..returned.span.end as usize].to_owned()
+                })
+                .collect::<Vec<_>>()
+        };
+        let forwarded = texts(super::own_returns(&facts, function).collect());
+        assert_eq!(forwarded, ["1", "() => 2", "return;"]);
+        assert_eq!(forwarded, texts(facts.own_returns(function).collect()));
     }
 }
