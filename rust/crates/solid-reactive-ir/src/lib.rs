@@ -55,7 +55,8 @@ pub mod hosts;
 pub use findings::{
     DOCS_BASE_URL, EvidenceStep, Finding, RuleManifestIdentity, RuleMetadata, SolveTimings,
     assert_rules_have_documentation, direct_mutation_wording, finish_findings, rule_manifest_json,
-    strict_read_evidence, strict_read_message, strict_read_related_locations,
+    strict_read_evidence, strict_read_message, strict_read_message_with_compute,
+    strict_read_related_locations,
 };
 pub use projection::{
     CatalogCapabilities, CatalogWording, FindingSeed, FindingWording, PackageContractIssue,
@@ -2199,6 +2200,10 @@ fn empty_contract_exports() -> &'static BTreeMap<String, ContractExport> {
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Program {
+    /// Message-only observations, recomputed from the current merged reads.
+    /// These apply sites also read the exact source in their paired compute.
+    #[serde(skip)]
+    pub apply_compute_reads: std::collections::HashSet<Location>,
     #[serde(
         default,
         skip_serializing_if = "RuntimeConfigurationPremise::permits_proof"

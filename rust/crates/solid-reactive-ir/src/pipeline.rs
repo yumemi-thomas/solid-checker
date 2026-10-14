@@ -36,6 +36,7 @@ use typefacts::Location;
 /// of its signature rather than ambient mutation of a shared function body.
 #[derive(Default)]
 pub(crate) struct ProgramDraft {
+    pub(crate) apply_compute_reads: HashSet<Location>,
     pub(crate) development_feedback: Vec<crate::development_feedback::DevelopmentFile>,
     pub(crate) reads: Vec<ReactiveRead>,
     pub(crate) writes: Vec<ReactiveWrite>,
@@ -142,6 +143,7 @@ impl ProgramDraft {
         self.contract_generation_obligations
             .sort_by(|left, right| location_order(&left.location, &right.location));
         Program {
+            apply_compute_reads: self.apply_compute_reads,
             runtime_configuration: crate::RuntimeConfigurationPremise::Assumed,
             development_feedback: self.development_feedback,
             reads: self.reads,

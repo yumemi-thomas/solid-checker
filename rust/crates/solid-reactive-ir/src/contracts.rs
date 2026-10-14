@@ -4699,6 +4699,17 @@ fn resolve_contract_imports_inner(
             }
         }
     }
+    bind_contract_barrel_imports(
+        facts,
+        accepted,
+        entities,
+        &provided_contexts,
+        &returns_shed,
+        &mut bindings,
+        &mut by_symbol,
+        &mut direct_returns,
+        &mut missing_exports,
+    );
     join_runtime_identity_aliases(
         facts,
         entities,
@@ -4745,6 +4756,605 @@ fn resolve_contract_imports_inner(
         returned_callable_bindings,
         missing_exports,
         counts,
+    }
+}
+
+/// A barrel name is either one exact binding, a namespace, absent, or
+/// unresolved. In particular, an unresolved competing star is never absence.
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum BarrelBinding {
+    Local(Location),
+    Package {
+        importer: String,
+        module: String,
+        name: String,
+        identity: Box<(
+            crate::contract_semantics::AcceptedSemanticIdentity,
+            crate::contract_semantics::ExportIdentity,
+        )>,
+    },
+    Namespace {
+        importer: String,
+        module: String,
+        span: solid_facts::core::Span,
+    },
+}
+
+fn barrel_module<'a>(
+    facts: &'a ProjectFacts,
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    module: &str,
+) -> Result<&'a solid_facts::FileFacts, ()> {
+    let path = if let Some(imports) = &facts.resolved_imports {
+        let solid_facts::SpecifierAttestation::Attested(row) =
+            imports.specifier(file.path.as_str(), span, module)
+        else {
+            return Err(());
+        };
+        if row.included_path.is_empty() {
+            row.resolved_path.as_ref()
+        } else {
+            row.included_path.as_ref()
+        }
+    } else {
+        solid_facts::resolve_relative_module_path(
+            file.path.as_str(),
+            module,
+            facts.files.iter().map(|file| file.path.as_str()),
+        )
+        .ok_or(())?
+    };
+    // A declaration surface alone cannot enumerate a runtime star provider.
+    if [".d.ts", ".d.mts", ".d.cts"]
+        .iter()
+        .any(|suffix| path.ends_with(suffix))
+    {
+        return Err(());
+    }
+    facts
+        .files
+        .iter()
+        .find(|file| file.path.as_str() == path)
+        .ok_or(())
+}
+
+fn barrel_target(
+    facts: &ProjectFacts,
+    accepted: &AcceptedContractIndex,
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    module: &str,
+    name: &str,
+    visiting: &mut HashSet<(String, String)>,
+) -> Result<Option<BarrelBinding>, ()> {
+    if let Ok(contract) = accepted.contract(file.path.as_str(), module) {
+        if !contract.artifact_case().exports.contains_key(name) {
+            // Contract coverage is not an exhaustive runtime export census.
+            // A competing provider's missing claim cannot prove absence.
+            return Err(());
+        }
+        let export = accepted
+            .resolve_name(file.path.as_str(), module, name)
+            .map_err(|_| ())?;
+        return Ok(Some(BarrelBinding::Package {
+            importer: file.path.to_string(),
+            module: module.to_owned(),
+            name: name.to_owned(),
+            identity: Box::new((
+                export.contract().semantic_identity(),
+                export.identity().clone(),
+            )),
+        }));
+    }
+    let target = barrel_module(facts, file, span, module)?;
+    resolve_barrel_binding(facts, accepted, target, name, visiting)
+}
+
+fn resolve_barrel_binding(
+    facts: &ProjectFacts,
+    accepted: &AcceptedContractIndex,
+    file: &solid_facts::FileFacts,
+    name: &str,
+    visiting: &mut HashSet<(String, String)>,
+) -> Result<Option<BarrelBinding>, ()> {
+    if !visiting.insert((file.path.to_string(), name.to_owned())) {
+        return Err(());
+    }
+    // A namespace declaration surface is not an authenticated value binding,
+    // including an ambient surface that TypeScript may merge with a star name.
+    if file.ast.module_level_exports().any(|export| {
+        export
+            .declaration_surface_only
+            .iter()
+            .any(|binding| binding.exported == name)
+    }) {
+        return Err(());
+    }
+    let exports = file
+        .ast
+        .module_level_exports()
+        .filter(|export| !export.type_only)
+        .collect::<Vec<_>>();
+    // No ESM export facts can also mean a CommonJS or otherwise opaque
+    // provider. Its missing export is not an enumerated absence.
+    if exports.is_empty() {
+        return Err(());
+    }
+    let explicit = exports
+        .iter()
+        .flat_map(|export| {
+            export
+                .specifiers
+                .iter()
+                .chain(&export.declarations)
+                .filter(move |binding| !binding.type_only && binding.exported == name)
+                .map(move |binding| (*export, binding))
+        })
+        .collect::<Vec<_>>();
+    let namespaces = exports
+        .iter()
+        .filter(|export| export.namespace.as_deref() == Some(name))
+        .collect::<Vec<_>>();
+    let defaults = exports
+        .iter()
+        .filter(|export| {
+            export.kind == solid_facts::ast::ExportKind::Default
+                && name == "default"
+                && export.specifiers.is_empty()
+                && export.declarations.is_empty()
+        })
+        .count();
+    if explicit.len() + namespaces.len() + defaults > 1 {
+        return Err(());
+    }
+    if let Some(export) = namespaces.first() {
+        return Ok(Some(BarrelBinding::Namespace {
+            importer: file.path.to_string(),
+            module: export.module.as_deref().ok_or(())?.to_owned(),
+            span: export.span,
+        }));
+    }
+    if let Some((export, binding)) = explicit.first() {
+        let local = file.source_text(binding.local.span).ok_or(())?;
+        if let Some(module) = export.module.as_deref() {
+            return barrel_target(facts, accepted, file, export.span, module, local, visiting);
+        }
+        let declaration = file.ast.reference_declaration(binding.local.span);
+        if let Some((import, binding)) = file
+            .ast
+            .imports
+            .iter()
+            .filter(|import| !import.type_only)
+            .find_map(|import| {
+                import
+                    .bindings
+                    .iter()
+                    .find(|binding| !binding.type_only && declaration == Some(binding.local.span))
+                    .map(|binding| (import, binding))
+            })
+        {
+            // The parser's exact lexical declaration joins this export
+            // reference to its module-level import binding.
+            let imported_name = binding
+                .imported
+                .as_deref()
+                .or_else(|| {
+                    (binding.kind == solid_facts::ast::ImportKind::Default).then_some("default")
+                })
+                .ok_or(())?;
+            return barrel_target(
+                facts,
+                accepted,
+                file,
+                import.span,
+                &import.module,
+                imported_name,
+                visiting,
+            );
+        }
+        return Ok(Some(BarrelBinding::Local(location(
+            file.path.shared(),
+            binding.local.span,
+        ))));
+    }
+    if defaults > 0 {
+        return Ok(Some(BarrelBinding::Local(location(
+            file.path.shared(),
+            file.ast
+                .module_level_exports()
+                .find(|export| export.kind == solid_facts::ast::ExportKind::Default)
+                .ok_or(())?
+                .span,
+        ))));
+    }
+    if name == "default" {
+        return Ok(None);
+    }
+    let mut found = None;
+    for export in exports.iter().filter(|export| {
+        export.kind == solid_facts::ast::ExportKind::All && export.namespace.is_none()
+    }) {
+        let candidate = barrel_target(
+            facts,
+            accepted,
+            file,
+            export.span,
+            export.module.as_deref().ok_or(())?,
+            name,
+            &mut visiting.clone(),
+        )?;
+        if let Some(candidate) = candidate {
+            // Equal contract semantics alone do not prove equal ESM bindings:
+            // two installed copies can carry the same accepted receipt. Only
+            // paths converging on the exact same provider edge join here.
+            if found.as_ref().is_some_and(|found| found != &candidate) {
+                return Err(());
+            }
+            found = Some(candidate);
+        }
+    }
+    Ok(found)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn bind_contract_barrel_imports(
+    facts: &ProjectFacts,
+    accepted: &AcceptedContractIndex,
+    entities: &EntitySymbols,
+    provided_contexts: &BTreeSet<(String, String)>,
+    returns_shed: &HashSet<SymbolId>,
+    bindings: &mut Vec<ResolvedContractBinding>,
+    by_symbol: &mut HashMap<SymbolId, ResolvedContractBinding>,
+    direct_returns: &mut HashMap<SymbolId, ContractReturn>,
+    missing: &mut Vec<StaticDefect>,
+) {
+    let mut demands = Vec::new();
+    for file in &facts.files {
+        for import in file.ast.imports.iter().filter(|import| !import.type_only) {
+            if accepted
+                .contract(file.path.as_str(), &import.module)
+                .is_ok()
+            {
+                continue;
+            }
+            for binding in import
+                .bindings
+                .iter()
+                .filter(|binding| !binding.type_only && binding.runtime_referenced)
+            {
+                let Some(symbol) = entities.get(&location(file.path.shared(), binding.local.span))
+                else {
+                    continue;
+                };
+                if binding.kind == solid_facts::ast::ImportKind::Namespace {
+                    for member in file.ast.members.iter().filter(|member| {
+                        file.ast
+                            .computed_members
+                            .binary_search(&member.span)
+                            .is_err()
+                            && entities.get(&location(file.path.shared(), member.object))
+                                == Some(symbol)
+                    }) {
+                        let Some(name) = file.source_text(member.property) else {
+                            continue;
+                        };
+                        if let Ok(Some(origin)) = barrel_target(
+                            facts,
+                            accepted,
+                            file,
+                            import.span,
+                            &import.module,
+                            name,
+                            &mut HashSet::new(),
+                        ) {
+                            demands.push((
+                                location(file.path.shared(), member.property),
+                                name.to_owned(),
+                                origin,
+                            ));
+                        }
+                    }
+                } else if let Some(name) = binding.imported.as_deref().or_else(|| {
+                    (binding.kind == solid_facts::ast::ImportKind::Default).then_some("default")
+                }) && let Ok(Some(origin)) = barrel_target(
+                    facts,
+                    accepted,
+                    file,
+                    import.span,
+                    &import.module,
+                    name,
+                    &mut HashSet::new(),
+                ) {
+                    if let BarrelBinding::Namespace {
+                        importer,
+                        module,
+                        span,
+                    } = origin
+                    {
+                        let Some(provider) = facts
+                            .files
+                            .iter()
+                            .find(|file| file.path.as_str() == importer)
+                        else {
+                            continue;
+                        };
+                        let Some(export) = provider.ast.module_level_exports().find(|export| {
+                            export.span == span
+                                && export.namespace.is_some()
+                                && export.module.as_deref() == Some(module.as_str())
+                        }) else {
+                            continue;
+                        };
+                        for member in file.ast.members.iter().filter(|member| {
+                            file.ast
+                                .computed_members
+                                .binary_search(&member.span)
+                                .is_err()
+                                && entities.get(&location(file.path.shared(), member.object))
+                                    == Some(symbol)
+                        }) {
+                            let Some(name) = file.source_text(member.property) else {
+                                continue;
+                            };
+                            if let Ok(Some(origin)) = barrel_target(
+                                facts,
+                                accepted,
+                                provider,
+                                export.span,
+                                &module,
+                                name,
+                                &mut HashSet::new(),
+                            ) {
+                                demands.push((
+                                    location(file.path.shared(), member.property),
+                                    name.to_owned(),
+                                    origin,
+                                ));
+                            }
+                        }
+                    } else {
+                        demands.push((
+                            location(file.path.shared(), binding.local.span),
+                            file.source_text(binding.local.span)
+                                .unwrap_or_default()
+                                .to_owned(),
+                            origin,
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    for (site, local_name, origin) in demands {
+        let BarrelBinding::Package {
+            importer,
+            module,
+            name,
+            ..
+        } = origin
+        else {
+            continue;
+        };
+        let Some(symbol) = entities.get(&site).cloned() else {
+            continue;
+        };
+        if by_symbol.contains_key(&symbol) {
+            continue;
+        }
+        let Ok(export) = accepted.resolve_name(&importer, &module, &name) else {
+            continue;
+        };
+        let mut summary = project_accepted_export(&export);
+        let unmet = unmet_context_premises(
+            &summary,
+            &export.contract().package().name,
+            provided_contexts,
+        );
+        if !unmet.is_empty() {
+            push_unmet_context_premise(missing, &module, &name, true, site.clone(), &unmet);
+            summary = premise_unmet_summary(&summary);
+        } else if !summary.open_claims.is_empty() {
+            push_unknown_contract_claims(
+                missing,
+                &summary,
+                &module,
+                &name,
+                true,
+                site.clone(),
+                !returns_shed.contains(&symbol),
+            );
+        }
+        let resolved = ResolvedContractBinding {
+            local_name,
+            imported_name: name.clone(),
+            package_name: export.contract().package().name.clone(),
+            symbol: symbol.clone(),
+            runtime_identity: runtime_identity_at(facts, &site),
+            contract_location: Location {
+                path: format!(
+                    "accepted:{}#{name}",
+                    export.contract().receipt().semantic_digest.as_str()
+                )
+                .into(),
+                start_byte: 0,
+                end_byte: 0,
+            },
+            summary,
+        };
+        if unmet.is_empty()
+            && let Some(provider) = facts
+                .files
+                .iter()
+                .find(|file| file.path.as_str() == importer)
+            && let Some(returned) = direct_contract_return(accepted, provider, &module, &name)
+        {
+            direct_returns.insert(symbol.clone(), returned);
+        }
+        bindings.push(resolved.clone());
+        by_symbol.insert(symbol, resolved);
+    }
+}
+
+#[cfg(test)]
+mod barrel_binding_tests {
+    use super::*;
+    use solid_facts::{
+        FileFacts, TypeScriptTable,
+        compiler::{COMPILER_FACTS_PROTOCOL, ExecutionMap},
+        core::Generation,
+    };
+
+    fn project(barrel: &str) -> ProjectFacts {
+        let generation = Generation::new(1).unwrap();
+        let files = [
+            ("barrel.ts", barrel),
+            (
+                "a.ts",
+                "export const value = () => true; export default () => true;",
+            ),
+            (
+                "b.ts",
+                "export const value = () => false; export const other = 1;",
+            ),
+            ("middle.ts", "export * from './a';"),
+            ("cycle.ts", "export * from './barrel';"),
+            ("empty.ts", "const value = 1;"),
+        ]
+        .into_iter()
+        .map(|(path, source)| {
+            let ast = solid_facts::ast::extract(path, source).unwrap();
+            let compiler = ExecutionMap {
+                compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
+                source_hash: ast.source.hash.clone(),
+                semantic_model: Default::default(),
+                tracked_regions: vec![],
+                untracked_regions: vec![],
+                discarded_regions: vec![],
+                ownership_regions: vec![],
+                callback_roles: vec![],
+                jsx_operations: vec![],
+            };
+            FileFacts::new(generation, source, ast, compiler).unwrap()
+        })
+        .collect();
+        ProjectFacts {
+            generation,
+            project_id: "barrels".into(),
+            files,
+            typescript: TypeScriptTable::from_parts(
+                3,
+                1,
+                "barrels",
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+            ),
+            typescript_changes: None,
+            resolved_imports: None,
+            runtime_resolutions: None,
+            runtime_symbol_redirects: Default::default(),
+            dependency_source_roots: vec![],
+        }
+    }
+
+    #[test]
+    fn barrel_names_follow_exact_bindings_and_explicit_precedence() {
+        for (source, name, expected_path) in [
+            ("export * from './a';", "value", "a.ts"),
+            ("export * from './middle';", "value", "a.ts"),
+            (
+                "export * from './a'; export * from './middle';",
+                "value",
+                "a.ts",
+            ),
+            (
+                "export * from './a'; export const value = () => false;",
+                "value",
+                "barrel.ts",
+            ),
+            (
+                "export * from './a'; export { value } from './b';",
+                "value",
+                "b.ts",
+            ),
+            (
+                "export * from './a'; export type value = string;",
+                "value",
+                "a.ts",
+            ),
+        ] {
+            let facts = project(source);
+            let binding = resolve_barrel_binding(
+                &facts,
+                &AcceptedContractIndex::default(),
+                &facts.files[0],
+                name,
+                &mut HashSet::new(),
+            )
+            .unwrap()
+            .unwrap();
+            let BarrelBinding::Local(site) = binding else {
+                panic!("{source}: {binding:?}");
+            };
+            assert_eq!(site.path.as_ref(), expected_path, "{source}");
+        }
+    }
+
+    #[test]
+    fn ambiguous_and_unknown_stars_never_choose_a_recovery_binding() {
+        for source in [
+            "export * from './a'; export * from './b';",
+            "export * from './a'; export * from './missing';",
+            "export * from './a'; export * from './empty';",
+            "export * from './cycle';",
+            "export * from './a'; export declare namespace value {}",
+        ] {
+            let facts = project(source);
+            assert!(
+                resolve_barrel_binding(
+                    &facts,
+                    &AcceptedContractIndex::default(),
+                    &facts.files[0],
+                    "value",
+                    &mut HashSet::new()
+                )
+                .is_err(),
+                "{source}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_namespace_export_is_one_binding_and_a_star_excludes_default() {
+        let facts = project("export * as ns from './a';");
+        let resolve = |name| {
+            resolve_barrel_binding(
+                &facts,
+                &AcceptedContractIndex::default(),
+                &facts.files[0],
+                name,
+                &mut HashSet::new(),
+            )
+        };
+        assert!(matches!(
+            resolve("ns").unwrap(),
+            Some(BarrelBinding::Namespace { .. })
+        ));
+        assert!(resolve("value").unwrap().is_none());
+        let facts = project("export * from './a';");
+        assert!(
+            resolve_barrel_binding(
+                &facts,
+                &AcceptedContractIndex::default(),
+                &facts.files[0],
+                "default",
+                &mut HashSet::new()
+            )
+            .unwrap()
+            .is_none()
+        );
     }
 }
 

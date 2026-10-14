@@ -267,6 +267,13 @@ pub(crate) fn collect_project<'facts>(
     timings.absorb_interprocedural(&interprocedural.timings);
     draft.strict_read_obligations += interprocedural.reads.len();
     draft.reads.extend(interprocedural.reads.iter().cloned());
+    draft.apply_compute_reads = crate::execution_role::apply_compute_reads(
+        ctx.facts,
+        &draft.reads,
+        ctx.semantic_lookup,
+        ctx.accessors,
+        &source.accessor_origins,
+    );
     // Recompute after both cache merges. A consumer in another file can change
     // while the literal's local read row is reused; a cached true is never proof.
     let mut consumers = crate::execution_role::ReadConsumerSummaries::new(ctx.semantic_lookup);

@@ -132,6 +132,114 @@
       "fixes": 0,
       "message": "reactive accessor \"shared\" is read directly in effect apply callback, which does not track; the read sees the current value once and never updates when \"shared\" changes",
       "hint": "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. Solid warns STRICT_READ_UNTRACKED here in dev."
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
+      "start": 3959,
+      "end": 3967,
+      "fixes": 0,
+      "message": "reactive accessor \"shared\" is read directly in createEffect apply callback, which does not track; this effect's compute also reads the same source, so the effect can re-run when it changes, but this apply read is untracked and Solid warns in development",
+      "hint": "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. Solid warns STRICT_READ_UNTRACKED here in dev."
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
+      "start": 4138,
+      "end": 4146,
+      "fixes": 0,
+      "message": "reactive accessor \"shared\" is read directly in createRenderEffect apply callback, which does not track; this effect's compute also reads the same source, so the effect can re-run when it changes, but this apply read is untracked and Solid warns in development",
+      "hint": "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. Solid warns STRICT_READ_UNTRACKED here in dev."
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
+      "start": 4372,
+      "end": 4380,
+      "fixes": 0,
+      "message": "reactive accessor \"shared\" is read directly in createEffect apply callback, which does not track; the read sees the current value once and never updates when \"shared\" changes",
+      "hint": "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. Solid warns STRICT_READ_UNTRACKED here in dev."
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
+      "start": 4541,
+      "end": 4549,
+      "fixes": 0,
+      "message": "reactive accessor \"shared\" is read directly in createEffect apply callback, which does not track; this effect's compute also reads the same source, so the effect can re-run when it changes, but this apply read is untracked and Solid warns in development",
+      "hint": "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. Solid warns STRICT_READ_UNTRACKED here in dev."
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
+      "start": 4842,
+      "end": 4850,
+      "fixes": 0,
+      "message": "reactive accessor \"shared\" is read directly in effect apply callback, which does not track; the read sees the current value once and never updates when \"shared\" changes",
+      "hint": "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. Solid warns STRICT_READ_UNTRACKED here in dev."
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
+      "start": 5178,
+      "end": 5186,
+      "fixes": 0,
+      "message": "reactive accessor \"shared\" is read directly in createEffect apply callback, which does not track; the read sees the current value once and never updates when \"shared\" changes",
+      "hint": "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. Solid warns STRICT_READ_UNTRACKED here in dev."
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
+      "start": 5568,
+      "end": 5581,
+      "fixes": 0,
+      "message": "reactive accessor \"applySource\" is read directly in createEffect apply callback, which does not track; the read sees the current value once and never updates when \"applySource\" changes",
+      "hint": "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. Solid warns STRICT_READ_UNTRACKED here in dev."
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
+      "start": 5568,
+      "end": 5581,
+      "fixes": 0,
+      "message": "reactive accessor \"source\" is read through applySource in effect apply callback, which does not track; the read sees the current value once and never updates when \"source\" changes",
+      "hint": "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. Solid warns STRICT_READ_UNTRACKED here in dev."
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
+      "start": 5789,
+      "end": 5797,
+      "fixes": 0,
+      "message": "reactive accessor \"shared\" is read directly in createEffect apply callback, which does not track; this effect's compute also reads the same source, so the effect can re-run when it changes, but this apply read is untracked and Solid warns in development",
+      "hint": "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. Solid warns STRICT_READ_UNTRACKED here in dev."
     }
   ]
 }

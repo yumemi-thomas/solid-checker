@@ -30644,11 +30644,10 @@ nonliteral loads are not reasons to retain every candidate contract.
 Remaining limits: namespace/module-object redirects are unimplemented and
 retain contracts, so those packages can still lose source proofs. Missing
 external acceptance is handled by source analysis rather than invented trust.
-Dynamic dispatch is not guessed. Independently, contract mode still reads
-explicit re-export specifiers only: a bare `export *` projects no accepted open
-return claim in `solid-reactive-ir::contracts::resolve_contract_imports_inner`.
-Source mode's star regression now proves the read; the contract-mode gap
-remains open.
+Dynamic dispatch is not guessed. The contract-mode bare-star gap is resolved
+separately by ADR 0301: exact demanded bindings and static namespace members
+retain accepted open claims and raise SC9005. Source mode's star regression
+still proves the runtime read.
 
 Revised ADR 0297 round-2 corpus: 562 violations at the same sites and 3,275
 uncertifiable (+27 from 3,248), no errors. All three probus-hk source reads
@@ -30770,3 +30769,38 @@ selected package hands out (`useLocation()`, the context value) is a plain
 member read, no visible write can reach it, whatever other computed writes
 target. It is not started, so that the running source-mode work can converge
 first. Both sites stay SC9012 until then.
+
+## 2026-10-14 — Star contract bindings and apply-read wording (ADR 0301)
+
+Resolved the contract-mode bare-star gap above. A demanded package export
+through a project star, a star chain or a static namespace member retains its
+accepted claims. An open return claim raises SC9005, matching the named form.
+Local exports precede stars. Ambiguous, cyclic, opaque and unresolved competing
+providers remain unbound; equal receipt semantics alone do not identify two
+installed module instances. Namespace declaration surfaces and computed or
+nested namespace dispatch remain unbound.
+
+SC1001's message no longer claims an apply read never updates when its paired
+compute is proven to read the same immutable getter value. Exact aliases keep
+that identity; two calls of one source factory do not. The observation changes
+only wording, not finding kind, evidence, hints or any other field, verified
+against the exact base over the expanded apply fixture. Summary-attributed and
+package-internal reads grant no observation. Mutable or unresolved getter values,
+instance-dependent helper captures and unresolved callback pairs retain their
+existing wording. Named computes require an unconditional synchronous accessor
+call; nested, JSX, async and conditional calls grant no new observation.
+
+Focused regressions: `contract-star-consumer`, `render-effect-apply-root`, the
+barrel-resolution library tests and the armed re-export process controls.
+The new apply cases are clean in strict and loose TypeScript 5.9.3 passes
+against published `solid-js`, `@solidjs/signals` and `@solidjs/web` 2.0.0-rc.13
+typings. Only the new star snapshot and the expanded apply snapshot changed.
+
+Release corpus, compared with a separately built exact `f5214e87a` base:
+every one of 49 project sites has zero violation and uncertifiable deltas in
+both modes, with zero finding-site additions or removals and no errors.
+Default mode stays at 565 violations / 3,235 uncertifiable; contract mode stays
+at 562 / 3,701. Only proven SC1001 messages change: default mode has one in
+openbot and two in probus-hk; contract mode has one and four respectively.
+The corpus's `experiments/sweep-sol-star-deltas.json` records all sites beside
+`sweep-sol-star.json` and `sweep-sol-star-contracts.json`.

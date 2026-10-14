@@ -170,3 +170,80 @@ export function SharedApplyRead() {
   createRenderEffect(() => 1, onEither);
   return <div />;
 }
+
+// The apply read is still untracked and warned about, but the compute already
+// subscribes to this exact source. It is false to say this effect never updates.
+export function ComputeAlsoReadsApplySource() {
+  createEffect(
+    () => shared(),
+    () => {
+      console.log(shared());
+    },
+  );
+  return <div />;
+}
+
+export function NamespaceComputeAlsoReadsApplySource() {
+  Solid.createRenderEffect(
+    () => shared(),
+    () => {
+      console.log(shared());
+    },
+  );
+  return <div />;
+}
+
+// A different compute source does not establish a subscription to `shared`.
+export function ComputeReadsDifferentSource() {
+  createEffect(
+    () => count(),
+    () => {
+      console.log(shared());
+    },
+  );
+  return <div />;
+}
+
+export function NamedComputeAlsoReadsApplySource() {
+  const compute = () => [shared()];
+  const apply = () => { console.log(shared()); };
+  createEffect(compute, apply);
+  return <div />;
+}
+
+// One named apply belongs to two effects. Only one compute reads `shared`,
+// so this shared read has no single paired-subscription observation.
+export function NamedApplyWithDifferentComputes() {
+  const apply = () => { console.log(shared()); };
+  createEffect(() => shared(), apply);
+  createRenderEffect(() => count(), apply);
+  return <div />;
+}
+
+// A syntactically present, unreachable read in a named compute is no subscription.
+export function NamedComputeDoesNotReadApplySource() {
+  const compute = () => false && shared();
+  const apply = () => { console.log(shared()); };
+  createEffect(compute, apply);
+  return <div />;
+}
+
+function makeSource() {
+  const [source] = createSignal(0);
+  return source;
+}
+
+// The same factory declaration allocates two different sources.
+export function DifferentFactoryInstances() {
+  const computeSource = makeSource();
+  const applySource = makeSource();
+  createEffect(() => computeSource(), () => { console.log(applySource()); });
+  return <div />;
+}
+
+// An immutable alias of one getter is still the same source value.
+export function AliasedSameSource() {
+  const alias = shared;
+  createEffect(() => alias(), () => { console.log(shared()); });
+  return <div />;
+}

@@ -19,6 +19,12 @@ function called from an untracked position, or through a chain of calls that end
 in one of those places. The finding's evidence trail shows where the value was
 declared and how the read reached the untracked scope.
 
+An apply read remains untracked even when the same effect's compute reads the
+same source. In that case the effect can re-run when the source changes, so the
+message describes the untracked read and Solid's development warning without
+claiming the effect never updates (ADR 0301). Finding kind and evidence stay the
+same.
+
 This is the static counterpart of Solid's dev-mode `STRICT_READ_UNTRACKED` warning,
 and it mirrors where the runtime actually installs strict-read contexts (component
 and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:

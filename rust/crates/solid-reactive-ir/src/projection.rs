@@ -589,7 +589,10 @@ pub struct PackageContractIssue {
 /// Every analysis result that can become a finding.
 #[derive(Clone, Copy, Debug)]
 pub enum FindingSeed<'a> {
-    StrictRead(&'a ReactiveRead),
+    StrictRead {
+        read: &'a ReactiveRead,
+        compute_reads_source: bool,
+    },
     OwnedWrite(&'a ReactiveWrite),
     Action(&'a ActionInvocation),
     LeafOperation(&'a LeafOwnerOperation),
@@ -659,7 +662,15 @@ pub fn project_findings(
                     && (capabilities.module_scope_strict_reads
                         || read.execution != crate::ExecutionRole::ModuleInitialization)
             })
-            .map(|read| project_finding(FindingSeed::StrictRead(read), catalog)),
+            .map(|read| {
+                project_finding(
+                    FindingSeed::StrictRead {
+                        read,
+                        compute_reads_source: program.apply_compute_reads.contains(&read.location),
+                    },
+                    catalog,
+                )
+            }),
     );
     findings.extend(
         program
@@ -1211,7 +1222,7 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
     };
 
     match seed {
-        FindingSeed::StrictRead(read) => {
+        FindingSeed::StrictRead { read, .. } => {
             finding.analysis_context = read.context.to_string();
             finding.subject_kind = read.kind.to_string();
             finding.related_locations = crate::strict_read_related_locations(read);
@@ -1430,7 +1441,7 @@ fn package_of_specifier(specifier: &str) -> &str {
 
 fn primary_location(seed: FindingSeed<'_>) -> Location {
     match seed {
-        FindingSeed::StrictRead(value) => value.location.clone(),
+        FindingSeed::StrictRead { read, .. } => read.location.clone(),
         FindingSeed::OwnedWrite(value) => value.location.clone(),
         FindingSeed::Action(value) => value.location.clone(),
         FindingSeed::LeafOperation(value) => value.location.clone(),
@@ -1473,7 +1484,10 @@ mod tests {
             callee_callback_timing: false,
         };
         let finding = project_finding(
-            FindingSeed::StrictRead(&read),
+            FindingSeed::StrictRead {
+                read: &read,
+                compute_reads_source: false,
+            },
             &RecordingCatalog(CatalogCapabilities::SOLID_2),
         );
         assert_eq!(finding.kind, "uncertifiable");
@@ -1495,7 +1509,7 @@ mod tests {
 
         fn wording(&self, seed: FindingSeed<'_>) -> FindingWording {
             let message = match seed {
-                FindingSeed::StrictRead(_) => "read",
+                FindingSeed::StrictRead { .. } => "read",
                 FindingSeed::OwnedWrite(_) => "write",
                 FindingSeed::Action(_) => "action",
                 FindingSeed::LeafOperation(_) => "leaf",

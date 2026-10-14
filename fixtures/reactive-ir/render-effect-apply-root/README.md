@@ -1,5 +1,18 @@
 # render-effect-apply-root
 
+The identity controls also distinguish two calls of the same source factory
+from one immutable alias of a getter. A shared allocation declaration does not
+prove that two getter values are the same source. A shared apply paired with
+different computes and an unreachable named-compute read retain ordinary wording.
+
+ADR 0301 also pins message precision: a direct or named apply callback reading
+the exact source its paired compute reads remains an SC1001 violation, with
+unchanged evidence, but says the effect can re-run and Solid warns. Named and
+namespace primitive spellings agree. A compute reading a different source
+retains the ordinary message. These additions are `tsc --noEmit` clean against
+the real published Solid 2.0.0-rc.13 typings; the existing declarations below
+retain their byte-faithful rc.3 signatures.
+
 **Claim.** An owner-requiring operation in a `createRenderEffect` apply is
 uncertifiable when the render effect is created inside a `createRoot` callback,
 or inside any other owner-creating callback, exactly as when it is created in a

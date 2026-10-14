@@ -224,11 +224,10 @@ selected; passing a reactive source through that helper reports `SC9011`
 (uncertifiable), rather than retaining the entire package or silently certifying
 the call.
 
-Still open independently: contract mode's `resolve_contract_imports_inner`
-projects explicit re-export specifiers only. A bare star has none, so its open
-accepted return claim raises no `SC9005` there. Source mode's star regression
-now proves the runtime read; this change does not repair contract-mode star
-projection. Namespace/module-object redirects remain unimplemented and retain
+Contract mode's bare-star gap was resolved separately by ADR 0301: exact
+demanded bindings now retain their accepted open claims and raise SC9005.
+Source mode's star regression still proves the runtime read.
+Namespace/module-object source redirects remain unimplemented and retain
 contracts; missing external acceptance remains source analysis's obligation.
 
 Revised rc.13 corpus (49 projects, release binary, browser/development/CSR):

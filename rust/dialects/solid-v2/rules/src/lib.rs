@@ -15,7 +15,7 @@ use solid_reactive_ir::{
     LeafOwnerOperationKind, OwnerRequirementOperation, PackageContractIssue,
     PackageContractIssueKind, Program, ReactiveSourceKind, ReactiveWriteOperation, StaticDefect,
     StaticDefectFamily, StaticDefectKind, project_finding, project_findings, strict_read_evidence,
-    strict_read_message,
+    strict_read_message_with_compute,
 };
 
 pub use rules::{Rule, docs_url, manifest_json};
@@ -81,8 +81,8 @@ impl CatalogWording for Catalog {
 
     fn wording(&self, seed: FindingSeed<'_>) -> FindingWording {
         match seed {
-            FindingSeed::StrictRead(read) => {
-                let mut message = strict_read_message(read);
+            FindingSeed::StrictRead { read, compute_reads_source } => {
+                let mut message = strict_read_message_with_compute(read, compute_reads_source);
                 if read.uncertain {
                     // Signal-backing is a caller-decided fact in 2.0 (probed:
                     // devComponent's strict-read window only warns for props

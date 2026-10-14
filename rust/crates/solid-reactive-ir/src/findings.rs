@@ -373,6 +373,12 @@ const fn unnamed_read_context(execution: crate::ExecutionRole) -> &'static str {
 /// is the hint, which the catalogs word themselves.
 #[must_use]
 pub fn strict_read_message(read: &ReactiveRead) -> String {
+    strict_read_message_with_compute(read, false)
+}
+
+/// The compute observation affects only wording, never the read's proof.
+#[must_use]
+pub fn strict_read_message_with_compute(read: &ReactiveRead, compute_reads_source: bool) -> String {
     let context = if read.context.is_empty() {
         unnamed_read_context(read.execution)
     } else {
@@ -441,6 +447,23 @@ pub fn strict_read_message(read: &ReactiveRead) -> String {
         };
         return format!(
             "{} {:?} is read{through} in a callback written in {context} and passed to a consumer that is not proven to invoke it during the call or component rendering; that consumer may invoke it then, later from a closure it returns or keeps, or never, so whether this read runs untracked in {context} cannot be proven either way",
+            reactive_value_label(&read.kind),
+            read.accessor,
+        );
+    }
+    if compute_reads_source
+        && read.execution == crate::ExecutionRole::EffectApply
+        && !read.is_uncertifiable()
+        && !read.summary_attributed
+        && !read.package_internal
+    {
+        let through = if read.via.is_empty() {
+            "directly".to_owned()
+        } else {
+            format!("through {}", read.via)
+        };
+        return format!(
+            "{} {:?} is read {through} in {context}, which does not track; this effect's compute also reads the same source, so the effect can re-run when it changes, but this apply read is untracked and Solid warns in development",
             reactive_value_label(&read.kind),
             read.accessor,
         );
@@ -671,6 +694,38 @@ mod tests {
             callback_invocation_unproven: false,
             callee_callback_timing: false,
         }
+    }
+
+    #[test]
+    fn a_paired_compute_read_changes_only_the_apply_message() {
+        let mut apply = read(false);
+        apply.execution = ExecutionRole::EffectApply;
+        apply.context = "createEffect apply callback".into();
+        let evidence = strict_read_evidence(&apply);
+        let message = super::strict_read_message_with_compute(&apply, true);
+        assert!(message.contains("compute also reads the same source"));
+        assert!(message.contains("apply read is untracked and Solid warns"));
+        assert!(!message.contains("never updates"));
+        assert!(strict_read_message(&apply).contains("never updates"));
+        assert!(!apply.is_uncertifiable());
+        assert_eq!(strict_read_evidence(&apply), evidence);
+        apply.summary_attributed = true;
+        assert_eq!(
+            super::strict_read_message_with_compute(&apply, true),
+            strict_read_message(&apply)
+        );
+        apply.summary_attributed = false;
+        apply.package_internal = true;
+        assert_eq!(
+            super::strict_read_message_with_compute(&apply, true),
+            strict_read_message(&apply)
+        );
+        apply.package_internal = false;
+        apply.missing_jsx_census = true;
+        assert_eq!(
+            super::strict_read_message_with_compute(&apply, true),
+            strict_read_message(&apply)
+        );
     }
 
     /// The census-gap wording *is* the precision claim of the escalation: a

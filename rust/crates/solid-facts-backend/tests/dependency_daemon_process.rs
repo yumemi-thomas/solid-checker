@@ -1479,6 +1479,7 @@ fn reexport_barrels_redirect_exact_bindings_and_retain_unselected_contracts() {
             false,
         ),
         ("star", "export * from 'reactive-package';", false),
+        ("star-chain", "export * from './inner';", false),
         ("star-mixed", "export * from 'reactive-package';", false),
         (
             "star-unselected-provider",
@@ -1625,7 +1626,16 @@ fn reexport_barrels_redirect_exact_bindings_and_retain_unselected_contracts() {
                     "node_modules/barrel-package/index.js"
                 } else {
                     fs::write(scratch.path("barrel.ts"), barrel).unwrap();
-                    "barrel.ts"
+                    if tag == "star-chain" {
+                        fs::write(
+                            scratch.path("inner.ts"),
+                            "export * from 'reactive-package';",
+                        )
+                        .unwrap();
+                        "inner.ts"
+                    } else {
+                        "barrel.ts"
+                    }
                 };
                 if tag.starts_with("files-only") {
                     let config_path = scratch.path("tsconfig.json");
@@ -1802,15 +1812,21 @@ fn reexport_barrels_redirect_exact_bindings_and_retain_unselected_contracts() {
             );
         }
         let findings = contracts.json()["findings"].as_array().unwrap().clone();
-        // Contract mode itself does not bind a bare star's open claims:
-        // resolve_contract_imports_inner walks explicit specifiers only.
-        // Source selection must prove the read even where contract mode
-        // projects no star obligation; that separate gap remains in ADR 0297.
-        assert!(
-            (tag.contains("star") && tag != "star-mixed")
-                || findings
-                    .iter()
-                    .any(|finding| finding["id"] == "SC9005" && finding["kind"] == "uncertifiable"),
+        // Exact stars retain the same open return claim as named exports.
+        // Ambiguous, shadowed and unresolved providers bind no package claim.
+        let binds_open = !matches!(
+            tag,
+            "star-ambiguous"
+                | "star-explicit"
+                | "star-unselected-provider"
+                | "star-opaque-provider"
+                | "star-same-binding"
+        );
+        assert_eq!(
+            findings
+                .iter()
+                .any(|finding| finding["id"] == "SC9005" && finding["kind"] == "uncertifiable"),
+            binds_open,
             "{tag}: {findings:#?}"
         );
         assert!(
@@ -2048,6 +2064,96 @@ fn a_namespace_import_keeps_its_accepted_contract() {
         "{}",
         namespace.stderr
     );
+}
+
+#[test]
+fn a_namespace_reexport_keeps_the_exact_members_accepted_contract() {
+    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    for (tag, declaration, app) in [
+        (
+            "direct",
+            "export * as ns from 'reactive-package';",
+            "import { ns } from './barrel';",
+        ),
+        (
+            "chain",
+            "export * as ns from './inner';",
+            "import { ns } from './barrel';",
+        ),
+        (
+            "star-namespace-import",
+            "export * from 'reactive-package';",
+            "import * as ns from './barrel';",
+        ),
+    ] {
+        let app = format!(
+            "{app}\nexport function Status() {{ return <div>{{ns.isReady() ? 'ready' : 'waiting'}}</div>; }}\nexport function StatusOpen() {{ return <div>{{ns.isReadyOpen() ? 'ready' : 'waiting'}}</div>; }}\n"
+        );
+        let (scratch, trust) =
+            accepted_solid_package_with(&format!("contract-namespace-{tag}"), &app, |scratch| {
+                fs::write(scratch.path("barrel.ts"), declaration).unwrap();
+                let importer = if tag == "chain" {
+                    fs::write(
+                        scratch.path("inner.ts"),
+                        "export * from 'reactive-package';",
+                    )
+                    .unwrap();
+                    "inner.ts"
+                } else {
+                    "barrel.ts"
+                };
+                let path = scratch.path(".solid-checker/authorize-contract.json");
+                let mut request: serde_json::Value =
+                    serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+                request["import"]["importer"] = importer.into();
+                fs::write(path, serde_json::to_vec_pretty(&request).unwrap()).unwrap();
+            });
+        if let Ok(tsc) = std::env::var("SOLID_CHECKER_TEST_TSC") {
+            let output = Command::new("node")
+                .arg(tsc)
+                .args(["--noEmit", "--project"])
+                .arg(&scratch.project)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{tag}: {}{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+        let trust = trust.to_string_lossy();
+        let mut args = with_host(&[]);
+        args.extend([
+            "--receipt-trust-configuration",
+            trust.as_ref(),
+            "--no-dependency-source",
+        ]);
+        let (success, run) = invoke(&typefacts, &scratch.project, &args, false);
+        assert!(success, "{tag}: {}", run.stderr);
+        let json = run.json();
+        let findings = json["findings"].as_array().unwrap();
+        assert!(
+            !findings
+                .iter()
+                .any(|finding| finding["kind"] == "violation")
+        );
+        let findings = findings
+            .iter()
+            .filter(|finding| finding["id"] == "SC9005")
+            .collect::<Vec<_>>();
+        assert_eq!(findings.len(), 1, "{tag}: {findings:#?}");
+        assert_eq!(findings[0]["id"], "SC9005", "{tag}: {findings:#?}");
+        assert_eq!(findings[0]["kind"], "uncertifiable");
+        assert!(
+            findings[0]["message"]
+                .as_str()
+                .unwrap()
+                .contains("isReadyOpen")
+        );
+    }
 }
 
 /// The same for a namespace import inside a selected package's own source:
