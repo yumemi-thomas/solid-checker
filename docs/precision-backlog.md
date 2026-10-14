@@ -10,13 +10,102 @@ fire at the call sites). Also from that review: the `PackageBoundary` digest
 hashes reason detail text that carries project `file:line`, so a line shift
 there flushes every derived cache; keep detail out of the domain key.
 
-Prototype-write vetoes, open (2026-10-14; review of the parked
+ADR 0282 round 3 (2026-10-14): the independent review found an inherited
+erased global-member string-code gap and a new false SC1001 restored by the
+round-2 Proxy exemption. Visible `globalThis.Function`/eval, static computed
+members, aliased/destructured realm slots, arbitrary function constructors and
+source-returned gateways now withdraw tuple authority. Selected source imports,
+conditional/logical and unsupported expression transports, literal array slots,
+and unresolved returned callable/receiver slots retain the same possibility.
+A visible string-code
+possibility also invalidates the Proxy and reflective-operator absence guards.
+The factory's declaration no longer discharges its opaque returned callable's
+intrinsic argument handoff. Closed source local methods and shadowed realm
+names remain controls; unresolved members, reassigned/cyclic aliases and the
+bounded traversal limit are conservative SC9012 possibilities, never proven
+mutations. Exact assignments to source function literals do not alone create
+a gateway, but a mutable/written factory's returned callable remains unknown;
+uninitialized bindings still census their visible assignments. The known
+unselected-package/setup boundary and partial full-app
+renderer recovery described below remain unchanged.
+
+Round-3 focused evidence: 104 isolated cases pass strict TypeScript 7.0.2
+against installed published rc.13 typings; 61 runtimes execute the same analyzed
+factory and mutations. The Proxy string replacement and erased gateways execute
+zero reads / `y` and now retain only SC9012 at the tuple consumer. Actual Proxy,
+source reflective calls and closed local same-spelled methods execute one read
+and retain SC1001. The independent scoped review confirms 33 finite probes and
+fresh authored-contract intact/mutated/restored transitions. This is finite
+supported-path evidence, not an exhaustive mutation census.
+
+The bounded absence model also withholds unknown returned callees/receivers,
+held tuple indices and unsupported expression transports in mixed fixtures.
+Five owned snapshots change: coverage remains 322 projects, with 2115 findings
+(round 2: 2112). Every withdrawn behavioral violation has SC9012 at the same
+consumer start; returned-store-source also loses one `prefer-show` suggestion.
+At render-effect-apply-root byte 5568 a propagated source-summary SC1001 remains
+alongside the newly withdrawn type-only SC9012; typed-accessor-roots byte 1749
+has the same overlap. Those scalar-accessor proof
+routes are a separate, unresolved proof-first follow-up, not a claim that R3
+eliminates every contradictory finding. No precision exemption or renderer
+recovery is added for this newly observed shape.
+
+ADR 0282 follow-up (2026-10-14): reflective invocation of possible/unresolved
+mutators and eval/Function string code now withdraw returned-tuple proofs.
+Authored contract returned-member effects, interprocedural projections,
+structural identities, callback results and local-access tuple consumers share
+the veto. The `tuple-contract-iteration-veto` fixture pins an authored callable
+slot: intact SC1001, replaced SC9012 without a contradictory violation.
+Exact dialect primitives and source-proven store setters no longer create an
+opaque intrinsic handoff; a TypeScript setter type alone is insufficient.
+Exact unaliased global Proxy construction also retains its non-mutating
+behavior, with symbol/declaration identity and a visible replacement census;
+a ProxyConstructor type alone grants nothing. Reflective source-function
+controls require an unchanged invocation operator, and Reflect.apply requires
+the exact global namespace receiver. Source-local immutable eval/Function
+aliases remain string-code hazards even after signature erasure.
+
+The opaque-call clause deliberately covers argument handoffs, not unseen global
+effects: zero-argument and primitive-argument opaque calls are both outside it.
+An **unselected installed package** can replace Array's iterator in `patch()`
+and the checker can still report the read that never happens. Setup/entry files
+outside the analyzing program have the same known false-positive boundary.
+This is not fixed by the visible census and source selection is unchanged.
+Foreign-class arguments (`world.createCollider(desc)`) remain uncertifiable;
+ADR 0309's runtime value-flow fact is still needed to prove disjointness.
+
+Round-2 corpus evidence (59 rc.13-clean isolated variants): both 49-project
+sweeps add zero violations. Default moves p0's 243/3239 to 240/3280
+violations/uncertifiable; no bundled contracts moves 238/3279 to 235/3320.
+Relative to round 1, one additional Spotify `useMutation` member read is
+withheld, with nine uncertainties added and five removed. The full app-game
+renderer and Rapier sites **remain uncertifiable**: unrelated foreign-object
+handoffs still retain the program-wide veto, so the primitive/setter narrowing
+does not recover those full-app violations. This is a partial precision
+improvement, not evidence that either application actually changes iteration.
+Round-2 verification passes: 59 mutation/control variants, authored-contract
+intact/mutated/restored controls and retained cache checks; 322 coverage
+projects / 2112 findings; 123 contract-corpus fixtures; Phase 19's 227-document
+pin; full `make verify` (195.05 s). The unselected-code boundary remains open.
+
+Prototype-write vetoes, partially closed (2026-10-14; review of the parked
 `p1a-demand-nonsolid` commits, `/tmp/sc-scratch.noindex/p1/p1a-veto-review.md`).
-The base binary at `d9ed2224d` has a **false positive**: a project assignment
+The base binary at `d9ed2224d` had a **false positive**: a project assignment
 `Array.prototype[Symbol.iterator] = …` is not seen by ADR 0282's tuple veto, so
-returned-tuple destructuring still reports an SC1001 read that the replaced
-iterator never performs. Aliased prototypes, `%ArrayIteratorPrototype%.next`
-writes and `Object.setPrototypeOf` also certify on every binary, and ADR 0211's
+returned-tuple destructuring reported an SC1001 read that the replaced
+iterator never performs. The ADR 0282 amendment closes the returned-tuple
+iteration path: assignment, prototype aliases, exact reflective mutations,
+`%ArrayIteratorPrototype%.next`/`return`, prototype replacement and unresolved
+mutation receivers/keys withdraw closure proofs to SC9012 uncertifiable;
+typed-source and contracted tuple accessor bindings also refuse, retaining
+typed-source uncertifiable findings rather than direct-read violations. Exact
+separate local allocations/class prototypes and unrelated named keys retain
+the proven read. Fixture `tuple-iteration-veto` and its isolated process-test
+variants are tsc-clean against published rc.13; Node confirms iterator and
+iterator-next replacements execute zero signal reads. Opaque calls supplied
+a possible intrinsic receiver also veto when no exact source implementation
+or library signature resolves them. This remains a visible-veto premise;
+unseen runtime mutations are not exhaustively censused. ADR 0211's
 member dispatch does not veto `Object.assign` or `defineProperty` onto
 `Array.prototype.filter`. All reproducers are tsc-clean against rc.13 and
 contrived. The parked commit 6f103c891 scopes an unnamed package `X.prototype`
@@ -24,6 +113,17 @@ write to the package's own tuples, which is a false positive when `Array` or
 `Promise` is passed as `X`; it stays parked. 77aaa674c (ADR 0211) is held
 until its symbol check is limited to the fixed well-known names and the
 `setPrototypeOf` case vetoes. ADR 0309 decision 5 owns the general fix.
+
+Returned-tuple fix verification: 30 isolated mutation/control variants are
+tsc-clean against the published rc.13 triple. The IR library, focused process
+and incremental checks, contract corpus (123 fixtures), and full `make verify`
+pass. Both requested 49-project corpus sweeps add zero violations. Default
+mode moves 243/3239 to 241/3276 violations/uncertifiable; without bundled
+contracts, 238/3279 to 236/3316. The same two `createRAF` reads in app-game's
+Rapier component (index.tsx:80:5) and three renderer (renderer.tsx:32:3) become
+uncertifiable because unresolved mutation receivers cannot exclude the
+intrinsic iterator; 37 uncertifiable sites are added in each mode. This is
+intentional conservative withholding, not proof that those apps patch it.
 
 ADR 0302 (2026-10-14): deferred effect apply no longer proves an execution
 from its callback position alone. Literal `defer: true` with a dependency-free

@@ -27,6 +27,16 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/package-lazy-getter-consumer/App.tsx",
+      "start": 755,
+      "end": 779,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-lazy-getter-consumer/App.tsx",
       "start": 861,
       "end": 871,
       "fixes": 0
@@ -57,16 +67,6 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/package-lazy-getter-consumer/App.tsx",
-      "start": 1437,
-      "end": 1448,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/package-lazy-getter-consumer/App.tsx",
       "start": 1534,
       "end": 1547,
       "fixes": 0
@@ -89,16 +89,6 @@
       "path": "fixtures/reactive-ir/package-lazy-getter-consumer/App.tsx",
       "start": 1712,
       "end": 1742,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/package-lazy-getter-consumer/App.tsx",
-      "start": 1766,
-      "end": 1777,
       "fixes": 0
     },
     {

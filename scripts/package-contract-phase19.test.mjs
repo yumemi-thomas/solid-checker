@@ -372,7 +372,8 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // 224 adds ADR 0271's reduced authored integration-premise document.
       // 225 adds ADR 0272's exact returned getter-object consumer document.
       // 226 adds ADR 0301's contract-star-consumer hand-stated document.
-      stableMainDocuments: 226,
+      // 227 adds tuple-contract-iteration-veto's authored main document.
+      stableMainDocuments: 227,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

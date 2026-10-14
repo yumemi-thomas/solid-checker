@@ -3,8 +3,13 @@
 Fixture for ADR 0259's createRoot passthrough. `expected-claims.json` names
 the semantic assertions; the observed findings are in the snapshot.
 
+ADR 0282 follow-up: the project's opaque handoffs retain the visible tuple veto.
+PaginationRead, SignalRead and SelectedRead now retain SC9012 candidates instead
+of proven reads: outer and callback-local tuple selection both require intact
+iteration. Object and scalar return paths retain their previous proof.
+
 `TimerRead`, `CounterRead` and `PaginationRead` mirror the three ledger shapes.
-They and `ObjectRead`, `SignalRead`, `MemoRead`, `SelectedRead`,
+TimerRead and CounterRead, and `ObjectRead`, `MemoRead`,
 `SelectedObjectRead`, `WrappedRead` must report SC1001 **violation** at their
 component-body accessor calls. The same identities in `TrackedReads`' JSX
 must have no strict-read finding. Calling the signal's setter is not a read.

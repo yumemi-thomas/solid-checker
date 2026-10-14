@@ -4,7 +4,7 @@ const frame = () => {};
 
 // `host-dead-return`'s proven `Loop`, in a project that also writes through
 // `Array.prototype` reflectively. Destructuring runs
-// `Array.prototype[Symbol.iterator]`, so no tuple slot resolves: silent.
+// `Array.prototype[Symbol.iterator]`, so the tuple call is uncertifiable.
 export function Loop() {
   const [running, start, stop] = createLoop(frame);
   start();

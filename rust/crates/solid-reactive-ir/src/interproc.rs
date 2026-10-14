@@ -4795,6 +4795,7 @@ impl StructuredReturnDiscovery<'_, '_> {
                 self.entities,
                 symbol,
                 &base,
+                self.lookup.tuple_iteration_may_be_mutated(),
             )
         {
             return None;
@@ -4815,7 +4816,7 @@ impl StructuredReturnDiscovery<'_, '_> {
             .is_ok();
         match base.kind.as_str() {
             "object" if !computed => base.properties.get(property).cloned(),
-            "tuple" => property
+            "tuple" if !self.lookup.tuple_iteration_may_be_mutated() => property
                 .parse::<usize>()
                 .ok()
                 .and_then(|index| base.elements.get(index))

@@ -1,5 +1,11 @@
 # lazy-default-consumer
 
+ADR 0282 amendment: the project's `assignAll(target, source)` has an unresolved
+mutation target/source and may change the intrinsic iterator. Every returned
+tuple closure call below is now SC9012 uncertifiable; direct signal reads and
+the lazy component witnesses keep their existing behavior. The table below
+records the original ADR 0292 outcomes before this independent tuple veto.
+
 **Claim (ADR 0292).** A component declared in a `lazy` loader and returned as
 its module's `default` is rendered by `lazy`, not retained by the module
 object. Under a declared browser host with `dep-loop` analyzed as source

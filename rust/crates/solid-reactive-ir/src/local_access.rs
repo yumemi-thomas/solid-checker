@@ -864,9 +864,24 @@ impl LocalAccessContext<'_, '_> {
             else {
                 continue;
             };
+            if returned.kind == "tuple"
+                && returned
+                    .elements
+                    .iter()
+                    .flatten()
+                    .any(|value| value.kind == LAZY_GETTER_OBJECT)
+                && self.lookup.tuple_iteration_may_be_mutated()
+            {
+                result.dispatch_obligations.push(obligation(
+                    call.span,
+                    file.source_text(call.callee).unwrap_or_default(),
+                    "tuple iteration identity is withheld before selecting a lazy getter receiver",
+                ));
+                continue;
+            }
             let (recipe, tuple_index) = if returned.kind == LAZY_GETTER_OBJECT {
                 (returned, None)
-            } else if returned.kind == "tuple" {
+            } else if returned.kind == "tuple" && !self.lookup.tuple_iteration_may_be_mutated() {
                 let recipes = returned
                     .elements
                     .iter()
@@ -1142,7 +1157,9 @@ impl LocalAccessContext<'_, '_> {
                         if let (Some(slot), Some(member)) = (slot, member)
                             && opaque(member)
                         {
-                            let bound = binding.immutable && effectful(member);
+                            let bound = binding.immutable
+                                && effectful(member)
+                                && !self.lookup.tuple_iteration_may_be_mutated();
                             members.insert(slot.span, (export.clone(), bound));
                         }
                     }

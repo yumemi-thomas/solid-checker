@@ -1,5 +1,9 @@
 # lazy-default-consumer-rc9
 
+ADR 0282 amendment: `assignAll(target, source)` also makes the tuple closure
+calls SC9012 uncertifiable. The rc.9 lazy witness refusal and direct `local()`
+read are unchanged; the table below records the original ADR 0292 outcomes.
+
 **Claim (ADR 0292).** `lazy-default-consumer`'s `Default.tsx` over
 `solid-js@2.0.0-rc.9`. That release's `lazy` renders the loaded member as
 `untrack(() => Comp(props))` (`dist/solid.dev.js:1175-1179`), with no

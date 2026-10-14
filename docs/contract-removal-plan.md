@@ -1,6 +1,7 @@
 # Plan: giving up package contracts
 
-Status: approved direction (owner, 2026-10-14). Not started.
+Status: approved direction (owner, 2026-10-14). P0 measured; P1 and the
+ADR 0309, tuple-veto and P3 branches await integration.
 
 Dependency behaviour comes from analyzing installed package source (ADRs 0284,
 0290, 0291, 0295–0300). Package contracts are removed: first their
@@ -35,6 +36,38 @@ pipeline.
 Premises a clean result rests on, stated in reports: Vite with the Solid
 plugin, standard runtime configuration, package integrity (ADR 0300), and the
 Window realm where declared (ADR 0295).
+
+## Integration cadence (owner, 2026-10-14)
+
+Finish the current implementation rounds within their existing scope. Keep
+their branches and review evidence intact while preparing smaller integration
+slices. New independent findings become separately scoped work; they do not
+automatically widen an active correction.
+
+1. Review and land the smallest independently sound P1b slice, with its
+   fixtures, snapshots and required producer/client changes kept together.
+   The allowlist merge bar below still applies.
+2. Integrate the reviewed P3 refactor after that slice when it clears its
+   proof. If P1b remains held, P3 may be reapplied independently: its four
+   selected patches have no semantic dependency on namespace admission or
+   the handoff allowlist. Preserve the lead's admission decisions and require
+   byte-identical findings against the actual new baseline; host extraction
+   stays in P4. Do not import P3's P1b merge ancestry.
+3. Isolate ADR 0309's shadow infrastructure from its production corrections.
+   An isolated shadow slice must preserve public findings and keep disputed
+   execution open in its audit. Hold production corrections that lack exact
+   admitted-runtime evidence; a documented new false positive is not cleared
+   for integration.
+4. Keep the tuple correction conservative and bounded by its visible mutation
+   evidence. Missing runtime authority remains an explicit uncertifiable
+   result. Precision recovery, including the renderer cases, is separate work.
+
+Before another semantic patch, write its proof premise, supported boundary,
+decisive positive and negative regressions, and acceptance criterion. Review
+that reasoning before implementation. Adversarial review remains required
+before integration; each resulting commit must be independently green.
+Use focused checks during a slice and one handoff verification pass after its
+final change, as prescribed by AGENTS.md and verify-handoff.
 
 ## Phases
 

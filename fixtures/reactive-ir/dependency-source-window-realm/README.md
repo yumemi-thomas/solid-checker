@@ -1,5 +1,11 @@
 # dependency-source-window-realm
 
+ADR 0282 follow-up: this project contains opaque handoffs that retain the
+iteration veto. The returned source depends on a tuple slot selected inside
+the hook, so the former proved consumer reads are now SC9012 uncertifiable.
+They remain candidates rather than becoming silent; the tables below describe
+the source derivation when the iteration premise is intact.
+
 **Claim (ADR 0295 under ADR 0284 and 0287).** Under a declared Window realm (`.solid-checker/runtime.json` `"realm": "window"`, the CLI's `--runtime-realm window`, with `--runtime-target browser` and `dep-query` as dependency source), a selected package's strict comparison of `typeof window` or `typeof document` with `"undefined"` is decided when the identifier is the unbound global, and a module-level `var` holding exactly that comparison carries it when every read is proved to run after the initializer. The decided `if` drops the forwarding proxy trap's server branch, so the trap returns the store's member and the project's read is SC1001.
 
 - `WindowQuery` (violation): `var isServer2 = typeof window === "undefined"` read inside the trap, the guard `@tanstack/solid-query` 6.0.0-rc.0 publishes. The statements before it in `src/index.js` are the kinds `build/dev.js` runs before its own `var isServer2`: imports and `export *`, function declarations, `createContext(null)` and `createContext(() => false)` (an imported callee with closed arguments), another Window-realm comparison, and arrow functions. None can call into the module, and no module imports `index.js` back.

@@ -46,3 +46,13 @@ context-provider refusal, which needs a closed program.
 `summary-completion-read`, unchanged; `createSignal`, `createMemo`, `onCleanup`
 and `untrack` keep the signatures that stub copies from the published
 typings. The cases are not type errors: `tsc --noEmit -p` passes.
+
+## Round-3 bounded tuple authority
+
+The mixed held/indexed/mutable callable shapes in this project now retain an
+unknown visible gateway possibility under ADR 0282's bounded census. Its five
+former SC1001 rows become SC9012 and four additional tuple calls remain explicit
+uncertifiable candidates. The intact isolated tuple control lives in
+`tuple-iteration-veto/cases.json`; this mixed project no longer establishes an
+absence premise for every callable slot. This records conservative withholding,
+not an observed iterator mutation.

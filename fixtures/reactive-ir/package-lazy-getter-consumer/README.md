@@ -1,5 +1,9 @@
 # Lazy per-key getter consumer (draft)
 
+ADR 0282 follow-up: the retained-setter tuple recipe now reports uncertainty
+at its factory before selecting the lazy receiver. Its member obligations are
+covered by that unresolved tuple identity; no lazy read becomes a violation.
+
 Hand-stated authored contract. Copy this tree to
 fixtures/reactive-ir/package-lazy-getter-consumer and add its node_modules
 .gitignore exceptions. There is no acceptance catalog. Coverage must authorize

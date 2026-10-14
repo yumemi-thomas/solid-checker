@@ -3,11 +3,8 @@
   "strictReadViolations": [
     "TimerRead",
     "CounterRead",
-    "PaginationRead",
     "ObjectRead",
-    "SignalRead",
     "MemoRead",
-    "SelectedRead",
     "SelectedObjectRead",
     "WrappedRead"
   ],
@@ -16,6 +13,9 @@
     "ShadowedRoot"
   ],
   "noProvenStrictRead": [
+    "PaginationRead",
+    "SignalRead",
+    "SelectedRead",
     "UnresolvedReads",
     "ShadowedBinding"
   ],

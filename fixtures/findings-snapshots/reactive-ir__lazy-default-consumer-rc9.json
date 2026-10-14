@@ -2,13 +2,13 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/lazy-default-consumer-rc9/Default.tsx",
       "start": 566,
-      "end": 573,
+      "end": 571,
       "fixes": 0
     },
     {
@@ -22,13 +22,13 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/lazy-default-consumer-rc9/Default.tsx",
-      "start": 1064,
-      "end": 1070,
+      "start": 1051,
+      "end": 1056,
       "fixes": 0
     },
     {

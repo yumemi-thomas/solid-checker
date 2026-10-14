@@ -1,5 +1,11 @@
 # returned-store-nested-read
 
+ADR 0282 follow-up: this project contains opaque handoffs that retain the
+iteration veto. The returned source depends on a tuple slot selected inside
+the hook, so the former proved consumer reads are now SC9012 uncertifiable.
+They remain candidates rather than becoming silent; the tables below describe
+the source derivation when the iteration premise is intact.
+
 **Claim (ADR 0281).** ADR 0222's returned-source proof refused a hook whose body names the store root anywhere inside a call argument, so the `@tanstack/solid-query` `useMutation` shape (a render effect that reads `state.isError` and throws) lost its store, and every caller's read went silent. A root reference inside an argument now escapes only when it can hand the root or a sub-proxy to other code: the bare root, a member chain that is itself an argument or a callee (which receives the proxy as `this`), or a chain a function returns (`source_discovery::member_chain_escapes`).
 
 | Case | `SC1001` on `thing.search` | Why |

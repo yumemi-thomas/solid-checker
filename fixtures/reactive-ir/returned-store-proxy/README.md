@@ -1,5 +1,11 @@
 # returned-store-proxy
 
+ADR 0282 follow-up: this project contains opaque handoffs that retain the
+iteration veto. The returned source depends on a tuple slot selected inside
+the hook, so the former proved consumer reads are now SC9012 uncertifiable.
+They remain candidates rather than becoming silent; the tables below describe
+the source derivation when the iteration premise is intact.
+
 **Claim (ADR 0287).** A hook that returns `new Proxy(state, handler)` over the store it created returns that store when the handler defines only a `get` trap and every value the trap returns is `Reflect.get(target, prop[, receiver])` over its own unwritten parameters. Every other operation forwards to the target, and a throw returns nothing. A same-file `return useBase()` forward returns what `useBase` returns. The shape is `@tanstack/solid-query` 6.0.0-rc.0's `useQuery` → `useBaseQuery`, without its server branch.
 
 | Case | `SC1001` on `query.search` | Why |

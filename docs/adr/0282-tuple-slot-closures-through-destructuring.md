@@ -89,6 +89,127 @@ write whose key no literal names is the one veto this slice can see.
   are untouched, so `cross_file_proof_digest` needs nothing new.
 - No fact, schema, wire or contract change.
 
+## Amendment: iteration mutation veto (2026-10-14)
+
+The original prototype-spelled reflective-target test missed shipped false
+positives: `Array.prototype[Symbol.iterator] = replacement` changes which
+closures destructuring binds. The review's `nsb` runtime yields harmless
+closures, so following the original slot's signal read was unsound.
+
+Returned-tuple identity now has its own visible iteration-mutation census.
+Normalized assignment/update/delete targets and exact library reflective
+mutations cover `@@iterator`, iterator `next` and early-close `return`, plus
+`__proto__`/`Object.setPrototypeOf`/`Reflect.setPrototypeOf`. Aliased
+`Array.prototype`, `%ArrayIteratorPrototype%` obtained by `getPrototypeOf`,
+unknown keys, unknown receivers, spread arguments and opaque descriptor/source
+maps veto. A library-signature mutation alias retains a possible mutation;
+it grants no runtime callee authority. A missing callee signature/implementation
+also vetoes when its supplied first argument may be an intrinsic receiver,
+including erased signatures. No target is classified by a `prototype` text search.
+
+The follow-up review also found reflective invocation (`.call`, `.apply`,
+`.bind`, `Reflect.apply`) bypassing the direct mutation catalog. Such an
+invocation vetoes when its target may be a mutator or is unresolved; the
+receiver/argument slots are not mistaken for direct mutation targets. An
+exact current source function discharges the invocation target only because
+its implementation participates in the same census and the invocation operator
+has no visible possible replacement. A source function alone cannot certify
+its mutable call/apply/bind members. Reflect.apply additionally requires its
+unaliased global namespace identity; a typeof Reflect receiver type is
+insufficient. Computed invocation keys without a literal key remain unresolved.
+Erased member signatures
+retain possible reflective invocation, rather than certifying it non-mutating.
+The existing `ModuleHazardKind::Eval`, indirect eval's library declaration,
+and calls/constructions of the unshadowed `Function` constructor also veto:
+string code can write any intrinsic, even with only primitive arguments.
+
+The round-3 review exposed erased `globalThis.Function`/`globalThis.eval`
+members, destructured realm slots and function-value `.constructor` gateways.
+Transparent wrappers, source aliases (including selected imports), static
+computed keys, literal array slots and source factories returning those
+gateways retain their possible string execution. Conditional/logical arms,
+unsupported expression transports and unknown returned callable/receiver
+slots also withhold the absence premise rather than guessing their value.
+Unknown gateway members, cycles, reassigned bindings and exhausted alias
+budgets withhold authority; they never establish a proven mutation. A closed
+non-escaping source allocation with its own exact method body can discharge a
+same-spelled local slot. Realm names and nominal Function types alone grant no
+positive authority. A factory declaration cannot discharge an opaque returned
+callable's intrinsic argument handoff. Mutable-but-unwritten bindings and
+exact reassignments to source function literals do not alone imply a string
+gateway: their bodies remain in the census. A mutable/written factory's
+returned callable remains unknown; uninitialized bindings still census their
+assignments before any absence result.
+
+The same visible string-code census invalidates the Proxy replacement and
+invocation-operator absence guards. Library declaration identity does not
+establish current runtime Proxy/call/apply/bind/Reflect identity after visible
+string code. The minimized string replacement of Proxy therefore retains
+SC9012, while actual global Proxy and source reflective controls still retain
+SC1001 when that census is absent. The tuple proof digest already binds this
+veto; retained edits exercise insertion, removal and restoration across files.
+
+Known other string keys are unrelated to the engine's dense literal iteration:
+the literal owns indices and length, and iterator results own value/done.
+An exact unwritten local class prototype or a separate literal allocation
+(including immutable local aliases) is disjoint and does not veto. Missing,
+imported, parameter-rooted, reassigned or cyclic identities never discharge a
+relevant mutation. This conservative project-wide veto is also global across
+analyzed dependency sources; this amendment does not change source selection.
+
+An otherwise supported tuple closure under this veto retains SC9012
+**uncertifiable**, replacing its SC1001 violation. No substitute implementation
+is followed. The companion typed-source array-slot proof and contracted tuple
+source binding also refuse: a declared Accessor type cannot restore the
+original slot. A direct accessor call retains its existing SC9012 typed-source
+uncertifiable finding. The cross-file proof digest binds the veto so a mutation in a
+different file invalidates the consuming proof. This remains a visible-veto
+premise, not an exhaustive mutation census of unseen runtime code.
+
+Every returned-tuple slot consumer now asks the same premise: interprocedural
+projection, structural value identity, callback-result selection, local-access
+member effects and source discovery. Import resolution's preinstalled authored
+returned-member graphs are withdrawn before graph consumers run, so SC1001
+cannot survive alongside the uncertainty for a replaced slot.
+Former sources selected inside a project wrapper or callback, and source
+arguments carried into an object contract, remain uncertainty candidates;
+withdrawing their tuple derivation cannot certify silence.
+
+Exact dialect primitive calls (`primitive_at_call`, through the selected
+vocabulary) do not themselves mutate iteration intrinsics. A store setter is
+discharged only with exact immutable, unwritten source-slot provenance from a
+resolved dialect primitive; `TypeRole::StoreSetter` corroborates that origin
+when available. A declared or cast setter type alone grants nothing. Callback
+bodies and arguments still participate in the visible mutation census.
+An exact unaliased global `Proxy` construction also writes no intrinsic:
+ProxyCreate validates object values and installs internal slots without calling
+the target or handler. The library signature alone is insufficient; the runtime
+variable must resolve to the library declaration and the visible census must
+exclude replacement of that global. A ProxyConstructor-typed foreign value
+does not discharge a call.
+
+The opaque-call veto is explicitly an **argument-handoff** premise: a possible
+intrinsic passed as a non-primitive first argument cannot be discharged without
+implementation evidence. Zero-argument calls and calls given only primitive,
+nullish, function or separate local-allocation first arguments do not veto by
+themselves. None of those forms proves an opaque callee unable to reach globals;
+they are consistent only within this bounded visible-census premise.
+
+An installed package whose runtime code is not selected can hijack
+`Array.prototype[Symbol.iterator]` and still leave an SC1001 on the consumer.
+For example, an unselected package's `patch()` can perform that write without
+any intrinsic argument. This is a known unseen-code false-positive boundary,
+also shared by setup/entry files outside the analyzing program, not a resolved
+case. Source selection is unchanged. Foreign class results such as
+`world.createCollider(desc)` remain uncertifiable when argument disjointness
+needs ADR 0309's unavailable runtime value-flow fact; their TypeScript types
+do not prove intrinsic disjointness.
+
+Fixture `tuple-iteration-veto` seeds the project assignment from the review.
+Its process test runs the positive and negative `cases.json` variants in
+isolated projects, since one global positive would veto every control tuple
+in a shared project. All variants are tsc-clean against published rc.13.
+
 ## Evidence
 
 - Fixture `reactive-ir/tuple-slot-provenance`: four proven `SC1001`s, one new

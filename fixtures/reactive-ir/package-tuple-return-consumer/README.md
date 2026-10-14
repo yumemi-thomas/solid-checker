@@ -1,5 +1,10 @@
 # A consumer reading through a wrapper into a reactive tuple
 
+ADR 0282 amendment: unresolved calls supplied with a possible intrinsic receiver
+withhold the destructured tuple source identities. `SignalSlot` and `StoreSlot`
+retain uncertifiable candidates; they must neither retain a proven violation
+nor become silent. Non-destructured source returns keep their existing proof.
+
 Pins `Dialect::returns_reactive_tuple` — which Solid 2.0 primitives return a
 two-slot `[source, setter]` tuple rather than the source itself — at the
 **behaviour** level. Until this fixture the row was correct-by-construction:
