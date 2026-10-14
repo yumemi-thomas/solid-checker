@@ -9,7 +9,8 @@ use std::{
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use solid_facts::ProjectFacts;
 use solid_reactive_ir::{
-    CacheRetention, Finding, IncrementalBuilder, Program, RuleOptions, RuntimeEnvironment,
+    AnalysisInputs, CacheRetention, Finding, IncrementalBuilder, Program, RuleOptions,
+    RuntimeEnvironment,
     contract_semantics::{AcceptedContractIndex, ClaimDomain, ValueShape},
     suppress_findings_owned_by_enabled_rules,
 };
@@ -262,7 +263,27 @@ impl DiagnosticSession {
         contracts: &AcceptedContractIndex,
         enablement: RequestedRuleEnablement<'_>,
     ) -> Result<(Arc<DiagnosticAnalysis>, DiagnosticTimings), BackendError> {
-        self.analyze_accepted_inner(project, sources, facts, contracts, enablement, true)
+        self.analyze_inputs_measured_with_enablement(
+            project,
+            sources,
+            facts,
+            AnalysisInputs::contracts_only(contracts),
+            enablement,
+        )
+    }
+
+    /// [`Self::analyze_accepted_measured_with_enablement`] given the
+    /// project's package boundary too. Both inputs are part of the retained
+    /// diagnostic's identity.
+    pub fn analyze_inputs_measured_with_enablement(
+        &mut self,
+        project: &Path,
+        sources: &[SourceFile],
+        facts: &ProjectFacts,
+        inputs: AnalysisInputs<'_>,
+        enablement: RequestedRuleEnablement<'_>,
+    ) -> Result<(Arc<DiagnosticAnalysis>, DiagnosticTimings), BackendError> {
+        self.analyze_accepted_inner(project, sources, facts, inputs, enablement, true)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -271,10 +292,11 @@ impl DiagnosticSession {
         project: &Path,
         sources: &[SourceFile],
         facts: &ProjectFacts,
-        contracts: &AcceptedContractIndex,
+        inputs: AnalysisInputs<'_>,
         enablement: RequestedRuleEnablement<'_>,
         validate_host_inputs: bool,
     ) -> Result<(Arc<DiagnosticAnalysis>, DiagnosticTimings), BackendError> {
+        let contracts = inputs.contracts;
         if let Some((baseline, browser)) = contracts.execution_views() {
             let hosts = contracts
                 .inferred_hosts()
@@ -286,7 +308,10 @@ impl DiagnosticSession {
                 project,
                 sources,
                 facts,
-                &baseline,
+                AnalysisInputs {
+                    boundary: inputs.boundary,
+                    contracts: &baseline,
+                },
                 enablement.clone(),
                 false,
             )?;
@@ -294,7 +319,17 @@ impl DiagnosticSession {
             // admission from this run can replace the ordinary program handed
             // to certification or the findings of a no-target function body.
             let (selected, selected_timings) = DiagnosticSession::new(self.dialect)
-                .analyze_accepted_inner(project, sources, facts, &browser, enablement, false)?;
+                .analyze_accepted_inner(
+                    project,
+                    sources,
+                    facts,
+                    AnalysisInputs {
+                        boundary: inputs.boundary,
+                        contracts: &browser,
+                    },
+                    enablement,
+                    false,
+                )?;
             let browser_site = |location: &SourceLocation| {
                 hosts.browser_proof_site(&location.path, location.start_byte, location.end_byte)
             };
@@ -358,6 +393,10 @@ impl DiagnosticSession {
         }
         let external_contracts = contracts.external_packages();
         let contracts = external_contracts.as_ref();
+        let inputs = AnalysisInputs {
+            boundary: inputs.boundary,
+            contracts,
+        };
         if validate_host_inputs && let Some(hosts) = contracts.inferred_hosts() {
             crate::inferred_host::validate_inputs(hosts)?;
         }
@@ -381,10 +420,10 @@ impl DiagnosticSession {
             .and_then(|notice| notice.scoped_to(facts));
         // Consult the builder before a diagnostic hit: its identity includes
         // ADR 0266's visible veto even when fact generation is unchanged.
-        let (program, _) = self.builder.build_with_accepted_contracts_shared(
+        let (program, _) = self.builder.build_with_analysis_inputs_shared(
             facts,
             self.dialect.vocabulary,
-            contracts,
+            inputs,
             &rule_options,
         )?;
         let identity = DiagnosticIdentity {
@@ -392,7 +431,7 @@ impl DiagnosticSession {
             dialect: self.dialect.id,
             project_id: facts.project_id.clone(),
             generation: facts.generation.get(),
-            contracts: vec![contracts.cache_fingerprint()],
+            contracts: inputs.cache_fingerprints(),
             rule_options: rule_options.clone(),
             release_notice: release_notice.clone(),
         };
@@ -486,8 +525,28 @@ pub fn analyze_project_accepted_measured_with_enablement(
     contracts: &AcceptedContractIndex,
     enablement: RequestedRuleEnablement<'_>,
 ) -> Result<(Arc<DiagnosticAnalysis>, DiagnosticTimings), BackendError> {
+    analyze_project_inputs_measured_with_enablement(
+        dialect,
+        project,
+        sources,
+        facts,
+        AnalysisInputs::contracts_only(contracts),
+        enablement,
+    )
+}
+
+/// [`analyze_project_accepted_measured_with_enablement`] given the project's
+/// package boundary too.
+pub fn analyze_project_inputs_measured_with_enablement(
+    dialect: &'static Dialect,
+    project: &Path,
+    sources: &[SourceFile],
+    facts: &ProjectFacts,
+    inputs: AnalysisInputs<'_>,
+    enablement: RequestedRuleEnablement<'_>,
+) -> Result<(Arc<DiagnosticAnalysis>, DiagnosticTimings), BackendError> {
     DiagnosticSession::new(dialect)
-        .analyze_accepted_measured_with_enablement(project, sources, facts, contracts, enablement)
+        .analyze_inputs_measured_with_enablement(project, sources, facts, inputs, enablement)
 }
 
 fn retain_enabled(

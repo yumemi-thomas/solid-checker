@@ -4378,26 +4378,10 @@ fn resolve_contract_imports_inner(
             if import.type_only {
                 continue;
             }
+            // An import no contract binds is the package boundary's question,
+            // answered by `discover_boundary_defects`.
             let Some(contract) = exact.get(&(file.path.to_string(), import.module.to_string()))
             else {
-                if let Some(reason) =
-                    accepted.uncertifiable_reason(file.path.as_str(), &import.module)
-                {
-                    // Only the acceptance gate carries the note: an obsolete
-                    // policy-1 receipt is its own, already specific answer.
-                    let refusal = (reason == UncertifiableImportReason::Unspecified)
-                        .then(|| accepted.admission_refusal_at(file.path.as_str(), &import.module))
-                        .flatten();
-                    push_missing_accepted_import(
-                        &mut missing_exports,
-                        file,
-                        import,
-                        entities,
-                        dialect,
-                        reason,
-                        refusal,
-                    );
-                }
                 continue;
             };
             counts.bound += 1;
@@ -5356,6 +5340,57 @@ mod barrel_binding_tests {
             .is_none()
         );
     }
+}
+
+/// The acceptance gate's defects: one per demanded export of every import no
+/// accepted contract binds and the requirement markers name, in file and
+/// import order (phase P3 of the contract-removal plan). Stored apart from
+/// what binding found about bound contracts.
+///
+/// The markers are read through `inputs.contracts`, not from the boundary's
+/// legacy keys directly: the index applies them per execution view and per
+/// nested-catalog scope, and requirements restored after acquisition reach
+/// only its project-wide tier. Reading the keys anywhere else would move
+/// findings at browser importers and inside scopes.
+pub(super) fn discover_boundary_defects(
+    facts: &ProjectFacts,
+    inputs: crate::AnalysisInputs<'_>,
+    entities: &EntitySymbols,
+    dialect: &dyn Dialect,
+) -> Vec<StaticDefect> {
+    let accepted = inputs.contracts;
+    let mut defects = Vec::new();
+    for file in &facts.files {
+        for import in &file.ast.imports {
+            // Exactly the imports `project_accepted_contracts` binds.
+            if import.type_only
+                || accepted
+                    .contract(file.path.as_str(), &import.module)
+                    .is_ok()
+            {
+                continue;
+            }
+            let Some(reason) = accepted.uncertifiable_reason(file.path.as_str(), &import.module)
+            else {
+                continue;
+            };
+            // Only the acceptance gate carries the note: an obsolete
+            // policy-1 receipt is its own, already specific answer.
+            let refusal = (reason == UncertifiableImportReason::Unspecified)
+                .then(|| accepted.admission_refusal_at(file.path.as_str(), &import.module))
+                .flatten();
+            push_missing_accepted_import(
+                &mut defects,
+                file,
+                import,
+                entities,
+                dialect,
+                reason,
+                refusal,
+            );
+        }
+    }
+    defects
 }
 
 fn push_missing_accepted_import(

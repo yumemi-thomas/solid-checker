@@ -11,9 +11,10 @@ use serde::Deserialize;
 use solid_facts::TypeScriptTable;
 use solid_facts_backend::SemanticDemandGroup;
 use solid_facts_backend::{
-    AcceptedContractSource, BackendError, ResolvedImport, SemanticDemandOptions, SourceFile,
-    TypeFactsProvider, analyze_project_accepted_measured_with_enablement,
-    build_project_native_measured_with_demands, load_external_contract_index,
+    AcceptedContractSource, AnalysisInputs, BackendError, PackageBoundary, ResolvedImport,
+    SemanticDemandOptions, SourceFile, TypeFactsProvider,
+    analyze_project_inputs_measured_with_enablement, build_project_native_measured_with_demands,
+    load_external_contract_index,
 };
 
 #[derive(Deserialize)]
@@ -246,12 +247,20 @@ pub fn check(request_json: &str) -> Result<String, Box<dyn std::error::Error>> {
                 import,
             }
         }))?;
-    let (analysis, _) = analyze_project_accepted_measured_with_enablement(
+    // The shared analysis input. This request states no unanalyzable package,
+    // so the boundary is empty: an import nothing answers stays an ordinary
+    // uncertifiable path, exactly as before the boundary existed. A host
+    // protocol that states one is phase P5's (contract-removal plan).
+    let boundary = PackageBoundary::default();
+    let (analysis, _) = analyze_project_inputs_measured_with_enablement(
         dialect,
         Path::new(&request.project_id),
         &request.sources,
         &facts,
-        &contracts,
+        AnalysisInputs {
+            boundary: &boundary,
+            contracts: &contracts,
+        },
         Default::default(),
     )?;
     Ok(serde_json::to_string(&analysis.snapshot)?)
@@ -260,6 +269,38 @@ pub fn check(request_json: &str) -> Result<String, Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use super::CheckRequest;
+
+    /// The adapter's answer through the shared input is the contracts-only
+    /// answer: an empty boundary moves nothing.
+    #[test]
+    fn the_shared_input_with_an_empty_boundary_answers_as_contracts_alone() {
+        let request = r#"{"projectId":"/p/tsconfig.json","generation":1,"sources":[],
+                "typeFacts":{"schema":2,"generation":1,"projectId":"/p/tsconfig.json",
+                "sources":[],"entities":[],"symbols":[],"files":[]}}"#;
+        let shared = super::check(request).expect("checks");
+        let decoded: CheckRequest = serde_json::from_str(request).unwrap();
+        let dialect = solid_facts_backend::dialect::default_dialect();
+        let mut typescript = super::InMemoryTypeFacts(Some(decoded.type_facts));
+        let (facts, _) = solid_facts_backend::build_project_native_measured_with_demands(
+            dialect,
+            decoded.project_id.clone(),
+            decoded.generation,
+            decoded.sources.clone(),
+            &mut typescript,
+            solid_facts_backend::SemanticDemandOptions::PREFERENCES,
+        )
+        .unwrap();
+        let (legacy, _) = solid_facts_backend::analyze_project_accepted_measured_with_enablement(
+            dialect,
+            std::path::Path::new(&decoded.project_id),
+            &decoded.sources,
+            &facts,
+            &Default::default(),
+            Default::default(),
+        )
+        .unwrap();
+        assert_eq!(shared, serde_json::to_string(&legacy.snapshot).unwrap());
+    }
 
     /// A request from a host written for the retired compiled-in tier still
     /// decodes: its fields are accepted and have no effect (ADR 0228).

@@ -43,6 +43,7 @@ the selected vocabulary and receives that dialect's answer.
 | ESLint-era file-local checks | fact helpers live in `solid-reactive-ir::upstream_compat` | Executed unconditionally; the modules that only 1.x ran went with it |
 | Shared static and fine-grained defects | `StaticDefectKind`, populated by static analysis and `upstream_compat::shared_reactivity`; contains no rule prose | Projected and worded by the 2.0 catalog; the async-tracked-scope check is omitted |
 | Package contracts | stable-v1 decoding, receipt validation, and exact external artifact acquisition terminate in `solid-facts-backend`; normalized external semantics live in `solid-reactive-ir::contract_semantics` | External package contracts; `solid-js`, `@solidjs/signals`, and `@solidjs/web` behavior comes from the built-in model |
+| Package boundary | `solid-reactive-ir::package_boundary` stores the imports whose package cannot be analyzed, with every recorded reason; the backend builds it at its decision sites (`package_requirements`, the dependency-source selector) and passes it beside the accepted contracts as `AnalysisInputs`. Through phase P7 of `docs/contract-removal-plan.md` only its legacy requirement keys reach the acceptance gate, and the gate reads them through the contract index's views and scopes; every other reason is explanation and part of the cache identity | Version-neutral |
 
 At runtime the only stable dialect id this build answers to is `solid-v2`, and
 `--dialect solid-v1` is refused as unknown. In Rust, `Version::V2` always means

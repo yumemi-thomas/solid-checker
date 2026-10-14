@@ -21,6 +21,7 @@ mod interproc;
 mod literal_member_slots;
 mod local_access;
 mod owners;
+pub mod package_boundary;
 mod pipeline;
 mod projection;
 mod reachability;
@@ -42,7 +43,10 @@ mod value_identity;
 pub use attribution::ObligationReach;
 pub use creates_walk::{CreatesDecline, CreatesDeclineKind, CreatesProposalWalk};
 pub use owners::function_binding_name;
-pub use pipeline::{build, build_with_accepted_contracts_measured};
+pub use pipeline::{
+    AnalysisInputs, build, build_with_accepted_contracts_measured,
+    build_with_analysis_inputs_measured,
+};
 pub use returns_walk::{
     ArgumentContainer, ReturnsDecline, described_callable_returns, literal_structural_returns,
     reading_callable_returns, value_completion, valueless_completion,
@@ -66,7 +70,7 @@ pub use projection::{
 };
 
 use cache::{BuildIdentity, IncrementalCacheState, RetainedBuild};
-use pipeline::build_with_accepted_contracts_measured_incremental;
+use pipeline::build_with_analysis_inputs_measured_incremental;
 
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
@@ -2436,8 +2440,28 @@ impl IncrementalBuilder {
         contracts: &contract_semantics::AcceptedContractIndex,
         rule_options: &RuleOptions,
     ) -> Result<(Arc<Program>, BuildTimings), BuildError> {
-        let external_contracts = contracts.external_packages();
-        let contracts = external_contracts.as_ref();
+        self.build_with_analysis_inputs_shared(
+            facts,
+            dialect,
+            AnalysisInputs::contracts_only(contracts),
+            rule_options,
+        )
+    }
+
+    /// [`Self::build_with_accepted_contracts_shared`] given a package
+    /// boundary too. Both inputs are part of the cache identity.
+    pub fn build_with_analysis_inputs_shared(
+        &mut self,
+        facts: &ProjectFacts,
+        dialect: &dyn Dialect,
+        inputs: AnalysisInputs<'_>,
+        rule_options: &RuleOptions,
+    ) -> Result<(Arc<Program>, BuildTimings), BuildError> {
+        let external_contracts = inputs.contracts.external_packages();
+        let inputs = AnalysisInputs {
+            boundary: inputs.boundary,
+            contracts: external_contracts.as_ref(),
+        };
         let total_started = Instant::now();
         let lookup_started = Instant::now();
         let premise_key = (
@@ -2458,7 +2482,7 @@ impl IncrementalBuilder {
             dialect: dialect.version(),
             project_id: facts.project_id.clone(),
             generation: facts.generation.get(),
-            contracts: vec![contracts.cache_fingerprint()],
+            contracts: inputs.cache_fingerprints(),
             rule_options: rule_options.clone(),
         };
         if self
@@ -2481,10 +2505,10 @@ impl IncrementalBuilder {
                 },
             ));
         }
-        let (program, mut timings) = build_with_accepted_contracts_measured_incremental(
+        let (program, mut timings) = build_with_analysis_inputs_measured_incremental(
             facts,
             dialect,
-            contracts,
+            inputs,
             rule_options,
             self.caches.for_build(),
             identity.runtime_configuration.clone(),
