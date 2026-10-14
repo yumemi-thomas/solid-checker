@@ -18,6 +18,7 @@ pub(crate) enum ReactiveIrStage {
     TypedAccessorsAndPropRoots,
     PropPropagationAndControlFlow,
     StaticPrepass,
+    ValueFlowShadow,
     LocalReadsAndWrites,
     InterproceduralSummaries,
     LocalAndInterprocedural,
@@ -30,12 +31,13 @@ pub(crate) enum ReactiveIrStage {
 
 impl ReactiveIrStage {
     #[cfg(test)]
-    pub(crate) const ALL: [Self; 13] = [
+    pub(crate) const ALL: [Self; 14] = [
         Self::IndexesAndReachability,
         Self::SourceDiscovery,
         Self::TypedAccessorsAndPropRoots,
         Self::PropPropagationAndControlFlow,
         Self::StaticPrepass,
+        Self::ValueFlowShadow,
         Self::LocalReadsAndWrites,
         Self::InterproceduralSummaries,
         Self::LocalAndInterprocedural,
@@ -53,6 +55,7 @@ impl ReactiveIrStage {
             Self::TypedAccessorsAndPropRoots => "typed-accessors-and-prop-roots",
             Self::PropPropagationAndControlFlow => "prop-propagation-and-control-flow",
             Self::StaticPrepass => "static-prepass",
+            Self::ValueFlowShadow => "value-flow-shadow",
             Self::LocalReadsAndWrites => "local-reads-and-writes",
             Self::InterproceduralSummaries => "interprocedural-summaries",
             Self::LocalAndInterprocedural => "local-and-interprocedural",
@@ -71,6 +74,7 @@ impl ReactiveIrStage {
             Self::TypedAccessorsAndPropRoots => &mut timings.typed_accessors_and_prop_roots,
             Self::PropPropagationAndControlFlow => &mut timings.prop_propagation_and_control_flow,
             Self::StaticPrepass => &mut timings.static_prepass,
+            Self::ValueFlowShadow => &mut timings.value_flow_shadow,
             Self::LocalReadsAndWrites => &mut timings.local_reads_and_writes,
             Self::InterproceduralSummaries => &mut timings.interprocedural_summaries,
             Self::LocalAndInterprocedural => &mut timings.local_and_interprocedural,
@@ -195,6 +199,7 @@ mod tests {
                 "typed-accessors-and-prop-roots",
                 "prop-propagation-and-control-flow",
                 "static-prepass",
+                "value-flow-shadow",
                 "local-reads-and-writes",
                 "interprocedural-summaries",
                 "local-and-interprocedural",

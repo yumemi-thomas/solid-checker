@@ -29,7 +29,7 @@ use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 60;
+pub const AST_FACTS_SCHEMA: u32 = 62;
 
 mod argument_completion;
 mod binding_references;
@@ -415,8 +415,118 @@ pub struct AstFacts {
     /// expression statement and is deliberately absent.
     #[serde(default)]
     pub module_directives: Vec<DirectiveFact>,
+    /// Every tagged template, with its substitutions in order (facts schema
+    /// 61, ADR 0309). The template calls its tag with the template object
+    /// as argument 0 and substitution `i` as argument `i + 1`; no call fact
+    /// records that invocation, and [`Self::template_literals`] deliberately
+    /// excludes tagged quasis.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tagged_templates: Vec<TaggedTemplateFact>,
+    /// Every array literal's elements in order, holes and spreads included
+    /// (facts schema 62, ADR 0309). [`Self::array_literals`] keeps the bare
+    /// spans its consumers read.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub array_literal_elements: Vec<ArrayLiteralFact>,
+    /// Every element of every array or object destructuring pattern, in
+    /// binding and assignment position alike (facts schema 62, ADR 0309):
+    /// which slot it projects, what it binds, and its default initializer.
+    /// A formal parameter's own default is its [`BindingFact::initializer`];
+    /// a default nested inside a parameter's pattern is only here.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pattern_elements: Vec<PatternElementFact>,
+    /// The operand of every `await` expression (facts schema 62, ADR 0309).
+    /// Awaiting a value Gets its `then` property.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub await_operands: Vec<Span>,
+    /// The expression of every JSX expression-container child, in elements
+    /// and fragments alike (facts schema 62, ADR 0309). Empty containers
+    /// (`{}` and comments) are absent. [`JsxElementFact::children`] holds the
+    /// container spans, which include the braces.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub jsx_child_expressions: Vec<Span>,
+    /// The initializer of every `using` and `await using` declarator (facts
+    /// schema 62, ADR 0309). The declaration Gets the value's
+    /// `Symbol.dispose` (or `Symbol.asyncDispose`) method and calls it when
+    /// the enclosing block exits: a protocol use no reference spells.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub disposal_initializers: Vec<Span>,
     #[serde(skip, default)]
     pub span_index: LazySpanIndex,
+}
+
+/// A tagged template expression (facts schema 62).
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaggedTemplateFact {
+    pub span: Span,
+    pub tag: Span,
+    /// The interpolated expressions, in order: arguments 1 onward of the
+    /// tag's invocation.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub substitutions: Vec<Span>,
+}
+
+/// An array literal and its elements (facts schema 62).
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArrayLiteralFact {
+    pub span: Span,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub elements: Vec<ArrayElementFact>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArrayElementFact {
+    pub kind: ArrayElementKind,
+    /// The element's value; a spread's argument; a hole's elision.
+    pub span: Span,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ArrayElementKind {
+    Value,
+    Spread,
+    Hole,
+}
+
+/// One element of a destructuring pattern (facts schema 62).
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PatternElementFact {
+    /// The array or object pattern (or assignment target) the element is in.
+    pub pattern: Span,
+    pub slot: PatternSlot,
+    /// An object pattern property's key; `None` in an array pattern and for
+    /// a rest element.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<Span>,
+    /// What the slot binds or assigns: an identifier, a member target, or a
+    /// nested pattern. A shorthand property's key is its target.
+    pub target: Span,
+    /// The default initializer, evaluated only when the projected value is
+    /// `undefined`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default: Option<Span>,
+    /// An assignment target pattern (`[a] = xs`) rather than a binding.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub assignment: bool,
+}
+
+/// Which value a pattern element projects.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "value", rename_all = "kebab-case")]
+pub enum PatternSlot {
+    /// An array pattern position before any rest element.
+    Index(u32),
+    /// An object pattern key the syntax states.
+    Key(CompactString),
+    /// An object pattern key computed at run time.
+    ComputedKey,
+    /// The rest element: the remaining iteration results, or the remaining
+    /// own enumerable properties.
+    Rest,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -1608,6 +1718,12 @@ impl AstFacts {
             loop_statements: Vec::new(),
             implicit_suspensions: Vec::new(),
             module_directives: Vec::new(),
+            tagged_templates: Vec::new(),
+            array_literal_elements: Vec::new(),
+            pattern_elements: Vec::new(),
+            await_operands: Vec::new(),
+            jsx_child_expressions: Vec::new(),
+            disposal_initializers: Vec::new(),
         }
     }
 
@@ -1770,6 +1886,12 @@ struct Collector<'s, 'semantic> {
     loop_statements: Vec<Span>,
     implicit_suspensions: Vec<Span>,
     module_directives: Vec<DirectiveFact>,
+    tagged_templates: Vec<TaggedTemplateFact>,
+    array_literal_elements: Vec<ArrayLiteralFact>,
+    pattern_elements: Vec<PatternElementFact>,
+    await_operands: Vec<Span>,
+    jsx_child_expressions: Vec<Span>,
+    disposal_initializers: Vec<Span>,
     conditional_control_stack: Vec<Span>,
     method_names: Vec<Option<NamedSpan>>,
     /// How many conditional/repeated/aborting constructs (if, ternary,
@@ -1976,6 +2098,12 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             loop_statements: Vec::new(),
             implicit_suspensions: Vec::new(),
             module_directives: Vec::new(),
+            tagged_templates: Vec::new(),
+            array_literal_elements: Vec::new(),
+            pattern_elements: Vec::new(),
+            await_operands: Vec::new(),
+            jsx_child_expressions: Vec::new(),
+            disposal_initializers: Vec::new(),
             conditional_control_stack: Vec::new(),
             discarded_expression: None,
             concise_arrow_bodies: Vec::new(),
@@ -2048,6 +2176,13 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.loop_statements.sort_unstable();
         self.implicit_suspensions.sort_unstable();
         self.module_directives.sort_by_key(|fact| fact.span);
+        self.tagged_templates.sort_by_key(|fact| fact.span);
+        self.array_literal_elements.sort_by_key(|fact| fact.span);
+        self.pattern_elements
+            .sort_by_key(|fact| (fact.pattern, fact.target, fact.default));
+        self.await_operands.sort_unstable();
+        self.jsx_child_expressions.sort_unstable();
+        self.disposal_initializers.sort_unstable();
         AstFacts {
             schema: AST_FACTS_SCHEMA,
             source,
@@ -2110,6 +2245,12 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             loop_statements: self.loop_statements,
             implicit_suspensions: self.implicit_suspensions,
             module_directives: self.module_directives,
+            tagged_templates: self.tagged_templates,
+            array_literal_elements: self.array_literal_elements,
+            pattern_elements: self.pattern_elements,
+            await_operands: self.await_operands,
+            jsx_child_expressions: self.jsx_child_expressions,
+            disposal_initializers: self.disposal_initializers,
         }
     }
 
@@ -2665,6 +2806,52 @@ fn transparent_inner_expression<'a>(expression: &'a Expression<'a>) -> Option<&'
     }
 }
 
+/// What a binding-pattern element binds, and its default initializer.
+fn binding_target_and_default(pattern: &BindingPattern<'_>) -> (Span, Option<Span>) {
+    match pattern {
+        BindingPattern::AssignmentPattern(assignment) => (
+            span(assignment.left.span()),
+            Some(span(assignment.right.span())),
+        ),
+        other => (span(other.span()), None),
+    }
+}
+
+/// What an assignment-pattern element assigns, and its default initializer.
+fn assignment_target_and_default(
+    element: &oxc_ast::ast::AssignmentTargetMaybeDefault<'_>,
+) -> (Span, Option<Span>) {
+    match element {
+        oxc_ast::ast::AssignmentTargetMaybeDefault::AssignmentTargetWithDefault(target) => {
+            (span(target.binding.span()), Some(span(target.init.span())))
+        }
+        other => (span(other.span()), None),
+    }
+}
+
+/// The slot an object-pattern key projects: a key the syntax states (an
+/// identifier, a string or a numeric literal, computed or not), or a key
+/// computed at run time.
+fn pattern_key_slot(key: &PropertyKey<'_>, computed: bool) -> PatternSlot {
+    let stated = match key {
+        PropertyKey::StaticIdentifier(identifier) if !computed => {
+            Some(CompactString::from(identifier.name.as_str()))
+        }
+        PropertyKey::StringLiteral(literal) => Some(CompactString::from(literal.value.as_str())),
+        PropertyKey::NumericLiteral(literal) => literal
+            .raw
+            .as_ref()
+            // Only a canonical integer spells its own runtime key.
+            .filter(|raw| {
+                raw.bytes().all(|byte| byte.is_ascii_digit())
+                    && (raw.as_str() == "0" || !raw.starts_with('0'))
+            })
+            .map(|raw| CompactString::from(raw.as_str())),
+        _ => None,
+    };
+    stated.map_or(PatternSlot::ComputedKey, PatternSlot::Key)
+}
+
 fn static_property_name(key: &PropertyKey<'_>) -> Option<NamedSpan> {
     match key {
         PropertyKey::StaticIdentifier(identifier) => Some(NamedSpan {
@@ -2888,6 +3075,14 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         // the conservative, position.
         if declaration.kind == oxc_ast::ast::VariableDeclarationKind::AwaitUsing {
             self.implicit_suspensions.push(span(declaration.span));
+        }
+        if matches!(
+            declaration.kind,
+            oxc_ast::ast::VariableDeclarationKind::Using
+                | oxc_ast::ast::VariableDeclarationKind::AwaitUsing
+        ) && let Some(init) = &declaration.init
+        {
+            self.disposal_initializers.push(span(init.span()));
         }
         if matches!(declaration.id, BindingPattern::ArrayPattern(_))
             && let Some(init) = &declaration.init
@@ -3418,6 +3613,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
 
     fn visit_await_expression(&mut self, expression: &AwaitExpression<'a>) {
         self.awaits.push(span(expression.span));
+        self.await_operands.push(span(expression.argument.span()));
         if self.conditional_flow_depth
             == self
                 .function_flow_depths
@@ -3833,6 +4029,16 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         // directly so their own nested nodes — including genuinely untagged
         // templates inside an interpolation — are still collected.
         self.tagged_template_tags.push(span(expression.tag.span()));
+        self.tagged_templates.push(TaggedTemplateFact {
+            span: span(expression.span),
+            tag: span(expression.tag.span()),
+            substitutions: expression
+                .quasi
+                .expressions
+                .iter()
+                .map(|interpolated| span(interpolated.span()))
+                .collect(),
+        });
         self.visit_expression(&expression.tag);
         for interpolated in &expression.quasi.expressions {
             self.visit_expression(interpolated);
@@ -3857,6 +4063,141 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 .collect(),
         });
         walk::walk_template_literal(self, literal);
+    }
+
+    fn visit_jsx_child(&mut self, child: &oxc_ast::ast::JSXChild<'a>) {
+        if let oxc_ast::ast::JSXChild::ExpressionContainer(container) = child
+            && let Some(expression) = container.expression.as_expression()
+        {
+            self.jsx_child_expressions.push(span(expression.span()));
+        }
+        walk::walk_jsx_child(self, child);
+    }
+
+    fn visit_array_pattern(&mut self, pattern: &oxc_ast::ast::ArrayPattern<'a>) {
+        let at = span(pattern.span);
+        for (index, element) in pattern.elements.iter().enumerate() {
+            let Some(element) = element else { continue };
+            let (target, default) = binding_target_and_default(element);
+            self.pattern_elements.push(PatternElementFact {
+                pattern: at,
+                slot: PatternSlot::Index(u32::try_from(index).unwrap_or(u32::MAX)),
+                key: None,
+                target,
+                default,
+                assignment: false,
+            });
+        }
+        if let Some(rest) = &pattern.rest {
+            self.pattern_elements.push(PatternElementFact {
+                pattern: at,
+                slot: PatternSlot::Rest,
+                key: None,
+                target: span(rest.argument.span()),
+                default: None,
+                assignment: false,
+            });
+        }
+        walk::walk_array_pattern(self, pattern);
+    }
+
+    fn visit_object_pattern(&mut self, pattern: &oxc_ast::ast::ObjectPattern<'a>) {
+        let at = span(pattern.span);
+        for property in &pattern.properties {
+            let (target, default) = binding_target_and_default(&property.value);
+            self.pattern_elements.push(PatternElementFact {
+                pattern: at,
+                slot: pattern_key_slot(&property.key, property.computed),
+                key: Some(span(property.key.span())),
+                target,
+                default,
+                assignment: false,
+            });
+        }
+        if let Some(rest) = &pattern.rest {
+            self.pattern_elements.push(PatternElementFact {
+                pattern: at,
+                slot: PatternSlot::Rest,
+                key: None,
+                target: span(rest.argument.span()),
+                default: None,
+                assignment: false,
+            });
+        }
+        walk::walk_object_pattern(self, pattern);
+    }
+
+    fn visit_array_assignment_target(&mut self, pattern: &oxc_ast::ast::ArrayAssignmentTarget<'a>) {
+        let at = span(pattern.span);
+        for (index, element) in pattern.elements.iter().enumerate() {
+            let Some(element) = element else { continue };
+            let (target, default) = assignment_target_and_default(element);
+            self.pattern_elements.push(PatternElementFact {
+                pattern: at,
+                slot: PatternSlot::Index(u32::try_from(index).unwrap_or(u32::MAX)),
+                key: None,
+                target,
+                default,
+                assignment: true,
+            });
+        }
+        if let Some(rest) = &pattern.rest {
+            self.pattern_elements.push(PatternElementFact {
+                pattern: at,
+                slot: PatternSlot::Rest,
+                key: None,
+                target: span(rest.target.span()),
+                default: None,
+                assignment: true,
+            });
+        }
+        walk::walk_array_assignment_target(self, pattern);
+    }
+
+    fn visit_object_assignment_target(
+        &mut self,
+        pattern: &oxc_ast::ast::ObjectAssignmentTarget<'a>,
+    ) {
+        use oxc_ast::ast::AssignmentTargetProperty;
+
+        let at = span(pattern.span);
+        for property in &pattern.properties {
+            let element = match property {
+                AssignmentTargetProperty::AssignmentTargetPropertyIdentifier(property) => {
+                    PatternElementFact {
+                        pattern: at,
+                        slot: PatternSlot::Key(property.binding.name.as_str().into()),
+                        key: Some(span(property.binding.span)),
+                        target: span(property.binding.span),
+                        default: property.init.as_ref().map(|init| span(init.span())),
+                        assignment: true,
+                    }
+                }
+                AssignmentTargetProperty::AssignmentTargetPropertyProperty(property) => {
+                    let (target, default) = assignment_target_and_default(&property.binding);
+                    PatternElementFact {
+                        pattern: at,
+                        slot: pattern_key_slot(&property.name, property.computed),
+                        key: Some(span(property.name.span())),
+                        target,
+                        default,
+                        assignment: true,
+                    }
+                }
+            };
+            self.pattern_elements.push(element);
+        }
+        if let Some(rest) = &pattern.rest {
+            self.pattern_elements.push(PatternElementFact {
+                pattern: at,
+                slot: PatternSlot::Rest,
+                key: None,
+                target: span(rest.target.span()),
+                default: None,
+                assignment: true,
+            });
+        }
+        walk::walk_object_assignment_target(self, pattern);
     }
 
     fn visit_jsx_fragment(&mut self, fragment: &oxc_ast::ast::JSXFragment<'a>) {
@@ -4088,6 +4429,27 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
 
     fn visit_array_expression(&mut self, array: &oxc_ast::ast::ArrayExpression<'a>) {
         self.array_literals.push(span(array.span));
+        self.array_literal_elements.push(ArrayLiteralFact {
+            span: span(array.span),
+            elements: array
+                .elements
+                .iter()
+                .map(|element| match element {
+                    ArrayExpressionElement::SpreadElement(spread) => ArrayElementFact {
+                        kind: ArrayElementKind::Spread,
+                        span: span(spread.argument.span()),
+                    },
+                    ArrayExpressionElement::Elision(hole) => ArrayElementFact {
+                        kind: ArrayElementKind::Hole,
+                        span: span(hole.span),
+                    },
+                    value => ArrayElementFact {
+                        kind: ArrayElementKind::Value,
+                        span: span(value.span()),
+                    },
+                })
+                .collect(),
+        });
         walk::walk_array_expression(self, array);
     }
 
@@ -4888,6 +5250,189 @@ export const short = async () => 2;
             panic!("one tag: {:?}", facts.tagged_template_tags);
         };
         assert_eq!(&source[tag.start as usize..tag.end as usize], "o.t");
+    }
+
+    fn text(source: &str, span: Span) -> &str {
+        &source[span.start as usize..span.end as usize]
+    }
+
+    #[test]
+    fn tagged_templates_record_their_substitutions_as_tag_arguments() {
+        let source = "declare function tag(s: TemplateStringsArray, ...v: unknown[]): void;\n\
+                      declare const value: () => string;\n\
+                      tag`a${value}b${1 + 1}`; tag`none`; `plain${value}`;";
+        let facts = extract("/project/tags.ts", source).unwrap();
+        let [first, second] = facts.tagged_templates.as_slice() else {
+            panic!("two tagged templates: {:?}", facts.tagged_templates);
+        };
+        assert_eq!(text(source, first.tag), "tag");
+        assert_eq!(
+            first
+                .substitutions
+                .iter()
+                .map(|substitution| text(source, *substitution))
+                .collect::<Vec<_>>(),
+            ["value", "1 + 1"]
+        );
+        assert!(second.substitutions.is_empty());
+        // The untagged literal stays in its own table only.
+        assert_eq!(facts.template_literals.len(), 1);
+    }
+
+    #[test]
+    fn array_literals_record_values_spreads_and_holes_in_order() {
+        let source = "declare const value: () => string; declare const xs: unknown[];\n\
+                      const a = [value, , ...xs, value as unknown];";
+        let facts = extract("/project/arrays.ts", source).unwrap();
+        let [array] = facts.array_literal_elements.as_slice() else {
+            panic!("one array: {:?}", facts.array_literal_elements);
+        };
+        assert_eq!(
+            array
+                .elements
+                .iter()
+                .map(|element| (element.kind, text(source, element.span)))
+                .collect::<Vec<_>>(),
+            [
+                (ArrayElementKind::Value, "value"),
+                (ArrayElementKind::Hole, ","),
+                (ArrayElementKind::Spread, "xs"),
+                (ArrayElementKind::Value, "value as unknown"),
+            ]
+        );
+        assert_eq!(facts.array_literals, [array.span]);
+    }
+
+    #[test]
+    fn pattern_elements_record_slots_targets_defaults_and_rests() {
+        let source = "declare const value: () => string; declare const o: any; declare const k: string;\n\
+                      function helper(v: () => string, { text = v(), 'q': [first = value, ...tail], [k]: c, 0: z, ...others } = {}) {}\n\
+                      let a, b, r; ({ a = value, b: [r = 1] } = o); [a, ...b] = o;";
+        let facts = extract("/project/patterns.ts", source).unwrap();
+        let rows = facts
+            .pattern_elements
+            .iter()
+            .map(|element| {
+                let slot = match &element.slot {
+                    PatternSlot::Index(index) => format!("#{index}"),
+                    PatternSlot::Key(key) => format!(".{key}"),
+                    PatternSlot::ComputedKey => "[*]".into(),
+                    PatternSlot::Rest => "...".into(),
+                };
+                format!(
+                    "{}{slot}->{}{}{}",
+                    if element.assignment { "=" } else { "" },
+                    text(source, element.target),
+                    element
+                        .default
+                        .map(|default| format!("={}", text(source, default)))
+                        .unwrap_or_default(),
+                    element
+                        .key
+                        .map(|key| format!(" key:{}", text(source, key)))
+                        .unwrap_or_default(),
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            rows,
+            [
+                ".text->text=v() key:text",
+                ".q->[first = value, ...tail] key:'q'",
+                "[*]->c key:k",
+                ".0->z key:0",
+                "...->others",
+                "#0->first=value",
+                "...->tail",
+                "=.a->a=value key:a",
+                "=.b->[r = 1] key:b",
+                "=#0->r=1",
+                "=#0->a",
+                "=...->b",
+            ]
+        );
+        // The parameter's own default stays its binding's initializer.
+        let helper = &facts.functions[0];
+        assert_eq!(
+            helper.parameters[1]
+                .initializer
+                .map(|span| text(source, span)),
+            Some("{}")
+        );
+    }
+
+    #[test]
+    fn await_operands_and_jsx_child_expressions_are_recorded() {
+        let source = "declare const value: () => string;\n\
+                      async function f() { await value; await (value as unknown); }\n\
+                      const view = <p>{value}{/* note */}{value()}<>{ value }</></p>;";
+        let facts = extract("/project/view.tsx", source).unwrap();
+        assert_eq!(
+            facts
+                .await_operands
+                .iter()
+                .map(|operand| text(source, *operand))
+                .collect::<Vec<_>>(),
+            ["value", "value as unknown"]
+        );
+        assert_eq!(
+            facts
+                .jsx_child_expressions
+                .iter()
+                .map(|child| text(source, *child))
+                .collect::<Vec<_>>(),
+            ["value", "value()", "value"]
+        );
+    }
+
+    #[test]
+    fn disposal_initializers_are_recorded() {
+        let source = "declare const value: Disposable;\n\
+                      async function f() { using held = value; await using later = (value as any); const plain = value; }";
+        let facts = extract("/project/dispose.ts", source).unwrap();
+        assert_eq!(
+            facts
+                .disposal_initializers
+                .iter()
+                .map(|initializer| text(source, *initializer))
+                .collect::<Vec<_>>(),
+            ["value", "value as any"]
+        );
+    }
+
+    #[test]
+    fn shadow_event_tables_default_without_attesting_completeness() {
+        let source = "async function f({ x = 1, ...rest } = {}) { using held = rest; await x; return tag`a${[x, ...rest]}`; } const view = <><p>{f()}{/* comment */}</p></>;";
+        let facts = extract("/project/control.tsx", source).unwrap();
+        let fields = [
+            "taggedTemplates",
+            "arrayLiteralElements",
+            "patternElements",
+            "awaitOperands",
+            "jsxChildExpressions",
+            "disposalInitializers",
+        ];
+        let mut old = serde_json::to_value(&facts).unwrap();
+        for field in fields {
+            assert!(old.as_object_mut().unwrap().remove(field).is_some());
+        }
+        let legacy: AstFacts = serde_json::from_value(old.clone()).unwrap();
+        assert!(legacy.tagged_templates.is_empty());
+        assert!(legacy.array_literal_elements.is_empty());
+        assert!(legacy.pattern_elements.is_empty());
+        assert!(legacy.await_operands.is_empty());
+        assert!(legacy.jsx_child_expressions.is_empty());
+        assert!(legacy.disposal_initializers.is_empty());
+        assert_eq!(serde_json::to_value(&legacy).unwrap(), old);
+        let roundtrip: AstFacts =
+            serde_json::from_value(serde_json::to_value(&facts).unwrap()).unwrap();
+        assert_eq!(roundtrip, facts);
+        let changed = extract(
+            "/project/control.tsx",
+            &source.replace("await x", "await rest"),
+        )
+        .unwrap();
+        assert_ne!(changed.await_operands, facts.await_operands);
     }
 
     #[test]

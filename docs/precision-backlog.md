@@ -30969,3 +30969,20 @@ leaves a file there, and read-only projects get source analysis instead of
 falling back to contracts. Gates run with `SOLID_CHECKER_DAEMON=0`. No
 snapshot moved. Open: a crashed run leaves its scratch file in
 `$TMPDIR/solid-checker-programs` (nothing reads it again).
+
+## ADR 0309 private observations (2026-10-15)
+
+The optional shadow stage records settled proven seeds and source-form uses.
+All seed coverage is open: reference completeness is unattested, including empty,
+excluded-only and import-only records. Exact identity gaps are retained instead
+of promoting an alias to an original declaration. Positive type/name exclusions
+exclude individual uses only. Invocation context is unbound and capture is null;
+function/default containment is lexical evidence alone. JSX and compiler-region
+execution, class folding and root/nested eager/deferred SSR spreads stay private
+runtime unknowns. Wrapped/optional eval binding semantics remain unattested.
+
+No production precision is recovered. Baseline seed omissions, implicit uses,
+ambiguous targets and namespace transfers beyond direct await-import remain
+open. P1b and production runtime corrections are held separately. Independent
+new shapes require proof-first followups. No public snapshot, contract, manifest,
+pin, protocol or dependency selection changes accompany these observations.

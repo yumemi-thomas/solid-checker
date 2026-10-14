@@ -1,10 +1,53 @@
 # ADR 0309: A reactive value's flow is one fact
 
-- Status: accepted (owner, 2026-10-14), with the ten decisions below. Not
-  started. Design pass: `rust/target/research/adr0309-design.md`.
+- Status: accepted design (owner, 2026-10-14). A private observational slice
+  is assembled under the 2026-10-15 premise review; assembly is not integration
+  or merge clearance. The production migration and recall decisions below
+  remain held. Design pass: `rust/target/research/adr0309-design.md`.
 - Owner: a new `solid-reactive-ir` stage, `value_flow`, between the project
   indexes and `interproc`.
 - Phase 1b of docs/contract-removal-plan.md. It comes before phase P2.
+
+## Current observational boundary
+
+The private `value_flow` stage runs only when an audit or timing is requested,
+after source discovery, reachability and the static prepass have settled. Its
+inputs are immutable facts and the existing proven accessor/store/certain-prop
+inventory. It does not repair that inventory's omissions. Its only outputs are
+an optional audit and dedicated timing/counter observations. Audit write failure
+changes no public finding, status, or ordinary diagnostic.
+
+Every seed's coverage remains **open**. Reference-table presence is never a
+completeness attestation, including empty, excluded-only, missing-alias and
+import-only records. More specific observed-use and publication reasons remain
+visible. Missing, ambiguous, outside, or unrepresentable identities are explicit
+gaps; an alias declaration never substitutes for the seed's exact declaration.
+
+Call, Get, construct, and protocol records describe source syntax. Every
+invocation context is `Unbound`; lexical function containment supplies no
+execution, ownership, cardinality, or capture authority. Capture is null. Only
+positive erased-type and definition-name evidence excludes an individual use.
+Compiler discarded/tracked/untracked spans and JSX lowering remain private
+runtime-execution unknowns, irrespective of operations present or absent.
+Live class arrays, folded DOM values, and root/nested eager/deferred SSR spreads
+stay open without selecting a renderer or changing shared execution policy.
+
+AST schema 62 adds six defaulted, empty-skipping event tables. The old tables,
+collector walking/order, hazard and loader decisions, and shared span index are
+preserved. New tables have only private consumers. Wrapped/optional eval whose
+exact global binding or call semantics cannot be established from this layout
+records `eval-binding-unattested`; no shared eval/require collector changes are
+included. Existing decoded prototype evidence can record private unknowns.
+
+Symbols and per-file indexes are private and rebuilt for each enabled audit;
+shadow queries never initialize production symbol lookup storage. Seeds,
+aliases, uses, edges, and identity-gap locations use Canon order: project-relative
+path then location; outside roots retain absolute spellings and their relocation
+limitation. Equal seed keys use Canon-normalized content as a tie-break without
+deduplicating or selecting a seed. Transfers are not followed. There is no terminal, certification,
+forward-flow, public obligation, package trust, namespace admission, P1b handoff,
+or production ADR 0309 correction in this slice. New independent semantic shapes
+require separate proof-first proposals and reviews before implementation.
 
 ## Context
 

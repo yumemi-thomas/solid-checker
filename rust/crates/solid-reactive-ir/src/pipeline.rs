@@ -613,6 +613,12 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     };
     static_rules::static_prepass(&analysis, &mut draft);
     clock.finish(&mut build_timings, ReactiveIrStage::StaticPrepass);
+    // Private observational census over settled immutable inputs. Disabled means
+    // no shadow indexes, lookups, or audit I/O are constructed.
+    if crate::value_flow::enabled(emit_timings) {
+        crate::value_flow::shadow_stage(&analysis, emit_timings);
+        clock.finish(&mut build_timings, ReactiveIrStage::ValueFlowShadow);
+    }
     let factory_instances = reactive_analysis::collect_project(
         reactive_analysis::ProjectInputs {
             ctx: &analysis,

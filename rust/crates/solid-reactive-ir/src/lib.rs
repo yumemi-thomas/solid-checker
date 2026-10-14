@@ -38,6 +38,7 @@ mod static_rules;
 mod symbols;
 mod timings;
 mod upstream_compat;
+mod value_flow;
 mod value_identity;
 
 pub use attribution::ObligationReach;
@@ -2337,6 +2338,9 @@ pub struct BuildTimings {
     pub typed_accessors_and_prop_roots: Duration,
     pub prop_propagation_and_control_flow: Duration,
     pub static_prepass: Duration,
+    /// ADR 0309's value-flow fact in shadow mode: built, audited, consumed by
+    /// no finding.
+    pub value_flow_shadow: Duration,
     pub local_and_interprocedural: Duration,
     pub local_reads_and_writes: Duration,
     pub interprocedural_summaries: Duration,
