@@ -8,6 +8,69 @@ mod dependency_daemon_process;
 use support::{assert_rule_findings, diagnostic_fixture, findings_for_rule};
 
 #[test]
+fn authored_tuple_iteration_mutations_withdraw_returned_member_effects() {
+    use solid_facts_backend::fixture_authorization::{
+        authorize_fixture_contract, read_fixture_contract_request,
+    };
+    use std::{fs, path::Path, process::Command};
+    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    fn copy(from: &Path, to: &Path) {
+        fs::create_dir_all(to).unwrap();
+        for entry in fs::read_dir(from).unwrap() {
+            let entry = entry.unwrap();
+            if entry.file_type().unwrap().is_dir() {
+                copy(&entry.path(), &to.join(entry.file_name()));
+            } else {
+                fs::copy(entry.path(), to.join(entry.file_name())).unwrap();
+            }
+        }
+    }
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let scratch = std::path::PathBuf::from("/tmp/sc-scratch.noindex")
+        .join(format!("tuple-contract-{}", std::process::id()));
+    copy(
+        &root.join("fixtures/reactive-ir/tuple-contract-iteration-veto"),
+        &scratch,
+    );
+    let project = fs::canonicalize(&scratch).unwrap();
+    let authorization =
+        authorize_fixture_contract(&project, &read_fixture_contract_request(&project).unwrap())
+            .unwrap();
+    let trust = project.join("trust.json");
+    fs::write(&trust, authorization.trust_configuration).unwrap();
+    let mutation = fs::read_to_string(project.join("mutations.ts")).unwrap();
+    for (source, kind, code) in [
+        ("export {};", "violation", "SC1001"),
+        (mutation.as_str(), "uncertifiable", "SC9012"),
+        ("export {};", "violation", "SC1001"),
+    ] {
+        fs::write(project.join("mutations.ts"), source).unwrap();
+        let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+            .env("SOLID_TYPEFACTS_BIN", &typefacts)
+            .env("SOLID_CHECKER_DAEMON", "0")
+            .args(["--format", "json", "--project"])
+            .arg(project.join("tsconfig.json"))
+            .arg("--receipt-trust-configuration")
+            .arg(&trust)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let snapshot: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        let rows = snapshot["findings"].as_array().unwrap();
+        assert_eq!(rows.len(), 1, "{rows:#?}");
+        assert_eq!(rows[0]["kind"], kind, "{rows:#?}");
+        assert_eq!(rows[0]["id"], code, "{rows:#?}");
+    }
+    fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn returned_tuple_iteration_mutations_withdraw_only_the_proven_read() {
     use std::{fs, process::Command};
     let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
@@ -15,10 +78,8 @@ fn returned_tuple_iteration_mutations_withdraw_only_the_proven_read() {
     };
     let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let fixture = root.join("fixtures/reactive-ir/tuple-iteration-veto");
-    let scratch = std::env::temp_dir().join(format!(
-        "sc-scratch.noindex/tuple-iteration-{}",
-        std::process::id()
-    ));
+    let scratch = std::path::PathBuf::from("/tmp/sc-scratch.noindex")
+        .join(format!("tuple-iteration-{}", std::process::id()));
     for package in ["solid-js", "@solidjs/signals", "@solidjs/web"] {
         fs::create_dir_all(scratch.join("node_modules").join(package)).unwrap();
     }
@@ -82,6 +143,69 @@ fn returned_tuple_iteration_mutations_withdraw_only_the_proven_read() {
         );
     }
     fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
+fn returned_store_tuple_veto_preserves_uncertifiable_candidates() {
+    use std::process::Command;
+    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    for (fixture, expected, kind, code, flags) in [
+        (
+            "returned-store-proxy",
+            4,
+            "uncertifiable",
+            "SC9012",
+            Vec::new(),
+        ),
+        (
+            "dependency-source-proxy-store",
+            1,
+            "violation",
+            "SC1001",
+            vec![
+                "--runtime-target",
+                "browser",
+                "--runtime-build",
+                "development",
+                "--dependency-source",
+                "dep-query",
+            ],
+        ),
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+            .env("SOLID_TYPEFACTS_BIN", &typefacts)
+            .env("SOLID_CHECKER_DAEMON", "0")
+            .args(["--format", "json", "--project"])
+            .arg(root.join(format!("fixtures/reactive-ir/{fixture}/tsconfig.json")))
+            .args(flags)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let snapshot: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        let rows = snapshot["findings"].as_array().unwrap();
+        let reads = rows
+            .iter()
+            .filter(|row| {
+                row["primaryLocation"]["path"]
+                    .as_str()
+                    .is_some_and(|path| path.ends_with("App.tsx"))
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(reads.len(), expected, "{fixture}: {rows:#?}");
+        assert!(
+            reads
+                .iter()
+                .all(|row| row["kind"] == kind && row["id"] == code),
+            "{fixture}: {rows:#?}"
+        );
+    }
 }
 
 #[test]

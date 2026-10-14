@@ -2,6 +2,16 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/root-callback-return/App.tsx",
+      "start": 415,
+      "end": 426,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -22,13 +32,13 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/root-callback-return/App.tsx",
       "start": 1084,
-      "end": 1090,
+      "end": 1088,
       "fixes": 0
     },
     {
@@ -42,13 +52,13 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/root-callback-return/App.tsx",
       "start": 1254,
-      "end": 1262,
+      "end": 1260,
       "fixes": 0
     },
     {
@@ -62,13 +72,13 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/root-callback-return/App.tsx",
       "start": 1420,
-      "end": 1430,
+      "end": 1428,
       "fixes": 0
     },
     {

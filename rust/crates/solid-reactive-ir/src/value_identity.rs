@@ -37,7 +37,11 @@ pub(crate) fn structural_binding_is_stable(
     entities: &EntitySymbols,
     root: &SymbolId,
     shape: &crate::ContractReturn,
+    tuple_iteration_veto: bool,
 ) -> bool {
+    if shape.kind == "tuple" && tuple_iteration_veto {
+        return false;
+    }
     let mut aliases = HashSet::from([root.clone()]);
     loop {
         let before = aliases.len();
@@ -251,7 +255,7 @@ mod tests {
                 ..Default::default()
             };
             assert_eq!(
-                structural_binding_is_stable(&file, &entities, &root, &shape),
+                structural_binding_is_stable(&file, &entities, &root, &shape, false),
                 stable,
                 "{body}"
             );

@@ -420,6 +420,18 @@ fn tuple_mutation_method<'a>(
         "Reflect.defineProperty" => ("defineProperty", "lib.es2015.reflect.d.ts"),
         "Reflect.deleteProperty" => ("deleteProperty", "lib.es2015.reflect.d.ts"),
         "Reflect.setPrototypeOf" => ("setPrototypeOf", "lib.es2015.reflect.d.ts"),
+        "Function.call"
+        | "Function.apply"
+        | "Function.bind"
+        | "CallableFunction.call"
+        | "CallableFunction.apply"
+        | "CallableFunction.bind"
+        | "NewableFunction.call"
+        | "NewableFunction.apply"
+        | "NewableFunction.bind" => ("invoke", "lib.es5.d.ts"),
+        "Reflect.apply" => ("reflectInvoke", "lib.es2015.reflect.d.ts"),
+        "FunctionConstructor" | "FunctionConstructor.new" => ("stringCode", "lib.es5.d.ts"),
+        "eval" => ("stringCode", "lib.es5.d.ts"),
         _ => return None,
     };
     (std::path::Path::new(declaration.source_file.as_ref())
@@ -431,6 +443,33 @@ fn tuple_mutation_method<'a>(
 
 pub(crate) fn tuple_iteration_write(lookup: &SemanticLookup<'_>) -> bool {
     lookup.files().iter().any(|file| {
+        if file
+            .ast
+            .module_hazards
+            .iter()
+            .any(|hazard| hazard.kind == ast::ModuleHazardKind::Eval)
+            || file
+                .ast
+                .calls
+                .iter()
+                .any(|call| string_code_reference(file, call.callee, 24))
+            || file
+                .ast
+                .calls
+                .iter()
+                .filter(|call| call.construct)
+                .any(|call| {
+                    lookup
+                        .standard_library_declaration(file, call, typefacts::CallKind::Construct)
+                        .is_some_and(|declaration| {
+                            declaration
+                                .qualified_name
+                                .starts_with("FunctionConstructor")
+                        })
+                })
+        {
+            return true;
+        }
         let targets = file
             .ast
             .write_targets
@@ -444,14 +483,35 @@ pub(crate) fn tuple_iteration_write(lookup: &SemanticLookup<'_>) -> bool {
                 && !separate_iteration_target(file, member.object, 24)
         }) || file.ast.calls.iter().any(|call| {
             let Some(method) = tuple_mutation_method(file, call, lookup) else {
+                // An erased reflective signature cannot use its receiver or
+                // first argument as the mutator's target. These spellings are
+                // possible invocation only, never positive callee authority.
+                if lookup
+                    .standard_library_declaration(file, call, typefacts::CallKind::Call)
+                    .is_none()
+                    && file.ast.members.iter().any(|member| {
+                        member.span == file.ast.peel_ts_sugar_span(call.callee)
+                            && matches!(
+                                member_key(file, member),
+                                None | Some("call" | "apply" | "bind")
+                            )
+                    })
+                    && !iteration_source_function(file, call.callee, lookup)
+                {
+                    return true;
+                }
                 // Missing callee evidence must not turn an opaque mutation
                 // helper into a negative census. A supplied receiver that may
                 // be an intrinsic retains the veto. Source implementations
                 // are covered by the same project-wide write census; exact
                 // non-mutating library signatures are outside this catalog.
-                return lookup
-                    .standard_library_declaration(file, call, typefacts::CallKind::Call)
-                    .is_none()
+                return lookup.primitive_at_call(file, call.span).is_none()
+                    && !intrinsic_disjoint_store_setter(file, call, lookup)
+                    && !intrinsic_disjoint_proxy_creation(file, call, lookup)
+                    && !source_bound_invocation(file, call.callee, lookup)
+                    && lookup
+                        .standard_library_declaration(file, call, typefacts::CallKind::Call)
+                        .is_none()
                     && lookup
                         .function_called_at(
                             file.path.as_str(),
@@ -468,6 +528,32 @@ pub(crate) fn tuple_iteration_write(lookup: &SemanticLookup<'_>) -> bool {
                             ) && !separate_iteration_target(file, target.span, 24))
                     });
             };
+            if method == "stringCode" {
+                return true;
+            }
+            if matches!(method, "invoke" | "reflectInvoke") {
+                if source_bound_invocation(file, call.callee, lookup) {
+                    return false;
+                }
+                // Receiver/argument slots are different for reflective calls.
+                // Only a source-resolved implementation discharges the target;
+                // its writes are covered by this same whole-program census.
+                let target = if method == "reflectInvoke" {
+                    call.arguments
+                        .first()
+                        .filter(|argument| !argument.spread)
+                        .map(|argument| argument.span)
+                } else {
+                    file.ast
+                        .members
+                        .iter()
+                        .find(|member| member.span == file.ast.peel_ts_sugar_span(call.callee))
+                        .map(|member| member.object)
+                };
+                return !invocation_operator_is_exact(file, call, method, lookup)
+                    || target
+                        .is_none_or(|target| !iteration_source_function(file, target, lookup));
+            }
             if call.arguments.iter().any(|argument| argument.spread) {
                 return true;
             }
@@ -498,6 +584,307 @@ pub(crate) fn tuple_iteration_write(lookup: &SemanticLookup<'_>) -> bool {
             }
         })
     })
+}
+
+/// Signature erasure does not hide a source-local immutable alias of the
+/// global string-code gateways. This retains possibility, not callee authority.
+fn string_code_reference(file: &FileFacts, span: Span, depth: usize) -> bool {
+    if depth == 0 {
+        return false;
+    }
+    let span = file.ast.peel_ts_sugar_span(span);
+    if !file
+        .ast
+        .identifiers
+        .iter()
+        .any(|identifier| identifier.span == span)
+    {
+        return false;
+    }
+    let Some(declaration) = file.ast.reference_declaration(span) else {
+        return matches!(file.source_text(span), Some("Function" | "eval"));
+    };
+    file.ast
+        .bindings
+        .iter()
+        .find(|binding| {
+            binding.immutable
+                && binding.shape == ast::BindingShape::Identifier
+                && binding.names.len() == 1
+                && binding.names[0].span == declaration
+                && !iteration_binding_written(file, declaration)
+        })
+        .and_then(|binding| binding.initializer)
+        .is_some_and(|initializer| string_code_reference(file, initializer, depth - 1))
+}
+
+fn iteration_source_function(file: &FileFacts, span: Span, lookup: &SemanticLookup<'_>) -> bool {
+    if invocation_property_write(lookup) {
+        return false;
+    }
+    let span = file.ast.peel_ts_sugar_span(span);
+    if lookup
+        .function_called_at(file.path.as_str(), span)
+        .is_some()
+    {
+        return true;
+    }
+    let declaration = file.ast.reference_declaration(span);
+    file.ast.functions.iter().any(|function| {
+        (function.span == span
+            || function
+                .name
+                .as_ref()
+                .is_some_and(|name| Some(name.span) == declaration))
+            && lookup.function_value_is_current(file, function)
+    })
+}
+
+fn invocation_key(key: Option<&str>) -> bool {
+    key.is_none_or(|key| matches!(key, "call" | "apply" | "bind" | "__proto__" | "Reflect"))
+}
+
+fn invocation_operator_is_exact(
+    file: &FileFacts,
+    call: &ast::CallFact,
+    method: &str,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let Some(member) = file
+        .ast
+        .members
+        .iter()
+        .find(|member| member.span == file.ast.peel_ts_sugar_span(call.callee))
+    else {
+        return false;
+    };
+    if method == "invoke" {
+        return matches!(member_key(file, member), Some("call" | "apply" | "bind"));
+    }
+    let receiver = file.ast.peel_ts_sugar_span(member.object);
+    if member_key(file, member) != Some("apply")
+        || file.source_text(receiver) != Some("Reflect")
+        || file.ast.reference_declaration(receiver).is_some()
+    {
+        return false;
+    }
+    let Some(symbol) = lookup.symbol_at(file.path.as_str(), receiver) else {
+        return false;
+    };
+    let Some(declaration) =
+        lookup.standard_library_declaration(file, call, typefacts::CallKind::Call)
+    else {
+        return false;
+    };
+    symbol.alias_target().is_empty()
+        && !symbol.declarations().is_empty()
+        && symbol.declarations().iter().all(|binding| {
+            binding.name.as_ref() == "Reflect" && binding.location.path == declaration.source_file
+        })
+}
+
+/// Knowing f's implementation does not prove that f.call/f.apply/f.bind, or
+/// Reflect.apply, still selects the intrinsic invocation operator. Retain
+/// visible possible replacement, including writes onto a fresh function.
+fn invocation_property_write(lookup: &SemanticLookup<'_>) -> bool {
+    let map = |file: &FileFacts, span: Span| {
+        file.ast
+            .object_get_shapes
+            .iter()
+            .find(|shape| shape.span == file.ast.peel_ts_sugar_span(span) && shape.closed)
+            .is_none_or(|shape| {
+                shape
+                    .properties
+                    .iter()
+                    .any(|property| invocation_key(Some(property.key.as_str())))
+            })
+    };
+    lookup.files().iter().any(|file| {
+        file.ast
+            .write_targets
+            .iter()
+            .chain(&file.ast.deleted_targets)
+            .any(|target| {
+                let target = file.ast.peel_ts_sugar_span(*target);
+                (file.source_text(target) == Some("Reflect")
+                    && file.ast.reference_declaration(target).is_none())
+                    || file.ast.members.iter().any(|member| {
+                        member.span == target && invocation_key(member_key(file, member))
+                    })
+            })
+            || file.ast.calls.iter().any(|call| {
+                let Some(method) = tuple_mutation_method(file, call, lookup) else {
+                    return false;
+                };
+                if call.arguments.iter().any(|argument| argument.spread) {
+                    return true;
+                }
+                match method {
+                    "invoke" | "reflectInvoke" | "stringCode" => false,
+                    "setPrototypeOf" => true,
+                    "assign" => call
+                        .arguments
+                        .iter()
+                        .skip(1)
+                        .any(|argument| map(file, argument.span)),
+                    "defineProperties" => call
+                        .arguments
+                        .get(1)
+                        .is_none_or(|argument| map(file, argument.span)),
+                    _ => invocation_key(call.arguments.get(1).and_then(|argument| {
+                        match &argument.literal_value {
+                            ast::ArgumentLiteralFact::String(key) => Some(key.as_ref()),
+                            ast::ArgumentLiteralFact::Integer(_) => Some("0"),
+                            _ => None,
+                        }
+                    })),
+                }
+            })
+    })
+}
+
+/// ProxyCreate validates two object values and installs internal slots; it
+/// invokes neither value and writes no intrinsic. A ProxyConstructor type is
+/// not this runtime identity: require the unaliased global's library variable,
+/// and refuse visible replacement (including unknown reflective targets).
+fn intrinsic_disjoint_proxy_creation(
+    file: &FileFacts,
+    call: &ast::CallFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    if !call.construct || call.arguments.iter().any(|argument| argument.spread) {
+        return false;
+    }
+    let Some(declaration) =
+        lookup.standard_library_declaration(file, call, typefacts::CallKind::Construct)
+    else {
+        return false;
+    };
+    if declaration.qualified_name.as_ref() != "ProxyConstructor.construct"
+        || std::path::Path::new(declaration.source_file.as_ref())
+            .file_name()
+            .and_then(|name| name.to_str())
+            != Some("lib.es2015.proxy.d.ts")
+    {
+        return false;
+    }
+    let callee = file.ast.peel_ts_sugar_span(call.callee);
+    if !file
+        .ast
+        .identifiers
+        .iter()
+        .any(|identifier| identifier.span == callee)
+        || file.ast.reference_declaration(callee).is_some()
+    {
+        return false;
+    }
+    let Some(symbol) = lookup.symbol_at(file.path.as_str(), callee) else {
+        return false;
+    };
+    if !symbol.alias_target().is_empty()
+        || symbol.declarations().len() != 1
+        || !symbol.declarations().iter().all(|binding| {
+            binding.name.as_ref() == "Proxy"
+                && binding.kind.as_ref() == "variable"
+                && binding.location.path == declaration.source_file
+        })
+    {
+        return false;
+    }
+    !lookup.files().iter().any(|candidate| {
+        candidate
+            .ast
+            .write_targets
+            .iter()
+            .chain(&candidate.ast.deleted_targets)
+            .any(|target| {
+                let target = candidate.ast.peel_ts_sugar_span(*target);
+                (candidate.source_text(target) == Some("Proxy")
+                    && candidate.ast.reference_declaration(target).is_none())
+                    || candidate.ast.members.iter().any(|member| {
+                        member.span == target
+                            && matches!(member_key(candidate, member), None | Some("Proxy"))
+                    })
+            })
+            || candidate.ast.calls.iter().any(|mutation| {
+                tuple_mutation_method(candidate, mutation, lookup).is_some_and(|method| {
+                    !matches!(method, "invoke" | "reflectInvoke" | "stringCode")
+                }) && mutation.arguments.first().is_none_or(|target| {
+                    target.spread || !separate_iteration_target(candidate, target.span, 24)
+                })
+            })
+    })
+}
+
+fn source_bound_invocation(file: &FileFacts, callee: Span, lookup: &SemanticLookup<'_>) -> bool {
+    let Some(bound) = file.ast.call_at(file.ast.peel_ts_sugar_span(callee)) else {
+        return false;
+    };
+    let Some(declaration) =
+        lookup.standard_library_declaration(file, bound, typefacts::CallKind::Call)
+    else {
+        return false;
+    };
+    declaration.qualified_name.ends_with(".bind")
+        && tuple_mutation_method(file, bound, lookup) == Some("invoke")
+        && file
+            .ast
+            .members
+            .iter()
+            .find(|member| member.span == file.ast.peel_ts_sugar_span(bound.callee))
+            .is_some_and(|member| {
+                member_key(file, member) == Some("bind")
+                    && iteration_source_function(file, member.object, lookup)
+            })
+}
+
+/// A store-setter type corroborates the binding, but does not prove runtime
+/// identity alone. Require the exact unwritten slot produced by a dialect
+/// primitive as well. Casts and declared-only setters cannot discharge a call.
+fn intrinsic_disjoint_store_setter(
+    file: &FileFacts,
+    call: &ast::CallFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let callee = file.ast.peel_ts_sugar_span(call.callee);
+    if !file
+        .ast
+        .identifiers
+        .iter()
+        .any(|identifier| identifier.span == callee)
+    {
+        return false;
+    }
+    let Some((origin, binding, symbol)) = lookup.binding_at_reference(file.path.as_str(), callee)
+    else {
+        return false;
+    };
+    let Some(slot) = binding.array_slots.get(1).and_then(Option::as_ref) else {
+        return false;
+    };
+    let store_role = lookup
+        .entity_at(file.path.as_str(), callee)
+        .or_else(|| lookup.entity_at(origin.path.as_str(), slot.span))
+        .and_then(|entity| entity.type_descriptor.as_ref())
+        .is_some_and(|descriptor| {
+            descriptor.alias_declarations.iter().any(|declaration| {
+                lookup
+                    .dialect
+                    .type_role(descriptor.origin_module.as_ref(), declaration.name.as_ref())
+                    == Some(solid_dialect::TypeRole::StoreSetter)
+            })
+        });
+    simple_array_binding(binding)
+        && lookup.entity_symbol(origin, slot.span) == Some(symbol.as_str())
+        && !crate::indexes::binding_written(origin, slot.span)
+        && binding
+            .initializer
+            .and_then(|span| origin.ast.call_at(origin.ast.peel_ts_sugar_span(span)))
+            .and_then(|created| lookup.primitive_at_call(origin, created.span))
+            .is_some_and(|primitive| {
+                lookup.dialect.returns_reactive_tuple(primitive)
+                    && (store_role || lookup.dialect.returns_store(primitive))
+            })
 }
 
 /// ADR 0292: whether any analyzed file holds a reflective write

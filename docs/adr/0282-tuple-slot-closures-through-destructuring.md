@@ -107,6 +107,22 @@ it grants no runtime callee authority. A missing callee signature/implementation
 also vetoes when its supplied first argument may be an intrinsic receiver,
 including erased signatures. No target is classified by a `prototype` text search.
 
+The follow-up review also found reflective invocation (`.call`, `.apply`,
+`.bind`, `Reflect.apply`) bypassing the direct mutation catalog. Such an
+invocation vetoes when its target may be a mutator or is unresolved; the
+receiver/argument slots are not mistaken for direct mutation targets. An
+exact current source function discharges the invocation target only because
+its implementation participates in the same census and the invocation operator
+has no visible possible replacement. A source function alone cannot certify
+its mutable call/apply/bind members. Reflect.apply additionally requires its
+unaliased global namespace identity; a typeof Reflect receiver type is
+insufficient. Computed invocation keys without a literal key remain unresolved.
+Erased member signatures
+retain possible reflective invocation, rather than certifying it non-mutating.
+The existing `ModuleHazardKind::Eval`, indirect eval's library declaration,
+and calls/constructions of the unshadowed `Function` constructor also veto:
+string code can write any intrinsic, even with only primitive arguments.
+
 Known other string keys are unrelated to the engine's dense literal iteration:
 the literal owns indices and length, and iterator results own value/done.
 An exact unwritten local class prototype or a separate literal allocation
@@ -123,6 +139,45 @@ original slot. A direct accessor call retains its existing SC9012 typed-source
 uncertifiable finding. The cross-file proof digest binds the veto so a mutation in a
 different file invalidates the consuming proof. This remains a visible-veto
 premise, not an exhaustive mutation census of unseen runtime code.
+
+Every returned-tuple slot consumer now asks the same premise: interprocedural
+projection, structural value identity, callback-result selection, local-access
+member effects and source discovery. Import resolution's preinstalled authored
+returned-member graphs are withdrawn before graph consumers run, so SC1001
+cannot survive alongside the uncertainty for a replaced slot.
+Former sources selected inside a project wrapper or callback, and source
+arguments carried into an object contract, remain uncertainty candidates;
+withdrawing their tuple derivation cannot certify silence.
+
+Exact dialect primitive calls (`primitive_at_call`, through the selected
+vocabulary) do not themselves mutate iteration intrinsics. A store setter is
+discharged only with exact immutable, unwritten source-slot provenance from a
+resolved dialect primitive; `TypeRole::StoreSetter` corroborates that origin
+when available. A declared or cast setter type alone grants nothing. Callback
+bodies and arguments still participate in the visible mutation census.
+An exact unaliased global `Proxy` construction also writes no intrinsic:
+ProxyCreate validates object values and installs internal slots without calling
+the target or handler. The library signature alone is insufficient; the runtime
+variable must resolve to the library declaration and the visible census must
+exclude replacement of that global. A ProxyConstructor-typed foreign value
+does not discharge a call.
+
+The opaque-call veto is explicitly an **argument-handoff** premise: a possible
+intrinsic passed as a non-primitive first argument cannot be discharged without
+implementation evidence. Zero-argument calls and calls given only primitive,
+nullish, function or separate local-allocation first arguments do not veto by
+themselves. None of those forms proves an opaque callee unable to reach globals;
+they are consistent only within this bounded visible-census premise.
+
+An installed package whose runtime code is not selected can hijack
+`Array.prototype[Symbol.iterator]` and still leave an SC1001 on the consumer.
+For example, an unselected package's `patch()` can perform that write without
+any intrinsic argument. This is a known unseen-code false-positive boundary,
+also shared by setup/entry files outside the analyzing program, not a resolved
+case. Source selection is unchanged. Foreign class results such as
+`world.createCollider(desc)` remain uncertifiable when argument disjointness
+needs ADR 0309's unavailable runtime value-flow fact; their TypeScript types
+do not prove intrinsic disjointness.
 
 Fixture `tuple-iteration-veto` seeds the project assignment from the review.
 Its process test runs the positive and negative `cases.json` variants in

@@ -2,8 +2,9 @@
 
 ADR 0282 amendment: this project includes an opaque `replace(result)` handoff.
 Its receiver cannot be excluded from the intrinsic prototype set, so the tuple
-source calls are SC9012 uncertifiable. The object controls retain their original
-findings. Withdrawing tuple identity retains a source candidate even when the
+source calls are SC9012 uncertifiable. BadObject's argument comes from a native
+tuple slot too, so its former source remains an SC9012 candidate. Withdrawing
+tuple identity retains a source candidate even when the
 declared package type is a plain `() => number`.
 
 ADR 0172 consumer controls over the stable tuple/object constructors. The

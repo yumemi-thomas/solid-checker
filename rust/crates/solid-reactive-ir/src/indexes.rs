@@ -1323,12 +1323,31 @@ impl<'a> SemanticLookup<'a> {
                             .array_literals
                             .contains(&file.ast.peel_ts_sugar_span(argument))
                     })
+                }) || file.ast.bindings.iter().any(|binding| {
+                    binding.shape == solid_facts::ast::BindingShape::Array
+                        && file
+                            .ast
+                            .functions
+                            .iter()
+                            .any(|function| function.body.contains(binding.pattern))
+                        && binding
+                            .call_initializer
+                            .and_then(|span| self.primitive_at_call(file, span))
+                            .is_some_and(|primitive| self.dialect.returns_reactive_tuple(primitive))
                 })
             }) || self
                 .resolved_contracts
                 .direct_returns
                 .values()
                 .any(|returned| matches!(returned.kind.as_str(), "tuple" | "parameter"))
+                || self.resolved_contracts.by_symbol.values().any(|binding| {
+                    binding
+                        .summary
+                        .returns
+                        .known()
+                        .and_then(Option::as_ref)
+                        .is_some_and(|returned| returned.kind == "tuple")
+                })
             {
                 hasher.update(b"tuple-iteration-veto\0");
                 hasher.update([u8::from(self.tuple_iteration_may_be_mutated())]);

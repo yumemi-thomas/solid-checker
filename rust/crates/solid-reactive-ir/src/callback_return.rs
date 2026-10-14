@@ -66,7 +66,14 @@ fn callback_result_binding_chain(
     })
 }
 
-fn selected(binding: &BindingFact, value: &ContractReturn) -> Option<Vec<(Span, ContractReturn)>> {
+fn selected(
+    tuple_iteration_veto: bool,
+    binding: &BindingFact,
+    value: &ContractReturn,
+) -> Option<Vec<(Span, ContractReturn)>> {
+    if binding.shape == BindingShape::Array && value.kind == "tuple" && tuple_iteration_veto {
+        return None;
+    }
     let values = match binding.shape {
         BindingShape::Identifier if binding.names.len() == 1 => {
             vec![(binding.names[0].span, value.clone())]
@@ -119,6 +126,30 @@ pub(super) fn resolve<'a>(
     lookup: &'a SemanticLookup<'_>,
     file: &'a FileFacts,
     call: &CallFact,
+) -> Option<CallbackReturn<'a>> {
+    resolve_with_iteration_veto(lookup, file, call, lookup.tuple_iteration_may_be_mutated())
+}
+
+/// Former slot identities are candidates for uncertainty only. A veto must
+/// not erase their calls merely because published types are plain functions.
+pub(super) fn withdrawn_tuple_candidates(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    call: &CallFact,
+) -> Vec<(Span, ContractReturn)> {
+    if !lookup.tuple_iteration_may_be_mutated() || resolve(lookup, file, call).is_some() {
+        return Vec::new();
+    }
+    resolve_with_iteration_veto(lookup, file, call, false)
+        .map(|returned| returned.bindings)
+        .unwrap_or_default()
+}
+
+fn resolve_with_iteration_veto<'a>(
+    lookup: &'a SemanticLookup<'_>,
+    file: &'a FileFacts,
+    call: &CallFact,
+    tuple_iteration_veto: bool,
 ) -> Option<CallbackReturn<'a>> {
     let index = callback_slot(lookup, file, call)?;
     if call.construct
@@ -237,7 +268,7 @@ pub(super) fn resolve<'a>(
         (returned.clone(), Some((export, location)))
     };
     if let Some(binding) = local {
-        returned = selected(binding, &returned)?
+        returned = selected(tuple_iteration_veto, binding, &returned)?
             .into_iter()
             .find(|(declaration, _)| file.ast.reference_declaration(value) == Some(*declaration))?
             .1;
@@ -247,7 +278,7 @@ pub(super) fn resolve<'a>(
             .initializer
             .is_some_and(|value| file.ast.peel_ts_sugar_span(value) == call.span)
     })?;
-    let bindings = selected(outer, &returned)?;
+    let bindings = selected(tuple_iteration_veto, outer, &returned)?;
     for (declaration, returned) in &bindings {
         if !matches!(returned.kind.as_str(), "accessor" | "setter" | "plain")
             || binding_written(file, *declaration)

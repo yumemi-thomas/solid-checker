@@ -194,6 +194,7 @@ fn push_callback_return_sources(
 }
 
 struct EffectiveReturnContext<'a> {
+    tuple_iteration_veto: bool,
     file: &'a FileFacts,
     ast_index: &'a CachedAstFileIndex,
     entities: &'a EntitySymbols,
@@ -323,7 +324,10 @@ fn project_returned_source<'a>(
         entities,
         symbol_names,
         resolved_contracts,
-        RETURNED_SOURCE_FORWARDS,
+        (
+            RETURNED_SOURCE_FORWARDS,
+            lookup.tuple_iteration_may_be_mutated(),
+        ),
     )
 }
 
@@ -371,8 +375,9 @@ fn returned_source_through<'a>(
     entities: &EntitySymbols,
     symbol_names: &HashMap<SymbolId, SymbolId>,
     resolved_contracts: &ResolvedContracts,
-    forwards: usize,
+    proof: (usize, bool),
 ) -> Option<(&'a FileFacts, &'a solid_facts::ast::CallFact, Primitive)> {
+    let (forwards, tuple_iteration_veto) = proof;
     // This first slice only admits straight-line calls, which also excludes
     // optional invocation and optional receivers. No selected signature is
     // substituted for a value identity.
@@ -440,7 +445,7 @@ fn returned_source_through<'a>(
             entities,
             symbol_names,
             resolved_contracts,
-            next,
+            (next, tuple_iteration_veto),
         )?;
         if found.0.path != file.path
             || forwarded.is_some_and(|prior: (&FileFacts, &solid_facts::ast::CallFact, _)| {
@@ -508,6 +513,7 @@ fn returned_source_through<'a>(
         return None;
     }
     let context = EffectiveReturnContext {
+        tuple_iteration_veto,
         file,
         ast_index: lookup.ast_file_index(file.path.as_str())?,
         entities,
@@ -649,13 +655,16 @@ fn effective_value_return(
                     context.entities,
                     symbol,
                     &returned,
+                    context.tuple_iteration_veto,
                 )
             {
                 return None;
             }
             Some(returned)
         }
-        solid_facts::ast::BindingShape::Array if returned.kind == "tuple" => {
+        solid_facts::ast::BindingShape::Array
+            if returned.kind == "tuple" && !context.tuple_iteration_veto =>
+        {
             let index = binding.array_slots.iter().position(|slot| {
                 slot.as_ref().is_some_and(|name| {
                     context.entities.at(context.file.path.as_str(), name.span) == Some(symbol)
@@ -1159,6 +1168,7 @@ pub(crate) fn discover_file_sources(
                 contracted.summary.returns.known().and_then(Option::as_ref)
         {
             let context = EffectiveReturnContext {
+                tuple_iteration_veto: lookup.tuple_iteration_may_be_mutated(),
                 file,
                 ast_index,
                 entities,
@@ -1240,6 +1250,7 @@ pub(crate) fn discover_file_sources(
                             entities,
                             root_symbol,
                             contracted_return,
+                            lookup.tuple_iteration_may_be_mutated(),
                         ) {
                             continue;
                         }
@@ -1278,6 +1289,7 @@ pub(crate) fn discover_file_sources(
             continue;
         }
         let context = EffectiveReturnContext {
+            tuple_iteration_veto: lookup.tuple_iteration_may_be_mutated(),
             file,
             ast_index,
             entities,
@@ -2274,7 +2286,81 @@ pub(crate) fn discover_sources(
     if semantic_lookup.tuple_iteration_may_be_mutated() {
         for file in &facts.files {
             let ast_index = &project_indexes.ast_files_by_path[file.path.as_str()];
+            for call in &file.ast.calls {
+                for (name, value) in
+                    crate::callback_return::withdrawn_tuple_candidates(semantic_lookup, file, call)
+                {
+                    let kind = match value.kind.as_str() {
+                        "accessor" => ReactiveSourceKind::Accessor,
+                        "store-path" => ReactiveSourceKind::Store,
+                        _ => continue,
+                    };
+                    if let Some(symbol) = entities.at(file.path.as_str(), name) {
+                        typed_sources.insert(
+                            symbol.clone(),
+                            TypedSource {
+                                name: symbol_id(file.source_text(name).unwrap_or_default()),
+                                declaration: location(file.path.shared(), name),
+                                kind,
+                                implementation_visible: false,
+                                held_body_unfollowed: false,
+                            },
+                        );
+                    }
+                }
+            }
+            // Identify only former candidates under the pre-veto premise.
+            // Never install that derivation as runtime source authority: a
+            // primitive tuple consumed inside a wrapper can also be replaced.
+            for binding in file.ast.bindings.iter().filter(|binding| {
+                binding.immutable
+                    && binding.shape == solid_facts::ast::BindingShape::Identifier
+                    && binding.names.len() == 1
+            }) {
+                let name = &binding.names[0];
+                let Some(symbol) = entities.at(file.path.as_str(), name.span) else {
+                    continue;
+                };
+                if runtime_sources.contains(symbol)
+                    || crate::indexes::binding_written(file, name.span)
+                {
+                    continue;
+                }
+                let Some(call) = binding
+                    .call_initializer
+                    .and_then(|span| ast_index.call_by_span(span))
+                else {
+                    continue;
+                };
+                let Some((_, _, primitive)) = returned_source_through(
+                    semantic_lookup,
+                    file,
+                    call,
+                    entities,
+                    symbol_names,
+                    resolved_contracts,
+                    (RETURNED_SOURCE_FORWARDS, false),
+                ) else {
+                    continue;
+                };
+                typed_sources.insert(
+                    symbol.clone(),
+                    TypedSource {
+                        name: symbol_id(file.source_text(name.span).unwrap_or_default()),
+                        declaration: location(file.path.shared(), name.span),
+                        kind: if semantic_lookup.dialect.returns_store(primitive) {
+                            ReactiveSourceKind::Store
+                        } else {
+                            ReactiveSourceKind::Accessor
+                        },
+                        implementation_visible: false,
+                        held_body_unfollowed: false,
+                    },
+                );
+            }
             let context = EffectiveReturnContext {
+                // This context records former candidates only, never authority.
+                tuple_iteration_veto: false,
                 file,
                 ast_index,
                 entities,
@@ -2282,6 +2368,81 @@ pub(crate) fn discover_sources(
                 resolved_contracts,
                 dialect: semantic_lookup.dialect,
             };
+            for binding in file.ast.bindings.iter().filter(|binding| {
+                binding.immutable
+                    && binding.shape == solid_facts::ast::BindingShape::Identifier
+                    && binding.names.len() == 1
+            }) {
+                let root = binding.names[0].span;
+                let Some(call) = binding
+                    .call_initializer
+                    .and_then(|span| ast_index.call_by_span(span))
+                else {
+                    continue;
+                };
+                let Some(contract) = entities
+                    .at(file.path.as_str(), call.callee)
+                    .and_then(|symbol| resolved_contracts.by_symbol.get(symbol))
+                else {
+                    continue;
+                };
+                let Some(returned) = contract
+                    .summary
+                    .returns
+                    .known()
+                    .and_then(Option::as_ref)
+                    .and_then(|returned| effective_call_return(returned, call, &context, 16))
+                    .filter(|returned| returned.kind == "object")
+                else {
+                    continue;
+                };
+                let Some(root_symbol) = entities.at(file.path.as_str(), root) else {
+                    continue;
+                };
+                if !crate::value_identity::structural_binding_is_stable(
+                    file,
+                    entities,
+                    root_symbol,
+                    &returned,
+                    false,
+                ) {
+                    continue;
+                }
+                for member in &file.ast.members {
+                    if file.ast.reference_declaration(member.object) != Some(root)
+                        || file.ast.computed_members.contains(&member.span)
+                    {
+                        continue;
+                    }
+                    let Some(value) = file
+                        .source_text(member.property)
+                        .and_then(|key| returned.properties.get(key))
+                    else {
+                        continue;
+                    };
+                    let kind = match value.kind.as_str() {
+                        "accessor" => ReactiveSourceKind::Accessor,
+                        "store-path" => ReactiveSourceKind::Store,
+                        _ => continue,
+                    };
+                    if let Some(symbol) = entities
+                        .at(file.path.as_str(), member.property)
+                        .or_else(|| entities.at(file.path.as_str(), member.span))
+                        && !runtime_sources.contains(symbol)
+                    {
+                        typed_sources.insert(
+                            symbol.clone(),
+                            TypedSource {
+                                name: symbol_id(file.source_text(member.span).unwrap_or_default()),
+                                declaration: location(file.path.shared(), member.span),
+                                kind,
+                                implementation_visible: false,
+                                held_body_unfollowed: false,
+                            },
+                        );
+                    }
+                }
+            }
             for binding in file
                 .ast
                 .bindings

@@ -31,4 +31,17 @@ declare module "solid-js" {
     unobserved?: () => void;
   }
   export function createSignal<T>(value: Exclude<T, Function>, options?: SignalOptions<T>): Signal<T>;
+  // rc.13 core declarations; only unused EffectOptions fields are reduced.
+  export interface EffectOptions { name?: string; }
+  export type ContextProviderComponent<T> = (props: { value: T; children: JSX.Element }) => JSX.Element;
+  export interface Context<T> extends ContextProviderComponent<T> { id: symbol; defaultValue: T | undefined; }
+  export function createContext<T>(defaultValue?: T, options?: EffectOptions): Context<T>;
+  export function useContext<T>(context: Context<T>): T;
+  // rc.13 plain-value overload, Store, StoreSetter and NoFn; StoreOptions
+  // omits unused fields. No tuple-slot or setter signature is loosened.
+  export type Store<T> = T;
+  export type StoreSetter<T> = (fn: (state: T) => T | void) => void;
+  export interface StoreOptions { name?: string; }
+  export type NoFn<T> = T extends Function ? never : T;
+  export function createStore<T extends object = {}>(initialValue: NoFn<T> | Store<NoFn<T>>, options?: StoreOptions): [get: Store<T>, set: StoreSetter<T>];
 }

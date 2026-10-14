@@ -390,6 +390,48 @@ fn build_with_accepted_contract_inputs_measured_incremental(
         &runtime_configuration,
     );
     build_timings.contract_resolution = substage_started.elapsed();
+    // Returned-member effects are installed during import resolution. Their
+    // tuple destructuring premise must be withdrawn before any graph/source
+    // consumer sees those synthetic bindings (ADR 0282).
+    let tuple_slots = facts
+        .files
+        .iter()
+        .flat_map(|file| {
+            file.ast
+                .bindings
+                .iter()
+                .filter(|binding| binding.shape == solid_facts::ast::BindingShape::Array)
+                .flat_map(|binding| binding.names.iter())
+                .filter_map(|name| entities.at(file.path.as_str(), name.span))
+        })
+        .collect::<HashSet<_>>();
+    let withdrawn = resolved_contracts
+        .bindings
+        .iter()
+        .filter(|binding| {
+            tuple_slots.contains(&binding.symbol) && binding.imported_name.ends_with(']')
+        })
+        .map(|binding| binding.symbol.clone())
+        .collect::<HashSet<_>>();
+    if !withdrawn.is_empty()
+        && SemanticLookup::new(
+            facts,
+            ast_indexes,
+            entities,
+            &symbol_names,
+            dialect,
+            &resolved_contracts,
+            rule_options.runtime.program_is_closed(),
+        )
+        .tuple_iteration_may_be_mutated()
+    {
+        resolved_contracts
+            .bindings
+            .retain(|binding| !withdrawn.contains(&binding.symbol));
+        resolved_contracts
+            .by_symbol
+            .retain(|symbol, _| !withdrawn.contains(symbol));
+    }
     let missing_contract_exports = std::mem::take(&mut resolved_contracts.missing_exports);
     let semantic_lookup = SemanticLookup::new(
         facts,

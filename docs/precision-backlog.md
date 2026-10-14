@@ -1,5 +1,43 @@
 # Precision backlog
 
+ADR 0282 follow-up (2026-10-14): reflective invocation of possible/unresolved
+mutators and eval/Function string code now withdraw returned-tuple proofs.
+Authored contract returned-member effects, interprocedural projections,
+structural identities, callback results and local-access tuple consumers share
+the veto. The `tuple-contract-iteration-veto` fixture pins an authored callable
+slot: intact SC1001, replaced SC9012 without a contradictory violation.
+Exact dialect primitives and source-proven store setters no longer create an
+opaque intrinsic handoff; a TypeScript setter type alone is insufficient.
+Exact unaliased global Proxy construction also retains its non-mutating
+behavior, with symbol/declaration identity and a visible replacement census;
+a ProxyConstructor type alone grants nothing. Reflective source-function
+controls require an unchanged invocation operator, and Reflect.apply requires
+the exact global namespace receiver. Source-local immutable eval/Function
+aliases remain string-code hazards even after signature erasure.
+
+The opaque-call clause deliberately covers argument handoffs, not unseen global
+effects: zero-argument and primitive-argument opaque calls are both outside it.
+An **unselected installed package** can replace Array's iterator in `patch()`
+and the checker can still report the read that never happens. Setup/entry files
+outside the analyzing program have the same known false-positive boundary.
+This is not fixed by the visible census and source selection is unchanged.
+Foreign-class arguments (`world.createCollider(desc)`) remain uncertifiable;
+ADR 0309's runtime value-flow fact is still needed to prove disjointness.
+
+Round-2 corpus evidence (59 rc.13-clean isolated variants): both 49-project
+sweeps add zero violations. Default moves p0's 243/3239 to 240/3280
+violations/uncertifiable; no bundled contracts moves 238/3279 to 235/3320.
+Relative to round 1, one additional Spotify `useMutation` member read is
+withheld, with nine uncertainties added and five removed. The full app-game
+renderer and Rapier sites **remain uncertifiable**: unrelated foreign-object
+handoffs still retain the program-wide veto, so the primitive/setter narrowing
+does not recover those full-app violations. This is a partial precision
+improvement, not evidence that either application actually changes iteration.
+Round-2 verification passes: 59 mutation/control variants, authored-contract
+intact/mutated/restored controls and retained cache checks; 322 coverage
+projects / 2112 findings; 123 contract-corpus fixtures; Phase 19's 227-document
+pin; full `make verify` (195.05 s). The unselected-code boundary remains open.
+
 Prototype-write vetoes, partially closed (2026-10-14; review of the parked
 `p1a-demand-nonsolid` commits, `/tmp/sc-scratch.noindex/p1/p1a-veto-review.md`).
 The base binary at `d9ed2224d` had a **false positive**: a project assignment

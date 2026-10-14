@@ -22,3 +22,18 @@ class prototypes, separate fresh allocations, and named keys iteration never
 reads. The signal declaration is copied from the existing tuple fixture's
 published typings; every variant is also checked against the installed published
 solid-js 2.0.0-rc.13 typings in an isolated scratch project.
+
+Round 2 adds reflective call/apply/bind/Reflect.apply, direct/indirect eval and
+Function construction, plus source-resolved reflective negative controls.
+Context primitives and an exact source-derived StoreSetter must preserve the
+intact tuple read; an opaque typed foreign argument must withhold it. Zero- and
+primitive-argument opaque calls pin the bounded handoff premise described in
+the ADR, not a claim that unseen callees cannot mutate globals.
+Exact global Proxy construction preserves the read; a replaced constructor or
+a declared-only ProxyConstructor type does not grant that exception.
+
+The `AccessorRead` row specifically exercises source-slot uncertainty with the
+fixture's descriptor projection. With real rc.13 typings, that direct accessor
+shape has no row on either baseline or changed checker; the `TupleRead` closure
+is the published-typing false-positive regression. No stub signature is looser
+than rc.13 in a way that creates a finding.
