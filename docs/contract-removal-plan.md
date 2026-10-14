@@ -112,6 +112,13 @@ uncertifiable result, not a phase 1 work item. Under this criterion:
 - the `browser` map and the `?raw`/JSON modules need fixtures only, since
   they move no corpus site.
 
+**P1b allowlist merge bar (2026-10-14):** the allowlist (ADRs 0305, 0307,
+0308) merges when a review confirms no tsc duplicate, no false positive, and
+no wrong certification that round 2 or the base refused. Remaining
+wrong certifications that the base also has are recorded in
+docs/precision-backlog.md with ADR 0309 as their owner, because each review
+round finds new shapes and ADR 0309 is the structural fix.
+
 ### 1b. One value-flow fact
 
 ADR 0309: one fact records where each proven reactive value can flow and
