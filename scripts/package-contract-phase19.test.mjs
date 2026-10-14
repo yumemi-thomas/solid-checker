@@ -371,7 +371,8 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // 223 adds inferred-host-callback-invocation (the prior 18 add 204 -> 222).
       // 224 adds ADR 0271's reduced authored integration-premise document.
       // 225 adds ADR 0272's exact returned getter-object consumer document.
-      stableMainDocuments: 225,
+      // 226 adds ADR 0301's contract-star-consumer hand-stated document.
+      stableMainDocuments: 226,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,
