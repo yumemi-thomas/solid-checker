@@ -30,19 +30,26 @@ pub(crate) fn index(facts: &ProjectFacts, lookup: &SemanticLookup<'_>) -> Target
     let mut targets = HashMap::new();
     let mut closed = HashMap::new();
     for file in &facts.files {
+        let members = file
+            .ast
+            .members
+            .iter()
+            .map(|member| (member.span, member))
+            .collect::<HashMap<_, _>>();
+        let references = references(file);
         for call in &file.ast.calls {
             if call.construct {
                 continue;
             }
             let callee = file.ast.peel_ts_sugar_span(call.callee);
-            let Some(member) = file.ast.members.iter().find(|m| m.span == callee) else {
+            let Some(member) = members.get(&callee) else {
                 continue;
             };
             if file.ast.computed_members.contains(&callee) {
                 continue;
             }
             let receiver = file.ast.peel_ts_sugar_span(member.object);
-            if !identifier(file, receiver) {
+            if !references.contains(&receiver) {
                 continue;
             }
             let Some(symbol) = lookup.entities().at(file.path.as_str(), receiver) else {
@@ -95,11 +102,37 @@ pub(crate) fn index(facts: &ProjectFacts, lookup: &SemanticLookup<'_>) -> Target
     targets
 }
 
-fn identifier(file: &FileFacts, span: Span) -> bool {
+fn references(file: &FileFacts) -> HashSet<Span> {
     file.ast
         .identifiers
         .iter()
-        .any(|id| id.span == span && id.role == ast::IdentifierRole::Reference)
+        .filter(|id| id.role == ast::IdentifierRole::Reference)
+        .map(|id| id.span)
+        .collect()
+}
+
+/// Every member expression whose receiver is an identifier bound to an exact
+/// object literal, as `(path, member span)`. Built once per build: the
+/// predicate below is asked for every call by several passes.
+pub(crate) fn literal_receiver_members(lookup: &SemanticLookup<'_>) -> HashSet<(String, Span)> {
+    let mut found = HashSet::new();
+    for file in lookup.files() {
+        let references = references(file);
+        for member in &file.ast.members {
+            let receiver = file.ast.peel_ts_sugar_span(member.object);
+            if references.contains(&receiver)
+                && lookup
+                    .entities()
+                    .at(file.path.as_str(), receiver)
+                    .is_some_and(|symbol| {
+                        receiver_literal(file, receiver, symbol, lookup).is_some()
+                    })
+            {
+                found.insert((file.path.to_string(), member.span));
+            }
+        }
+    }
+    found
 }
 
 /// The older accessor-transport route must not bypass this receiver census.
@@ -111,15 +144,9 @@ pub(crate) fn literal_receiver_call(
     lookup: &SemanticLookup<'_>,
 ) -> bool {
     let callee = file.ast.peel_ts_sugar_span(callee);
-    let Some(member) = file.ast.members.iter().find(|member| member.span == callee) else {
-        return false;
-    };
-    let receiver = file.ast.peel_ts_sugar_span(member.object);
-    identifier(file, receiver)
-        && lookup
-            .entities()
-            .at(file.path.as_str(), receiver)
-            .is_some_and(|symbol| receiver_literal(file, receiver, symbol, lookup).is_some())
+    lookup
+        .literal_receiver_members()
+        .contains(&(file.path.to_string(), callee))
 }
 
 pub(crate) fn call_withheld(file: &FileFacts, callee: Span, lookup: &SemanticLookup<'_>) -> bool {
@@ -306,21 +333,7 @@ impl ModuleCensus {
                 break;
             }
         }
-        for root in graph.keys() {
-            let mut visited = HashSet::new();
-            let mut pending = graph[root].iter().collect::<Vec<_>>();
-            while let Some(path) = pending.pop() {
-                if path == root {
-                    result.cyclic.insert(root.clone());
-                    break;
-                }
-                if visited.insert(path)
-                    && let Some(targets) = graph.get(path)
-                {
-                    pending.extend(targets);
-                }
-            }
-        }
+        result.cyclic.extend(cyclic_modules(&graph));
         loop {
             let mut changed = false;
             for (path, targets) in &graph {
@@ -334,6 +347,87 @@ impl ModuleCensus {
         }
         result
     }
+}
+
+/// Every module on a cycle of `graph`: a member of a strongly connected
+/// component with more than one module, or with an edge to itself. Tarjan's
+/// algorithm, iterative, in time linear in the graph.
+fn cyclic_modules(graph: &HashMap<String, HashSet<String>>) -> HashSet<String> {
+    let mut nodes = graph.keys().collect::<Vec<_>>();
+    for targets in graph.values() {
+        nodes.extend(targets);
+    }
+    nodes.sort();
+    nodes.dedup();
+    let id = nodes
+        .iter()
+        .enumerate()
+        .map(|(index, node)| (*node, index))
+        .collect::<HashMap<_, _>>();
+    let edges = nodes
+        .iter()
+        .map(|node| {
+            let mut targets = graph
+                .get(*node)
+                .into_iter()
+                .flatten()
+                .map(|target| id[target])
+                .collect::<Vec<_>>();
+            targets.sort_unstable();
+            targets
+        })
+        .collect::<Vec<_>>();
+    let mut index = vec![usize::MAX; nodes.len()];
+    let mut low = vec![0; nodes.len()];
+    let mut on_stack = vec![false; nodes.len()];
+    let mut stack = Vec::new();
+    let mut next = 0;
+    let mut cyclic = HashSet::new();
+    for start in 0..nodes.len() {
+        if index[start] != usize::MAX {
+            continue;
+        }
+        let mut frames = vec![(start, 0usize)];
+        index[start] = next;
+        low[start] = next;
+        next += 1;
+        stack.push(start);
+        on_stack[start] = true;
+        while let Some(&mut (node, ref mut edge)) = frames.last_mut() {
+            if let Some(&target) = edges[node].get(*edge) {
+                *edge += 1;
+                if index[target] == usize::MAX {
+                    index[target] = next;
+                    low[target] = next;
+                    next += 1;
+                    stack.push(target);
+                    on_stack[target] = true;
+                    frames.push((target, 0));
+                } else if on_stack[target] {
+                    low[node] = low[node].min(index[target]);
+                }
+                continue;
+            }
+            frames.pop();
+            if let Some(&(parent, _)) = frames.last() {
+                low[parent] = low[parent].min(low[node]);
+            }
+            if low[node] == index[node] {
+                let mut component = Vec::new();
+                while let Some(member) = stack.pop() {
+                    on_stack[member] = false;
+                    component.push(member);
+                    if member == node {
+                        break;
+                    }
+                }
+                if component.len() > 1 || edges[node].contains(&node) {
+                    cyclic.extend(component.into_iter().map(|member| nodes[member].clone()));
+                }
+            }
+        }
+    }
+    cyclic
 }
 
 fn enclosing_function(file: &FileFacts, span: Span) -> Option<Span> {
@@ -732,4 +826,42 @@ fn literal_function<'a>(
     (function.kind == ast::FunctionKind::Declaration
         && lookup.function_value_is_current(owner, function))
     .then_some((owner, function))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::{HashMap, HashSet};
+
+    fn graph(edges: &[(&str, &str)]) -> HashMap<String, HashSet<String>> {
+        let mut graph = HashMap::<String, HashSet<String>>::new();
+        for (from, to) in edges {
+            graph
+                .entry((*from).to_owned())
+                .or_default()
+                .insert((*to).to_owned());
+        }
+        graph
+    }
+
+    fn sorted(set: HashSet<String>) -> Vec<String> {
+        let mut values = set.into_iter().collect::<Vec<_>>();
+        values.sort();
+        values
+    }
+
+    #[test]
+    fn cyclic_modules_are_exactly_the_modules_on_a_cycle() {
+        // a -> b -> c -> a is a cycle; d -> a reaches it but is not on it;
+        // e imports itself; f -> g is acyclic.
+        let modules = super::cyclic_modules(&graph(&[
+            ("a", "b"),
+            ("b", "c"),
+            ("c", "a"),
+            ("d", "a"),
+            ("e", "e"),
+            ("f", "g"),
+        ]));
+        assert_eq!(sorted(modules), ["a", "b", "c", "e"]);
+        assert!(super::cyclic_modules(&graph(&[("x", "y"), ("y", "z")])).is_empty());
+    }
 }

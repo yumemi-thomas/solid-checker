@@ -488,6 +488,7 @@ pub(super) struct ResultAccessForwarded {
 /// never pay for an index.
 pub(super) struct SemanticLookup<'a> {
     object_members: OnceLock<crate::object_members::Targets>,
+    literal_receiver_members: OnceLock<HashSet<(String, Span)>>,
     facts: &'a ProjectFacts,
     /// The Solid-version vocabulary this build analyzes with. Every consumer
     /// of the lookup shares one dialect; a build never mixes two.
@@ -652,6 +653,7 @@ impl<'a> SemanticLookup<'a> {
         );
         Self {
             object_members: OnceLock::new(),
+            literal_receiver_members: OnceLock::new(),
             facts,
             dialect,
             program_closed,
@@ -1949,6 +1951,11 @@ impl<'a> SemanticLookup<'a> {
     pub(super) fn object_member_targets(&self) -> &crate::object_members::Targets {
         self.object_members
             .get_or_init(|| crate::object_members::index(self.facts, self))
+    }
+
+    pub(super) fn literal_receiver_members(&self) -> &HashSet<(String, Span)> {
+        self.literal_receiver_members
+            .get_or_init(|| crate::object_members::literal_receiver_members(self))
     }
 
     pub(super) fn object_member_function(
