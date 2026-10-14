@@ -15,8 +15,10 @@ pipeline.
    their Type Facts and resolution rows, and WASM runs the same source
    analysis.
 3. **Non-Solid packages.** Analyzed from source when a selected package
-   re-exports or forwards their values. Any other package stays unknown
-   behaviour, which is uncertifiable.
+   re-exports or forwards their values, or, by demand (owner, 2026-10-14,
+   after P0), when a project call passes a reactive value or callback into
+   one, or reactive code reads a value from one. Any other package stays
+   unknown behaviour, which is uncertifiable.
 4. **Pipeline.** Contract consumption is switched off first. The code stays
    for one release as a rollback, then everything contract-only is deleted.
 5. **Rollback.** The switch-off is one commit, rolled back with `git revert`.
@@ -44,6 +46,41 @@ back clean, a per-site corpus sweep, and `make verify`.
 A corpus sweep in source mode with every contract disabled, compared per site
 with contract mode. The difference is the work list for phase 1.
 
+**Result (2026-10-14, release binary at `d9ed2224d`, 49 projects, browser
+host, no realm flag, no errors in any run):**
+
+| Run | Violations | Uncertifiable |
+| --- | --- | --- |
+| default (source mode, contracts as fallback) | 561 | 3,239 |
+| source mode, `--no-bundled-contracts` | 556 | 3,279 |
+| contract mode, `--no-dependency-source` | 561 | 3,702 |
+
+Disabling contracts drops one site and adds no violation:
+
+- `probus-hk/src/components/VirtualRows.tsx:81:23`, which carries 5
+  `strict-read-untracked` findings. The project imports
+  `@tanstack/virtual-core` (a non-Solid package) **directly** in
+  `src/lib/tanstack/virtual.ts`. Decision 3 covers a non-Solid package only
+  when a selected package forwards it, so this case is outside it. The same
+  direct import accounts for the `package-contract-incomplete` rows in
+  ai-memory-ui, compass-ui and openbot.
+- 40 openbot uncertifiable rows, all from callbacks passed to `Button`, which
+  wraps `Root` from `@kobalte/core/button`. This is a subpath import, not a
+  namespace import. The install is patched, and an authored contract covers
+  it (`@kobalte/core@2.0.0-alpha.0+openbot-patch`). Without that contract the
+  import reports `package-contract-incomplete` at `button.tsx:1:1`, so source
+  mode does not analyze it. Why is still undiagnosed: the patch, the selection
+  filter, or the subpath.
+
+The other gap packages (`@kobalte/solidbase`, `@solidjs/start`,
+`@rigelbuild/solid-markdown`, `@solid-primitives/controlled-signal`) move no
+site on this corpus. Their phase 1 work rests on fixtures alone.
+
+Contract mode compared with the default: the kui router getter
+(`TopicsRoute.tsx:425:75`) and two spotify `prefer-show` sites (realm, which
+`--runtime-realm window` recovers) exist only with contracts. The 3 probus
+router reads exist only with source.
+
 ### 1. Close the source gaps
 
 These are the six packages the corpus still keeps on contracts:
@@ -51,7 +88,8 @@ These are the six packages the corpus still keeps on contracts:
 | Gap | Packages | Work |
 | --- | --- | --- |
 | Namespace imports | `@kobalte/core`, `@solid-primitives/controlled-signal` | redirect `ns.member` exactly; refuse escaping uses |
-| Non-Solid re-export | `@rigelbuild/solid-virtual` → `@tanstack/virtual-core` | decision 3 |
+| Non-Solid packages | `@rigelbuild/solid-virtual` → `@tanstack/virtual-core`; direct imports of `@tanstack/virtual-core` (probus, ai-memory-ui, compass-ui, openbot) | decision 3, forwarding and demand |
+| Patched subpath install | `@kobalte/core/button` (openbot) | diagnose why source mode refuses it |
 | `browser` field map | `@rigelbuild/solid-markdown` | apply the map for a browser host, as Vite does |
 | `?raw` / JSON modules | `@kobalte/solidbase`, `@solidjs/start` | model them as inert data modules |
 
