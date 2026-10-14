@@ -321,7 +321,7 @@ pub fn prepare_program(
     // name only App.tsx). Inspect the complete runtime project inventory.
     let project_imports = project_files
         .iter()
-        .filter(|path| is_source(path))
+        .filter(|path| is_source(path) && !is_build_config(path))
         .map(|path| {
             let source = project_sources
                 .iter()
@@ -353,6 +353,9 @@ pub fn prepare_program(
         },
     );
     unredirected.runtime_packages = excluded.clone();
+    unredirected
+        .packages
+        .retain(|name, _| !excluded.contains(name));
     // ADR 0291: `*` selects every package the project loads at run time,
     // and every package those load, except the dialect's own runtime.
     let selected = if selection.iter().any(|source| source == "*") {
@@ -559,8 +562,8 @@ pub fn prepare_all(
             Ok(entry) => entry,
             Err(reason) => {
                 notes.push(format!(
-                    "solid-checker: note: dependency source {name} ({}): {reason}; its contract stays",
-                    root.display()
+                    "solid-checker: note: dependency source {name} ({}): {reason}; its contract stays; {}",
+                    root.display(), request_edge(&importer, &specifier)
                 ));
                 unsupported.insert(root);
                 continue;
@@ -568,8 +571,8 @@ pub fn prepare_all(
         };
         names_by_root.insert(root.clone(), name);
         pending.push(ImportResolution {
-            importer: Some(importer),
-            specifier,
+            importer: Some(importer.clone()),
+            specifier: specifier.clone(),
             target: entry.clone(),
         });
         if walked.insert(entry.clone()) {
@@ -591,9 +594,9 @@ pub fn prepare_all(
                 }
                 Err(reason) => {
                     notes.push(format!(
-                        "solid-checker: note: dependency source {} ({}): {reason}; its contract stays",
+                        "solid-checker: note: dependency source {} ({}): {reason}; its contract stays; {}",
                         names_by_root[&root],
-                        root.display()
+                        root.display(), request_edge(&importer, &specifier)
                     ));
                     unsupported.insert(root);
                 }
@@ -754,6 +757,19 @@ fn runtime_bare_imports(facts: &solid_facts::ast::AstFacts) -> BTreeSet<String> 
                 .filter(|export| runtime_reexport(export))
                 .filter_map(|export| export.module.as_deref()),
         )
+        .chain(
+            facts
+                .import_equals
+                .iter()
+                .filter(|edge| !edge.type_only)
+                .map(|edge| edge.module.as_str()),
+        )
+        .chain(
+            facts
+                .module_loads
+                .iter()
+                .filter_map(|edge| edge.specifier.as_deref()),
+        )
         .filter(|module| split_bare_specifier(module).is_some())
         .map(str::to_owned)
         .collect()
@@ -764,14 +780,18 @@ fn runtime_bare_imports(facts: &solid_facts::ast::AstFacts) -> BTreeSet<String> 
 /// of that package on contracts, including otherwise redirectable imports.
 #[derive(Clone, Debug, Default)]
 pub struct UnsupportedBindings {
-    packages: std::collections::BTreeMap<String, &'static str>,
+    packages: std::collections::BTreeMap<String, String>,
     opaque: Option<&'static str>,
     runtime_packages: BTreeSet<String>,
 }
 
 impl UnsupportedBindings {
+    pub fn retain(&mut self, name: String, reason: String) {
+        self.packages.insert(name, reason);
+    }
     fn contains(&self, name: &str) -> bool {
-        self.opaque.is_some() || self.packages.contains_key(name)
+        !self.runtime_packages.contains(name)
+            && (self.opaque.is_some() || self.packages.contains_key(name))
     }
 
     fn extend(&mut self, other: Self) {
@@ -780,24 +800,13 @@ impl UnsupportedBindings {
     }
 
     fn note(&self, name: &str) -> String {
-        let reason = self.opaque.or_else(|| self.packages.get(name).copied()).unwrap_or(
+        let reason = self.opaque.or_else(|| self.packages.get(name).map(String::as_str)).unwrap_or(
             "its source overlaps an unredirected package or shares that package's selection name"
         );
         format!(
             "solid-checker: note: dependency source {name}: {reason}, \
              which source analysis does not redirect; its contract stays"
         )
-    }
-
-    fn reexports_external_package(&self, facts: &solid_facts::ast::AstFacts) -> bool {
-        facts.exports.iter().any(|export| {
-            runtime_reexport(export)
-                && export
-                    .module
-                    .as_deref()
-                    .and_then(package_name)
-                    .is_some_and(|name| !self.runtime_packages.contains(&name))
-        })
     }
 }
 
@@ -812,42 +821,130 @@ fn unredirected_packages(facts: &solid_facts::ast::AstFacts) -> UnsupportedBindi
             })
             && let Some(name) = package_name(&import.module)
         {
-            bindings
-                .packages
-                .insert(name, "imported through a namespace binding");
+            bindings.packages.insert(
+                name,
+                binding_reason(facts, import.span, "imported through a namespace binding"),
+            );
         }
     }
     for export in &facts.exports {
         if runtime_reexport(export)
+            && export.namespace.is_some()
             && let Some(name) = export.module.as_deref().and_then(package_name)
         {
-            bindings
-                .packages
-                .insert(name, "re-exported through a runtime binding");
+            bindings.packages.insert(
+                name,
+                binding_reason(
+                    facts,
+                    export.span,
+                    "re-exported through a namespace binding",
+                ),
+            );
         }
     }
     for import in &facts.import_equals {
         if !import.type_only
             && let Some(name) = package_name(&import.module)
         {
-            bindings
-                .packages
-                .insert(name, "loaded through an import-equals binding");
+            bindings.packages.insert(
+                name,
+                binding_reason(
+                    facts,
+                    import.span,
+                    "loaded through an import-equals binding",
+                ),
+            );
         }
     }
     for load in &facts.module_loads {
         if let Some(name) = load.specifier.as_deref().and_then(package_name) {
-            bindings
-                .packages
-                .insert(name, "loaded through a dynamic import or require binding");
-        } else {
-            // A nonliteral or relative load can reach a package through a
-            // module this static closure does not walk. No package-name
-            // removal is justified when its target cannot be enumerated.
-            bindings.opaque = Some("a module load has no exact bare package target");
+            bindings.packages.insert(
+                name,
+                binding_reason(
+                    facts,
+                    load.span,
+                    match load.kind {
+                        solid_facts::ast::ModuleLoadKind::DynamicImport => {
+                            "loaded through a literal dynamic import binding"
+                        }
+                        solid_facts::ast::ModuleLoadKind::Require => {
+                            "loaded through a literal require binding"
+                        }
+                    },
+                ),
+            );
         }
     }
     bindings
+}
+
+fn binding_reason(
+    facts: &solid_facts::ast::AstFacts,
+    span: solid_facts::core::Span,
+    form: &str,
+) -> String {
+    let line = fs::read_to_string(facts.source.path.as_str())
+        .ok()
+        .and_then(|source| {
+            source
+                .get(..span.start as usize)
+                .map(|prefix| prefix.bytes().filter(|byte| *byte == b'\n').count() + 1)
+        });
+    format!(
+        "{form} at {}:{}",
+        facts.source.path.as_str(),
+        line.map_or_else(|| format!("byte {}", span.start), |line| line.to_string())
+    )
+}
+
+/// A refusal's requesting edge, not just the root whose source was refused.
+fn request_edge(path: &Path, specifier: &str) -> String {
+    let location = || {
+        let source = fs::read_to_string(path).ok()?;
+        let facts = solid_facts::ast::extract(path.to_string_lossy().into_owned(), &source).ok()?;
+        let edge = facts
+            .imports
+            .iter()
+            .filter(|edge| !edge.type_only && edge.module == specifier)
+            .map(|edge| (edge.span, "static import"))
+            .chain(
+                facts
+                    .exports
+                    .iter()
+                    .filter(|edge| {
+                        runtime_reexport(edge) && edge.module.as_deref() == Some(specifier)
+                    })
+                    .map(|edge| (edge.span, "static re-export")),
+            )
+            .chain(
+                facts
+                    .import_equals
+                    .iter()
+                    .filter(|edge| !edge.type_only && edge.module == specifier)
+                    .map(|edge| (edge.span, "import-equals")),
+            )
+            .chain(
+                facts
+                    .module_loads
+                    .iter()
+                    .filter(|edge| edge.specifier.as_deref() == Some(specifier))
+                    .map(|edge| (edge.span, "literal module load")),
+            )
+            .next()?;
+        Some(binding_reason(&facts, edge.0, edge.1))
+    };
+    location().unwrap_or_else(|| {
+        format!(
+            "runtime request {specifier:?} from {} could not be reread",
+            path.display()
+        )
+    })
+}
+
+pub fn is_build_config(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.starts_with("vite.config.") || name.starts_with("vitest.config."))
 }
 
 fn runtime_reexport(export: &solid_facts::ast::ExportFact) -> bool {
@@ -864,7 +961,7 @@ fn runtime_reexport(export: &solid_facts::ast::ExportFact) -> bool {
 /// exactly as without this mode (review rounds 1 and 2 of ADR 0297). A contract
 /// binds by package name, so a name is taken out whole. `None` when nothing
 /// is left.
-fn without_unredirected_packages(
+pub fn without_unredirected_packages(
     mut selection: DependencySelection,
     unredirected: &UnsupportedBindings,
     notes: &mut Vec<String>,
@@ -1082,22 +1179,6 @@ fn walk(
                 .into_iter()
                 .map(|module| (file.clone(), module)),
         );
-        // Keeping only the target's contract is insufficient: the source
-        // barrel's own contract requirement would still be removed, while
-        // the target's open claim is located inside that package and filtered
-        // from project findings. Retain the exporting package too. Dialect
-        // runtime re-exports already bind exact vocabulary and need no redirect.
-        if unredirected.reexports_external_package(&facts) {
-            if let Some(name) = package_name_of_root(root) {
-                unredirected.packages.insert(
-                    name,
-                    "re-exports a package through an unredirected runtime binding",
-                );
-            } else {
-                unredirected.opaque =
-                    Some("a re-exporting source package has no exact package identity");
-            }
-        }
         unredirected.extend(unredirected_packages(&facts));
         let modules = facts
             .imports
@@ -1110,6 +1191,19 @@ fn walk(
                     .iter()
                     .filter(|export| !export.type_only)
                     .filter_map(|export| export.module.as_deref()),
+            )
+            .chain(
+                facts
+                    .import_equals
+                    .iter()
+                    .filter(|edge| !edge.type_only)
+                    .map(|edge| edge.module.as_str()),
+            )
+            .chain(
+                facts
+                    .module_loads
+                    .iter()
+                    .filter_map(|edge| edge.specifier.as_deref()),
             )
             .filter(|module| module.starts_with("./") || module.starts_with("../"))
             .map(str::to_owned)
@@ -1278,9 +1372,6 @@ mod tests {
     #[test]
     fn unsupported_runtime_bindings_keep_contracts_but_type_only_edges_do_not() {
         for source in [
-            "export { x } from 'pkg';",
-            "export { default as y } from 'pkg';",
-            "export * from 'pkg';",
             "export * as ns from 'pkg';",
             "import * as ns from 'pkg'; ns.x();",
             "import x = require('pkg'); export = x;",
@@ -1293,6 +1384,9 @@ mod tests {
             assert!(!bindings.contains("other"), "{source}");
         }
         for source in [
+            "export { x } from 'pkg';",
+            "export { default as y } from 'pkg';",
+            "export * from 'pkg';",
             "import { x } from 'pkg'; x();",
             "import x from 'pkg'; x();",
             "import { type T, x } from 'pkg'; x();",
@@ -1318,33 +1412,26 @@ mod tests {
         ] {
             let facts = solid_facts::ast::extract("module.ts", source).unwrap();
             assert!(
-                super::unredirected_packages(&facts).contains("any-package"),
+                !super::unredirected_packages(&facts).contains("any-package"),
                 "{source}"
             );
         }
     }
 
     #[test]
-    fn source_barrels_keep_contracts_except_for_exact_dialect_runtime_exports() {
+    fn dialect_runtime_namespaces_do_not_retain_packages() {
         let bindings = super::UnsupportedBindings {
             runtime_packages: ["runtime".into()].into_iter().collect(),
             ..super::UnsupportedBindings::default()
         };
-        for (source, external) in [
-            ("export { x } from 'pkg';", true),
-            ("export * from 'pkg';", true),
-            ("export { default as x } from 'pkg';", true),
-            ("export * as ns from 'pkg';", true),
-            ("export { type T } from 'pkg';", false),
-            ("export * from './local.js';", false),
-            ("export { x } from 'runtime';", false),
+        for source in [
+            "export * as ns from 'runtime';",
+            "import * as ns from 'runtime'; ns.x();",
         ] {
             let facts = solid_facts::ast::extract("module.ts", source).unwrap();
-            assert_eq!(
-                bindings.reexports_external_package(&facts),
-                external,
-                "{source}"
-            );
+            let mut bindings = bindings.clone();
+            bindings.extend(super::unredirected_packages(&facts));
+            assert!(!bindings.contains("runtime"), "{source}");
         }
     }
 
@@ -1386,7 +1473,7 @@ mod tests {
             let bindings = super::UnsupportedBindings {
                 packages: [(
                     selected_name.into(),
-                    "re-exported through a runtime binding",
+                    "re-exported through a runtime binding".into(),
                 )]
                 .into_iter()
                 .collect(),
@@ -1432,7 +1519,7 @@ mod tests {
     }
 
     #[test]
-    fn a_reexporting_package_without_manifest_identity_keeps_contracts() {
+    fn a_reexporting_package_without_manifest_identity_keeps_its_selection_identity() {
         let directory = std::env::temp_dir().join(format!(
             "solid-checker-source-missing-identity-{}",
             std::process::id()
@@ -1455,14 +1542,11 @@ mod tests {
             &mut notes,
         )
         .unwrap();
-        assert!(prepared.is_none());
-        assert!(
-            notes
-                .iter()
-                .any(|note| note.contains("no exact package identity")
-                    && note.contains("its contract stays")),
-            "{notes:?}"
+        assert_eq!(
+            prepared.unwrap().selection.package_names,
+            ["anonymous".into()].into_iter().collect()
         );
+        assert!(notes.is_empty(), "{notes:?}");
         std::fs::remove_dir_all(directory).unwrap();
     }
 

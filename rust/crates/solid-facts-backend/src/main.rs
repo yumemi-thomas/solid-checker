@@ -4250,7 +4250,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             eprintln!("{note}");
         }
 
-        let contracts = if request.proposal_dependency_catalog.is_empty() {
+        let mut contracts = if request.proposal_dependency_catalog.is_empty() {
             contracts
         } else {
             if request.emit_contract.is_empty() && request.emit_contract_batch.is_empty() {
@@ -4271,7 +4271,18 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         };
         // ADR 0284: a package analyzed as source binds through no contract.
         let contracts = match &dependency_sources {
-            Some(program) => contracts.without_packages(&program.selection.package_names),
+            Some(program) => {
+                let (selected, notes) = dependency_program::retain_exported_contracts(
+                    &mut facts,
+                    program,
+                    &mut contracts,
+                    dialect,
+                );
+                for note in notes {
+                    eprintln!("{note}");
+                }
+                contracts.without_packages(&selected)
+            }
             None => contracts,
         };
         let (analysis, diagnostic_timings) = analyze_project_accepted_measured_with_enablement(
@@ -7413,12 +7424,14 @@ fn dependency_source_redirects(
                     let Ok(path) = Path::new(file.path.as_str()).canonicalize() else {
                         continue;
                     };
-                    if sources.contains(&path)
-                        || !file
-                            .ast
-                            .imports
-                            .iter()
-                            .any(|import| import.module.as_str() == resolution.specifier)
+                    if !(file
+                        .ast
+                        .imports
+                        .iter()
+                        .any(|import| import.module.as_str() == resolution.specifier)
+                        || file.ast.exports.iter().any(|export| {
+                            export.module.as_deref() == Some(resolution.specifier.as_str())
+                        }))
                     {
                         continue;
                     }
@@ -7431,15 +7444,46 @@ fn dependency_source_redirects(
             }
         }
     }
+    // Project barrels can be imported outside the configured roots. Their
+    // exact relative edges are needed to carry a star's demanded names to
+    // the selected runtime export, rather than to the declaration barrel.
+    for file in &facts.files {
+        let Ok(path) = Path::new(file.path.as_str()).canonicalize() else {
+            continue;
+        };
+        if sources.contains(&path) {
+            continue;
+        }
+        for module in file
+            .ast
+            .imports
+            .iter()
+            .filter(|edge| !edge.type_only)
+            .map(|edge| edge.module.as_str())
+            .chain(
+                file.ast
+                    .exports
+                    .iter()
+                    .filter(|edge| !edge.type_only)
+                    .filter_map(|edge| edge.module.as_deref()),
+            )
+            .filter(|module| module.starts_with('.'))
+        {
+            if let Ok(target) = resolve_relative_export(facts, &path, module) {
+                rows.push((path.clone(), module.to_owned(), target));
+            }
+        }
+    }
     symbol_redirects(facts, typescript, rows, |_, target, declaration| {
         let declaration = declaration
             .canonicalize()
             .unwrap_or_else(|_| declaration.to_path_buf());
-        sources
-            .selection
-            .roots
-            .iter()
-            .any(|root| target.starts_with(root) && declaration.starts_with(root))
+        (same_canonical_path(target, &declaration) && sources.project_files.contains(target))
+            || sources
+                .selection
+                .roots
+                .iter()
+                .any(|root| target.starts_with(root) && declaration.starts_with(root))
     })
 }
 
@@ -7470,12 +7514,54 @@ fn symbol_redirects(
         return Ok(HashMap::new());
     }
     let aliases = canonical_symbol_aliases(facts);
-    let entity_at = |file: &solid_facts::FileFacts, span: solid_facts::core::Span| {
-        facts.typescript.entities().find(|entity| {
-            entity.location.path.as_ref() == file.path.as_str()
-                && entity.location.start_byte == u64::from(span.start)
-                && entity.location.end_byte == u64::from(span.end)
+    let files_by_path = facts
+        .files
+        .iter()
+        .filter_map(|file| {
+            Path::new(file.path.as_str())
+                .canonicalize()
+                .ok()
+                .map(|path| (path, file))
         })
+        .collect::<HashMap<_, _>>();
+    let entities_by_location = facts
+        .typescript
+        .entities()
+        .map(|entity| (entity.location.clone(), entity))
+        .collect::<HashMap<_, _>>();
+    let mut declarations = HashMap::<(PathBuf, String), BTreeSet<PathBuf>>::new();
+    for import in &graph.imports {
+        if import.included_path.is_empty()
+            && !import.resolved_path.is_empty()
+            && let Ok(importer) = Path::new(import.specifier.path.as_ref()).canonicalize()
+        {
+            declarations
+                .entry((importer, import.text.to_string()))
+                .or_default()
+                .insert(Path::new(import.resolved_path.as_ref()).canonicalize()?);
+        }
+    }
+    let mut edge_targets = HashMap::<(PathBuf, String), BTreeSet<PathBuf>>::new();
+    for (importer, specifier, target) in &rows {
+        edge_targets
+            .entry((importer.clone(), specifier.clone()))
+            .or_default()
+            .insert(target.clone());
+    }
+    let runtime_edges = edge_targets
+        .into_iter()
+        .filter_map(|(edge, targets)| {
+            (targets.len() == 1).then(|| (edge, targets.into_iter().next().unwrap()))
+        })
+        .collect::<HashMap<_, _>>();
+    let entity_at = |file: &solid_facts::FileFacts, span: solid_facts::core::Span| {
+        entities_by_location
+            .get(&typefacts::Location {
+                path: file.path.to_string().into(),
+                start_byte: u64::from(span.start),
+                end_byte: u64::from(span.end),
+            })
+            .copied()
     };
     let mut redirects = HashMap::<String, String>::new();
     let mut ambiguous = HashSet::new();
@@ -7487,27 +7573,20 @@ fn symbol_redirects(
         // runtime file the compiler picked when the bundler loads another
         // (`./read` is `read.js` to TypeScript, `read.mjs` to Vite; review
         // round 1 of ADR 0290). `admitted` decides which kinds a caller takes.
-        let declaration = graph.imports.iter().find_map(|import| {
-            (import.text.as_ref() == specifier
-                && same_canonical_path(Path::new(import.specifier.path.as_ref()), &importer_path)
-                && import.included_path.is_empty()
-                && !import.resolved_path.is_empty()
-                && !same_canonical_path(Path::new(import.resolved_path.as_ref()), &target_path))
-            .then(|| PathBuf::from(import.resolved_path.as_ref()))
-        });
-        let Some(declaration) = declaration else {
-            continue;
-        };
-        if !admitted(&importer_path, &target_path, &declaration) {
-            continue;
-        }
-        let Some(importer) = facts
-            .files
-            .iter()
-            .find(|file| same_canonical_path(Path::new(file.path.as_str()), &importer_path))
+        let Some(declaration) = declarations
+            .get(&(importer_path.clone(), specifier.clone()))
+            .filter(|paths| paths.len() == 1)
+            .and_then(|paths| paths.first())
         else {
             continue;
         };
+        if !admitted(&importer_path, &target_path, declaration) {
+            continue;
+        }
+        let Some(importer) = files_by_path.get(&importer_path).copied() else {
+            continue;
+        };
+        let mut pairs = Vec::new();
         let imports = importer
             .ast
             .imports
@@ -7531,30 +7610,160 @@ fn symbol_redirects(
                 let Some(exported) = exported else {
                     continue;
                 };
-                let Some(source) = entity_at(importer, binding.local.span) else {
-                    continue;
-                };
-                let Some(target) = entry_export_entity(facts, &target_path, exported) else {
-                    continue;
-                };
-                let source = canonical_symbol(&source.symbol, &aliases);
-                let target = canonical_symbol(&target.symbol, &aliases);
-                if source.is_empty() || target.is_empty() || source == target {
-                    continue;
+                pairs.push((binding.local.span, exported.to_owned()));
+            }
+        }
+        for export in importer.ast.module_level_exports().filter(|export| {
+            !export.type_only
+                && export.module.as_deref() == Some(specifier.as_str())
+                && export.namespace.is_none()
+        }) {
+            for binding in export
+                .specifiers
+                .iter()
+                .filter(|binding| !binding.type_only)
+            {
+                if let Some(name) = importer.source_text(binding.local.span) {
+                    pairs.push((binding.local.span, name.to_owned()));
                 }
-                if redirects
-                    .get(&source)
-                    .is_some_and(|existing| existing != &target)
-                {
-                    redirects.remove(&source);
-                    ambiguous.insert(source);
-                } else if !ambiguous.contains(&source) {
-                    redirects.insert(source, target);
-                }
+            }
+        }
+        for (span, exported) in pairs {
+            let Some(source) = entity_at(importer, span) else {
+                continue;
+            };
+            let Ok(Some(target)) = redirected_export_entity(
+                facts,
+                &files_by_path,
+                &entities_by_location,
+                &runtime_edges,
+                &target_path,
+                &exported,
+                &mut HashSet::new(),
+            ) else {
+                continue;
+            };
+            let source = canonical_symbol(&source.symbol, &aliases);
+            let target = canonical_symbol(&target.symbol, &aliases);
+            if source.is_empty() || target.is_empty() || source == target {
+                continue;
+            }
+            if redirects
+                .get(&source)
+                .is_some_and(|existing| existing != &target)
+            {
+                redirects.remove(&source);
+                ambiguous.insert(source);
+            } else if !ambiguous.contains(&source) {
+                redirects.insert(source, target);
             }
         }
     }
     Ok(redirects)
+}
+
+/// Resolve the selected runtime graph, including bare re-exports. Explicit
+/// exports win; distinct star bindings refuse rather than picking one.
+/// `Ok(None)` is an enumerated absence. Missing, cyclic or ambiguous
+/// providers return `Err`, which a competing star must never treat as absence.
+fn redirected_export_entity<'a>(
+    facts: &'a solid_facts::ProjectFacts,
+    files: &HashMap<PathBuf, &'a solid_facts::FileFacts>,
+    entities: &HashMap<typefacts::Location, &'a typefacts::EntityFact>,
+    edges: &HashMap<(PathBuf, String), PathBuf>,
+    path: &Path,
+    name: &str,
+    visiting: &mut HashSet<(PathBuf, String)>,
+) -> Result<Option<&'a typefacts::EntityFact>, ()> {
+    let path = path.to_path_buf();
+    if !visiting.insert((path.clone(), name.to_owned())) {
+        return Err(());
+    }
+    let file = files.get(&path).copied().ok_or(())?;
+    let stars = validate_module_export_precedence(&file.ast, &path, name).map_err(|_| ())?;
+    let mut candidates = Vec::new();
+    for export in file
+        .ast
+        .module_level_exports()
+        .filter(|edge| !edge.type_only)
+    {
+        if let Some(binding) = export
+            .specifiers
+            .iter()
+            .chain(&export.declarations)
+            .find(|binding| !binding.type_only && binding.exported == name)
+        {
+            if let Some(module) = export.module.as_deref()
+                && let Some(target) = edges.get(&(path.clone(), module.to_owned()))
+            {
+                return redirected_export_entity(
+                    facts,
+                    files,
+                    entities,
+                    edges,
+                    target,
+                    file.source_text(binding.local.span).ok_or(())?,
+                    visiting,
+                )?
+                .map(Some)
+                .ok_or(());
+            }
+            return entry_export_entity_indexed(
+                facts,
+                files,
+                entities,
+                &path,
+                name,
+                &mut HashSet::new(),
+            )
+            .map(Some)
+            .ok_or(());
+        }
+        if stars && name != "default" && is_bare_runtime_export_star(export) {
+            let module = export.module.as_deref().ok_or(())?;
+            // An unknown competing provider can also publish this name.
+            // Missing resolution is not evidence that it exports nothing.
+            let target = edges.get(&(path.clone(), module.to_owned())).ok_or(())?;
+            if let Some(entity) = redirected_export_entity(
+                facts,
+                files,
+                entities,
+                edges,
+                target,
+                name,
+                &mut visiting.clone(),
+            )? {
+                candidates.push(entity);
+            }
+        }
+    }
+    if let Some(first) = candidates.first() {
+        return if candidates
+            .iter()
+            .all(|entity| entity.location == first.location)
+        {
+            Ok(Some(*first))
+        } else {
+            Err(())
+        };
+    }
+    if stars {
+        // No ESM export table is not proof that a CommonJS/opaque module
+        // contributes no names to the namespace the bundler constructs.
+        if file
+            .ast
+            .module_level_exports()
+            .any(|export| !export.type_only)
+        {
+            Ok(None)
+        } else {
+            Err(())
+        }
+    } else {
+        entry_export_entity_indexed(facts, files, entities, &path, name, &mut HashSet::new())
+            .map(Some)
+            .ok_or(())
+    }
 }
 
 /// Writes the analyzing program's own module inventory beside the contract.
@@ -10501,14 +10710,6 @@ mod entry_export_kind_reconciliation_tests {
     }
 }
 
-fn entry_export_entity<'a>(
-    facts: &'a solid_facts::ProjectFacts,
-    entry_file: &Path,
-    name: &str,
-) -> Option<&'a typefacts::EntityFact> {
-    entry_export_entity_with_visiting(facts, entry_file, name, &mut HashSet::new())
-}
-
 /// The compiler entity of `name`'s exact runtime binding, as the resolution
 /// record states it (ADR 0132 § 2).
 ///
@@ -10635,96 +10836,6 @@ fn entry_export_entity_indexed<'a>(
         }
     }
     None
-}
-
-fn entry_export_entity_with_visiting<'a>(
-    facts: &'a solid_facts::ProjectFacts,
-    entry_file: &Path,
-    name: &str,
-    visiting: &mut HashSet<(PathBuf, String)>,
-) -> Option<&'a typefacts::EntityFact> {
-    let entry_file = entry_file.canonicalize().ok()?;
-    if !visiting.insert((entry_file.clone(), name.to_owned())) {
-        return None;
-    }
-    let file = facts
-        .files
-        .iter()
-        .find(|file| same_canonical_path(Path::new(file.path.as_str()), &entry_file))?;
-    // `module_level_exports`, not `exports`: an `export` nested in a
-    // `namespace`, `declare module`, or `declare global` body binds a member
-    // of that namespace object, not a name this module publishes. See
-    // `AstFacts::module_level_exports`.
-    let consult_export_stars =
-        validate_module_export_precedence(&file.ast, &entry_file, name).ok()?;
-    // Star exports are consulted after every explicit export, and a name two
-    // of them provide with different bindings is ambiguous: importing it is a
-    // link error, not either binding (ADR 0284 review round 2).
-    let mut starred: Option<&typefacts::EntityFact> = None;
-    let mut star_ambiguous = false;
-    for export in file
-        .ast
-        .module_level_exports()
-        .filter(|export| !export.type_only)
-    {
-        if export.namespace.as_deref() == Some(name) {
-            let binding = export.namespace_binding.as_ref()?;
-            return facts.typescript.entities().find(|entity| {
-                entity.location.path.as_ref() == file.path.as_str()
-                    && entity.location.start_byte == u64::from(binding.span.start)
-                    && entity.location.end_byte == u64::from(binding.span.end)
-            });
-        }
-        if let Some(specifier) = export
-            .specifiers
-            .iter()
-            .chain(&export.declarations)
-            .find(|specifier| !specifier.type_only && specifier.exported == name)
-        {
-            let span = specifier.local.span;
-            let location = typefacts::Location {
-                path: file.path.to_string().into(),
-                start_byte: u64::from(span.start),
-                end_byte: u64::from(span.end),
-            };
-            if let Some(entity) = facts.typescript.entities().find(|entity| {
-                entity.location.path == location.path
-                    && entity.location.start_byte == location.start_byte
-                    && entity.location.end_byte == location.end_byte
-            }) {
-                return Some(entity);
-            }
-            if let Some(module) = export.module.as_deref()
-                && module.starts_with('.')
-            {
-                let target = resolve_relative_export(facts, &entry_file, module).ok()?;
-                let local_name = file.source_text(specifier.local.span).unwrap_or(name);
-                if let Some(entity) =
-                    entry_export_entity_with_visiting(facts, &target, local_name, visiting)
-                {
-                    return Some(entity);
-                }
-            }
-        }
-        if consult_export_stars
-            && is_bare_runtime_export_star(export)
-            && let Some(module) = export.module.as_deref()
-            && module.starts_with('.')
-        {
-            let target = resolve_relative_export(facts, &entry_file, module).ok()?;
-            if let Some(entity) = entry_export_entity_with_visiting(facts, &target, name, visiting)
-            {
-                match starred {
-                    Some(previous) if previous.location != entity.location => {
-                        star_ambiguous = true;
-                    }
-                    Some(_) => {}
-                    None => starred = Some(entity),
-                }
-            }
-        }
-    }
-    if star_ambiguous { None } else { starred }
 }
 
 fn unify_runtime_alias_summaries(

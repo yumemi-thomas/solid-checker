@@ -192,3 +192,362 @@ pub(crate) fn bind(
     facts.runtime_symbol_redirects.extend(redirects);
     Ok(())
 }
+
+/// Decide the remaining contract boundary only after the run's actual tiers
+/// and artifact admission have been acquired. An internal external call is
+/// source analysis's obligation; an exported external value must preserve the
+/// exporting package's contract boundary when its target stays on contracts.
+pub(crate) fn retain_exported_contracts(
+    facts: &mut solid_facts::ProjectFacts,
+    program: &PreparedDependencyProgram,
+    contracts: &mut solid_reactive_ir::contract_semantics::AcceptedContractIndex,
+    dialect: &'static Dialect,
+) -> (BTreeSet<String>, Vec<String>) {
+    let mut selection = program.selection.clone();
+    let mut retained = solid_facts_backend::dependency_sources::UnsupportedBindings::default();
+    let mut notes = Vec::new();
+    loop {
+        let mut changed = false;
+        for file in &facts.files {
+            let path = Path::new(file.path.as_str());
+            let Some(root) = selection
+                .roots
+                .iter()
+                .filter(|root| path.starts_with(root))
+                .max_by_key(|root| root.components().count())
+            else {
+                continue;
+            };
+            let eligible = |module: &str| {
+                solid_facts_backend::dependency_sources::package_name(module).is_some_and(|name| {
+                    !selection.package_names.contains(&name)
+                        && !dialect
+                            .vocabulary
+                            .primitive_defining_packages()
+                            .iter()
+                            .any(|package| {
+                                solid_facts_backend::dependency_sources::package_name(package)
+                                    .as_deref()
+                                    == Some(name.as_str())
+                            })
+                        && contracts.contract(file.path.as_str(), module).is_ok()
+                })
+            };
+            for (module, (span, form)) in exported_external_modules(&file.ast, &eligible) {
+                // Use selection names as well as manifest names (npm aliases).
+                let names = selection
+                    .resolutions
+                    .iter()
+                    .filter(|edge| edge.target.starts_with(root))
+                    .filter_map(|edge| {
+                        solid_facts_backend::dependency_sources::package_name(&edge.specifier)
+                    })
+                    .filter(|name| selection.package_names.contains(name))
+                    .collect::<BTreeSet<_>>();
+                for exporting in names {
+                    let line = file.source[..span.start as usize]
+                        .bytes()
+                        .filter(|byte| *byte == b'\n')
+                        .count()
+                        + 1;
+                    retained.retain(
+                        exporting,
+                        format!(
+                            "{form} from accepted unselected package {module} at {}:{line}",
+                            file.path
+                        ),
+                    );
+                    changed = true;
+                }
+            }
+        }
+        if !changed {
+            break;
+        }
+        match solid_facts_backend::dependency_sources::without_unredirected_packages(
+            selection, &retained, &mut notes,
+        ) {
+            Some(remaining) => selection = remaining,
+            None => {
+                selection = program.selection.clone();
+                selection.roots.clear();
+                selection.files.clear();
+                selection.resolutions.clear();
+                selection.package_names.clear();
+                break;
+            }
+        }
+    }
+    let removed = program
+        .selection
+        .roots
+        .iter()
+        .filter(|root| !selection.roots.contains(root))
+        .collect::<Vec<_>>();
+    if !removed.is_empty() {
+        let inside = |path: &str| removed.iter().any(|root| Path::new(path).starts_with(root));
+        let removed_symbols = facts
+            .typescript
+            .symbols()
+            .filter(|symbol| {
+                symbol
+                    .declarations()
+                    .iter()
+                    .any(|declaration| inside(&declaration.location.path))
+            })
+            .map(|symbol| symbol.id().to_owned())
+            .collect::<BTreeSet<_>>();
+        facts.runtime_symbol_redirects.retain(|source, target| {
+            !removed_symbols.contains(source) && !removed_symbols.contains(target)
+        });
+        facts.files.retain(|file| !inside(file.path.as_str()));
+        facts.dependency_source_roots = selection
+            .roots
+            .iter()
+            .map(|root| root.to_string_lossy().into_owned())
+            .collect();
+        // Initial acquisition saw these roots as source and consequently did
+        // not request their ordinary external-package obligations. Restore
+        // those requirements together with the contract boundary.
+        let project = Path::new(&facts.project_id);
+        let directory = if project.is_dir() {
+            project
+        } else {
+            project.parent().unwrap_or_else(|| Path::new("."))
+        };
+        *contracts = std::mem::take(contracts).with_fallback(
+            solid_facts_backend::external_package_contract_requirements(directory, facts),
+        );
+    }
+    (selection.package_names, notes)
+}
+
+fn exported_external_modules(
+    facts: &solid_facts::ast::AstFacts,
+    eligible: &impl Fn(&str) -> bool,
+) -> BTreeMap<String, (solid_facts::core::Span, &'static str)> {
+    use solid_facts::core::Span;
+    let mut modules = BTreeMap::new();
+    let mut functions_by_start = facts.functions.iter().collect::<Vec<_>>();
+    functions_by_start.sort_by_key(|function| function.span);
+    let mut returned_values = BTreeMap::<Span, Vec<Span>>::new();
+    for returned in &facts.returns {
+        if let Some(argument) = returned.argument
+            && let Some(owner) = facts
+                .functions
+                .iter()
+                .filter(|function| function.body.contains(returned.span))
+                .min_by_key(|function| function.body.end - function.body.start)
+        {
+            returned_values
+                .entry(owner.span)
+                .or_default()
+                .push(argument);
+        }
+    }
+    for export in facts.module_level_exports().filter(|edge| !edge.type_only) {
+        if let Some(module) = export.module.as_deref()
+            && eligible(module)
+            && (export.kind == solid_facts::ast::ExportKind::All
+                || export.specifiers.iter().any(|binding| !binding.type_only))
+        {
+            modules.insert(
+                module.to_owned(),
+                (
+                    export.span,
+                    if export.namespace.is_some() {
+                        "namespace re-export"
+                    } else if export.kind == solid_facts::ast::ExportKind::All {
+                        "star re-export"
+                    } else {
+                        "named re-export"
+                    },
+                ),
+            );
+        }
+    }
+    let seeds = facts
+        .imports
+        .iter()
+        .filter(|edge| !edge.type_only)
+        .map(|edge| {
+            (
+                edge.module.as_str(),
+                edge.span,
+                edge.bindings
+                    .iter()
+                    .filter(|binding| !binding.type_only && binding.runtime_referenced)
+                    .map(|binding| binding.local.span)
+                    .collect::<BTreeSet<_>>(),
+                None,
+            )
+        })
+        .chain(
+            facts
+                .import_equals
+                .iter()
+                .filter(|edge| !edge.type_only)
+                .map(|edge| {
+                    (
+                        edge.module.as_str(),
+                        edge.span,
+                        [edge.local.span].into_iter().collect(),
+                        None,
+                    )
+                }),
+        )
+        .chain(facts.module_loads.iter().filter_map(|edge| {
+            edge.specifier
+                .as_deref()
+                .map(|module| (module, edge.span, BTreeSet::new(), Some(edge.span)))
+        }));
+    for (module, import_span, mut tainted, load) in seeds.filter(|(module, ..)| eligible(module)) {
+        if modules.contains_key(module) {
+            continue;
+        }
+        let mut derived_functions = BTreeSet::new();
+        let reads = |span: Span, tainted: &BTreeSet<Span>, functions: &BTreeSet<Span>| {
+            let first_function =
+                functions_by_start.partition_point(|function| function.span.start < span.start);
+            let direct = |reference| {
+                !functions_by_start[first_function..]
+                    .iter()
+                    .take_while(|function| function.span.start < span.end)
+                    .any(|function| {
+                        span.contains(function.span) && function.body.contains(reference)
+                    })
+            };
+            let first_reference = facts
+                .reference_declarations
+                .partition_point(|(reference, _)| reference.start < span.start);
+            functions.iter().any(|function| span.contains(*function))
+                || load.is_some_and(|load| span.contains(load) && direct(load))
+                || facts.reference_declarations[first_reference..]
+                    .iter()
+                    .take_while(|(reference, _)| reference.start < span.end)
+                    .any(|(reference, declaration)| {
+                        span.contains(*reference)
+                            && tainted.contains(declaration)
+                            && direct(*reference)
+                    })
+        };
+        loop {
+            let before = (tainted.len(), derived_functions.len());
+            for binding in &facts.bindings {
+                if binding
+                    .initializer
+                    .is_some_and(|span| reads(span, &tainted, &derived_functions))
+                {
+                    tainted.extend(binding.names.iter().map(|name| name.span));
+                }
+            }
+            for assignment in &facts.assignments {
+                if reads(assignment.value_span, &tainted, &derived_functions) {
+                    tainted.extend(
+                        facts
+                            .reference_declarations
+                            .iter()
+                            .filter(|(reference, _)| assignment.target.contains(*reference))
+                            .map(|(_, declaration)| *declaration),
+                    );
+                }
+            }
+            for function in &facts.functions {
+                if (function.expression_body && reads(function.body, &tainted, &derived_functions))
+                    || returned_values
+                        .get(&function.span)
+                        .into_iter()
+                        .flatten()
+                        .any(|span| reads(*span, &tainted, &derived_functions))
+                {
+                    derived_functions.insert(function.span);
+                    tainted.extend(function.name.iter().map(|name| name.span));
+                    tainted.extend(
+                        facts
+                            .bindings
+                            .iter()
+                            .filter(|binding| {
+                                binding.initializer_function
+                                    && binding
+                                        .initializer
+                                        .is_some_and(|span| span.contains(function.span))
+                            })
+                            .flat_map(|binding| binding.names.iter().map(|name| name.span)),
+                    );
+                }
+            }
+            if before == (tainted.len(), derived_functions.len()) {
+                break;
+            }
+        }
+        if facts
+            .module_level_exports()
+            .filter(|edge| !edge.type_only && edge.module.is_none())
+            .any(|export| {
+                export
+                    .specifiers
+                    .iter()
+                    .chain(&export.declarations)
+                    .filter(|binding| !binding.type_only)
+                    .any(|binding| {
+                        tainted.contains(&binding.local.span)
+                            || reads(binding.local.span, &tainted, &derived_functions)
+                    })
+                    || facts.exported_bindings(export).any(|binding| {
+                        binding
+                            .names
+                            .iter()
+                            .any(|name| tainted.contains(&name.span))
+                    })
+                    || (export.kind == solid_facts::ast::ExportKind::Default
+                        && reads(export.span, &tainted, &derived_functions))
+            })
+        {
+            modules.insert(
+                module.to_owned(),
+                (import_span, "exports an imported or derived value"),
+            );
+        }
+    }
+    modules
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn only_exported_external_values_retain_a_boundary() {
+        for source in [
+            "export { x } from 'pkg';",
+            "export * from 'pkg';",
+            "export * as ns from 'pkg';",
+            "import { x } from 'pkg'; export { x as y };",
+            "import { x } from 'pkg'; export const y = x;",
+            "import { x } from 'pkg'; const y = x(); export { y };",
+            "import { x } from 'pkg'; export function y() { return x(); }",
+            "import { x } from 'pkg'; export const y = () => x();",
+            "import { x } from 'pkg'; let y; y = x; export { y };",
+        ] {
+            let facts = solid_facts::ast::extract("module.ts", source).unwrap();
+            assert!(
+                super::exported_external_modules(&facts, &|_| true).contains_key("pkg"),
+                "{source}"
+            );
+        }
+        for source in [
+            "import { x } from 'pkg'; x(); export const y = 1;",
+            "import { x } from 'pkg'; export function y() { x(); return 1; }",
+            "import { x } from 'pkg'; export const y = () => { x(); return 1; };",
+            "import { x } from 'pkg'; export default function y() { x(); return 1; }",
+            "import { x } from 'pkg'; export default () => { x(); return 1; };",
+            "import { x } from 'pkg'; function internal() { return x(); } export const y = 1;",
+            "import { x } from 'pkg'; function y(x) { return x; } export { y };",
+            "export type { T } from 'pkg';",
+        ] {
+            let facts = solid_facts::ast::extract("module.ts", source).unwrap();
+            assert!(
+                !super::exported_external_modules(&facts, &|_| true).contains_key("pkg"),
+                "{source}"
+            );
+        }
+    }
+}

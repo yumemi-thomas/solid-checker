@@ -30419,16 +30419,37 @@ removes 44 source-mode obligations in openbot (42 `SC1001`, 2 `SC9012`) and
 adds 5 `SC9005` in openbot and jibe-run; all 5 added rows, and none of the 44
 removed ones, are contract mode's (`sweep-m-base.json`).
 
-Open, found in this round and not fixed:
-- **A re-export of a selected package loses its accepted contract the same
-  way.** `export { isReady, isReadyOpen } from "reactive-package"` in a
-  project barrel, with a contract accepted for the barrel's import that leaves
-  `isReadyOpen`'s `returns` unknown: contract mode reports `SC9005`; under
-  `*` the package is selected, the re-export is not redirected (only
-  named/default import bindings are), and nothing is reported. The same holds
-  for a re-export between packages inside a selected closure. Without an
-  accepted contract the call keeps its `SC9011` when it passes a reactive
-  value.
+Resolved in the revised round-2 implementation:
+- **Exact re-export redirects.** Named/default-as exports and unambiguous
+  stars follow the selected runtime graph in project barrels and selected
+  package files. Explicit source selection covers package importers too.
+  Ten process variants, including barrels outside `files`-only roots, require
+  a source-proven `SC1001` accessor read where contract mode leaves `SC9005`.
+  Distinct star bindings and unknown competing providers refuse. A `tsc`-clean
+  negative whose external star provider omits a runtime name from its typings
+  stays `SC9011`, not a guessed `SC1001`. An exact export ending at an unselected
+  external declaration does not retain its entire exporting package: that
+  boundary is decided by the accepted-contract test below, rather than by
+  requiring every export to have a selected runtime body.
+- **Only bound, unsupported forms retain targets.** Namespace imports and
+  namespace re-exports, literal bare dynamic imports/`require`, and runtime
+  import-equals retain that package for all copies/subpaths. Nonliteral loads
+  bind no contract and retain nothing; relative literal loads join the selected
+  closure. Type-only edges, dialect runtime/subpaths and build-config imports
+  do not retain packages or seed automatic selection. Shadowed `require`
+  remains an ordinary local call. Unreadable project AST facts still refuse
+  selection conservatively.
+- **Accepted external values retain their exporting boundary.** An unselected
+  Q retains selected A only when Q has an accepted contract in the actual run
+  and a Q binding or derived value reaches A's exports. Internal external calls
+  with discarded results retain nothing. Initializers, assignments, returned
+  values and shadowing use the binder's exact reference/declaration spans.
+  Retention is decided after catalog/artifact acquisition, prunes roots/files
+  and redirects together (including overlapping roots and npm aliases), and
+  restores the ordinary package obligations initial acquisition skipped.
+  A process control for an unaccepted external re-export keeps source selection
+  and reports `SC9011` for a reactive argument, so ignoring that contractless
+  edge for retention does not silently certify the consumer.
 
 ## Kui package-context getter recovery investigation (2026-10-14, ADR 0289)
 
@@ -30616,29 +30637,27 @@ Resolved in review round 2:
   static closure, so all candidate contracts are retained with a note.
   Unreadable project AST facts take the same conservative path.
 
-Remaining limits: exact redirects for these binding forms are unimplemented.
-Keeping contracts can lose source proofs; packages without an accepted
-contract stay uncertifiable. Erased type-only imports/re-exports, import types
-and JSDoc import types do not block selection, and mixed imports retain their
-runtime named/default redirect. `export =` follows the binding of the value it
-publishes. Locally bound functions named `require` are not guessed to load a
-module.
+The first conservative implementation (3,736 uncertifiable, +488, losing three
+probus-hk source reads) was over-retention and is superseded. Relative and
+nonliteral loads are not reasons to retain every candidate contract.
 
-Still open, independently of source selection: the contract resolver's
-re-export loop reads `export.specifiers` only. A bare `export *` has none,
-so an accepted open `returns` claim through a star raises no `SC9005` in
-contract mode either. The new star regression establishes retained contracts
-and equality with that baseline, not recovery of the missing obligation.
-This remains in `solid-reactive-ir::contracts::resolve_contract_imports_inner`.
+Remaining limits: namespace/module-object redirects are unimplemented and
+retain contracts, so those packages can still lose source proofs. Missing
+external acceptance is handled by source analysis rather than invented trust.
+Dynamic dispatch is not guessed. Independently, contract mode still reads
+explicit re-export specifiers only: a bare `export *` projects no accepted open
+return claim in `solid-reactive-ir::contracts::resolve_contract_imports_inner`.
+Source mode's star regression now proves the read; the contract-mode gap
+remains open.
 
-Round-2 rc.13 corpus: 562 violations (same count), 3,736 uncertifiable
-(+488), no analysis errors. Contract retention restores kui's getter at
-`TopicsRoute.tsx:425:75` and spotify's two `prefer-show` sites at
-`PlayerControlIcon.tsx:26:5` and `PlayerControls.tsx:133:5`, all present in
-`sweep-m-base.json`. It loses three source-only probus-hk reads:
-`RouteDetail.tsx:2214:7`, `Search.tsx:302:42`, `Search.tsx:317:11`.
-Most candidate source packages now stay on contracts because a relative or
-nonliteral module load cannot be scoped safely. This is a deliberate recall
-cost of fail-closed selection, not recovery of source proofs. The per-app
-violation/uncertifiable deltas and 74 newly retained package names (37 apps)
-are recorded in the corpus's `experiments/sweep-sol-reexport-delta.json`.
+Revised ADR 0297 round-2 corpus: 562 violations at the same sites and 3,275
+uncertifiable (+27 from 3,248), no errors. All three probus-hk source reads
+remain (`RouteDetail.tsx:2214:7`, `Search.tsx:302:42`, `Search.tsx:317:11`).
+The 28 added/one removed uncertifiable sites comprise 24 added Vite-config
+contract obligations and four added runtime-import obligations. The retention
+table contains eight namespace cases, three explicit source refusals and one
+accepted external re-export (`@rigelbuild/solid-virtual` to
+`@tanstack/virtual-core`), across nine apps: 12 entries, six package names.
+Build tools and app-game have zero retained entries. The corpus's
+`experiments/sweep-sol-reexport2-reasons.json` records every exact edge and
+per-site delta; `sweep-sol-reexport2.json` holds the complete findings.

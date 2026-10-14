@@ -56,10 +56,13 @@ beside `--dependency-source`, which asks for the opposite. A fixture says
 **Fallback.** Nothing is deleted. A package `*` does not select (non-Solid
 packages, workspace packages, Solid's own runtime) or refuses (an `exports`
 array, a `browser` map, an oversized closure) keeps its contract. A package
-any project or selected package file reaches through a namespace import,
-runtime re-export, dynamic import, `require`, or import-equals binding is
-not selected, in any selection, and keeps its contract too (review rounds 1
-and 2): those bindings are never redirected to source. A run without both a target and
+any runtime project or selected package file reaches through a namespace import,
+namespace re-export, literal bare dynamic import, `require`, or import-equals
+binding is not selected, in any selection, and keeps its contract too (review
+rounds 1 and 2). Named/default imports and named/default-as/star re-exports
+bind exact runtime exports instead. Nonliteral loads bind no contract in either
+mode; relative literal loads join the package closure. Type-only edges, dialect
+runtime edges and build-config imports do not retain packages. A run without both a target and
 a build, including ESLint's `browser-v2` config, is contract mode as before.
 
 **ESLint.** The adapter's snapshot cache keys on settings, and nothing in
@@ -172,46 +175,76 @@ option positions and the option table.
 
 ## Review round 2
 
-Runtime named, star, default-as and namespace re-exports are not redirected by
-`symbol_redirects`. Their target package now keeps its contract for every copy
-and subpath, including beside a named import of the same package. Imported
-project barrels are scanned even outside a `files`-only tsconfig's roots.
+The boundary is a contract binding that source selection would drop. The first
+implementation retained every re-export target and every candidate beside a
+relative/nonliteral load; its 488 extra uncertifiable results and loss of the
+three probus-hk source proofs were over-retention. This revision replaces those
+blanket rules with the following selection.
 
-A source package re-exporting a non-runtime package keeps its own contract too:
-retaining only the target still removed the caller's obligation, while the
-target's open claim was filtered as a package-located finding. The dialect's
-primitive runtime re-exports already bind exact vocabulary.
-Pruning also removes overlapping installed roots and every copy sharing their
-manifest or resolved selection names, including npm aliases. It leaves no
-selected root without its source files; a re-exporter without a manifest
-identity retains all candidate contracts.
+Named, default, default-as and star re-exports follow the same exact
+compiler-symbol/runtime-target joins as imports, in project barrels and selected
+package files. Explicit selection expands its rows into package importers too.
+Project barrels outside `files`-only roots enter through the program inventory.
+Explicit exports precede stars; distinct star bindings or an unknown competing
+star provider refuse the join. Known absence and unavailable export facts are
+distinct outcomes. An
+exact re-export can end at an unselected external declaration; requiring every
+export to have a selected runtime body would incorrectly retain its entire
+exporting package. That boundary follows the accepted-contract test below.
 
-The audit also retains contracts for literal bare dynamic imports, unshadowed
-`require` and runtime import-equals. A nonliteral or relative load, or unreadable
-project AST facts, cannot be scoped to one package, so all candidate contracts
-stay with a note. Erased type-only edges do not block selection; mixed imports
-retain their runtime named/default redirect. `export =` follows its value's
-binding, and a locally bound `require` is not guessed to load a module.
+Namespace imports, `export * as ns`, import-equals, literal bare `require` and
+literal bare `import()` retain the target package for all copies and subpaths.
+Nonliteral loads bind nothing in contract mode and retain nothing. Relative
+literal loads are walked inside the selected closure. Erased type-only edges,
+the dialect's primitive-defining packages (including runtime subpaths), and
+`vite.config.*`/`vitest.config.*` edges do not retain packages or seed selection.
+An unreadable project AST still refuses selection conservatively.
 
-Ten process variants compare project and package barrels with contract mode,
-under the default, explicit `*` and explicit package selection; all are
-`tsc --noEmit` clean. Named/default-as project claims and package-barrel
-requirements remain `SC9005` (uncertifiable). Dynamic-load regressions and
-focused unit controls cover the other binding forms.
+A selected package A importing an unselected Q retains A's contract only when
+the run's admitted catalogs/tiers accept Q and a Q binding or derived value
+reaches A's exports. Internal calls with discarded results retain nothing.
+This check runs after acquisition, closes retention over overlapping roots and
+selection aliases, removes retained source files/redirects, and restores the
+ordinary external-package obligations omitted during initial acquisition.
+It is shared by one-shot and retained analysis.
 
-Still open: contract mode itself projects explicit re-export specifiers only.
-A bare star has none, so its accepted open `returns` claim raises no `SC9005`.
-The star-only regression pins contract retention and baseline equality; a star
-beside a direct accepted import retains that import's `SC9005`. The independent
-IR-owned star projection gap remains in `resolve_contract_imports_inner`.
+The ten primary barrel process variants now require a source-proven `SC1001` read
+through the re-export, stronger than contract mode's open `SC9005` claim, under
+default, explicit `*`, and explicit package selections. Selecting only a barrel
+whose target has an accepted contract preserves contract mode's findings.
+Dynamic-load and config controls distinguish the ignored edges from namespace
+bindings. Five more star controls cover identical bindings, explicit precedence,
+ambiguity refusal, an unselected provider whose declarations omit a runtime
+export, and an opaque CommonJS provider. The last two are `tsc`-clean and report
+`SC9011`, never a guessed read violation. Binder-resolved initializer, assignment,
+return and shadowing controls
+exercise exported values separately from internal external-package uses.
+An accepted source package re-exporting an unaccepted external helper stays
+selected; passing a reactive source through that helper reports `SC9011`
+(uncertifiable), rather than retaining the entire package or silently certifying
+the call.
 
-rc.13 corpus, release binary and the same browser/development/CSR flags:
-562 violations (unchanged count), 3,736 uncertifiable (3,248 before), no errors.
-Three contract-mode sites return: kui `TopicsRoute.tsx:425:75` and spotify's
-`PlayerControlIcon.tsx:26:5` and `PlayerControls.tsx:133:5`. Three source-only
-probus-hk sites disappear: `RouteDetail.tsx:2214:7`, `Search.tsx:302:42` and
-`Search.tsx:317:11`. All added violations already occur in the saved contract
-sweep. Opaque-load fallback accounts for most of the 488 extra obligations.
-74 package names across 37 apps newly retain contracts; per-app deltas and
-package names are in `experiments/sweep-sol-reexport-delta.json`, with full
-notes in `sweep-sol-reexport-selection.json` beside the sweep.
+Still open independently: contract mode's `resolve_contract_imports_inner`
+projects explicit re-export specifiers only. A bare star has none, so its open
+accepted return claim raises no `SC9005` there. Source mode's star regression
+now proves the runtime read; this change does not repair contract-mode star
+projection. Namespace/module-object redirects remain unimplemented and retain
+contracts; missing external acceptance remains source analysis's obligation.
+
+Revised rc.13 corpus (49 projects, release binary, browser/development/CSR):
+562 violations at exactly the baseline sites, including probus-hk
+`RouteDetail.tsx:2214:7`, `Search.tsx:302:42` and `Search.tsx:317:11`;
+3,275 uncertifiable against 3,248 (+27), with no analysis errors. There are
+28 added and one removed uncertifiable sites: 24 added sites are Vite-config
+imports, which now stay in ordinary contract mode instead of selecting build
+tools, and four are runtime imports.
+
+The complete retention table has 12 package entries across nine apps (six
+distinct names): eight namespace cases, three source refusals (`browser` map,
+raw-query import, JSON import), and one accepted external re-export:
+`@rigelbuild/solid-virtual` exports `@tanstack/virtual-core`. Neither router nor
+TanStack's Solid packages are retained; app-game and build tools have zero
+entries. Every entry names its requesting file, line and binding form; source
+refusals also name the offending closure edge. Per-site deltas and reasons are
+in the corpus's `experiments/sweep-sol-reexport2-reasons.json`, beside
+`sweep-sol-reexport2.json`.

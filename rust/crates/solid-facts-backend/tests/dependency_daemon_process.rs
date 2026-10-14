@@ -1118,10 +1118,11 @@ export function StatusOpen() {
 }
 "#;
 
-/// Review round 2: every unredirected runtime re-export keeps the accepted
-/// contract, including a re-export discovered inside a selected closure.
+/// Exact re-export edges select runtime source, in project and package
+/// barrels alike. A reactive runtime read proves a violation where contract
+/// mode could only leave the re-export's return claim uncertifiable.
 #[test]
-fn reexport_barrels_keep_their_accepted_contracts() {
+fn reexport_barrels_redirect_exact_bindings_and_retain_unselected_contracts() {
     let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
         return;
     };
@@ -1133,6 +1134,31 @@ fn reexport_barrels_keep_their_accepted_contracts() {
         ),
         ("star", "export * from 'reactive-package';", false),
         ("star-mixed", "export * from 'reactive-package';", false),
+        (
+            "star-unselected-provider",
+            "export * from 'reactive-package'; export * from 'external-star-provider';",
+            false,
+        ),
+        (
+            "star-same-binding",
+            "export * from 'reactive-package'; export * from './other';",
+            false,
+        ),
+        (
+            "star-ambiguous",
+            "export * from 'reactive-package'; export * from './other';",
+            false,
+        ),
+        (
+            "star-opaque-provider",
+            "export * from 'reactive-package'; export * from './opaque.js';",
+            false,
+        ),
+        (
+            "star-explicit",
+            "export * from 'reactive-package'; export { isReadyOpen } from './other';",
+            false,
+        ),
         (
             "default-as",
             "export { isReady, default as isReadyOpen } from 'reactive-package';",
@@ -1171,6 +1197,17 @@ fn reexport_barrels_keep_their_accepted_contracts() {
             "./barrel"
         };
         let mut app = NAMED_APP.replace("reactive-package", specifier);
+        app = format!("import {{ createSignal }} from 'solid-js';\n{}", app.replace("  return <div>{isReadyOpen() ?", "  const [ready] = createSignal(true);\n  const value = isReadyOpen(ready);\n  return <div>{value ?"));
+        let source_read_line = app
+            .lines()
+            .position(|line| line.contains("const value = isReadyOpen(ready)"))
+            .unwrap()
+            + 1;
+        let plain_line = app
+            .lines()
+            .position(|line| line.contains("return <div>{isReady()"))
+            .unwrap()
+            + 1;
         if tag == "star-mixed" {
             app.push_str("\nimport { isReadyOpen as directOpen } from 'reactive-package';\nexport function DirectStatusOpen() { return <div>{directOpen() ? 'ready' : 'waiting'}</div>; }\n");
         }
@@ -1178,6 +1215,61 @@ fn reexport_barrels_keep_their_accepted_contracts() {
             &format!("reexport-{tag}"),
             &app,
             |scratch| {
+                fs::copy(
+                    fixture("dependency-source-all").join("solid-js.d.ts"),
+                    scratch.path("solid-js.d.ts"),
+                )
+                .unwrap();
+                fs::write(scratch.path("node_modules/reactive-package/index.js"), "export function isReady() { return true; }\nexport function isReadyOpen(source) { return source(); }\n").unwrap();
+                edit(
+                    &scratch.path("node_modules/reactive-package/index.d.ts"),
+                    "isReadyOpen()",
+                    "isReadyOpen(source?: () => boolean)",
+                );
+                if matches!(
+                    tag,
+                    "star-same-binding" | "star-ambiguous" | "star-explicit"
+                ) {
+                    fs::write(scratch.path("other.ts"), if tag == "star-same-binding" { "export * from 'reactive-package';" } else { "export function isReadyOpen(_source?: () => boolean): boolean { return true; }" }).unwrap();
+                }
+                if tag == "star-opaque-provider" {
+                    fs::write(
+                        scratch.path("opaque.js"),
+                        "exports.isReadyOpen = () => true;",
+                    )
+                    .unwrap();
+                    fs::write(
+                        scratch.path("opaque.d.ts"),
+                        "export declare const another: number;",
+                    )
+                    .unwrap();
+                    let config_path = scratch.path("tsconfig.json");
+                    let mut config: serde_json::Value =
+                        serde_json::from_slice(&fs::read(&config_path).unwrap()).unwrap();
+                    config["compilerOptions"]["allowJs"] = true.into();
+                    config["include"]
+                        .as_array_mut()
+                        .unwrap()
+                        .push("*.js".into());
+                    fs::write(config_path, serde_json::to_vec_pretty(&config).unwrap()).unwrap();
+                }
+                if tag == "star-unselected-provider" {
+                    let external = scratch.path("node_modules/external-star-provider");
+                    fs::create_dir_all(&external).unwrap();
+                    fs::write(external.join("package.json"), r#"{"name":"external-star-provider","version":"1.0.0","types":"index.d.ts","module":"index.js"}"#).unwrap();
+                    // TypeScript is clean, but this unselected runtime
+                    // provider contributes a competing binding.
+                    fs::write(
+                        external.join("index.d.ts"),
+                        "export declare const another: number;",
+                    )
+                    .unwrap();
+                    fs::write(
+                        external.join("index.js"),
+                        "export const isReadyOpen = () => true;",
+                    )
+                    .unwrap();
+                }
                 let importer = if in_package {
                     let package = scratch.path("node_modules/barrel-package");
                     fs::create_dir_all(&package).unwrap();
@@ -1194,7 +1286,7 @@ fn reexport_barrels_keep_their_accepted_contracts() {
                     let mut config: serde_json::Value =
                         serde_json::from_slice(&fs::read(&config_path).unwrap()).unwrap();
                     config["include"] = serde_json::json!([]);
-                    config["files"] = serde_json::json!(["App.tsx", "jsx.d.ts"]);
+                    config["files"] = serde_json::json!(["App.tsx", "jsx.d.ts", "solid-js.d.ts"]);
                     fs::write(config_path, serde_json::to_vec_pretty(&config).unwrap()).unwrap();
                 }
                 let request_path = scratch.path(".solid-checker/authorize-contract.json");
@@ -1236,7 +1328,11 @@ fn reexport_barrels_keep_their_accepted_contracts() {
             },
         );
         let trust = trust.to_string_lossy();
-        if let Ok(tsc) = std::env::var("SOLID_CHECKER_TEST_TSC") {
+        // The ambiguous-star negative deliberately has TS2308. The checker
+        // must refuse its runtime join, not choose TypeScript's recovery arm.
+        if let Ok(tsc) = std::env::var("SOLID_CHECKER_TEST_TSC")
+            && tag != "star-ambiguous"
+        {
             let output = Command::new("node")
                 .arg(tsc)
                 .args(["--noEmit", "--project"])
@@ -1272,19 +1368,98 @@ fn reexport_barrels_keep_their_accepted_contracts() {
         for args in [vec![], vec!["--dependency-source", "*"], explicit] {
             let selected = run(&args);
             assert!(
-                selected.notes().iter().any(|note| note.contains(
-                    "dependency source reactive-package: re-exported through a runtime binding"
-                )),
+                !selected
+                    .notes()
+                    .iter()
+                    .any(|note| note.contains("dependency source reactive-package")
+                        && note.contains("its contract stays")),
                 "{tag}: {}",
                 selected.stderr
             );
-            assert_eq!(stdout(&selected), stdout(&contracts), "{tag}: {args:?}");
+            let proves_read = !matches!(
+                tag,
+                "star-ambiguous"
+                    | "star-explicit"
+                    | "star-unselected-provider"
+                    | "star-opaque-provider"
+            );
+            assert_eq!(
+                selected.json()["findings"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|finding| finding["id"] == "SC1001"
+                        && finding["kind"] == "violation"
+                        && finding["primaryLocation"]["line"] == source_read_line),
+                proves_read,
+                "{tag}: {args:?}: {}",
+                stdout(&selected)
+            );
+            if matches!(tag, "star-unselected-provider" | "star-opaque-provider") {
+                assert!(
+                    selected.json()["findings"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(|finding| finding["id"] == "SC9011"
+                            && finding["kind"] == "uncertifiable"),
+                    "{}",
+                    stdout(&selected)
+                );
+            }
+            assert!(
+                !selected.json()["findings"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|finding| finding["kind"] == "violation"
+                        && finding["primaryLocation"]["line"] == plain_line),
+                "{tag}: plain return: {}",
+                stdout(&selected)
+            );
+            for obligation in contracts.json()["findings"].as_array().unwrap() {
+                assert!(
+                    selected.json()["findings"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(|finding| {
+                            ["path", "line", "column"].iter().all(|key| {
+                                finding["primaryLocation"][key]
+                                    == obligation["primaryLocation"][key]
+                            }) && finding["id"] == obligation["id"]
+                                && finding["kind"] == obligation["kind"]
+                                || finding["id"] == "SC1001"
+                                    && finding["kind"] == "violation"
+                                    && finding["primaryLocation"]["line"] == source_read_line
+                                    && proves_read
+                        }),
+                    "{tag}: {args:?}: lost obligation {obligation}; selected {}",
+                    stdout(&selected)
+                );
+            }
+        }
+        if in_package {
+            let retained = run(&["--dependency-source", "barrel-package"]);
+            assert_eq!(
+                stdout(&retained),
+                stdout(&contracts),
+                "{tag}: accepted unselected target"
+            );
+            assert!(
+                retained
+                    .notes()
+                    .iter()
+                    .any(|note| note.contains("accepted unselected package reactive-package")),
+                "{tag}: {}",
+                retained.stderr
+            );
         }
         let findings = contracts.json()["findings"].as_array().unwrap().clone();
         // Contract mode itself does not bind a bare star's open claims:
         // resolve_contract_imports_inner walks explicit specifiers only.
-        // Selection must still retain the package and equal that baseline;
-        // the independent star projection gap is recorded in ADR 0297.
+        // Source selection must prove the read even where contract mode
+        // projects no star obligation; that separate gap remains in ADR 0297.
         assert!(
             (tag.contains("star") && tag != "star-mixed")
                 || findings
@@ -1302,7 +1477,7 @@ fn reexport_barrels_keep_their_accepted_contracts() {
 }
 
 #[test]
-fn dynamic_module_loads_keep_the_named_imports_contract_too() {
+fn only_literal_bare_module_loads_retain_the_named_imports_contract() {
     let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
         return;
     };
@@ -1336,6 +1511,27 @@ fn dynamic_module_loads_keep_the_named_imports_contract_too() {
         };
         let selected = run(&[]);
         let contracts = run(&["--no-dependency-source"]);
+        if tag != "literal" {
+            assert!(
+                selected.json()["findings"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .all(|finding| finding["id"] == "SC9014"),
+                "{tag}: {}",
+                stdout(&selected)
+            );
+            assert!(
+                !selected
+                    .notes()
+                    .iter()
+                    .any(|note| note.contains("dependency source reactive-package")
+                        && note.contains("its contract stays")),
+                "{tag}: {}",
+                selected.stderr
+            );
+            continue;
+        }
         assert_eq!(stdout(&selected), stdout(&contracts), "{tag}");
         assert!(
             stdout(&selected).contains("SC9005"),
@@ -1352,6 +1548,109 @@ fn dynamic_module_loads_keep_the_named_imports_contract_too() {
             selected.stderr
         );
     }
+}
+
+/// An exact source re-export may end at an unselected declaration. Absence
+/// of that external package's accepted contract is source analysis's
+/// obligation, not a reason to retain every export of the selected package.
+#[test]
+fn reexport_to_an_unaccepted_external_package_keeps_source_selection() {
+    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let app = "import { createSignal } from 'solid-js';\nimport { isReadyOpen } from 'reactive-package';\nexport function Status() { const [ready] = createSignal(true); const value = isReadyOpen(ready); return <div>{value}</div>; }";
+    let (scratch, trust) = accepted_solid_package_with("unaccepted-reexport", app, |scratch| {
+        fs::copy(
+            fixture("dependency-source-all").join("solid-js.d.ts"),
+            scratch.path("solid-js.d.ts"),
+        )
+        .unwrap();
+        edit(
+            &scratch.path("node_modules/reactive-package/index.d.ts"),
+            "isReadyOpen()",
+            "isReadyOpen(source?: () => boolean)",
+        );
+        fs::write(
+            scratch.path("node_modules/reactive-package/index.js"),
+            "export { isReady, isReadyOpen } from 'external-package';",
+        )
+        .unwrap();
+        let external = scratch.path("node_modules/external-package");
+        fs::create_dir_all(&external).unwrap();
+        fs::write(external.join("package.json"), r#"{"name":"external-package","version":"1.0.0","types":"index.d.ts","module":"index.js"}"#).unwrap();
+        fs::write(external.join("index.d.ts"), "export declare function isReady(): boolean; export declare function isReadyOpen(source?: () => boolean): boolean;").unwrap();
+        fs::write(external.join("index.js"), "export function isReady() { return true; } export function isReadyOpen(source) { return source(); }").unwrap();
+    });
+    let trust = trust.to_string_lossy();
+    let mut args = with_host(&[]);
+    args.extend(["--receipt-trust-configuration", trust.as_ref()]);
+    let (success, selected) = invoke(&typefacts, &scratch.project, &args, false);
+    assert!(success, "{}", selected.stderr);
+    assert!(
+        !selected
+            .notes()
+            .iter()
+            .any(|note| note.contains("dependency source reactive-package")
+                && note.contains("its contract stays")),
+        "{}",
+        selected.stderr
+    );
+    assert!(
+        selected.json()["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|finding| finding["id"] == "SC9011" && finding["kind"] == "uncertifiable"),
+        "{}",
+        stdout(&selected)
+    );
+    assert!(
+        !selected.json()["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|finding| finding["kind"] == "violation"),
+        "{}",
+        stdout(&selected)
+    );
+}
+
+#[test]
+fn config_only_namespace_edges_do_not_retain_runtime_packages() {
+    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let (scratch, trust) =
+        accepted_solid_package_with("config-only-namespace", NAMED_APP, |scratch| {
+            fs::write(
+                scratch.path("vite.config.ts"),
+                "import * as reactive from 'reactive-package'; export default reactive;",
+            )
+            .unwrap();
+        });
+    let trust = trust.to_string_lossy();
+    let mut args = with_host(&[]);
+    args.extend(["--receipt-trust-configuration", trust.as_ref()]);
+    let (success, selected) = invoke(&typefacts, &scratch.project, &args, false);
+    assert!(success, "{}", selected.stderr);
+    assert!(
+        selected.json()["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|finding| finding["id"] == "SC9014"),
+        "{}",
+        stdout(&selected)
+    );
+    assert!(
+        !selected
+            .notes()
+            .iter()
+            .any(|note| note.contains("dependency source reactive-package")
+                && note.contains("its contract stays")),
+        "{}",
+        selected.stderr
+    );
 }
 
 /// Review round 1 of ADR 0297: a package imported through a namespace

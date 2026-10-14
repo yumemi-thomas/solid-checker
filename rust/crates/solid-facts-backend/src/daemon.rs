@@ -1334,7 +1334,7 @@ fn answer(
         state.session.set_semantic_demand_options(options);
         Ok(())
     };
-    let facts = if changes.is_empty() {
+    let mut facts = if changes.is_empty() {
         demand(state)?;
         state.session.analyze()?
     } else {
@@ -1391,7 +1391,7 @@ fn answer(
     // Capture discovery's exact input generation before it runs. A refusal
     // needs only its witness; success retains the complete graph-input closure.
     let mut inference_inputs = inference_inputs_for_check(state, check);
-    let (contracts, inference_note) =
+    let (mut contracts, inference_note) =
         solid_facts_backend::inferred_project_accepted_contracts_with_note(
             directory,
             &selection.admitted,
@@ -1421,11 +1421,28 @@ fn answer(
     }
     // ADR 0296: preparation's notes come first, where a one-shot check
     // prints them.
-    let dependency_notes = state
+    let mut dependency_notes = state
         .dependency
         .as_ref()
         .map(|dependency| dependency.prepared.notes.clone())
         .unwrap_or_default();
+    let contracts = match state
+        .dependency
+        .as_ref()
+        .and_then(|dependency| dependency.prepared.program.as_ref())
+    {
+        Some(program) => {
+            let (selected, notes) = super::dependency_program::retain_exported_contracts(
+                Arc::make_mut(&mut facts),
+                program,
+                &mut contracts,
+                state.dialect,
+            );
+            dependency_notes.extend(notes);
+            contracts.without_packages(&selected)
+        }
+        None => contracts,
+    };
     let notice: Arc<str> = dependency_notes
         .into_iter()
         .chain(selection.notice())
@@ -1433,15 +1450,6 @@ fn answer(
         .collect::<Vec<_>>()
         .join("\n")
         .into();
-    // ADR 0284: a package analyzed as source binds through no contract.
-    let contracts = match state
-        .dependency
-        .as_ref()
-        .and_then(|dependency| dependency.prepared.program.as_ref())
-    {
-        Some(program) => contracts.without_packages(&program.selection.package_names),
-        None => contracts,
-    };
     let analysis = state
         .diagnostics
         .analyze_accepted_measured_with_enablement(
