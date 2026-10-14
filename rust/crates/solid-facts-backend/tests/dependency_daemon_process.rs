@@ -1048,6 +1048,14 @@ fn manifest_closure_digest(manifest: &str) -> String {
 /// authorized: `isReady` closes `returns`, `isReadyOpen` leaves it open.
 /// Answers the scratch and the trust configuration, outside the project.
 fn accepted_solid_package(tag: &str, app: &str) -> (Scratch, PathBuf) {
+    accepted_solid_package_with(tag, app, |_| {})
+}
+
+fn accepted_solid_package_with(
+    tag: &str,
+    app: &str,
+    setup: impl FnOnce(&Scratch),
+) -> (Scratch, PathBuf) {
     use sha2::{Digest, Sha256};
     use solid_facts_backend::fixture_authorization::{
         authorize_fixture_contract, read_fixture_contract_request,
@@ -1077,6 +1085,7 @@ fn accepted_solid_package(tag: &str, app: &str) -> (Scratch, PathBuf) {
     rebind(scratch.path(".solid-checker/authorize-contract.json"));
     rebind(package.join("solid-reactivity.json"));
     fs::write(scratch.path("App.tsx"), app).unwrap();
+    setup(&scratch);
     let authorization = authorize_fixture_contract(
         &scratch.project,
         &read_fixture_contract_request(&scratch.project).unwrap(),
@@ -1108,6 +1117,242 @@ export function StatusOpen() {
   return <div>{reactive.isReadyOpen() ? "ready" : "waiting"}</div>;
 }
 "#;
+
+/// Review round 2: every unredirected runtime re-export keeps the accepted
+/// contract, including a re-export discovered inside a selected closure.
+#[test]
+fn reexport_barrels_keep_their_accepted_contracts() {
+    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    for (tag, barrel, in_package) in [
+        (
+            "named",
+            "export { isReady, isReadyOpen } from 'reactive-package';",
+            false,
+        ),
+        ("star", "export * from 'reactive-package';", false),
+        ("star-mixed", "export * from 'reactive-package';", false),
+        (
+            "default-as",
+            "export { isReady, default as isReadyOpen } from 'reactive-package';",
+            false,
+        ),
+        (
+            "files-only-named",
+            "export { isReady, isReadyOpen } from 'reactive-package';",
+            false,
+        ),
+        (
+            "files-only-star",
+            "export * from 'reactive-package';",
+            false,
+        ),
+        (
+            "files-only-default-as",
+            "export { isReady, default as isReadyOpen } from 'reactive-package';",
+            false,
+        ),
+        (
+            "closure-named",
+            "export { isReady, isReadyOpen } from 'reactive-package';",
+            true,
+        ),
+        ("closure-star", "export * from 'reactive-package';", true),
+        (
+            "closure-default-as",
+            "export { isReady, default as isReadyOpen } from 'reactive-package';",
+            true,
+        ),
+    ] {
+        let specifier = if in_package {
+            "barrel-package"
+        } else {
+            "./barrel"
+        };
+        let mut app = NAMED_APP.replace("reactive-package", specifier);
+        if tag == "star-mixed" {
+            app.push_str("\nimport { isReadyOpen as directOpen } from 'reactive-package';\nexport function DirectStatusOpen() { return <div>{directOpen() ? 'ready' : 'waiting'}</div>; }\n");
+        }
+        let (scratch, trust) = accepted_solid_package_with(
+            &format!("reexport-{tag}"),
+            &app,
+            |scratch| {
+                let importer = if in_package {
+                    let package = scratch.path("node_modules/barrel-package");
+                    fs::create_dir_all(&package).unwrap();
+                    fs::write(package.join("package.json"), r#"{"name":"barrel-package","version":"1.0.0","types":"index.d.ts","module":"index.js","peerDependencies":{"solid-js":"*"}}"#).unwrap();
+                    fs::write(package.join("index.d.ts"), barrel).unwrap();
+                    fs::write(package.join("index.js"), barrel).unwrap();
+                    "node_modules/barrel-package/index.js"
+                } else {
+                    fs::write(scratch.path("barrel.ts"), barrel).unwrap();
+                    "barrel.ts"
+                };
+                if tag.starts_with("files-only") {
+                    let config_path = scratch.path("tsconfig.json");
+                    let mut config: serde_json::Value =
+                        serde_json::from_slice(&fs::read(&config_path).unwrap()).unwrap();
+                    config["include"] = serde_json::json!([]);
+                    config["files"] = serde_json::json!(["App.tsx", "jsx.d.ts"]);
+                    fs::write(config_path, serde_json::to_vec_pretty(&config).unwrap()).unwrap();
+                }
+                let request_path = scratch.path(".solid-checker/authorize-contract.json");
+                let mut request: serde_json::Value =
+                    serde_json::from_slice(&fs::read(&request_path).unwrap()).unwrap();
+                request["import"]["importer"] = if tag == "star-mixed" {
+                    "App.tsx"
+                } else {
+                    importer
+                }
+                .into();
+                if tag.contains("default-as") {
+                    let package = scratch.path("node_modules/reactive-package");
+                    let declarations = fs::read_to_string(package.join("index.d.ts")).unwrap();
+                    fs::write(
+                        package.join("index.d.ts"),
+                        format!("{declarations}\nexport default isReadyOpen;\n"),
+                    )
+                    .unwrap();
+                    let runtime = fs::read_to_string(package.join("index.js")).unwrap();
+                    fs::write(
+                        package.join("index.js"),
+                        format!("{runtime}\nexport default isReadyOpen;\n"),
+                    )
+                    .unwrap();
+                    let document_path = package.join("solid-reactivity.json");
+                    let mut document: serde_json::Value =
+                        serde_json::from_slice(&fs::read(&document_path).unwrap()).unwrap();
+                    document["entrypoints"]["."]["exports"]["default"] =
+                        "summary-returns-open".into();
+                    fs::write(document_path, serde_json::to_vec_pretty(&document).unwrap())
+                        .unwrap();
+                    let mut export = request["import"]["exports"]["isReadyOpen"].clone();
+                    export["declarations"]["exportName"] = "default".into();
+                    export["runtime"]["exportName"] = "default".into();
+                    request["import"]["exports"]["default"] = export;
+                }
+                fs::write(request_path, serde_json::to_vec_pretty(&request).unwrap()).unwrap();
+            },
+        );
+        let trust = trust.to_string_lossy();
+        if let Ok(tsc) = std::env::var("SOLID_CHECKER_TEST_TSC") {
+            let output = Command::new("node")
+                .arg(tsc)
+                .args(["--noEmit", "--project"])
+                .arg(scratch.path("tsconfig.json"))
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{tag}: tsc: {}{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+        let run = |extra: &[&str]| {
+            let mut args = with_host(&[]);
+            args.extend(["--receipt-trust-configuration", trust.as_ref()]);
+            args.extend(extra);
+            let (success, run) = invoke(&typefacts, &scratch.project, &args, false);
+            assert!(success, "{tag}: {}", run.stderr);
+            run
+        };
+        let contracts = run(&["--no-dependency-source"]);
+        let explicit = if in_package {
+            vec![
+                "--dependency-source",
+                "barrel-package",
+                "--dependency-source",
+                "reactive-package",
+            ]
+        } else {
+            vec!["--dependency-source", "reactive-package"]
+        };
+        for args in [vec![], vec!["--dependency-source", "*"], explicit] {
+            let selected = run(&args);
+            assert!(
+                selected.notes().iter().any(|note| note.contains(
+                    "dependency source reactive-package: re-exported through a runtime binding"
+                )),
+                "{tag}: {}",
+                selected.stderr
+            );
+            assert_eq!(stdout(&selected), stdout(&contracts), "{tag}: {args:?}");
+        }
+        let findings = contracts.json()["findings"].as_array().unwrap().clone();
+        // Contract mode itself does not bind a bare star's open claims:
+        // resolve_contract_imports_inner walks explicit specifiers only.
+        // Selection must still retain the package and equal that baseline;
+        // the independent star projection gap is recorded in ADR 0297.
+        assert!(
+            (tag.contains("star") && tag != "star-mixed")
+                || findings
+                    .iter()
+                    .any(|finding| finding["id"] == "SC9005" && finding["kind"] == "uncertifiable"),
+            "{tag}: {findings:#?}"
+        );
+        assert!(
+            !findings
+                .iter()
+                .any(|finding| finding["kind"] == "violation"),
+            "{tag}: {findings:#?}"
+        );
+    }
+}
+
+#[test]
+fn dynamic_module_loads_keep_the_named_imports_contract_too() {
+    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    for (tag, load) in [
+        (
+            "literal",
+            "export async function load() { return import('reactive-package'); }",
+        ),
+        (
+            "nonliteral",
+            "export async function load(name: string) { return import(name); }",
+        ),
+        (
+            "relative",
+            "export async function load() { return import('./barrel'); }",
+        ),
+    ] {
+        let app = format!("{NAMED_APP}\n{load}\n");
+        let (scratch, trust) =
+            accepted_solid_package_with(&format!("module-load-{tag}"), &app, |scratch| {
+                fs::write(scratch.path("barrel.ts"), "export const value = true;").unwrap();
+            });
+        let trust = trust.to_string_lossy();
+        let run = |extra: &[&str]| {
+            let mut args = with_host(&[]);
+            args.extend(["--receipt-trust-configuration", trust.as_ref()]);
+            args.extend(extra);
+            let (success, run) = invoke(&typefacts, &scratch.project, &args, false);
+            assert!(success, "{tag}: {}", run.stderr);
+            run
+        };
+        let selected = run(&[]);
+        let contracts = run(&["--no-dependency-source"]);
+        assert_eq!(stdout(&selected), stdout(&contracts), "{tag}");
+        assert!(
+            stdout(&selected).contains("SC9005"),
+            "{tag}: {}",
+            stdout(&selected)
+        );
+        assert!(
+            selected
+                .notes()
+                .iter()
+                .any(|note| note.contains("dependency source reactive-package")
+                    && note.contains("its contract stays")),
+            "{tag}: {}",
+            selected.stderr
+        );
+    }
+}
 
 /// Review round 1 of ADR 0297: a package imported through a namespace
 /// binding is not selected, so the namespace keeps its accepted contract.

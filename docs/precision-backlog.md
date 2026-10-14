@@ -30594,3 +30594,51 @@ SC9012 to SC1001 uncertifiable; their execution hole is preserved.
 CLI verification also passed: 494 tests (4 intentionally skipped) and the
 adapter type check. Full make verify is deferred to the lead's integration
 pass; no bundled contract or checked-in binary changed.
+
+Resolved in review round 2:
+- **Re-exports keep their contracts.** A runtime named, star, default-as or
+  namespace re-export keeps the named package out of source selection, in
+  project barrels and selected package closures, for every copy and subpath.
+  Explicit named/default-as open accepted `returns` claims remain `SC9005`
+  (uncertifiable). A source package re-exporting a non-runtime package keeps
+  its own contract too: otherwise its obligation disappears and the target's
+  open claim is filtered as a package-located finding. The complete runtime
+  project inventory is inspected, including imported barrels
+  absent from a `files`-only configuration's root list.
+  Pruning closes over overlapping installed roots and all copies of their
+  manifest/resolution names (including npm aliases), so removing an outer
+  package cannot leave a nested package selected after deleting its source.
+  A re-exporter with no manifest identity retains all candidate contracts.
+- **Other unredirected loads keep their contracts too.** Dynamic `import()`,
+  unshadowed `require` and runtime import-equals are not named/default ESM
+  bindings and have no redirect. Literal bare loads retain that package's
+  contract. A nonliteral or relative load can reach a package outside the
+  static closure, so all candidate contracts are retained with a note.
+  Unreadable project AST facts take the same conservative path.
+
+Remaining limits: exact redirects for these binding forms are unimplemented.
+Keeping contracts can lose source proofs; packages without an accepted
+contract stay uncertifiable. Erased type-only imports/re-exports, import types
+and JSDoc import types do not block selection, and mixed imports retain their
+runtime named/default redirect. `export =` follows the binding of the value it
+publishes. Locally bound functions named `require` are not guessed to load a
+module.
+
+Still open, independently of source selection: the contract resolver's
+re-export loop reads `export.specifiers` only. A bare `export *` has none,
+so an accepted open `returns` claim through a star raises no `SC9005` in
+contract mode either. The new star regression establishes retained contracts
+and equality with that baseline, not recovery of the missing obligation.
+This remains in `solid-reactive-ir::contracts::resolve_contract_imports_inner`.
+
+Round-2 rc.13 corpus: 562 violations (same count), 3,736 uncertifiable
+(+488), no analysis errors. Contract retention restores kui's getter at
+`TopicsRoute.tsx:425:75` and spotify's two `prefer-show` sites at
+`PlayerControlIcon.tsx:26:5` and `PlayerControls.tsx:133:5`, all present in
+`sweep-m-base.json`. It loses three source-only probus-hk reads:
+`RouteDetail.tsx:2214:7`, `Search.tsx:302:42`, `Search.tsx:317:11`.
+Most candidate source packages now stay on contracts because a relative or
+nonliteral module load cannot be scoped safely. This is a deliberate recall
+cost of fail-closed selection, not recovery of source proofs. The per-app
+violation/uncertifiable deltas and 74 newly retained package names (37 apps)
+are recorded in the corpus's `experiments/sweep-sol-reexport-delta.json`.

@@ -317,25 +317,42 @@ pub fn prepare_program(
                     .any(|component| component.as_os_str() == "node_modules")
         })
         .collect::<BTreeSet<_>>();
-    let project_imports = project_sources
+    // Imported project barrels need not be configured roots (`files` may
+    // name only App.tsx). Inspect the complete runtime project inventory.
+    let project_imports = project_files
         .iter()
-        .map(|source| {
-            let facts = solid_facts::ast::extract(source.path.clone(), &source.source).ok();
+        .filter(|path| is_source(path))
+        .map(|path| {
+            let source = project_sources
+                .iter()
+                .find(|source| Path::new(&source.path) == path.as_path())
+                .map(|source| source.source.clone())
+                .or_else(|| fs::read_to_string(path).ok().map(Into::into));
+            let facts = source.as_deref().and_then(|source| {
+                solid_facts::ast::extract(path.to_string_lossy().into_owned(), source).ok()
+            });
             let bare = facts.as_ref().map(runtime_bare_imports).unwrap_or_default();
-            let namespaced = facts.as_ref().map(namespace_packages).unwrap_or_default();
-            (PathBuf::from(&source.path), bare, namespaced)
+            let unredirected = facts
+                .as_ref()
+                .map(unredirected_packages)
+                .unwrap_or_else(|| UnsupportedBindings {
+                    opaque: Some("a project module's runtime bindings could not be read"),
+                    ..UnsupportedBindings::default()
+                });
+            (path.clone(), bare, unredirected)
         })
         .collect::<Vec<_>>();
-    // Review round 1 of ADR 0297: a namespace binding is never redirected to
-    // source, so a package any importer -- a project file or a selected
-    // closure file -- binds through one is not selected at all and keeps its
-    // contract. Selecting it removed the contract its namespace members bind
-    // through, and an accepted contract was then neither applied nor
-    // obligated.
-    let mut namespaced = project_imports
-        .iter()
-        .flat_map(|(_, _, namespaced)| namespaced.iter().cloned())
-        .collect::<BTreeSet<_>>();
+    // ADR 0297 review rounds 1 and 2: retain contracts for runtime binding
+    // forms that symbol_redirects does not join to the selected source, in
+    // project files and selected package closures alike.
+    let mut unredirected = project_imports.iter().fold(
+        UnsupportedBindings::default(),
+        |mut all, (_, _, bindings)| {
+            all.extend(bindings.clone());
+            all
+        },
+    );
+    unredirected.runtime_packages = excluded.clone();
     // ADR 0291: `*` selects every package the project loads at run time,
     // and every package those load, except the dialect's own runtime.
     let selected = if selection.iter().any(|source| source == "*") {
@@ -351,7 +368,7 @@ pub fn prepare_program(
             host,
             excluded,
             ecosystem_scopes,
-            &mut namespaced,
+            &mut unredirected,
             notes,
         )?
     } else {
@@ -370,12 +387,12 @@ pub fn prepare_program(
             tsconfig,
             &specifiers.into_iter().collect::<Vec<_>>(),
             host,
-            &mut namespaced,
+            &mut unredirected,
             notes,
         )?
     };
-    let Some(selection) =
-        selected.and_then(|selection| without_namespaced_packages(selection, &namespaced, notes))
+    let Some(selection) = selected
+        .and_then(|selection| without_unredirected_packages(selection, &unredirected, notes))
     else {
         return Ok(None);
     };
@@ -395,7 +412,7 @@ pub fn prepare(
     tsconfig: &Path,
     specifiers: &[String],
     host: &Host,
-    namespaced: &mut BTreeSet<String>,
+    unredirected: &mut UnsupportedBindings,
     notes: &mut Vec<String>,
 ) -> Result<Option<DependencySelection>, String> {
     let mut roots = Vec::new();
@@ -413,6 +430,10 @@ pub fn prepare(
             ));
             continue;
         };
+        if unredirected.contains(&name) {
+            push_note(notes, unredirected.note(&name));
+            continue;
+        }
         let root = root
             .canonicalize()
             .map_err(|error| format!("--dependency-source {specifier:?}: {error}"))?;
@@ -429,7 +450,7 @@ pub fn prepare(
             &mut files,
             &mut resolutions,
             &mut Vec::new(),
-            namespaced,
+            unredirected,
         )
         .map_err(|reason| format!("--dependency-source {specifier:?}: {reason}"))?;
         package_names.insert(name);
@@ -468,9 +489,12 @@ pub fn prepare_all(
     host: &Host,
     excluded: &BTreeSet<String>,
     ecosystem_scopes: &[&str],
-    namespaced: &mut BTreeSet<String>,
+    unredirected: &mut UnsupportedBindings,
     notes: &mut Vec<String>,
 ) -> Result<Option<DependencySelection>, String> {
+    unredirected
+        .runtime_packages
+        .extend(excluded.iter().cloned());
     let solid_package = |root: &Path| {
         let Some(manifest) = fs::read(root.join("package.json"))
             .ok()
@@ -525,10 +549,10 @@ pub fn prepare_all(
             not_solid.insert(root);
             continue;
         }
-        // A package bound through a namespace somewhere keeps its contract
-        // (`without_namespaced_packages`): one known to be is not walked.
-        if namespaced.contains(&name) {
-            push_note(notes, namespaced_note(&name));
+        // A package reached through an unredirected binding keeps its contract
+        // (`without_unredirected_packages`): one known to be is not walked.
+        if unredirected.contains(&name) {
+            push_note(notes, unredirected.note(&name));
             continue;
         }
         let entry = match select_entry(&root, &subpath, host) {
@@ -558,7 +582,7 @@ pub fn prepare_all(
                 &mut closure,
                 &mut closure_resolutions,
                 &mut bare,
-                namespaced,
+                unredirected,
             ) {
                 Ok(()) => {
                     files.extend(closure);
@@ -727,7 +751,7 @@ fn runtime_bare_imports(facts: &solid_facts::ast::AstFacts) -> BTreeSet<String> 
             facts
                 .exports
                 .iter()
-                .filter(|export| !export.type_only)
+                .filter(|export| runtime_reexport(export))
                 .filter_map(|export| export.module.as_deref()),
         )
         .filter(|module| split_bare_specifier(module).is_some())
@@ -735,53 +759,170 @@ fn runtime_bare_imports(facts: &solid_facts::ast::AstFacts) -> BTreeSet<String> 
         .collect()
 }
 
-/// The packages a module binds through a runtime namespace import
-/// (`import * as ns from "pkg"`), which is never redirected to source.
-fn namespace_packages(facts: &solid_facts::ast::AstFacts) -> BTreeSet<String> {
-    facts
-        .imports
-        .iter()
-        .filter(|import| {
-            !import.type_only
-                && import.bindings.iter().any(|binding| {
-                    !binding.type_only
-                        && binding.runtime_referenced
-                        && binding.kind == solid_facts::ast::ImportKind::Namespace
-                })
-        })
-        .filter_map(|import| package_name(&import.module))
-        .collect()
+/// Binding forms that `symbol_redirects` does not join to runtime exports.
+/// Contracts are removed by package name, so one such edge keeps every copy
+/// of that package on contracts, including otherwise redirectable imports.
+#[derive(Clone, Debug, Default)]
+pub struct UnsupportedBindings {
+    packages: std::collections::BTreeMap<String, &'static str>,
+    opaque: Option<&'static str>,
+    runtime_packages: BTreeSet<String>,
 }
 
-/// `selection` without the packages named in `namespaced`, every copy of
+impl UnsupportedBindings {
+    fn contains(&self, name: &str) -> bool {
+        self.opaque.is_some() || self.packages.contains_key(name)
+    }
+
+    fn extend(&mut self, other: Self) {
+        self.packages.extend(other.packages);
+        self.opaque = self.opaque.or(other.opaque);
+    }
+
+    fn note(&self, name: &str) -> String {
+        let reason = self.opaque.or_else(|| self.packages.get(name).copied()).unwrap_or(
+            "its source overlaps an unredirected package or shares that package's selection name"
+        );
+        format!(
+            "solid-checker: note: dependency source {name}: {reason}, \
+             which source analysis does not redirect; its contract stays"
+        )
+    }
+
+    fn reexports_external_package(&self, facts: &solid_facts::ast::AstFacts) -> bool {
+        facts.exports.iter().any(|export| {
+            runtime_reexport(export)
+                && export
+                    .module
+                    .as_deref()
+                    .and_then(package_name)
+                    .is_some_and(|name| !self.runtime_packages.contains(&name))
+        })
+    }
+}
+
+fn unredirected_packages(facts: &solid_facts::ast::AstFacts) -> UnsupportedBindings {
+    let mut bindings = UnsupportedBindings::default();
+    for import in &facts.imports {
+        if !import.type_only
+            && import.bindings.iter().any(|binding| {
+                !binding.type_only
+                    && binding.runtime_referenced
+                    && binding.kind == solid_facts::ast::ImportKind::Namespace
+            })
+            && let Some(name) = package_name(&import.module)
+        {
+            bindings
+                .packages
+                .insert(name, "imported through a namespace binding");
+        }
+    }
+    for export in &facts.exports {
+        if runtime_reexport(export)
+            && let Some(name) = export.module.as_deref().and_then(package_name)
+        {
+            bindings
+                .packages
+                .insert(name, "re-exported through a runtime binding");
+        }
+    }
+    for import in &facts.import_equals {
+        if !import.type_only
+            && let Some(name) = package_name(&import.module)
+        {
+            bindings
+                .packages
+                .insert(name, "loaded through an import-equals binding");
+        }
+    }
+    for load in &facts.module_loads {
+        if let Some(name) = load.specifier.as_deref().and_then(package_name) {
+            bindings
+                .packages
+                .insert(name, "loaded through a dynamic import or require binding");
+        } else {
+            // A nonliteral or relative load can reach a package through a
+            // module this static closure does not walk. No package-name
+            // removal is justified when its target cannot be enumerated.
+            bindings.opaque = Some("a module load has no exact bare package target");
+        }
+    }
+    bindings
+}
+
+fn runtime_reexport(export: &solid_facts::ast::ExportFact) -> bool {
+    !export.type_only
+        && (export.kind == solid_facts::ast::ExportKind::All
+            || export
+                .specifiers
+                .iter()
+                .any(|specifier| !specifier.type_only))
+}
+
+/// `selection` without the packages named in `unredirected`, every copy of
 /// each: none of its files, redirects or names, so each keeps its contract
-/// exactly as without this mode (review round 1 of ADR 0297). A contract
+/// exactly as without this mode (review rounds 1 and 2 of ADR 0297). A contract
 /// binds by package name, so a name is taken out whole. `None` when nothing
 /// is left.
-fn without_namespaced_packages(
+fn without_unredirected_packages(
     mut selection: DependencySelection,
-    namespaced: &BTreeSet<String>,
+    unredirected: &UnsupportedBindings,
     notes: &mut Vec<String>,
 ) -> Option<DependencySelection> {
-    let removed = selection
+    if unredirected.opaque.is_some() {
+        for name in &selection.package_names {
+            push_note(notes, unredirected.note(name));
+        }
+        return None;
+    }
+    // Contract removal and source-root admission must disappear together.
+    // A root can overlap another installed root, or be loaded under an npm
+    // alias. Use the selector's exact targets beside manifest names, and close
+    // removal over overlapping roots and every copy sharing a removal name.
+    let root_names = selection
         .roots
         .iter()
-        .filter(|root| package_name_of_root(root).is_some_and(|name| namespaced.contains(&name)))
-        .cloned()
+        .map(|root| {
+            let mut names = package_name_of_root(root)
+                .into_iter()
+                .collect::<BTreeSet<_>>();
+            names.extend(
+                selection
+                    .resolutions
+                    .iter()
+                    .filter(|resolution| resolution.target.starts_with(root))
+                    .filter_map(|resolution| package_name(&resolution.specifier)),
+            );
+            (root.clone(), names)
+        })
         .collect::<Vec<_>>();
-    let mut names = removed
+    let mut removed = BTreeSet::<PathBuf>::new();
+    let mut names = selection
+        .package_names
         .iter()
-        .filter_map(|root| package_name_of_root(root))
+        .filter(|name| unredirected.contains(name))
+        .cloned()
         .collect::<BTreeSet<_>>();
-    names.extend(
-        selection
-            .package_names
-            .iter()
-            .filter(|name| namespaced.contains(*name))
-            .cloned(),
-    );
+    loop {
+        let previous = (removed.len(), names.len());
+        for (root, associated) in &root_names {
+            if associated
+                .iter()
+                .any(|name| unredirected.contains(name) || names.contains(name))
+                || removed
+                    .iter()
+                    .any(|other| root.starts_with(other) || other.starts_with(root))
+            {
+                removed.insert(root.clone());
+                names.extend(associated.iter().cloned());
+            }
+        }
+        if previous == (removed.len(), names.len()) {
+            break;
+        }
+    }
     for name in &names {
-        push_note(notes, namespaced_note(name));
+        push_note(notes, unredirected.note(name));
     }
     let inside = |path: &Path| removed.iter().any(|root| path.starts_with(root));
     selection.roots.retain(|root| !removed.contains(root));
@@ -791,13 +932,6 @@ fn without_namespaced_packages(
     });
     selection.package_names.retain(|name| !names.contains(name));
     (!selection.roots.is_empty()).then_some(selection)
-}
-
-fn namespaced_note(name: &str) -> String {
-    format!(
-        "solid-checker: note: dependency source {name}: imported through a namespace \
-         binding, which source analysis does not redirect; its contract stays"
-    )
 }
 
 fn push_note(notes: &mut Vec<String>, note: String) {
@@ -922,14 +1056,14 @@ fn select(entry: &Ordered, host: &Host, depth: usize, star: Option<&str>) -> Opt
 
 /// Every file `entry` reaches through relative static imports and
 /// re-exports, inside `root`, the bare runtime imports of those files into
-/// `bare`, and the packages they bind through a namespace into `namespaced`.
+/// `bare`, and their unsupported runtime bindings into `unredirected`.
 fn walk(
     root: &Path,
     entry: &Path,
     files: &mut BTreeSet<PathBuf>,
     resolutions: &mut BTreeSet<ImportResolution>,
     bare: &mut Vec<(PathBuf, String)>,
-    namespaced: &mut BTreeSet<String>,
+    unredirected: &mut UnsupportedBindings,
 ) -> Result<(), String> {
     let mut queue = VecDeque::from([entry.to_path_buf()]);
     while let Some(file) = queue.pop_front() {
@@ -948,7 +1082,23 @@ fn walk(
                 .into_iter()
                 .map(|module| (file.clone(), module)),
         );
-        namespaced.extend(namespace_packages(&facts));
+        // Keeping only the target's contract is insufficient: the source
+        // barrel's own contract requirement would still be removed, while
+        // the target's open claim is located inside that package and filtered
+        // from project findings. Retain the exporting package too. Dialect
+        // runtime re-exports already bind exact vocabulary and need no redirect.
+        if unredirected.reexports_external_package(&facts) {
+            if let Some(name) = package_name_of_root(root) {
+                unredirected.packages.insert(
+                    name,
+                    "re-exports a package through an unredirected runtime binding",
+                );
+            } else {
+                unredirected.opaque =
+                    Some("a re-exporting source package has no exact package identity");
+            }
+        }
+        unredirected.extend(unredirected_packages(&facts));
         let modules = facts
             .imports
             .iter()
@@ -1126,6 +1276,197 @@ mod tests {
     }
 
     #[test]
+    fn unsupported_runtime_bindings_keep_contracts_but_type_only_edges_do_not() {
+        for source in [
+            "export { x } from 'pkg';",
+            "export { default as y } from 'pkg';",
+            "export * from 'pkg';",
+            "export * as ns from 'pkg';",
+            "import * as ns from 'pkg'; ns.x();",
+            "import x = require('pkg'); export = x;",
+            "const ns = await import('pkg'); ns.x();",
+            "const ns = require('pkg'); ns.x();",
+        ] {
+            let facts = solid_facts::ast::extract("module.ts", source).unwrap();
+            let bindings = super::unredirected_packages(&facts);
+            assert!(bindings.contains("pkg"), "{source}");
+            assert!(!bindings.contains("other"), "{source}");
+        }
+        for source in [
+            "import { x } from 'pkg'; x();",
+            "import x from 'pkg'; x();",
+            "import { type T, x } from 'pkg'; x();",
+            "import type * as ns from 'pkg'; let x: ns.T;",
+            "export type { T } from 'pkg';",
+            "export { type T } from 'pkg';",
+            "export type * from 'pkg';",
+            "import type x = require('pkg'); let y: x.T;",
+            "type T = import('pkg').T;",
+            "/** @type {import('pkg').T} */ let x;",
+            "function require(x: string) { return x; } require('pkg');",
+        ] {
+            let facts = solid_facts::ast::extract("module.ts", source).unwrap();
+            assert!(
+                !super::unredirected_packages(&facts).contains("pkg"),
+                "{source}"
+            );
+        }
+        for source in [
+            "const ns = await import(name);",
+            "const ns = await import('./barrel');",
+            "const ns = require(name);",
+        ] {
+            let facts = solid_facts::ast::extract("module.ts", source).unwrap();
+            assert!(
+                super::unredirected_packages(&facts).contains("any-package"),
+                "{source}"
+            );
+        }
+    }
+
+    #[test]
+    fn source_barrels_keep_contracts_except_for_exact_dialect_runtime_exports() {
+        let bindings = super::UnsupportedBindings {
+            runtime_packages: ["runtime".into()].into_iter().collect(),
+            ..super::UnsupportedBindings::default()
+        };
+        for (source, external) in [
+            ("export { x } from 'pkg';", true),
+            ("export * from 'pkg';", true),
+            ("export { default as x } from 'pkg';", true),
+            ("export * as ns from 'pkg';", true),
+            ("export { type T } from 'pkg';", false),
+            ("export * from './local.js';", false),
+            ("export { x } from 'runtime';", false),
+        ] {
+            let facts = solid_facts::ast::extract("module.ts", source).unwrap();
+            assert_eq!(
+                bindings.reexports_external_package(&facts),
+                external,
+                "{source}"
+            );
+        }
+    }
+
+    #[test]
+    fn removing_a_package_removes_nested_roots_and_every_copy_of_their_names() {
+        let directory = std::env::temp_dir().join(format!(
+            "solid-checker-source-pruning-{}",
+            std::process::id()
+        ));
+        let root = |path: &str, name: &str| {
+            let root = directory.join(path);
+            std::fs::create_dir_all(&root).unwrap();
+            std::fs::write(root.join("package.json"), format!(r#"{{"name":"{name}"}}"#)).unwrap();
+            std::fs::write(root.join("index.js"), "export const value = true;").unwrap();
+            root
+        };
+        let parent = root("parent", "parent");
+        let inner = root("parent/node_modules/inner", "inner");
+        let peer = root("peer/node_modules/inner", "inner");
+        let other = root("other", "other");
+        for selected_name in ["parent", "alias"] {
+            let roots = vec![parent.clone(), inner.clone(), peer.clone(), other.clone()];
+            let selection = super::DependencySelection {
+                files: roots.iter().map(|root| root.join("index.js")).collect(),
+                resolutions: roots
+                    .iter()
+                    .zip([selected_name, "inner", "inner", "other"])
+                    .map(|(root, name)| super::ImportResolution {
+                        importer: None,
+                        specifier: name.into(),
+                        target: root.join("index.js"),
+                    })
+                    .collect(),
+                roots,
+                package_names: [selected_name.into(), "inner".into(), "other".into()]
+                    .into_iter()
+                    .collect(),
+            };
+            let bindings = super::UnsupportedBindings {
+                packages: [(
+                    selected_name.into(),
+                    "re-exported through a runtime binding",
+                )]
+                .into_iter()
+                .collect(),
+                ..super::UnsupportedBindings::default()
+            };
+            assert_eq!(
+                super::without_unredirected_packages(
+                    selection.clone(),
+                    &super::UnsupportedBindings::default(),
+                    &mut Vec::new()
+                ),
+                Some(selection.clone()),
+                "an unrelated package remains selected",
+            );
+            assert!(
+                super::without_unredirected_packages(
+                    selection.clone(),
+                    &super::UnsupportedBindings {
+                        opaque: Some("a module load has no exact bare package target"),
+                        ..super::UnsupportedBindings::default()
+                    },
+                    &mut Vec::new(),
+                )
+                .is_none()
+            );
+            let remaining =
+                super::without_unredirected_packages(selection, &bindings, &mut Vec::new())
+                    .unwrap();
+            assert_eq!(
+                remaining.roots,
+                std::slice::from_ref(&other),
+                "{selected_name}"
+            );
+            assert_eq!(remaining.files, [other.join("index.js")], "{selected_name}");
+            assert_eq!(
+                remaining.package_names,
+                ["other".into()].into_iter().collect(),
+                "{selected_name}"
+            );
+            assert_eq!(remaining.resolutions.len(), 1, "{selected_name}");
+        }
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn a_reexporting_package_without_manifest_identity_keeps_contracts() {
+        let directory = std::env::temp_dir().join(format!(
+            "solid-checker-source-missing-identity-{}",
+            std::process::id()
+        ));
+        let package = directory.join("node_modules/anonymous");
+        std::fs::create_dir_all(&package).unwrap();
+        std::fs::write(package.join("package.json"), r#"{"module":"index.js"}"#).unwrap();
+        std::fs::write(package.join("index.js"), "export { x } from 'other';").unwrap();
+        let tsconfig = directory.join("tsconfig.json");
+        std::fs::write(&tsconfig, "{}").unwrap();
+        let mut notes = Vec::new();
+        let prepared = super::prepare_program(
+            &tsconfig,
+            &["anonymous".into()],
+            &host(&["browser", "development"]),
+            &[],
+            &[],
+            &BTreeSet::new(),
+            &[],
+            &mut notes,
+        )
+        .unwrap();
+        assert!(prepared.is_none());
+        assert!(
+            notes
+                .iter()
+                .any(|note| note.contains("no exact package identity")
+                    && note.contains("its contract stays")),
+            "{notes:?}"
+        );
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
     fn a_project_installing_none_of_the_packages_is_analyzed_as_usual() {
         let directory = std::env::temp_dir().join(format!(
             "solid-checker-dependency-sources-{}",
@@ -1220,7 +1561,7 @@ mod tests {
             &host(&["browser", "development"]),
             &["solid-js".to_owned()].into_iter().collect(),
             &["@solidjs/"],
-            &mut BTreeSet::new(),
+            &mut super::UnsupportedBindings::default(),
             &mut Vec::new(),
         )
         .unwrap()
