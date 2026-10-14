@@ -13,6 +13,7 @@ use crate::contract_semantics::AcceptedContractIndex;
 use crate::contracts::{
     ResolvedContractBinding, discover_boundary_defects, resolve_accepted_contract_imports,
 };
+use crate::hosts::ProjectHostIndex;
 use crate::identity::{SymbolId, SymbolName};
 use crate::indexes::{CachedAstFileIndex, EntitySymbols, ProjectIndexes, SemanticLookup};
 use crate::package_boundary::PackageBoundary;
@@ -29,6 +30,7 @@ use crate::{
 use crate::{
     cleanup, directives, owners, reactive_analysis, server_rules, static_api, static_rules,
 };
+use sha2::{Digest as _, Sha256};
 use solid_dialect::Dialect;
 use solid_facts::core::Span;
 use solid_facts::{FileFacts, ProjectFacts};
@@ -207,32 +209,111 @@ pub(crate) struct AnalysisContext<'a> {
 /// boundary, and the accepted contracts that still answer for packages
 /// through phase P7 of the contract-removal plan. Both are complete inputs;
 /// neither is derived from the other inside the analysis.
+///
+/// `hosts` is the execution evidence behind an inferred browser view (phase
+/// P4 of the plan), carried beside the contracts rather than inside them. The
+/// IR pipeline fingerprints it and never reads it: only the backend's
+/// projection of findings does. A host belongs with the view that was
+/// selected from it; [`Self::check_host_pairing`] states the pairing.
 #[derive(Clone, Copy, Debug)]
 pub struct AnalysisInputs<'a> {
     pub boundary: &'a PackageBoundary,
     pub contracts: &'a AcceptedContractIndex,
+    pub hosts: Option<&'a ProjectHostIndex>,
 }
 
+/// An analysis's host input and its browser view disagree about each other.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum HostPairingError {
+    /// The index asks for a browser/baseline fork but no host was supplied to
+    /// project the findings.
+    ForkWithoutHost,
+    /// A host was supplied but the index has no browser view built from it.
+    HostWithoutView,
+    /// The view was selected from a different host state than the one supplied.
+    SelectionMismatch,
+}
+
+impl std::fmt::Display for HostPairingError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::ForkWithoutHost => {
+                "inferred browser view has no host input; the host that selected it must accompany it"
+            }
+            Self::HostWithoutView => {
+                "host input has no browser view built from it to select imports"
+            }
+            Self::SelectionMismatch => {
+                "inferred browser view does not match the host input it accompanies; the host changed after the view was selected"
+            }
+        })
+    }
+}
+
+impl std::error::Error for HostPairingError {}
+
 impl<'a> AnalysisInputs<'a> {
-    /// Accepted contracts with no recorded boundary: every caller that has
-    /// not been given one.
+    /// Accepted contracts with no recorded boundary and no host: every caller
+    /// that has not been given one.
     #[must_use]
     pub fn contracts_only(contracts: &'a AcceptedContractIndex) -> Self {
         static EMPTY: std::sync::OnceLock<PackageBoundary> = std::sync::OnceLock::new();
         Self {
             boundary: EMPTY.get_or_init(PackageBoundary::default),
             contracts,
+            hosts: None,
         }
     }
 
-    /// The cache identity of both inputs. An empty boundary adds nothing, so
-    /// an identity is what it was before the boundary existed; any recorded
-    /// cause, explanation included, is part of it.
+    /// These inputs with the host that selected the contracts' browser view.
+    #[must_use]
+    pub fn with_hosts(self, hosts: &'a ProjectHostIndex) -> Self {
+        Self {
+            hosts: Some(hosts),
+            ..self
+        }
+    }
+
+    /// Whether the host and the browser view agree: both absent, a view
+    /// without a host only for the browser half of a fork (which projects no
+    /// findings), and otherwise a host whose selection equals the view's.
+    ///
+    /// # Errors
+    ///
+    /// Names the disagreement. Nothing here substitutes the baseline or the
+    /// browser view for the other.
+    pub fn check_host_pairing(&self) -> Result<(), HostPairingError> {
+        match (self.hosts, self.contracts.browser_view_state()) {
+            (None, None) | (None, Some((_, false))) => Ok(()),
+            (None, Some((_, true))) => Err(HostPairingError::ForkWithoutHost),
+            (Some(_), None) => Err(HostPairingError::HostWithoutView),
+            (Some(hosts), Some((selection, _))) => {
+                if *selection == hosts.browser_view_selection() {
+                    Ok(())
+                } else {
+                    Err(HostPairingError::SelectionMismatch)
+                }
+            }
+        }
+    }
+
+    /// The cache identity of the inputs. An empty boundary and an absent host
+    /// add nothing, so an identity is what it was before either existed; any
+    /// recorded cause, explanation included, and every byte of a host is part
+    /// of it.
     #[must_use]
     pub fn cache_fingerprints(&self) -> Vec<[u8; 32]> {
         let mut fingerprints = vec![self.contracts.cache_fingerprint()];
         if !self.boundary.is_empty() {
             fingerprints.push(self.boundary.digest());
+        }
+        if let Some(hosts) = self.hosts {
+            let mut hash = Sha256::new();
+            hash.update(b"project-host-index-v1");
+            // Deterministic BTree collections; include config, integration,
+            // source inventory, roots and the final conservative join.
+            hash.update(serde_json::to_vec(hosts).expect("host index is serializable"));
+            fingerprints.push(hash.finalize().into());
         }
         fingerprints
     }
@@ -308,6 +389,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     let inputs = AnalysisInputs {
         boundary: inputs.boundary,
         contracts,
+        hosts: inputs.hosts,
     };
     let BuildCaches {
         ast_indexes: ast_indexes_cache,

@@ -1265,6 +1265,138 @@ fn inferred_hosts_admit_browser_claims_without_changing_no_target_scopes() {
     fs::remove_dir_all(scratch).unwrap();
 }
 
+/// The public Rust entry points after the host left the contract index: the
+/// inference result's host must accompany its contracts, and the pair is the
+/// same analysis the native entry point runs.
+#[test]
+fn inferred_host_is_a_separate_input_beside_the_browser_view_it_selected() {
+    use solid_facts_backend::{
+        AnalysisInputs, BackendError, DiagnosticSession, InferredAcceptedContracts,
+        NativeIncrementalSession, RequestedRuleEnablement, TypeFactsSession,
+        decode_policy2_trust_configuration,
+        fixture_authorization::{authorize_fixture_contract, read_fixture_contract_request},
+        inferred_project_accepted_contracts_with_note,
+    };
+    use solid_reactive_ir::{RuntimeEnvironment, contract_semantics::AcceptedContractIndex};
+    use std::{fs, path::Path};
+
+    fn copy_tree(from: &Path, to: &Path) {
+        fs::create_dir_all(to).unwrap();
+        for entry in fs::read_dir(from).unwrap() {
+            let entry = entry.unwrap();
+            let destination = to.join(entry.file_name());
+            if entry.file_type().unwrap().is_dir() {
+                copy_tree(&entry.path(), &destination);
+            } else {
+                fs::copy(entry.path(), destination).unwrap();
+            }
+        }
+    }
+
+    let Ok(producer) = std::env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let repository = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let scratch = repository.join(format!(
+        "rust/target/inferred-host-input-{}",
+        std::process::id()
+    ));
+    copy_tree(
+        &repository.join("fixtures/reactive-ir/node_modules"),
+        &scratch.join("node_modules"),
+    );
+    let directory = scratch.join("spa");
+    copy_tree(
+        &repository.join("fixtures/reactive-ir/inferred-host-spa"),
+        &directory,
+    );
+    let directory = fs::canonicalize(directory).unwrap();
+    let authorization = authorize_fixture_contract(
+        &directory,
+        &read_fixture_contract_request(&directory).unwrap(),
+    )
+    .unwrap();
+    let trust = decode_policy2_trust_configuration(&authorization.trust_configuration).unwrap();
+    let project = directory.join("tsconfig.json").to_str().unwrap().to_owned();
+    let typescript = TypeFactsSession::open(&producer, &project, &[]).unwrap();
+    let dialect = solid_facts_backend::dialect::default_dialect();
+    let (mut session, sources) =
+        NativeIncrementalSession::open_pipelined(dialect, project, typescript).unwrap();
+    let facts = session.analyze().unwrap();
+    let InferredAcceptedContracts {
+        contracts,
+        hosts,
+        note,
+    } = inferred_project_accepted_contracts_with_note(
+        &directory,
+        &[directory.join(solid_facts_backend::fixture_authorization::CATALOG)],
+        &[],
+        Some(&trust),
+        false,
+        &RuntimeEnvironment::default(),
+        dialect.vocabulary,
+        &facts,
+        AcceptedContractIndex::default(),
+    )
+    .unwrap();
+    // A live inference, not a refusal: the run note and a host.
+    assert!(
+        note.as_deref()
+            .is_some_and(|note| note.starts_with("solid-checker: note: browser host inferred for")),
+        "{note:?}"
+    );
+    let hosts = hosts.expect("the fixture infers a browser host");
+    let analyze = |inputs: AnalysisInputs<'_>| {
+        DiagnosticSession::new(dialect).analyze_inputs_measured_with_enablement(
+            Path::new(&facts.project_id),
+            &sources,
+            &facts,
+            inputs,
+            RequestedRuleEnablement::default(),
+        )
+    };
+    // The migrated caller: the contracts with the host that selected them.
+    let (analysis, _) =
+        analyze(AnalysisInputs::contracts_only(&contracts).with_hosts(&hosts)).unwrap();
+    assert!(
+        analysis.snapshot.findings.iter().any(|finding| {
+            finding.rule == "missing-owner"
+                && finding.kind == "violation"
+                && finding
+                    .evidence
+                    .iter()
+                    .any(|step| step.message.starts_with("inferred browser:"))
+        }),
+        "{:#?}",
+        analysis.snapshot.findings
+    );
+    let refusal = |inputs: AnalysisInputs<'_>| match analyze(inputs) {
+        Err(BackendError::Contract(message)) => message,
+        Err(other) => panic!("unexpected error: {other}"),
+        Ok(_) => panic!("an inconsistent pair was analyzed"),
+    };
+    // Dropping the host is a refusal, not a silent baseline run.
+    assert!(refusal(AnalysisInputs::contracts_only(&contracts)).contains("has no host input"));
+    // A host with no view built from it selects nothing.
+    let (baseline, browser) = contracts.execution_views().unwrap();
+    assert!(
+        refusal(AnalysisInputs::contracts_only(&baseline).with_hosts(&hosts))
+            .contains("no browser view")
+    );
+    // A host that moved after the view was selected from it.
+    let mut later = hosts.clone();
+    later.blocked_imports.insert(("/x.ts".into(), "x".into()));
+    assert!(
+        refusal(AnalysisInputs::contracts_only(&contracts).with_hosts(&later))
+            .contains("does not match the host input")
+    );
+    // The two halves of the fork are valid on their own: the baseline needs no
+    // host, and the browser half carries a view but projects no findings.
+    analyze(AnalysisInputs::contracts_only(&baseline)).unwrap();
+    analyze(AnalysisInputs::contracts_only(&browser)).unwrap();
+    fs::remove_dir_all(scratch).unwrap();
+}
+
 #[test]
 fn write_scope_diagnostics_have_semantic_locations() {
     let Some(findings) = diagnostic_fixture("write-scope") else {

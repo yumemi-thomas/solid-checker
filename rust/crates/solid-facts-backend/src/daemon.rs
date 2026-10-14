@@ -1392,20 +1392,23 @@ fn answer(
     // Capture discovery's exact input generation before it runs. A refusal
     // needs only its witness; success retains the complete graph-input closure.
     let mut inference_inputs = inference_inputs_for_check(state, check);
-    let (mut contracts, inference_note) =
-        solid_facts_backend::inferred_project_accepted_contracts_with_note(
-            directory,
-            &selection.admitted,
-            &selection.nested,
-            trust.as_ref(),
-            check.bundled_contracts,
-            &check.runtime,
-            state.dialect.vocabulary,
-            &facts,
-            requirements,
-        )?;
+    let solid_facts_backend::InferredAcceptedContracts {
+        mut contracts,
+        hosts,
+        note: inference_note,
+    } = solid_facts_backend::inferred_project_accepted_contracts_with_note(
+        directory,
+        &selection.admitted,
+        &selection.nested,
+        trust.as_ref(),
+        check.bundled_contracts,
+        &check.runtime,
+        state.dialect.vocabulary,
+        &facts,
+        requirements,
+    )?;
     if let Some(inputs) = &mut inference_inputs
-        && let Some(hosts) = contracts.inferred_hosts()
+        && let Some(hosts) = &hosts
     {
         // Final package admission can observe additional canonical targets.
         // Retain the identities actually used, rather than a post-analysis
@@ -1462,6 +1465,7 @@ fn answer(
             solid_reactive_ir::AnalysisInputs {
                 boundary: &boundary,
                 contracts: &contracts,
+                hosts: hosts.as_ref(),
             },
             RequestedRuleEnablement {
                 presets: &check.presets,

@@ -162,7 +162,9 @@ struct ScopedAcceptances {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct InferredBrowserContracts {
-    hosts: crate::hosts::ProjectHostIndex,
+    /// Which importers this view answers. The host itself is not stored here:
+    /// it is the analysis's own input (`AnalysisInputs::hosts`).
+    selection: crate::hosts::BrowserViewSelection,
     contracts: AcceptedContractIndex,
     project_findings: bool,
 }
@@ -183,22 +185,26 @@ impl ScopedAcceptances {
 
 impl AcceptedContractIndex {
     #[must_use]
-    pub fn with_inferred_browser(
+    pub fn with_browser_view(
         mut self,
-        hosts: crate::hosts::ProjectHostIndex,
+        selection: crate::hosts::BrowserViewSelection,
         contracts: Self,
     ) -> Self {
         self.inferred_browser = Some(Box::new(InferredBrowserContracts {
-            hosts,
+            selection,
             contracts,
             project_findings: true,
         }));
         self
     }
 
-    #[must_use]
-    pub fn inferred_hosts(&self) -> Option<&crate::hosts::ProjectHostIndex> {
-        self.inferred_browser.as_ref().map(|view| &view.hosts)
+    /// The selection of the browser view this index carries, and whether the
+    /// view still projects findings (the outer index of a fork does; the
+    /// browser half of [`Self::execution_views`] does not).
+    pub(crate) fn browser_view_state(&self) -> Option<(&crate::hosts::BrowserViewSelection, bool)> {
+        self.inferred_browser
+            .as_ref()
+            .map(|view| (&view.selection, view.project_findings))
     }
 
     /// Separate execution views keep uncalled bodies on today's no-target answer.
@@ -217,13 +223,7 @@ impl AcceptedContractIndex {
     fn browser_view_at(&self, importer: &str, specifier: &str) -> Option<&Self> {
         self.inferred_browser
             .as_ref()
-            .filter(|view| {
-                view.hosts.browser_at(importer)
-                    && !view
-                        .hosts
-                        .blocked_imports
-                        .contains(&(importer.into(), specifier.into()))
-            })
+            .filter(|view| view.selection.selects(importer, specifier))
             .map(|view| &view.contracts)
     }
 
@@ -869,10 +869,19 @@ impl AcceptedContractIndex {
             }
         }
         if let Some(view) = &self.inferred_browser {
-            hash.update(b"inferred-browser-host-v1");
-            // Deterministic BTree collections; include config, integration,
-            // source inventory, roots and the final conservative join.
-            hash.update(serde_json::to_vec(&view.hosts).expect("host index is serializable"));
+            // The selection is all of the host this view reads. The host's own
+            // bytes are part of `AnalysisInputs::cache_fingerprints`. Counts
+            // and lengths delimit every collection.
+            hash.update(b"inferred-browser-view-v1");
+            hash.update((view.selection.importers().len() as u64).to_be_bytes());
+            for importer in view.selection.importers() {
+                hash_text(&mut hash, importer);
+            }
+            hash.update((view.selection.blocked().len() as u64).to_be_bytes());
+            for (importer, specifier) in view.selection.blocked() {
+                hash_text(&mut hash, importer);
+                hash_text(&mut hash, specifier);
+            }
             hash.update(view.contracts.cache_fingerprint());
         }
         hash.finalize().into()

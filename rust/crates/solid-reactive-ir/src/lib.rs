@@ -45,7 +45,7 @@ pub use attribution::ObligationReach;
 pub use creates_walk::{CreatesDecline, CreatesDeclineKind, CreatesProposalWalk};
 pub use owners::function_binding_name;
 pub use pipeline::{
-    AnalysisInputs, build, build_with_accepted_contracts_measured,
+    AnalysisInputs, HostPairingError, build, build_with_accepted_contracts_measured,
     build_with_analysis_inputs_measured,
 };
 pub use returns_walk::{
@@ -2465,6 +2465,7 @@ impl IncrementalBuilder {
         let inputs = AnalysisInputs {
             boundary: inputs.boundary,
             contracts: external_contracts.as_ref(),
+            hosts: inputs.hosts,
         };
         let total_started = Instant::now();
         let lookup_started = Instant::now();

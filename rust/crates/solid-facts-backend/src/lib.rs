@@ -201,9 +201,10 @@ pub use first_party_bundles::{
     solid2_rc3_bundles,
 };
 pub use inferred_host::{
-    inferred_host_directory_digest, inferred_host_input_digest, inferred_host_input_paths,
-    inferred_host_input_paths_for_project, inferred_host_input_paths_for_sources,
-    inferred_project_accepted_contracts, inferred_project_accepted_contracts_with_note,
+    InferredAcceptedContracts, inferred_host_directory_digest, inferred_host_input_digest,
+    inferred_host_input_paths, inferred_host_input_paths_for_project,
+    inferred_host_input_paths_for_sources, inferred_project_accepted_contracts,
+    inferred_project_accepted_contracts_with_note,
 };
 pub use package_requirements::{
     external_package_boundary, external_package_contract_requirements, requirement_index,

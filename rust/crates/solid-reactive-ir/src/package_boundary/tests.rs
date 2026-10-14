@@ -193,6 +193,7 @@ fn a_recorded_cause_is_part_of_the_analysis_identity_and_an_empty_boundary_is_no
     let explained = crate::AnalysisInputs {
         boundary: &boundary,
         contracts: &contracts,
+        hosts: None,
     }
     .cache_fingerprints();
     assert_eq!(explained.len(), 2);
@@ -212,6 +213,7 @@ fn a_recorded_cause_is_part_of_the_analysis_identity_and_an_empty_boundary_is_no
         crate::AnalysisInputs {
             boundary: &reworded,
             contracts: &contracts,
+            hosts: None,
         }
         .cache_fingerprints(),
         "a changed reason invalidates a cached answer although no file moved"

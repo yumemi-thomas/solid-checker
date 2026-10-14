@@ -297,10 +297,19 @@ impl DiagnosticSession {
         validate_host_inputs: bool,
     ) -> Result<(Arc<DiagnosticAnalysis>, DiagnosticTimings), BackendError> {
         let contracts = inputs.contracts;
+        // A host belongs with the view selected from it. Refuse a pair that
+        // disagrees, rather than answer from the baseline or the browser view
+        // in place of the other.
+        inputs
+            .check_host_pairing()
+            .map_err(|error| BackendError::Contract(error.to_string()))?;
         if let Some((baseline, browser)) = contracts.execution_views() {
-            let hosts = contracts
-                .inferred_hosts()
-                .expect("execution views carry hosts");
+            // The pairing check settled that a fork carries its host.
+            let hosts = inputs.hosts.ok_or_else(|| {
+                BackendError::Contract(
+                    solid_reactive_ir::HostPairingError::ForkWithoutHost.to_string(),
+                )
+            })?;
             crate::inferred_host::validate_inputs(hosts)?;
             // The outer transaction validates the complete input generation
             // before and after both views; nested checks add no new boundary.
@@ -311,6 +320,7 @@ impl DiagnosticSession {
                 AnalysisInputs {
                     boundary: inputs.boundary,
                     contracts: &baseline,
+                    hosts: None,
                 },
                 enablement.clone(),
                 false,
@@ -326,6 +336,7 @@ impl DiagnosticSession {
                     AnalysisInputs {
                         boundary: inputs.boundary,
                         contracts: &browser,
+                        hosts: None,
                     },
                     enablement,
                     false,
@@ -396,8 +407,9 @@ impl DiagnosticSession {
         let inputs = AnalysisInputs {
             boundary: inputs.boundary,
             contracts,
+            hosts: inputs.hosts,
         };
-        if validate_host_inputs && let Some(hosts) = contracts.inferred_hosts() {
+        if validate_host_inputs && let Some(hosts) = inputs.hosts {
             crate::inferred_host::validate_inputs(hosts)?;
         }
         let ir_started = Instant::now();
@@ -435,7 +447,7 @@ impl DiagnosticSession {
             rule_options: rule_options.clone(),
             release_notice: release_notice.clone(),
         };
-        if validate_host_inputs && let Some(hosts) = contracts.inferred_hosts() {
+        if validate_host_inputs && let Some(hosts) = inputs.hosts {
             crate::inferred_host::validate_inputs(hosts)?;
         }
         if let Some(retained) = &self.retained
@@ -472,7 +484,7 @@ impl DiagnosticSession {
             findings.push(unaudited_release_finding(notice));
         }
         let metrics = analysis_metrics(facts, &program, contracts);
-        if validate_host_inputs && let Some(hosts) = contracts.inferred_hosts() {
+        if validate_host_inputs && let Some(hosts) = inputs.hosts {
             crate::inferred_host::validate_inputs(hosts)?;
         }
         let mut snapshot = snapshot_with_package_summaries(
@@ -4543,6 +4555,99 @@ mod tests {
         assert!(Arc::ptr_eq(&initial, &reused));
         assert!(!initial_timings.reused);
         assert!(reused_timings.reused);
+    }
+
+    /// A host and the browser view selected from it travel as a pair, and an
+    /// outer fork analyzes only with its host. Needs no producer.
+    #[test]
+    fn a_fork_needs_its_host_and_a_host_needs_its_view() {
+        use solid_reactive_ir::AnalysisInputs;
+        use solid_reactive_ir::hosts::{
+            BrowserRootManifest, HostExecutionRegion, HostScope, ProjectHostIndex,
+        };
+
+        let facts = ProjectFacts {
+            generation: Generation::new(1).unwrap(),
+            project_id: "/virtual/tsconfig.json".into(),
+            files: Vec::new(),
+            typescript: TypeScriptTable::from_parts(
+                3,
+                1,
+                "/virtual/tsconfig.json",
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            ),
+            typescript_changes: None,
+            resolved_imports: None,
+            runtime_resolutions: None,
+            runtime_symbol_redirects: Default::default(),
+            dependency_source_roots: Vec::new(),
+        };
+        let top = HostScope {
+            id: "top".into(),
+            path: "/virtual/main.ts".into(),
+            execution: vec![HostExecutionRegion {
+                span: solid_facts::core::Span::new(0, u32::MAX),
+                client: Some(true),
+                server: Some(true),
+            }],
+            ..HostScope::default()
+        };
+        let host = ProjectHostIndex::build(
+            BrowserRootManifest {
+                roots: ["top".to_owned()].into(),
+                reason: "inferred browser: root".into(),
+                ..BrowserRootManifest::default()
+            },
+            &[],
+            &[top],
+        );
+        assert!(host.browser_at("/virtual/main.ts"));
+        let contracts = AcceptedContractIndex::default().with_browser_view(
+            host.browser_view_selection(),
+            AcceptedContractIndex::default(),
+        );
+        let analyze = |inputs: AnalysisInputs<'_>| {
+            DiagnosticSession::default().analyze_inputs_measured_with_enablement(
+                Path::new(&facts.project_id),
+                &[],
+                &facts,
+                inputs,
+                super::RequestedRuleEnablement::default(),
+            )
+        };
+        let refusal = |inputs: AnalysisInputs<'_>| match analyze(inputs) {
+            Err(crate::BackendError::Contract(message)) => message,
+            Err(other) => panic!("{other}"),
+            Ok(_) => panic!("an inconsistent pair was analyzed"),
+        };
+        // The pair, forked: a real fork with nothing to find.
+        let (paired, _) =
+            analyze(AnalysisInputs::contracts_only(&contracts).with_hosts(&host)).unwrap();
+        assert_eq!(paired.snapshot.status, "uncertifiable");
+        // The three refusals.
+        assert!(refusal(AnalysisInputs::contracts_only(&contracts)).contains("no host input"));
+        let plain = AcceptedContractIndex::default();
+        assert!(
+            refusal(AnalysisInputs::contracts_only(&plain).with_hosts(&host))
+                .contains("no browser view")
+        );
+        let mut later = host.clone();
+        later
+            .blocked_imports
+            .insert(("/virtual/main.ts".into(), "x".into()));
+        assert!(
+            refusal(AnalysisInputs::contracts_only(&contracts).with_hosts(&later))
+                .contains("does not match")
+        );
+        // Valid calls stay valid: no view, and the browser half of a fork
+        // (a view that projects nothing, with no host).
+        analyze(AnalysisInputs::contracts_only(&plain)).unwrap();
+        let (baseline, browser) = contracts.execution_views().unwrap();
+        analyze(AnalysisInputs::contracts_only(&baseline)).unwrap();
+        analyze(AnalysisInputs::contracts_only(&browser)).unwrap();
     }
 
     #[test]

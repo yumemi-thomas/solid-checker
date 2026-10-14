@@ -3479,6 +3479,31 @@ fn discovered_index_with_inputs(
     Ok(index)
 }
 
+/// What host inference returns: the contracts both views are answered from,
+/// the host that selected the browser view (`None` whenever no browser view
+/// exists: every refusal and every declared target), and the run note.
+///
+/// `hosts` is the analysis's own input. Hand it to
+/// [`solid_reactive_ir::AnalysisInputs::with_hosts`] together with `contracts`;
+/// `contracts` carries only the derived view selection, from which no host can
+/// be recovered.
+#[derive(Debug)]
+pub struct InferredAcceptedContracts {
+    pub contracts: AcceptedContractIndex,
+    pub hosts: Option<ProjectHostIndex>,
+    pub note: Option<String>,
+}
+
+impl InferredAcceptedContracts {
+    fn without_host(contracts: AcceptedContractIndex, note: Option<String>) -> Self {
+        Self {
+            contracts,
+            hosts: None,
+            note,
+        }
+    }
+}
+
 /// The old acquisition remains the authority for both views. Explicit runtime
 /// selections bypass discovery; browser admission is confined to its importer
 /// partition and never becomes a no-target fallback.
@@ -3493,7 +3518,7 @@ pub fn inferred_project_accepted_contracts(
     dialect: &dyn solid_dialect::Dialect,
     facts: &ProjectFacts,
     requirements: AcceptedContractIndex,
-) -> Result<AcceptedContractIndex, BackendError> {
+) -> Result<InferredAcceptedContracts, BackendError> {
     inferred_project_accepted_contracts_with_note(
         directory,
         catalogs,
@@ -3505,7 +3530,6 @@ pub fn inferred_project_accepted_contracts(
         facts,
         requirements,
     )
-    .map(|(contracts, _)| contracts)
 }
 
 /// Native run note. The caller must replay it through the existing note channel
@@ -3521,7 +3545,7 @@ pub fn inferred_project_accepted_contracts_with_note(
     dialect: &dyn solid_dialect::Dialect,
     facts: &ProjectFacts,
     requirements: AcceptedContractIndex,
-) -> Result<(AcceptedContractIndex, Option<String>), BackendError> {
+) -> Result<InferredAcceptedContracts, BackendError> {
     let conditions = runtime.selected_conditions();
     let admission = HostStage::new("contract-admission-baseline");
     let baseline = crate::project_accepted_contracts(
@@ -3536,7 +3560,7 @@ pub fn inferred_project_accepted_contracts_with_note(
     )?;
     drop(admission);
     if runtime.target.is_some() {
-        return Ok((baseline, None));
+        return Ok(InferredAcceptedContracts::without_host(baseline, None));
     }
     let refused = |reason: String| {
         Some(format!(
@@ -3544,7 +3568,7 @@ pub fn inferred_project_accepted_contracts_with_note(
         ))
     };
     if !conditions.is_empty() {
-        return Ok((
+        return Ok(InferredAcceptedContracts::without_host(
             baseline,
             refused(format!(
                 "{}: explicit runtime conditions select {conditions:?}",
@@ -3553,7 +3577,7 @@ pub fn inferred_project_accepted_contracts_with_note(
         ));
     }
     if runtime.program_boundary == Some(ProgramBoundary::Open) {
-        return Ok((
+        return Ok(InferredAcceptedContracts::without_host(
             baseline,
             refused(format!(
                 "{}: explicit open program boundary",
@@ -3572,12 +3596,27 @@ pub fn inferred_project_accepted_contracts_with_note(
         == Some(serde_json::Value::Bool(true));
     let inputs = match discovery_inputs(directory, facts, dialect, fixture_authority) {
         Ok(inputs) => inputs,
-        Err(reason) => return Ok((baseline, refused(reason.message()))),
+        Err(reason) => {
+            return Ok(InferredAcceptedContracts::without_host(
+                baseline,
+                refused(reason.message()),
+            ));
+        }
     };
     let mut index = match discovered_index_with_inputs(&inputs, facts, dialect, None) {
-        Ok(index) if index.is_empty() => return Ok((baseline, refused(index.manifest.reason))),
+        Ok(index) if index.is_empty() => {
+            return Ok(InferredAcceptedContracts::without_host(
+                baseline,
+                refused(index.manifest.reason),
+            ));
+        }
         Ok(index) => index,
-        Err(reason) => return Ok((baseline, refused(reason.message()))),
+        Err(reason) => {
+            return Ok(InferredAcceptedContracts::without_host(
+                baseline,
+                refused(reason.message()),
+            ));
+        }
     };
     // Package checking only adds module refusals (provisional NodeModules
     // requests skip the final load proof). It cannot create a browser
@@ -3596,7 +3635,7 @@ pub fn inferred_project_accepted_contracts_with_note(
     ) {
         Ok(browser) => browser,
         Err(error) => {
-            return Ok((
+            return Ok(InferredAcceptedContracts::without_host(
                 baseline,
                 refused(format!(
                     "{}: browser artifact admission failed: {error}",
@@ -3618,10 +3657,16 @@ pub fn inferred_project_accepted_contracts_with_note(
         fixture_authority,
         Some(&browser),
     ) {
-        return Ok((baseline, refused(reason.message())));
+        return Ok(InferredAcceptedContracts::without_host(
+            baseline,
+            refused(reason.message()),
+        ));
     }
     if index.is_empty() {
-        return Ok((baseline, refused(index.manifest.reason)));
+        return Ok(InferredAcceptedContracts::without_host(
+            baseline,
+            refused(index.manifest.reason),
+        ));
     }
     // Invocation rows are read only after exact browser artifact admission.
     // No argument/child/prop edge is installed by native syntax discovery.
@@ -3667,7 +3712,13 @@ pub fn inferred_project_accepted_contracts_with_note(
             .collect::<Vec<_>>()
             .join(", ")
     );
-    Ok((baseline.with_inferred_browser(index, browser), Some(note)))
+    // Select after the host's last mutation (the blocked imports above): the
+    // view is a snapshot of it.
+    Ok(InferredAcceptedContracts {
+        contracts: baseline.with_browser_view(index.browser_view_selection(), browser),
+        hosts: Some(index),
+        note: Some(note),
+    })
 }
 
 #[cfg(test)]
@@ -4001,23 +4052,24 @@ mod tests {
         let (mut session, _) =
             crate::NativeIncrementalSession::open_pipelined(dialect, project, typescript).unwrap();
         let facts = session.analyze().unwrap();
-        let (contracts, note) = inferred_project_accepted_contracts_with_note(
-            &directory,
-            &[directory.join(crate::fixture_authorization::CATALOG)],
-            &[],
-            Some(&trust),
-            false,
-            &RuntimeEnvironment::default(),
-            dialect.vocabulary,
-            &facts,
-            AcceptedContractIndex::default(),
-        )
-        .unwrap();
+        let InferredAcceptedContracts { hosts, note, .. } =
+            inferred_project_accepted_contracts_with_note(
+                &directory,
+                &[directory.join(crate::fixture_authorization::CATALOG)],
+                &[],
+                Some(&trust),
+                false,
+                &RuntimeEnvironment::default(),
+                dialect.vocabulary,
+                &facts,
+                AcceptedContractIndex::default(),
+            )
+            .unwrap();
         // Only reactive-package is artifact-admitted here. The declaration-only
         // Solid/signals stubs do not establish runtime loadability. Callback
         // delivery tests remain in callback_host/hosts; this consumer refuses
         // evaluation before any of those registrations can gain authority.
-        assert!(contracts.inferred_hosts().is_none());
+        assert!(hosts.is_none());
         assert!(
             note.unwrap()
                 .starts_with("solid-checker: note: browser host not inferred: ")

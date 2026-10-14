@@ -260,6 +260,7 @@ pub fn check(request_json: &str) -> Result<String, Box<dyn std::error::Error>> {
         AnalysisInputs {
             boundary: &boundary,
             contracts: &contracts,
+            hosts: None,
         },
         Default::default(),
     )?;
