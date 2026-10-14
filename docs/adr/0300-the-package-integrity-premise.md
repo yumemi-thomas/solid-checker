@@ -20,14 +20,18 @@ provider, write, alias or opaque handoff refuses. Exact exports/re-exports are
 publication, not provision. A factory value is proved when its expression
 runs; a preceding guard does not establish a different successful value.
 
-Named member and descriptor writes remain global vetoes. Project wildcard
-writes are considered for every object; package wildcards retain ADR 0284
-decision 8's package scope. Within either scope, an exact target proof may discharge a
-wildcard only when every local identity input comes from other fresh literal
-allocation sites. `Object.assign` forwards its exact target; unknown targets,
-parameter targets, other calls, exported bindings, eval and unsupported writes
-refuse. A dynamic-key write/delete whose receiver derives to the object also
-vetoes, including through aliases.
+Named member and descriptor writes remain global vetoes. For the selected
+package getter proof, every visible computed write/delete and reflective
+wildcard must prove an unrelated target. Unknown receivers veto every
+selected-package object, including across package roots. Discharge requires
+every identity input to come from other fresh object, array or function-expression
+allocation sites.
+`Object.assign` forwards its exact target. Local assignments and branch arms,
+plain object/array patterns and private helpers' complete invocation inputs
+are joined. Exact call/apply signatures and unchanged literal method holders
+can supply this. Escapes, defaults, rest/spreads, unsupported calls, exported
+targets, eval and missing identities refuse. Ordinary callable transport
+retains ADR 0284 decision 8's scope.
 
 A getter proof requires a closed own-property shape and an exact runtime
 accessor call at getter entry. It supplies reactive origin only. The existing
@@ -65,3 +69,32 @@ Hand review used kui router 2.0.0-next.26's routing.js:514-516 and
 routers/factory.jsx:227, and donegeon router 2.0.0-next.16's
 routing.js:461-463 and routers/factory.jsx:124. Three other unique sites
 remain uncertifiable about execution (SC9012 becomes SC1001 uncertifiable).
+
+## Review round 1
+
+The review found four false-violation families: reassigned aliases, logical
+and conditional receivers, destructuring, and call/method-bound this. The
+same this mutation in visible unselected JavaScript also failed. Receiver
+derivation had dropped these visible deletes when it could not join them.
+
+Computed writes now use the complete exact-target discharge, with unknown
+inputs refusing proof. A nonliteral descriptor-map key is also a wildcard,
+even when its map is a literal. Nineteen focused fixtures cover the review
+cases, additional assignment/apply/branch channels and unrelated fresh-target
+controls. The nine retained review projects still type-check against the real
+rc.13/next.26 declarations; their project reads are now SC9012.
+
+The complete target requirement withdraws the two unique corpus additions
+from round 1: kui TopicsRoute.tsx:425:75 (two project views) and donegeon
+WaitlistRoute.tsx:33:108 are SC9012. Their runtime reads were confirmed true
+by review; the requested retention is unmet. Visible targets such as
+globalThis._$HY.r, reducer parameters, escaped holder projections and
+Object.create results have no admitted complete allocation proof here.
+They require further semantic facts, not an integrity exemption. Unknown
+targets still veto every selected-package object.
+
+The final release browser sweep has 49 projects and no errors: violations
+565 → 562 and uncertifiable 3,245 → 3,211. No other violation moves and none
+is added. Existing fixture snapshots are unchanged; nineteen review
+snapshots are added. The retreat in uncertifiable rows does not establish
+that their reads are clean.

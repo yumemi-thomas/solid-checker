@@ -43,6 +43,7 @@ mod host_execution;
 mod import_reexport;
 mod inert_erasure;
 mod inert_javascript;
+mod literal_array;
 mod module_requests;
 mod object_binding;
 mod primitive_completion;
@@ -76,6 +77,7 @@ pub use inert_javascript::{
     InertJavaScriptModule, InertJavaScriptRefusal, inert_javascript_module,
     inert_javascript_module_with_export_all,
 };
+pub use literal_array::{literal_array_element, this_expression_spans};
 pub use module_requests::static_module_requests;
 pub use object_binding::{
     UnwrittenObjectBinding, UnwrittenPrimitiveBinding, unwritten_object_binding,

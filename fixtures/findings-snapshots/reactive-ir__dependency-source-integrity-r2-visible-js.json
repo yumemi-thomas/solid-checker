@@ -1,0 +1,25 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-visible-js/App.tsx",
+      "start": 285,
+      "end": 300,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-visible-js/node_modules/dep-wrap/index.jsx",
+      "start": 170,
+      "end": 184,
+      "fixes": 0
+    }
+  ]
+}

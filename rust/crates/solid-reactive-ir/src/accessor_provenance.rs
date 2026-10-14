@@ -62,7 +62,6 @@ pub(super) struct Resolver<'a, 'facts> {
     blocked_contexts: HashSet<Location>,
     unkeyed_provider: bool,
     member_stability: MemberStability,
-    mutated_objects: HashSet<Location>,
 }
 
 /// ADR 0273: absence of a visible veto is an assumption, not a closed census.
@@ -71,14 +70,13 @@ pub(crate) struct MemberStability {
     written: HashMap<String, Location>,
     all: Option<Location>,
     /// Every wildcard site, retained so ADR 0300 can discharge one only by
-    /// proving its target is a different fresh literal.
+    /// proving its target is a different fresh allocation.
     wildcard_sites: Vec<Location>,
-    /// Dynamic-key syntax on a receiver whose literal identity can still be
-    /// derived. It cannot escape the old exact-receiver veto just because the
-    /// package integrity premise permits other receiver uses.
+    /// Dynamic-key syntax must pass the same complete exact-target proof as
+    /// reflective wildcards. A failed may-derivation is never a discharge.
     unknown_receivers: Vec<Location>,
-    /// ADR 0284: the wildcard vetoes written inside a package analyzed as
-    /// source, by its root. Dependency internals are outside ADR 0273's
+    /// ADR 0284: ordinary callable transport scopes wildcard vetoes written
+    /// inside a package analyzed as source by its root. Dependency internals are outside ADR 0273's
     /// premise, as when only the package's declarations are seen, so a write
     /// that could name any member vetoes only members of objects that package
     /// creates. A write naming its member vetoes it everywhere (review
@@ -174,8 +172,8 @@ impl MemberStability {
                     "defineProperties" => {
                         // A literal descriptor map names its literal keys; a
                         // spread in it, or a map that is not a literal, could
-                        // name any member. A non-literal computed key stays
-                        // outside the premise (ADR 0273).
+                        // name any member. An unnamed computed descriptor
+                        // key is also a wildcard for the integrity proof.
                         let shape = call
                             .arguments
                             .get(1)
@@ -191,6 +189,16 @@ impl MemberStability {
                                     .spreads
                                     .iter()
                                     .any(|spread| shape.span.contains(spread.span))
+                                    // An unnamed computed descriptor key is
+                                    // a wildcard, even inside a literal map.
+                                    && shape.properties.len() == file.ast.object_properties.iter().filter(|property| {
+                                        shape.span.contains(property.span)
+                                            && !file.ast.object_properties.iter().any(|parent| {
+                                                parent.span != property.span
+                                                    && shape.span.contains(parent.span)
+                                                    && parent.span.contains(property.span)
+                                            })
+                                    }).count()
                             });
                         match shape {
                             Some(shape) => {
@@ -416,7 +424,6 @@ impl Resolver<'_, '_> {
             blocked_contexts: HashSet::new(),
             unkeyed_provider: false,
             member_stability: MemberStability::index(facts, lookup),
-            mutated_objects: HashSet::new(),
         };
         for file in &facts.files {
             for binding in &file.ast.bindings {
@@ -864,34 +871,6 @@ impl Resolver<'_, '_> {
             }
         }
         resolver.blocked_contexts = blocked_contexts;
-        let mut mutated = Vec::new();
-        for receiver in resolver.member_stability.unknown_receivers.iter().chain(
-            resolver
-                .member_stability
-                .dependencies
-                .values()
-                .flat_map(|package| &package.unknown_receivers),
-        ) {
-            let Some(file) = resolver.lookup.file_by_path(receiver.path.as_ref()) else {
-                continue;
-            };
-            let (Ok(start), Ok(end)) = (
-                u32::try_from(receiver.start_byte),
-                u32::try_from(receiver.end_byte),
-            ) else {
-                continue;
-            };
-            resolver.derived_mutation_objects(
-                file,
-                Span::new(start, end),
-                32,
-                &mut HashSet::new(),
-                &mut mutated,
-            );
-        }
-        resolver
-            .mutated_objects
-            .extend(mutated.into_iter().map(|(path, span)| location(path, span)));
         resolver
     }
 
@@ -2135,26 +2114,54 @@ impl Resolver<'_, '_> {
     }
 
     fn dependency_member_stable(&self, path: &str, object: Span, name: &str) -> bool {
-        // Named writes anywhere retain their veto. A project wildcard is
-        // considered for every object; a package wildcard only for its own
-        // objects (ADR 0284). Either needs an exact disjoint target to waive it.
+        // Named writes anywhere retain their veto. Every visible unknown
+        // target needs an exact disjoint identity before the integrity proof.
         if self.member_stability.written.contains_key(name) {
             return false;
         }
-        if self.mutated_objects.contains(&location(path, object)) {
+        let object = location(path, object);
+        // Visible syntax cannot disappear when receiver derivation is
+        // incomplete. In particular a package's unknown receiver can be an
+        // object from another selected package, or one handed it by the app.
+        if !self
+            .member_stability
+            .unknown_receivers
+            .iter()
+            .chain(
+                self.member_stability
+                    .dependencies
+                    .values()
+                    .flat_map(|p| &p.unknown_receivers),
+            )
+            .all(|receiver| {
+                let Some(file) = self.lookup.file_by_path(receiver.path.as_ref()) else {
+                    return false;
+                };
+                let (Ok(start), Ok(end)) = (
+                    u32::try_from(receiver.start_byte),
+                    u32::try_from(receiver.end_byte),
+                ) else {
+                    return false;
+                };
+                mutation_target_is_distinct(
+                    file,
+                    Span::new(start, end),
+                    &object,
+                    self.lookup,
+                    32,
+                    &mut HashSet::new(),
+                )
+            })
+        {
             return false;
         }
-        let package = self
-            .facts
-            .dependency_source_root(path)
-            .and_then(|root| self.member_stability.dependencies.get(root));
-        let object = location(path, object);
         self.member_stability
             .wildcard_sites
             .iter()
             .chain(
-                package
-                    .into_iter()
+                self.member_stability
+                    .dependencies
+                    .values()
                     .flat_map(|package| &package.wildcard_sites),
             )
             .all(|site| {
@@ -2180,62 +2187,6 @@ impl Resolver<'_, '_> {
                     &mut HashSet::new(),
                 )
             })
-    }
-
-    /// A veto can join several known callers; it need not prove a unique
-    /// parameter input as positive accessor transport does. Unknown callers
-    /// add no identity, and a found caller can only withhold the getter proof.
-    fn derived_mutation_objects(
-        &self,
-        file: &FileFacts,
-        span: Span,
-        depth: usize,
-        visited: &mut HashSet<Location>,
-        objects: &mut Vec<(String, Span)>,
-    ) {
-        self.derived_objects(file, span, depth, &mut HashSet::new(), objects);
-        let span = file.ast.peel_ts_sugar_span(span);
-        if depth == 0
-            || !visited.insert(location(file.path.shared(), span))
-            || !exact_identifier(file, span)
-        {
-            return;
-        }
-        let declaration = file.ast.reference_declaration(span).unwrap_or(span);
-        if let Some((function, position)) = file.ast.functions.iter().find_map(|function| {
-            function
-                .parameters
-                .iter()
-                .position(|p| p.pattern == declaration && p.shape == ast::BindingShape::Identifier)
-                .map(|position| (function, position))
-        }) {
-            for caller in &self.facts.files {
-                for call in &caller.ast.calls {
-                    let target = self.lookup.function_called_at(
-                        caller.path.as_str(),
-                        caller.ast.peel_ts_sugar_span(call.callee),
-                    );
-                    if target.is_some_and(|(target_file, target)| {
-                        target_file.path == file.path && target.span == function.span
-                    }) && !call.arguments.iter().take(position + 1).any(|a| a.spread)
-                        && let Some(argument) = call.arguments.get(position)
-                    {
-                        self.derived_mutation_objects(
-                            caller,
-                            argument.span,
-                            depth - 1,
-                            visited,
-                            objects,
-                        );
-                    }
-                }
-            }
-        } else if let Some((bound_file, binding, _)) =
-            self.lookup.binding_at_reference(file.path.as_str(), span)
-            && let Some(initializer) = binding.initializer
-        {
-            self.derived_mutation_objects(bound_file, initializer, depth - 1, visited, objects);
-        }
     }
 
     /// ADR 0289: derivation only, like [`Self::context_origin`]. The getters
@@ -2509,7 +2460,7 @@ impl Resolver<'_, '_> {
 /// Whether `span` is exactly one identifier, as opposed to an expression an
 /// identifier merely begins.
 /// ADR 0300: a wildcard target whose complete local identity comes from
-/// other literal allocation sites cannot replace this literal's descriptor.
+/// other fresh allocation sites cannot replace this literal's descriptor.
 /// Unknown inputs never count as distinct. Cyclic local assignments are
 /// checked as a graph: every non-cyclic input must be a distinct allocation
 /// (or an uninitialized local's undefined); no source edge is skipped.
@@ -2521,37 +2472,197 @@ fn mutation_target_is_distinct(
     depth: usize,
     visited: &mut HashSet<Span>,
 ) -> bool {
+    mutation_target_projected(file, span, &[], object, lookup, depth, visited)
+}
+
+/// A complete identity join. Projections are copied by destructuring, or
+/// read through a holder whose exact uses cannot replace the projected slot.
+#[allow(clippy::too_many_arguments)]
+fn mutation_target_projected(
+    file: &FileFacts,
+    span: Span,
+    projection: &[String],
+    object: &Location,
+    lookup: &SemanticLookup<'_>,
+    depth: usize,
+    visited: &mut HashSet<Span>,
+) -> bool {
     if depth == 0 {
         return false;
     }
     let span = file.ast.peel_ts_sugar_span(span);
+    // Evaluating a function expression allocates a new callable object. A
+    // write to its own fields cannot rewrite the package's getter literal.
+    if projection.is_empty()
+        && file.ast.functions.iter().any(|function| {
+            function.span == span
+                && matches!(
+                    function.kind,
+                    ast::FunctionKind::Expression | ast::FunctionKind::Arrow
+                )
+        })
+    {
+        return location(file.path.shared(), span) != *object;
+    }
     if file
         .ast
         .object_get_shapes
         .iter()
         .any(|shape| shape.span == span)
     {
-        return location(file.path.shared(), span) != *object;
+        if projection.is_empty() {
+            return location(file.path.shared(), span) != *object;
+        }
+        return file
+            .ast
+            .object_get_shapes
+            .iter()
+            .any(|s| s.span == span && s.closed)
+            && Some(direct_data_properties(file, span)).is_some_and(|properties| {
+                properties
+                    .iter()
+                    .find(|p| {
+                        file.source_text(p.key).map(|k| k.trim_matches(['\'', '"']))
+                            == Some(projection[0].as_str())
+                    })
+                    .is_some_and(|p| {
+                        mutation_target_projected(
+                            file,
+                            p.shorthand_binding.unwrap_or(p.value),
+                            &projection[1..],
+                            object,
+                            lookup,
+                            depth - 1,
+                            visited,
+                        )
+                    })
+            });
+    }
+    if file.ast.array_literals.contains(&span) {
+        if projection.is_empty() {
+            return location(file.path.shared(), span) != *object;
+        }
+        return projection[0]
+            .parse::<usize>()
+            .ok()
+            .filter(|index| index.to_string() == projection[0])
+            .and_then(|index| {
+                ast::literal_array_element(
+                    std::path::Path::new(file.path.as_str()),
+                    &file.source,
+                    span,
+                    index,
+                )
+            })
+            .is_some_and(|element| {
+                mutation_target_projected(
+                    file,
+                    element,
+                    &projection[1..],
+                    object,
+                    lookup,
+                    depth - 1,
+                    visited,
+                )
+            });
     }
     if let Some(logical) = file.ast.logical_expressions.iter().find(|e| e.span == span) {
-        return mutation_target_is_distinct(file, logical.left, object, lookup, depth - 1, visited)
-            && mutation_target_is_distinct(
-                file,
-                logical.right,
-                object,
-                lookup,
-                depth - 1,
-                visited,
-            );
+        return mutation_target_projected(
+            file,
+            logical.left,
+            projection,
+            object,
+            lookup,
+            depth - 1,
+            visited,
+        ) && mutation_target_projected(
+            file,
+            logical.right,
+            projection,
+            object,
+            lookup,
+            depth - 1,
+            visited,
+        );
+    }
+    if let Some(choice) = file
+        .ast
+        .conditional_expressions
+        .iter()
+        .find(|e| e.span == span)
+    {
+        return mutation_target_projected(
+            file,
+            choice.consequent,
+            projection,
+            object,
+            lookup,
+            depth - 1,
+            visited,
+        ) && mutation_target_projected(
+            file,
+            choice.alternate,
+            projection,
+            object,
+            lookup,
+            depth - 1,
+            visited,
+        );
+    }
+    if let Some(member) = file.ast.members.iter().find(|m| m.span == span) {
+        let key = if file.ast.computed_members.contains(&span) {
+            file.ast
+                .literal_computed_members
+                .iter()
+                .find(|m| m.span == span)
+                .map(|m| m.key.to_string())
+        } else {
+            file.source_text(member.property).map(str::to_owned)
+        };
+        let Some(key) = key else {
+            return false;
+        };
+        let mut keys = vec![key];
+        keys.extend_from_slice(projection);
+        return mutation_target_projected(
+            file,
+            member.object,
+            &keys,
+            object,
+            lookup,
+            depth - 1,
+            visited,
+        );
+    }
+    if file.source_text(span) == Some("this") {
+        let Some(function) = file
+            .ast
+            .functions_body_containing(span)
+            .filter(|f| f.kind != ast::FunctionKind::Arrow)
+            .min_by_key(|f| f.span.end - f.span.start)
+        else {
+            return false;
+        };
+        return mutation_parameter_inputs(
+            file,
+            function,
+            None,
+            projection,
+            object,
+            lookup,
+            depth - 1,
+            visited,
+        );
     }
     if let Some(call) = file.ast.call_at(span) {
         // Object.assign returns the exact target. No other call is guessed.
         return mutation_builtin(file, call, lookup) == Some("assign")
             && call.arguments.first().is_some_and(|target| {
                 !target.spread
-                    && mutation_target_is_distinct(
+                    && mutation_target_projected(
                         file,
                         target.span,
+                        projection,
                         object,
                         lookup,
                         depth - 1,
@@ -2562,16 +2673,42 @@ fn mutation_target_is_distinct(
     if !exact_identifier(file, span) {
         return false;
     }
-    let Some(declaration) = file.ast.reference_declaration(span) else {
+    let declaration = file.ast.reference_declaration(span).unwrap_or(span);
+    if let Some((function, position, binding)) = file.ast.functions.iter().find_map(|f| {
+        f.parameters
+            .iter()
+            .enumerate()
+            .find(|(_, p)| p.names.iter().any(|n| n.span == declaration))
+            .map(|(i, p)| (f, i, p))
+    }) {
+        let Some(mut keys) = mutation_binding_projection(binding, declaration) else {
+            return false;
+        };
+        keys.extend_from_slice(projection);
+        return !crate::indexes::binding_written(file, declaration)
+            && mutation_parameter_inputs(
+                file,
+                function,
+                Some(position),
+                &keys,
+                object,
+                lookup,
+                depth - 1,
+                visited,
+            );
+    }
+    let Some(binding) = file
+        .ast
+        .bindings
+        .iter()
+        .find(|b| b.names.iter().any(|n| n.span == declaration))
+    else {
         return false;
     };
-    let Some(binding) = file.ast.bindings.iter().find(|b| {
-        b.shape == ast::BindingShape::Identifier
-            && b.names.len() == 1
-            && b.names[0].span == declaration
-    }) else {
+    let Some(mut keys) = mutation_binding_projection(binding, declaration) else {
         return false;
     };
+    keys.extend_from_slice(projection);
     if file.ast.identifiers.iter().any(|id| {
         id.role == ast::IdentifierRole::Reference
             && matches!(file.source_text(id.span), Some("eval" | "arguments"))
@@ -2582,6 +2719,11 @@ fn mutation_target_is_distinct(
     }) {
         return false;
     }
+    if !projection.is_empty()
+        && !mutation_holder_closed(file, declaration, projection[0].as_str(), false)
+    {
+        return false;
+    }
     if !visited.insert(declaration) {
         return true;
     }
@@ -2590,7 +2732,7 @@ fn mutation_target_is_distinct(
         target == declaration || file.ast.reference_declaration(target) == Some(declaration)
     };
     let initial = binding.initializer.is_none_or(|initial| {
-        mutation_target_is_distinct(file, initial, object, lookup, depth - 1, visited)
+        mutation_target_projected(file, initial, &keys, object, lookup, depth - 1, visited)
     });
     let writes = file
         .ast
@@ -2605,14 +2747,16 @@ fn mutation_target_is_distinct(
                 .iter()
                 .find(|a| a.target == *target && !a.reads_target)
                 .is_some_and(|assignment| {
-                    mutation_target_is_distinct(
-                        file,
-                        assignment.value_span,
-                        object,
-                        lookup,
-                        depth - 1,
-                        visited,
-                    )
+                    keys == projection
+                        && mutation_target_projected(
+                            file,
+                            assignment.value_span,
+                            projection,
+                            object,
+                            lookup,
+                            depth - 1,
+                            visited,
+                        )
                 })
         });
     let assignments = file
@@ -2622,9 +2766,11 @@ fn mutation_target_is_distinct(
         .filter(|a| refers(a.target))
         .all(|a| {
             !a.reads_target
-                && mutation_target_is_distinct(
+                && keys == projection
+                && mutation_target_projected(
                     file,
                     a.value_span,
+                    projection,
                     object,
                     lookup,
                     depth - 1,
@@ -2633,6 +2779,298 @@ fn mutation_target_is_distinct(
         });
     visited.remove(&declaration);
     initial && writes && assignments
+}
+
+fn mutation_binding_projection(
+    binding: &ast::BindingFact,
+    declaration: Span,
+) -> Option<Vec<String>> {
+    match binding.shape {
+        ast::BindingShape::Identifier
+            if binding.names.len() == 1 && binding.pattern == declaration =>
+        {
+            Some(vec![])
+        }
+        ast::BindingShape::Object
+            if binding.object_slots.len() == binding.names.len()
+                && binding.object_slots.iter().all(|s| s.plain_identifier_key) =>
+        {
+            binding
+                .object_slots
+                .iter()
+                .find(|s| s.local.span == declaration)
+                .map(|s| vec![s.property.to_string()])
+        }
+        ast::BindingShape::Array
+            if binding.array_slots.iter().flatten().count() == binding.names.len() =>
+        {
+            binding
+                .array_slots
+                .iter()
+                .position(|s| s.as_ref().is_some_and(|s| s.span == declaration))
+                .map(|i| vec![i.to_string()])
+        }
+        _ => None,
+    }
+}
+
+/// A holder projection needs more than its initializer: all exact references
+/// remain static member receivers, and no visible write can replace the slot.
+fn mutation_holder_closed(
+    file: &FileFacts,
+    declaration: Span,
+    key: &str,
+    method_identity: bool,
+) -> bool {
+    let targets = file
+        .ast
+        .write_targets
+        .iter()
+        .chain(&file.ast.deleted_targets)
+        .collect::<HashSet<_>>();
+    let Some(binding) = file
+        .ast
+        .bindings
+        .iter()
+        .find(|b| b.names.iter().any(|n| n.span == declaration))
+    else {
+        return false;
+    };
+    if let Some(literal) = binding.initializer.map(|s| file.ast.peel_ts_sugar_span(s))
+        && file.ast.object_get_shapes.iter().any(|s| s.span == literal)
+    {
+        let Some(this_uses) =
+            ast::this_expression_spans(std::path::Path::new(file.path.as_str()), &file.source)
+        else {
+            return false;
+        };
+        if !this_uses
+            .into_iter()
+            .filter(|s| literal.contains(*s))
+            .all(|s| {
+                let owner = file
+                    .ast
+                    .functions_body_containing(s)
+                    .filter(|f| f.kind != ast::FunctionKind::Arrow)
+                    .min_by_key(|f| f.span.end - f.span.start);
+                // A nested ordinary function has a different this channel. Its
+                // own mutation still faces the global exact-target gate.
+                if owner.is_some_and(|f| {
+                    !file
+                        .ast
+                        .object_properties
+                        .iter()
+                        .any(|p| literal.contains(p.span) && p.value == f.span)
+                }) {
+                    return true;
+                }
+                file.ast
+                    .members
+                    .iter()
+                    .find(|m| file.ast.peel_ts_sugar_span(m.object) == s)
+                    .is_some_and(|m| {
+                        (method_identity && targets.contains(&m.span)
+                            || !file.ast.computed_members.contains(&m.span))
+                            && !(targets.contains(&m.span)
+                                && file.source_text(m.property) == Some(key))
+                            && !file.ast.calls.iter().any(|c| c.callee == m.span)
+                            && (!method_identity
+                                || file.source_text(m.property) != Some(key)
+                                || targets.contains(&m.span))
+                    })
+            })
+        {
+            return false;
+        }
+    }
+    file.ast
+        .reference_declarations
+        .iter()
+        .filter(|(_, d)| *d == declaration)
+        .all(|(reference, _)| {
+            file.ast
+                .members
+                .iter()
+                .find(|m| file.ast.peel_ts_sugar_span(m.object) == *reference)
+                .is_some_and(|m| {
+                    !file.ast.computed_members.contains(&m.span)
+                        && !(targets.contains(&m.span) && file.source_text(m.property) == Some(key))
+                })
+        })
+        && !file.ast.calls.iter().any(|c| {
+            c.arguments.iter().any(|a| {
+                file.ast
+                    .reference_declaration(file.ast.peel_ts_sugar_span(a.span))
+                    == Some(declaration)
+            })
+        })
+}
+
+/// Join every invocation of a private, current source-local helper. An alias,
+/// export, unknown call, spread or default is an unknown input, never an empty
+/// set of receivers. call/apply require the actual library signature, and
+/// methods require one unchanged literal holder with a closed reference census.
+#[allow(clippy::too_many_arguments)]
+fn mutation_parameter_inputs(
+    file: &FileFacts,
+    function: &ast::FunctionFact,
+    position: Option<usize>,
+    projection: &[String],
+    object: &Location,
+    lookup: &SemanticLookup<'_>,
+    depth: usize,
+    visited: &mut HashSet<Span>,
+) -> bool {
+    if depth == 0
+        || function.rest_parameter
+        || !lookup.function_value_is_current(file, function)
+        || function.parameters.iter().any(|p| p.initializer.is_some())
+        || file.ast.identifiers.iter().any(|id| {
+            id.role == ast::IdentifierRole::Reference
+                && matches!(file.source_text(id.span), Some("eval" | "arguments"))
+        })
+    {
+        return false;
+    }
+    let name = crate::owners::function_binding_name(file, function);
+    let method = file
+        .ast
+        .object_properties
+        .iter()
+        .find(|p| !p.computed && !p.data && file.ast.peel_ts_sugar_span(p.value) == function.span)
+        .and_then(|property| {
+            let holder = file
+                .ast
+                .object_get_shapes
+                .iter()
+                .filter(|s| s.span.contains(property.span))
+                .min_by_key(|s| s.span.end - s.span.start)?;
+            let binding = file.ast.bindings.iter().find(|b| {
+                b.immutable
+                    && b.shape == ast::BindingShape::Identifier
+                    && b.initializer == Some(holder.span)
+            })?;
+            let name = binding.names.first()?;
+            let key = file.source_text(property.key)?;
+            mutation_holder_closed(file, name.span, key, true).then_some((name.span, key))
+        });
+    let Some(declaration) = method
+        .map(|(d, _)| d)
+        .or_else(|| name.as_ref().map(|n| n.span))
+    else {
+        return false;
+    };
+    if file.ast.exports.iter().any(|export| {
+        export.span.contains(function.span)
+            || file
+                .ast
+                .exported_bindings(export)
+                .any(|b| b.names.iter().any(|n| n.span == declaration))
+            || export
+                .specifiers
+                .iter()
+                .chain(&export.declarations)
+                .any(|s| {
+                    s.local.span == declaration
+                        || file.ast.reference_declaration(s.local.span) == Some(declaration)
+                })
+    }) {
+        return false;
+    }
+    let mut seen = false;
+    for (reference, _) in file
+        .ast
+        .reference_declarations
+        .iter()
+        .filter(|(_, d)| *d == declaration)
+    {
+        let direct = file
+            .ast
+            .calls
+            .iter()
+            .find(|c| file.ast.peel_ts_sugar_span(c.callee) == *reference);
+        let member = file.ast.members.iter().find(|m| {
+            file.ast.peel_ts_sugar_span(m.object) == *reference
+                && !file.ast.computed_members.contains(&m.span)
+        });
+        let call = direct.or_else(|| {
+            member.and_then(|m| {
+                file.ast
+                    .calls
+                    .iter()
+                    .find(|c| file.ast.peel_ts_sugar_span(c.callee) == m.span)
+            })
+        });
+        let Some(call) = call else {
+            // A method holder may also have ordinary data member reads. They
+            // are checked when that projected receiver is proved separately.
+            if method.is_some()
+                && member
+                    .is_some_and(|m| file.source_text(m.property) != method.map(|(_, key)| key))
+            {
+                continue;
+            }
+            return false;
+        };
+        if call.construct || call.arguments.iter().any(|a| a.spread) {
+            return false;
+        }
+        let mut offset = 0;
+        let mut apply = false;
+        let receiver = if let Some(member) = member {
+            let property = file.source_text(member.property);
+            if let Some((_, key)) = method {
+                if property != Some(key) {
+                    continue;
+                }
+                Some(member.object)
+            } else {
+                let Some(signature) =
+                    lookup.standard_library_declaration(file, call, typefacts::CallKind::Call)
+                else {
+                    return false;
+                };
+                if !matches!(
+                    signature.qualified_name.as_ref(),
+                    "Function.call"
+                        | "Function.apply"
+                        | "CallableFunction.call"
+                        | "CallableFunction.apply"
+                ) || std::path::Path::new(signature.source_file.as_ref())
+                    .file_name()
+                    .and_then(|p| p.to_str())
+                    != Some("lib.es5.d.ts")
+                    || !matches!(property, Some("call" | "apply"))
+                {
+                    return false;
+                }
+                offset = 1;
+                apply = property == Some("apply");
+                call.arguments.first().map(|a| a.span)
+            }
+        } else {
+            None
+        };
+        seen = true;
+        let input = match position {
+            None => receiver,
+            Some(index) if apply => call.arguments.get(1).and_then(|a| {
+                ast::literal_array_element(
+                    std::path::Path::new(file.path.as_str()),
+                    &file.source,
+                    file.ast.peel_ts_sugar_span(a.span),
+                    index,
+                )
+            }),
+            Some(index) => call.arguments.get(index + offset).map(|a| a.span),
+        };
+        if !input.is_some_and(|input| {
+            mutation_target_projected(file, input, projection, object, lookup, depth - 1, visited)
+        }) {
+            return false;
+        }
+    }
+    seen
 }
 
 /// Whether `span` is exactly one identifier, as opposed to an expression an
@@ -3051,6 +3489,110 @@ mod tests {
                 false,
             ),
             ("const location = {}; Object.assign(make(), input);", false),
+            (
+                "const location = {}; const other = function () {}; Object.assign(other, input);",
+                true,
+            ),
+            (
+                "const location = {}; const other = () => {}; Object.assign(other, input);",
+                true,
+            ),
+            (
+                "const location = {}; let other = () => {}; other = location; Object.assign(other, input);",
+                false,
+            ),
+            (
+                "const location = {}; Object.assign([{}, {}][\"01\"], input);",
+                false,
+            ),
+            (
+                "const location = {}; const holder = { patch() { Object.assign(this, input); } }; holder.patch();",
+                false,
+            ),
+            (
+                "const location = {}; const holder = { other: {}, patch() { Object.assign(this.other, input); } }; holder.patch();",
+                true,
+            ),
+            (
+                "const location = {}; const holder = { other: location, patch() { Object.assign(this.other, input); } }; holder.patch();",
+                false,
+            ),
+            (
+                "const location = {}; const holder = { other: {}, change() { this[key] = location; }, patch() { Object.assign(this.other, input); } }; holder.change(); holder.patch();",
+                false,
+            ),
+            (
+                "const location = {}; const holder = { patch() { Object.assign(this, input); } }; const borrowed = holder.patch; holder.patch();",
+                false,
+            ),
+            (
+                "const location = {}; const other = Math.random() ? {} : {}; Object.assign(other, input);",
+                true,
+            ),
+            (
+                "const location = {}; const other = Math.random() ? {} : location; Object.assign(other, input);",
+                false,
+            ),
+            (
+                "const location = {}; const other = {} && {}; Object.assign(other, input);",
+                true,
+            ),
+            (
+                "const location = {}; const other = {} && location; Object.assign(other, input);",
+                false,
+            ),
+            (
+                "const location = {}; const other = {} ?? {}; Object.assign(other, input);",
+                true,
+            ),
+            (
+                "const location = {}; const other = {} ?? location; Object.assign(other, input);",
+                false,
+            ),
+            (
+                "const location = {}; const [other] = [{}]; Object.assign(other, input);",
+                true,
+            ),
+            (
+                "const location = {}; const [other] = [location]; Object.assign(other, input);",
+                false,
+            ),
+            (
+                "const location = {}; const { other } = { other: {} }; Object.assign(other, input);",
+                true,
+            ),
+            (
+                "const location = {}; const { other } = { other: location }; Object.assign(other, input);",
+                false,
+            ),
+            (
+                "const location = {}; function patch({ other }) { Object.assign(other, input); } patch({ other: {} }); patch({ other: {} });",
+                true,
+            ),
+            (
+                "const location = {}; function patch({ other }) { Object.assign(other, input); } patch({ other: {} }); patch({ other: location });",
+                false,
+            ),
+            (
+                "const location = {}; function patch([other]) { Object.assign(other, input); } patch([{}]);",
+                true,
+            ),
+            (
+                "const location = {}; function patch([other]) { Object.assign(other, input); } patch([location]);",
+                false,
+            ),
+            (
+                "const location = {}; function patch(other) { Object.assign(other, input); } const escaped = patch; patch({});",
+                false,
+            ),
+            (
+                "const location = {}; const holder = { other: {} }; holder.other = location; Object.assign(holder.other, input);",
+                false,
+            ),
+            (
+                "const location = {}; const holder = { other: {} }; handoff(holder); Object.assign(holder.other, input);",
+                false,
+            ),
         ] {
             let file = file(source);
             let object = location(

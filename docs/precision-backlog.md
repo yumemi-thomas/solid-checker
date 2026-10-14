@@ -30661,3 +30661,59 @@ accepted external re-export (`@rigelbuild/solid-virtual` to
 Build tools and app-game have zero retained entries. The corpus's
 `experiments/sweep-sol-reexport2-reasons.json` records every exact edge and
 per-site delta; `sweep-sol-reexport2.json` holds the complete findings.
+
+## Package integrity review round 1 (2026-10-14, ADR 0300)
+
+Four P1 false-violation families were confirmed against published typings:
+mutable aliases reassigned to a location, logical/conditional receivers,
+object/array destructuring (including parameters), and call/method-bound
+this. A visible unselected JavaScript wrapper reproduces the same this
+failure. The old receiver may-derivation silently dropped unsupported
+targets and therefore failed open when certifying a package getter.
+
+The getter's stability proof now requires every visible computed write/delete
+and reflective wildcard to discharge its complete target, across selected
+package roots. Failure is SC9012. The distinct-target proof joins every local
+assignment and branch input, plain pattern projections, private helpers'
+closed invocation census, library-identified call/apply, and private literal
+method receivers. Object, array and function-expression allocations are
+fresh; a later assignment to the location defeats that discharge. A computed
+descriptor-map key also remains a wildcard rather than vanishing from the map.
+Ordinary callable transport retains its prior package scope.
+
+Nineteen focused fixtures pin the review cases and additional assignment,
+apply, array-parameter, escaped-helper, descriptor-map and fresh-allocation
+controls. The nine original review projects pass TypeScript 5.9.3 against
+their installed published rc.13/next.26 declarations and now report SC9012
+at the project reads. Existing sole-provider and unrelated-literal controls
+keep their violations. No existing snapshot is changed; the fresh-channels
+snapshot belongs to this new regression set.
+
+Remaining exact-target refusals include unresolved or exported inputs,
+cross-file/escaping helpers, defaults/rest/spreads, other call results,
+unknown global members, returned/escaping holders and reducer callback
+inputs. These are uncertifiable targets, not proof that nothing was touched.
+In particular the complete veto withdraws the known-true kui
+TopicsRoute.tsx:425:75 and donegeon WaitlistRoute.tsx:33:108 additions. The
+requested retention remains unmet. Kui's visible selected router includes
+globalThis._$HY.r deletion, a reducer's result write, match.params writes,
+and an Object.create-created scroll positions table; their complete target
+identities are not established by the current proof. No exemption or new
+premise was added to retain those findings.
+
+Verification: 380 IR library tests and 196 facts library tests pass. All
+nineteen fixtures pass TypeScript; the 318-project coverage comparison leaves
+every pre-existing snapshot unchanged. The new snapshots contain two SC1001
+violations, seventeen SC9012 obligations and the visible wrapper's existing
+SC1001 execution obligation. The 42-case ownership gate, workspace all-target
+Clippy, touched-crate all-target Clippy after the final implementation,
+formatting, diff, schema and dialect-manifest checks pass. Full make verify
+and the broader process/CLI suites are deferred to integration. No bundled
+contract, dialect manifest or checked-in binary changes.
+
+The final release browser sweep completes all 49 projects with zero errors:
+violations 565 → 562, uncertifiable 3,245 → 3,211. The only moved violations
+are kui's TopicsRoute site in shell and feature-topics, and donegeon's
+WaitlistRoute site; each becomes SC9012. No violation is added. Withdrawing
+getter transport also changes the uncertifiable finding set; this is a
+precision retreat, not evidence that the withdrawn reads are clean.

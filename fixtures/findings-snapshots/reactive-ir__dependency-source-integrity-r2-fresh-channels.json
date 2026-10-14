@@ -1,0 +1,15 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-fresh-channels/App.tsx",
+      "start": 1296,
+      "end": 1311,
+      "fixes": 0
+    }
+  ]
+}

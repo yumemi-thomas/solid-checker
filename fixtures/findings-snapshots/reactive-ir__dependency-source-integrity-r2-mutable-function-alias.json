@@ -1,0 +1,15 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-mutable-function-alias/App.tsx",
+      "start": 434,
+      "end": 449,
+      "fixes": 0
+    }
+  ]
+}
