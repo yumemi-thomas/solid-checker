@@ -120,6 +120,23 @@ gaps the phase 1 reviews kept finding. It is built in shadow mode, at least
 as strict as the allowlist, and then takes over consumers one at a time.
 The recall that phase 1 deferred comes from this fact.
 
+### P3 decisions (owner, 2026-10-14)
+
+Design: `rust/target/research/p3-package-boundary-design.md`. P3 is a pure
+refactor, five individually green commits, no finding moving:
+1. Recorded reasons do not emit new SC9005 findings; wording changes at P7.
+2. Every cause is kept internally; today's collapsed output stays until P7.
+3. Host extraction only; inference changes belong to P4.
+4. Demand selection of non-Solid packages lands only after its recall and
+   cost gate; P3 does not depend on it.
+5. No new refusal of patched installs or installs without integrity data.
+6. A workspace link in the analyzed program is project code, not unknown.
+7. `packageSummaries` and notes stay byte-identical through P3; P7 decides,
+   with a changelog.
+
+P3 starts after the P1b allowlist merges. It runs in parallel with ADR 0309
+once both agree on the shared analysis-input and `SemanticLookup` seam.
+
 ### 2. Host-free runs
 
 Host inference supplies a browser host where it is proven, without contract
