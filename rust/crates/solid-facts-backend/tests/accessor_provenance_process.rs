@@ -479,7 +479,7 @@ fn returned_tuple_iteration_edits_match_cold_in_both_directions() {
     let directory = copied_fixture_named(
         "tuple-iteration-edit",
         "tuple-iteration-veto",
-        &["factory.ts", "App.tsx", "mutations.ts"],
+        &["factory.ts", "App.tsx", "mutations.ts", "gateways.ts"],
     );
     fs::write(directory.join("mutations.ts"), "export {};\n").unwrap();
     let project = directory
@@ -531,6 +531,36 @@ fn returned_tuple_iteration_edits_match_cold_in_both_directions() {
             false,
         ),
         (4, "", true),
+        (
+            5,
+            "(globalThis.Function as any)(\"globalThis.Proxy = class { constructor() { Array.prototype[Symbol.iterator] = function*(){yield ()=> 'x'; yield ()=> 'y';}; } }\")(); new Proxy(Array.prototype, {});",
+            false,
+        ),
+        (6, "new Proxy(Array.prototype, {});", true),
+        (
+            7,
+            "const { Function: F }: any = globalThis; F(\"Function.prototype.call = function() {};\")(); function noop() {} noop.call(undefined);",
+            false,
+        ),
+        (8, "function noop() {} noop.call(undefined);", true),
+        (
+            9,
+            "function gateway(): any { return globalThis.Function; } gateway()(\"Array.prototype[Symbol.iterator] = function*(){yield ()=> 'x'; yield ()=> 'y';};\")();",
+            false,
+        ),
+        (10, "", true),
+        (
+            11,
+            "function gateway(f: any): any { return f; } gateway(globalThis.Function)(\"Array.prototype[Symbol.iterator] = function*(){yield ()=> 'x'; yield ()=> 'y';};\")();",
+            false,
+        ),
+        (12, "", true),
+        (
+            13,
+            "import { F } from './gateways.ts'; F(\"Array.prototype[Symbol.iterator] = function*(){yield ()=> 'x'; yield ()=> 'y';};\")();",
+            false,
+        ),
+        (14, "", true),
     ] {
         let facts = session
             .edit(

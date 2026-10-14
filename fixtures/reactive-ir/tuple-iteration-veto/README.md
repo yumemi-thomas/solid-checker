@@ -37,3 +37,12 @@ fixture's descriptor projection. With real rc.13 typings, that direct accessor
 shape has no row on either baseline or changed checker; the `TupleRead` closure
 is the published-typing false-positive regression. No stub signature is looser
 than rc.13 in a way that creates a finding.
+
+Round 3 retains erased global-member, static-computed, namespace-alias,
+destructured and function-constructor gateway possibilities. The minimized
+string replacement of global Proxy must remain SC9012. Source factories that
+return a gateway or mutator cannot discharge the returned callable by the
+factory's own declaration. Closed local methods named Function/eval/constructor
+and shadowed realm names remain controls; unknown members and reassigned
+gateway bindings withhold authority. Retained-session edits insert and remove
+gateways around intact Proxy and reflective-call controls in both directions.

@@ -123,6 +123,32 @@ The existing `ModuleHazardKind::Eval`, indirect eval's library declaration,
 and calls/constructions of the unshadowed `Function` constructor also veto:
 string code can write any intrinsic, even with only primitive arguments.
 
+The round-3 review exposed erased `globalThis.Function`/`globalThis.eval`
+members, destructured realm slots and function-value `.constructor` gateways.
+Transparent wrappers, source aliases (including selected imports), static
+computed keys, literal array slots and source factories returning those
+gateways retain their possible string execution. Conditional/logical arms,
+unsupported expression transports and unknown returned callable/receiver
+slots also withhold the absence premise rather than guessing their value.
+Unknown gateway members, cycles, reassigned bindings and exhausted alias
+budgets withhold authority; they never establish a proven mutation. A closed
+non-escaping source allocation with its own exact method body can discharge a
+same-spelled local slot. Realm names and nominal Function types alone grant no
+positive authority. A factory declaration cannot discharge an opaque returned
+callable's intrinsic argument handoff. Mutable-but-unwritten bindings and
+exact reassignments to source function literals do not alone imply a string
+gateway: their bodies remain in the census. A mutable/written factory's
+returned callable remains unknown; uninitialized bindings still census their
+assignments before any absence result.
+
+The same visible string-code census invalidates the Proxy replacement and
+invocation-operator absence guards. Library declaration identity does not
+establish current runtime Proxy/call/apply/bind/Reflect identity after visible
+string code. The minimized string replacement of Proxy therefore retains
+SC9012, while actual global Proxy and source reflective controls still retain
+SC1001 when that census is absent. The tuple proof digest already binds this
+veto; retained edits exercise insertion, removal and restoration across files.
+
 Known other string keys are unrelated to the engine's dense literal iteration:
 the literal owns indices and length, and iterator results own value/done.
 An exact unwritten local class prototype or a separate literal allocation

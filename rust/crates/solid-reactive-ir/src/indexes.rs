@@ -533,6 +533,7 @@ pub(super) struct SemanticLookup<'a> {
     result_access_forwarded: OnceLock<HashMap<&'a str, Vec<ResultAccessForwarded>>>,
     cross_file_proof_digest: OnceLock<Option<CrossFileProofDigest>>,
     tuple_iteration_veto: OnceLock<bool>,
+    string_code_veto: OnceLock<bool>,
     /// ADR 0277: `(path, function span, parameter index)` for each parameter
     /// a synchronous project function calls on its every-completion path.
     parameter_completion_calls: OnceLock<HashSet<(&'a str, Span, usize)>>,
@@ -690,6 +691,7 @@ impl<'a> SemanticLookup<'a> {
             result_access_forwarded: OnceLock::new(),
             cross_file_proof_digest: OnceLock::new(),
             tuple_iteration_veto: OnceLock::new(),
+            string_code_veto: OnceLock::new(),
             parameter_completion_calls: OnceLock::new(),
             never_returning_calls: OnceLock::new(),
             parameter_testing_functions: OnceLock::new(),
@@ -2042,6 +2044,15 @@ impl<'a> SemanticLookup<'a> {
         *self
             .tuple_iteration_veto
             .get_or_init(|| crate::interproc::accessor_provenance::tuple_iteration_write(self))
+    }
+
+    /// Facts are immutable for this lookup's lifetime. Proxy and invocation
+    /// guards consume the same project census as tuple identity, without
+    /// repeating it at every source-call site. A new generation has a new lock.
+    pub(super) fn visible_string_code(&self) -> bool {
+        *self
+            .string_code_veto
+            .get_or_init(|| crate::interproc::accessor_provenance::visible_string_code(self))
     }
 
     /// ADR 0292: whether `property` holding `function` is the `default` of a

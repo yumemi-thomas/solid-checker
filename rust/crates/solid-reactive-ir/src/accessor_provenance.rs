@@ -442,34 +442,10 @@ fn tuple_mutation_method<'a>(
 }
 
 pub(crate) fn tuple_iteration_write(lookup: &SemanticLookup<'_>) -> bool {
+    if lookup.visible_string_code() {
+        return true;
+    }
     lookup.files().iter().any(|file| {
-        if file
-            .ast
-            .module_hazards
-            .iter()
-            .any(|hazard| hazard.kind == ast::ModuleHazardKind::Eval)
-            || file
-                .ast
-                .calls
-                .iter()
-                .any(|call| string_code_reference(file, call.callee, 24))
-            || file
-                .ast
-                .calls
-                .iter()
-                .filter(|call| call.construct)
-                .any(|call| {
-                    lookup
-                        .standard_library_declaration(file, call, typefacts::CallKind::Construct)
-                        .is_some_and(|declaration| {
-                            declaration
-                                .qualified_name
-                                .starts_with("FunctionConstructor")
-                        })
-                })
-        {
-            return true;
-        }
         let targets = file
             .ast
             .write_targets
@@ -512,12 +488,15 @@ pub(crate) fn tuple_iteration_write(lookup: &SemanticLookup<'_>) -> bool {
                     && lookup
                         .standard_library_declaration(file, call, typefacts::CallKind::Call)
                         .is_none()
-                    && lookup
-                        .function_called_at(
-                            file.path.as_str(),
-                            file.ast.peel_ts_sugar_span(call.callee),
-                        )
-                        .is_none()
+                    // A factory's declaration does not describe the callable
+                    // it returns. Its object handoff needs its own census.
+                    && (file.ast.call_at(file.ast.peel_ts_sugar_span(call.callee)).is_some()
+                        || lookup
+                            .function_called_at(
+                                file.path.as_str(),
+                                file.ast.peel_ts_sugar_span(call.callee),
+                            )
+                            .is_none())
                     && call.arguments.first().is_some_and(|target| {
                         target.spread
                             || (!matches!(
@@ -586,36 +565,495 @@ pub(crate) fn tuple_iteration_write(lookup: &SemanticLookup<'_>) -> bool {
     })
 }
 
-/// Signature erasure does not hide a source-local immutable alias of the
-/// global string-code gateways. This retains possibility, not callee authority.
-fn string_code_reference(file: &FileFacts, span: Span, depth: usize) -> bool {
+/// This census withholds authority: it never proves that a gateway ran or
+/// mutated a particular property. Erased signatures cannot hide visible code
+/// construction, including source slots and returned gateway values.
+pub(crate) fn visible_string_code(lookup: &SemanticLookup<'_>) -> bool {
+    lookup.files().iter().any(|file| {
+        file.ast
+            .module_hazards
+            .iter()
+            .any(|hazard| hazard.kind == ast::ModuleHazardKind::Eval)
+            || file.ast.calls.iter().any(|call| {
+                string_code_reference(file, call.callee, lookup, 24, false)
+                    || tuple_mutation_method(file, call, lookup) == Some("stringCode")
+                    || (call.construct
+                        && lookup
+                            .standard_library_declaration(
+                                file,
+                                call,
+                                typefacts::CallKind::Construct,
+                            )
+                            .is_some_and(|declaration| {
+                                declaration
+                                    .qualified_name
+                                    .starts_with("FunctionConstructor")
+                            }))
+            })
+    })
+}
+
+fn string_code_reference(
+    file: &FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+    depth: usize,
+    returned_value: bool,
+) -> bool {
     if depth == 0 {
-        return false;
+        return true;
     }
     let span = file.ast.peel_ts_sugar_span(span);
+    if let Some(branch) = file
+        .ast
+        .conditional_expressions
+        .iter()
+        .find(|branch| branch.span == span)
+    {
+        return string_code_reference(file, branch.consequent, lookup, depth - 1, returned_value)
+            || string_code_reference(file, branch.alternate, lookup, depth - 1, returned_value);
+    }
+    if let Some(branch) = file
+        .ast
+        .logical_expressions
+        .iter()
+        .find(|branch| branch.span == span)
+    {
+        return string_code_reference(file, branch.left, lookup, depth - 1, returned_value)
+            || string_code_reference(file, branch.right, lookup, depth - 1, returned_value);
+    }
+    if let Some(member) = file.ast.members.iter().find(|member| member.span == span) {
+        return string_code_slot(
+            file,
+            member.object,
+            member_key(file, member),
+            lookup,
+            depth - 1,
+            false,
+        );
+    }
+    if let Some(call) = file.ast.call_at(span) {
+        if string_code_reference(file, call.callee, lookup, depth - 1, false) {
+            return true;
+        }
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        if gateway_binding(file, callee, lookup).is_some_and(|(origin, binding, declaration)| {
+            !binding.immutable || iteration_binding_written(origin, declaration)
+        }) || file
+            .ast
+            .reference_declaration(callee)
+            .is_some_and(|declaration| iteration_binding_written(file, declaration))
+        {
+            return true;
+        }
+        // Source implementation, not an identifier's nominal signature, owns
+        // the value returned by a visible gateway factory.
+        if let Some((origin, function)) =
+            lookup.function_called_at(file.path.as_str(), file.ast.peel_ts_sugar_span(call.callee))
+        {
+            return function
+                .expression_return
+                .as_ref()
+                .filter(|returned| {
+                    !matches!(
+                        returned.runtime_value_kind,
+                        ast::RuntimeValueKind::Primitive | ast::RuntimeValueKind::Nullish
+                    )
+                })
+                .and_then(|returned| returned.argument)
+                .into_iter()
+                .chain(
+                    origin
+                        .ast
+                        .returns
+                        .iter()
+                        .filter(|returned| {
+                            containing_ast_function(&origin.ast, returned.span)
+                                .is_some_and(|owner| owner.span == function.span)
+                        })
+                        .filter(|returned| {
+                            !matches!(
+                                returned.runtime_value_kind,
+                                ast::RuntimeValueKind::Primitive | ast::RuntimeValueKind::Nullish
+                            )
+                        })
+                        .filter_map(|returned| returned.argument),
+                )
+                .any(|returned| string_code_reference(origin, returned, lookup, depth - 1, true));
+        }
+        return string_code_reference(file, call.callee, lookup, depth - 1, returned_value);
+    }
     if !file
         .ast
         .identifiers
         .iter()
         .any(|identifier| identifier.span == span)
     {
+        // Unsupported expression transports (a sequence, for example) do
+        // not prove absence. Exact fresh functions/allocations are not code
+        // constructors; their bodies still participate in the call census.
+        return !file
+            .ast
+            .functions
+            .iter()
+            .any(|function| function.span == span)
+            && !file.ast.array_literals.contains(&span)
+            && !file
+                .ast
+                .object_get_shapes
+                .iter()
+                .any(|shape| shape.span == span);
+    }
+    let Some((file, binding, declaration)) = gateway_binding(file, span, lookup) else {
+        if file
+            .ast
+            .reference_declaration(span)
+            .is_some_and(|declaration| gateway_assignment(file, declaration, lookup, depth))
+        {
+            return true;
+        }
+        return matches!(file.source_text(span), Some("Function" | "eval"))
+            && file.ast.reference_declaration(span).is_none()
+            || (returned_value
+                && !file.ast.functions.iter().any(|function| {
+                    function
+                        .name
+                        .as_ref()
+                        .is_some_and(|name| Some(name.span) == file.ast.reference_declaration(span))
+                        && lookup.function_value_is_current(file, function)
+                }));
+    };
+    if gateway_assignment(file, declaration, lookup, depth) {
+        return true;
+    }
+    let Some(initializer) = binding.initializer else {
+        return returned_value;
+    };
+    if binding.shape == ast::BindingShape::Object {
+        return binding
+            .object_slots
+            .iter()
+            .find(|slot| slot.local.span == declaration)
+            .is_none_or(|slot| {
+                string_code_slot(
+                    file,
+                    initializer,
+                    Some(slot.property.as_str()),
+                    lookup,
+                    depth - 1,
+                    false,
+                )
+            });
+    }
+    if binding.shape == ast::BindingShape::Array
+        && file
+            .ast
+            .array_literals
+            .contains(&file.ast.peel_ts_sugar_span(initializer))
+    {
+        // No element identity is guessed. Any possible gateway in a literal
+        // withholds every selected callable slot until exact value flow exists.
+        return file
+            .ast
+            .identifiers
+            .iter()
+            .filter(|id| id.role == ast::IdentifierRole::Reference && initializer.contains(id.span))
+            .any(|id| string_code_reference(file, id.span, lookup, depth - 1, true))
+            || file
+                .ast
+                .members
+                .iter()
+                .filter(|member| initializer.contains(member.span))
+                .any(|member| string_code_reference(file, member.span, lookup, depth - 1, true));
+    }
+    if matches!(
+        binding.initializer_value_kind,
+        ast::RuntimeValueKind::Primitive | ast::RuntimeValueKind::Nullish
+    ) {
         return false;
     }
-    let Some(declaration) = file.ast.reference_declaration(span) else {
-        return matches!(file.source_text(span), Some("Function" | "eval"));
-    };
+    string_code_reference(file, initializer, lookup, depth - 1, returned_value)
+}
+
+fn gateway_assignment(
+    file: &FileFacts,
+    declaration: Span,
+    lookup: &SemanticLookup<'_>,
+    depth: usize,
+) -> bool {
+    iteration_binding_written(file, declaration)
+        && file
+            .ast
+            .write_targets
+            .iter()
+            .chain(&file.ast.deleted_targets)
+            .filter(|target| {
+                file.ast
+                    .reference_declaration(file.ast.peel_ts_sugar_span(**target))
+                    == Some(declaration)
+            })
+            .any(|target| {
+                file.ast
+                    .assignments
+                    .iter()
+                    .find(|assignment| assignment.target == *target && !assignment.reads_target)
+                    .is_none_or(|assignment| {
+                        assignment.value != ast::AssignmentValueKind::Function
+                            || string_code_reference(
+                                file,
+                                assignment.value_span,
+                                lookup,
+                                depth - 1,
+                                true,
+                            )
+                    })
+            })
+}
+
+fn gateway_binding<'a>(
+    file: &'a FileFacts,
+    span: Span,
+    lookup: &'a SemanticLookup<'_>,
+) -> Option<(&'a FileFacts, &'a ast::BindingFact, Span)> {
     file.ast
-        .bindings
-        .iter()
-        .find(|binding| {
-            binding.immutable
-                && binding.shape == ast::BindingShape::Identifier
-                && binding.names.len() == 1
-                && binding.names[0].span == declaration
-                && !iteration_binding_written(file, declaration)
+        .reference_declaration(span)
+        .and_then(|declaration| {
+            file.ast
+                .bindings
+                .iter()
+                .find(|binding| binding.names.iter().any(|name| name.span == declaration))
+                .map(|binding| (file, binding, declaration))
         })
-        .and_then(|binding| binding.initializer)
-        .is_some_and(|initializer| string_code_reference(file, initializer, depth - 1))
+        .or_else(|| {
+            let (origin, binding, symbol) =
+                lookup.binding_at_reference(file.path.as_str(), span)?;
+            let declaration = binding
+                .names
+                .iter()
+                .find(|name| lookup.entity_symbol(origin, name.span) == Some(symbol.as_str()))?
+                .span;
+            Some((origin, binding, declaration))
+        })
+}
+
+fn string_code_slot(
+    file: &FileFacts,
+    object: Span,
+    key: Option<&str>,
+    lookup: &SemanticLookup<'_>,
+    depth: usize,
+    returned_receiver: bool,
+) -> bool {
+    let possible_gateway_key = matches!(key, None | Some("Function" | "eval" | "constructor"));
+    // Only exact, current source implementations discharge these potentially
+    // executable slots. A Function/Proxy type is no runtime identity proof.
+    // A selected property declaration on a structural receiver is not enough.
+    // The receiver below must be a closed, non-escaping source allocation.
+    if depth == 0 {
+        return true;
+    }
+    let object = file.ast.peel_ts_sugar_span(object);
+    if let Some(branch) = file
+        .ast
+        .conditional_expressions
+        .iter()
+        .find(|branch| branch.span == object)
+    {
+        return string_code_slot(
+            file,
+            branch.consequent,
+            key,
+            lookup,
+            depth - 1,
+            returned_receiver,
+        ) || string_code_slot(
+            file,
+            branch.alternate,
+            key,
+            lookup,
+            depth - 1,
+            returned_receiver,
+        );
+    }
+    if let Some(branch) = file
+        .ast
+        .logical_expressions
+        .iter()
+        .find(|branch| branch.span == object)
+    {
+        return string_code_slot(file, branch.left, key, lookup, depth - 1, returned_receiver)
+            || string_code_slot(
+                file,
+                branch.right,
+                key,
+                lookup,
+                depth - 1,
+                returned_receiver,
+            );
+    }
+    if let Some(call) = file.ast.call_at(object)
+        && let Some((origin, function)) =
+            lookup.function_called_at(file.path.as_str(), file.ast.peel_ts_sugar_span(call.callee))
+    {
+        return function
+            .expression_return
+            .as_ref()
+            .filter(|returned| {
+                !matches!(
+                    returned.runtime_value_kind,
+                    ast::RuntimeValueKind::Primitive | ast::RuntimeValueKind::Nullish
+                )
+            })
+            .and_then(|returned| returned.argument)
+            .into_iter()
+            .chain(
+                origin
+                    .ast
+                    .returns
+                    .iter()
+                    .filter(|returned| {
+                        containing_ast_function(&origin.ast, returned.span)
+                            .is_some_and(|owner| owner.span == function.span)
+                    })
+                    .filter(|returned| {
+                        !matches!(
+                            returned.runtime_value_kind,
+                            ast::RuntimeValueKind::Primitive | ast::RuntimeValueKind::Nullish
+                        )
+                    })
+                    .filter_map(|returned| returned.argument),
+            )
+            .any(|returned| string_code_slot(origin, returned, key, lookup, depth - 1, true));
+    }
+    if let Some((file, binding, declaration)) = gateway_binding(file, object, lookup)
+        && binding.shape == ast::BindingShape::Identifier
+        && binding.immutable
+        && !iteration_binding_written(file, declaration)
+        && let Some(initializer) = binding.initializer
+    {
+        let possible =
+            string_code_slot(file, initializer, key, lookup, depth - 1, returned_receiver);
+        if possible || !possible_gateway_key {
+            return possible;
+        }
+        if file.ast.exports.iter().any(|export| {
+            export
+                .declarations
+                .iter()
+                .any(|value| value.local.span == declaration)
+                || export.specifiers.iter().any(|value| {
+                    file.ast.reference_declaration(value.local.span) == Some(declaration)
+                })
+        }) {
+            return true;
+        }
+        if !file
+            .ast
+            .reference_declarations
+            .iter()
+            .filter(|(_, bound)| *bound == declaration)
+            .all(|(reference, _)| {
+                file.ast.members.iter().any(|member| {
+                    file.ast.peel_ts_sugar_span(member.object) == *reference
+                        && !file.ast.write_targets.contains(&member.span)
+                        && !file.ast.deleted_targets.contains(&member.span)
+                }) || file.ast.bindings.iter().any(|binding| {
+                    binding.immutable
+                        && binding.shape == ast::BindingShape::Object
+                        && binding
+                            .initializer
+                            .map(|span| file.ast.peel_ts_sugar_span(span))
+                            == Some(*reference)
+                })
+            })
+        {
+            return true;
+        }
+        return false;
+    }
+    if let Some(key) = key
+        && let Some(shape) = file.ast.object_get_shapes.iter().find(|shape| {
+            shape.span == object
+                && shape.closed
+                && shape
+                    .properties
+                    .iter()
+                    .all(|property| property.getter.is_none())
+        })
+        && let Some(property) = file.ast.object_properties.iter().find(|property| {
+            object.contains(property.span)
+                && !property.computed
+                && file.source_text(property.key) == Some(key)
+                && !file.ast.object_get_shapes.iter().any(|nested| {
+                    nested.span != object
+                        && object.contains(nested.span)
+                        && nested.span.contains(property.span)
+                })
+        })
+        && shape.properties.iter().any(|property| property.key == key)
+    {
+        // A method body can expose/replace its slot through `this`, without a
+        // reference to the object binding. Refuse possible slot replacement
+        // before using an own source method as negative gateway evidence.
+        if lookup.files().iter().any(|candidate| {
+            candidate.ast.write_targets.iter().chain(&candidate.ast.deleted_targets).any(|target| {
+                candidate.ast.members.iter().any(|member| member.span == candidate.ast.peel_ts_sugar_span(*target)
+                    && member_key(candidate, member).is_none_or(|written| written == key || written == "__proto__"))
+            }) || candidate.ast.calls.iter().any(|call| {
+                tuple_mutation_method(candidate, call, lookup).is_some_and(|method| match method {
+                    "setPrototypeOf" => true,
+                    "assign" | "defineProperties" => call.arguments.iter().skip(1).any(|argument| {
+                        candidate.ast.object_get_shapes.iter().find(|shape| shape.span == candidate.ast.peel_ts_sugar_span(argument.span) && shape.closed)
+                            .is_none_or(|shape| shape.properties.iter().any(|property| property.key == key || property.key == "__proto__"))
+                    }),
+                    "set" | "defineProperty" | "deleteProperty" => call.arguments.get(1).is_none_or(|argument| {
+                        !matches!(&argument.literal_value, ast::ArgumentLiteralFact::String(written) if written.as_str() != key && written.as_str() != "__proto__")
+                    }),
+                    _ => false,
+                })
+            })
+        }) { return true; }
+        let Some(function) = file
+            .ast
+            .functions
+            .iter()
+            .find(|function| function.span == file.ast.peel_ts_sugar_span(property.value))
+        else {
+            if matches!(
+                property.value_kind,
+                ast::RuntimeValueKind::Primitive | ast::RuntimeValueKind::Nullish
+            ) {
+                return false;
+            }
+            return string_code_reference(file, property.value, lookup, depth - 1, true);
+        };
+        return function
+            .expression_return
+            .as_ref()
+            .and_then(|returned| returned.argument)
+            .into_iter()
+            .chain(
+                file.ast
+                    .returns
+                    .iter()
+                    .filter(|returned| {
+                        containing_ast_function(&file.ast, returned.span)
+                            .is_some_and(|owner| owner.span == function.span)
+                    })
+                    .filter(|returned| {
+                        !matches!(
+                            returned.runtime_value_kind,
+                            ast::RuntimeValueKind::Primitive | ast::RuntimeValueKind::Nullish
+                        )
+                    })
+                    .filter_map(|returned| returned.argument),
+            )
+            .any(|returned| string_code_reference(file, returned, lookup, depth - 1, true));
+    }
+    // Unknown member authority remains a possibility, including a function's
+    // inherited constructor and erased/aliased realm objects. No name grants
+    // positive authority and no unresolved value proves a mutation.
+    possible_gateway_key || returned_receiver
 }
 
 fn iteration_source_function(file: &FileFacts, span: Span, lookup: &SemanticLookup<'_>) -> bool {
@@ -687,6 +1125,9 @@ fn invocation_operator_is_exact(
 /// Reflect.apply, still selects the intrinsic invocation operator. Retain
 /// visible possible replacement, including writes onto a fresh function.
 fn invocation_property_write(lookup: &SemanticLookup<'_>) -> bool {
+    if lookup.visible_string_code() {
+        return true;
+    }
     let map = |file: &FileFacts, span: Span| {
         file.ast
             .object_get_shapes
@@ -752,7 +1193,10 @@ fn intrinsic_disjoint_proxy_creation(
     call: &ast::CallFact,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
-    if !call.construct || call.arguments.iter().any(|argument| argument.spread) {
+    if lookup.visible_string_code()
+        || !call.construct
+        || call.arguments.iter().any(|argument| argument.spread)
+    {
         return false;
     }
     let Some(declaration) =

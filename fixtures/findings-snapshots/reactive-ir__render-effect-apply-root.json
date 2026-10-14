@@ -214,20 +214,20 @@
       "start": 5568,
       "end": 5581,
       "fixes": 0,
-      "message": "reactive accessor \"applySource\" is read directly in createEffect apply callback, which does not track; the read sees the current value once and never updates when \"applySource\" changes",
+      "message": "reactive accessor \"source\" is read through applySource in effect apply callback, which does not track; the read sees the current value once and never updates when \"source\" changes",
       "hint": "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. Solid warns STRICT_READ_UNTRACKED here in dev."
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/render-effect-apply-root/App.tsx",
       "start": 5568,
-      "end": 5581,
+      "end": 5579,
       "fixes": 0,
-      "message": "reactive accessor \"source\" is read through applySource in effect apply callback, which does not track; the read sees the current value once and never updates when \"source\" changes",
-      "hint": "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. Solid warns STRICT_READ_UNTRACKED here in dev."
+      "message": "applySource runs where a reactive read would not be tracked, but its only evidence of reading reactive state is its declared type, a Solid source alias that a plain function or object also satisfies; no implementation, contract or source flow proves what it reads, so whether this is an untracked reactive read can be neither proven nor ruled out",
+      "hint": "Read it inside JSX, a createMemo, or an effect's compute function, or make its source visible to solid-checker: create it with a Solid primitive in the project, or pass one through a path the analysis follows (ADR 0294)."
     },
     {
       "rule": "strict-read-untracked",

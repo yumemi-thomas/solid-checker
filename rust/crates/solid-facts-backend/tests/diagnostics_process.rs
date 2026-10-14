@@ -86,6 +86,7 @@ fn returned_tuple_iteration_mutations_withdraw_only_the_proven_read() {
     for name in [
         "App.tsx",
         "factory.ts",
+        "gateways.ts",
         "tsconfig.json",
         "solid-js.d.ts",
         "node_modules/solid-js/package.json",

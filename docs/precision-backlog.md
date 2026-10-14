@@ -1,5 +1,45 @@
 # Precision backlog
 
+ADR 0282 round 3 (2026-10-14): the independent review found an inherited
+erased global-member string-code gap and a new false SC1001 restored by the
+round-2 Proxy exemption. Visible `globalThis.Function`/eval, static computed
+members, aliased/destructured realm slots, arbitrary function constructors and
+source-returned gateways now withdraw tuple authority. Selected source imports,
+conditional/logical and unsupported expression transports, literal array slots,
+and unresolved returned callable/receiver slots retain the same possibility.
+A visible string-code
+possibility also invalidates the Proxy and reflective-operator absence guards.
+The factory's declaration no longer discharges its opaque returned callable's
+intrinsic argument handoff. Closed source local methods and shadowed realm
+names remain controls; unresolved members, reassigned/cyclic aliases and the
+bounded traversal limit are conservative SC9012 possibilities, never proven
+mutations. Exact assignments to source function literals do not alone create
+a gateway, but a mutable/written factory's returned callable remains unknown;
+uninitialized bindings still census their visible assignments. The known
+unselected-package/setup boundary and partial full-app
+renderer recovery described below remain unchanged.
+
+Round-3 focused evidence: 104 isolated cases pass strict TypeScript 7.0.2
+against installed published rc.13 typings; 61 runtimes execute the same analyzed
+factory and mutations. The Proxy string replacement and erased gateways execute
+zero reads / `y` and now retain only SC9012 at the tuple consumer. Actual Proxy,
+source reflective calls and closed local same-spelled methods execute one read
+and retain SC1001. The independent scoped review confirms 33 finite probes and
+fresh authored-contract intact/mutated/restored transitions. This is finite
+supported-path evidence, not an exhaustive mutation census.
+
+The bounded absence model also withholds unknown returned callees/receivers,
+held tuple indices and unsupported expression transports in mixed fixtures.
+Five owned snapshots change: coverage remains 322 projects, with 2115 findings
+(round 2: 2112). Every withdrawn behavioral violation has SC9012 at the same
+consumer start; returned-store-source also loses one `prefer-show` suggestion.
+At render-effect-apply-root byte 5568 a propagated source-summary SC1001 remains
+alongside the newly withdrawn type-only SC9012; typed-accessor-roots byte 1749
+has the same overlap. Those scalar-accessor proof
+routes are a separate, unresolved proof-first follow-up, not a claim that R3
+eliminates every contradictory finding. No precision exemption or renderer
+recovery is added for this newly observed shape.
+
 ADR 0282 follow-up (2026-10-14): reflective invocation of possible/unresolved
 mutators and eval/Function string code now withdraw returned-tuple proofs.
 Authored contract returned-member effects, interprocedural projections,
