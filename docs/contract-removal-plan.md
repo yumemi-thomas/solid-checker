@@ -175,7 +175,8 @@ Each step lands green on its own. The inventory's section 5 has the details.
 | D1–D8 | Delete consumption (backend, IR), emission, certification and probes, the dialect's negative authority, the Type Facts certification protocol, historical ledgers and benchmarks, schemas and docs | large in total |
 
 These constraints are fixed:
-- P1b comes before P2.
+- P1b comes before P2, whose IR renames collide with it. P3–P5 are backend
+  work and run in parallel with P1b (owner, 2026-10-14).
 - P2–P6 come before P7.
 - P1's seed recycling comes before D3.
 - D6 comes after D4.
