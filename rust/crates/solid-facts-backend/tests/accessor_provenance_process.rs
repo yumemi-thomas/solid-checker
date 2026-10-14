@@ -474,6 +474,86 @@ fn context_intermediate_handoff_edits_match_cold_in_both_directions() {
 }
 
 #[test]
+fn returned_tuple_iteration_edits_match_cold_in_both_directions() {
+    let typefacts = env::var("SOLID_TYPEFACTS_BIN").expect("arm the real Type Facts process");
+    let directory = copied_fixture_named(
+        "tuple-iteration-edit",
+        "tuple-iteration-veto",
+        &["factory.ts", "App.tsx", "mutations.ts"],
+    );
+    fs::write(directory.join("mutations.ts"), "export {};\n").unwrap();
+    let project = directory
+        .join("tsconfig.json")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let mutation = directory
+        .join("mutations.ts")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let caller = directory
+        .join("App.tsx")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let typescript = TypeFactsSession::open(&typefacts, &project, &[]).unwrap();
+    let (mut session, _) =
+        NativeIncrementalSession::open_pipelined(dialect::default_dialect(), project, typescript)
+            .unwrap();
+    let vocabulary = dialect::default_dialect().vocabulary;
+    let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
+    let has_tuple_read = |program: &solid_reactive_ir::Program| {
+        program.reads.iter().any(|read| {
+            read.location.path.as_ref() == caller
+                && read.transported
+                && !read.summary_attributed
+                && read.execution == solid_reactive_ir::ExecutionRole::UntrackedRendering
+        })
+    };
+    let first = session.analyze().unwrap();
+    assert!(has_tuple_read(
+        &closed_warm(&mut incremental, &first, vocabulary).0
+    ));
+    for (version, source, reads) in [
+        (
+            1,
+            "(Array.prototype as any)[Symbol.iterator] = function* () { yield () => 'x'; yield () => 'y'; };",
+            false,
+        ),
+        (2, "(Array.prototype as any).zzz = () => 'x';", true),
+        (
+            3,
+            "const IP = Object.getPrototypeOf([][Symbol.iterator]()); IP.next = () => ({ value: () => 'x', done: false });",
+            false,
+        ),
+        (4, "", true),
+    ] {
+        let facts = session
+            .edit(
+                vec![SourceChange {
+                    path: mutation.clone(),
+                    version,
+                    source: Some(format!("{source}\nexport {{}};\n")),
+                    compiler_options: CompilerOptions::default(),
+                }],
+                None,
+            )
+            .unwrap();
+        assert!(session.last_build_timings().source_files_reused > 0);
+        let cold = closed_cold(&facts, vocabulary);
+        let warm = closed_warm(&mut incremental, &facts, vocabulary).0;
+        assert_eq!(has_tuple_read(&cold), reads, "edit {version}");
+        assert_eq!(warm, cold, "tuple iteration edit {version}");
+    }
+    drop(session);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn single_call_parameter_edits_match_cold_in_both_directions() {
     let typefacts = env::var("SOLID_TYPEFACTS_BIN").expect("arm the real Type Facts process");
     let directory = copied_fixture_named(

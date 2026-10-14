@@ -1,14 +1,14 @@
 {
-  "status": "violation",
+  "status": "uncertifiable",
   "findings": [
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/host-dead-return-wildcard/App.tsx",
-      "start": 361,
-      "end": 368,
+      "start": 381,
+      "end": 386,
       "fixes": 0
     }
   ]

@@ -532,6 +532,7 @@ pub(super) struct SemanticLookup<'a> {
     component_functions: OnceLock<HashSet<(&'a str, Span)>>,
     result_access_forwarded: OnceLock<HashMap<&'a str, Vec<ResultAccessForwarded>>>,
     cross_file_proof_digest: OnceLock<Option<CrossFileProofDigest>>,
+    tuple_iteration_veto: OnceLock<bool>,
     /// ADR 0277: `(path, function span, parameter index)` for each parameter
     /// a synchronous project function calls on its every-completion path.
     parameter_completion_calls: OnceLock<HashSet<(&'a str, Span, usize)>>,
@@ -688,6 +689,7 @@ impl<'a> SemanticLookup<'a> {
             component_functions: OnceLock::new(),
             result_access_forwarded: OnceLock::new(),
             cross_file_proof_digest: OnceLock::new(),
+            tuple_iteration_veto: OnceLock::new(),
             parameter_completion_calls: OnceLock::new(),
             never_returning_calls: OnceLock::new(),
             parameter_testing_functions: OnceLock::new(),
@@ -1310,6 +1312,27 @@ impl<'a> SemanticLookup<'a> {
             component_keys.sort_unstable();
             let mut hasher = Sha256::new();
             hasher.update(b"components\0");
+            // ADR 0282: a mutation in another file can withdraw the tuple
+            // callable edge without changing the consuming file's facts.
+            // Projects with no supported tuple result cannot consume this
+            // premise. Do not invalidate their unrelated object/source caches.
+            if self.files().iter().any(|file| {
+                file.ast.returns.iter().any(|returned| {
+                    returned.argument.is_some_and(|argument| {
+                        file.ast
+                            .array_literals
+                            .contains(&file.ast.peel_ts_sugar_span(argument))
+                    })
+                })
+            }) || self
+                .resolved_contracts
+                .direct_returns
+                .values()
+                .any(|returned| matches!(returned.kind.as_str(), "tuple" | "parameter"))
+            {
+                hasher.update(b"tuple-iteration-veto\0");
+                hasher.update([u8::from(self.tuple_iteration_may_be_mutated())]);
+            }
             // ADR 0302: a compute helper or source in another file decides an
             // apply's owner/execution edge. Bind each call's answer, including
             // named callbacks that also have independent invocations.
@@ -1994,6 +2017,12 @@ impl<'a> SemanticLookup<'a> {
 
     pub(super) fn files(&self) -> &'a [FileFacts] {
         &self.facts.files
+    }
+
+    pub(super) fn tuple_iteration_may_be_mutated(&self) -> bool {
+        *self
+            .tuple_iteration_veto
+            .get_or_init(|| crate::interproc::accessor_provenance::tuple_iteration_write(self))
     }
 
     /// ADR 0292: whether `property` holding `function` is the `default` of a

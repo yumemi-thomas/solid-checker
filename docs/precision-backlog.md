@@ -1,12 +1,23 @@
 # Precision backlog
 
-Prototype-write vetoes, open (2026-10-14; review of the parked
+Prototype-write vetoes, partially closed (2026-10-14; review of the parked
 `p1a-demand-nonsolid` commits, `/tmp/sc-scratch.noindex/p1/p1a-veto-review.md`).
-The base binary at `d9ed2224d` has a **false positive**: a project assignment
+The base binary at `d9ed2224d` had a **false positive**: a project assignment
 `Array.prototype[Symbol.iterator] = …` is not seen by ADR 0282's tuple veto, so
-returned-tuple destructuring still reports an SC1001 read that the replaced
-iterator never performs. Aliased prototypes, `%ArrayIteratorPrototype%.next`
-writes and `Object.setPrototypeOf` also certify on every binary, and ADR 0211's
+returned-tuple destructuring reported an SC1001 read that the replaced
+iterator never performs. The ADR 0282 amendment closes the returned-tuple
+iteration path: assignment, prototype aliases, exact reflective mutations,
+`%ArrayIteratorPrototype%.next`/`return`, prototype replacement and unresolved
+mutation receivers/keys withdraw closure proofs to SC9012 uncertifiable;
+typed-source and contracted tuple accessor bindings also refuse, retaining
+typed-source uncertifiable findings rather than direct-read violations. Exact
+separate local allocations/class prototypes and unrelated named keys retain
+the proven read. Fixture `tuple-iteration-veto` and its isolated process-test
+variants are tsc-clean against published rc.13; Node confirms iterator and
+iterator-next replacements execute zero signal reads. Opaque calls supplied
+a possible intrinsic receiver also veto when no exact source implementation
+or library signature resolves them. This remains a visible-veto premise;
+unseen runtime mutations are not exhaustively censused. ADR 0211's
 member dispatch does not veto `Object.assign` or `defineProperty` onto
 `Array.prototype.filter`. All reproducers are tsc-clean against rc.13 and
 contrived. The parked commit 6f103c891 scopes an unnamed package `X.prototype`
@@ -14,6 +25,17 @@ write to the package's own tuples, which is a false positive when `Array` or
 `Promise` is passed as `X`; it stays parked. 77aaa674c (ADR 0211) is held
 until its symbol check is limited to the fixed well-known names and the
 `setPrototypeOf` case vetoes. ADR 0309 decision 5 owns the general fix.
+
+Returned-tuple fix verification: 30 isolated mutation/control variants are
+tsc-clean against the published rc.13 triple. The IR library, focused process
+and incremental checks, contract corpus (123 fixtures), and full `make verify`
+pass. Both requested 49-project corpus sweeps add zero violations. Default
+mode moves 243/3239 to 241/3276 violations/uncertifiable; without bundled
+contracts, 238/3279 to 236/3316. The same two `createRAF` reads in app-game's
+Rapier component (index.tsx:80:5) and three renderer (renderer.tsx:32:3) become
+uncertifiable because unresolved mutation receivers cannot exclude the
+intrinsic iterator; 37 uncertifiable sites are added in each mode. This is
+intentional conservative withholding, not proof that those apps patch it.
 
 ADR 0302 (2026-10-14): deferred effect apply no longer proves an execution
 from its callback position alone. Literal `defer: true` with a dependency-free

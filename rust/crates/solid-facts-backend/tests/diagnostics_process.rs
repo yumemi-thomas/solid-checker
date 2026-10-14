@@ -8,6 +8,83 @@ mod dependency_daemon_process;
 use support::{assert_rule_findings, diagnostic_fixture, findings_for_rule};
 
 #[test]
+fn returned_tuple_iteration_mutations_withdraw_only_the_proven_read() {
+    use std::{fs, process::Command};
+    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let fixture = root.join("fixtures/reactive-ir/tuple-iteration-veto");
+    let scratch = std::env::temp_dir().join(format!(
+        "sc-scratch.noindex/tuple-iteration-{}",
+        std::process::id()
+    ));
+    for package in ["solid-js", "@solidjs/signals", "@solidjs/web"] {
+        fs::create_dir_all(scratch.join("node_modules").join(package)).unwrap();
+    }
+    for name in [
+        "App.tsx",
+        "factory.ts",
+        "tsconfig.json",
+        "solid-js.d.ts",
+        "node_modules/solid-js/package.json",
+        "node_modules/@solidjs/signals/package.json",
+        "node_modules/@solidjs/web/package.json",
+    ] {
+        fs::copy(fixture.join(name), scratch.join(name)).unwrap();
+    }
+    let cases: serde_json::Value =
+        serde_json::from_slice(&fs::read(fixture.join("cases.json")).unwrap()).unwrap();
+    for case in cases.as_array().unwrap() {
+        fs::write(
+            scratch.join("mutations.ts"),
+            format!("{}\nexport {{}};\n", case["source"].as_str().unwrap()),
+        )
+        .unwrap();
+        let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+            .env("SOLID_TYPEFACTS_BIN", &typefacts)
+            .env("SOLID_CHECKER_DAEMON", "0")
+            .args(["--format", "json", "--project"])
+            .arg(scratch.join("tsconfig.json"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}: {}",
+            case["name"],
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let snapshot: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        let rows = snapshot["findings"].as_array().unwrap();
+        let read = rows
+            .iter()
+            .filter(|row| {
+                row["primaryLocation"]["path"]
+                    .as_str()
+                    .is_some_and(|path| path.ends_with("App.tsx"))
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(read.len(), 2, "{}: {rows:#?}", case["name"]);
+        let (kind, code) = if case["veto"] == true {
+            ("uncertifiable", "SC9012")
+        } else {
+            ("violation", "SC1001")
+        };
+        assert_eq!(read[0]["kind"], kind, "{}: {read:#?}", case["name"]);
+        assert_eq!(read[0]["id"], code, "{}: {read:#?}", case["name"]);
+        assert_eq!(read[1]["kind"], kind, "{}: {read:#?}", case["name"]);
+        assert_eq!(read[1]["id"], code, "{}: {read:#?}", case["name"]);
+        assert!(
+            rows.iter()
+                .all(|row| row["kind"] != "violation" || !case["veto"].as_bool().unwrap()),
+            "{}: {rows:#?}",
+            case["name"]
+        );
+    }
+    fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn discovered_tsconfig_package_shadowing_cannot_create_guarded_violation() {
     use solid_facts_backend::fixture_authorization::{
         authorize_fixture_contract, read_fixture_contract_request,

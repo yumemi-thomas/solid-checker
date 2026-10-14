@@ -1187,6 +1187,9 @@ pub(crate) fn discover_file_sources(
                     }
                 }
                 "tuple" if binding.shape == solid_facts::ast::BindingShape::Array => {
+                    if lookup.tuple_iteration_may_be_mutated() {
+                        continue;
+                    }
                     for (name, returned) in binding
                         .array_slots
                         .iter()
@@ -2264,6 +2267,79 @@ pub(crate) fn discover_sources(
     let mut literal_member_slots =
         crate::literal_member_slots::LiteralMemberSlots::new(facts, semantic_lookup);
     let mut typed_sources = HashMap::<SymbolId, TypedSource>::new();
+    // A tuple contract describes the factory's result, not the values a
+    // replaced iterator hands the binding. Preserve those former source
+    // candidates even when the package's declared type is a plain function
+    // or object, so withdrawing the contract proof cannot certify silence.
+    if semantic_lookup.tuple_iteration_may_be_mutated() {
+        for file in &facts.files {
+            let ast_index = &project_indexes.ast_files_by_path[file.path.as_str()];
+            let context = EffectiveReturnContext {
+                file,
+                ast_index,
+                entities,
+                symbol_names,
+                resolved_contracts,
+                dialect: semantic_lookup.dialect,
+            };
+            for binding in file
+                .ast
+                .bindings
+                .iter()
+                .filter(|binding| binding.shape == solid_facts::ast::BindingShape::Array)
+            {
+                let Some(call) = binding
+                    .call_initializer
+                    .and_then(|span| ast_index.call_by_span(span))
+                else {
+                    continue;
+                };
+                let Some(contract) = entities
+                    .at(file.path.as_str(), call.callee)
+                    .and_then(|symbol| resolved_contracts.by_symbol.get(symbol))
+                else {
+                    continue;
+                };
+                let Some(returned) = contract
+                    .summary
+                    .returns
+                    .known()
+                    .and_then(Option::as_ref)
+                    .and_then(|returned| effective_call_return(returned, call, &context, 16))
+                    .filter(|returned| returned.kind == "tuple")
+                else {
+                    continue;
+                };
+                for (name, value) in binding
+                    .array_slots
+                    .iter()
+                    .zip(&returned.elements)
+                    .filter_map(|(name, value)| name.as_ref().zip(value.as_ref()))
+                {
+                    if crate::indexes::binding_written(file, name.span) {
+                        continue;
+                    }
+                    let kind = match value.kind.as_str() {
+                        "accessor" => ReactiveSourceKind::Accessor,
+                        "store-path" => ReactiveSourceKind::Store,
+                        _ => continue,
+                    };
+                    if let Some(symbol) = entities.at(file.path.as_str(), name.span) {
+                        typed_sources.insert(
+                            symbol.clone(),
+                            TypedSource {
+                                name: symbol_id(file.source_text(name.span).unwrap_or_default()),
+                                declaration: location(file.path.shared(), name.span),
+                                kind,
+                                implementation_visible: false,
+                                held_body_unfollowed: false,
+                            },
+                        );
+                    }
+                }
+            }
+        }
+    }
     for entity in facts.typescript.entities() {
         let Some(descriptor) = &entity.type_descriptor else {
             continue;
@@ -3167,6 +3243,12 @@ impl TypedValueJudge<'_, '_> {
         file: &FileFacts,
         declaration: solid_facts::core::Span,
     ) -> Option<SymbolId> {
+        // The same destructuring protocol as ADR 0282's closure slots. A
+        // declared accessor type cannot restore an identity the iterator may
+        // have replaced; retain the ordinary typed candidate instead.
+        if self.lookup.tuple_iteration_may_be_mutated() {
+            return None;
+        }
         let binding = file.ast.bindings.iter().find(|binding| {
             binding.shape == solid_facts::ast::BindingShape::Array
                 && binding

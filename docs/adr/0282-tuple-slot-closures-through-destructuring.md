@@ -89,6 +89,46 @@ write whose key no literal names is the one veto this slice can see.
   are untouched, so `cross_file_proof_digest` needs nothing new.
 - No fact, schema, wire or contract change.
 
+## Amendment: iteration mutation veto (2026-10-14)
+
+The original prototype-spelled reflective-target test missed shipped false
+positives: `Array.prototype[Symbol.iterator] = replacement` changes which
+closures destructuring binds. The review's `nsb` runtime yields harmless
+closures, so following the original slot's signal read was unsound.
+
+Returned-tuple identity now has its own visible iteration-mutation census.
+Normalized assignment/update/delete targets and exact library reflective
+mutations cover `@@iterator`, iterator `next` and early-close `return`, plus
+`__proto__`/`Object.setPrototypeOf`/`Reflect.setPrototypeOf`. Aliased
+`Array.prototype`, `%ArrayIteratorPrototype%` obtained by `getPrototypeOf`,
+unknown keys, unknown receivers, spread arguments and opaque descriptor/source
+maps veto. A library-signature mutation alias retains a possible mutation;
+it grants no runtime callee authority. A missing callee signature/implementation
+also vetoes when its supplied first argument may be an intrinsic receiver,
+including erased signatures. No target is classified by a `prototype` text search.
+
+Known other string keys are unrelated to the engine's dense literal iteration:
+the literal owns indices and length, and iterator results own value/done.
+An exact unwritten local class prototype or a separate literal allocation
+(including immutable local aliases) is disjoint and does not veto. Missing,
+imported, parameter-rooted, reassigned or cyclic identities never discharge a
+relevant mutation. This conservative project-wide veto is also global across
+analyzed dependency sources; this amendment does not change source selection.
+
+An otherwise supported tuple closure under this veto retains SC9012
+**uncertifiable**, replacing its SC1001 violation. No substitute implementation
+is followed. The companion typed-source array-slot proof and contracted tuple
+source binding also refuse: a declared Accessor type cannot restore the
+original slot. A direct accessor call retains its existing SC9012 typed-source
+uncertifiable finding. The cross-file proof digest binds the veto so a mutation in a
+different file invalidates the consuming proof. This remains a visible-veto
+premise, not an exhaustive mutation census of unseen runtime code.
+
+Fixture `tuple-iteration-veto` seeds the project assignment from the review.
+Its process test runs the positive and negative `cases.json` variants in
+isolated projects, since one global positive would veto every control tuple
+in a shared project. All variants are tsc-clean against published rc.13.
+
 ## Evidence
 
 - Fixture `reactive-ir/tuple-slot-provenance`: four proven `SC1001`s, one new

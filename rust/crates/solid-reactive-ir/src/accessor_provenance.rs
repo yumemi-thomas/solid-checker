@@ -24,6 +24,8 @@ pub(crate) enum Callable {
 
 enum Value {
     Callable(Callable),
+    /// A supported tuple closure whose iteration identity was withdrawn.
+    VetoedTuple,
     Object {
         path: String,
         span: Span,
@@ -82,12 +84,9 @@ pub(crate) struct MemberStability {
     /// creates. A write naming its member vetoes it everywhere (review
     /// round 1): the package may write it on an object the project handed it.
     dependencies: HashMap<String, MemberStability>,
-    /// ADR 0282, narrowed: a reflective write (`Object.assign`,
-    /// `defineProperty`, `Reflect.set`, ...) whose target is spelled through a
-    /// `prototype`, in any analyzed file. Destructuring runs
-    /// `Array.prototype[Symbol.iterator]`, and that is the one way a write
-    /// reaches a fresh returned array literal.
-    prototype_target: Option<Location>,
+    /// ADR 0282: a visible mutation that may change the array iteration
+    /// protocol. Unknown receivers/keys refuse; spelling is not identity.
+    tuple_iteration: bool,
 }
 
 pub(crate) enum Stability<'a> {
@@ -124,7 +123,6 @@ impl MemberStability {
 
     pub(crate) fn index(facts: &ProjectFacts, lookup: &SemanticLookup<'_>) -> Self {
         let mut project = Self::default();
-        let mut prototype_target = None;
         for file in &facts.files {
             let index = match facts.dependency_source_root(file.path.as_str()) {
                 Some(root) => project.dependencies.entry(root.to_owned()).or_default(),
@@ -136,9 +134,6 @@ impl MemberStability {
                     continue;
                 };
                 let site = location(file.path.shared(), call.span);
-                if targets_prototype(file, call) {
-                    prototype_target.get_or_insert_with(|| site.clone());
-                }
                 // A spread argument shifts every later position (a tuple can
                 // supply target, key and value at once), so no key position is
                 // known: it could write any member.
@@ -249,7 +244,7 @@ impl MemberStability {
                 project.written.entry(name).or_insert(site);
             }
         }
-        project.prototype_target = prototype_target;
+        project.tuple_iteration = lookup.tuple_iteration_may_be_mutated();
         project
     }
 
@@ -299,6 +294,209 @@ fn targets_prototype(file: &FileFacts, call: &ast::CallFact) -> bool {
             || file
                 .source_text(target.span)
                 .is_some_and(|text| text.contains("prototype"))
+    })
+}
+
+/// The engine's dense returned literal owns its indices and length, and the
+/// iterator result owns value/done. Iteration still Gets @@iterator, next and
+/// (on early close) return through mutable prototype chains. A __proto__ write
+/// or setPrototypeOf can change any of those lookups. Unknown keys may name
+/// these properties; a known different string cannot.
+fn iteration_key(key: Option<&str>) -> bool {
+    key.is_none_or(|key| matches!(key, "next" | "return" | "__proto__"))
+}
+
+fn member_key<'a>(file: &'a FileFacts, member: &ast::MemberFact) -> Option<&'a str> {
+    if file.ast.computed_members.contains(&member.span) {
+        file.ast
+            .literal_computed_members
+            .iter()
+            .find(|key| key.span == member.span)
+            .map(|key| key.key.as_str())
+    } else {
+        file.source_text(member.property)
+    }
+}
+
+/// A negative proof only: a separate source allocation cannot be one of the
+/// intrinsic prototypes, nor the fresh literal consumed directly at its return.
+/// Follow exact immutable local aliases. Parameters, calls (getPrototypeOf
+/// included), imports, reassigned bindings and cycles remain unknown.
+fn separate_iteration_target(file: &FileFacts, span: Span, depth: usize) -> bool {
+    if depth == 0 {
+        return false;
+    }
+    let span = file.ast.peel_ts_sugar_span(span);
+    if file.ast.array_literals.contains(&span)
+        || file
+            .ast
+            .functions
+            .iter()
+            .any(|function| function.span == span)
+        || file
+            .ast
+            .object_get_shapes
+            .iter()
+            .any(|shape| shape.span == span)
+    {
+        return true;
+    }
+    if let Some(member) = file.ast.members.iter().find(|member| member.span == span)
+        && member_key(file, member) == Some("prototype")
+        && let Some(declaration) = file
+            .ast
+            .reference_declaration(file.ast.peel_ts_sugar_span(member.object))
+        && file.ast.classes.iter().any(|class| {
+            class
+                .name
+                .as_ref()
+                .is_some_and(|name| name.span == declaration)
+        })
+        && !iteration_binding_written(file, declaration)
+    {
+        return true;
+    }
+    let Some(declaration) = file.ast.reference_declaration(span) else {
+        return false;
+    };
+    file.ast
+        .bindings
+        .iter()
+        .find(|binding| {
+            binding.immutable
+                && binding.shape == ast::BindingShape::Identifier
+                && binding.names.len() == 1
+                && binding.names[0].span == declaration
+                && !iteration_binding_written(file, declaration)
+        })
+        .and_then(|binding| binding.initializer)
+        .is_some_and(|initializer| separate_iteration_target(file, initializer, depth - 1))
+}
+
+fn iteration_binding_written(file: &FileFacts, declaration: Span) -> bool {
+    file.ast
+        .write_targets
+        .iter()
+        .chain(&file.ast.deleted_targets)
+        .any(|target| {
+            file.ast
+                .reference_declaration(file.ast.peel_ts_sugar_span(*target))
+                == Some(declaration)
+        })
+}
+
+fn iteration_map(file: &FileFacts, span: Span) -> bool {
+    let span = file.ast.peel_ts_sugar_span(span);
+    let Some(shape) = file
+        .ast
+        .object_get_shapes
+        .iter()
+        .find(|shape| shape.span == span && shape.closed)
+    else {
+        return true;
+    };
+    // closed excludes spreads and unnamed computed keys. Do not accidentally
+    // treat a symbol descriptor (which has no string key) as an empty map.
+    shape
+        .properties
+        .iter()
+        .any(|property| iteration_key(Some(property.key.as_str())))
+}
+
+fn tuple_mutation_method<'a>(
+    file: &FileFacts,
+    call: &ast::CallFact,
+    lookup: &'a SemanticLookup<'_>,
+) -> Option<&'a str> {
+    // A library signature on an alias is insufficient to certify the runtime
+    // callee, but is sufficient to retain a possible mutation as a veto.
+    let declaration = lookup.standard_library_declaration(file, call, typefacts::CallKind::Call)?;
+    let (method, library) = match declaration.qualified_name.as_ref() {
+        "ObjectConstructor.assign" => ("assign", "lib.es2015.core.d.ts"),
+        "ObjectConstructor.defineProperty" => ("defineProperty", "lib.es5.d.ts"),
+        "ObjectConstructor.defineProperties" => ("defineProperties", "lib.es5.d.ts"),
+        "ObjectConstructor.setPrototypeOf" => ("setPrototypeOf", "lib.es2015.core.d.ts"),
+        "Reflect.set" => ("set", "lib.es2015.reflect.d.ts"),
+        "Reflect.defineProperty" => ("defineProperty", "lib.es2015.reflect.d.ts"),
+        "Reflect.deleteProperty" => ("deleteProperty", "lib.es2015.reflect.d.ts"),
+        "Reflect.setPrototypeOf" => ("setPrototypeOf", "lib.es2015.reflect.d.ts"),
+        _ => return None,
+    };
+    (std::path::Path::new(declaration.source_file.as_ref())
+        .file_name()?
+        .to_str()?
+        == library)
+        .then_some(method)
+}
+
+pub(crate) fn tuple_iteration_write(lookup: &SemanticLookup<'_>) -> bool {
+    lookup.files().iter().any(|file| {
+        let targets = file
+            .ast
+            .write_targets
+            .iter()
+            .chain(&file.ast.deleted_targets)
+            .map(|span| file.ast.peel_ts_sugar_span(*span))
+            .collect::<HashSet<_>>();
+        file.ast.members.iter().any(|member| {
+            targets.contains(&member.span)
+                && iteration_key(member_key(file, member))
+                && !separate_iteration_target(file, member.object, 24)
+        }) || file.ast.calls.iter().any(|call| {
+            let Some(method) = tuple_mutation_method(file, call, lookup) else {
+                // Missing callee evidence must not turn an opaque mutation
+                // helper into a negative census. A supplied receiver that may
+                // be an intrinsic retains the veto. Source implementations
+                // are covered by the same project-wide write census; exact
+                // non-mutating library signatures are outside this catalog.
+                return lookup
+                    .standard_library_declaration(file, call, typefacts::CallKind::Call)
+                    .is_none()
+                    && lookup
+                        .function_called_at(
+                            file.path.as_str(),
+                            file.ast.peel_ts_sugar_span(call.callee),
+                        )
+                        .is_none()
+                    && call.arguments.first().is_some_and(|target| {
+                        target.spread
+                            || (!matches!(
+                                target.runtime_value_kind,
+                                ast::RuntimeValueKind::Primitive
+                                    | ast::RuntimeValueKind::Nullish
+                                    | ast::RuntimeValueKind::Function
+                            ) && !separate_iteration_target(file, target.span, 24))
+                    });
+            };
+            if call.arguments.iter().any(|argument| argument.spread) {
+                return true;
+            }
+            let Some(target) = call.arguments.first() else {
+                return true;
+            };
+            if separate_iteration_target(file, target.span, 24) {
+                return false;
+            }
+            match method {
+                "setPrototypeOf" => true,
+                "assign" => call
+                    .arguments
+                    .iter()
+                    .skip(1)
+                    .any(|argument| iteration_map(file, argument.span)),
+                "defineProperties" => call
+                    .arguments
+                    .get(1)
+                    .is_none_or(|argument| iteration_map(file, argument.span)),
+                _ => iteration_key(call.arguments.get(1).and_then(|argument| {
+                    match &argument.literal_value {
+                        ast::ArgumentLiteralFact::String(key) => Some(key.as_ref()),
+                        ast::ArgumentLiteralFact::Integer(_) => Some("0"),
+                        _ => None,
+                    }
+                })),
+            }
+        })
     })
 }
 
@@ -1169,6 +1367,9 @@ impl Resolver<'_, '_> {
                         Some(Value::Callable(target)) => {
                             calls.insert(location(call_file.path.shared(), call.callee), target);
                         }
+                        Some(Value::VetoedTuple) => {
+                            unavailable.insert(location(call_file.path.shared(), call.callee));
+                        }
                         _ => {}
                     }
                 }
@@ -1428,7 +1629,7 @@ impl Resolver<'_, '_> {
                 Value::Object { .. } => uses.is_none_or(|uses| !uses.object_escaped),
                 Value::Array { .. } => uses.is_none_or(|uses| !uses.array_escaped),
                 // ADR 0282: a handed-off tuple is a held array, not a fresh one.
-                Value::Callable(_) | Value::Tuple { .. } => false,
+                Value::Callable(_) | Value::Tuple { .. } | Value::VetoedTuple => false,
             };
             if !closed {
                 return None;
@@ -1741,16 +1942,7 @@ impl Resolver<'_, '_> {
     ) -> Option<Value> {
         // `declaration` is a span of `file`; a binding another file holds
         // cannot be paired with it by position.
-        if bound_file.path != file.path
-            || !simple_array_binding(binding)
-            // Destructuring runs `Array.prototype[Symbol.iterator]`. Like ADR
-            // 0273's members, its stability is a premise, vetoed by a visible
-            // reflective write through a prototype. Any other wildcard write
-            // cannot reach the array: it is a literal created at the return
-            // and destructured by the call's own binding, so nothing else
-            // ever holds it (ADR 0288 review).
-            || self.member_stability.prototype_target.is_some()
-        {
+        if bound_file.path != file.path || !simple_array_binding(binding) {
             return None;
         }
         let index = binding
@@ -1760,7 +1952,16 @@ impl Resolver<'_, '_> {
         // The initializer is the call itself, so the array is the call's
         // fresh result: `const [, start] = t` destructures a held tuple.
         let initializer = bound_file.ast.peel_ts_sugar_span(binding.initializer?);
-        bound_file.ast.call_at(initializer)?;
+        let call = bound_file.ast.call_at(initializer)?;
+        if self.member_stability.tuple_iteration
+            && self
+                .lookup
+                .contract_return_at_call(bound_file, call)
+                .is_some_and(|(returned, _, _)| returned.kind == "tuple")
+        {
+            *transported = true;
+            return Some(Value::VetoedTuple);
+        }
         let Value::Tuple {
             path,
             factory,
@@ -1780,6 +1981,12 @@ impl Resolver<'_, '_> {
             element,
             self.lookup,
         )?;
+        // Retain the transported-call obligation after establishing this is
+        // a tuple closure. A mutation withdraws its identity, never certifies
+        // silence or substitutes another violating implementation.
+        if self.member_stability.tuple_iteration {
+            return Some(Value::VetoedTuple);
+        }
         Some(Value::Callable(Callable::Function { path, span }))
     }
 
@@ -3422,6 +3629,58 @@ mod tests {
                 matches!(index.state("rows"), Stability::Assumed),
                 "{source}"
             );
+        }
+    }
+
+    #[test]
+    fn tuple_iteration_negative_targets_require_exact_separate_allocations() {
+        for (source, separate) in [
+            ("class Foo {} Foo.prototype.next = f;", true),
+            ("class Foo {} const FP = Foo.prototype; FP.next = f;", true),
+            (
+                "class Foo {} const FP = Foo.prototype; (FP as any).next = f;",
+                true,
+            ),
+            ("const other = () => {}; other.next = f;", true),
+            (
+                "const other = {}; const alias = other; alias.next = f;",
+                true,
+            ),
+            ("const other = []; other.next = f;", true),
+            ("const AP = Array.prototype; AP.next = f;", false),
+            (
+                "const IP = Object.getPrototypeOf([][Symbol.iterator]()); IP.next = f;",
+                false,
+            ),
+            ("function patch(target) { target.next = f; }", false),
+            ("class Foo {} Foo = Array; Foo.prototype.next = f;", false),
+            (
+                "let other = {}; other = Array.prototype; other.next = f;",
+                false,
+            ),
+            ("const a = b; const b = a; a.next = f;", false),
+        ] {
+            let file = file(source);
+            let member = file
+                .ast
+                .members
+                .iter()
+                .find(|member| {
+                    file.ast.write_targets.contains(&member.span)
+                        && member_key(&file, member) == Some("next")
+                })
+                .unwrap();
+            assert_eq!(
+                separate_iteration_target(&file, member.object, 24),
+                separate,
+                "{source}"
+            );
+        }
+        for key in [None, Some("next"), Some("return"), Some("__proto__")] {
+            assert!(iteration_key(key));
+        }
+        for key in ["bar", "filter", "length", "0", "prototype", "iterator"] {
+            assert!(!iteration_key(Some(key)), "{key}");
         }
     }
 

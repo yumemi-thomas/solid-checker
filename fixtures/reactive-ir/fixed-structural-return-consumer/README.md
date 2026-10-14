@@ -1,5 +1,11 @@
 # Fixed structural return consumer controls
 
+ADR 0282 amendment: this project includes an opaque `replace(result)` handoff.
+Its receiver cannot be excluded from the intrinsic prototype set, so the tuple
+source calls are SC9012 uncertifiable. The object controls retain their original
+findings. Withdrawing tuple identity retains a source candidate even when the
+declared package type is a plain `() => number`.
+
 ADR 0172 consumer controls over the stable tuple/object constructors. The
 fixture issuer supplies exact whole-parameter carrier contracts. It does not
 claim runtime census coverage of a published primitives package.
