@@ -1259,7 +1259,7 @@ fn direct_protocol_parameters(
     nodes: &[SummaryNode],
     nodes_by_path: &HashMap<String, Vec<usize>>,
 ) -> DirectProtocolUses {
-    use crate::contract_semantics::InvokeProtocol;
+    use crate::summary_semantics::InvokeProtocol;
     let ast = &file.ast;
     let Some(indices) = nodes_by_path.get(file.path.as_str()) else {
         return DirectProtocolUses::default();
@@ -1465,7 +1465,7 @@ fn direct_protocol_parameters(
 struct DirectProtocolUses {
     /// `(owner, protocol, parameter index)`: item A's `get` and `coerce`
     /// uses, and the iterations that forbid describing an enumeration whole.
-    protocols: Vec<(Span, crate::contract_semantics::InvokeProtocol, usize)>,
+    protocols: Vec<(Span, crate::summary_semantics::InvokeProtocol, usize)>,
     /// `(callee member span, owner, parameter index, path)`: item B's calls
     /// of a literal-keyed member of the parameter's own value.
     member_calls: Vec<(Span, Span, usize, Vec<String>)>,
@@ -1614,7 +1614,7 @@ fn discover_interprocedural_graph(
                     clears_tracking: false,
                     arguments: callback_argument_contracts(file, call, symbols.entities, accessors),
                     owner: None,
-                    protocol: crate::contract_semantics::InvokeProtocol::Call,
+                    protocol: crate::summary_semantics::InvokeProtocol::Call,
                     path: path.clone(),
                 },
             ));
@@ -2129,7 +2129,7 @@ fn discover_interprocedural_graph(
                             accessors,
                         ),
                         owner: owned.then(|| "created".into()),
-                        protocol: crate::contract_semantics::InvokeProtocol::Call,
+                        protocol: crate::summary_semantics::InvokeProtocol::Call,
                         path: Vec::new(),
                     },
                 ));
@@ -2675,7 +2675,7 @@ fn discover_interprocedural_graph(
                             clears_tracking: detaches,
                             arguments: Vec::new(),
                             owner: owned.then(|| "created".into()),
-                            protocol: crate::contract_semantics::InvokeProtocol::Call,
+                            protocol: crate::summary_semantics::InvokeProtocol::Call,
                             path: Vec::new(),
                         },
                     ));
@@ -2809,7 +2809,7 @@ fn discover_interprocedural_graph(
                                 clears_tracking: runtime_behavior.runs_on_fresh_stack(),
                                 arguments: Vec::new(),
                                 owner: None,
-                                protocol: crate::contract_semantics::InvokeProtocol::Call,
+                                protocol: crate::summary_semantics::InvokeProtocol::Call,
                                 path: Vec::new(),
                             },
                         ));
@@ -5532,7 +5532,7 @@ struct InterproceduralGraphAssembly<'a> {
     invoked_parameters: &'a mut [Vec<usize>],
     direct_callback_parameters: &'a mut [Vec<usize>],
     guaranteed_callback_parameters: &'a mut [Vec<usize>],
-    direct_protocol_parameters: &'a mut [Vec<(crate::contract_semantics::InvokeProtocol, usize)>],
+    direct_protocol_parameters: &'a mut [Vec<(crate::summary_semantics::InvokeProtocol, usize)>],
     direct_member_callback_parameters: &'a mut [Vec<(usize, Vec<String>)>],
     escaped_parameters: &'a mut [Vec<usize>],
     invoked_parameter_members: &'a mut [Vec<ParameterMemberInvocation>],
@@ -8364,7 +8364,7 @@ fn interprocedural_reads(
     let mut direct_callback_parameters = vec![Vec::<usize>::new(); nodes.len()];
     let mut guaranteed_callback_parameters = vec![Vec::<usize>::new(); nodes.len()];
     let mut direct_protocol_parameters =
-        vec![Vec::<(crate::contract_semantics::InvokeProtocol, usize)>::new(); nodes.len()];
+        vec![Vec::<(crate::summary_semantics::InvokeProtocol, usize)>::new(); nodes.len()];
     let mut direct_member_callback_parameters =
         vec![Vec::<(usize, Vec<String>)>::new(); nodes.len()];
     let mut escaped_parameters = vec![Vec::<usize>::new(); nodes.len()];
@@ -9653,7 +9653,7 @@ mod tests {
             clears_tracking: false,
             arguments: Vec::new(),
             owner: None,
-            protocol: crate::contract_semantics::InvokeProtocol::Call,
+            protocol: crate::summary_semantics::InvokeProtocol::Call,
             path: Vec::new(),
         };
         let repeated = [callback(0, "deferred"), callback(0, "deferred")];
@@ -9674,7 +9674,7 @@ mod tests {
             clears_tracking: false,
             arguments: Vec::new(),
             owner: Some("inherited".into()),
-            protocol: crate::contract_semantics::InvokeProtocol::Call,
+            protocol: crate::summary_semantics::InvokeProtocol::Call,
             path: Vec::new(),
         };
         let leaf = ContractCallback {
@@ -10059,7 +10059,7 @@ mod tests {
             clears_tracking,
             arguments: Vec::new(),
             owner: None,
-            protocol: crate::contract_semantics::InvokeProtocol::Call,
+            protocol: crate::summary_semantics::InvokeProtocol::Call,
             path: Vec::new(),
         };
         let clearing = row("inline", true);

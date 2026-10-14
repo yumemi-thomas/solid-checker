@@ -3571,3 +3571,52 @@ fn callback_results_refuse_recursive_producers_and_wildcard_paths() {
             .is_err()
     );
 }
+
+// The contract-side spelling and bounds of the protocol vocabulary, pinned with
+// literals so they survive the protocol's definition moving modules.
+#[test]
+fn invoke_protocol_wire_names_and_enumeration_bounds_are_fixed() {
+    let wire = [
+        (InvokeProtocol::Call, "call"),
+        (InvokeProtocol::Get, "get"),
+        (InvokeProtocol::Iterate, "iterate"),
+        (InvokeProtocol::Coerce, "coerce"),
+        (InvokeProtocol::HasInstance, "has-instance"),
+        (
+            InvokeProtocol::GetEnumerableStringValues,
+            "get-enumerable-string-values",
+        ),
+        (
+            InvokeProtocol::GetOwnEnumerableValues,
+            "get-own-enumerable-values",
+        ),
+    ];
+    for (protocol, name) in wire {
+        assert_eq!(protocol.wire_name(), name);
+    }
+    for protocol in [
+        InvokeProtocol::Call,
+        InvokeProtocol::Get,
+        InvokeProtocol::Iterate,
+        InvokeProtocol::Coerce,
+        InvokeProtocol::HasInstance,
+    ] {
+        assert_eq!(protocol.enumeration_cardinality(), None);
+    }
+    assert_eq!(
+        InvokeProtocol::GetEnumerableStringValues.enumeration_cardinality(),
+        Some(Cardinality {
+            scope: Some(CardinalityScope::Call),
+            min: Some(1),
+            max: Some(UpperBound::Finite(1)),
+        })
+    );
+    assert_eq!(
+        InvokeProtocol::GetOwnEnumerableValues.enumeration_cardinality(),
+        Some(Cardinality {
+            scope: Some(CardinalityScope::Call),
+            min: Some(0),
+            max: Some(UpperBound::Finite(1)),
+        })
+    );
+}

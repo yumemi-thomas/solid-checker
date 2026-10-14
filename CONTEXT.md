@@ -105,6 +105,10 @@ _Avoid_: Certified Solid runtime, bundled core receipt, trusted package name
 The rich, wire-independent semantic representation produced by the single contract decoder and normalizer. Reactive IR consumes this model and never compact-document omission, summary, closure-array, or schema-version conventions.
 _Avoid_: Expanded JSON, decoded schema, contract AST
 
+**Export summary**:
+The ordinary analysis's description of one export: reads, returned shape, callbacks, owner requirements. It is produced from project or dependency source and, until contract consumption is removed, also projected from accepted contracts. Its callback and returned-shape rows are shared summary vocabulary (`summary_semantics`: `CallbackSummary`, `ReturnSummary`, `InvokeProtocol`, `CallbackSchedule`), not contract-owned; the whole summary is not yet contract-free, because its current carrier `ContractExport` still mixes ordinary fields with contract-only state, and `ReturnSummary` keeps one receipt-projected prototype recipe.
+_Avoid_: Contract summary (the carrier's current name, not what the data is), package summary (the `packageSummaries` output)
+
 **Artifact case**:
 One exact package-entrypoint resolution outcome, including its resolution trace, runtime artifact, declarations, and dependency closure. Artifact cases are selected exclusively and never merged.
 _Avoid_: Environment, mode, variant

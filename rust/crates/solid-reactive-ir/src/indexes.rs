@@ -5085,7 +5085,7 @@ mod tests {
                     arguments: vec![],
                     owner: None,
                     clears_tracking: false,
-                    protocol: crate::contract_semantics::InvokeProtocol::Call,
+                    protocol: crate::summary_semantics::InvokeProtocol::Call,
                     path: vec![],
                 }]),
                 vec![],

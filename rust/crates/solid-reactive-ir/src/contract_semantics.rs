@@ -20,8 +20,10 @@ pub use consumer::{
     AcceptedContractIndex, AcceptedContractInput, AcceptedContractUse, AcceptedImportIdentity,
     AcceptedSemanticIdentity, CallSiteFacts, FiniteFact, InstantiatedClaim, InstantiatedExport,
     OpenDomainDiagnostic, OpenDomainReason, PropertyFact, SemanticQueryError,
-    UncertifiableImportReason, enumeration_get_is_guaranteed, native_claim_precedence,
+    UncertifiableImportReason, native_claim_precedence,
 };
+
+pub use crate::summary_semantics::{InvokeProtocol, enumeration_get_is_guaranteed};
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -1851,37 +1853,8 @@ pub enum Schedule {
     External,
 }
 
-/// Which protocol of the caller's value an `invoke` operation runs.
-///
-/// A call is the historical meaning of every `invoke`, and stays the one
-/// spelled by absence: [`Operation::protocol`] is `None` for it, and a decoded
-/// `call` normalizes to `None`, so the model has one meaning for it. The other
-/// four are the non-call invocations of caller-supplied code `semantic-model.md`
-/// § callbacks names: a property read that may run a getter or a proxy trap
-/// (`Get`), the iteration protocol (`Iterate`), ToPrimitive (`Coerce`), and
-/// `Symbol.hasInstance` (`HasInstance`). Two explicit value enumerations
-/// additionally distinguish which property values are obtained; their entry
-/// bounds never establish every getter's execution. Each runs whatever the caller's value
-/// carries, at the call, on the caller's stack, in the caller's tracking
-/// context. Historical argument protocol items are always
-/// `ambient-at-execution`. A catalogued callback-result use states its exact
-/// execution point, owner and tracking independently of the producer.
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub enum InvokeProtocol {
-    Call,
-    Get,
-    Iterate,
-    Coerce,
-    HasInstance,
-    /// One for-in value-copy enumeration entered on every call. Own keys
-    /// precede inherited enumerable string keys. This does not guarantee
-    /// reaching a key after an earlier getter throws or mutates the object.
-    GetEnumerableStringValues,
-    /// At most one CopyDataProperties occurrence, after an unproved prefix.
-    /// Own enumerable strings and symbols participate; inherited keys do not.
-    GetOwnEnumerableValues,
-}
-
+/// The contract wire spelling and schema cardinality of the shared
+/// [`InvokeProtocol`], which [`crate::summary_semantics`] defines.
 impl InvokeProtocol {
     /// The wire spelling (`has-instance`, kebab-case).
     #[must_use]
@@ -1895,14 +1868,6 @@ impl InvokeProtocol {
             Self::GetEnumerableStringValues => "get-enumerable-string-values",
             Self::GetOwnEnumerableValues => "get-own-enumerable-values",
         }
-    }
-
-    #[must_use]
-    pub const fn is_value_enumeration(self) -> bool {
-        matches!(
-            self,
-            Self::GetEnumerableStringValues | Self::GetOwnEnumerableValues
-        )
     }
 
     /// Fixed occurrence bounds of the two deliberately narrow initial forms.

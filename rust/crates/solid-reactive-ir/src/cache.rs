@@ -219,7 +219,7 @@ pub(crate) struct InterproceduralGraphContribution {
     /// owner's body (item A of ways-to-improve § 3.3): the proposal input the
     /// generator describes as a non-call `callbacks` item. Never evidence.
     pub(crate) direct_protocol_parameters:
-        Vec<(Span, crate::contract_semantics::InvokeProtocol, usize)>,
+        Vec<(Span, crate::summary_semantics::InvokeProtocol, usize)>,
     /// `(owner, parameter index, member path)` for a call of a literal-keyed
     /// member of a parameter's own unwritten binding written directly in the
     /// owner's body -- `handler[0](…)` (item B of ways-to-improve § 3.3): the

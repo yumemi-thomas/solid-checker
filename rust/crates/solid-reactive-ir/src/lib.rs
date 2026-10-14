@@ -35,6 +35,7 @@ mod server_rules;
 mod source_discovery;
 mod static_api;
 mod static_rules;
+pub mod summary_semantics;
 mod symbols;
 mod timings;
 mod upstream_compat;
@@ -1820,102 +1821,12 @@ impl ContractReadContext {
     }
 }
 
-/// When a `tracked` callback row runs, relative to the export returning.
-///
-/// `execution: "tracked"` is an *attribution* word: it says the runtime
-/// subscribes the callback's reads, and says nothing about whether the export
-/// has already run it. `inline` and `deferred` carry their schedule in the word
-/// itself; `tracked` cannot, because 1.x `createMemo` runs its compute during
-/// the creating call while 1.x `createEffect` queues it, and 2.0 disagrees with
-/// 1.x on `createEffect`. The schedule is
-/// [`solid_dialect::Dialect::tracked_callback_timing`]'s to answer, and it is
-/// carried here rather than re-derived from the word — a consumer that reads
-/// "queued" out of "tracked" publishes a promise the runtime breaks, which is
-/// what `mergeProps` and `createMemo` rows did before this field existed.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CallbackSchedule {
-    /// The callback has run by the time the export returns.
-    SameStack,
-    /// The export queued it; it has not run when the export returns.
-    Queued,
-    /// The runtime hands it to an external scheduler.
-    External,
-    /// The dialect states no timing for this slot, so no schedule word is
-    /// honest. The emitted operation carries no execution point at all rather
-    /// than a guessed one.
-    Unestablished,
-    /// ADR 0139, and only on a `deferred` row: the export keeps the callable
-    /// only in the value it returns (for a construction, the instance), and
-    /// it runs later, on the stack of code that invokes it through that value.
-    /// The row is a deferred invocation in every pass that models one; the
-    /// variant exists so an accepted contract's `result-access` item projects
-    /// back, and is re-emitted, as exactly that item.
-    ResultAccess,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ContractCallback {
-    pub parameter: usize,
-    pub execution: String,
-    /// The schedule of a `tracked` row, where the producer established one.
-    /// `None` is a producer that did not compute a schedule for this row and
-    /// leaves the consumer's historical default in place; it is meaningless
-    /// for `inline` and for `deferred`, whose word already carries the
-    /// schedule -- except [`CallbackSchedule::ResultAccess`], which only a
-    /// `deferred` row carries and which names ADR 0139's retention event.
-    pub schedule: Option<CallbackSchedule>,
-    /// Runtime arguments supplied when this callback is invoked. `null`
-    /// preserves an unmodeled ordinary value at that position; a structured
-    /// descriptor uses the same bounded accessor/store/tuple/object vocabulary
-    /// as exported returns.
-    pub arguments: Vec<Option<ContractReturn>>,
-    /// The owner context in which the runtime invokes this callback. Missing
-    /// means the package contract describes timing only; consumers must keep
-    /// the existing fail-closed owner behavior for that callback.
-    pub owner: Option<String>,
-    /// Whether the callback is proven to run with no listener of the caller's
-    /// current, defined per execution word. `true` publishes
-    /// `tracking: "untracked"`; `false` publishes `ambient-at-execution`, which
-    /// claims nothing about the listener and is the fail-closed answer.
-    ///
-    /// - `inline`: a `Detaching` wrapper (`untrack`, `createRoot`,
-    ///   `runWithOwner`, a package row that states the same) stands between the
-    ///   export and the callback. A bare `fn()` does not clear:
-    ///   `@solid-primitives/utils`' `access` is `typeof v === "function" ? v() : v`
-    ///   and its row once said `untracked` like `untrack`'s did.
-    /// - `deferred`: the deferral is proven to run the callback on a fresh stack
-    ///   or with the listener cleared -- a reviewed host queue
-    ///   (`runtime_semantics::FRESH_STACK_SCHEDULERS`), a dialect deferred slot
-    ///   the dialect states untracked, a clearing wrapper *inside* the deferral,
-    ///   or a dependency's row that states one. "Runs after the export returns"
-    ///   is not that proof: a returned closure (`safe`, `pipe`), a bound
-    ///   function and an event listener all run on their caller's stack, inside
-    ///   whatever computation that caller is in.
-    /// - `tracked`: always `false`. The word is the attribution claim, and a
-    ///   clearing wrapper outside a tracking one cannot undo its subscription.
-    ///
-    /// A bool rather than an enum because the state space is exactly
-    /// (word x proven-or-not): no consumer distinguishes *why* a clearing was
-    /// proven, and the one invalid pair, `tracked` with `true`, is excluded at
-    /// both constructors -- the chain composition and
-    /// [`ContractCallback::clears_tracking_from`].
-    pub clears_tracking: bool,
-    /// Which protocol of the caller's value this row invokes. `Call` is every
-    /// row an analysis pass writes; the others arrive only from an accepted
-    /// contract's non-call `invoke` items (a property read, iteration,
-    /// coercion or `hasInstance` of the argument), and the generator's own
-    /// derivation of them, and they are **not** inline invocations of a
-    /// callable: no consumer pass may read one as a call of the argument. See
-    /// [`ContractCallback::is_invocation`].
-    pub protocol: contract_semantics::InvokeProtocol,
-    /// The member of the argument at [`Self::parameter`] this row invokes,
-    /// outwards from the argument: empty for the argument itself, `["0"]` for
-    /// `handler[0](…)` (item B of ways-to-improve § 3.3). A row with a path is
-    /// a call of *that member*, never of the argument: see
-    /// [`ContractCallback::invokes_argument`] and
-    /// [`ContractCallback::invokes_member`].
-    pub path: Vec<String>,
-}
+/// The callback and return summary vocabulary lives in [`summary_semantics`]; the
+/// old contract-prefixed spellings stay as aliases until the last reader
+/// migrates (no later than the contract-consumption removal, D2).
+pub use summary_semantics::{CallbackSchedule, CallbackSummary, ReturnSummary};
+pub type ContractCallback = CallbackSummary;
+pub type ContractReturn = ReturnSummary;
 
 impl ContractCallback {
     /// The clearing bit a contract operation's tracking word states for a row
@@ -1926,53 +1837,6 @@ impl ContractCallback {
     pub fn clears_tracking_from(execution: &str, tracking: contract_semantics::Tracking) -> bool {
         matches!(execution, "inline" | "deferred")
             && tracking == contract_semantics::Tracking::Untracked
-    }
-
-    /// Whether this row is an invocation of the argument *as a callable* --
-    /// the only kind of row an interprocedural or owner pass models.
-    ///
-    /// A non-call row is kept in [`ContractExport::callbacks`] so a closed
-    /// enumeration stays closed and re-emission republishes it; every pass
-    /// that reads rows to build edges, invoked parameters, wrappers, owner
-    /// edges or accessor arguments filters on this first. A property read or
-    /// coercion of the caller's value runs that value's own traps at the call,
-    /// on the caller's stack, in the caller's tracking context -- what the
-    /// value's author wrote -- and today such a use of a non-callable argument
-    /// raises no obligation at all, so ignoring the row loses nothing the
-    /// consumer modelled.
-    #[must_use]
-    pub fn is_invocation(&self) -> bool {
-        self.protocol == contract_semantics::InvokeProtocol::Call
-    }
-
-    /// Whether this row is ADR 0139's `result-access` item: a `deferred`
-    /// invocation of a callable the export keeps only in the value it
-    /// returns. Every pass that models invocations reads it as the deferred
-    /// row it is; only projection and re-emission ask.
-    #[must_use]
-    pub fn is_result_access(&self) -> bool {
-        self.execution == "deferred" && self.schedule == Some(CallbackSchedule::ResultAccess)
-    }
-
-    /// Whether this row calls the argument at [`Self::parameter`] itself: an
-    /// invocation with an empty path. Every pass that reads a row as "the
-    /// value passed here is called" -- a call-graph edge to the argument, an
-    /// invoked parameter, a wrapper, an owner edge, an execution role for the
-    /// argument -- asks this, not [`Self::is_invocation`]: a member-path row
-    /// calls a member of the argument, and reading it as a call of the
-    /// argument would fold `callHandler(e, handlerProp)` as a call of
-    /// `handlerProp`.
-    #[must_use]
-    pub fn invokes_argument(&self) -> bool {
-        self.is_invocation() && self.path.is_empty()
-    }
-
-    /// Whether this row calls a member of the argument, at [`Self::path`]
-    /// (item B of ways-to-improve § 3.3). A consumer folds such a row only
-    /// when the argument written at the slot resolves that member exactly.
-    #[must_use]
-    pub fn invokes_member(&self) -> bool {
-        self.is_invocation() && !self.path.is_empty()
     }
 }
 
@@ -2011,18 +1875,6 @@ pub struct ContractOwnerRequirement {
     /// each call (`owners::owner_requirement_at_call`, ADR 0223). Missing
     /// argument facts and unsupported guard axes retain a possible requirement.
     pub guard: Option<crate::contract_semantics::Guard>,
-}
-
-#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize)]
-pub struct ContractReturn {
-    pub kind: String,
-    pub label: String,
-    pub parameter: Option<usize>,
-    pub elements: Vec<Option<ContractReturn>>,
-    pub properties: BTreeMap<String, ContractReturn>,
-    /// Receipt-projected recipe only. Generation never proposes this shape.
-    #[serde(skip)]
-    pub prototype: Option<crate::contract_semantics::PrototypeInstanceRecipe>,
 }
 
 impl PackageContract {

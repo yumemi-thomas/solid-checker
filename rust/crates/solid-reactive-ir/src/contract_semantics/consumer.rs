@@ -1848,50 +1848,6 @@ fn evaluate_guard_with(
     }
 }
 
-/// Whether a `for…in` value copy is guaranteed to Get one getter.
-///
-/// A preceding accessor that throws is an abrupt completion, which the
-/// statically-present-code premise puts out of scope (owner decision
-/// 2026-10-13, ADR 0274). A preceding accessor that may delete a later key or
-/// replace its descriptor still breaks the guarantee: it is counted in
-/// `preceding_mutation_hazards`. `receiver_exact` must come from a
-/// descriptor-aware, non-escaped allocation proof, not a TypeScript object
-/// type. Methods held as data are never called by this use.
-#[must_use]
-pub fn enumeration_get_is_guaranteed(
-    protocol: InvokeProtocol,
-    receiver_exact: bool,
-    preceding_mutation_hazards: usize,
-) -> bool {
-    protocol == InvokeProtocol::GetEnumerableStringValues
-        && receiver_exact
-        && preceding_mutation_hazards == 0
-}
-
-#[cfg(test)]
-mod enumeration_tests {
-    use super::*;
-
-    #[test]
-    fn getter_strength_requires_receiver_and_a_hazard_free_prefix() {
-        let protocol = InvokeProtocol::GetEnumerableStringValues;
-        assert!(enumeration_get_is_guaranteed(protocol, true, 0));
-        assert!(!enumeration_get_is_guaranteed(protocol, false, 0));
-        assert!(!enumeration_get_is_guaranteed(protocol, true, 1));
-        assert!(!enumeration_get_is_guaranteed(
-            InvokeProtocol::GetOwnEnumerableValues,
-            true,
-            0
-        ));
-        assert!(!enumeration_get_is_guaranteed(InvokeProtocol::Get, true, 0));
-        assert!(!enumeration_get_is_guaranteed(
-            InvokeProtocol::Call,
-            true,
-            0
-        ));
-    }
-}
-
 fn knowledge_from<T>(items: Vec<T>, complete: bool) -> KnowledgeSet<T> {
     if complete {
         KnowledgeSet::Complete(items)

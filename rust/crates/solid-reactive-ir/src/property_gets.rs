@@ -166,7 +166,7 @@ pub(super) fn reads(
             // Obtaining a function/method value never executes that body.
             continue;
         };
-        let occurrence_guaranteed = crate::contract_semantics::enumeration_get_is_guaranteed(
+        let occurrence_guaranteed = crate::summary_semantics::enumeration_get_is_guaranteed(
             callback.protocol,
             true,
             preceding_mutation_hazards,

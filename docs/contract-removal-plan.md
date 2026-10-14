@@ -246,6 +246,35 @@ These constraints are fixed:
 - P1's seed recycling comes before D3.
 - D6 comes after D4.
 
+### P2 status
+
+P2 is not complete; only its first slice, the shared callback and return
+summary vocabulary (`summary_semantics`: `InvokeProtocol`,
+`enumeration_get_is_guaranteed`, `CallbackSchedule`, `CallbackSummary`,
+`ReturnSummary`), has moved. It is a pure move with the old spellings kept as
+aliases and re-exports, so a rebase onto any held branch needs no rename.
+Recorded for the remaining P2 slices:
+
+- the ordinary export summary (`ContractExport`, `ContractClaim`,
+  `ContractReactiveRead`, `ContractOwnerRequirement`) mixes ordinary fields
+  with contract-only ones (`capture_sources`, `captured_arguments`,
+  `event_handler_props`, `open_claims`, `leaf_forbidden_operations`,
+  `callback_results`, `*_closed_empty`); it needs field pruning, not a rename,
+  and the ordinary owner requirements must survive it;
+- `own_returns` is a pure AST helper with ordinary readers and belongs with a
+  returns-walk or facts-side slice;
+- the contract-side `wire_name` and `enumeration_cardinality`, the
+  `ReturnSummary::prototype` edge to `PrototypeInstanceRecipe` and
+  `prototype_instance.rs`, the escape/stability helpers and the return-kind
+  constants stay while contract emission or consumption exists. The
+  contract-removal inventory allocates the prototype model to D3 while this
+  slice's design placed it at D2; the disposition is compile-driven, not an
+  unconditional deletion at D2;
+- the `ContractCallback` / `ContractReturn` aliases and the
+  `contract_semantics::InvokeProtocol` re-export stay through the rollback
+  release and leave when their last reader migrates (a count ratchet:
+  `rg -w "ContractCallback|ContractReturn"` must not grow).
+
 ## Risks
 
 - Every new source path needs review rounds; so far each round has found
