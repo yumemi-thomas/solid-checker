@@ -3562,6 +3562,9 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     // The producer reads the generated program's bytes from a scratch file
     // and opens them at the logical path beside the project's tsconfig.
     let mut program_config: Option<String> = None;
+    // Preparation's decisions, which the package boundary attaches to the
+    // imports they were about.
+    let mut source_refusals = Vec::new();
     let (dependency_sources, _generated) = match &dependency_host {
         None => (None, None),
         Some(host) => {
@@ -3578,9 +3581,10 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 &mut configured,
             )?;
             drop(configured);
-            for note in &notes {
+            for note in &notes.lines {
                 eprintln!("{note}");
             }
+            source_refusals = notes.refusals;
             match prepared? {
                 None => (None, None),
                 Some(program) => match program.write_for_process() {
@@ -4193,7 +4197,9 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         } else {
             project.parent().unwrap_or_else(|| Path::new("."))
         };
-        let requirements = external_package_contract_requirements(directory, &facts);
+        let mut boundary =
+            solid_facts_backend::external_package_boundary(directory, &facts, &source_refusals);
+        let requirements = solid_facts_backend::requirement_index(&boundary);
         let trust = (!request.receipt_trust_configuration.is_empty())
             .then(|| {
                 read_policy2_trust_configuration(Path::new(&request.receipt_trust_configuration))
@@ -4287,23 +4293,29 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                     &mut facts,
                     program,
                     &mut contracts,
+                    &mut boundary,
+                    &source_refusals,
                     dialect,
                 );
-                for note in notes {
+                for note in notes.lines {
                     eprintln!("{note}");
                 }
                 contracts.without_packages(&selected)
             }
             None => contracts,
         };
-        let (analysis, diagnostic_timings) = analyze_project_accepted_measured_with_enablement(
-            dialect,
-            Path::new(&facts.project_id),
-            &request.sources,
-            &facts,
-            &contracts,
-            requested_enablement,
-        )?;
+        let (analysis, diagnostic_timings) =
+            solid_facts_backend::analyze_project_inputs_measured_with_enablement(
+                dialect,
+                Path::new(&facts.project_id),
+                &request.sources,
+                &facts,
+                solid_reactive_ir::AnalysisInputs {
+                    boundary: &boundary,
+                    contracts: &contracts,
+                },
+                requested_enablement,
+            )?;
         let contract_emission_ns = Cell::new(0_u128);
         let module_inventory_ns = Cell::new(0_u128);
         let report_timings = || {

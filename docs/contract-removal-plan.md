@@ -1,7 +1,8 @@
 # Plan: giving up package contracts
 
-Status: approved direction (owner, 2026-10-14). P0 measured; P1 and the
-ADR 0309, tuple-veto and P3 branches await integration.
+Status: approved direction (owner, 2026-10-14). P0 measured; the bounded
+tuple correction and independently reapplied P3 refactor are integrated.
+P1 and the combined ADR 0309 production corrections remain held.
 
 Dependency behaviour comes from analyzing installed package source (ADRs 0284,
 0290, 0291, 0295–0300). Package contracts are removed: first their
@@ -174,13 +175,15 @@ refactor, five individually green commits, no finding moving:
 7. `packageSummaries` and notes stay byte-identical through P3; P7 decides,
    with a changelog.
 
-P3 landed four of its five slices on branch `p3-boundary` with no finding
-moving. Slice 4, extracting the host index from the contract views, touches
-every IR consumer, so it becomes the first commit of P4, under the same
-byte-identity gate.
+P3's four selected slices are integrated through the independently reviewed
+`p3-independent` extraction, with no finding moving. The original
+`p3-boundary` history remains intact. Slice 4, extracting the host index from
+the contract views, touches every IR consumer, so it becomes the first commit
+of P4, under the same byte-identity gate.
 
-P3 starts after the P1b allowlist merges. It runs in parallel with ADR 0309
-once both agree on the shared analysis-input and `SemanticLookup` seam.
+P3 was reapplied independently while the P1b allowlist remained held, under
+the integration cadence above. Subsequent work uses the shared analysis-input
+and `SemanticLookup` seam; the shadow slice must add no production authority.
 
 ### 2. Host-free runs
 

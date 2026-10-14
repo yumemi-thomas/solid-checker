@@ -13,7 +13,7 @@ use std::{
 use solid_facts::core::SourceHash;
 use solid_facts_backend::{
     SourceFile, TypeFactsSession,
-    dependency_sources::{Host, PreparedDependencyProgram, prepare_program},
+    dependency_sources::{Host, PreparedDependencyProgram, SelectionNotes, prepare_program},
     dialect::Dialect,
 };
 use solid_reactive_ir::{RuntimeEnvironment, RuntimeTarget};
@@ -23,14 +23,14 @@ use solid_reactive_ir::{RuntimeEnvironment, RuntimeTarget};
 /// program with the same notes.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct PreparedDependencies {
-    pub(crate) notes: Vec<String>,
+    pub(crate) notes: SelectionNotes,
     pub(crate) program: Option<PreparedDependencyProgram>,
 }
 
 /// Preparation's notes, beside its outcome: a refusal still prints the notes
 /// that preceded it.
 pub(crate) type Preparation = (
-    Vec<String>,
+    SelectionNotes,
     Result<Option<PreparedDependencyProgram>, String>,
 );
 
@@ -100,7 +100,7 @@ pub(crate) fn prepare_from(
         .iter()
         .map(|name| (*name).to_owned())
         .collect::<BTreeSet<_>>();
-    let mut notes = Vec::new();
+    let mut notes = SelectionNotes::default();
     let outcome = prepare_program(
         project,
         selection,
@@ -201,11 +201,13 @@ pub(crate) fn retain_exported_contracts(
     facts: &mut solid_facts::ProjectFacts,
     program: &PreparedDependencyProgram,
     contracts: &mut solid_reactive_ir::contract_semantics::AcceptedContractIndex,
+    boundary: &mut solid_reactive_ir::package_boundary::PackageBoundary,
+    refusals: &[solid_facts_backend::dependency_sources::SourceRefusal],
     dialect: &'static Dialect,
-) -> (BTreeSet<String>, Vec<String>) {
+) -> (BTreeSet<String>, SelectionNotes) {
     let mut selection = program.selection.clone();
     let mut retained = solid_facts_backend::dependency_sources::UnsupportedBindings::default();
-    let mut notes = Vec::new();
+    let mut notes = SelectionNotes::default();
     loop {
         let mut changed = false;
         for file in &facts.files {
@@ -252,6 +254,9 @@ pub(crate) fn retain_exported_contracts(
                         + 1;
                     retained.retain(
                         exporting,
+                        solid_reactive_ir::package_boundary::UnanalyzableReason::NotSelected(
+                            solid_reactive_ir::package_boundary::SelectionFailure::RetainedExportedValue,
+                        ),
                         format!(
                             "{form} from accepted unselected package {module} at {}:{line}",
                             file.path
@@ -315,9 +320,15 @@ pub(crate) fn retain_exported_contracts(
         } else {
             project.parent().unwrap_or_else(|| Path::new("."))
         };
-        *contracts = std::mem::take(contracts).with_fallback(
-            solid_facts_backend::external_package_contract_requirements(directory, facts),
-        );
+        let refusals = refusals
+            .iter()
+            .chain(&notes.refusals)
+            .cloned()
+            .collect::<Vec<_>>();
+        let restored = solid_facts_backend::external_package_boundary(directory, facts, &refusals);
+        *contracts = std::mem::take(contracts)
+            .with_fallback(solid_facts_backend::requirement_index(&restored));
+        boundary.extend(restored);
     }
     (selection.package_names, notes)
 }

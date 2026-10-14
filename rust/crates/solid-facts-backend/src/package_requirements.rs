@@ -2,12 +2,17 @@
 //! dialect model; this module reads no core contract or receipt documents.
 
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::HashMap,
     fs,
     path::{Path, PathBuf},
 };
 
-use solid_reactive_ir::contract_semantics::AcceptedContractIndex;
+use solid_reactive_ir::{
+    contract_semantics::{AcceptedContractIndex, UncertifiableImportReason},
+    package_boundary::{
+        BindingForm, BoundaryReason, ImportKey, PackageBoundary, UnanalyzableReason,
+    },
+};
 
 /// Whether `importer` imports `specifier` as a namespace at run time.
 fn namespace_import(facts: &solid_facts::ProjectFacts, importer: &str, specifier: &str) -> bool {
@@ -34,7 +39,31 @@ pub fn external_package_contract_requirements(
     project: &Path,
     facts: &solid_facts::ProjectFacts,
 ) -> AcceptedContractIndex {
-    let mut missing = BTreeSet::new();
+    requirement_index(&external_package_boundary(project, facts, &[]))
+}
+
+/// The contract-era requirement index a boundary's legacy keys produce.
+#[must_use]
+pub fn requirement_index(boundary: &PackageBoundary) -> AcceptedContractIndex {
+    boundary
+        .legacy_requirement_index()
+        .external_packages()
+        .into_owned()
+}
+
+/// The package boundary of `facts` (phase P3 of the contract-removal plan):
+/// every import the requirement discovery below refuses, with each cause
+/// recorded at the decision that found it, and `refusals` -- the source
+/// selector's own decisions -- attached to the imports of the copy or name
+/// they were about. Its legacy keys are exactly the requirement markers this
+/// discovery always raised, and nothing else reaches the acceptance gate:
+/// a recorded cause is explanation.
+pub fn external_package_boundary(
+    project: &Path,
+    facts: &solid_facts::ProjectFacts,
+    refusals: &[crate::dependency_sources::SourceRefusal],
+) -> PackageBoundary {
+    let mut boundary = PackageBoundary::default();
     let mut owners = HashMap::new();
     if let Some(imports) = &facts.resolved_imports {
         for (importer, import) in imports.iter() {
@@ -48,6 +77,20 @@ pub fn external_package_contract_requirements(
             if is_package_local_edge(&mut owners, importer, import) {
                 continue;
             }
+            let key = ImportKey::new(importer, import.text.to_string());
+            let installed_root = import
+                .package_manifest
+                .as_deref()
+                .and_then(|manifest| Path::new(manifest).parent())
+                .map(|root| root.to_string_lossy().into_owned());
+            let mut record = |reason: UnanalyzableReason, detail: &str| {
+                boundary.record(
+                    key.clone(),
+                    package,
+                    installed_root.as_deref(),
+                    BoundaryReason::new(reason, detail),
+                );
+            };
             // ADR 0284: a package analyzed as source needs no contract, when
             // the import is one its redirects bind. A namespace import is not
             // redirected, so its members stay the declarations' and the
@@ -55,14 +98,27 @@ pub fn external_package_contract_requirements(
             if facts
                 .dependency_source_root(&import.resolved_path)
                 .is_some()
-                && !namespace_import(facts, importer, &import.text)
             {
-                continue;
+                if !namespace_import(facts, importer, &import.text) {
+                    continue;
+                }
+                record(
+                    UnanalyzableReason::UnsupportedBinding(BindingForm::NamespaceValue),
+                    "a runtime namespace import of selected source is not redirected",
+                );
             }
             if import.resolution == solid_facts::ImportResolution::Unresolved
                 && local_proposal_exists(project, &import.text)
             {
-                missing.insert((importer.to_owned(), import.text.to_string()));
+                record(
+                    UnanalyzableReason::ResolutionUnavailable,
+                    "the import resolves to no file",
+                );
+                record(
+                    UnanalyzableReason::LegacyContractFallback,
+                    "a project-local contract proposal names this package",
+                );
+                boundary.require_legacy(key, UncertifiableImportReason::Unspecified);
                 continue;
             }
             if package.is_some()
@@ -72,14 +128,25 @@ pub fn external_package_contract_requirements(
                     .as_deref()
                     .is_some_and(manifest_uses_solid)
             {
-                missing.insert((importer.to_owned(), import.text.to_string()));
+                record(
+                    UnanalyzableReason::LegacyContractFallback,
+                    "an installed package whose manifest names a Solid package",
+                );
+                let name = crate::dependency_sources::package_name(&import.text);
+                for refusal in refusals.iter().filter(|refusal| match &refusal.root {
+                    Some(root) => Path::new(import.resolved_path.as_ref()).starts_with(root),
+                    None => {
+                        name.as_deref() == Some(refusal.name.as_str())
+                            || package == Some(refusal.name.as_str())
+                    }
+                }) {
+                    record(refusal.kind, &refusal.detail);
+                }
+                boundary.require_legacy(key, UncertifiableImportReason::Unspecified);
             }
         }
     }
-    AcceptedContractIndex::default()
-        .with_uncertifiable_imports(missing)
-        .external_packages()
-        .into_owned()
+    boundary
 }
 
 /// Whether `import` is a relative edge between two modules of one package

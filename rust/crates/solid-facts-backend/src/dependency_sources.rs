@@ -35,6 +35,7 @@ use sha2::{Digest, Sha256};
 
 use crate::SourceFile;
 use crate::host_constants::{Ordered, find_package_root, split_bare_specifier};
+use solid_reactive_ir::package_boundary::{BindingForm, SelectionFailure, UnanalyzableReason};
 
 /// The conditions every Vite + `vite-plugin-solid` build sets, beside the
 /// host's: `exports` is read in its own document order.
@@ -108,6 +109,50 @@ pub struct ImportResolution {
     pub importer: Option<PathBuf>,
     pub specifier: String,
     pub target: PathBuf,
+}
+
+/// One source-selection decision that left a package off the analyzed
+/// program, recorded where it was made, beside the note that says so (phase
+/// P3 of the contract-removal plan). `detail` is the note's own reason text.
+/// Explanation only: the selection, the notes and every contract binding are
+/// exactly what they were without it.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct SourceRefusal {
+    /// The package name the decision was about.
+    pub name: String,
+    /// The exact installed root, when the decision was about one copy; `None`
+    /// when it applies to the name, every copy included.
+    pub root: Option<PathBuf>,
+    pub kind: UnanalyzableReason,
+    pub detail: String,
+}
+
+/// What selection said: the notes a check prints, in order, and the decisions
+/// behind them.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct SelectionNotes {
+    pub lines: Vec<String>,
+    pub refusals: Vec<SourceRefusal>,
+}
+
+impl SelectionNotes {
+    fn refuse(
+        &mut self,
+        name: &str,
+        root: Option<&Path>,
+        kind: UnanalyzableReason,
+        detail: impl Into<String>,
+    ) {
+        let refusal = SourceRefusal {
+            name: name.to_owned(),
+            root: root.map(Path::to_path_buf),
+            kind,
+            detail: detail.into(),
+        };
+        if !self.refusals.contains(&refusal) {
+            self.refusals.push(refusal);
+        }
+    }
 }
 
 /// The selected packages and their closure.
@@ -303,7 +348,7 @@ pub fn prepare_program(
     program_modules: &[PathBuf],
     excluded: &BTreeSet<String>,
     ecosystem_scopes: &[&str],
-    notes: &mut Vec<String>,
+    notes: &mut SelectionNotes,
 ) -> Result<Option<PreparedDependencyProgram>, String> {
     // Configured sources omit declaration files, and an ambient `declare
     // module` stub is part of the project's program too: take every file the
@@ -422,7 +467,7 @@ pub fn prepare(
     specifiers: &[String],
     host: &Host,
     unredirected: &mut UnsupportedBindings,
-    notes: &mut Vec<String>,
+    notes: &mut SelectionNotes,
 ) -> Result<Option<DependencySelection>, String> {
     let mut roots = Vec::new();
     let mut package_names = BTreeSet::new();
@@ -434,20 +479,26 @@ pub fn prepare(
         // A package the project does not install is no source to analyze;
         // a sweep may name the same packages for every project.
         let Some(root) = find_package_root(tsconfig, &name, None) else {
-            notes.push(format!(
+            notes.lines.push(format!(
                 "solid-checker: note: --dependency-source {specifier}: not installed here, skipped"
             ));
+            notes.refuse(
+                &name,
+                None,
+                UnanalyzableReason::ResolutionUnavailable,
+                "not installed here",
+            );
             continue;
         };
         if unredirected.contains(&name) {
-            push_note(notes, unredirected.note(&name));
+            unredirected.refuse(notes, &name, Some(&root));
             continue;
         }
         let root = root
             .canonicalize()
             .map_err(|error| format!("--dependency-source {specifier:?}: {error}"))?;
         let entry = select_entry(&root, &subpath, host)
-            .map_err(|reason| format!("--dependency-source {specifier:?}: {reason}"))?;
+            .map_err(|(_, reason)| format!("--dependency-source {specifier:?}: {reason}"))?;
         resolutions.insert(ImportResolution {
             importer: None,
             specifier: specifier.clone(),
@@ -461,7 +512,7 @@ pub fn prepare(
             &mut Vec::new(),
             unredirected,
         )
-        .map_err(|reason| format!("--dependency-source {specifier:?}: {reason}"))?;
+        .map_err(|(_, reason)| format!("--dependency-source {specifier:?}: {reason}"))?;
         package_names.insert(name);
         if !roots.contains(&root) {
             roots.push(root);
@@ -499,7 +550,7 @@ pub fn prepare_all(
     excluded: &BTreeSet<String>,
     ecosystem_scopes: &[&str],
     unredirected: &mut UnsupportedBindings,
-    notes: &mut Vec<String>,
+    notes: &mut SelectionNotes,
 ) -> Result<Option<DependencySelection>, String> {
     unredirected
         .runtime_packages
@@ -555,22 +606,29 @@ pub fn prepare_all(
             continue;
         }
         if !names_by_root.contains_key(&root) && !solid_package(&root) {
+            notes.refuse(
+                &name,
+                Some(&root),
+                UnanalyzableReason::NotSelected(SelectionFailure::NoDemand),
+                "its manifest's dependencies and peerDependencies name no Solid package",
+            );
             not_solid.insert(root);
             continue;
         }
         // A package reached through an unredirected binding keeps its contract
         // (`without_unredirected_packages`): one known to be is not walked.
         if unredirected.contains(&name) {
-            push_note(notes, unredirected.note(&name));
+            unredirected.refuse(notes, &name, Some(&root));
             continue;
         }
         let entry = match select_entry(&root, &subpath, host) {
             Ok(entry) => entry,
-            Err(reason) => {
-                notes.push(format!(
+            Err((kind, reason)) => {
+                notes.lines.push(format!(
                     "solid-checker: note: dependency source {name} ({}): {reason}; its contract stays; {}",
                     root.display(), request_edge(&importer, &specifier)
                 ));
+                notes.refuse(&name, Some(&root), kind, reason);
                 unsupported.insert(root);
                 continue;
             }
@@ -598,12 +656,14 @@ pub fn prepare_all(
                     resolutions.extend(closure_resolutions);
                     queue.extend(bare);
                 }
-                Err(reason) => {
-                    notes.push(format!(
+                Err((kind, reason)) => {
+                    notes.lines.push(format!(
                         "solid-checker: note: dependency source {} ({}): {reason}; its contract stays; {}",
                         names_by_root[&root],
                         root.display(), request_edge(&importer, &specifier)
                     ));
+                    let name = names_by_root[&root].clone();
+                    notes.refuse(&name, Some(&root), kind, reason);
                     unsupported.insert(root);
                 }
             }
@@ -634,6 +694,16 @@ pub fn prepare_all(
         .chain(&not_solid)
         .filter_map(|root| package_name_of_root(root))
         .collect::<BTreeSet<_>>();
+    for (root, name) in &names_by_root {
+        if unsupported_names.contains(name) {
+            notes.refuse(
+                name,
+                Some(root),
+                UnanalyzableReason::NotSelected(SelectionFailure::RetainedCopy),
+                "another installed copy of this name is not analyzed, so its contract stays for every copy",
+            );
+        }
+    }
     let package_names = names_by_root
         .values()
         .filter(|name| !unsupported_names.contains(*name))
@@ -655,11 +725,20 @@ fn package_name_of_root(root: &Path) -> Option<String> {
 }
 
 /// The source file `subpath` of the package at `root` loads for `host`.
-fn select_entry(root: &Path, subpath: &str, host: &Host) -> Result<PathBuf, String> {
+fn select_entry(
+    root: &Path,
+    subpath: &str,
+    host: &Host,
+) -> Result<PathBuf, (UnanalyzableReason, String)> {
     let manifest = fs::read(root.join("package.json"))
         .ok()
         .and_then(|bytes| serde_json::from_slice::<Ordered>(&bytes).ok())
-        .ok_or("unreadable package.json")?;
+        .ok_or_else(|| {
+            (
+                UnanalyzableReason::ManifestUnavailable,
+                "unreadable package.json".to_owned(),
+            )
+        })?;
     // A `browser` map remaps files inside the package for a browser
     // build, which the closure walk does not model (review round 2). An
     // empty map remaps nothing.
@@ -670,18 +749,30 @@ fn select_entry(root: &Path, subpath: &str, host: &Host) -> Result<PathBuf, Stri
             _ => true,
         })
     {
-        return Err("a `browser` field map is not supported".into());
+        return Err((
+            UnanalyzableReason::RuntimeEntryUnavailable,
+            "a `browser` field map is not supported".into(),
+        ));
     }
     let relative = entry_target(&manifest, subpath, host).ok_or_else(|| {
-        format!("no runtime entry for {subpath} under the declared host's conditions")
+        (
+            UnanalyzableReason::RuntimeEntryUnavailable,
+            format!("no runtime entry for {subpath} under the declared host's conditions"),
+        )
     })?;
     let entry = root
         .join(relative.trim_start_matches("./"))
         .canonicalize()
-        .map_err(|error| format!("entry {relative}: {error}"))?;
+        .map_err(|error| {
+            (
+                UnanalyzableReason::RuntimeSourceUnavailable,
+                format!("entry {relative}: {error}"),
+            )
+        })?;
     if !entry.starts_with(root) || !is_source(&entry) {
-        return Err(format!(
-            "entry {relative} is not a source file inside the package"
+        return Err((
+            UnanalyzableReason::RuntimeSourceUnavailable,
+            format!("entry {relative} is not a source file inside the package"),
         ));
     }
     Ok(entry)
@@ -786,14 +877,14 @@ fn runtime_bare_imports(facts: &solid_facts::ast::AstFacts) -> BTreeSet<String> 
 /// of that package on contracts, including otherwise redirectable imports.
 #[derive(Clone, Debug, Default)]
 pub struct UnsupportedBindings {
-    packages: std::collections::BTreeMap<String, String>,
+    packages: std::collections::BTreeMap<String, (UnanalyzableReason, String)>,
     opaque: Option<&'static str>,
     runtime_packages: BTreeSet<String>,
 }
 
 impl UnsupportedBindings {
-    pub fn retain(&mut self, name: String, reason: String) {
-        self.packages.insert(name, reason);
+    pub fn retain(&mut self, name: String, kind: UnanalyzableReason, reason: String) {
+        self.packages.insert(name, (kind, reason));
     }
     fn contains(&self, name: &str) -> bool {
         !self.runtime_packages.contains(name)
@@ -805,10 +896,32 @@ impl UnsupportedBindings {
         self.opaque = self.opaque.or(other.opaque);
     }
 
+    /// The decision behind [`Self::note`], in the same precedence.
+    fn reason(&self, name: &str) -> (UnanalyzableReason, &str) {
+        if let Some(opaque) = self.opaque {
+            return (
+                UnanalyzableReason::UnsupportedBinding(BindingForm::OpaqueInventory),
+                opaque,
+            );
+        }
+        self.packages.get(name).map_or(
+            (
+                UnanalyzableReason::NotSelected(SelectionFailure::RetainedCopy),
+                "its source overlaps an unredirected package or shares that package's selection name",
+            ),
+            |(kind, reason)| (*kind, reason.as_str()),
+        )
+    }
+
+    /// Pushes [`Self::note`] once and records the decision behind it.
+    fn refuse(&self, notes: &mut SelectionNotes, name: &str, root: Option<&Path>) {
+        push_note(&mut notes.lines, self.note(name));
+        let (kind, reason) = self.reason(name);
+        notes.refuse(name, root, kind, reason);
+    }
+
     fn note(&self, name: &str) -> String {
-        let reason = self.opaque.or_else(|| self.packages.get(name).map(String::as_str)).unwrap_or(
-            "its source overlaps an unredirected package or shares that package's selection name"
-        );
+        let (_, reason) = self.reason(name);
         format!(
             "solid-checker: note: dependency source {name}: {reason}, \
              which source analysis does not redirect; its contract stays"
@@ -829,7 +942,10 @@ fn unredirected_packages(facts: &solid_facts::ast::AstFacts) -> UnsupportedBindi
         {
             bindings.packages.insert(
                 name,
-                binding_reason(facts, import.span, "imported through a namespace binding"),
+                (
+                    UnanalyzableReason::UnsupportedBinding(BindingForm::NamespaceValue),
+                    binding_reason(facts, import.span, "imported through a namespace binding"),
+                ),
             );
         }
     }
@@ -840,10 +956,13 @@ fn unredirected_packages(facts: &solid_facts::ast::AstFacts) -> UnsupportedBindi
         {
             bindings.packages.insert(
                 name,
-                binding_reason(
-                    facts,
-                    export.span,
-                    "re-exported through a namespace binding",
+                (
+                    UnanalyzableReason::UnsupportedBinding(BindingForm::NamespaceReexport),
+                    binding_reason(
+                        facts,
+                        export.span,
+                        "re-exported through a namespace binding",
+                    ),
                 ),
             );
         }
@@ -854,29 +973,34 @@ fn unredirected_packages(facts: &solid_facts::ast::AstFacts) -> UnsupportedBindi
         {
             bindings.packages.insert(
                 name,
-                binding_reason(
-                    facts,
-                    import.span,
-                    "loaded through an import-equals binding",
+                (
+                    UnanalyzableReason::UnsupportedBinding(BindingForm::ImportEquals),
+                    binding_reason(
+                        facts,
+                        import.span,
+                        "loaded through an import-equals binding",
+                    ),
                 ),
             );
         }
     }
     for load in &facts.module_loads {
         if let Some(name) = load.specifier.as_deref().and_then(package_name) {
+            let (form, wording) = match load.kind {
+                solid_facts::ast::ModuleLoadKind::DynamicImport => (
+                    BindingForm::DynamicImport,
+                    "loaded through a literal dynamic import binding",
+                ),
+                solid_facts::ast::ModuleLoadKind::Require => (
+                    BindingForm::Require,
+                    "loaded through a literal require binding",
+                ),
+            };
             bindings.packages.insert(
                 name,
-                binding_reason(
-                    facts,
-                    load.span,
-                    match load.kind {
-                        solid_facts::ast::ModuleLoadKind::DynamicImport => {
-                            "loaded through a literal dynamic import binding"
-                        }
-                        solid_facts::ast::ModuleLoadKind::Require => {
-                            "loaded through a literal require binding"
-                        }
-                    },
+                (
+                    UnanalyzableReason::UnsupportedBinding(form),
+                    binding_reason(facts, load.span, wording),
                 ),
             );
         }
@@ -970,11 +1094,11 @@ fn runtime_reexport(export: &solid_facts::ast::ExportFact) -> bool {
 pub fn without_unredirected_packages(
     mut selection: DependencySelection,
     unredirected: &UnsupportedBindings,
-    notes: &mut Vec<String>,
+    notes: &mut SelectionNotes,
 ) -> Option<DependencySelection> {
     if unredirected.opaque.is_some() {
         for name in &selection.package_names {
-            push_note(notes, unredirected.note(name));
+            unredirected.refuse(notes, name, None);
         }
         return None;
     }
@@ -1025,7 +1149,7 @@ pub fn without_unredirected_packages(
         }
     }
     for name in &names {
-        push_note(notes, unredirected.note(name));
+        unredirected.refuse(notes, name, None);
     }
     let inside = |path: &Path| removed.iter().any(|root| path.starts_with(root));
     selection.roots.retain(|root| !removed.contains(root));
@@ -1167,19 +1291,23 @@ fn walk(
     resolutions: &mut BTreeSet<ImportResolution>,
     bare: &mut Vec<(PathBuf, String)>,
     unredirected: &mut UnsupportedBindings,
-) -> Result<(), String> {
+) -> Result<(), (UnanalyzableReason, String)> {
+    let unavailable = |reason: String| (UnanalyzableReason::ClosureUnavailable, reason);
     let mut queue = VecDeque::from([entry.to_path_buf()]);
     while let Some(file) = queue.pop_front() {
         if !files.insert(file.clone()) {
             continue;
         }
         if files.len() > MAX_CLOSURE_FILES {
-            return Err(format!("closure exceeds {MAX_CLOSURE_FILES} files"));
+            return Err((
+                UnanalyzableReason::ClosureLimit,
+                format!("closure exceeds {MAX_CLOSURE_FILES} files"),
+            ));
         }
-        let source =
-            fs::read_to_string(&file).map_err(|error| format!("{}: {error}", file.display()))?;
+        let source = fs::read_to_string(&file)
+            .map_err(|error| unavailable(format!("{}: {error}", file.display())))?;
         let facts = solid_facts::ast::extract(file.to_string_lossy().into_owned(), &source)
-            .map_err(|error| format!("{}: {error}", file.display()))?;
+            .map_err(|error| unavailable(format!("{}: {error}", file.display())))?;
         bare.extend(
             runtime_bare_imports(&facts)
                 .into_iter()
@@ -1214,13 +1342,15 @@ fn walk(
             .filter(|module| module.starts_with("./") || module.starts_with("../"))
             .map(str::to_owned)
             .collect::<BTreeSet<_>>();
-        let directory = file.parent().ok_or("closure file has no directory")?;
+        let directory = file
+            .parent()
+            .ok_or_else(|| unavailable("closure file has no directory".to_owned()))?;
         for module in modules {
             let Some(target) = resolve_relative(directory, &module) else {
-                return Err(format!(
+                return Err(unavailable(format!(
                     "{} imports {module:?}, which resolves to no source file",
                     file.display()
-                ));
+                )));
             };
             if !target.starts_with(root) {
                 continue;
@@ -1363,6 +1493,7 @@ mod tests {
 
     use super::{Host, entry_target, select};
     use crate::host_constants::Ordered;
+    use solid_reactive_ir::package_boundary::{BindingForm, UnanalyzableReason};
 
     fn ordered(json: &str) -> Ordered {
         serde_json::from_str(json).unwrap()
@@ -1479,7 +1610,10 @@ mod tests {
             let bindings = super::UnsupportedBindings {
                 packages: [(
                     selected_name.into(),
-                    "re-exported through a runtime binding".into(),
+                    (
+                        UnanalyzableReason::UnsupportedBinding(BindingForm::NamespaceReexport),
+                        "re-exported through a runtime binding".into(),
+                    ),
                 )]
                 .into_iter()
                 .collect(),
@@ -1489,7 +1623,7 @@ mod tests {
                 super::without_unredirected_packages(
                     selection.clone(),
                     &super::UnsupportedBindings::default(),
-                    &mut Vec::new()
+                    &mut super::SelectionNotes::default()
                 ),
                 Some(selection.clone()),
                 "an unrelated package remains selected",
@@ -1501,13 +1635,28 @@ mod tests {
                         opaque: Some("a module load has no exact bare package target"),
                         ..super::UnsupportedBindings::default()
                     },
-                    &mut Vec::new(),
+                    &mut super::SelectionNotes::default(),
                 )
                 .is_none()
             );
+            let mut notes = super::SelectionNotes::default();
             let remaining =
-                super::without_unredirected_packages(selection, &bindings, &mut Vec::new())
-                    .unwrap();
+                super::without_unredirected_packages(selection, &bindings, &mut notes).unwrap();
+            // The decision behind each note is recorded beside it, by name.
+            assert_eq!(notes.lines.len(), notes.refusals.len(), "{selected_name}");
+            assert!(
+                notes
+                    .refusals
+                    .iter()
+                    .any(|refusal| refusal.name == selected_name
+                        && refusal.root.is_none()
+                        && refusal.kind
+                            == UnanalyzableReason::UnsupportedBinding(
+                                BindingForm::NamespaceReexport
+                            )
+                        && refusal.detail == "re-exported through a runtime binding"),
+                "{selected_name}: {notes:?}"
+            );
             assert_eq!(
                 remaining.roots,
                 std::slice::from_ref(&other),
@@ -1536,7 +1685,7 @@ mod tests {
         std::fs::write(package.join("index.js"), "export { x } from 'other';").unwrap();
         let tsconfig = directory.join("tsconfig.json");
         std::fs::write(&tsconfig, "{}").unwrap();
-        let mut notes = Vec::new();
+        let mut notes = super::SelectionNotes::default();
         let prepared = super::prepare_program(
             &tsconfig,
             &["anonymous".into()],
@@ -1552,7 +1701,7 @@ mod tests {
             prepared.unwrap().selection.package_names,
             ["anonymous".into()].into_iter().collect()
         );
-        assert!(notes.is_empty(), "{notes:?}");
+        assert!(notes.lines.is_empty(), "{notes:?}");
         std::fs::remove_dir_all(directory).unwrap();
     }
 
@@ -1565,7 +1714,7 @@ mod tests {
         std::fs::create_dir_all(&directory).unwrap();
         let tsconfig = directory.join("tsconfig.json");
         std::fs::write(&tsconfig, "{}").unwrap();
-        let mut notes = Vec::new();
+        let mut notes = super::SelectionNotes::default();
         let prepared = super::prepare_program(
             &tsconfig,
             &["not-installed-here".to_owned()],
@@ -1582,10 +1731,19 @@ mod tests {
         assert!(prepared.is_none());
         assert_eq!(written, 1, "no sibling tsconfig is written");
         assert_eq!(
-            notes,
+            notes.lines,
             [
                 "solid-checker: note: --dependency-source not-installed-here: not installed here, skipped"
             ]
+        );
+        assert_eq!(
+            notes.refusals,
+            [super::SourceRefusal {
+                name: "not-installed-here".into(),
+                root: None,
+                kind: UnanalyzableReason::ResolutionUnavailable,
+                detail: "not installed here".into(),
+            }]
         );
     }
 
@@ -1646,13 +1804,14 @@ mod tests {
         )
         .unwrap();
         let app = directory.join("App.tsx");
+        let mut notes = super::SelectionNotes::default();
         let prepared = super::prepare_all(
             vec![(app.clone(), "ui".into()), (app, "real".into())],
             &host(&["browser", "development"]),
             &["solid-js".to_owned()].into_iter().collect(),
             &["@solidjs/"],
             &mut super::UnsupportedBindings::default(),
-            &mut Vec::new(),
+            &mut notes,
         )
         .unwrap()
         .unwrap();
@@ -1663,6 +1822,54 @@ mod tests {
             .collect::<Vec<_>>();
         std::fs::remove_dir_all(&directory).unwrap();
         assert_eq!(roots, ["real"]);
+        // Project code is no unanalyzable package: nothing is recorded for it.
+        assert_eq!(notes, super::SelectionNotes::default());
+    }
+
+    #[test]
+    fn each_entry_refusal_names_its_decision() {
+        let directory = std::env::temp_dir().join(format!(
+            "solid-checker-dependency-entry-refusals-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&directory);
+        let package = |name: &str, manifest: Option<&str>| {
+            let root = directory.join(name);
+            std::fs::create_dir_all(&root).unwrap();
+            std::fs::write(root.join("index.d.ts"), "export {};\n").unwrap();
+            if let Some(manifest) = manifest {
+                std::fs::write(root.join("package.json"), manifest).unwrap();
+            }
+            root.canonicalize().unwrap()
+        };
+        let browser = host(&["browser", "development"]);
+        let kind = |root: &std::path::Path| super::select_entry(root, ".", &browser).unwrap_err().0;
+        let unreadable = package("unreadable", None);
+        let mapped = package(
+            "mapped",
+            Some(r#"{"browser":{"./a.js":"./b.js"},"module":"index.js"}"#),
+        );
+        let entryless = package("entryless", Some(r#"{"exports":{"./x":"./index.js"}}"#));
+        let declaration = package("declaration", Some(r#"{"module":"index.d.ts"}"#));
+        let missing = package("missing", Some(r#"{"module":"absent.js"}"#));
+        let found = [
+            kind(&unreadable),
+            kind(&mapped),
+            kind(&entryless),
+            kind(&declaration),
+            kind(&missing),
+        ];
+        std::fs::remove_dir_all(&directory).unwrap();
+        assert_eq!(
+            found,
+            [
+                UnanalyzableReason::ManifestUnavailable,
+                UnanalyzableReason::RuntimeEntryUnavailable,
+                UnanalyzableReason::RuntimeEntryUnavailable,
+                UnanalyzableReason::RuntimeSourceUnavailable,
+                UnanalyzableReason::RuntimeSourceUnavailable,
+            ]
+        );
     }
 
     #[test]

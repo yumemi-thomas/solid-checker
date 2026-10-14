@@ -35,8 +35,8 @@ use solid_facts::core::SourceHash;
 use solid_facts_backend::{
     BackendError, DiagnosticSession, NativeIncrementalSession, RequestedRuleEnablement,
     SourceChange, SourceFile, TypeFactsSession, accepted_contract_catalog_members,
-    discovered_contract_paths, external_package_contract_requirements, imported_package_roots,
-    read_policy2_trust_configuration, semantic_demand_options_for_enablement,
+    discovered_contract_paths, imported_package_roots, read_policy2_trust_configuration,
+    semantic_demand_options_for_enablement,
 };
 use solid_reactive_ir::CacheRetention;
 use solid_reactive_ir::RuntimeEnvironment;
@@ -1355,7 +1355,14 @@ fn answer(
         .project
         .parent()
         .ok_or("tsconfig has no parent directory")?;
-    let requirements = external_package_contract_requirements(directory, &facts);
+    let source_refusals = state
+        .dependency
+        .as_ref()
+        .map(|dependency| dependency.prepared.notes.refusals.clone())
+        .unwrap_or_default();
+    let mut boundary =
+        solid_facts_backend::external_package_boundary(directory, &facts, &source_refusals);
+    let requirements = solid_facts_backend::requirement_index(&boundary);
     let trust = (!check.receipt_trust_configuration.is_empty())
         .then(|| read_policy2_trust_configuration(Path::new(&check.receipt_trust_configuration)))
         .transpose()?;
@@ -1418,7 +1425,7 @@ fn answer(
     let mut dependency_notes = state
         .dependency
         .as_ref()
-        .map(|dependency| dependency.prepared.notes.clone())
+        .map(|dependency| dependency.prepared.notes.lines.clone())
         .unwrap_or_default();
     let contracts = match state
         .dependency
@@ -1430,9 +1437,11 @@ fn answer(
                 Arc::make_mut(&mut facts),
                 program,
                 &mut contracts,
+                &mut boundary,
+                &source_refusals,
                 state.dialect,
             );
-            dependency_notes.extend(notes);
+            dependency_notes.extend(notes.lines);
             contracts.without_packages(&selected)
         }
         None => contracts,
@@ -1446,11 +1455,14 @@ fn answer(
         .into();
     let analysis = state
         .diagnostics
-        .analyze_accepted_measured_with_enablement(
+        .analyze_inputs_measured_with_enablement(
             &state.project,
             &state.sources,
             &facts,
-            &contracts,
+            solid_reactive_ir::AnalysisInputs {
+                boundary: &boundary,
+                contracts: &contracts,
+            },
             RequestedRuleEnablement {
                 presets: &check.presets,
                 rules: &check.enable_rules,

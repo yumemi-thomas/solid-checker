@@ -1,5 +1,14 @@
 # Precision backlog
 
+P3 boundary identity composition, open (2026-10-15; independent extraction
+review, `/tmp/sc-scratch.noindex/p3-independent/review.md`).
+`PackageBoundary::extend` transfers an optional identity without its private
+conflict-history flags. A conflicted right-hand identity can therefore regain
+a name during later composition. This is a source-inspection API caveat,
+not an executed public-output regression: P3 does not consume these identities
+as admission or finding authority. Keep that broader invariant unclaimed;
+pin monotone conflict propagation before any P4/P7 consumer grants authority.
+
 P4 prerequisite, open (2026-10-14; P3 review, `/tmp/sc-scratch.noindex/p3/p3-review.md`).
 Requirements restored by `retain_exported_contracts` reach only the
 project-wide tier, not the inferred browser view. It is unreachable today:

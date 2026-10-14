@@ -10,9 +10,12 @@ use std::{
 
 use crate::cache::{BuildCaches, ReusePlan, build_typescript_indexes};
 use crate::contract_semantics::AcceptedContractIndex;
-use crate::contracts::{ResolvedContractBinding, resolve_accepted_contract_imports};
+use crate::contracts::{
+    ResolvedContractBinding, discover_boundary_defects, resolve_accepted_contract_imports,
+};
 use crate::identity::{SymbolId, SymbolName};
 use crate::indexes::{CachedAstFileIndex, EntitySymbols, ProjectIndexes, SemanticLookup};
+use crate::package_boundary::PackageBoundary;
 use crate::reachability::{ReachabilityInputs, reachability_stage};
 use crate::source_discovery::{StageContext, discover_sources};
 use crate::symbols::{add_solid_import_names, patch_typescript_indexes};
@@ -200,6 +203,41 @@ pub(crate) struct AnalysisContext<'a> {
     pub(crate) rule_options: &'a RuleOptions,
 }
 
+/// What one analysis is given about the code it cannot read: the package
+/// boundary, and the accepted contracts that still answer for packages
+/// through phase P7 of the contract-removal plan. Both are complete inputs;
+/// neither is derived from the other inside the analysis.
+#[derive(Clone, Copy, Debug)]
+pub struct AnalysisInputs<'a> {
+    pub boundary: &'a PackageBoundary,
+    pub contracts: &'a AcceptedContractIndex,
+}
+
+impl<'a> AnalysisInputs<'a> {
+    /// Accepted contracts with no recorded boundary: every caller that has
+    /// not been given one.
+    #[must_use]
+    pub fn contracts_only(contracts: &'a AcceptedContractIndex) -> Self {
+        static EMPTY: std::sync::OnceLock<PackageBoundary> = std::sync::OnceLock::new();
+        Self {
+            boundary: EMPTY.get_or_init(PackageBoundary::default),
+            contracts,
+        }
+    }
+
+    /// The cache identity of both inputs. An empty boundary adds nothing, so
+    /// an identity is what it was before the boundary existed; any recorded
+    /// cause, explanation included, is part of it.
+    #[must_use]
+    pub fn cache_fingerprints(&self) -> Vec<[u8; 32]> {
+        let mut fingerprints = vec![self.contracts.cache_fingerprint()];
+        if !self.boundary.is_empty() {
+            fingerprints.push(self.boundary.digest());
+        }
+        fingerprints
+    }
+}
+
 pub fn build(facts: &ProjectFacts, dialect: &dyn Dialect) -> Result<Program, BuildError> {
     build_with_accepted_contracts_measured(
         facts,
@@ -232,44 +270,45 @@ pub fn build_with_accepted_contracts_measured(
     contracts: &AcceptedContractIndex,
     rule_options: &RuleOptions,
 ) -> Result<(Program, BuildTimings), BuildError> {
-    build_with_accepted_contract_inputs_measured_incremental(
+    build_with_analysis_inputs_measured(
         facts,
         dialect,
-        contracts,
+        AnalysisInputs::contracts_only(contracts),
+        rule_options,
+    )
+}
+
+/// [`build_with_accepted_contracts_measured`] given a package boundary too.
+pub fn build_with_analysis_inputs_measured(
+    facts: &ProjectFacts,
+    dialect: &dyn Dialect,
+    inputs: AnalysisInputs<'_>,
+    rule_options: &RuleOptions,
+) -> Result<(Program, BuildTimings), BuildError> {
+    build_with_analysis_inputs_measured_incremental(
+        facts,
+        dialect,
+        inputs,
         rule_options,
         BuildCaches::default(),
         crate::runtime_configuration::scan(facts, dialect),
     )
 }
 
-pub(crate) fn build_with_accepted_contracts_measured_incremental(
+pub(crate) fn build_with_analysis_inputs_measured_incremental(
     facts: &ProjectFacts,
     dialect: &dyn Dialect,
-    contracts: &AcceptedContractIndex,
+    inputs: AnalysisInputs<'_>,
     rule_options: &RuleOptions,
     caches: BuildCaches<'_>,
     runtime_configuration: crate::RuntimeConfigurationPremise,
 ) -> Result<(Program, BuildTimings), BuildError> {
-    build_with_accepted_contract_inputs_measured_incremental(
-        facts,
-        dialect,
-        contracts,
-        rule_options,
-        caches,
-        runtime_configuration,
-    )
-}
-
-fn build_with_accepted_contract_inputs_measured_incremental(
-    facts: &ProjectFacts,
-    dialect: &dyn Dialect,
-    contracts: &AcceptedContractIndex,
-    rule_options: &RuleOptions,
-    caches: BuildCaches<'_>,
-    runtime_configuration: crate::RuntimeConfigurationPremise,
-) -> Result<(Program, BuildTimings), BuildError> {
-    let external_contracts = contracts.external_packages();
+    let external_contracts = inputs.contracts.external_packages();
     let contracts = external_contracts.as_ref();
+    let inputs = AnalysisInputs {
+        boundary: inputs.boundary,
+        contracts,
+    };
     let BuildCaches {
         ast_indexes: ast_indexes_cache,
         source_discovery: source_discovery_cache,
@@ -389,6 +428,10 @@ fn build_with_accepted_contract_inputs_measured_incremental(
         dialect,
         &runtime_configuration,
     );
+    // Concatenated, not interleaved: every table is ordered by location before
+    // anything reads its order, and no import is both bound and unbound.
+    let mut missing_contract_exports = std::mem::take(&mut resolved_contracts.missing_exports);
+    missing_contract_exports.extend(discover_boundary_defects(facts, inputs, entities, dialect));
     build_timings.contract_resolution = substage_started.elapsed();
     // Returned-member effects are installed during import resolution. Their
     // tuple destructuring premise must be withdrawn before any graph/source
@@ -432,7 +475,6 @@ fn build_with_accepted_contract_inputs_measured_incremental(
             .by_symbol
             .retain(|symbol, _| !withdrawn.contains(symbol));
     }
-    let missing_contract_exports = std::mem::take(&mut resolved_contracts.missing_exports);
     let semantic_lookup = SemanticLookup::new(
         facts,
         ast_indexes,

@@ -182,7 +182,8 @@ pub use diagnostics::{
     RequestedRuleEnablement, Snapshot, SnapshotEvidence, SnapshotFinding, SnapshotFix,
     SnapshotTextEdit, SourceLocation, UnauthenticatedCatalog, accepted_package_contract_statuses,
     admission_input_paths, admission_refusal_details, admitted_project_artifacts, analysis_metrics,
-    analyze_project_accepted_measured_with_enablement, certified_catalog_self_admission,
+    analyze_project_accepted_measured_with_enablement,
+    analyze_project_inputs_measured_with_enablement, certified_catalog_self_admission,
     discovered_contract_paths, discovered_rule_options_path, imported_package_roots,
     importer_admission_inputs, nested_catalog_candidates, project_accepted_contracts,
     select_project_catalogs, select_project_catalogs_in, semantic_demand_options_for_enablement,
@@ -204,7 +205,9 @@ pub use inferred_host::{
     inferred_host_input_paths_for_project, inferred_host_input_paths_for_sources,
     inferred_project_accepted_contracts, inferred_project_accepted_contracts_with_note,
 };
-pub use package_requirements::external_package_contract_requirements;
+pub use package_requirements::{
+    external_package_boundary, external_package_contract_requirements, requirement_index,
+};
 pub use phase16_benchmark::phase16_benchmark_report;
 pub use proposal_generation::{
     ConstructedProposal, LocalProposalClaim, PlannedProposal, PositiveOperationCandidate,
@@ -223,6 +226,9 @@ pub use runtime_probes::{
     ResponseState, RuntimeProbeError, RuntimeProbeEvaluation, RuntimeProbePlan, SettlementState,
     StreamState, TransitionState, evaluate_runtime_probes,
 };
+/// The shared analysis input an in-memory adapter builds without the
+/// filesystem (phase P3 of the contract-removal plan).
+pub use solid_reactive_ir::{AnalysisInputs, package_boundary::PackageBoundary};
 pub use wire::{
     SemanticDemandGroup, SourceChange, SourceFile, TypeFactsExchangeTimings, TypeFactsProvider,
 };
