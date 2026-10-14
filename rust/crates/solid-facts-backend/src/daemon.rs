@@ -464,7 +464,8 @@ fn process_tree_resident_bytes(root: u32) -> Option<u64> {
 struct State {
     dialect: &'static solid_facts_backend::dialect::Dialect,
     /// The tsconfig the Type Facts program opened: the project's own, or in
-    /// dependency-source mode the sibling it extends (ADR 0296).
+    /// dependency-source mode the logical path of the program that extends
+    /// it, beside it, whose bytes are a scratch file (ADR 0296).
     project: PathBuf,
     session: NativeIncrementalSession,
     diagnostics: DiagnosticSession,
@@ -488,7 +489,8 @@ struct DependencyState {
     original: OriginalProgram,
     prepared: PreparedDependencies,
     folds: BTreeMap<String, Option<SourceHash>>,
-    /// The sibling tsconfig this daemon wrote and owns.
+    /// The scratch file holding the analyzed program's configuration,
+    /// which this daemon wrote and owns.
     generated: Option<PathBuf>,
 }
 
@@ -522,7 +524,7 @@ impl OriginalProgram {
         let modules = super::dependency_program::program_modules(&mut typescript)?;
         let mut sources = configured;
         sources.sort_by(|left, right| left.path.cmp(&right.path));
-        let tracking = Tracking::new(&project, &sources)?;
+        let tracking = Tracking::new(&project, &project, &sources)?;
         Ok(Self {
             project,
             typescript,
@@ -571,12 +573,15 @@ impl OriginalProgram {
 struct Tracking {
     fingerprints: BTreeMap<String, FileFingerprint>,
     dirs: BTreeMap<PathBuf, Option<FileStamp>>,
+    /// The file holding the program's configuration: the project's tsconfig,
+    /// or the scratch file a dependency-source program is opened from.
+    config: PathBuf,
     tsconfig: FileFingerprint,
 }
 
 impl Tracking {
-    fn new(project: &Path, sources: &[SourceFile]) -> Result<Self, Box<dyn Error>> {
-        let tsconfig = fingerprint_file(project)?;
+    fn new(project: &Path, config: &Path, sources: &[SourceFile]) -> Result<Self, Box<dyn Error>> {
+        let tsconfig = fingerprint_file(config)?;
         let mut fingerprints = BTreeMap::new();
         let mut dirs = BTreeMap::new();
         if let Some(parent) = project.parent() {
@@ -595,16 +600,9 @@ impl Tracking {
         Ok(Self {
             fingerprints,
             dirs,
+            config: config.to_path_buf(),
             tsconfig,
         })
-    }
-
-    /// Record `directory` as it is now, after this daemon itself created or
-    /// removed a sibling tsconfig in it.
-    fn restamp(&mut self, directory: &Path) {
-        if let Some(stamp) = self.dirs.get_mut(directory) {
-            *stamp = directory_stamp(directory);
-        }
     }
 }
 
@@ -660,12 +658,12 @@ enum Sync {
 /// known files become overlay updates at `version`; anything that can change
 /// the project's file set demands a full rebuild.
 fn resync_tracked(
-    project: &Path,
     tracking: &mut Tracking,
     sources: &mut [SourceFile],
     version: u64,
 ) -> Result<Sync, Box<dyn Error>> {
-    match refresh_file_with(project, &tracking.tsconfig, |path| fs::read(path)) {
+    let config = tracking.config.clone();
+    match refresh_file_with(&config, &tracking.tsconfig, |path| fs::read(path)) {
         Ok(FileRefresh::Unchanged) => {}
         Ok(FileRefresh::MetadataOnly(fingerprint)) => tracking.tsconfig = fingerprint,
         // A tsconfig that changed or can no longer be read is a new program.
@@ -712,7 +710,7 @@ fn resync_tracked(
     Ok(Sync::Ready(changes))
 }
 
-/// The sibling tsconfig a live daemon owns, removed when it exits.
+/// The scratch program file a live daemon owns, removed when it exits.
 static OWNED_PROGRAM: std::sync::Mutex<Option<PathBuf>> = std::sync::Mutex::new(None);
 
 fn own_program(path: Option<&Path>) {
@@ -761,7 +759,11 @@ impl State {
     ) -> Result<Self, Box<dyn Error>> {
         let mut sources = configured;
         sources.sort_by(|left, right| left.path.cmp(&right.path));
-        let tracking = Tracking::new(&project, &sources)?;
+        let config = dependency
+            .as_ref()
+            .and_then(|dependency| dependency.generated.clone())
+            .unwrap_or_else(|| project.clone());
+        let tracking = Tracking::new(&project, &config, &sources)?;
         let cache_retention = cache_retention(sources.len());
         Ok(Self {
             dialect,
@@ -815,14 +817,14 @@ impl State {
             );
         };
         let domain = dependency_domain(request).unwrap_or_default();
-        let generated = program.write_retained(domain.as_bytes())?;
-        if let Some(directory) = generated.parent() {
-            original.tracking.restamp(directory);
-        }
+        let (logical, generated) = program.write_retained(domain.as_bytes())?;
         let opened = (|| -> Result<Self, Box<dyn Error>> {
-            let project_id = generated.to_string_lossy().into_owned();
-            let mut typescript =
-                TypeFactsSession::open(&request.typefacts_executable, &project_id, &[])?;
+            let project_id = logical.to_string_lossy().into_owned();
+            let mut typescript = TypeFactsSession::open(
+                &request.typefacts_executable,
+                &project_id,
+                &[format!("-project-config={}", generated.display())],
+            )?;
             let configured = typescript.configured_sources()?;
             let folded = super::dependency_program::fold_sources(
                 &configured,
@@ -844,7 +846,7 @@ impl State {
             }));
             Self::from_session(
                 dialect,
-                generated.clone(),
+                logical.clone(),
                 session,
                 configured,
                 Some(DependencyState {
@@ -872,7 +874,6 @@ impl State {
     /// answer as they did too.
     fn resync(&mut self, request: &Request) -> Result<Sync, Box<dyn Error>> {
         let changes = match resync_tracked(
-            &self.project,
             &mut self.tracking,
             &mut self.sources,
             self.session.generation() + 1,
@@ -888,7 +889,6 @@ impl State {
         };
         let original = &mut dependency.original;
         match resync_tracked(
-            &original.project,
             &mut original.tracking,
             &mut original.sources,
             original.typescript.generation() + 1,
@@ -952,20 +952,14 @@ impl State {
     }
 }
 
-/// Replace a retained state, removing `previous`, the sibling tsconfig the
-/// replaced one owned, when the new one does not use it.
+/// Replace a retained state, removing `previous`, the scratch program file
+/// the replaced one owned, when the new one does not use it.
 fn replace_state(state: &mut State, next: State, previous: Option<PathBuf>) {
     *state = next;
     if let Some(previous) = previous
         && state.generated() != Some(previous.as_path())
     {
         let _ = fs::remove_file(&previous);
-        if let Some(directory) = previous.parent() {
-            state.tracking.restamp(directory);
-            if let Some(dependency) = state.dependency.as_mut() {
-                dependency.original.tracking.restamp(directory);
-            }
-        }
     }
     own_program(state.generated());
 }
@@ -1238,7 +1232,7 @@ fn respond_error(stream: &mut UnixStream, message: &str) -> Result<(), Box<dyn E
 /// applied: a refresh records each file as it reads it, and the project's own
 /// program takes its edits before preparation can still refuse. So the state
 /// a failed request leaves is never trusted again. It is discarded whole --
-/// session, trackers, cached answer and sibling -- and the next request opens
+/// session, trackers, cached answer and program file -- and the next request opens
 /// the program from scratch, as a one-shot check would (review round 1 of
 /// ADR 0296).
 fn answer_retained(
@@ -1293,7 +1287,7 @@ fn answer(
                 Ok(next) => replace_state(state, next, previous),
                 Err(error) => {
                     // The next request rebuilds: the retained program has
-                    // lost its original, and its sibling is gone.
+                    // lost its original, and its program file is gone.
                     if let Some(previous) = previous {
                         let _ = fs::remove_file(previous);
                     }

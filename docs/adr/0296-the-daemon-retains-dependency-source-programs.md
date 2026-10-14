@@ -1,6 +1,7 @@
 # ADR 0296: The daemon retains dependency-source programs
 
-- Status: accepted and implemented (2026-10-14).
+- Status: accepted and implemented (2026-10-14). The sibling became a
+  scratch file opened at a logical path: ADR 0303.
 - Owner: `dependency_sources::prepare_program` and
   `PreparedDependencyProgram` (preparation), `dependency_program.rs` (the
   shared fold and bind), `daemon.rs` (retention).

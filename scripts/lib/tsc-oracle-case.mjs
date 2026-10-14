@@ -209,7 +209,7 @@ const runChecker = (testCase, index, strict, { checker, typefacts }) => {
     {
       encoding: "utf8",
       maxBuffer: 256 * 1024 * 1024,
-      env: { ...process.env, SOLID_TYPEFACTS_BIN: typefacts },
+      env: { ...process.env, SOLID_CHECKER_DAEMON: "0", SOLID_TYPEFACTS_BIN: typefacts },
     },
   );
   const snapshot = JSON.parse(output);

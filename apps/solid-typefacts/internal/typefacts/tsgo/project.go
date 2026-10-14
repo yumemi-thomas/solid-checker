@@ -223,12 +223,24 @@ type project struct {
 // OpenProject opens one configured project. trace may be nil, which disables
 // backend tracing.
 func OpenProject(ctx context.Context, configPath string, trace typefacts.Trace) (typefacts.Project, error) {
+	return OpenProjectWithConfig(ctx, configPath, nil, trace)
+}
+
+// OpenProjectWithConfig is OpenProject with configSource, when it is not nil,
+// as the bytes of configPath. They are an overlay at that exact path, so the
+// configuration is anchored where it would be on disk (its directory, default
+// type roots, `${configDir}`) while nothing is written there, and every later
+// rebuild reads the same bytes.
+func OpenProjectWithConfig(ctx context.Context, configPath string, configSource *string, trace typefacts.Trace) (typefacts.Project, error) {
 	absConfigPath, err := filepath.Abs(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("resolve tsconfig path: %w", err)
 	}
 	absConfigPath = normalizeTypeScriptPath(absConfigPath)
 	fs := newOverlayFS(bundled.WrapFS(osvfs.FS()))
+	if configSource != nil {
+		fs.set(absConfigPath, *configSource)
+	}
 	program, typeChecker, release, err := buildProgram(ctx, absConfigPath, fs)
 	if err != nil {
 		return nil, err

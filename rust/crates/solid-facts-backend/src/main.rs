@@ -3559,6 +3559,9 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     // project keeps its own identity for reporting (ADR 0296); only the Type
     // Facts program and the analysis read the sibling.
     let logical_project_id = request.project_id.clone();
+    // The producer reads the generated program's bytes from a scratch file
+    // and opens them at the logical path beside the project's tsconfig.
+    let mut program_config: Option<String> = None;
     let (dependency_sources, _generated) = match &dependency_host {
         None => (None, None),
         Some(host) => {
@@ -3583,6 +3586,8 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 Some(program) => match program.write_for_process() {
                     Ok(generated) => {
                         request.project_id = generated.path().to_string_lossy().into_owned();
+                        program_config =
+                            Some(format!("-project-config={}", generated.config().display()));
                         (Some(program), Some(generated))
                     }
                     // Review round 1 of ADR 0297: the default adds no write
@@ -3602,7 +3607,10 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     let mut typescript = TypeFactsSession::open(
         &request.typefacts_executable,
         &request.project_id,
-        &producer_arguments(&request.typefacts_args),
+        &producer_arguments(&request.typefacts_args)
+            .into_iter()
+            .chain(program_config.clone())
+            .collect::<Vec<_>>(),
     )?;
     if let Some(probe) = declaration_probe {
         emit_declaration_probe_plan(&mut typescript, &probe)?;
@@ -3678,7 +3686,10 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             dialect: dialect.id.into(),
             typefacts_project: request.project_id.clone(),
             typefacts_executable: request.typefacts_executable.clone(),
-            typefacts_arguments: producer_arguments(&request.typefacts_args),
+            typefacts_arguments: producer_arguments(&request.typefacts_args)
+                .into_iter()
+                .chain(program_config.clone())
+                .collect(),
             generation: request.generation,
             semantic_demands: semantic_demand_options,
             runtime: request.runtime.clone(),
@@ -4439,12 +4450,11 @@ fn defaults_to_dependency_sources(request: &Request) -> bool {
 /// (`solid`, `import` and `module` always set), and a target and build do
 /// not say that is how the project is built: a Node host never sets
 /// `solid`. The default therefore needs that plugin resolvable from the
-/// project (`dependency_sources::solid_vite_plugin`). And contract mode
-/// writes nothing into the project, so the default also needs the sibling
-/// tsconfig's directory writable. `--dependency-source` states the premise
-/// and keeps its write requirement.
+/// project (`dependency_sources::solid_vite_plugin`). The generated program
+/// is written to a scratch directory, never the project, so a read-only
+/// project needs nothing more.
 fn implicit_dependency_source_refusal(project: &Path) -> Option<String> {
-    use solid_facts_backend::dependency_sources::{sibling_writable, solid_vite_plugin};
+    use solid_facts_backend::dependency_sources::solid_vite_plugin;
     if solid_vite_plugin(project).is_none() {
         return Some(
             "no Solid Vite plugin (@solidjs/vite-plugin, vite-plugin-solid, or one \
@@ -4452,13 +4462,6 @@ fn implicit_dependency_source_refusal(project: &Path) -> Option<String> {
              resolver source selection reads `exports` with"
                 .into(),
         );
-    }
-    if !sibling_writable(project) {
-        let directory = project.parent().unwrap_or(project);
-        return Some(format!(
-            "{} is not writable, and source analysis writes a tsconfig there",
-            directory.display()
-        ));
     }
     None
 }

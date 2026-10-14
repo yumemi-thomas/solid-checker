@@ -30825,3 +30825,13 @@ at 562 / 3,701. Only proven SC1001 messages change: default mode has one in
 openbot and two in probus-hk; contract mode has one and four respectively.
 The corpus's `experiments/sweep-sol-star-deltas.json` records all sites beside
 `sweep-sol-star.json` and `sweep-sol-star-contracts.json`.
+
+## The generated program is never written into the project (2026-10-14, ADR 0303)
+
+The source-mode tsconfig is a scratch file the producer opens at a logical
+path beside the project's tsconfig (`-project-config`), so the anchoring is
+unchanged and nothing is written into the project. A retained daemon no longer
+leaves a file there, and read-only projects get source analysis instead of
+falling back to contracts. Gates run with `SOLID_CHECKER_DAEMON=0`. No
+snapshot moved. Open: a crashed run leaves its scratch file in
+`$TMPDIR/solid-checker-programs` (nothing reads it again).

@@ -354,7 +354,7 @@ for (const { config, members } of groups.values()) {
     const args = ["--format", "json", "--project", join(directory, "tsconfig.json")];
     for (const preset of config.presets) args.push("--preset", preset);
     for (const rule of config.enableRules) args.push("--enable-rule", rule);
-    const output = execFileSync(CHECKER, args, { encoding: "utf8", maxBuffer: 1 << 28, env: { ...process.env, SOLID_TYPEFACTS_BIN: TYPEFACTS } });
+    const output = execFileSync(CHECKER, args, { encoding: "utf8", maxBuffer: 1 << 28, env: { ...process.env, SOLID_CHECKER_DAEMON: "0", SOLID_TYPEFACTS_BIN: TYPEFACTS } });
     const checkerRows = [];
     for (const finding of JSON.parse(output).findings ?? []) {
       const name = finding.primaryLocation.path.split(/[\\/]/).slice(-2).join("/");

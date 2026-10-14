@@ -360,6 +360,9 @@ async function analyze(tsconfig, keepWording, authorized) {
       maxBuffer: 256 * 1024 * 1024,
       env: {
         ...process.env,
+        // One retained daemon per fixture would outlive the gate by its idle
+        // limit, hundreds at once; a gate run is one-shot.
+        SOLID_CHECKER_DAEMON: "0",
         SOLID_TYPEFACTS_BIN: typefacts
       }
     }

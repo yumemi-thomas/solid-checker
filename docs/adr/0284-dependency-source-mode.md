@@ -1,6 +1,7 @@
 # ADR 0284: Dependency source mode
 
-- Status: accepted, experimental and opt-in (2026-10-13).
+- Status: accepted, experimental and opt-in (2026-10-13). Decision 3's
+  sibling is no longer written: ADR 0303.
 - Owner: `solid-facts-backend::dependency_sources` (selection, closure,
   program), `main.rs` (redirects, host folding, contract removal), and the
   ADR 0284 filters in `diagnostics.rs`, `package_requirements.rs`,

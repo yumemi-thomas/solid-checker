@@ -224,15 +224,10 @@ fn a_retained_dependency_source_check_is_the_one_shot_check() {
             assert_eq!(warm.cache_hit(), Some(true), "{context}");
             assert_same(&cold, &fresh, &context);
             assert_same(&warm, &fresh, &context);
-            // The daemon's sibling is named by its bytes, not by a process.
+            // A retained program writes nothing into the project either: its
+            // configuration is a scratch file opened at a logical path.
             let siblings = scratch.siblings();
-            assert!(siblings.len() <= 1, "{context}: {siblings:?}");
-            for sibling in siblings {
-                let key = sibling
-                    .trim_start_matches(".solid-checker-dependency-sources.")
-                    .trim_end_matches(".tsconfig.json");
-                assert_eq!(key.len(), 64, "{context}: {sibling}");
-            }
+            assert!(siblings.is_empty(), "{context}: {siblings:?}");
         }
     }
 }
@@ -982,48 +977,42 @@ impl Drop for ReadOnly {
     }
 }
 
-/// Review round 1 of ADR 0297: contract mode writes nothing into the
-/// project, so the default does not make a read-only project fail. It is
-/// contract mode there, one-shot and retained, with a note; an explicit
-/// selection keeps its write requirement and its error.
+/// A source-mode program is written to a scratch directory and opened at a
+/// logical path beside the project's tsconfig, so a read-only project gets
+/// the same source analysis as a writable one, one-shot and retained, by
+/// default and when selected explicitly, and nothing is written into it.
 #[cfg(unix)]
 #[test]
-fn a_read_only_project_keeps_contracts_by_default() {
+fn a_read_only_project_is_analyzed_from_source() {
     let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
         return;
     };
     let scratch =
         Scratch::new("dependency-source-all", "default-read-only").with_solid_vite_plugin();
-    let opted_out = invoke(
+    let writable = invoke(
         &typefacts,
         &scratch.project,
-        &with_host(&["--no-dependency-source"]),
+        &with_host(&["--dependency-source", "*"]),
         false,
     )
     .1;
     let _read_only = ReadOnly::new(&scratch.project);
     for retained in [false, true] {
-        let (success, run) = invoke(&typefacts, &scratch.project, &HOST, retained);
-        assert!(success, "retained {retained}: {}", run.stderr);
-        assert_eq!(stdout(&run), stdout(&opted_out), "retained {retained}");
-        assert!(
-            run.stderr.contains("is not writable"),
-            "retained {retained}: {}",
-            run.stderr
-        );
+        for arguments in [HOST.to_vec(), with_host(&["--dependency-source", "*"])] {
+            let (success, run) = invoke(&typefacts, &scratch.project, &arguments, retained);
+            assert!(success, "retained {retained} {arguments:?}: {}", run.stderr);
+            assert_eq!(
+                stdout(&run),
+                stdout(&writable),
+                "retained {retained} {arguments:?}"
+            );
+            assert!(
+                !run.stderr.contains("not writable"),
+                "retained {retained}: {}",
+                run.stderr
+            );
+        }
     }
-    let (success, refused) = invoke(
-        &typefacts,
-        &scratch.project,
-        &with_host(&["--dependency-source", "*"]),
-        false,
-    );
-    assert!(!success, "{}", refused.stderr);
-    assert!(
-        refused.stderr.contains("--dependency-source: cannot write"),
-        "{}",
-        refused.stderr
-    );
     assert!(scratch.siblings().is_empty());
 }
 

@@ -1,6 +1,7 @@
 # ADR 0297: Source is the default under a declared host
 
-- Status: accepted and implemented (2026-10-14).
+- Status: accepted and implemented (2026-10-14). Read-only projects get
+  source analysis since ADR 0303.
 - Owner: `defaults_to_dependency_sources` and its call at the top of `run` in
   `main.rs`; `loadSnapshot` in `packages/cli/eslint.cjs`.
 - Step 4 of moving dependency analysis from contracts to source (ADRs 0284,

@@ -86,6 +86,7 @@ async function generate(directory) {
         cwd: root,
         env: {
           ...process.env,
+          SOLID_CHECKER_DAEMON: "0",
           SOLID_CHECKER_NATIVE_BIN: native,
           SOLID_TYPEFACTS_BIN: typeFacts
         },

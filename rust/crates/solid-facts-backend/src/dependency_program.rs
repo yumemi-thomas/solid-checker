@@ -53,7 +53,7 @@ pub(crate) fn host(runtime: &RuntimeEnvironment) -> Result<Host, String> {
 
 /// Prepare from `original`, the Type Facts program of the project's own
 /// tsconfig. The project's configured sources, read from its own program, are
-/// the project half of the sibling tsconfig's `files`: composing
+/// the project half of the generated program's `files`: composing
 /// `include`/`files` through `extends` widened or emptied it (review round 2
 /// of ADR 0284).
 ///

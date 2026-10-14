@@ -73,6 +73,7 @@ func run(ctx context.Context, args []string, input io.Reader, output io.Writer) 
 	flags := flag.NewFlagSet("solid-typefacts", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	project := flags.String("project", "", "path to tsconfig.json")
+	projectConfig := flags.String("project-config", "", "file holding the bytes of -project, which then need not exist")
 	schema := flags.Uint64("schema", typefacts.TypeFactsSchemaVersionV1, "lifecycle schema version")
 	cpuProfile := flags.String("cpuprofile", "", "write a CPU profile to this path")
 	transitionArenaPath := flags.String("transition-arena", "", "Rust-owned transition arena path")
@@ -136,7 +137,16 @@ func run(ctx context.Context, args []string, input io.Reader, output io.Writer) 
 		trace.Stage("handshake-written", time.Since(started))
 	}
 
-	backend, err := tsgo.OpenProject(ctx, projectID, nil)
+	var configSource *string
+	if *projectConfig != "" {
+		bytes, err := os.ReadFile(*projectConfig)
+		if err != nil {
+			return fmt.Errorf("read -project-config: %w", err)
+		}
+		source := string(bytes)
+		configSource = &source
+	}
+	backend, err := tsgo.OpenProjectWithConfig(ctx, projectID, configSource, nil)
 	if err != nil {
 		return fmt.Errorf("open TS-Go project: %w", err)
 	}

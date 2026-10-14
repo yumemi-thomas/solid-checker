@@ -94,36 +94,6 @@ fn nearest_versioned_manifest(start: &Path, package: &str) -> Option<PathBuf> {
     })
 }
 
-/// Review round 1 of ADR 0297: whether this process may create the sibling
-/// tsconfig beside `tsconfig` ([`PreparedDependencyProgram::write_for_process`]),
-/// as `access(2)` answers for the directory. A project on a read-only mount
-/// or in a directory the checker cannot write is analyzed without any write
-/// in contract mode, so the implicit default must not add one. Not a proof:
-/// the write itself can still fail, and its caller falls back then too.
-#[must_use]
-pub fn sibling_writable(tsconfig: &Path) -> bool {
-    let Some(directory) = tsconfig.parent() else {
-        return false;
-    };
-    #[cfg(unix)]
-    {
-        use std::os::unix::ffi::OsStrExt as _;
-        let directory = if directory.as_os_str().is_empty() {
-            Path::new(".")
-        } else {
-            directory
-        };
-        let Ok(path) = std::ffi::CString::new(directory.as_os_str().as_bytes()) else {
-            return false;
-        };
-        // SAFETY: `path` is a valid NUL-terminated path for the call.
-        unsafe { libc::access(path.as_ptr(), libc::W_OK) == 0 }
-    }
-    #[cfg(not(unix))]
-    {
-        directory.is_dir()
-    }
-}
 /// Vite's `resolve.extensions` order (`DEFAULT_EXTENSIONS`, minus `.json`):
 /// a relative import that matches two files loads the first (review round 1
 /// of ADR 0290, Sol: `./read` with `read.js` and `read.mjs` loads `.mjs`).
@@ -179,27 +149,48 @@ impl PreparedDependencyProgram {
             .any(|root| path.starts_with(root))
     }
 
-    /// Write the sibling tsconfig under this process's id, as a one-shot
-    /// check does. It is removed when the returned value drops.
-    pub fn write_for_process(&self) -> Result<GeneratedProgram, String> {
-        let written = self.sibling(&std::process::id().to_string())?;
-        fs::write(&written, &self.document).map_err(|error| {
-            format!(
-                "--dependency-source: cannot write {}: {error}",
-                written.display()
-            )
-        })?;
-        Ok(GeneratedProgram { path: written })
+    /// The tsconfig path the program is opened at: beside the project's own,
+    /// so it is anchored as the project is (its directory, default type
+    /// roots, `${configDir}`). Nothing is written there; the producer reads
+    /// its bytes from [`GeneratedProgram::config`] (`-project-config`).
+    pub fn logical_path(&self) -> Result<PathBuf, String> {
+        let directory = self
+            .tsconfig
+            .parent()
+            .ok_or("--dependency-source: the project tsconfig has no directory")?;
+        Ok(directory.join(".solid-checker-dependency-sources.tsconfig.json"))
     }
 
-    /// Write the sibling tsconfig under a name keyed by `domain` and its
+    /// Write the program's bytes to a scratch file under this process's id,
+    /// as a one-shot check does. It is removed when the returned value drops.
+    pub fn write_for_process(&self) -> Result<GeneratedProgram, String> {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |elapsed| elapsed.as_nanos());
+        let config =
+            scratch_directory()?.join(format!("{}-{nanos}.tsconfig.json", std::process::id()));
+        fs::write(&config, &self.document).map_err(|error| {
+            format!(
+                "--dependency-source: cannot write {}: {error}",
+                config.display()
+            )
+        })?;
+        Ok(GeneratedProgram {
+            logical: self.logical_path()?,
+            config,
+        })
+    }
+
+    /// Write the program's bytes to a scratch file named by `domain` and the
     /// bytes, as a retained daemon does. An existing file of that name is
     /// reused only when its bytes are these; it is never rewritten, and a
     /// missing one is created without replacing anything a concurrent writer
     /// made. Nothing removes it here: its owner does.
-    pub fn write_retained(&self, domain: &[u8]) -> Result<PathBuf, String> {
+    pub fn write_retained(&self, domain: &[u8]) -> Result<(PathBuf, PathBuf), String> {
         let mut digest = Sha256::new();
         digest.update(domain);
+        digest.update([0]);
+        digest.update(self.tsconfig.as_os_str().as_encoded_bytes());
         digest.update([0]);
         digest.update(&self.document);
         let key = digest
@@ -207,11 +198,12 @@ impl PreparedDependencyProgram {
             .iter()
             .map(|byte| format!("{byte:02x}"))
             .collect::<String>();
-        let written = self.sibling(&key)?;
+        let written = scratch_directory()?.join(format!("{key}.tsconfig.json"));
         let matches = |path: &Path| fs::read(path).is_ok_and(|bytes| bytes == self.document);
+        let logical = self.logical_path()?;
         if written.exists() {
             return if matches(&written) {
-                Ok(written)
+                Ok((logical, written))
             } else {
                 Err(format!(
                     "--dependency-source: {} holds other bytes",
@@ -231,42 +223,56 @@ impl PreparedDependencyProgram {
         let linked = fs::hard_link(&staged, &written);
         let _ = fs::remove_file(&staged);
         match linked {
-            Ok(()) => Ok(written),
-            Err(_) if matches(&written) => Ok(written),
+            Ok(()) => Ok((logical, written)),
+            Err(_) if matches(&written) => Ok((logical, written)),
             Err(error) => Err(format!(
                 "--dependency-source: cannot write {}: {error}",
                 written.display()
             )),
         }
     }
-
-    fn sibling(&self, key: &str) -> Result<PathBuf, String> {
-        let directory = self
-            .tsconfig
-            .parent()
-            .ok_or("--dependency-source: the project tsconfig has no directory")?;
-        Ok(directory.join(format!(
-            ".solid-checker-dependency-sources.{key}.tsconfig.json"
-        )))
-    }
 }
 
-/// A sibling tsconfig a one-shot check wrote, removed when this drops.
+/// Where generated program configurations are written: a scratch directory,
+/// never the project (`SOLID_CHECKER_PROGRAM_DIR` overrides it).
+fn scratch_directory() -> Result<PathBuf, String> {
+    let directory = std::env::var_os("SOLID_CHECKER_PROGRAM_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| std::env::temp_dir().join("solid-checker-programs"));
+    fs::create_dir_all(&directory).map_err(|error| {
+        format!(
+            "--dependency-source: cannot create {}: {error}",
+            directory.display()
+        )
+    })?;
+    Ok(directory)
+}
+
+/// The program a one-shot check opens: its logical tsconfig path, which is
+/// never written, and the scratch file holding its bytes, removed when this
+/// drops.
 #[derive(Debug)]
 pub struct GeneratedProgram {
-    path: PathBuf,
+    logical: PathBuf,
+    config: PathBuf,
 }
 
 impl GeneratedProgram {
     #[must_use]
     pub fn path(&self) -> &Path {
-        &self.path
+        &self.logical
+    }
+
+    /// The scratch file holding the program's bytes.
+    #[must_use]
+    pub fn config(&self) -> &Path {
+        &self.config
     }
 }
 
 impl Drop for GeneratedProgram {
     fn drop(&mut self) {
-        let _ = fs::remove_file(&self.path);
+        let _ = fs::remove_file(&self.config);
     }
 }
 
@@ -1660,7 +1666,7 @@ mod tests {
     }
 
     #[test]
-    fn a_retained_sibling_is_named_by_its_bytes_and_never_rewritten() {
+    fn a_generated_program_is_written_outside_the_project_and_never_rewritten() {
         let directory = std::env::temp_dir().join(format!(
             "solid-checker-dependency-sibling-{}",
             std::process::id()
@@ -1679,12 +1685,17 @@ mod tests {
             },
             document: document.to_vec(),
         };
-        let first = program(b"{\"files\":[]}").write_retained(b"a").unwrap();
+        let (logical, first) = program(b"{\"files\":[]}").write_retained(b"a").unwrap();
+        // The logical path is beside the project's tsconfig, and nothing is
+        // written there.
+        assert_eq!(logical.parent(), Some(directory.as_path()));
+        assert!(!logical.exists());
+        assert!(!first.starts_with(&directory));
         assert_eq!(std::fs::read(&first).unwrap(), b"{\"files\":[]}");
         let stamp = std::fs::metadata(&first).unwrap().modified().unwrap();
         // The same bytes and domain reuse the file as it is.
         assert_eq!(
-            program(b"{\"files\":[]}").write_retained(b"a").unwrap(),
+            program(b"{\"files\":[]}").write_retained(b"a").unwrap().1,
             first
         );
         assert_eq!(
@@ -1692,22 +1703,28 @@ mod tests {
             stamp
         );
         // Another domain or other bytes are another file.
-        let other_domain = program(b"{\"files\":[]}").write_retained(b"b").unwrap();
+        let other_domain = program(b"{\"files\":[]}").write_retained(b"b").unwrap().1;
         let other_bytes = program(b"{\"files\":[\"x\"]}")
             .write_retained(b"a")
-            .unwrap();
+            .unwrap()
+            .1;
         assert_ne!(other_domain, first);
         assert_ne!(other_bytes, first);
         // A file of that name holding other bytes is refused, not rewritten.
         std::fs::write(&first, b"tampered").unwrap();
         assert!(program(b"{\"files\":[]}").write_retained(b"a").is_err());
         assert_eq!(std::fs::read(&first).unwrap(), b"tampered");
-        // A one-shot check's sibling goes with it.
+        for path in [&first, &other_domain, &other_bytes] {
+            let _ = std::fs::remove_file(path);
+        }
+        // A one-shot check's program file goes with it.
         let generated = program(b"{}").write_for_process().unwrap();
-        let path = generated.path().to_path_buf();
-        assert!(path.is_file());
+        let config = generated.config().to_path_buf();
+        assert!(config.is_file());
+        assert!(!generated.path().exists());
         drop(generated);
-        assert!(!path.exists());
+        assert!(!config.exists());
+        assert_eq!(std::fs::read_dir(&directory).unwrap().count(), 0);
         std::fs::remove_dir_all(&directory).unwrap();
     }
 
