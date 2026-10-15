@@ -55,6 +55,17 @@ async function once(root, request) {
   }
 }
 
+// The same check with the tree read on demand (P5 S3b): the gate requires
+// exactly the mount's answer.
+async function onceDirectory(root, request) {
+  const checker = await owned.createOwnedChecker({ directory: root });
+  try {
+    return await settle(checker.check(request));
+  } finally {
+    await checker.close();
+  }
+}
+
 // The package's client over the gate's fault worker, never the shipped one.
 async function faultChecker(mode, mount, extra = {}) {
   const channel = new MessageChannel();
@@ -85,6 +96,7 @@ const w2 = plan.cases.w2;
 
 // The legacy witness's ordinary cases, each through a fresh public checker.
 for (const item of plan.standard) record(item.name, await once(item.root, item.request));
+for (const item of plan.standard) record(`directory:${item.name}`, await onceDirectory(item.root, item.request));
 
 // W5: every forged answer, each followed by a clean check on the same pair.
 {
@@ -272,10 +284,12 @@ record("option-unknown", await attempt(async () => {
 
 // Project spellings, each against its own native run.
 for (const spelling of plan.spellings) record(spelling.name, await once(spelling.root, spelling.request));
+for (const spelling of plan.spellings) record(`directory:${spelling.name}`, await onceDirectory(spelling.root, spelling.request));
 
 // S3a: the semantic fixture with a `../` dependency import, and the same tree
 // with that module missing, each through a fresh public checker.
 for (const item of plan.dotdot) record(item.name, await once(item.root, item.request));
+for (const item of plan.dotdot) record(`directory:${item.name}`, await onceDirectory(item.root, item.request));
 
 // S3a: the control guests' real WASI path calls, through the owned runtime
 // and, as the old-layer control, through the pinned upstream one.
@@ -305,6 +319,19 @@ for (const item of plan.dotdot) record(item.name, await once(item.root, item.req
 
 // An unsupported installed runtime is answered before any producer program.
 record("sc9013", await once(plan.cases.sc9013.root, plan.cases.sc9013.request));
+record("directory:sc9013", await onceDirectory(plan.cases.sc9013.root, plan.cases.sc9013.request));
+
+// Directory mode and a link leaving the root: refused only when a check
+// reaches it, with the store's reason; an unreached one does not refuse.
+{
+  const root = plan.mounts.outsideLink;
+  const unreached = await owned.createOwnedChecker({ directory: root });
+  record("directory-outside-link-unreached", await settle(unreached.check({ projectId: `${root}/tsconfig.json` })));
+  await unreached.close();
+  const reached = await owned.createOwnedChecker({ directory: root });
+  record("directory-outside-link-reached", await settle(reached.check({ projectId: `${root}/escape/tsconfig.json` })));
+  await reached.close();
+}
 
 // What a worker may do under this run's permissions.
 {

@@ -486,6 +486,9 @@ const DECLARED = [
   "mount-non-normal", "mount-duplicate", "mount-undeclared-parent", "mount-unsupported-kind",
   "option-unknown", "spelling-alias", "spelling-dotdot", "spelling-relative", "sc9013", "canary",
   "w6-update-replay", "dotdot-fixture", "dotdot-missing", "path-semantics",
+  // P5 S3b: every ordinary case again in directory mode, and its link controls.
+  ...[...STANDARD, "spelling-alias", "spelling-dotdot", "spelling-relative", "sc9013", "dotdot-fixture", "dotdot-missing"].map(name => `directory:${name}`),
+  "directory-outside-link-unreached", "directory-outside-link-reached",
 ];
 
 const engines = {};
@@ -768,13 +771,29 @@ for (const [engine, { driver, urls, oldEntry }] of Object.entries(engines)) {
     for (const id of [...fails, ...notRun, ...Object.keys(pathExpectations.overrides)]) check(id in pathHost, `path-expectations names unknown row ${id}`);
   }
 
+  // Directory mode answers exactly as the mount does for every ordinary case:
+  // the same answer text and the same producer traffic, refusals included.
+  for (const name of [...STANDARD, "spelling-alias", "spelling-dotdot", "spelling-relative", "sc9013", "dotdot-fixture", "dotdot-missing"]) {
+    const mounted = at(name);
+    const direct = at(`directory:${name}`);
+    check(direct?.ok === mounted?.ok && direct?.json === mounted?.json && same(direct?.transport, mounted?.transport),
+      `${label(`directory:${name}`)}: differs from the mount: ${JSON.stringify(direct)?.slice(0, 400)}`);
+  }
+  const unreached = at("directory-outside-link-unreached");
+  check(unreached?.ok === false && unreached.error === "No such file or directory (os error 44)",
+    `${label("directory-outside-link-unreached")}: ${JSON.stringify(unreached)}`);
+  const reached = at("directory-outside-link-reached");
+  check(reached?.rejected === true && reached.message.startsWith("the owned checker is poisoned: the owned checker's input faulted: ") &&
+    reached.message.endsWith(`: a link leads outside the directory root ${plan.mounts.outsideLink}`),
+  `${label("directory-outside-link-reached")}: ${JSON.stringify(reached)}`);
+
   const canary = at("canary");
   if (engine === "node") {
     check(canary?.spawn === "ERR_ACCESS_DENIED" && canary?.read === "ERR_ACCESS_DENIED", `${label("canary")}: ${JSON.stringify(canary)}`);
     const allowed = [`file://${consumer}/`];
     const strays = urls.filter(url => !url.startsWith("node:") && !allowed.some(prefix => url.startsWith(prefix)));
     check(strays.length === 0, `${engine}: modules resolved outside the isolated install: ${JSON.stringify(strays)}`);
-    for (const module of ["owned-worker.mjs", "owned-worker-core.mjs", "owned-host.mjs"]) {
+    for (const module of ["owned-worker.mjs", "owned-worker-core.mjs", "owned-host.mjs", "owned-boundary.mjs", "owned-snapshot.mjs"]) {
       check(urls.includes(`file://${installed}/${module}`), `${engine}: ${module} was not resolved from the installed package (worker hooks absent?)`);
     }
     // The owned worker's WASI runtime is the package's own vendored copy.

@@ -22,14 +22,14 @@
     "lib/mjs/memory.mjs": "a4d5d55b4ffa514f42cc417cfc93f8ff581b4b6fec634e9052218e0d8ea2d008",
     "lib/mjs/jspi.mjs": "5146843a4f313cc41937d7f4b593d7f9307cfd0ea0ccbfb6b7da5cffa3d58579",
     "lib/mjs/wasi/index.mjs": "daaeec31469c5c895f1e631ac52ee4a35fa113ccd45929aafe5eacc50d334fd1",
-    "lib/mjs/wasi/preview1.mjs": "a4f284d09a3be741ccf9a943c8d243ee1c2a11612250caffc1ef0fb4f43d8e77",
+    "lib/mjs/wasi/preview1.mjs": "d955989e48f9cd5fcb6f479a76ea669efdfeed53157ded6a643ef94e57a701fb",
     "lib/mjs/wasi/path.mjs": "13d2048be07ff7be2bbbb9f304b6bd7e4c57fd3db6761bce42bb1307303268c9",
     "lib/mjs/wasi/types.mjs": "c8c6eeed1eeff08504af69068416145e8237cd978fb3dae5fdb939944f226837",
     "lib/mjs/wasi/fd.mjs": "feb7ed568ac13a9a4b375ff9db9eb0bcbb5bbf69c202bbeece767d7338e090da",
     "lib/mjs/wasi/error.mjs": "83f14b24535486987c23b24aad0296ee5e2ceecf2bff428cb279fa23e5e55f8e",
     "lib/mjs/wasi/util.mjs": "7db52c92ed46715c8b8567a117c2abb34375766986d32a78afc14d2bbfc7d077",
     "lib/mjs/wasi/rights.mjs": "f70dba81c11077000d04a741de1edc759f0df47750a02f470531e5163a326cd7",
-    "lib/mjs/wasi/physical.mjs": "96204c0c52d354d131868a06a2a624a3eb68e8a26e4dccaecfac3f0c1efd5031"
+    "lib/mjs/wasi/physical.mjs": "f3e6ff9a3f22a66d08d026f9f3c4ea5654fb11eadd004e982a80173a2c4a4c3b"
   },
   "changedFiles": [
     "lib/mjs/wasi/preview1.mjs"

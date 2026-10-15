@@ -76,6 +76,15 @@ export declare class OwnedMountError extends Error {}
 
 /** Starts one owned checker over `mount` (Node and Bun only). */
 export declare function createOwnedChecker(options: { mount: OwnedMount }): Promise<OwnedChecker>
+/**
+ * Starts one owned checker over a host directory read on demand (Node and
+ * Bun, POSIX hosts). `directory` is resolved to its real path once; both
+ * reactors read only under it, through one read-only store that records
+ * every read. The caller keeps that directory, and the path from `/` to it,
+ * unchanged while the checker lives: a change detected after a check
+ * rejects that check and every later one, and is never answered.
+ */
+export declare function createOwnedChecker(options: { directory: string }): Promise<OwnedChecker>
 
 /**
  * Snapshots a directory from disk as a mount, by its real path, recording

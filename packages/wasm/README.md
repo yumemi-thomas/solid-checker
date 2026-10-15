@@ -67,7 +67,8 @@ by `prefer-for`.
 `solid-checker-wasm/owned.mjs` checks a project from its files alone, with no
 host-supplied Type Facts. It is available on Node and Bun only, with no
 browser entry. One worker thread runs two WebAssembly reactors over one
-in-memory copy of the project:
+filesystem — an in-memory copy of the project (`mount`) or a host directory
+read on demand (`directory`):
 - the canonical Type Facts producer, the same Go source as the native
   `solid-typefacts` built for `wasip1`;
 - the checker.
@@ -123,8 +124,87 @@ fixed when `check` is called.
 
 **Trust.** The digest check detects a corrupted or mismatched artifact in a
 package trusted as a unit; it does not authenticate it. The producer
-handshake checks compatibility only. Neither reactor can read the host disk:
-both see only the mount. Certification is not served.
+handshake checks compatibility only. With a `mount`, neither reactor can read
+the host disk: both see only the mount. With a `directory`, both reach the
+host only through the read-only directory store, and only under the
+directory. Certification is not served.
+
+### Directory mode
+
+```js
+const checker = await createOwnedChecker({ directory: "/workspace/app" })
+```
+
+A mount copies a whole tree into memory before the first check, which does
+not fit large projects (a check typically reads a few percent of the tree,
+`node_modules` included). Directory mode reads only what a check reaches.
+
+- **Options.** `createOwnedChecker` reads its option keys once and the one
+  present value once; `mount` and `directory` are exclusive. `directory` must
+  be a path string naming a directory other than `/`; it is resolved to its
+  real path once, on the calling thread.
+- **The store.** Both reactors share one store. Each host read is recorded
+  once, keyed by operation and physical path: `lstat` (with the identity
+  `dev, ino, mode, nlink, size, mtimeNs, ctimeNs`), `readlink`, a directory
+  listing taken between two `lstat`s, and a file's bytes, read once with
+  `fstat` before and after. Every later answer comes from these records.
+  Paths resolve as a kernel resolves one syscall, with at most 32 link
+  substitutions. Listings are ordered by name bytes on every engine.
+- **Namespace.** It is the mount's: nothing above the directory exists except
+  the directories leading to it, each listing only the next one. Anything
+  else outside it is absent, with no host read.
+- **Precondition.** The caller keeps the host namespace from `/` through the
+  directory, and everything a check reaches, unchanged while the checker
+  lives. The store issues ordinary path-string calls, so it is not a sandbox:
+  it cannot stop the operating system following a link someone swaps in.
+- **What is detected.** After every check, every record the checker ever
+  captured is performed again and compared exactly: identity, link target,
+  listing, and each recorded error. Any difference rejects that check and
+  every later one, and the answer is discarded. When every record validates,
+  there was an instant between the check's last read and the start of
+  validation at which the host held every recorded byte, identity, target,
+  listing and error. This rests on the filesystem changing a file's identity
+  whenever it changes. A rewrite restored to the same size, `mtime` and
+  `ctime` (for example within one timestamp tick on a filesystem with coarse
+  timestamps) is not detected. Stat fields outside the identity (`atime`,
+  which reading may itself change; `blksize`; `blocks`) are captured once and
+  are not part of that claim. The answer is not claimed current at delivery.
+- **What is refused.** These are input faults: a link whose target leads
+  outside the directory, as soon as that target is read (by the store's own
+  resolution or by the guest's `readlink`, since a guest that followed it
+  itself would otherwise be told "absent" where the host has a file; a link
+  no check reads is not refused), a kind other than file, directory or link,
+  a name or link target that is not UTF-8, any host error other than the
+  expected ones, and any write. The expected errors (`ENOENT`, `ENOTDIR`, `EACCES`, `EPERM`, `EINVAL`
+  from `readlink` of a non-link, `ELOOP`) are recorded and answered as the
+  host gave them. An open that would create, truncate or append is refused
+  before any host access; the host file is only ever opened read-only. The
+  first input fault is final: it rejects the current, queued and later checks
+  with the store's own reason, whatever the guest did after it. A store that
+  cannot start fails `createOwnedChecker`.
+- **Memory.** The store holds each file a check reads, once, until the checker
+  is closed. A reused checker accumulates the union of its checks' reads. No
+  general bound is claimed.
+- **Links.** The store's substitution bound is the vendored runtime's own
+  (`MAX_SUBSTITUTIONS`, 32), and a longer chain is answered `ELOOP` through
+  the runtime's own `WasiError`, as a guest path call is.
+
+### Addresses above 2 GiB
+
+A WebAssembly `i32` reaches JavaScript signed, so a reactor address at or above
+2 GiB arrives negative. Every import either reactor declares is wrapped by its
+signature (`owned-boundary.mjs`): arguments are normalized as the unsigned (or,
+for `fd_seek`'s delta, signed) values they encode; every memory range the call
+addresses, including each iovec, must lie inside memory or the call answers
+`EFAULT` without reaching the runtime; and a malformed value is refused, never
+coerced. An import the table does not know refuses the module. The transport
+and the worker normalize the reactors' exported pointers and lengths the same
+way. The vendored runtime's synchronous `fd_pread`, `fd_pwrite`, `fd_read`
+and `fd_write` decode each iovec's buffer address unsigned (C-vendor; see
+`vendor/wasm-util/NOTICE`); the published 0.10.3 runtime reads such an
+address relative to the end of memory, silently. Capacity beyond what the
+measured projects needed (about 2.5 GB of producer memory) is not certified;
+wasm32's 4 GiB is the inferred limit.
 
 **WASI runtime.** The worker runs the package's own copy of the pinned
 `@tybys/wasm-util` 0.10.3 WASI runtime (`vendor/wasm-util`; see its NOTICE,

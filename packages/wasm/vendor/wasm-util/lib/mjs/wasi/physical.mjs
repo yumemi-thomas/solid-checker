@@ -19,8 +19,11 @@
 import { WasiErrno, WasiFileControlFlag } from "./types.mjs";
 import { WasiError } from "./error.mjs";
 
-/** macOS MAXSYMLINKS, the measured native reference; not a universal bound. */
-const MAX_SUBSTITUTIONS = 32;
+/**
+ * macOS MAXSYMLINKS, the measured native reference; not a universal bound.
+ * Exported so the owned worker gives its directory store this same bound.
+ */
+export const MAX_SUBSTITUTIONS = 32;
 const LOOKUP_SYMLINK_FOLLOW = 1;
 
 // ENOENT, ENOTDIR and EEXIST travel as fs-style errors, which the upstream

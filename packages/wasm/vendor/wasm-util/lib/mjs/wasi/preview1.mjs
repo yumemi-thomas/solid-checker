@@ -702,7 +702,7 @@ export class WASI {
             let totalSize = 0;
             const ioVecs = Array.from({ length: Number(iovslen) }, (_, i) => {
                 const offset = iovs + (i * 8);
-                const buf = view.getInt32(offset, true);
+                const buf = view.getUint32(offset, true);
                 const bufLen = view.getUint32(offset + 4, true);
                 totalSize += bufLen;
                 return HEAPU8.subarray(buf, buf + bufLen);
@@ -766,7 +766,7 @@ export class WASI {
             }
             const buffer = concatBuffer(Array.from({ length: Number(iovslen) }, (_, i) => {
                 const offset = iovs + (i * 8);
-                const buf = view.getInt32(offset, true);
+                const buf = view.getUint32(offset, true);
                 const bufLen = view.getUint32(offset + 4, true);
                 return HEAPU8.subarray(buf, buf + bufLen);
             }));
@@ -813,7 +813,7 @@ export class WASI {
             let totalSize = 0;
             const ioVecs = Array.from({ length: Number(iovslen) }, (_, i) => {
                 const offset = iovs + (i * 8);
-                const buf = view.getInt32(offset, true);
+                const buf = view.getUint32(offset, true);
                 const bufLen = view.getUint32(offset + 4, true);
                 totalSize += bufLen;
                 return HEAPU8.subarray(buf, buf + bufLen);
@@ -1021,7 +1021,7 @@ export class WASI {
             }
             const buffer = concatBuffer(Array.from({ length: Number(iovslen) }, (_, i) => {
                 const offset = iovs + (i * 8);
-                const buf = view.getInt32(offset, true);
+                const buf = view.getUint32(offset, true);
                 const bufLen = view.getUint32(offset + 4, true);
                 return HEAPU8.subarray(buf, buf + bufLen);
             }));

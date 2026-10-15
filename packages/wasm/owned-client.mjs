@@ -34,10 +34,11 @@ function answer(status, output, transport) {
 }
 
 /**
- * Starts `worker` with the module bytes and validated mount, and resolves to
- * the checker once it is ready. `transfer` lists the buffers moved to it.
+ * Starts `worker` with the module bytes and a validated mount or a captured
+ * directory, and resolves to the checker once it is ready. `transfer` lists
+ * the buffers moved to it.
  */
-export function attach(worker, { checker, producer, mount, transfer }) {
+export function attach(worker, { checker, producer, mount, directory, transfer }) {
   return new Promise((resolveReady, rejectReady) => {
     let state = "initializing";
     let failure;
@@ -126,7 +127,7 @@ export function attach(worker, { checker, producer, mount, transfer }) {
     worker.on("messageerror", error => poison(new OwnedCheckerError(`the owned checker sent an undecodable message: ${error?.message ?? error}`)));
     worker.on("exit", code => poison(new OwnedCheckerError(`the owned checker worker exited with code ${code}`)));
     try {
-      worker.postMessage({ type: "init", checker, producer, mount }, transfer);
+      worker.postMessage(directory ? { type: "init", checker, producer, directory } : { type: "init", checker, producer, mount }, transfer);
     } catch (error) {
       poison(new OwnedCheckerError(`the owned checker could not be started: ${error.message}`));
     }

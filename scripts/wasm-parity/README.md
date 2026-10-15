@@ -120,6 +120,14 @@ witness's operation sequence.
   no producer call;
 - the Node worker's spawn and out-of-tree read, both denied.
 
+**Directory mode (S3b).** Every answering and refusal case, the three project
+spellings and SC9013 run a second time through
+`createOwnedChecker({ directory })`. Each must give exactly the mount's
+answer text and producer traffic, refusals included, so the native and
+witness comparisons above carry over. Two link controls are pinned:
+- a link leaving the root that no check reaches does not refuse;
+- a check that reaches it is rejected with the store's reason.
+
 The pre-S2 entry (`require`, `import`, `checkSync`) runs from the same
 install under both engines. The packed `main`, `browser` and `types` fields,
 the absence of an `exports` map, and every pre-S2 packed file are checked.

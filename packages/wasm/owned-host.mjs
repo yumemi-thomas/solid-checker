@@ -9,8 +9,24 @@
 // are never parsed here. There is no callback, replacement or observation
 // path: the only read-out is `stats()`, which returns fresh arrays and
 // numbers.
+//
+// Addresses and lengths are u32 on both sides (P5 S3b): the producer's
+// exported pointers and lengths are normalized as the u32 they encode and
+// must lie inside its memory, so an address at or above 2 GiB is neither
+// negative nor clipped. The checker's arguments arrive normalized by the
+// owned boundary (`protocolImports`) and are range-checked here.
+import { u32 } from "./owned-boundary.mjs";
 
 const textDecoder = new TextDecoder();
+
+function producerBytes(producer, pointer, length, what) {
+  const at = u32(pointer, `producer ${what} pointer`);
+  const size = u32(length, `producer ${what} length`);
+  if (at + size > producer.memory.buffer.byteLength) {
+    throw new RangeError(`producer ${what} [${at}, ${at + size}) is outside its memory`);
+  }
+  return new Uint8Array(producer.memory.buffer, at, size);
+}
 
 /**
  * @param producer the producer instance's exports: `memory`, `allocate_input`,
@@ -36,13 +52,10 @@ export function createTransport(producer) {
   };
   const call = (operation, input, ...rest) => {
     if (input) {
-      const pointer = producer.allocate_input(input.length);
-      new Uint8Array(producer.memory.buffer, pointer, input.length).set(input);
+      producerBytes(producer, producer.allocate_input(input.length), input.length, "input").set(input);
     }
     const status = producer[operation](...rest);
-    const pointer = producer.output_pointer();
-    const length = producer.output_length();
-    const output = new Uint8Array(producer.memory.buffer, pointer, length).slice();
+    const output = producerBytes(producer, producer.output_pointer(), producer.output_length(), "output").slice();
     return { status, output };
   };
   const hold = (handle, status, output) => {

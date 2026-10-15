@@ -1,5 +1,42 @@
 # Precision backlog
 
+P5 S3b directory mode and addresses above 2 GiB (2026-10-16; premise R2
+cleared, CODE pending). These lift the owned check's eager whole-tree mount
+budget, the G2 gap in the S3 baseline.
+
+- **B, demand reads:** `createOwnedChecker({ directory })` reads a host
+  directory on demand through one recorded, read-only store shared by both
+  reactors (`owned-snapshot.mjs`). The old `mount` path is unchanged.
+  - Records: `lstat`, `readlink`, listings and file bytes, keyed by physical
+    path, each captured once.
+  - Resolution: kernel-style, 32 substitutions.
+  - Namespace: the mount's.
+  - Revalidation: every record after every check.
+- **C-own, boundary normalization:** every preview1 import of both reactors
+  is normalized and range-checked by signature, iovecs included
+  (`owned-boundary.mjs`). The own protocol and exported pointers are
+  normalized as u32.
+- **C-vendor:** on the reviewed S3a vendored runtime, the four synchronous
+  iovec buffer-address decodes (`fd_pread`, `fd_pwrite`, `fd_read`,
+  `fd_write`) read unsigned; `owned.patch`, `UPSTREAM.json` owned hashes and
+  `NOTICE` record it. The store answers `ELOOP` through that runtime's
+  `WasiError` and shares its 32-substitution bound.
+- **Combined measurement** (2026-10-16, on S3a `ae83d6a94` + B + C, packed
+  tarball `b175f3ea…`, native release image `406814d3…` with
+  `--no-package-contracts`, the same producer `073f35e4…`): all 49 rc.13
+  corpus projects (38 apps) and all 528 fixture and oracle requests are exactly
+  equal to native in directory mode — status, metrics, full snapshot, ordered
+  notes, per-site findings — as is S3a's new fixture. Nothing was skipped; no
+  input tree's metadata manifest changed across a run, and no mount root has an
+  input above it. The largest producer linear memory was 2.81 GB (openbot) and
+  the largest process peak 4.33 GB; no memory bound is claimed. The remaining
+  matched-control difference is the held host-link spelling (G3).
+- **Not claimed:**
+  - stability when the caller changes the tree during a check (detected,
+    not prevented; coarse timestamps and same-identity rewrites are not
+    detected);
+  - any general memory bound or browser fit.
+
 P5 S3a owned WASI path resolution (2026-10-16). The S3 parity baseline found the
 owned check refusing, or falling back to open obligations, wherever an installed
 dependency source imported `../…`: under `@tybys/wasm-util` 0.10.3 every WASI

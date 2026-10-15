@@ -9,11 +9,16 @@ upstream bytes were identified.
 
 Modifications by solid-checker (complete in owned.patch):
 - lib/mjs/wasi/physical.mjs is new: physical, component-wise path resolution.
+  It exports its substitution bound (MAX_SUBSTITUTIONS) for the owned
+  worker's directory store.
 - lib/mjs/wasi/preview1.mjs: the synchronous bodies of path_open,
   path_filestat_get, path_readlink, path_create_directory,
   path_remove_directory and path_unlink_file call physical.mjs instead of the
   lexical resolve/resolvePathSync, and path_readlink truncates to the buffer
-  instead of returning ENOBUFS. Nothing else changed.
+  instead of returning ENOBUFS; and the synchronous fd_pread, fd_pwrite,
+  fd_read and fd_write decode each iovec's buffer address unsigned
+  (getUint32, not getInt32), so an address at or above 2 GiB is not read
+  relative to the end of memory. Nothing else changed.
 
 @tybys/wasm-util is distributed under the MIT License; LICENSE in this
 directory is that license text (source recorded in UPSTREAM.json).
