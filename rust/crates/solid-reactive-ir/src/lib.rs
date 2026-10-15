@@ -1072,7 +1072,7 @@ const fn is_false(value: &bool) -> bool {
     !*value
 }
 
-fn validate_contract_return(returned: &ContractReturn) -> Result<(), &'static str> {
+fn validate_contract_return(returned: &ReturnSummary) -> Result<(), &'static str> {
     if returned.kind != crate::contracts::PROTOTYPE_INSTANCE && returned.prototype.is_some() {
         return Err("a prototype recipe requires its own return kind");
     }
@@ -1334,8 +1334,8 @@ pub struct EventHandlerPropsClaim {
 pub struct ContractExport {
     pub kind: String,
     pub reactive_reads: ContractClaim<Vec<ContractReactiveRead>>,
-    pub returns: ContractClaim<Option<ContractReturn>>,
-    pub callbacks: ContractClaim<Vec<ContractCallback>>,
+    pub returns: ContractClaim<Option<ReturnSummary>>,
+    pub callbacks: ContractClaim<Vec<CallbackSummary>>,
     /// Exact result producers and contextual uses, never ordinary argument
     /// invocation rows. Local summaries do not infer this authored vocabulary.
     pub callback_results: Vec<ContractCallbackResult>,
@@ -1371,7 +1371,7 @@ pub struct ContractExport {
     /// as a positive item over an open domain. `None` whenever the claim is
     /// `Known`, which carries its own return. Generation only: never decoded
     /// from or encoded into a package-contract document.
-    pub open_return: Option<ContractReturn>,
+    pub open_return: Option<ReturnSummary>,
     /// ADR 0179: the owner registrations this export makes on its caller's
     /// owner, at the call and on the same stack: `ambient-at-call`,
     /// call-scoped. Inside a leaf owner each is a forbidden operation the
@@ -1829,7 +1829,7 @@ pub use summary_semantics::{CallbackSchedule, CallbackSummary, ReturnSummary};
 pub type ContractCallback = CallbackSummary;
 pub type ContractReturn = ReturnSummary;
 
-impl ContractCallback {
+impl CallbackSummary {
     /// The clearing bit a contract operation's tracking word states for a row
     /// with this execution word: the exact inverse of the generator's mapping,
     /// so a row that round-trips through a document keeps its claim and a
@@ -2536,7 +2536,7 @@ fn contract_callback_execution(execution: ExecutionRole) -> Option<&'static str>
     }
 }
 
-fn push_contract_callback(callbacks: &mut Vec<ContractCallback>, callback: ContractCallback) {
+fn push_contract_callback(callbacks: &mut Vec<CallbackSummary>, callback: CallbackSummary) {
     if !callbacks.contains(&callback) {
         callbacks.push(callback);
     }
@@ -3091,63 +3091,63 @@ mod tests {
 
     #[test]
     fn inferred_structured_returns_reject_mixed_shapes() {
-        let leaf = ContractReturn {
+        let leaf = ReturnSummary {
             kind: "accessor".into(),
             label: "active".into(),
             prototype: None,
-            ..ContractReturn::default()
+            ..ReturnSummary::default()
         };
-        let structured = ContractReturn {
+        let structured = ReturnSummary {
             kind: "tuple".into(),
             elements: vec![
-                Some(ContractReturn {
+                Some(ReturnSummary {
                     kind: "store-path".into(),
                     label: "query".into(),
                     prototype: None,
-                    ..ContractReturn::default()
+                    ..ReturnSummary::default()
                 }),
-                Some(ContractReturn {
+                Some(ReturnSummary {
                     kind: "object".into(),
                     properties: BTreeMap::from([("active".into(), leaf.clone())]),
                     prototype: None,
-                    ..ContractReturn::default()
+                    ..ReturnSummary::default()
                 }),
             ],
             prototype: None,
-            ..ContractReturn::default()
+            ..ReturnSummary::default()
         };
         assert!(validate_contract_return(&structured).is_ok());
 
-        let argument = ContractReturn {
+        let argument = ReturnSummary {
             kind: "argument".into(),
             parameter: Some(0),
             prototype: None,
-            ..ContractReturn::default()
+            ..ReturnSummary::default()
         };
         assert!(validate_contract_return(&argument).is_ok());
 
-        let callback_result = ContractReturn {
+        let callback_result = ReturnSummary {
             kind: "callback-result".into(),
             parameter: Some(0),
             prototype: None,
-            ..ContractReturn::default()
+            ..ReturnSummary::default()
         };
         assert!(validate_contract_return(&callback_result).is_ok());
 
-        let callback_result_function = ContractReturn {
+        let callback_result_function = ReturnSummary {
             kind: "callback-result-function".into(),
             parameter: Some(0),
             prototype: None,
-            ..ContractReturn::default()
+            ..ReturnSummary::default()
         };
         assert!(validate_contract_return(&callback_result_function).is_ok());
 
-        let mixed = ContractReturn {
+        let mixed = ReturnSummary {
             kind: "object".into(),
             label: "invalid".into(),
             properties: BTreeMap::from([("active".into(), leaf)]),
             prototype: None,
-            ..ContractReturn::default()
+            ..ReturnSummary::default()
         };
         assert!(validate_contract_return(&mixed).is_err());
     }

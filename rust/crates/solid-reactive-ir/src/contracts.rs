@@ -16,9 +16,9 @@ use solid_facts::ProjectFacts;
 use typefacts::{Callability, Constructability, Location, ReferenceSpace, RuntimeBindingKind};
 
 use super::{
-    CallbackSchedule, ContractCallback, ContractClaim, ContractExport, ContractOwnerRequirement,
-    ContractReactiveRead, ContractReturn, EntitySymbols, OwnerRequirementOperation,
-    PackageContract, ReactiveSourceKind, StaticDefect, StaticDefectKind, SummaryNode, SummaryRead,
+    CallbackSchedule, CallbackSummary, ContractClaim, ContractExport, ContractOwnerRequirement,
+    ContractReactiveRead, EntitySymbols, OwnerRequirementOperation, PackageContract,
+    ReactiveSourceKind, ReturnSummary, StaticDefect, StaticDefectKind, SummaryNode, SummaryRead,
     SummaryReads, SymbolId, location, location_order,
 };
 use crate::cache::{CachedContractExports, ContractExportFragment, ContractNodeKey};
@@ -407,7 +407,7 @@ fn project_returned_invocations(
 fn project_callbacks(
     export: &crate::contract_semantics::ExportSemantics,
     open: &mut BTreeSet<ClaimDomain>,
-) -> ContractClaim<Vec<ContractCallback>> {
+) -> ContractClaim<Vec<CallbackSummary>> {
     let knowledge = export.callbacks();
     if !knowledge.is_closed() {
         open.insert(ClaimDomain::Callbacks);
@@ -458,7 +458,7 @@ fn project_callbacks(
             open.insert(ClaimDomain::Callbacks);
             continue;
         };
-        callbacks.push(ContractCallback {
+        callbacks.push(CallbackSummary {
             parameter: index,
             execution: execution.into(),
             // `projected_execution` collapses a tracked operation onto one
@@ -481,20 +481,20 @@ fn project_callbacks(
                 })
             },
             // The inverse of the producer's mapping, word for word
-            // (`ContractCallback::clears_tracking`): `untracked` on an `inline`
+            // (`CallbackSummary::clears_tracking`): `untracked` on an `inline`
             // row is a proven clearing wrapper, on a `deferred` row a deferral
             // proven to run with no caller's listener, and neither word reads
             // back from `ambient-at-execution`, which leaves the listener to
             // whoever runs the callback. A `tracked` row never carries the bit
             // -- its word is the claim.
-            clears_tracking: ContractCallback::clears_tracking_from(execution, operation.tracking),
+            clears_tracking: CallbackSummary::clears_tracking_from(execution, operation.tracking),
             // A non-call item (a property read, iteration, coercion or
             // `hasInstance` of the argument) is projected with its protocol and
             // kept: the domain's closure is a statement about *every* use of
             // caller-supplied code, and dropping the item would either reopen
             // the domain or, re-emitted, silently delete a claim. Every pass
             // that models invocations filters it out
-            // (`ContractCallback::is_invocation`), which is sound because such
+            // (`CallbackSummary::is_invocation`), which is sound because such
             // a use runs the caller's own traps, at the call, on the caller's
             // stack, in the caller's tracking context -- what the value's author
             // wrote -- and today raises no obligation for a non-callable
@@ -506,7 +506,7 @@ fn project_callbacks(
             // consumer would then fold `callHandler(e, handlerProp)` as a call
             // of `handlerProp`, and re-emission would republish the item as
             // a call of the argument. Every pass that reads a row as a call of
-            // the argument asks `ContractCallback::invokes_argument`.
+            // the argument asks `CallbackSummary::invokes_argument`.
             path: path.clone(),
             arguments: operation.inputs.iter().map(project_return_shape).collect(),
             owner: match operation.owner.source {
@@ -666,22 +666,22 @@ fn project_reactive_reads(
 }
 
 /// Direct runtime values only: no awaited shape or dropped return branch.
-fn direct_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
+fn direct_return_shape(shape: &ValueShape) -> Option<ReturnSummary> {
     match shape {
         ValueShape::Reactive {
             role: crate::contract_semantics::ReactiveRole::Accessor,
             ..
         } => project_return_shape(shape),
-        ValueShape::Plain => Some(ContractReturn {
+        ValueShape::Plain => Some(ReturnSummary {
             kind: "plain".into(),
-            ..ContractReturn::default()
+            ..ReturnSummary::default()
         }),
-        ValueShape::Tuple(KnowledgeSet::Complete(items)) => Some(ContractReturn {
+        ValueShape::Tuple(KnowledgeSet::Complete(items)) => Some(ReturnSummary {
             kind: "tuple".into(),
             elements: items.iter().map(direct_return_shape).collect(),
-            ..ContractReturn::default()
+            ..ReturnSummary::default()
         }),
-        ValueShape::Object(KnowledgeSet::Complete(properties)) => Some(ContractReturn {
+        ValueShape::Object(KnowledgeSet::Complete(properties)) => Some(ReturnSummary {
             kind: "object".into(),
             properties: properties
                 .iter()
@@ -689,7 +689,7 @@ fn direct_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
                     direct_return_shape(&property.value).map(|value| (property.name.clone(), value))
                 })
                 .collect(),
-            ..ContractReturn::default()
+            ..ReturnSummary::default()
         }),
         _ => None,
     }
@@ -700,7 +700,7 @@ fn direct_contract_return(
     file: &solid_facts::FileFacts,
     module: &str,
     imported: &str,
-) -> Option<ContractReturn> {
+) -> Option<ReturnSummary> {
     let accepted = accepted
         .resolve_name(file.path.as_str(), module, imported)
         .ok()?;
@@ -731,7 +731,7 @@ fn direct_contract_return(
 fn project_return(
     export: &crate::contract_semantics::ExportSemantics,
     open: &mut BTreeSet<ClaimDomain>,
-) -> ContractClaim<Option<ContractReturn>> {
+) -> ContractClaim<Option<ReturnSummary>> {
     let knowledge = export
         .operation_claim(ClaimDomain::Returns)
         .expect("returns is an operation domain");
@@ -754,10 +754,10 @@ fn project_return(
         .any(|operation| matches!(operation.output, Some(ValueShape::ReturnedCallable { .. })))
         && agreed_returned_callable(export).is_none()
     {
-        return ContractClaim::Known(Some(ContractReturn {
+        return ContractClaim::Known(Some(ReturnSummary {
             kind: RETURNED_CALLABLE.into(),
             prototype: None,
-            ..ContractReturn::default()
+            ..ReturnSummary::default()
         }));
     }
     // ADR 0113: a `plain` output carries no reactive capability, which is
@@ -855,7 +855,7 @@ fn project_return(
         open.insert(ClaimDomain::Returns);
         return ContractClaim::Open;
     }
-    let lazy_recipe = |returned: &ContractReturn| {
+    let lazy_recipe = |returned: &ReturnSummary| {
         matches!(
             returned.kind.as_str(),
             LAZY_GETTER_OBJECT | PROTOTYPE_INSTANCE | GETTER_OBJECT
@@ -915,7 +915,7 @@ fn exact_structural_return(shape: &ValueShape) -> bool {
     }
 }
 
-fn project_returned_output(shape: &ValueShape) -> Option<ContractReturn> {
+fn project_returned_output(shape: &ValueShape) -> Option<ReturnSummary> {
     match shape {
         ValueShape::Parameter { path, .. } if !path.is_empty() => None,
         ValueShape::Undefined => None,
@@ -927,25 +927,25 @@ fn project_returned_output(shape: &ValueShape) -> Option<ContractReturn> {
 /// `callable`, whose invocation the contract does not describe, or `unknown`
 /// -- is kept as an `opaque-callable` leaf, so the consumer can hold every
 /// call or escape of it as a proof obligation. It names no reactive source.
-fn project_member_shape(shape: &ValueShape) -> Option<ContractReturn> {
+fn project_member_shape(shape: &ValueShape) -> Option<ReturnSummary> {
     match shape {
-        ValueShape::Callable | ValueShape::Unknown => Some(ContractReturn {
+        ValueShape::Callable | ValueShape::Unknown => Some(ReturnSummary {
             kind: OPAQUE_MEMBER.into(),
             prototype: None,
-            ..ContractReturn::default()
+            ..ReturnSummary::default()
         }),
         // ADR 0235: its effects are projected beside the export
         // ([`project_returned_member_effects`]), keyed by this member.
-        ValueShape::EffectfulCallable(_) => Some(ContractReturn {
+        ValueShape::EffectfulCallable(_) => Some(ReturnSummary {
             kind: EFFECTFUL_MEMBER.into(),
             prototype: None,
-            ..ContractReturn::default()
+            ..ReturnSummary::default()
         }),
         _ => project_return_shape(shape),
     }
 }
 
-/// The [`ContractReturn::kind`] of a returned member with described effects
+/// The [`ReturnSummary::kind`] of a returned member with described effects
 /// (ADR 0235).
 pub(crate) const EFFECTFUL_MEMBER: &str = "effectful-callable";
 
@@ -1016,7 +1016,7 @@ fn project_returned_member_effects(
         .collect()
 }
 
-fn project_returned_callable_member_shape(shape: &ValueShape) -> Option<ContractReturn> {
+fn project_returned_callable_member_shape(shape: &ValueShape) -> Option<ReturnSummary> {
     if matches!(
         shape,
         ValueShape::Reactive {
@@ -1024,10 +1024,10 @@ fn project_returned_callable_member_shape(shape: &ValueShape) -> Option<Contract
             ..
         }
     ) {
-        return Some(ContractReturn {
+        return Some(ReturnSummary {
             kind: OPAQUE_MEMBER.into(),
             prototype: None,
-            ..ContractReturn::default()
+            ..ReturnSummary::default()
         });
     }
     project_member_shape(shape)
@@ -1263,29 +1263,29 @@ fn capture_context_supported(export: &crate::contract_semantics::ExportSemantics
             })
 }
 
-/// The [`ContractReturn::kind`] of an opaque returned member (ADR 0234).
+/// The [`ReturnSummary::kind`] of an opaque returned member (ADR 0234).
 pub(crate) const OPAQUE_MEMBER: &str = "opaque-callable";
 pub(crate) const PROTOTYPE_INSTANCE: &str = "prototype-instance";
 pub(crate) const LAZY_GETTER_OBJECT: &str = "lazy-getter-object";
 pub(crate) const GETTER_OBJECT: &str = "getter-object";
 
-fn project_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
+fn project_return_shape(shape: &ValueShape) -> Option<ReturnSummary> {
     match shape {
-        ValueShape::Getter { reactive } => Some(ContractReturn {
+        ValueShape::Getter { reactive } => Some(ReturnSummary {
             kind: if *reactive {
                 "reactive-getter"
             } else {
                 "plain"
             }
             .into(),
-            ..ContractReturn::default()
+            ..ReturnSummary::default()
         }),
         ValueShape::Object(KnowledgeSet::Complete(properties))
             if properties
                 .iter()
                 .any(|property| matches!(property.value, ValueShape::Getter { .. })) =>
         {
-            Some(ContractReturn {
+            Some(ReturnSummary {
                 kind: GETTER_OBJECT.into(),
                 properties: properties
                     .iter()
@@ -1293,20 +1293,20 @@ fn project_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
                         (
                             property.name.clone(),
                             project_return_shape(&property.value).unwrap_or_else(|| {
-                                ContractReturn {
+                                ReturnSummary {
                                     kind: "plain".into(),
-                                    ..ContractReturn::default()
+                                    ..ReturnSummary::default()
                                 }
                             }),
                         )
                     })
                     .collect(),
-                ..ContractReturn::default()
+                ..ReturnSummary::default()
             })
         }
         // ADR 0235: valid only as a member, projected there.
         ValueShape::EffectfulCallable(_) => None,
-        ValueShape::ReturnedCallable { members, .. } => Some(ContractReturn {
+        ValueShape::ReturnedCallable { members, .. } => Some(ReturnSummary {
             kind: RETURNED_CALLABLE.into(),
             properties: members
                 .iter()
@@ -1316,52 +1316,52 @@ fn project_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
                 })
                 .collect(),
             prototype: None,
-            ..ContractReturn::default()
+            ..ReturnSummary::default()
         }),
-        ValueShape::Reactive { .. } => Some(ContractReturn {
+        ValueShape::Reactive { .. } => Some(ReturnSummary {
             kind: "accessor".into(),
             label: "normalized reactive result".into(),
             prototype: None,
-            ..ContractReturn::default()
+            ..ReturnSummary::default()
         }),
-        ValueShape::Store { .. } => Some(ContractReturn {
+        ValueShape::Store { .. } => Some(ReturnSummary {
             kind: "store-path".into(),
             label: "normalized store result".into(),
             prototype: None,
-            ..ContractReturn::default()
+            ..ReturnSummary::default()
         }),
         // ADR 0109. Carries the caller's argument index and *no* label: this is
         // not a reactive leaf, it is a conditional one, and reading it as a
         // `store-path` would assert reactivity of a merge of plain objects.
-        ValueShape::MergedProps { from } => Some(ContractReturn {
+        ValueShape::MergedProps { from } => Some(ReturnSummary {
             kind: "merged-props".into(),
             parameter: Some(usize::from(*from)),
             prototype: None,
-            ..ContractReturn::default()
+            ..ReturnSummary::default()
         }),
-        ValueShape::Parameter { index, .. } => Some(ContractReturn {
+        ValueShape::Parameter { index, .. } => Some(ReturnSummary {
             kind: "argument".into(),
             parameter: Some(usize::from(*index)),
             prototype: None,
-            ..ContractReturn::default()
+            ..ReturnSummary::default()
         }),
         // ADR 0115: a fresh array of the caller's arguments is a tuple of
         // argument leaves; `[]` holds nothing to name.
-        ValueShape::ArgumentArray { items } if !items.is_empty() => Some(ContractReturn {
+        ValueShape::ArgumentArray { items } if !items.is_empty() => Some(ReturnSummary {
             kind: "tuple".into(),
             elements: items
                 .iter()
                 .map(|index| {
-                    Some(ContractReturn {
+                    Some(ReturnSummary {
                         kind: "argument".into(),
                         parameter: Some(usize::from(*index)),
                         prototype: None,
-                        ..ContractReturn::default()
+                        ..ReturnSummary::default()
                     })
                 })
                 .collect(),
             prototype: None,
-            ..ContractReturn::default()
+            ..ReturnSummary::default()
         }),
         // ADR 0177: a tuple or object whose member enumeration is not closed
         // still proves each member it lists, at its position or key; "partial"
@@ -1369,11 +1369,11 @@ fn project_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
         // leaves, never the enumeration, so a listed member is as good here as
         // in a closed container, and an unlisted position names no leaf.
         ValueShape::Tuple(KnowledgeSet::Complete(items) | KnowledgeSet::Partial(items)) => {
-            Some(ContractReturn {
+            Some(ReturnSummary {
                 kind: "tuple".into(),
                 elements: items.iter().map(project_member_shape).collect(),
                 prototype: None,
-                ..ContractReturn::default()
+                ..ReturnSummary::default()
             })
         }
         ValueShape::Object(
@@ -1388,12 +1388,12 @@ fn project_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
                 .collect::<BTreeMap<_, _>>();
             // This projection retains reactive leaves, not the certified
             // container's full enumeration. No retained leaf means no local
-            // return summary; an empty object is not a valid ContractReturn.
-            (!properties.is_empty()).then_some(ContractReturn {
+            // return summary; an empty object is not a valid ReturnSummary.
+            (!properties.is_empty()).then_some(ReturnSummary {
                 kind: "object".into(),
                 properties,
                 prototype: None,
-                ..ContractReturn::default()
+                ..ReturnSummary::default()
             })
         }
         ValueShape::Promise(value) | ValueShape::AsyncIterable(value) => {
@@ -1405,11 +1405,11 @@ fn project_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
         // stays one. One that reads nothing names no leaf: calling it
         // observes nothing reactive, invokes nothing the caller handed over and
         // creates nothing, which is what describing no reactive return says.
-        ValueShape::DescribedCallable(call) if !call.reads.is_empty() => Some(ContractReturn {
+        ValueShape::DescribedCallable(call) if !call.reads.is_empty() => Some(ReturnSummary {
             kind: "accessor".into(),
             label: "described callable read".into(),
             prototype: None,
-            ..ContractReturn::default()
+            ..ReturnSummary::default()
         }),
         ValueShape::DescribedCallable(_) => None,
         // ADR 0146: only ever an item of a described callable's returns.
@@ -1417,15 +1417,15 @@ fn project_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
         ValueShape::PrototypeInstance {
             members,
             population,
-        } => Some(ContractReturn {
+        } => Some(ReturnSummary {
             kind: PROTOTYPE_INSTANCE.into(),
             prototype: Some(crate::contract_semantics::PrototypeInstanceRecipe {
                 members: members.clone(),
                 population: *population,
             }),
-            ..ContractReturn::default()
+            ..ReturnSummary::default()
         }),
-        ValueShape::LazyGetterObject { keys, from } => Some(ContractReturn {
+        ValueShape::LazyGetterObject { keys, from } => Some(ReturnSummary {
             kind: LAZY_GETTER_OBJECT.into(),
             parameter: from.map(usize::from),
             properties: keys
@@ -1433,16 +1433,16 @@ fn project_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
                 .map(|key| {
                     (
                         key.clone(),
-                        ContractReturn {
+                        ReturnSummary {
                             kind: OPAQUE_MEMBER.into(),
                             prototype: None,
-                            ..ContractReturn::default()
+                            ..ReturnSummary::default()
                         },
                     )
                 })
                 .collect(),
             prototype: None,
-            ..ContractReturn::default()
+            ..ReturnSummary::default()
         }),
         ValueShape::Unknown
         | ValueShape::Plain
@@ -1911,7 +1911,7 @@ mod owner_requirement_projection_tests {
         UpperBound, ValueShape,
     };
     use crate::{
-        ContractClaim, ContractOwnerRequirement, ContractReturn, OwnerRequirementOperation,
+        ContractClaim, ContractOwnerRequirement, OwnerRequirementOperation, ReturnSummary,
     };
 
     #[test]
@@ -3258,16 +3258,16 @@ mod owner_requirement_projection_tests {
         assert_eq!(
             project(true, vec![returned("return-0", array(&[1]))]),
             (
-                ContractClaim::Known(Some(ContractReturn {
+                ContractClaim::Known(Some(ReturnSummary {
                     kind: "tuple".into(),
-                    elements: vec![Some(ContractReturn {
+                    elements: vec![Some(ReturnSummary {
                         kind: "argument".into(),
                         parameter: Some(1),
                         prototype: None,
-                        ..ContractReturn::default()
+                        ..ReturnSummary::default()
                     })],
                     prototype: None,
-                    ..ContractReturn::default()
+                    ..ReturnSummary::default()
                 })),
                 false
             )
@@ -3610,7 +3610,7 @@ pub(super) struct ResolvedContracts {
     pub(super) bindings: Vec<ResolvedContractBinding>,
     pub(super) by_symbol: HashMap<SymbolId, ResolvedContractBinding>,
     /// Closed, agreed direct runtime returns for callback-result identity.
-    pub(super) direct_returns: HashMap<SymbolId, ContractReturn>,
+    pub(super) direct_returns: HashMap<SymbolId, ReturnSummary>,
     /// Exact receiver-bound calls. Never attach a graph to a shared structural
     /// member declaration or infer dispatch from a property spelling alone.
     pub(super) callee_bindings: HashMap<Location, SymbolId>,
@@ -4990,7 +4990,7 @@ fn bind_contract_barrel_imports(
     returns_shed: &HashSet<SymbolId>,
     bindings: &mut Vec<ResolvedContractBinding>,
     by_symbol: &mut HashMap<SymbolId, ResolvedContractBinding>,
-    direct_returns: &mut HashMap<SymbolId, ContractReturn>,
+    direct_returns: &mut HashMap<SymbolId, ReturnSummary>,
     missing: &mut Vec<StaticDefect>,
 ) {
     let mut demands = Vec::new();
@@ -5576,8 +5576,8 @@ pub(super) struct ContractGraph<'a> {
 pub(super) struct ContractAnalysis<'a> {
     pub(super) summaries: &'a [SummaryReads],
     pub(super) returned: &'a [SummaryReads],
-    pub(super) structured_returns: &'a [Option<ContractReturn>],
-    pub(super) callbacks: &'a [Vec<ContractCallback>],
+    pub(super) structured_returns: &'a [Option<ReturnSummary>],
+    pub(super) callbacks: &'a [Vec<CallbackSummary>],
     /// Per node, the parameters the node calls itself, directly, in its own
     /// body (ADR 0100) -- see `InterproceduralGraphContribution`.
     pub(super) direct_callback_parameters: &'a [Vec<usize>],
@@ -5605,8 +5605,8 @@ struct ContractExportNode<'a> {
     node: &'a SummaryNode,
     summary: &'a SummaryReads,
     returned_summary: &'a SummaryReads,
-    structured_return: Option<&'a ContractReturn>,
-    callbacks: &'a [ContractCallback],
+    structured_return: Option<&'a ReturnSummary>,
+    callbacks: &'a [CallbackSummary],
     direct_callback_parameters: &'a [usize],
     guaranteed_callback_parameters: &'a [usize],
     direct_protocol_parameters: &'a [(crate::contract_semantics::InvokeProtocol, usize)],
@@ -5738,7 +5738,7 @@ fn contract_export_function(
         },
     );
     let returns = structured_return.cloned().or_else(|| {
-        first_returned.map(|read| ContractReturn {
+        first_returned.map(|read| ReturnSummary {
             kind: if semantics.source_kinds.get(&read.symbol) == Some(&ReactiveSourceKind::Store) {
                 "store-path".into()
             } else {
@@ -5882,7 +5882,7 @@ fn contract_export_function(
 /// sentinel two lines up has exactly the same width for the same reason.
 ///
 /// `callbacks` must already be sorted by parameter.
-fn callbacks_contradict_on_a_parameter(callbacks: &[ContractCallback]) -> bool {
+fn callbacks_contradict_on_a_parameter(callbacks: &[CallbackSummary]) -> bool {
     // Per invoked value: the argument itself, or one member path of it (item
     // B of ways-to-improve § 3.3). A row for `handler` and a row for
     // `handler[0]` describe two different invocations and cannot contradict
@@ -6928,10 +6928,10 @@ mod native_obligation_tests {
 
 #[cfg(test)]
 mod callback_contradiction_tests {
-    use super::{ContractCallback, callbacks_contradict_on_a_parameter};
+    use super::{CallbackSummary, callbacks_contradict_on_a_parameter};
 
-    fn row(parameter: usize, execution: &str) -> ContractCallback {
-        ContractCallback {
+    fn row(parameter: usize, execution: &str) -> CallbackSummary {
+        CallbackSummary {
             parameter,
             execution: execution.into(),
             schedule: None,
@@ -7905,7 +7905,7 @@ fn bind_returned_member_effects(
 pub(crate) fn returned_object_members_are_stable(
     file: &solid_facts::FileFacts,
     root: solid_facts::core::Span,
-    returned: &ContractReturn,
+    returned: &ReturnSummary,
 ) -> bool {
     let refers_to_root = |span| file.ast.reference_declaration(span) == Some(root);
     if file
@@ -8285,7 +8285,7 @@ mod captured_lookup_tests {
         hazard: bool,
     ) -> Option<crate::ContractExport> {
         use crate::contract_semantics::{CapturedLookup, ClaimDomain, InvokeProtocol, ValueSource};
-        use crate::{ContractCallback, ContractClaim, ContractExport, EntitySymbols, SymbolId};
+        use crate::{CallbackSummary, ContractClaim, ContractExport, EntitySymbols, SymbolId};
         use solid_facts::{
             FileFacts, ast,
             compiler::{COMPILER_FACTS_PROTOCOL, ExecutionMap},
@@ -8365,7 +8365,7 @@ mod captured_lookup_tests {
                     path: vec![],
                 },
             )]),
-            callbacks: ContractClaim::Known(vec![ContractCallback {
+            callbacks: ContractClaim::Known(vec![CallbackSummary {
                 parameter: usize::MAX,
                 execution: "inline".into(),
                 schedule: None,

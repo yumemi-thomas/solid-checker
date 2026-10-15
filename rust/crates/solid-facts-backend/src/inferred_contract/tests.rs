@@ -421,7 +421,7 @@ fn self_bootstrapped_callbacks_are_unknown_while_consuming_callbacks_survive() {
     ] {
         let summary = ContractExport {
             kind: "function".into(),
-            callbacks: ContractClaim::Known(vec![solid_reactive_ir::ContractCallback {
+            callbacks: ContractClaim::Known(vec![solid_reactive_ir::CallbackSummary {
                 parameter: 0,
                 execution: "inline".into(),
                 schedule: None,
@@ -503,7 +503,7 @@ fn self_bootstrapped_callbacks_are_unknown_while_consuming_callbacks_survive() {
 #[test]
 fn a_parameter_read_or_coercion_is_described_as_a_non_call_callbacks_item() {
     use solid_reactive_ir::contract_semantics::{InvokeProtocol, Tracking};
-    let call_row = solid_reactive_ir::ContractCallback {
+    let call_row = solid_reactive_ir::CallbackSummary {
         parameter: 0,
         execution: "inline".into(),
         schedule: None,
@@ -664,7 +664,7 @@ fn a_parameter_read_or_coercion_is_described_as_a_non_call_callbacks_item() {
 #[test]
 fn a_member_call_of_a_parameter_is_described_with_its_path() {
     use solid_reactive_ir::contract_semantics::{InvokeProtocol, Tracking};
-    let row = |path: Vec<String>| solid_reactive_ir::ContractCallback {
+    let row = |path: Vec<String>| solid_reactive_ir::CallbackSummary {
         parameter: 1,
         execution: "inline".into(),
         schedule: None,
@@ -795,7 +795,7 @@ fn a_deferred_callback_description_stays_partial_and_proposes_nothing() {
     ] {
         let summary = ContractExport {
             kind: "function".into(),
-            callbacks: ContractClaim::Known(vec![solid_reactive_ir::ContractCallback {
+            callbacks: ContractClaim::Known(vec![solid_reactive_ir::CallbackSummary {
                 parameter: 0,
                 execution: execution.into(),
                 schedule: None,
@@ -1265,11 +1265,11 @@ fn an_open_returns_claim_publishes_its_retained_return_as_an_item() {
     let summary = ContractExport {
         kind: "function".into(),
         returns: ContractClaim::Open,
-        open_return: Some(solid_reactive_ir::ContractReturn {
+        open_return: Some(solid_reactive_ir::ReturnSummary {
             kind: "accessor".into(),
             label: "memo".into(),
             prototype: None,
-            ..solid_reactive_ir::ContractReturn::default()
+            ..solid_reactive_ir::ReturnSummary::default()
         }),
         async_behavior: ContractClaim::Known(String::new()),
         ..ContractExport::default()
@@ -1534,7 +1534,7 @@ fn inherited_summary() -> ContractExport {
         kind: "function".into(),
         reactive_reads: ContractClaim::Open,
         returns: ContractClaim::Known(None),
-        callbacks: ContractClaim::Known(vec![solid_reactive_ir::ContractCallback {
+        callbacks: ContractClaim::Known(vec![solid_reactive_ir::CallbackSummary {
             parameter: 0,
             execution: "inline".into(),
             schedule: None,
@@ -1985,7 +1985,7 @@ fn a_member_alias_proposes_its_empty_call_domains_for_the_alias_census() {
 #[test]
 fn every_execution_word_states_tracking_from_the_row_and_reads_back_to_it() {
     use solid_reactive_ir::contract_semantics::{InvokeProtocol, OperationId, Tracking};
-    let row = |execution: &str, clears_tracking: bool| solid_reactive_ir::ContractCallback {
+    let row = |execution: &str, clears_tracking: bool| solid_reactive_ir::CallbackSummary {
         parameter: 0,
         execution: execution.into(),
         schedule: None,
@@ -2013,10 +2013,7 @@ fn every_execution_word_states_tracking_from_the_row_and_reads_back_to_it() {
             "{execution} {clears_tracking}"
         );
         assert_eq!(
-            solid_reactive_ir::ContractCallback::clears_tracking_from(
-                execution,
-                operation.tracking
-            ),
+            solid_reactive_ir::CallbackSummary::clears_tracking_from(execution, operation.tracking),
             clears_tracking,
             "{execution} {clears_tracking} round-trips"
         );
@@ -2035,7 +2032,7 @@ fn every_execution_word_states_tracking_from_the_row_and_reads_back_to_it() {
         Tracking::Untracked,
         Tracking::AmbientAtExecution,
     ] {
-        assert!(!solid_reactive_ir::ContractCallback::clears_tracking_from(
+        assert!(!solid_reactive_ir::CallbackSummary::clears_tracking_from(
             "tracked", tracking
         ));
     }

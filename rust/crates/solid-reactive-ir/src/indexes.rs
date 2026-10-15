@@ -720,14 +720,14 @@ impl<'a> SemanticLookup<'a> {
 
     /// The known callback rows of the contract bound to `symbol` that invoke
     /// the argument as a callable. A non-call row (a property read or
-    /// coercion of the argument, `ContractCallback::is_invocation`) is not an
+    /// coercion of the argument, `CallbackSummary::is_invocation`) is not an
     /// invocation any caller of this lookup models, and is left out; so is a
     /// member-path row (item B of ways-to-improve § 3.3), which invokes a
     /// member of the argument rather than the argument, and whose execution
     /// or owner is no claim about the function written at the slot. `Some`
     /// still means the enumeration is known, even when it holds only such
     /// rows.
-    pub(super) fn contract_callbacks(&self, symbol: &str) -> Option<Vec<&super::ContractCallback>> {
+    pub(super) fn contract_callbacks(&self, symbol: &str) -> Option<Vec<&super::CallbackSummary>> {
         self.resolved_contracts
             .by_symbol
             .get(symbol)
@@ -742,10 +742,7 @@ impl<'a> SemanticLookup<'a> {
 
     /// The accepted value-enumeration rows of this export (ADR 0225) whose
     /// source is a bare argument. Empty when callbacks are not known.
-    pub(super) fn value_enumeration_callbacks(
-        &self,
-        symbol: &str,
-    ) -> Vec<&super::ContractCallback> {
+    pub(super) fn value_enumeration_callbacks(&self, symbol: &str) -> Vec<&super::CallbackSummary> {
         self.resolved_contracts
             .by_symbol
             .get(symbol)
@@ -766,7 +763,7 @@ impl<'a> SemanticLookup<'a> {
         &self,
         file: &FileFacts,
         call: &solid_facts::ast::CallFact,
-    ) -> Option<(&crate::ContractReturn, &str, &Location)> {
+    ) -> Option<(&crate::ReturnSummary, &str, &Location)> {
         let binding = self
             .resolved_contracts
             .by_symbol
@@ -5080,7 +5077,7 @@ mod tests {
             (true, crate::ContractClaim::Open, vec![]),
             (
                 true,
-                crate::ContractClaim::Known(vec![crate::ContractCallback {
+                crate::ContractClaim::Known(vec![crate::CallbackSummary {
                     parameter: 0,
                     execution: "inline".into(),
                     schedule: None,
@@ -5200,18 +5197,18 @@ mod tests {
 
     #[test]
     fn object_member_stability_uses_every_binder_reference() {
-        let returned = crate::ContractReturn {
+        let returned = crate::ReturnSummary {
             kind: "object".into(),
             properties: std::collections::BTreeMap::from([(
                 "member".into(),
-                crate::ContractReturn {
+                crate::ReturnSummary {
                     kind: crate::contracts::EFFECTFUL_MEMBER.into(),
                     prototype: None,
-                    ..crate::ContractReturn::default()
+                    ..crate::ReturnSummary::default()
                 },
             )]),
             prototype: None,
-            ..crate::ContractReturn::default()
+            ..crate::ReturnSummary::default()
         };
         for (source, stable) in [
             ("const obj = make(); obj.member();", true),

@@ -16778,8 +16778,8 @@ export const value = phantom;
     #[test]
     fn returned_parameter_identity_verifies_without_a_concrete_generic_shape() {
         use solid_reactive_ir::{
-            ContractClaim, ContractEntrypoint, ContractExport, ContractPackage, ContractReturn,
-            PackageContract,
+            ContractClaim, ContractEntrypoint, ContractExport, ContractPackage, PackageContract,
+            ReturnSummary,
         };
         let Some(pin) = pinned_producer_for_test() else {
             return;
@@ -16840,13 +16840,13 @@ export const value = phantom;
                                         returns: if export == "mutated" && forged != Some(export) {
                                             ContractClaim::Open
                                         } else {
-                                            ContractClaim::Known(Some(ContractReturn {
+                                            ContractClaim::Known(Some(ReturnSummary {
                                                 kind: "argument".into(),
                                                 parameter: Some(usize::from(
                                                     export == "second" && forged != Some(export),
                                                 )),
                                                 prototype: None,
-                                                ..ContractReturn::default()
+                                                ..ReturnSummary::default()
                                             }))
                                         },
                                         ..ContractExport::default()
@@ -20325,7 +20325,7 @@ export const value = phantom;
             DescribedCall, DescribedCallback, InvokeProtocol,
         };
         use solid_reactive_ir::{
-            CallbackSchedule, ContractCallback, ContractClaim, ContractEntrypoint, ContractExport,
+            CallbackSchedule, CallbackSummary, ContractClaim, ContractEntrypoint, ContractExport,
             ContractPackage, PackageContract,
         };
         let described = |returns: Vec<ValueShape>, invoked: &[u16]| DescribedCall {
@@ -20393,7 +20393,7 @@ export const value = phantom;
             &[],
             "/project/src/app.ts",
         );
-        let kept_row = |parameter: usize| ContractCallback {
+        let kept_row = |parameter: usize| CallbackSummary {
             parameter,
             execution: "deferred".into(),
             schedule: Some(CallbackSchedule::ResultAccess),
@@ -20612,7 +20612,7 @@ export const value = phantom;
     )> {
         use solid_reactive_ir::contract_semantics::{ContractProposal, InvokeProtocol};
         use solid_reactive_ir::{
-            ContractCallback, ContractClaim, ContractEntrypoint, ContractExport, ContractPackage,
+            CallbackSummary, ContractClaim, ContractEntrypoint, ContractExport, ContractPackage,
             PackageContract,
         };
         let exports = [
@@ -20666,7 +20666,7 @@ export const value = phantom;
             &[],
             "/project/src/app.ts",
         );
-        let inline = ContractCallback {
+        let inline = CallbackSummary {
             parameter: 0,
             execution: "inline".into(),
             schedule: None,
@@ -21017,7 +21017,7 @@ export const value = phantom;
     )> {
         use solid_reactive_ir::contract_semantics::InvokeProtocol;
         use solid_reactive_ir::{
-            ContractCallback, ContractClaim, ContractEntrypoint, ContractExport, ContractPackage,
+            CallbackSummary, ContractClaim, ContractEntrypoint, ContractExport, ContractPackage,
             PackageContract,
         };
         type Claim = (
@@ -21101,7 +21101,7 @@ export const value = phantom;
                                     callbacks: ContractClaim::Known(
                                         calls
                                             .iter()
-                                            .map(|parameter| ContractCallback {
+                                            .map(|parameter| CallbackSummary {
                                                 parameter: *parameter,
                                                 execution: "inline".into(),
                                                 schedule: None,
@@ -21318,7 +21318,7 @@ export const value = phantom;
     )> {
         use solid_reactive_ir::contract_semantics::InvokeProtocol;
         use solid_reactive_ir::{
-            CallbackSchedule, ContractCallback, ContractClaim, ContractEntrypoint, ContractExport,
+            CallbackSchedule, CallbackSummary, ContractClaim, ContractEntrypoint, ContractExport,
             ContractPackage, PackageContract,
         };
         type Claim = (&'static str, &'static [usize], &'static [usize]);
@@ -21375,7 +21375,7 @@ export const value = phantom;
             &[],
             "/project/src/app.ts",
         );
-        let row = |parameter: usize, kept: bool| ContractCallback {
+        let row = |parameter: usize, kept: bool| CallbackSummary {
             parameter,
             execution: if kept { "deferred" } else { "inline" }.into(),
             schedule: kept.then_some(CallbackSchedule::ResultAccess),
@@ -21556,7 +21556,7 @@ export const value = phantom;
     )> {
         use solid_reactive_ir::contract_semantics::InvokeProtocol;
         use solid_reactive_ir::{
-            ContractCallback, ContractClaim, ContractEntrypoint, ContractExport, ContractPackage,
+            CallbackSummary, ContractClaim, ContractEntrypoint, ContractExport, ContractPackage,
             PackageContract,
         };
         type Claim = (
@@ -21622,7 +21622,7 @@ export const value = phantom;
             &[],
             "/project/src/app.ts",
         );
-        let row = |parameter: usize, path: Vec<String>| ContractCallback {
+        let row = |parameter: usize, path: Vec<String>| CallbackSummary {
             parameter,
             execution: "inline".into(),
             schedule: None,

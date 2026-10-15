@@ -7,12 +7,12 @@ use solid_facts::ast::{BindingFact, BindingShape, CallFact, FunctionKind, Identi
 use solid_facts::core::Span;
 use typefacts::Location;
 
-use crate::ContractReturn;
+use crate::ReturnSummary;
 use crate::indexes::{SemanticLookup, binding_written};
 use crate::owners::containing_ast_function;
 
 pub(super) struct CallbackReturn<'a> {
-    pub(super) bindings: Vec<(Span, ContractReturn)>,
+    pub(super) bindings: Vec<(Span, ReturnSummary)>,
     pub(super) created: &'a CallFact,
     pub(super) primitive: Option<Primitive>,
     pub(super) origin: Option<(&'a str, &'a Location)>,
@@ -69,8 +69,8 @@ fn callback_result_binding_chain(
 fn selected(
     tuple_iteration_veto: bool,
     binding: &BindingFact,
-    value: &ContractReturn,
-) -> Option<Vec<(Span, ContractReturn)>> {
+    value: &ReturnSummary,
+) -> Option<Vec<(Span, ReturnSummary)>> {
     if binding.shape == BindingShape::Array && value.kind == "tuple" && tuple_iteration_veto {
         return None;
     }
@@ -136,7 +136,7 @@ pub(super) fn withdrawn_tuple_candidates(
     lookup: &SemanticLookup<'_>,
     file: &FileFacts,
     call: &CallFact,
-) -> Vec<(Span, ContractReturn)> {
+) -> Vec<(Span, ReturnSummary)> {
     if !lookup.tuple_iteration_may_be_mutated() || resolve(lookup, file, call).is_some() {
         return Vec::new();
     }
@@ -240,24 +240,24 @@ fn resolve_with_iteration_veto<'a>(
             lookup
                 .dialect
                 .reactive_result_slot(primitive, slot)
-                .map(|role| ContractReturn {
+                .map(|role| ReturnSummary {
                     kind: match role {
                         ReactiveRole::Accessor => "accessor",
                         ReactiveRole::Setter => "setter",
                     }
                     .into(),
                     label: "callback returned source".into(),
-                    ..ContractReturn::default()
+                    ..ReturnSummary::default()
                 })
         };
         let returned = if lookup.dialect.returns_reactive_tuple(primitive) {
-            ContractReturn {
+            ReturnSummary {
                 kind: "tuple".into(),
                 elements: vec![
                     shape(ResultSlot::TupleItem(0)),
                     shape(ResultSlot::TupleItem(1)),
                 ],
-                ..ContractReturn::default()
+                ..ReturnSummary::default()
             }
         } else {
             shape(ResultSlot::Whole)?

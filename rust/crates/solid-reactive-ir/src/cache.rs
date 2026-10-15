@@ -7,7 +7,7 @@ use crate::owners::{
 };
 use crate::pipeline::available_analysis_workers;
 use crate::{
-    ActionInvocation, AsyncRead, CacheRetention, ContractCallback, ContractExport,
+    ActionInvocation, AsyncRead, CacheRetention, CallbackSummary, ContractExport,
     ContractGenerationObligation, FunctionNode, OwnerRequirement, Program, ReactiveRead,
     ReactiveSourceKind, ReactiveWrite, RuleOptions, StaticDefect,
 };
@@ -240,7 +240,7 @@ pub(crate) struct InterproceduralGraphContribution {
     /// site supplies it -- so this records the obligation and leaves
     /// resolution to the site.
     pub(crate) invoked_parameter_members: Vec<(Span, crate::interproc::ParameterMemberInvocation)>,
-    pub(crate) callbacks: Vec<(Span, ContractCallback)>,
+    pub(crate) callbacks: Vec<(Span, CallbackSummary)>,
     pub(crate) callback_forwardings: Vec<(
         Span,
         InterproceduralGraphTarget,
@@ -342,7 +342,7 @@ pub(crate) struct ContractExportFragment {
 #[derive(Default)]
 pub(crate) struct CachedContractExports {
     pub(crate) nodes: HashMap<ContractNodeKey, ContractExport>,
-    pub(crate) structured_returns: HashMap<ContractNodeKey, crate::ContractReturn>,
+    pub(crate) structured_returns: HashMap<ContractNodeKey, crate::ReturnSummary>,
     pub(crate) files: HashMap<String, ContractExportFragment>,
     pub(crate) aggregate: Option<Arc<BTreeMap<String, ContractExport>>>,
 }

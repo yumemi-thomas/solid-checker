@@ -7233,7 +7233,7 @@ fn dispatch_independent_parameter_return(
 #[cfg(test)]
 mod dispatch_identity_tests {
     use super::*;
-    use solid_reactive_ir::{ContractClaim, ContractExport, ContractReturn, StaticDefectKind};
+    use solid_reactive_ir::{ContractClaim, ContractExport, ReturnSummary, StaticDefectKind};
 
     #[test]
     fn dispatch_identity_preserves_only_a_positive_parameter_relation() {
@@ -7243,7 +7243,7 @@ mod dispatch_identity_tests {
         };
         let mut summary = ContractExport {
             kind: "function".into(),
-            returns: ContractClaim::Known(Some(ContractReturn {
+            returns: ContractClaim::Known(Some(ReturnSummary {
                 kind: "argument".into(),
                 parameter: Some(0),
                 prototype: None,
@@ -7262,7 +7262,7 @@ mod dispatch_identity_tests {
             &summary
         ));
         for kind in ["object", "tuple", "accessor", "callback-result"] {
-            summary.returns = ContractClaim::Known(Some(ContractReturn {
+            summary.returns = ContractClaim::Known(Some(ReturnSummary {
                 kind: kind.into(),
                 parameter: Some(0),
                 prototype: None,
@@ -7270,7 +7270,7 @@ mod dispatch_identity_tests {
             }));
             assert!(!dispatch_independent_parameter_return(&dispatch, &summary));
         }
-        summary.returns = ContractClaim::Known(Some(ContractReturn {
+        summary.returns = ContractClaim::Known(Some(ReturnSummary {
             kind: "argument".into(),
             prototype: None,
             ..Default::default()
@@ -8064,7 +8064,7 @@ fn emit_package_contract(
                     disposition,
                     solid_facts::ast::RetainedParameter::Kept { .. }
                 ) {
-                    rows.push(solid_reactive_ir::ContractCallback {
+                    rows.push(solid_reactive_ir::CallbackSummary {
                         parameter,
                         execution: "deferred".into(),
                         schedule: Some(solid_reactive_ir::CallbackSchedule::ResultAccess),
@@ -10398,7 +10398,7 @@ fn propose_returned_literal_captures(summary: &mut solid_reactive_ir::ContractEx
             continue;
         }
         rows.retain(|row| row.parameter != parameter);
-        rows.push(solid_reactive_ir::ContractCallback {
+        rows.push(solid_reactive_ir::CallbackSummary {
             parameter,
             execution: "deferred".into(),
             schedule: Some(solid_reactive_ir::CallbackSchedule::ResultAccess),
@@ -11087,10 +11087,10 @@ mod open_owner_requirement_tests {
     // open alias union keeps it only when every alias states the same one.
     #[test]
     fn opening_returns_keeps_the_described_return() {
-        let accessor = solid_reactive_ir::ContractReturn {
+        let accessor = solid_reactive_ir::ReturnSummary {
             kind: "accessor".into(),
             prototype: None,
-            ..solid_reactive_ir::ContractReturn::default()
+            ..solid_reactive_ir::ReturnSummary::default()
         };
         let mut summary = function(ContractClaim::Known(vec![]));
         summary.returns = ContractClaim::Known(Some(accessor.clone()));

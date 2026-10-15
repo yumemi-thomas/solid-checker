@@ -11,8 +11,8 @@ use std::collections::BTreeSet;
 use crate::ClosureHazardKind;
 
 use solid_reactive_ir::{
-    CallbackSchedule, ContractCallback, ContractClaim, ContractExport, ContractOwnerRequirement,
-    ContractReturn, OwnerRequirementOperation, PackageContract,
+    CallbackSchedule, CallbackSummary, ContractClaim, ContractExport, ContractOwnerRequirement,
+    OwnerRequirementOperation, PackageContract, ReturnSummary,
     contract_semantics::{
         ArrayLength, ArtifactCase, CallClaims, CallSemantics, CallbackInvocation,
         CapabilityKnowledge, Cardinality, CardinalityScope, ClaimDomain, ClaimPath, ComposedFrom,
@@ -977,7 +977,7 @@ fn normalize_export(
     // identifier proposes what invoking it does -- an owned-signal read --
     // and the census decides whether the signal is one this export created,
     // inert, and exactly what is read. Anything else proposes its shape.
-    let described_return_operations = |returned: &ContractReturn,
+    let described_return_operations = |returned: &ReturnSummary,
                                        operations: &mut Vec<Operation>|
      -> Result<Vec<OperationId>, ContractFailure> {
         if returned.kind == "accessor"
@@ -1329,9 +1329,9 @@ fn normalize_export(
 /// its projected non-call rows are republished as they were rather than
 /// derived again, so a row is never stated twice.
 fn with_derived_protocol_items(
-    callbacks: &[ContractCallback],
+    callbacks: &[CallbackSummary],
     summary: &ContractExport,
-) -> Vec<ContractCallback> {
+) -> Vec<CallbackSummary> {
     use solid_reactive_ir::contract_semantics::InvokeProtocol;
     let mut rows = callbacks.to_vec();
     let derived = summary
@@ -1345,7 +1345,7 @@ fn with_derived_protocol_items(
                 .map(|parameter| (InvokeProtocol::Coerce, *parameter)),
         );
     for (protocol, parameter) in derived {
-        let row = ContractCallback {
+        let row = CallbackSummary {
             parameter,
             execution: "inline".into(),
             schedule: None,
@@ -1364,7 +1364,7 @@ fn with_derived_protocol_items(
 
 fn callback_operation(
     id: OperationId,
-    callback: &ContractCallback,
+    callback: &CallbackSummary,
     resources: &mut Vec<Resource>,
 ) -> Result<Operation, ContractFailure> {
     // Non-call rows use the model's exact protocol shapes: legacy uses have
@@ -1441,7 +1441,7 @@ fn callback_operation(
         // caller is in. Only a deferral proven to clear -- a reviewed
         // fresh-stack host queue, a dialect slot stated untracked, a clearing
         // wrapper inside the deferral -- says `untracked`
-        // (`ContractCallback::clears_tracking`); every other deferral says
+        // (`CallbackSummary::clears_tracking`); every other deferral says
         // `ambient-at-execution`.
         "deferred" => (
             Some(Schedule::Queued),
@@ -1937,7 +1937,7 @@ fn supplement_structural_proposal(known: ValueShape, literal: &ValueShape) -> Va
     }
 }
 
-fn return_shape(returned: &ContractReturn) -> Result<ValueShape, ContractFailure> {
+fn return_shape(returned: &ReturnSummary) -> Result<ValueShape, ContractFailure> {
     Ok(match returned.kind.as_str() {
         "accessor" => ValueShape::Reactive {
             role: ReactiveRole::Accessor,

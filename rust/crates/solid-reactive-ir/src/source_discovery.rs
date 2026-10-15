@@ -10,7 +10,7 @@ use crate::owners::{
 };
 use crate::pipeline::{parallel_file_chunk_results, parallel_file_results, parallel_slice_results};
 use crate::{
-    BuildTimings, ContractCallback, ContractReturn, PrimitiveName, ReactiveSourceKind,
+    BuildTimings, CallbackSummary, PrimitiveName, ReactiveSourceKind, ReturnSummary,
     RuntimeEnvironment, RuntimeRendering, call_primitive_name, jsx_primitive_name, known_primitive,
     location,
 };
@@ -92,7 +92,7 @@ fn push_contracted_return_source(
     result: &mut SourceDiscoveryContribution,
     symbol: &SymbolId,
     display: SymbolId,
-    returned: &ContractReturn,
+    returned: &ReturnSummary,
     export_name: &str,
     contract_location: &Location,
 ) {
@@ -204,16 +204,16 @@ struct EffectiveReturnContext<'a> {
 }
 
 fn effective_call_return(
-    returned: &ContractReturn,
+    returned: &ReturnSummary,
     call: &solid_facts::ast::CallFact,
     context: &EffectiveReturnContext<'_>,
     depth: usize,
-) -> Option<ContractReturn> {
+) -> Option<ReturnSummary> {
     if depth == 0 {
         return None;
     }
     if returned.kind == "tuple" {
-        return Some(ContractReturn {
+        return Some(ReturnSummary {
             elements: returned
                 .elements
                 .iter()
@@ -228,7 +228,7 @@ fn effective_call_return(
         });
     }
     if returned.kind == "object" {
-        return Some(ContractReturn {
+        return Some(ReturnSummary {
             properties: returned
                 .properties
                 .iter()
@@ -283,7 +283,7 @@ fn effective_call_return(
                     containing_ast_function(&context.file.ast, candidate.span)
                         .is_some_and(|owner| owner.span == function.span)
                 }));
-        let mut resolved = None::<ContractReturn>;
+        let mut resolved = None::<ReturnSummary>;
         for returned_value in returns {
             let value = returned_value.argument?;
             let inner = context.ast_index.call_by_span(value).or_else(|| {
@@ -618,7 +618,7 @@ fn effective_value_return(
     span: solid_facts::core::Span,
     context: &EffectiveReturnContext<'_>,
     depth: usize,
-) -> Option<ContractReturn> {
+) -> Option<ReturnSummary> {
     if depth == 0 {
         return None;
     }
@@ -733,7 +733,7 @@ fn effective_inner_call_return(
     inner: &solid_facts::ast::CallFact,
     context: &EffectiveReturnContext<'_>,
     depth: usize,
-) -> Option<ContractReturn> {
+) -> Option<ReturnSummary> {
     if let Some(contracted) = context
         .entities
         .at(context.file.path.as_str(), inner.callee)
@@ -763,29 +763,29 @@ fn effective_inner_call_return(
     // return two-slot tuples -- were missing, so a read traced through either
     // was told the call returns the store itself.
     if context.dialect.returns_reactive_tuple(primitive) {
-        return Some(ContractReturn {
+        return Some(ReturnSummary {
             kind: "tuple".into(),
             elements: vec![
-                Some(ContractReturn {
+                Some(ReturnSummary {
                     kind: kind.into(),
                     label: "wrapped reactive value".into(),
                     prototype: None,
-                    ..ContractReturn::default()
+                    ..ReturnSummary::default()
                 }),
                 None,
             ],
             prototype: None,
-            ..ContractReturn::default()
+            ..ReturnSummary::default()
         });
     }
     context
         .dialect
         .creates_reactive_source(primitive)
-        .then(|| ContractReturn {
+        .then(|| ReturnSummary {
             kind: kind.into(),
             label: "wrapped reactive value".into(),
             prototype: None,
-            ..ContractReturn::default()
+            ..ReturnSummary::default()
         })
 }
 
@@ -798,7 +798,7 @@ fn effective_returned_callable_call(
     call: &solid_facts::ast::CallFact,
     context: &EffectiveReturnContext<'_>,
     depth: usize,
-) -> Option<(ContractReturn, String, Location)> {
+) -> Option<(ReturnSummary, String, Location)> {
     if depth == 0 {
         return None;
     }
@@ -826,11 +826,11 @@ fn effective_returned_callable_call(
     if returned.kind != "callback-result-function" {
         return None;
     }
-    let relation = ContractReturn {
+    let relation = ReturnSummary {
         kind: "callback-result".into(),
         parameter: returned.parameter,
         prototype: None,
-        ..ContractReturn::default()
+        ..ReturnSummary::default()
     };
     effective_call_return(&relation, factory_call, context, depth - 1).map(|returned| {
         (
@@ -1869,8 +1869,8 @@ pub(crate) struct SourceDiscovery {
     pub(crate) value_form_stores: HashSet<SymbolId>,
     pub(crate) contract_reads: HashMap<SymbolId, Vec<crate::ContractReadSite>>,
     pub(crate) contract_parameter_reads: HashMap<SymbolId, Vec<crate::ContractParameterReadSite>>,
-    pub(crate) contract_callbacks: HashMap<SymbolId, Vec<ContractCallback>>,
-    pub(crate) contract_returns: HashMap<SymbolId, (ContractReturn, Location)>,
+    pub(crate) contract_callbacks: HashMap<SymbolId, Vec<CallbackSummary>>,
+    pub(crate) contract_returns: HashMap<SymbolId, (ReturnSummary, Location)>,
     pub(crate) contracted_accessor_symbols: HashSet<SymbolId>,
     /// ADR 0294: bindings and members whose only evidence of being a
     /// reactive source is a dialect type alias. Never in `accessors`.
@@ -2043,8 +2043,8 @@ pub(crate) fn discover_sources(
     let mut contract_reads = HashMap::<SymbolId, Vec<crate::ContractReadSite>>::new();
     let mut contract_parameter_reads =
         HashMap::<SymbolId, Vec<crate::ContractParameterReadSite>>::new();
-    let mut contract_callbacks = HashMap::<SymbolId, Vec<ContractCallback>>::new();
-    let mut contract_returns = HashMap::<SymbolId, (ContractReturn, Location)>::new();
+    let mut contract_callbacks = HashMap::<SymbolId, Vec<CallbackSummary>>::new();
+    let mut contract_returns = HashMap::<SymbolId, (ReturnSummary, Location)>::new();
     let mut contracted_accessor_symbols = HashSet::<SymbolId>::new();
 
     for contracted in &resolved_contracts.bindings {
@@ -2091,7 +2091,7 @@ pub(crate) fn discover_sources(
         }
         // Callable rows and explicit value enumerations only. An enumeration
         // is retained for the occurrence Get consumer, never as a callable:
-        // a non-call row (`ContractCallback::is_invocation`) is no
+        // a non-call row (`CallbackSummary::is_invocation`) is no
         // graph edge, no invoked parameter, no wrapper and no re-pushed row. A
         // member-path row is kept and every reader resolves the member it
         // calls before folding anything (`contract_callback_invoked_value`,

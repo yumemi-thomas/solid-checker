@@ -36,7 +36,7 @@ pub(crate) fn structural_binding_is_stable(
     file: &FileFacts,
     entities: &EntitySymbols,
     root: &SymbolId,
-    shape: &crate::ContractReturn,
+    shape: &crate::ReturnSummary,
     tuple_iteration_veto: bool,
 ) -> bool {
     if shape.kind == "tuple" && tuple_iteration_veto {
@@ -241,11 +241,11 @@ mod tests {
                     jsx_operations: vec![],
                 }),
             };
-            let shape = crate::ContractReturn {
+            let shape = crate::ReturnSummary {
                 kind: "object".into(),
                 properties: std::collections::BTreeMap::from([(
                     "value".into(),
-                    crate::ContractReturn {
+                    crate::ReturnSummary {
                         kind: "accessor".into(),
                         prototype: None,
                         ..Default::default()

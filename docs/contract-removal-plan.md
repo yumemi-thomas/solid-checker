@@ -288,11 +288,14 @@ Recorded for what remains:
   unconditional deletion at D2;
 - the `ContractCallback` / `ContractReturn` aliases and the
   `contract_semantics::InvokeProtocol` re-export stay through the rollback
-  release and leave when their last reader migrates (a count ratchet:
-  `rg -w "ContractCallback|ContractReturn"` must not grow). Migrating the old
-  spellings is the remaining spelling work; it is not evidence that the shared
-  fields, row 13 or P2 are finished. P4 inference, P5 and P7 remain open, and
-  D1–D8 wait for one actual release after P7.
+  release. The internal Rust callers now spell `CallbackSummary` and
+  `ReturnSummary` (the same types), so the aliases' only remaining Rust uses
+  are their two declarations and three string literals in the Debug-order pin
+  (a count ratchet: `rg -w "ContractCallback|ContractReturn" --glob '*.rs'`
+  must list exactly those five lines and never grow). The migration is spelling
+  only; it is not evidence that the shared fields, row 13 or P2 are finished.
+  P4 inference, P5 and P7 remain open, and D1–D8 wait for one actual release
+  after P7.
 
 ## Risks
 

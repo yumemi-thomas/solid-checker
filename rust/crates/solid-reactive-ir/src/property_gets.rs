@@ -140,7 +140,7 @@ fn obligation(context: &ReadContext<'_, '_>) -> Option<StaticDefect> {
 
 pub(super) fn reads(
     context: &ReadContext<'_, '_>,
-    callback: &ContractCallback,
+    callback: &CallbackSummary,
 ) -> (
     Vec<ReactiveRead>,
     Option<StaticDefect>,
@@ -350,7 +350,7 @@ fn helper_forwards(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
     lookup: &SemanticLookup<'_>,
-) -> Vec<ContractCallback> {
+) -> Vec<CallbackSummary> {
     // A directive can hand the function to a compiler or host that replaces
     // it, so its body need not run at the call. `"use server"` is the
     // default, and the server-function directive is configurable to any text
@@ -511,7 +511,7 @@ pub(super) fn forwarded_enumerations(
     file: &solid_facts::FileFacts,
     call: &solid_facts::ast::CallFact,
     lookup: &SemanticLookup<'_>,
-) -> Vec<ContractCallback> {
+) -> Vec<CallbackSummary> {
     if call.construct {
         return Vec::new();
     }

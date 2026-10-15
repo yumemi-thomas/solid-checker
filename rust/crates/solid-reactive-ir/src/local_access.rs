@@ -14,8 +14,8 @@ use crate::owners::{
 use crate::pipeline::parallel_file_chunk_results;
 use crate::source_discovery::{AsyncSourceOptions, PropUse, PropsReactivityIndex};
 use crate::{
-    ActionInvocation, AsyncRead, ContractReturn, ExecutionRole, ReactiveRead, ReactiveSourceKind,
-    ReactiveWrite, location,
+    ActionInvocation, AsyncRead, ExecutionRole, ReactiveRead, ReactiveSourceKind, ReactiveWrite,
+    ReturnSummary, location,
 };
 
 use std::{
@@ -122,7 +122,7 @@ pub(crate) struct LocalAccessContext<'a, 'facts> {
     pub(crate) contract_reads: &'a HashMap<SymbolId, Vec<crate::ContractReadSite>>,
     pub(crate) contract_parameter_reads:
         &'a HashMap<SymbolId, Vec<crate::ContractParameterReadSite>>,
-    pub(crate) contract_returns: &'a HashMap<SymbolId, (ContractReturn, Location)>,
+    pub(crate) contract_returns: &'a HashMap<SymbolId, (ReturnSummary, Location)>,
     pub(crate) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
     pub(crate) prop_sources: &'a HashMap<SymbolId, (SymbolId, Location)>,
     pub(crate) uncertain_prop_sources: &'a HashSet<SymbolId>,
@@ -1089,13 +1089,13 @@ impl LocalAccessContext<'_, '_> {
     ) {
         // ADR 0235: a member with described effects is opaque everywhere a
         // call of it is not bound to those effects.
-        let opaque = |returned: &ContractReturn| {
+        let opaque = |returned: &ReturnSummary| {
             returned.kind == crate::contracts::OPAQUE_MEMBER
                 || returned.kind == crate::contracts::EFFECTFUL_MEMBER
         };
         let effectful =
-            |returned: &ContractReturn| returned.kind == crate::contracts::EFFECTFUL_MEMBER;
-        let holds_opaque = |returned: &ContractReturn| {
+            |returned: &ReturnSummary| returned.kind == crate::contracts::EFFECTFUL_MEMBER;
+        let holds_opaque = |returned: &ReturnSummary| {
             returned.kind != crate::contracts::LAZY_GETTER_OBJECT
                 && (returned.elements.iter().flatten().any(opaque)
                     || returned.properties.values().any(opaque))

@@ -23,10 +23,10 @@ use super::runtime_semantics::{
     retains_argument_value,
 };
 use super::{
-    CallbackSchedule, ContractAnalysis, ContractCallback, ContractExport,
-    ContractGenerationObligation, ContractGraph, ContractReturn, ContractSemantics, EntitySymbols,
-    ExecutionRole, FunctionBoundary, FunctionLookup, ProjectIndexes, ReactiveRead,
-    ReactiveSourceKind, SemanticLookup, StaticDefect, StaticDefectKind, SymbolId,
+    CallbackSchedule, CallbackSummary, ContractAnalysis, ContractExport,
+    ContractGenerationObligation, ContractGraph, ContractSemantics, EntitySymbols, ExecutionRole,
+    FunctionBoundary, FunctionLookup, ProjectIndexes, ReactiveRead, ReactiveSourceKind,
+    ReturnSummary, SemanticLookup, StaticDefect, StaticDefectKind, SymbolId,
     allowed_callback_spans, assigned_member_function_contains, call_primitive_name,
     containing_summary_function_indexed, contract_callback_execution, contract_export_summaries,
     contract_export_summaries_incremental, function_indices_by_path, function_lookup_for_path,
@@ -204,10 +204,10 @@ fn equivalent_summary_reads(left: &SummaryReads, right: &SummaryReads) -> bool {
 /// Set equality over callback timing, for the same reason as
 /// [`equivalent_summary_reads`]: repeating one parameter's timing is not a
 /// different effect, but a parameter only one candidate defers is.
-fn equivalent_callbacks(left: &[ContractCallback], right: &[ContractCallback]) -> bool {
+fn equivalent_callbacks(left: &[CallbackSummary], right: &[CallbackSummary]) -> bool {
     /// Parameter, member path, execution, owner and the arguments' JSON.
     type Effect<'c> = (usize, &'c [String], &'c str, Option<&'c str>, String);
-    fn effect(callbacks: &[ContractCallback]) -> HashSet<Effect<'_>> {
+    fn effect(callbacks: &[CallbackSummary]) -> HashSet<Effect<'_>> {
         callbacks
             .iter()
             .map(|callback| {
@@ -613,7 +613,7 @@ fn discover_summary_nodes(
 struct InterproceduralContracts<'a> {
     reads: &'a HashMap<SymbolId, Vec<crate::ContractReadSite>>,
     parameter_reads: &'a HashMap<SymbolId, Vec<crate::ContractParameterReadSite>>,
-    callbacks: &'a HashMap<SymbolId, Vec<ContractCallback>>,
+    callbacks: &'a HashMap<SymbolId, Vec<CallbackSummary>>,
 }
 
 fn unknown_callback_execution_message(
@@ -751,18 +751,18 @@ fn callback_argument_contracts(
     call: &solid_facts::ast::CallFact,
     entities: &EntitySymbols,
     accessors: &HashMap<SymbolId, (SymbolId, Location)>,
-) -> Vec<Option<ContractReturn>> {
+) -> Vec<Option<ReturnSummary>> {
     let mut arguments = call
         .arguments
         .iter()
         .map(|argument| {
             let symbol = entities.get(&location(file.path.shared(), argument.span))?;
             let (display, _) = accessors.get(symbol)?;
-            Some(ContractReturn {
+            Some(ReturnSummary {
                 kind: "accessor".into(),
                 label: display.to_string(),
                 prototype: None,
-                ..ContractReturn::default()
+                ..ReturnSummary::default()
             })
         })
         .collect::<Vec<_>>();
@@ -802,7 +802,7 @@ fn callback_argument_contracts(
 fn contract_callback_arguments_unbound(
     file: &solid_facts::FileFacts,
     invoked: Option<Span>,
-    callback: &ContractCallback,
+    callback: &CallbackSummary,
 ) -> bool {
     if callback.arguments.iter().all(Option::is_none) {
         return false;
@@ -860,7 +860,7 @@ pub(crate) fn contract_callback_invoked_value(
     file: &solid_facts::FileFacts,
     lookup: &SemanticLookup<'_>,
     call: &solid_facts::ast::CallFact,
-    callback: &ContractCallback,
+    callback: &CallbackSummary,
 ) -> Option<(solid_facts::ast::ArgumentFact, Option<Span>)> {
     let argument = lookup
         .callee_symbol(file, call.callee)
@@ -1607,7 +1607,7 @@ fn discover_interprocedural_graph(
             ));
             contribution.callbacks.push((
                 *callback_owner,
-                ContractCallback {
+                CallbackSummary {
                     parameter: *parameter,
                     execution: "inline".into(),
                     schedule: None,
@@ -2088,7 +2088,7 @@ fn discover_interprocedural_graph(
                 }
                 contribution.callbacks.push((
                     nodes[callback_owner].span,
-                    ContractCallback {
+                    CallbackSummary {
                         parameter,
                         // Per word: a composed chain's clearing, or a
                         // fresh-stack host deferral's. Every other rung --
@@ -2206,7 +2206,7 @@ fn discover_interprocedural_graph(
                     {
                         contribution.callbacks.push((
                             nodes[callback_owner].span,
-                            ContractCallback {
+                            CallbackSummary {
                                 parameter,
                                 execution: callback.execution.clone(),
                                 schedule: callback.schedule,
@@ -2254,7 +2254,7 @@ fn discover_interprocedural_graph(
                             }
                             contribution.callbacks.push((
                                 nodes[callback_owner].span,
-                                ContractCallback {
+                                CallbackSummary {
                                     parameter,
                                     execution: callback.execution.clone(),
                                     schedule: callback.schedule,
@@ -2345,7 +2345,7 @@ fn discover_interprocedural_graph(
                         }
                         contribution.callbacks.push((
                             nodes[callback_owner].span,
-                            ContractCallback {
+                            CallbackSummary {
                                 parameter,
                                 execution: callback.execution.clone(),
                                 schedule: callback.schedule,
@@ -2667,7 +2667,7 @@ fn discover_interprocedural_graph(
                     }
                     contribution.callbacks.push((
                         nodes[callback_owner].span,
-                        ContractCallback {
+                        CallbackSummary {
                             parameter,
                             execution: execution.into(),
                             schedule: (execution == "tracked")
@@ -2787,7 +2787,7 @@ fn discover_interprocedural_graph(
                     | RuntimeArgumentBehavior::FreshStackCallback => {
                         contribution.callbacks.push((
                             nodes[callback_owner].span,
-                            ContractCallback {
+                            CallbackSummary {
                                 parameter,
                                 execution: match runtime_behavior {
                                     RuntimeArgumentBehavior::InlineCallback => "inline",
@@ -3542,7 +3542,7 @@ fn callback_wrapper_at(
 /// -- is a slot whose listener the contract does not settle, and the wrapper
 /// keeps the transparent (or non-clearing deferred) reading. No rows is no
 /// statement at all.
-fn package_rows_clear(rows: &[&ContractCallback], execution: &str) -> bool {
+fn package_rows_clear(rows: &[&CallbackSummary], execution: &str) -> bool {
     !rows.is_empty()
         && rows
             .iter()
@@ -4054,7 +4054,7 @@ fn primitive_callback_execution(
 ///   `initialState`, because `createStore(initialState)` sits at
 ///   `(CreateStore, 0)`. Its real callbacks are `createMethods.getters` and
 ///   `createMethods.actions` -- argument 1 behind a property path, which the
-///   generator's [`ContractCallback`] cannot spell at all (recorded in
+///   generator's [`CallbackSummary`] cannot spell at all (recorded in
 ///   docs/precision-backlog.md).
 /// - `@solidjs/meta`'s
 ///   `Stylesheet = props => createComponent(Link, mergeProps({rel}, props))`,
@@ -4166,10 +4166,10 @@ struct StructuredReturnDiscovery<'a, 'facts> {
     by_symbol: &'a HashMap<SymbolId, usize>,
     summaries: &'a [SummaryReads],
     returned: &'a [SummaryReads],
-    structured_returns: &'a [Option<ContractReturn>],
+    structured_returns: &'a [Option<ReturnSummary>],
     accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
     source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
-    contract_returns: &'a HashMap<SymbolId, (ContractReturn, Location)>,
+    contract_returns: &'a HashMap<SymbolId, (ReturnSummary, Location)>,
     entities: &'a EntitySymbols,
     symbol_names: &'a HashMap<SymbolId, SymbolId>,
     lookup: &'a SemanticLookup<'facts>,
@@ -4247,7 +4247,7 @@ impl StructuredReturnDiscovery<'_, '_> {
         file: &solid_facts::FileFacts,
         function: &solid_facts::ast::FunctionFact,
         span: Span,
-    ) -> Option<ContractReturn> {
+    ) -> Option<ReturnSummary> {
         if function.r#async
             || function.generator
             || file.ast.identifiers.iter().any(|identifier| {
@@ -4299,11 +4299,11 @@ impl StructuredReturnDiscovery<'_, '_> {
             {
                 return None;
             }
-            return Some(ContractReturn {
+            return Some(ReturnSummary {
                 kind: "argument".into(),
                 parameter: Some(parameter),
                 prototype: None,
-                ..ContractReturn::default()
+                ..ReturnSummary::default()
             });
         }
         None
@@ -4313,10 +4313,10 @@ impl StructuredReturnDiscovery<'_, '_> {
         &self,
         file: &solid_facts::FileFacts,
         call: &solid_facts::ast::CallFact,
-        returned: &ContractReturn,
+        returned: &ReturnSummary,
         fallback_label: &str,
         depth: usize,
-    ) -> Option<ContractReturn> {
+    ) -> Option<ReturnSummary> {
         if depth == 0 {
             return None;
         }
@@ -4347,7 +4347,7 @@ impl StructuredReturnDiscovery<'_, '_> {
                     ))
                     .then(|| resolved.clone())
                 }),
-            "tuple" => Some(ContractReturn {
+            "tuple" => Some(ReturnSummary {
                 elements: returned
                     .elements
                     .iter()
@@ -4360,7 +4360,7 @@ impl StructuredReturnDiscovery<'_, '_> {
                 prototype: None,
                 ..returned.clone()
             }),
-            "object" => Some(ContractReturn {
+            "object" => Some(ReturnSummary {
                 properties: returned
                     .properties
                     .iter()
@@ -4386,7 +4386,7 @@ impl StructuredReturnDiscovery<'_, '_> {
         call: &solid_facts::ast::CallFact,
         fallback_label: &str,
         depth: usize,
-    ) -> Option<ContractReturn> {
+    ) -> Option<ReturnSummary> {
         if depth == 0 {
             return None;
         }
@@ -4402,11 +4402,11 @@ impl StructuredReturnDiscovery<'_, '_> {
             .get(symbol)
             .map(|(returned, _)| returned)
             .filter(|returned| returned.kind == "callback-result-function")?;
-        let relation = ContractReturn {
+        let relation = ReturnSummary {
             kind: "callback-result".into(),
             parameter: returned.parameter,
             prototype: None,
-            ..ContractReturn::default()
+            ..ReturnSummary::default()
         };
         self.instantiate_return(file, factory_call, &relation, fallback_label, depth - 1)
     }
@@ -4417,7 +4417,7 @@ impl StructuredReturnDiscovery<'_, '_> {
         call: &solid_facts::ast::CallFact,
         fallback_label: &str,
         depth: usize,
-    ) -> Option<ContractReturn> {
+    ) -> Option<ReturnSummary> {
         if depth == 0 {
             return None;
         }
@@ -4490,7 +4490,7 @@ impl StructuredReturnDiscovery<'_, '_> {
         file: &solid_facts::FileFacts,
         call: &solid_facts::ast::CallFact,
         fallback_label: &str,
-    ) -> Option<ContractReturn> {
+    ) -> Option<ReturnSummary> {
         let resolved = self.lookup.resolved_callee_call(file, call.callee)?;
         let declaration = resolved.declaration.as_ref()?;
         if resolved.kind != CallKind::Construct
@@ -4511,11 +4511,11 @@ impl StructuredReturnDiscovery<'_, '_> {
                 ))
                 .is_some_and(|primitive| self.lookup.dialect.creates_reactive_source(primitive))
         });
-        reactive.then(|| ContractReturn {
+        reactive.then(|| ReturnSummary {
             kind: "store-path".into(),
             label: fallback_label.into(),
             prototype: None,
-            ..ContractReturn::default()
+            ..ReturnSummary::default()
         })
     }
 
@@ -4526,7 +4526,7 @@ impl StructuredReturnDiscovery<'_, '_> {
         span: Span,
         fallback_label: &str,
         depth: usize,
-    ) -> Option<ContractReturn> {
+    ) -> Option<ReturnSummary> {
         if depth == 0 {
             return None;
         }
@@ -4579,7 +4579,7 @@ impl StructuredReturnDiscovery<'_, '_> {
         call: &solid_facts::ast::CallFact,
         fallback_label: &str,
         depth: usize,
-    ) -> Option<ContractReturn> {
+    ) -> Option<ReturnSummary> {
         if depth == 0 {
             return None;
         }
@@ -4605,7 +4605,7 @@ impl StructuredReturnDiscovery<'_, '_> {
         if let Some(primitive) = super::known_primitive(&primitive)
             && self.lookup.dialect.creates_reactive_source(primitive)
         {
-            return Some(ContractReturn {
+            return Some(ReturnSummary {
                 kind: if self.lookup.dialect.returns_store(primitive) {
                     "store-path".into()
                 } else {
@@ -4613,7 +4613,7 @@ impl StructuredReturnDiscovery<'_, '_> {
                 },
                 label: fallback_label.into(),
                 prototype: None,
-                ..ContractReturn::default()
+                ..ReturnSummary::default()
             });
         }
         if let Some(returned) = self.reactive_proxy_return(file, call, fallback_label) {
@@ -4753,7 +4753,7 @@ impl StructuredReturnDiscovery<'_, '_> {
         span: Span,
         fallback_label: &str,
         depth: usize,
-    ) -> Option<ContractReturn> {
+    ) -> Option<ReturnSummary> {
         if depth == 0 {
             return None;
         }
@@ -4778,11 +4778,11 @@ impl StructuredReturnDiscovery<'_, '_> {
             self.entities
                 .at(file.path.as_str(), member.object)
                 .filter(|symbol| self.source_kinds.get(*symbol) == Some(&ReactiveSourceKind::Store))
-                .map(|_| ContractReturn {
+                .map(|_| ReturnSummary {
                     kind: "store-path".into(),
                     label: fallback_label.into(),
                     prototype: None,
-                    ..ContractReturn::default()
+                    ..ReturnSummary::default()
                 })
         }?;
         if matches!(base.kind.as_str(), "tuple" | "object")
@@ -4821,11 +4821,11 @@ impl StructuredReturnDiscovery<'_, '_> {
                 .ok()
                 .and_then(|index| base.elements.get(index))
                 .and_then(Clone::clone),
-            "store-path" => Some(ContractReturn {
+            "store-path" => Some(ReturnSummary {
                 kind: "store-path".into(),
                 label: fallback_label.into(),
                 prototype: None,
-                ..ContractReturn::default()
+                ..ReturnSummary::default()
             }),
             _ => None,
         }
@@ -5129,7 +5129,7 @@ impl StructuredReturnDiscovery<'_, '_> {
         file: &solid_facts::FileFacts,
         span: Span,
         fallback_label: &str,
-    ) -> Option<ContractReturn> {
+    ) -> Option<ReturnSummary> {
         self.leaf_with_depth(file, span, fallback_label, 16)
     }
 
@@ -5139,7 +5139,7 @@ impl StructuredReturnDiscovery<'_, '_> {
         span: Span,
         fallback_label: &str,
         depth: usize,
-    ) -> Option<ContractReturn> {
+    ) -> Option<ReturnSummary> {
         if depth == 0 {
             return None;
         }
@@ -5202,11 +5202,11 @@ impl StructuredReturnDiscovery<'_, '_> {
                 })
                 .collect::<BTreeMap<_, _>>();
             if !properties.is_empty() {
-                return Some(ContractReturn {
+                return Some(ReturnSummary {
                     kind: "object".into(),
                     properties,
                     prototype: None,
-                    ..ContractReturn::default()
+                    ..ReturnSummary::default()
                 });
             }
         }
@@ -5232,11 +5232,11 @@ impl StructuredReturnDiscovery<'_, '_> {
                         .is_some_and(|symbol| self.accessors.contains_key(symbol))
             });
             if summarized || calls_accessor {
-                return Some(ContractReturn {
+                return Some(ReturnSummary {
                     kind: "accessor".into(),
                     label: fallback_label.into(),
                     prototype: None,
-                    ..ContractReturn::default()
+                    ..ReturnSummary::default()
                 });
             }
         }
@@ -5289,7 +5289,7 @@ impl StructuredReturnDiscovery<'_, '_> {
             .or_else(|| self.named_accessor(file, span))
         {
             if self.accessors.contains_key(symbol) {
-                return Some(ContractReturn {
+                return Some(ReturnSummary {
                     kind: if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
                         "store-path".into()
                     } else {
@@ -5297,17 +5297,17 @@ impl StructuredReturnDiscovery<'_, '_> {
                     },
                     label: fallback_label.into(),
                     prototype: None,
-                    ..ContractReturn::default()
+                    ..ReturnSummary::default()
                 });
             }
             if let Some(index) = self.by_symbol.get(symbol)
                 && self.summaries[*index].iter().any(|read| !read.undecided)
             {
-                return Some(ContractReturn {
+                return Some(ReturnSummary {
                     kind: "accessor".into(),
                     label: fallback_label.into(),
                     prototype: None,
-                    ..ContractReturn::default()
+                    ..ReturnSummary::default()
                 });
             }
         }
@@ -5325,7 +5325,7 @@ impl StructuredReturnDiscovery<'_, '_> {
                 .as_ref()
                 .filter(|symbol| self.accessors.contains_key(*symbol))
             {
-                return Some(ContractReturn {
+                return Some(ReturnSummary {
                     kind: if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
                         "store-path".into()
                     } else {
@@ -5333,7 +5333,7 @@ impl StructuredReturnDiscovery<'_, '_> {
                     },
                     label: fallback_label.into(),
                     prototype: None,
-                    ..ContractReturn::default()
+                    ..ReturnSummary::default()
                 });
             }
             // Only a name bound to the *whole* initializer carries the
@@ -5350,22 +5350,18 @@ impl StructuredReturnDiscovery<'_, '_> {
             && let Some(symbol) = self.entities.at(file.path.as_str(), member.object)
             && self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store)
         {
-            return Some(ContractReturn {
+            return Some(ReturnSummary {
                 kind: "store-path".into(),
                 label: fallback_label.into(),
                 prototype: None,
-                ..ContractReturn::default()
+                ..ReturnSummary::default()
             });
         }
         None
     }
 
-    fn contract_return_from_read(
-        &self,
-        read: &SummaryRead,
-        fallback_label: &str,
-    ) -> ContractReturn {
-        ContractReturn {
+    fn contract_return_from_read(&self, read: &SummaryRead, fallback_label: &str) -> ReturnSummary {
+        ReturnSummary {
             kind: if self.source_kinds.get(&read.symbol) == Some(&ReactiveSourceKind::Store) {
                 "store-path".into()
             } else {
@@ -5373,14 +5369,14 @@ impl StructuredReturnDiscovery<'_, '_> {
             },
             label: fallback_label.to_owned(),
             prototype: None,
-            ..ContractReturn::default()
+            ..ReturnSummary::default()
         }
     }
 }
 
 fn discover_structured_returns(
     discovery: &StructuredReturnDiscovery<'_, '_>,
-) -> Vec<Option<ContractReturn>> {
+) -> Vec<Option<ReturnSummary>> {
     parallel_slice_results(discovery.nodes, |node| {
         let file = discovery.lookup.file_by_path(node.path.as_str())?;
         let function = file
@@ -5417,11 +5413,11 @@ fn discover_structured_returns(
                     })
                     .collect::<Vec<_>>();
                 if elements.iter().any(Option::is_some) {
-                    return Some(ContractReturn {
+                    return Some(ReturnSummary {
                         kind: "tuple".into(),
                         elements,
                         prototype: None,
-                        ..ContractReturn::default()
+                        ..ReturnSummary::default()
                     });
                 }
             }
@@ -5436,11 +5432,11 @@ fn discover_structured_returns(
                     })
                     .collect::<BTreeMap<_, _>>();
                 if !properties.is_empty() {
-                    return Some(ContractReturn {
+                    return Some(ReturnSummary {
                         kind: "object".into(),
                         properties,
                         prototype: None,
-                        ..ContractReturn::default()
+                        ..ReturnSummary::default()
                     });
                 }
             }
@@ -5475,7 +5471,7 @@ fn discover_structured_returns(
     })
 }
 
-fn merge_structured_return(target: &mut Option<ContractReturn>, incoming: ContractReturn) -> bool {
+fn merge_structured_return(target: &mut Option<ReturnSummary>, incoming: ReturnSummary) -> bool {
     let Some(current) = target.as_mut() else {
         *target = Some(incoming);
         return true;
@@ -5522,7 +5518,7 @@ struct InterproceduralGraphAssembly<'a> {
     nodes_by_path: &'a HashMap<String, Vec<usize>>,
     by_symbol: &'a HashMap<SymbolId, usize>,
     summaries: &'a mut [SummaryReads],
-    callback_summaries: &'a mut [Vec<ContractCallback>],
+    callback_summaries: &'a mut [Vec<CallbackSummary>],
     callback_forwardings: &'a mut Vec<(usize, usize, usize, usize, ForwardedAmbientExecution)>,
     dispatches: &'a mut Vec<(usize, Vec<usize>)>,
     contract_generation_obligations: &'a mut [Vec<ContractGenerationObligation>],
@@ -5832,7 +5828,7 @@ fn remove_interprocedural_dependency_user(
 
 pub(super) struct InterproceduralResultReadContext<'a, 'b> {
     pub(super) result: InterproceduralResultView<'a>,
-    pub(super) contract_callbacks: &'a HashMap<SymbolId, Vec<ContractCallback>>,
+    pub(super) contract_callbacks: &'a HashMap<SymbolId, Vec<CallbackSummary>>,
     pub(super) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
     pub(super) accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
     pub(super) entities: &'a EntitySymbols,
@@ -8161,8 +8157,8 @@ pub(super) struct InterproceduralContext<'a, 'facts> {
     pub(super) contract_reads: &'a HashMap<SymbolId, Vec<crate::ContractReadSite>>,
     pub(super) contract_parameter_reads:
         &'a HashMap<SymbolId, Vec<crate::ContractParameterReadSite>>,
-    pub(super) contract_callbacks: &'a HashMap<SymbolId, Vec<ContractCallback>>,
-    pub(super) contract_returns: &'a HashMap<SymbolId, (ContractReturn, Location)>,
+    pub(super) contract_callbacks: &'a HashMap<SymbolId, Vec<CallbackSummary>>,
+    pub(super) contract_returns: &'a HashMap<SymbolId, (ReturnSummary, Location)>,
     pub(super) entities: &'a EntitySymbols,
     pub(super) references_by_source: &'a HashMap<SymbolId, Vec<Location>>,
     pub(super) symbol_names: &'a HashMap<SymbolId, SymbolId>,
@@ -8352,7 +8348,7 @@ fn interprocedural_reads(
         .filter_map(|(index, node)| node.symbol.clone().map(|symbol| (symbol, index)))
         .collect::<HashMap<_, _>>();
     let mut summaries = vec![SummaryReads::default(); nodes.len()];
-    let mut callback_summaries = vec![Vec::<ContractCallback>::new(); nodes.len()];
+    let mut callback_summaries = vec![Vec::<CallbackSummary>::new(); nodes.len()];
     let mut callback_forwardings = Vec::new();
     let mut dispatches = Vec::<(usize, Vec<usize>)>::new();
     let mut contract_generation_obligations =
@@ -8624,7 +8620,7 @@ fn interprocedural_reads(
                     callback.schedule,
                     callback.clears_tracking,
                 ));
-                let forwarded = ContractCallback {
+                let forwarded = CallbackSummary {
                     parameter: *owner_parameter,
                     execution,
                     schedule,
@@ -9509,11 +9505,11 @@ mod tests {
     use typefacts::Location;
 
     use super::{
-        CallbackSchedule, CallbackWrapper, ContractCallback, ForwardedAmbientExecution,
-        SummaryRead, SummaryReads, SymbolId, add_interprocedural_dependency_user,
-        cached_reactive_source, compose_callback_chain, composed_tracked_schedule,
-        equivalent_callbacks, equivalent_summary_reads, package_rows_clear,
-        primitive_callback_execution, primitive_slot_roots_parameter_invoke, reactive_source_order,
+        CallbackSchedule, CallbackSummary, CallbackWrapper, ForwardedAmbientExecution, SummaryRead,
+        SummaryReads, SymbolId, add_interprocedural_dependency_user, cached_reactive_source,
+        compose_callback_chain, composed_tracked_schedule, equivalent_callbacks,
+        equivalent_summary_reads, package_rows_clear, primitive_callback_execution,
+        primitive_slot_roots_parameter_invoke, reactive_source_order,
         remove_interprocedural_dependency_user, retained_reactive_sources,
     };
     use crate::cache::InterproceduralResultDependency;
@@ -9646,7 +9642,7 @@ mod tests {
 
     #[test]
     fn callback_equivalence_rejects_timing_only_one_candidate_declares() {
-        let callback = |parameter, execution: &str| ContractCallback {
+        let callback = |parameter, execution: &str| CallbackSummary {
             parameter,
             execution: execution.to_owned(),
             schedule: None,
@@ -9667,7 +9663,7 @@ mod tests {
 
     #[test]
     fn callback_equivalence_rejects_different_owner_contexts() {
-        let inherited = ContractCallback {
+        let inherited = CallbackSummary {
             parameter: 0,
             execution: "deferred".into(),
             schedule: None,
@@ -9677,7 +9673,7 @@ mod tests {
             protocol: crate::summary_semantics::InvokeProtocol::Call,
             path: Vec::new(),
         };
-        let leaf = ContractCallback {
+        let leaf = CallbackSummary {
             owner: Some("leaf".into()),
             ..inherited.clone()
         };
@@ -10052,7 +10048,7 @@ mod tests {
     /// deferred one, stay unsettled.
     #[test]
     fn a_package_slot_clears_only_when_every_row_says_so() {
-        let row = |execution: &str, clears_tracking| ContractCallback {
+        let row = |execution: &str, clears_tracking| CallbackSummary {
             parameter: 0,
             execution: execution.to_owned(),
             schedule: None,
