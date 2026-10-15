@@ -15,6 +15,9 @@ fixtures/upstream-parity/.staging/
 **/.DS_Store
 **/target/
 **/node_modules/
+!apps/solid-typefacts/prototypes/typefacts-reactor/testdata/forms/node_modules/
+!apps/solid-typefacts/prototypes/typefacts-reactor/testdata/forms/node_modules/pkg/
+!apps/solid-typefacts/prototypes/typefacts-reactor/testdata/forms/node_modules/pkg/**
 !fixtures/reactive-ir/node_modules/
 !fixtures/reactive-ir/node_modules/@solidjs/
 !fixtures/reactive-ir/node_modules/@solidjs/vite-plugin/

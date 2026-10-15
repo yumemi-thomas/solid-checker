@@ -167,6 +167,28 @@ func (t *FactTable) rangeWireEntities(visit func(EntityFact)) {
 	}
 }
 
+// RangeEntities visits every entity row of t exactly as the wire layer does:
+// the retained per-file runs when t carries runs (a non-nil but empty run
+// slice visits nothing and never falls back), otherwise the public Entities
+// slice. Order, rows and every field, including those JSON excludes, are the
+// canonical ones; nothing is sorted, filtered, merged or copied deeply. A nil
+// table visits nothing.
+//
+// Each visited value shares nested storage (pointers, slices) with t, and t
+// itself borrows rows the DemandClosure that produced it may later clear or
+// recycle. Callers therefore follow a conservative contract: do not mutate
+// through a visited value, consume each one immediately rather than retaining
+// aliases, and make no call into the producing closure (no demand, update,
+// release, close, or other method) until the projection and any serialization
+// of it are complete. RangeEntities takes no lock and promises nothing about
+// concurrent use of that closure.
+func (t *FactTable) RangeEntities(visit func(EntityFact)) {
+	if t == nil {
+		return
+	}
+	t.rangeWireEntities(visit)
+}
+
 // SourceDigest is the source identity transferred to Rust's retained table.
 // It is deliberately not part of the public FactTable schema.
 type SourceDigest struct {
