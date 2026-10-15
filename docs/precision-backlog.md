@@ -1,5 +1,67 @@
 # Precision backlog
 
+P5 S1 `--no-package-contracts`, corrected (2026-10-15; CODE review r1,
+`/tmp/sc-scratch.noindex/p5-owned-producer-roundtrip-code-review-r1.md`).
+The flag runs the ordinary check consuming no package contract's claims from
+any tier. It is the native reference for the owned WASM check. The first
+candidate certified a project it could not prove: it skipped catalog
+discovery entirely, so an import a tier covered lost its obligation.
+
+- **Counterexample:** `package-unknown-callback-consumer` passes a local
+  reactive callback to `runUnknown(callback: () => unknown)` from an installed
+  package. The package names no Solid dependency, and nothing analyzes its
+  implementation. That run reported `certified` with zero proof obligations.
+  Fourteen other cataloged fixtures moved the same way, and
+  `package-structured-unresolved` lost one SC9005.
+- **Correction:** `UnconsumedContractProvenance` reads tiers for coverage, as
+  identity only. No contract document or receipt is opened. Catalog entries
+  are decoded whole, but no status, binding or claim is used as semantic
+  authority or to select coverage. It reads:
+  - the exact `(importer, specifier)` of each discovered or nested catalog
+    entry;
+  - the authored tier's `(specifier, name, version)`.
+
+  Each covered import is raised as an ordinary requirement, under the existing
+  exemptions:
+  - Solid core and package-local edges;
+  - selected dependency source (a runtime namespace import of it stays open);
+  - imports resolved to project source (relative, or `paths`-mapped);
+  - unresolved specifiers whose package is not installed (TypeScript's TS2307).
+
+  An unresolved but installed import (an ambiently typed install) stays open.
+- **Later corrections (S1b owner and consumer checkpoints):**
+  - **Importer identity:** importer keys are the real path by the default
+    loader's own rule. Only `NotFound` falls back to the canonical parent; a
+    host without realpath refuses rather than guessing a lexical key.
+  - **Discovery:** a followed `NotFound` counts as absence only when the entry
+    itself is missing and its parent resolves. A dangling link refuses.
+  - **Installation:** a covered unresolved import needs its installation
+    answered. A followed `package.json` file raises the requirement, proved
+    absence leaves it to TypeScript, and anything else refuses the check.
+  - **Every refusal** ends the check with no snapshot.
+- **Result** (observed on these fixtures, not a general parity claim): all 16
+  fixtures now match the default run: same status,
+  `proofObligations`, `unresolvedObligations` and distinct finding sites. The
+  other 240 compared projects are byte-identical to the default. The wording
+  differs: a covered import reports the acceptance gate's "no accepted
+  reactivity contract" once per import, plus a note naming the flag and the
+  tier, instead of the tier's per-export refusal.
+- **Coverage:** pinned by:
+  - `tests/no_package_contracts_process.rs` (all 16 fixtures, the
+    counterexample, the paths shadow);
+  - the `package_requirements` unit tests (installed, `paths`-mapped,
+    unresolved installed against missing, authored version and subpath
+    exactness, selected source and core);
+  - the owned-check WASI harness.
+- **Remaining, as held:**
+  - A package with no Solid dependency that no tier covers is read as plain
+    code, exactly as by default. That is the P1 non-Solid premise.
+  - A version of an authored package that the tier does not name is plain too.
+  - Nested catalogs apply project-wide in this mode. That can only keep more
+    imports open.
+  - The admission note's presence in an inferred browser view is not
+    witnessed. The requirement reaches both views.
+
 P5 module-specifier literal spans, consumer held (2026-10-15, AST facts
 schema 63). `ImportFact`, `ExportFact`, `ImportEqualsFact` and
 `TypeImportFact` now record `specifier_span`: the owning Oxc string literal's

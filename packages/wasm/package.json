@@ -22,6 +22,7 @@
     "build:debug": "bun ./scripts/build.mjs",
     "prototype:self-contained": "bun ./prototypes/self-contained.mjs",
     "prototype:module-graph": "bun ./prototypes/module-graph-equivalence.mjs",
+    "prototype:owned-check": "bun ./prototypes/owned-check.mjs",
     "test": "bun ./node_modules/vitest/vitest.mjs run --config vitest.config.mjs test/*.test.mjs"
   },
   "napi": {

@@ -330,6 +330,46 @@ fn parse_index(bytes: &[u8]) -> Result<AuthoredIndex, ContractFailure> {
     Ok(index)
 }
 
+/// The `(specifier, package name, package version)` every entry of an authored
+/// index names, read from the index metadata alone: the coverage provenance a
+/// check that consumes no package contract keeps open.
+///
+/// Only [`parse_index`] runs: the index is deserialized (unknown fields and a
+/// format other than 1 refuse) and these three strings are taken from it. No
+/// document object is fetched, hashed, normalized, accepted or weakened, and
+/// nothing here establishes package integrity or any claim. An entry for the
+/// Solid runtime foundation refuses, as [`load_authored`] refuses it.
+pub(crate) fn authored_coverage_index(
+    index: &[u8],
+) -> Result<Vec<(String, String, String)>, ContractFailure> {
+    parse_index(index)?
+        .entries
+        .into_iter()
+        .map(|entry| {
+            if solid_dialect::primitive_defining_package(&entry.package_name)
+                || solid_dialect::core_runtime_contract_reference(
+                    &entry.package_name,
+                    &entry.specifier,
+                )
+            {
+                return Err(ContractFailure::IdentityMismatch {
+                    reason: format!(
+                        "{} is the Solid runtime foundation, which ordinary analysis takes from the \
+                         dialect (ADR 0027); it cannot be an authored package contract",
+                        entry.package_name
+                    ),
+                });
+            }
+            Ok((entry.specifier, entry.package_name, entry.package_version))
+        })
+        .collect()
+}
+
+/// The compiled-in authored index's bytes, for [`authored_coverage_index`].
+pub(crate) fn embedded_index() -> &'static [u8] {
+    embedded::INDEX
+}
+
 pub(crate) fn load_index(
     index: &[u8],
     object: impl Fn(&str) -> Option<&'static [u8]>,

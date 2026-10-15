@@ -60,13 +60,6 @@ func (stderrTrace) Metrics(name string, values ...typefacts.Metric) {
 	_, _ = os.Stderr.WriteString(builder.String())
 }
 
-func main() {
-	if err := run(context.Background(), os.Args[1:], os.Stdin, os.Stdout); err != nil {
-		fmt.Fprintln(os.Stderr, "solid-typefacts:", err)
-		os.Exit(1)
-	}
-}
-
 func run(ctx context.Context, args []string, input io.Reader, output io.Writer) error {
 	started := time.Now()
 	trace := newTrace()
@@ -77,6 +70,7 @@ func run(ctx context.Context, args []string, input io.Reader, output io.Writer) 
 	schema := flags.Uint64("schema", typefacts.TypeFactsSchemaVersionV1, "lifecycle schema version")
 	cpuProfile := flags.String("cpuprofile", "", "write a CPU profile to this path")
 	transitionArenaPath := flags.String("transition-arena", "", "Rust-owned transition arena path")
+	inlineSources := flags.Bool("inline-sources", false, "answer sources inline rather than through a temporary arena file")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -118,12 +112,7 @@ func run(ctx context.Context, args []string, input io.Reader, output io.Writer) 
 	// the program build below. Early client frames simply queue in the pipe
 	// until the reader starts; the ordered worker preserves arrival order.
 	writer := bufio.NewWriter(output)
-	schemaHash := typefacts.TypeFactsSchemaSHA256
-	handshake, err := wirecbor.Marshal(typefacts.ServiceHandshake{
-		Protocol:   typefacts.TypeFactsHandshakeProtocol,
-		SchemaHash: schemaHash,
-		BuildID:    buildID,
-	})
+	handshake, err := handshakePayload()
 	if err != nil {
 		return fmt.Errorf("encode startup handshake: %w", err)
 	}
@@ -154,7 +143,10 @@ func run(ctx context.Context, args []string, input io.Reader, output io.Writer) 
 		trace.Stage("open", time.Since(started))
 	}
 	var session *typefacts.Session
-	session, err = typefacts.NewSessionWithBuildID(backend, projectID, trace, buildID)
+	session, err = typefacts.NewSessionWithOptions(backend, projectID, trace, typefacts.SessionOptions{
+		BuildID:       buildID,
+		InlineSources: *inlineSources,
+	})
 	if err != nil {
 		return err
 	}
@@ -367,8 +359,8 @@ func serve(ctx context.Context, respond responder, input io.Reader, output *bufi
 			return drain(next.err)
 		}
 		decodeStarted := time.Now()
-		var request typefacts.LifecycleRequest
-		if err := wirecbor.Unmarshal(next.payload, &request); err != nil {
+		request, err := decodeLifecycleRequest(next.payload)
+		if err != nil {
 			return drain(fmt.Errorf("decode request: %w", err))
 		}
 		if request.Operation == typefacts.LifecycleCancel {
@@ -401,41 +393,21 @@ func writeLifecycleResponse(
 	trace typefacts.Trace,
 ) (int, error) {
 	encodeStarted := time.Now()
-	if len(value.TableTransition) >= 1<<20 {
-		chunks, encodedSize, err := lifecycleResponseChunks(value)
-		if err != nil {
-			return 0, fmt.Errorf("encode response: %w", err)
-		}
-		if trace != nil {
-			trace.Stage("encode-response", time.Since(encodeStarted))
-		}
-		writeStarted := time.Now()
-		if err := writeFrameHeader(output, encodedSize); err != nil {
-			return 0, err
-		}
-		for _, chunk := range chunks {
-			if _, err := output.Write(chunk); err != nil {
-				return 0, err
-			}
-		}
-		if err := output.Flush(); err != nil {
-			return 0, err
-		}
-		if trace != nil {
-			trace.Stage("write-response", time.Since(writeStarted))
-		}
-		return encodedSize, nil
-	}
-	encoded, err := wirecbor.Marshal(value)
+	chunks, encodedSize, err := encodeLifecycleResponse(value)
 	if err != nil {
-		return 0, fmt.Errorf("encode response: %w", err)
+		return 0, err
 	}
 	if trace != nil {
 		trace.Stage("encode-response", time.Since(encodeStarted))
 	}
 	writeStarted := time.Now()
-	if err := writeFrame(output, encoded); err != nil {
+	if err := writeFrameHeader(output, encodedSize); err != nil {
 		return 0, err
+	}
+	for _, chunk := range chunks {
+		if _, err := output.Write(chunk); err != nil {
+			return 0, err
+		}
 	}
 	if err := output.Flush(); err != nil {
 		return 0, err
@@ -443,7 +415,45 @@ func writeLifecycleResponse(
 	if trace != nil {
 		trace.Stage("write-response", time.Since(writeStarted))
 	}
-	return len(encoded), nil
+	return encodedSize, nil
+}
+
+// handshakePayload is the startup frame's payload: the protocol version,
+// schema hash and build id, and nothing derived from the project.
+func handshakePayload() ([]byte, error) {
+	return wirecbor.Marshal(typefacts.ServiceHandshake{
+		Protocol:   typefacts.TypeFactsHandshakeProtocol,
+		SchemaHash: typefacts.TypeFactsSchemaSHA256,
+		BuildID:    buildID,
+	})
+}
+
+// decodeLifecycleRequest decodes one request frame's payload. It is the only
+// request decoder, shared by the stdio service and the owned reactor.
+func decodeLifecycleRequest(payload []byte) (typefacts.LifecycleRequest, error) {
+	var request typefacts.LifecycleRequest
+	err := wirecbor.Unmarshal(payload, &request)
+	return request, err
+}
+
+// encodeLifecycleResponse encodes one response frame's payload as the ordered
+// fragments of a single deterministic-CBOR value, and its total size. It is
+// the only response encoder, shared by the stdio service and the owned
+// reactor: a large table transition takes the incremental encoding that
+// borrows the transition bytes, every other response one Marshal.
+func encodeLifecycleResponse(value typefacts.LifecycleResponse) ([][]byte, int, error) {
+	if len(value.TableTransition) >= 1<<20 {
+		chunks, encodedSize, err := lifecycleResponseChunks(value)
+		if err != nil {
+			return nil, 0, fmt.Errorf("encode response: %w", err)
+		}
+		return chunks, encodedSize, nil
+	}
+	encoded, err := wirecbor.Marshal(value)
+	if err != nil {
+		return nil, 0, fmt.Errorf("encode response: %w", err)
+	}
+	return [][]byte{encoded}, len(encoded), nil
 }
 
 type lifecycleResponseChunk struct {

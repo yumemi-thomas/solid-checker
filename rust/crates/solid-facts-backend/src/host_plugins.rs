@@ -169,27 +169,40 @@ pub(super) fn audit(
     let workers = std::thread::available_parallelism()
         .map_or(1, usize::from)
         .min(8);
-    let observations = std::thread::scope(|scope| {
-        let jobs = (0..workers.min(missing.len()))
-            .map(|worker| {
-                let missing = &missing;
-                scope.spawn(move || {
-                    (worker..missing.len())
-                        .step_by(workers)
-                        .map(|index| {
-                            let root = missing[index];
-                            let mut paths = Vec::new();
-                            let observed = package_tree(root, &mut paths, generation);
-                            (root.clone(), observed, paths)
-                        })
-                        .collect::<Vec<_>>()
-                })
+    // One worker computes in place: a target without threads (wasm32-wasip1)
+    // cannot spawn even one, and the answer and its order are the same.
+    let observations = if workers == 1 {
+        missing
+            .iter()
+            .map(|root| {
+                let mut paths = Vec::new();
+                let observed = package_tree(root, &mut paths, generation);
+                ((*root).clone(), observed, paths)
             })
-            .collect::<Vec<_>>();
-        jobs.into_iter()
-            .flat_map(|job| job.join().expect("plugin fingerprint worker panicked"))
             .collect::<Vec<_>>()
-    });
+    } else {
+        std::thread::scope(|scope| {
+            let jobs = (0..workers.min(missing.len()))
+                .map(|worker| {
+                    let missing = &missing;
+                    scope.spawn(move || {
+                        (worker..missing.len())
+                            .step_by(workers)
+                            .map(|index| {
+                                let root = missing[index];
+                                let mut paths = Vec::new();
+                                let observed = package_tree(root, &mut paths, generation);
+                                (root.clone(), observed, paths)
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                })
+                .collect::<Vec<_>>();
+            jobs.into_iter()
+                .flat_map(|job| job.join().expect("plugin fingerprint worker panicked"))
+                .collect::<Vec<_>>()
+        })
+    };
     let mut trees = BTreeMap::new();
     let mut files = Vec::new();
     for (root, observed, paths) in observations {

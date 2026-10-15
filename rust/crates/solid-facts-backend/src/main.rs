@@ -87,6 +87,12 @@ struct Request {
     /// depend on nothing but its own catalogs.
     #[serde(default = "enabled")]
     bundled_contracts: bool,
+    /// Consume no package contract from any tier (`--no-package-contracts`):
+    /// no bundled, authored, discovered, nested or explicit catalog. The
+    /// package boundary and every obligation it raises stay. This is the
+    /// reference configuration of the owned WASM check.
+    #[serde(default)]
+    no_package_contracts: bool,
     #[serde(default)]
     validate_contract_paths: Vec<String>,
     #[serde(default)]
@@ -3445,6 +3451,48 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     if !request.dependency_sources.is_empty() {
         dependency_program::host(&request.runtime)?;
     }
+    // A check that consumes no package contract takes nothing a contract tier
+    // would read, and is answered one-shot (the daemon never sees it).
+    if request.no_package_contracts {
+        for (present, flag) in [
+            (
+                !request.accepted_contract_catalog.is_empty(),
+                "--accepted-contracts",
+            ),
+            (
+                !request.receipt_trust_configuration.is_empty(),
+                "--receipt-trust-configuration",
+            ),
+            (
+                !request.proposal_dependency_catalog.is_empty(),
+                "--proposal-dependencies",
+            ),
+            (
+                !request.emit_contract.is_empty() || emits_contract_batch,
+                "contract emission",
+            ),
+            (request.check_contracts, "--check-contracts"),
+            (
+                !request.declaration_probe_plan.is_empty(),
+                "--declaration-probe-plan",
+            ),
+            (
+                !request.runtime_module_resolutions.is_empty(),
+                "--runtime-module-resolutions",
+            ),
+            (
+                !request.contract_package_root.is_empty(),
+                "--contract-package-root",
+            ),
+            (request.serve, "--serve"),
+        ] {
+            if present {
+                return Err(
+                    format!("--no-package-contracts cannot be combined with {flag}").into(),
+                );
+            }
+        }
+    }
     #[cfg(unix)]
     {
         if request.serve {
@@ -4324,7 +4372,12 @@ fn check_options(
         implicit_dependency_sources,
         window_realm: request.window_realm,
         runtime_resolution: request.runtime_resolution,
-        bundled_contracts: request.bundled_contracts,
+        consumption: if request.no_package_contracts {
+            solid_facts_backend::check::ContractConsumption::Disabled
+        } else {
+            solid_facts_backend::check::ContractConsumption::ExistingTiers
+        },
+        bundled_contracts: request.bundled_contracts && !request.no_package_contracts,
         accepted_contract_catalog: request.accepted_contract_catalog.clone(),
         receipt_trust_configuration: request.receipt_trust_configuration.clone(),
     }
@@ -4603,6 +4656,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
     let mut check_contracts = false;
     let mut runtime_resolution = false;
     let mut bundled_contracts = true;
+    let mut no_package_contracts = false;
     let mut validate_contract_paths = Vec::new();
     let mut emit_contract = String::new();
     let mut emit_contract_batch = String::new();
@@ -4873,6 +4927,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
                 }
             }
             "--no-bundled-contracts" => bundled_contracts = false,
+            "--no-package-contracts" => no_package_contracts = true,
             "--serve" => serve = true,
             // Internal: the whole declared host a dependency-source daemon
             // serves (ADR 0296), as its client stated it.
@@ -5083,6 +5138,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         check_contracts,
         runtime_resolution,
         bundled_contracts,
+        no_package_contracts,
         validate_contract_paths,
         emit_contract,
         emit_contract_batch,
@@ -5218,6 +5274,8 @@ fn print_help() {
                                         --runtime-build; with both declared, `*` is the default\n\
            --no-dependency-source       Bind every package through its contract even under a\n\
                                         declared target and build\n\
+           --no-package-contracts       Consume no package contract's claims from any tier;\n\
+                                        an import a tier covers stays an open obligation\n\
            --runtime-realm <window>     Declare that the dependency-source packages run\n\
                                         in an HTML Window realm, which decides their\n\
                                         `typeof window`/`typeof document` guards.\n\

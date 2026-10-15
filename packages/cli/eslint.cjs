@@ -294,7 +294,7 @@ const NATIVE_VALUE_OPTIONS = new Set([
 ]);
 const NATIVE_FLAGS = new Set([
   "--certify", "--feedback-facts", "--check-contracts", "--no-bundled-contracts",
-  "--serve", "--help", "-h", "--no-dependency-source"
+  "--serve", "--help", "-h", "--no-dependency-source", "--no-package-contracts"
 ]);
 /** Options whose presence may select package source under the native default. */
 const SOURCE_OPTIONS = new Set([
@@ -304,13 +304,14 @@ const SOURCE_OPTIONS = new Set([
 /**
  * What `commandArgs` say about package source, read at the positions native
  * reads options: `optOut` for `--no-dependency-source` as an option, `source`
- * for a host or selection option, and `opaque` for an option this table does
- * not know, whose arity -- and so whether a later token is an option at all
- * -- is unknown. A token that is no option is a wrapper's own argument (a
- * script path); native refuses one.
+ * for a host or selection option, `contractsOff` for `--no-package-contracts`
+ * as an option, and `opaque` for an option this table does not know, whose
+ * arity -- and so whether a later token is an option at all -- is unknown. A
+ * token that is no option is a wrapper's own argument (a script path); native
+ * refuses one.
  */
 function commandArgsSource(userArgs) {
-  const read = { optOut: false, source: false, opaque: false };
+  const read = { optOut: false, source: false, opaque: false, contractsOff: false };
   for (let index = 0; index < userArgs.length; index++) {
     const argument = String(userArgs[index]);
     if (!argument.startsWith("-")) continue;
@@ -319,6 +320,8 @@ function commandArgsSource(userArgs) {
       index++;
     } else if (argument === "--no-dependency-source") {
       read.optOut = true;
+    } else if (argument === "--no-package-contracts") {
+      read.contractsOff = true;
     } else if (!NATIVE_FLAGS.has(argument)) {
       read.opaque = true;
     }
@@ -339,6 +342,18 @@ function readsPackageSource(userArgs, runtime, dependencySource) {
   if (read.opaque) return true;
   if (read.optOut) return false;
   return Boolean(runtime?.target && runtime?.build) || read.source;
+}
+
+/**
+ * Whether a run is reused within one file's pass only. A run that reads
+ * package source is (see `readsPackageSource`), and so is one checking with
+ * `--no-package-contracts`: its result depends on the project's catalog files
+ * and on installed package entries, none of which the cross-pass key follows,
+ * so it is analyzed afresh every pass -- whatever `dependencySource` says.
+ */
+function passOnly(userArgs, runtime, dependencySource) {
+  return commandArgsSource(userArgs).contractsOff ||
+    readsPackageSource(userArgs, runtime, dependencySource);
 }
 
 /**
@@ -438,7 +453,7 @@ function loadSnapshot(context) {
   });
   // ADR 0297: a run that reads installed package source is reused within one
   // file's pass only (`passCache`). An observed runtime is never reused.
-  const pass = !observesRuntime && readsPackageSource(userArgs, runtime, dependencySource)
+  const pass = !observesRuntime && passOnly(userArgs, runtime, dependencySource)
     ? passCache(context) ?? new Map()
     : null;
   const store = (value) => (pass ?? snapshotCache).set(key, value);

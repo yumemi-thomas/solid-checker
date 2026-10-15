@@ -171,6 +171,8 @@ fn carried(request: &Request) -> bool {
         && request.emit_contract_batch.is_empty()
         && request.emit_module_inventory.is_empty()
         && !request.feedback_facts
+        // A check consuming no package contract is answered one-shot.
+        && !request.no_package_contracts
         && super::producer_arguments(&request.typefacts_args).is_empty()
 }
 

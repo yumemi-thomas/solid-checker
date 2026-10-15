@@ -232,7 +232,9 @@ pub use runtime_probes::{
 };
 /// The shared analysis input an in-memory adapter builds without the
 /// filesystem (phase P3 of the contract-removal plan).
-pub use solid_reactive_ir::{AnalysisInputs, package_boundary::PackageBoundary};
+pub use solid_reactive_ir::{
+    AnalysisInputs, RuntimeEnvironment, package_boundary::PackageBoundary,
+};
 pub use wire::{
     SemanticDemandGroup, SourceChange, SourceFile, TypeFactsExchangeTimings, TypeFactsProvider,
 };
@@ -655,6 +657,22 @@ impl TypeFactsSession {
             producer = producer.with_arg(argument);
         }
         let session = typefacts::Session::open(producer, project_id, Vec::new())?;
+        Ok(Self {
+            session,
+            last_exchange_timings: None,
+            last_table_changes: None,
+        })
+    }
+
+    /// A session over a producer program its owner already opened and carries
+    /// frame by frame (`typefacts::FrameBridge`): the owned WASM producer.
+    /// Every answer decodes, validates and expands exactly as a process
+    /// session's; the session never relaunches, replays or certifies.
+    pub fn open_bridged(
+        bridge: Box<dyn typefacts::FrameBridge + Send>,
+        project_id: &str,
+    ) -> Result<Self, BackendError> {
+        let session = typefacts::Session::open_bridged(bridge, project_id)?;
         Ok(Self {
             session,
             last_exchange_timings: None,

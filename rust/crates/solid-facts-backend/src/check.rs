@@ -1,13 +1,15 @@
-//! The ordinary project check, as one library operation.
+//! The ordinary project check, as one library operation the native CLI and
+//! the owned WASM host both run.
 //!
 //! It is exactly the native one-shot composition, in its order: the original
 //! program's sources and inventory, dependency-source selection and
 //! preparation, the combined program opened at its logical path, the selected
 //! host fold against the original program's hashes, semantic facts, source-root
 //! and runtime redirects, import attestation, the package boundary with its
-//! refusals, contract acquisition with host inference, retained-export
-//! decisions, and analysis. A [`ProducerSessions`] opens the producer
-//! programs; natively they are child processes ([`ProcessSessions`]).
+//! refusals, contract acquisition in the selected consumption mode with host
+//! inference, retained-export decisions, and analysis. Only the producer
+//! programs differ between callers: a [`ProducerSessions`] opens them, as
+//! child processes natively or as owned reactor programs in WASM.
 //!
 //! Formatting, stdout and exit codes, the daemon's retained sessions, and
 //! every contract-generation, inspection and certification mode stay with
@@ -31,6 +33,22 @@ use crate::{
     dialect::Dialect,
 };
 
+/// Which package-contract tiers an ordinary check consumes.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ContractConsumption {
+    /// Every existing tier, as the native default always has: bundled,
+    /// discovered, nested and explicit catalogs with their trust.
+    ExistingTiers,
+    /// No package contract's claims are consumed from any tier. The package
+    /// boundary, its requirement markers, ordinary resolved imports, source
+    /// refusals and residual obligations are all kept, and an import a tier
+    /// would have answered keeps an open requirement of its own
+    /// (`package_requirements::UnconsumedContractProvenance`): tiers are read for which
+    /// packages they cover, never for what they claim. Host inference still
+    /// runs, over requirement-only indexes.
+    Disabled,
+}
+
 /// Everything an ordinary check reads besides its producer programs.
 #[derive(Clone, Debug)]
 pub struct Options {
@@ -52,15 +70,16 @@ pub struct Options {
     pub implicit_dependency_sources: bool,
     pub window_realm: bool,
     pub runtime_resolution: bool,
-    /// The bundled tier, an explicit catalog and the receipt trust
-    /// configuration.
+    pub consumption: ContractConsumption,
+    /// `ExistingTiers` only: the bundled tier, an explicit catalog and the
+    /// receipt trust configuration.
     pub bundled_contracts: bool,
     pub accepted_contract_catalog: String,
     pub receipt_trust_configuration: String,
 }
 
-/// Opens the producer programs a check reads. The native implementation is
-/// [`ProcessSessions`], which runs them as child processes.
+/// Opens the producer programs a check reads. Two implementations exist: child
+/// processes (native) and owned reactor programs (WASM).
 pub trait ProducerSessions {
     /// The project's own program.
     fn open(&mut self, project_id: &str) -> Result<TypeFactsSession, Box<dyn Error>>;
@@ -250,46 +269,88 @@ pub fn run(
     let import_identity_elapsed = started.elapsed().saturating_sub(facts_complete);
 
     let directory = project_directory(&facts.project_id);
-    let mut boundary = crate::external_package_boundary(&directory, &facts, &source_refusals);
-    let requirements = crate::requirement_index(&boundary);
+    // Disabled consumption reads no tier's claims, but an import a tier
+    // covers keeps its obligation open: the tier is why this build would not
+    // read that package as plain code.
+    let (mut boundary, requirements) = match options.consumption {
+        ContractConsumption::ExistingTiers => {
+            let boundary = crate::external_package_boundary(&directory, &facts, &source_refusals);
+            let requirements = crate::requirement_index(&boundary);
+            (boundary, requirements)
+        }
+        ContractConsumption::Disabled => {
+            // Either refusal ends the check with no snapshot: provenance that
+            // cannot be established is never an empty index, and a covered
+            // import whose installation cannot be inspected is never dropped.
+            let provenance = crate::package_requirements::UnconsumedContractProvenance::acquire(
+                &directory, &facts,
+            )?;
+            let (boundary, notes) =
+                crate::package_requirements::external_package_boundary_without_contracts(
+                    &directory,
+                    &facts,
+                    &source_refusals,
+                    &provenance,
+                )?;
+            let requirements =
+                crate::requirement_index(&boundary).with_admission_refusals_for(notes);
+            (boundary, requirements)
+        }
+    };
     let crate::InferredAcceptedContracts {
         contracts,
         hosts,
         note: inference_note,
-    } = {
-        let trust = (!options.receipt_trust_configuration.is_empty())
-            .then(|| {
-                crate::read_policy2_trust_configuration(Path::new(
-                    &options.receipt_trust_configuration,
-                ))
-            })
-            .transpose()?;
-        // A discovered catalog that needs trust nobody supplied is
-        // withheld, not fatal; see `select_project_catalogs`. Nested
-        // catalogs apply to their own directories' files.
-        let selection = crate::select_project_catalogs_in(
-            &directory,
-            &crate::nested_catalog_candidates(
+    } = match options.consumption {
+        ContractConsumption::ExistingTiers => {
+            let trust = (!options.receipt_trust_configuration.is_empty())
+                .then(|| {
+                    crate::read_policy2_trust_configuration(Path::new(
+                        &options.receipt_trust_configuration,
+                    ))
+                })
+                .transpose()?;
+            // A discovered catalog that needs trust nobody supplied is
+            // withheld, not fatal; see `select_project_catalogs`. Nested
+            // catalogs apply to their own directories' files.
+            let selection = crate::select_project_catalogs_in(
                 &directory,
-                facts.files.iter().map(|file| file.path.as_str()),
-            ),
-            &options.accepted_contract_catalog,
-            trust.is_some(),
-        )?;
-        if let Some(notice) = selection.notice() {
-            note(&notice);
+                &crate::nested_catalog_candidates(
+                    &directory,
+                    facts.files.iter().map(|file| file.path.as_str()),
+                ),
+                &options.accepted_contract_catalog,
+                trust.is_some(),
+            )?;
+            if let Some(notice) = selection.notice() {
+                note(&notice);
+            }
+            crate::inferred_project_accepted_contracts_with_note(
+                &directory,
+                &selection.admitted,
+                &selection.nested,
+                trust.as_ref(),
+                options.bundled_contracts,
+                &options.runtime,
+                options.dialect.vocabulary,
+                &facts,
+                requirements,
+            )?
         }
-        crate::inferred_project_accepted_contracts_with_note(
+        // No tier's claims at all: no catalog, nested scope, trust, bundled or
+        // authored contract. What remains is the requirement-only index above,
+        // for the baseline and the browser view alike.
+        ContractConsumption::Disabled => crate::inferred_project_accepted_contracts_with_note(
             &directory,
-            &selection.admitted,
-            &selection.nested,
-            trust.as_ref(),
-            options.bundled_contracts,
+            &[],
+            &[],
+            None,
+            false,
             &options.runtime,
             options.dialect.vocabulary,
             &facts,
             requirements,
-        )?
+        )?,
     };
     if let Some(inference_note) = inference_note {
         note(&inference_note);

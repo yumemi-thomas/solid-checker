@@ -9,6 +9,10 @@ mod dependency_daemon_process;
 #[path = "dependency_fresh_native_process.rs"]
 mod dependency_fresh_native_process;
 
+// P5 S1: the ordinary check consuming no package contract.
+#[path = "no_package_contracts_process.rs"]
+mod no_package_contracts_process;
+
 use support::{assert_rule_findings, diagnostic_fixture, findings_for_rule};
 
 #[test]

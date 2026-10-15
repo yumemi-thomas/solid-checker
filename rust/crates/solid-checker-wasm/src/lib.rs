@@ -520,6 +520,16 @@ pub extern "C" fn run_check() -> u32 {
     run_reactor(check)
 }
 
+/// Check a project from its files alone: the shared ordinary check, with the
+/// canonical producer reached through the host's owned reactor and both
+/// modules reading the same mounted project tree. No package contract is
+/// consumed from any tier.
+#[cfg(all(feature = "reactor", target_family = "wasm"))]
+#[unsafe(no_mangle)]
+pub extern "C" fn run_owned_check() -> u32 {
+    run_reactor(owned::check)
+}
+
 #[cfg(feature = "reactor")]
 #[unsafe(no_mangle)]
 pub extern "C" fn output_pointer() -> u32 {
@@ -536,4 +546,270 @@ pub extern "C" fn output_length() -> u32 {
         .lock()
         .expect("reactor output lock poisoned")
         .len() as u32
+}
+
+/// The owned check (S1 of the WASM host protocol).
+///
+/// The host owns a canonical Type Facts producer reactor and lends this module
+/// six imports from `solid_typefacts`. Every call is synchronous and none
+/// calls back into this module: the host copies bytes in and out of this
+/// module's memory directly, at the pointers given, during the call.
+///
+/// - `open(envelope, length, handle_out) -> status` opens one program from the
+///   CBOR open envelope and writes its handle (u32 little endian) at
+///   `handle_out`.
+/// - `handshake(handle) -> status` and `exchange(handle, frame, length) ->
+///   status` leave one result per handle: the startup frame, or exactly one
+///   response frame for exactly one request frame.
+/// - `result_length(handle)` and `copy_result(handle, destination, capacity)
+///   -> status` read that result into this module's memory and release it.
+/// - `close(handle) -> status` releases the program.
+///
+/// A nonzero status means the result is a UTF-8 message (for a failed open,
+/// held under handle 0). The host is trusted to forward the producer's bytes
+/// unchanged and to keep the mounted tree immutable during a check; nothing
+/// here authenticates either.
+#[cfg(all(feature = "reactor", target_family = "wasm"))]
+mod owned {
+    use std::{
+        error::Error,
+        path::{Component, Path},
+    };
+
+    use serde::{Deserialize, Serialize};
+    use solid_facts_backend::{
+        RuntimeEnvironment, Snapshot, TypeFactsSession,
+        check::{self, ContractConsumption, ProducerSessions},
+        dependency_sources::PreparedDependencyProgram,
+    };
+
+    #[link(wasm_import_module = "solid_typefacts")]
+    unsafe extern "C" {
+        fn open(envelope: *const u8, length: u32, handle: *mut u32) -> u32;
+        fn handshake(handle: u32) -> u32;
+        fn exchange(handle: u32, frame: *const u8, length: u32) -> u32;
+        fn result_length(handle: u32) -> u32;
+        fn copy_result(handle: u32, destination: *mut u8, capacity: u32) -> u32;
+        fn close(handle: u32) -> u32;
+    }
+
+    fn take_result(handle: u32) -> Result<Vec<u8>, String> {
+        // SAFETY: the host writes at most `capacity` bytes into the buffer it
+        // is handed, during this call only.
+        let length = unsafe { result_length(handle) };
+        let mut buffer = vec![0_u8; length as usize];
+        let status = unsafe { copy_result(handle, buffer.as_mut_ptr(), length) };
+        if status != 0 {
+            return Err(format!("host could not copy the result of handle {handle}"));
+        }
+        Ok(buffer)
+    }
+
+    fn answer(handle: u32, status: u32) -> Result<Vec<u8>, String> {
+        let bytes = take_result(handle)?;
+        if status == 0 {
+            Ok(bytes)
+        } else {
+            Err(String::from_utf8_lossy(&bytes).into_owned())
+        }
+    }
+
+    /// One program the host opened, carried frame by frame.
+    struct HostBridge {
+        handle: u32,
+        closed: bool,
+    }
+
+    impl typefacts::FrameBridge for HostBridge {
+        fn handshake(&mut self) -> Result<Vec<u8>, String> {
+            // SAFETY: a plain call into the host; no memory is shared.
+            let status = unsafe { handshake(self.handle) };
+            answer(self.handle, status)
+        }
+
+        fn exchange(&mut self, request: &[u8]) -> Result<Vec<u8>, String> {
+            let length = u32::try_from(request.len()).map_err(|_| "request frame too large")?;
+            // SAFETY: the host reads `length` bytes at `request` during this
+            // call only.
+            let status = unsafe { exchange(self.handle, request.as_ptr(), length) };
+            answer(self.handle, status)
+        }
+
+        fn close(&mut self) {
+            if !self.closed {
+                self.closed = true;
+                // SAFETY: a plain call into the host.
+                unsafe { close(self.handle) };
+            }
+        }
+
+        fn instance(&self) -> String {
+            format!("owned-reactor-{}", self.handle)
+        }
+    }
+
+    impl Drop for HostBridge {
+        fn drop(&mut self) {
+            typefacts::FrameBridge::close(self);
+        }
+    }
+
+    struct OwnedSessions;
+
+    impl OwnedSessions {
+        fn open_program(
+            project_id: &str,
+            config: Option<&[u8]>,
+        ) -> Result<TypeFactsSession, Box<dyn Error>> {
+            let envelope = typefacts::owned_open_envelope(project_id, config)?;
+            let length = u32::try_from(envelope.len()).map_err(|_| "open envelope too large")?;
+            let mut handle = 0_u32;
+            // SAFETY: the host reads `length` bytes at `envelope` and writes
+            // four bytes at `handle`, during this call only.
+            let status = unsafe { open(envelope.as_ptr(), length, &raw mut handle) };
+            if status != 0 {
+                return Err(answer(0, status)
+                    .err()
+                    .unwrap_or_else(|| "producer program did not open".into())
+                    .into());
+            }
+            Ok(TypeFactsSession::open_bridged(
+                Box::new(HostBridge {
+                    handle,
+                    closed: false,
+                }),
+                project_id,
+            )?)
+        }
+    }
+
+    impl ProducerSessions for OwnedSessions {
+        fn open(&mut self, project_id: &str) -> Result<TypeFactsSession, Box<dyn Error>> {
+            Self::open_program(project_id, None)
+        }
+
+        fn open_generated(
+            &mut self,
+            program: &PreparedDependencyProgram,
+        ) -> Result<Result<(String, TypeFactsSession), String>, Box<dyn Error>> {
+            // The generated program is an overlay at its logical path, never a
+            // file written into the mounted project.
+            let logical = program.logical_path()?.to_string_lossy().into_owned();
+            let session = Self::open_program(&logical, Some(&program.document))?;
+            Ok(Ok((logical, session)))
+        }
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct OwnedCheckRequest {
+        project_id: String,
+        #[serde(default)]
+        dialect: Option<String>,
+        #[serde(default = "first_generation")]
+        generation: u64,
+        #[serde(default)]
+        runtime: RuntimeEnvironment,
+        #[serde(default)]
+        presets: Vec<String>,
+        #[serde(default)]
+        enable_rules: Vec<String>,
+        #[serde(default)]
+        dependency_sources: Vec<String>,
+        #[serde(default)]
+        no_dependency_source: bool,
+        #[serde(default)]
+        window_realm: bool,
+    }
+
+    const fn first_generation() -> u64 {
+        1
+    }
+
+    /// The snapshot in its own field order, beside the notes the native check
+    /// writes to standard error.
+    #[derive(Serialize)]
+    struct OwnedCheckResponse<'a> {
+        snapshot: &'a Snapshot,
+        notes: &'a [String],
+    }
+
+    pub(super) fn check(request_json: &str) -> Result<String, Box<dyn Error>> {
+        let request: OwnedCheckRequest = serde_json::from_str(request_json)?;
+        let project = Path::new(&request.project_id);
+        // The native check canonicalizes its project before anything reads it.
+        // WASI has no realpath, so the host must already name the project by
+        // its canonical path: anything that is not even lexically normal is
+        // refused, and a missing project fails here as it does natively.
+        if !project.is_absolute()
+            || project
+                .components()
+                .any(|component| matches!(component, Component::CurDir | Component::ParentDir))
+        {
+            return Err(format!(
+                "project {} is not a normal absolute path",
+                request.project_id
+            )
+            .into());
+        }
+        std::fs::metadata(project)?;
+        let mut notes = Vec::<String>::new();
+        let mut note = |line: &str| notes.push(line.to_owned());
+        let (dialect, unsupported) = check::select_dialect(project, request.dialect.as_deref())?;
+        if let Some(unsupported) = unsupported {
+            if request.runtime.target.is_none() {
+                note(&format!(
+                    "solid-checker: note: browser host not inferred: {}: unsupported installed Solid runtime {}",
+                    unsupported.manifest.display(),
+                    unsupported.installed
+                ));
+            }
+            let snapshot = solid_facts_backend::unsupported_runtime_snapshot(
+                &unsupported.installed,
+                &unsupported.manifest,
+                unsupported.refusal,
+            );
+            return Ok(serde_json::to_string(&OwnedCheckResponse {
+                snapshot: &snapshot,
+                notes: &notes,
+            })?);
+        }
+        // ADR 0297, exactly as the native ordinary check decides it.
+        let default_applies = request.runtime.target.is_some()
+            && request.runtime.build.is_some()
+            && request.dependency_sources.is_empty()
+            && !request.no_dependency_source;
+        let (dependency_sources, implicit_dependency_sources) =
+            check::effective_dependency_selection(
+                project,
+                &request.dependency_sources,
+                request.no_dependency_source,
+                default_applies,
+                request.window_realm,
+                &mut note,
+            )?;
+        let options = check::Options {
+            project_id: request.project_id.clone(),
+            dialect,
+            generation: request.generation,
+            sources: Vec::new(),
+            runtime: request.runtime,
+            presets: request.presets,
+            enable_rules: request.enable_rules,
+            feedback_facts: false,
+            dependency_sources,
+            implicit_dependency_sources,
+            window_realm: request.window_realm,
+            runtime_resolution: false,
+            consumption: ContractConsumption::Disabled,
+            bundled_contracts: false,
+            accepted_contract_catalog: String::new(),
+            receipt_trust_configuration: String::new(),
+        };
+        let outcome = check::run(&options, &mut OwnedSessions, &mut note)?;
+        Ok(serde_json::to_string(&OwnedCheckResponse {
+            snapshot: &outcome.analysis.snapshot,
+            notes: &notes,
+        })?)
+    }
 }

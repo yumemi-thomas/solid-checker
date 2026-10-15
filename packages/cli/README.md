@@ -12,6 +12,86 @@ bun add --dev solid-checker
 
 Then run `solid-checker --certify`.
 
+## Checking without package contracts
+
+`--no-package-contracts` runs the ordinary check while consuming no package
+contract's claims from any tier:
+
+- project catalogs, discovered or nested;
+- policy-2 receipts;
+- the authored contracts compiled into this build.
+
+Without the flag nothing changes: every tier is consumed as before.
+
+Consuming no claims is not the same as reading no tier. An import that a tier
+covers is exactly the import whose behavior this build would otherwise take
+from a contract. So that import stays an open obligation, and the check stays
+`uncertifiable` (`SC9005`). Two tiers are read for coverage, never for content:
+
+- **Catalogs:** each discovered catalog is read for the exact importer and
+  specifier of every entry. No contract document or receipt is opened, and
+  nothing is authenticated.
+- **Authored tier:** it is read for the specifier, package name and version it
+  covers.
+
+The `SC9005` finding then carries one more evidence step saying so. Imports
+whose installed manifest names a Solid package stay open as they always do.
+
+Exemptions:
+
+- **Analyzed source:** a package analyzed from its runtime source
+  (`--dependency-source`, or the default under a declared target and build)
+  needs no contract, with or without this flag. A runtime namespace import
+  (`import * as`) of that package is not redirected to its source, so it stays
+  an open obligation.
+- **Project source:** a specifier that `paths` maps onto project source is
+  analyzed as project source.
+- **Missing packages:** a cataloged specifier whose package is not installed
+  raises nothing here; that is TypeScript's missing module.
+
+The coverage is read eagerly and strictly; any of these refuses the whole check
+(exit 2, one stderr line, no snapshot):
+
+- a catalog or authored index that cannot be decoded;
+- a catalog entry whose importer identity cannot be established, even one no
+  import would match;
+- a discovery path or covered installation that is a dangling link,
+  unreadable or of the wrong kind.
+
+A refusal is not a finding, and nothing is reported in its place.
+
+The flag refuses every option that reads or writes a contract tier:
+
+- `--accepted-contracts`, `--receipt-trust-configuration`,
+  `--proposal-dependencies`;
+- contract emission, `--check-contracts`, `--declaration-probe-plan`;
+- `--runtime-module-resolutions`, `--contract-package-root`;
+- `--serve`.
+
+A check with the flag is always one-shot, even when the retained daemon is
+requested.
+
+Compared with a default run of the same project, a covered import reads
+"this project has no accepted reactivity contract" rather than the tier's own
+refusal, and is reported once per import rather than once per export. This is
+not a general parity claim. The 16 fixtures whose output moves kept their
+status, obligation counts and finding sites, and the other 240 compared
+projects did not move (see [the precision backlog](../../docs/precision-backlog.md)).
+But where a default run accepts a tier's contract and certifies from it, the
+same project checked with this flag withholds that contract and can become
+uncertifiable.
+
+What the flag does not change:
+
+- **Plain packages:** a package with no Solid dependency that no tier covers is
+  read as plain code, as it is without the flag.
+- **Other versions:** a version of an authored package that the authored tier
+  does not name is likewise plain.
+
+The flag is also the native reference for the experimental WASM owned-producer
+check (`packages/wasm/prototypes/owned-check.md`). That check is manual
+evidence, not a packaged WASM provider.
+
 ## Development feedback
 
 The experimental feedback command combines native findings with recorded

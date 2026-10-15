@@ -36,7 +36,7 @@ use crate::{
 
 const MAX_CONTRACT_DOCUMENT_BYTES: usize = 1024 * 1024;
 const MAX_RECEIPT_BYTES: usize = 64 * 1024;
-const MAX_CATALOG_BYTES: usize = 16 * 1024 * 1024;
+pub(crate) const MAX_CATALOG_BYTES: usize = 16 * 1024 * 1024;
 const MAX_CATALOG_CONTRACTS: usize = 65_536;
 const MAX_BOUNDARY_DEPTH: usize = 128;
 const MAX_BOUNDARY_STRING_BYTES: usize = 16 * 1024;
@@ -1403,7 +1403,27 @@ pub fn catalog_paths_in(catalog_root: &Path) -> Result<Vec<PathBuf>, ContractFai
         "accepted contract case-set pointer",
         false,
     )?;
-    let pointer: CaseSetPointerDocument = decode_case_set_json(&pointer_bytes)?;
+    let references = case_set_pointer_references(&pointer_bytes)?;
+    let pointer_base = pointer_path
+        .parent()
+        .ok_or_else(|| catalog_field("accepted contract case-set pointer has no directory"))?;
+    for (document, document_digest) in &references {
+        paths.extend(case_set_catalog_paths(
+            pointer_base,
+            document,
+            document_digest,
+        )?);
+    }
+    Ok(paths)
+}
+
+/// The `(document, documentDigest)` case-set references one case-set pointer
+/// names, validated exactly as [`catalog_paths_in`] validates them. Bytes in,
+/// so a caller that reads the pointer itself shares this one decoder.
+pub(crate) fn case_set_pointer_references(
+    pointer_bytes: &[u8],
+) -> Result<Vec<(String, String)>, ContractFailure> {
+    let pointer: CaseSetPointerDocument = decode_case_set_json(pointer_bytes)?;
     // Version 1 names one case set; version 2 names every case set the
     // project holds, one per package, so a second certification no longer
     // replaces the first.
@@ -1430,13 +1450,10 @@ pub fn catalog_paths_in(catalog_root: &Path) -> Result<Vec<PathBuf>, ContractFai
             "accepted contract case-set pointer has an unsupported format",
         ));
     }
-    let pointer_base = pointer_path
-        .parent()
-        .ok_or_else(|| catalog_field("accepted contract case-set pointer has no directory"))?;
-    for reference in &references {
-        paths.extend(case_set_catalog_paths(pointer_base, reference)?);
-    }
-    Ok(paths)
+    Ok(references
+        .into_iter()
+        .map(|reference| (reference.document, reference.document_digest))
+        .collect())
 }
 
 /// The packages whose entries in the catalog at `path` ordinary analysis can
@@ -1472,22 +1489,45 @@ pub fn catalog_packages_needing_receipt_trust(path: &Path) -> Result<Vec<String>
 /// The case catalogs one digest-verified case-set document names.
 fn case_set_catalog_paths(
     pointer_base: &Path,
-    reference: &CaseSetReference,
+    document: &str,
+    document_digest: &str,
 ) -> Result<Vec<PathBuf>, ContractFailure> {
     let mut paths = Vec::new();
-    let document_path = catalog_member_path(pointer_base, &reference.document)?;
+    let document_path = catalog_member_path(pointer_base, document)?;
     let document_bytes = read_boundary_file(
         &document_path,
         MAX_CATALOG_BYTES,
         "accepted contract case set",
         false,
     )?;
+    let cases = case_set_document_cases(&document_bytes, document_digest)?;
+    let base = document_path
+        .parent()
+        .ok_or_else(|| catalog_field("accepted contract case set has no directory"))?;
+    paths.reserve(cases.len());
+    for (catalog, catalog_digest) in &cases {
+        let path = catalog_member_path(base, catalog)?;
+        let bytes =
+            read_boundary_file(&path, MAX_CATALOG_BYTES, "accepted contract catalog", false)?;
+        verify_catalog_digest(&bytes, Some(catalog_digest.as_str()), "catalogDigest")?;
+        paths.push(path);
+    }
+    Ok(paths)
+}
+
+/// The `(catalog, catalogDigest)` cases one case-set document names, after its
+/// own digest and format are verified exactly as [`catalog_paths_in`] verifies
+/// them.
+pub(crate) fn case_set_document_cases(
+    document_bytes: &[u8],
+    document_digest: &str,
+) -> Result<Vec<(String, String)>, ContractFailure> {
     verify_catalog_digest(
-        &document_bytes,
-        Some(reference.document_digest.as_str()),
+        document_bytes,
+        Some(document_digest),
         "caseSetDocumentDigest",
     )?;
-    let document: CaseSetDocument = decode_case_set_json(&document_bytes)?;
+    let document: CaseSetDocument = decode_case_set_json(document_bytes)?;
     if document.format != "solid-checker-accepted-contract-case-set"
         || document.case_set_version != 1
     {
@@ -1495,18 +1535,11 @@ fn case_set_catalog_paths(
             "accepted contract case set has an unsupported format",
         ));
     }
-    let base = document_path
-        .parent()
-        .ok_or_else(|| catalog_field("accepted contract case set has no directory"))?;
-    paths.reserve(document.cases.len());
-    for case in &document.cases {
-        let path = catalog_member_path(base, &case.catalog)?;
-        let bytes =
-            read_boundary_file(&path, MAX_CATALOG_BYTES, "accepted contract catalog", false)?;
-        verify_catalog_digest(&bytes, Some(case.catalog_digest.as_str()), "catalogDigest")?;
-        paths.push(path);
-    }
-    Ok(paths)
+    Ok(document
+        .cases
+        .into_iter()
+        .map(|case| (case.catalog, case.catalog_digest))
+        .collect())
 }
 
 fn decode_case_set_json<T: serde::de::DeserializeOwned>(
@@ -1566,7 +1599,7 @@ fn catalog_field(message: impl Into<String>) -> ContractFailure {
     }
 }
 
-fn verify_catalog_digest(
+pub(crate) fn verify_catalog_digest(
     bytes: &[u8],
     expected: Option<&str>,
     field: &'static str,
@@ -1600,6 +1633,38 @@ pub fn accepted_contract_catalog_members(path: &Path) -> Result<Vec<PathBuf>, Co
     paths.sort();
     paths.dedup();
     Ok(paths)
+}
+
+/// Every non-core `(importer spelling, specifier)` one catalog's entries name,
+/// with the base its relative importers resolve against.
+///
+/// The catalog is decoded exactly as every catalog reader decodes it (limits,
+/// `deny_unknown_fields`, format and version, the entry-count limit), so its
+/// `status`, bindings and other envelope fields are structurally decoded, but
+/// none of them confers authority or selects what is returned: every entry is
+/// named. No contract document or receipt is opened, nothing is authenticated
+/// and nothing is normalized. Core entries are left out exactly as
+/// [`read_external_contract_catalog_with_trust`] leaves them out. The importer
+/// spelling is returned raw; establishing its identity is the caller's.
+pub(crate) fn catalog_named_entries(
+    path: &Path,
+    bytes: &[u8],
+) -> Result<(PathBuf, Vec<(String, String)>), ContractFailure> {
+    let (catalog, base) = decode_accepted_contract_catalog_bytes(path, bytes)?;
+    Ok((
+        base,
+        catalog
+            .contracts
+            .into_iter()
+            .filter(|entry| {
+                !solid_dialect::core_runtime_contract_reference(
+                    &entry.import.package_name,
+                    &entry.import.specifier,
+                )
+            })
+            .map(|entry| (entry.import.importer, entry.import.specifier))
+            .collect(),
+    ))
 }
 
 fn decode_accepted_contract_catalog(
@@ -1716,7 +1781,7 @@ fn rebase_catalog_file(base: &Path, file: &mut ResolvedFile) -> Result<(), Contr
 /// which is exactly its canonical directory joined with its name. Requiring
 /// the file to exist here would make every published project catalog
 /// unreadable the moment certify cleaned up after itself.
-fn catalog_importer_path(base: &Path, value: &str) -> Result<String, ContractFailure> {
+pub(crate) fn catalog_importer_path(base: &Path, value: &str) -> Result<String, ContractFailure> {
     let path = catalog_path(base, value)?;
     if let Ok(canonical) = path.canonicalize() {
         return Ok(canonical.to_string_lossy().into_owned());
@@ -1740,7 +1805,7 @@ fn catalog_importer_path(base: &Path, value: &str) -> Result<String, ContractFai
         })
 }
 
-fn catalog_path(base: &Path, value: &str) -> Result<PathBuf, ContractFailure> {
+pub(crate) fn catalog_path(base: &Path, value: &str) -> Result<PathBuf, ContractFailure> {
     let path = Path::new(value);
     if path.is_absolute() {
         Ok(path.to_path_buf())
@@ -1758,7 +1823,7 @@ fn catalog_absolute_path(base: &Path, value: &str) -> Result<String, ContractFai
         })
 }
 
-fn catalog_member_path(base: &Path, member: &str) -> Result<PathBuf, ContractFailure> {
+pub(crate) fn catalog_member_path(base: &Path, member: &str) -> Result<PathBuf, ContractFailure> {
     let member = Path::new(member);
     let spelling = member.to_string_lossy();
     let windows_absolute = spelling.as_bytes().get(1) == Some(&b':')

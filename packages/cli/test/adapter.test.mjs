@@ -1053,6 +1053,90 @@ process.stdout.write(JSON.stringify({ status: "certified", findings: [],
   };
 }
 
+// `--no-package-contracts` reads catalog files and installed package entries
+// the cross-pass key does not follow, so a run with it is analyzed afresh every
+// pass -- with or without the adapter's own dependencySource opt-out -- while
+// the rules of one pass still share one analysis. The same token consumed as a
+// value option's value is a value, and changes nothing.
+test("a run with --no-package-contracts is reused within one pass only", () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-contracts-off-"));
+  try {
+    const project = join(root, "tsconfig.json");
+    writeFileSync(project, "{}\n");
+    const { command, commandArgs, edit, runs } = epochAnalyzer(root);
+    const observe = {
+      create(context) {
+        return {
+          Program(node) {
+            const snapshot = plugin._testing.loadSnapshot(context);
+            context.report({ node, message: `${snapshot.epoch} ${snapshot.run}` });
+          }
+        };
+      }
+    };
+    const linter = new Linter({ cwd: root });
+    const messages = (extraArgs, settings = {}) => linter.verify("export {};", [{
+      plugins: { review: { rules: { observe, other: observe } }, "solid-checker": plugin },
+      settings: { solidChecker: {
+        project, command, commandArgs: [...commandArgs, ...extraArgs], ...settings
+      } },
+      rules: {
+        "review/observe": "warn",
+        "review/other": "warn",
+        "solid-checker/certification": "error"
+      }
+    }], { filename: join(root, "App.js") }).map(m => m.message);
+    plugin._testing.snapshotCache.clear();
+
+    const off = ["--no-package-contracts"];
+    assert.deepEqual(messages(off), ["before-edit 1", "before-edit 1"],
+      "every rule of one pass shares one analysis");
+    edit();
+    assert.deepEqual(messages(off), ["after-edit 2", "after-edit 2"],
+      "the next pass analyzes afresh and sees the changed input");
+    assert.deepEqual(messages(off, { dependencySource: false }), ["after-edit 3", "after-edit 3"],
+      "the dependencySource opt-out does not restore cross-pass reuse");
+    assert.equal(plugin._testing.snapshotCache.size, 0, "nothing enters the cross-pass cache");
+    assert.equal(runs(), 3);
+
+    // The control: the same token as `--runtime-condition`'s value is a value.
+    // That run is cached across passes as before, so a later edit is not seen.
+    const valued = ["--runtime-condition", "--no-package-contracts"];
+    assert.deepEqual(messages(valued), ["after-edit 4", "after-edit 4"]);
+    writeFileSync(join(root, "epoch.txt"), "later-edit");
+    assert.deepEqual(messages(valued), ["after-edit 4", "after-edit 4"],
+      "a value is not the flag: the cross-pass cache stands");
+    assert.equal(runs(), 4);
+  } finally {
+    plugin._testing.snapshotCache.clear();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("--no-package-contracts in commandArgs reaches native unchanged", () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-contracts-off-argv-"));
+  try {
+    const project = join(root, "tsconfig.json");
+    writeFileSync(project, "{}\n");
+    const { command, commandArgs, invocations } = recordingAnalyzer(root);
+    plugin._testing.snapshotCache.clear();
+    plugin._testing.loadSnapshot({
+      filename: join(root, "App.tsx"),
+      physicalFilename: join(root, "App.tsx"),
+      sourceCode: sourceCode("export {};"),
+      settings: { solidChecker: {
+        command, commandArgs: [...commandArgs, "--no-package-contracts"], project
+      } },
+      options: []
+    });
+    assert.equal(invocations().length, 1);
+    assert.equal(invocations()[0].filter(arg => arg === "--no-package-contracts").length, 1);
+  } finally {
+    plugin._testing.snapshotCache.clear();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("a SourceCode linted again is a new pass and analyzes again (ADR 0297 review)", () => {
   const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-reverify-"));
   try {

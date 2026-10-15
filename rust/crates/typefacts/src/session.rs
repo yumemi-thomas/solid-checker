@@ -7,7 +7,7 @@ use std::{
     process::{Child, ChildStdin, Command, Stdio},
     sync::{
         Arc, Mutex, Weak,
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         mpsc,
     },
     thread::JoinHandle,
@@ -273,7 +273,8 @@ struct SentRequest {
     cancellable: bool,
 }
 
-struct Connection {
+/// A producer child process and the threads that serve its pipes.
+struct ProcessConnection {
     child: Child,
     executable_sha256: crate::SourceHash,
     handshake: Handshake,
@@ -316,8 +317,16 @@ impl Cancellation {
     }
 }
 
-impl Connection {
+impl ProcessConnection {
     fn spawn(producer: &Producer, project_id: &str) -> Result<Self, SessionError> {
+        if cfg!(target_family = "wasm") {
+            // A WASM build reaches its producer through a FrameBridge, never a
+            // child process.
+            return Err(SessionError::Spawn(std::io::Error::new(
+                std::io::ErrorKind::Unsupported,
+                "process producers are unavailable on this target",
+            )));
+        }
         let executable_sha256 = sha256_file(&producer.path)?;
         if let Some(pin) = &producer.certification_pin
             && executable_sha256 != pin.executable_sha256
@@ -394,22 +403,9 @@ impl Connection {
         };
         let handshake = handshake
             .map_err(|error| SessionError::Handshake(format!("invalid startup frame: {error}")))?;
-        let expected = (
-            v3::TYPE_FACTS_HANDSHAKE_PROTOCOL,
-            v3::TYPE_FACTS_SCHEMA_SHA256,
-            v3::TYPE_FACTS_BUILD_ID,
-        );
-        let actual = (
-            handshake.protocol,
-            handshake.schema_hash.as_str(),
-            handshake.build_id.as_str(),
-        );
-        if actual != expected {
+        if let Err(error) = check_handshake(&handshake) {
             terminate_child(&mut child);
-            return Err(SessionError::Handshake(format!(
-                "expected protocol {}, schema {}, build {:?}; got protocol {}, schema {}, build {:?}",
-                expected.0, expected.1, expected.2, actual.0, actual.1, actual.2
-            )));
+            return Err(error);
         }
 
         let writer = Arc::new(Mutex::new(BufWriter::new(input)));
@@ -425,23 +421,10 @@ impl Connection {
                         break;
                     }
                 };
-                let decode_started = Instant::now();
-                let response = match decode_trusted::<Response>(&payload) {
-                    Ok(mut response) => {
-                        response.client_response_bytes =
-                            u64::try_from(payload.len()).unwrap_or(u64::MAX);
-                        if let Some(arena) = &reader_arena
-                            && let Err(error) = arena.attach(&mut response)
-                        {
-                            fail_pending(&reader_pending, error.to_string());
-                            break;
-                        }
-                        response.client_decode_ns =
-                            u64::try_from(decode_started.elapsed().as_nanos()).unwrap_or(u64::MAX);
-                        response
-                    }
+                let response = match decode_response_payload(&payload, reader_arena.as_deref()) {
+                    Ok(response) => response,
                     Err(error) => {
-                        fail_pending(&reader_pending, error.to_string());
+                        fail_pending(&reader_pending, error);
                         break;
                     }
                 };
@@ -521,42 +504,15 @@ impl Connection {
 
     /// Collects the response to an already-sent request.
     fn wait(&self, sent: SentRequest) -> Result<Response, SessionError> {
-        let SentRequest {
-            request_id,
-            receiver,
-            sent_at,
-            request_send,
-            request_bytes,
-            cancellable,
-        } = sent;
-        let response = receiver
+        let response = sent
+            .receiver
             .recv()
             .map_err(|_| SessionError::Process("producer response channel closed".into()))?
             .map_err(SessionError::Process);
-        if cancellable {
-            self.clear_active_request(request_id);
+        if sent.cancellable {
+            self.clear_active_request(sent.request_id);
         }
-        let mut response = response?;
-        response.client_roundtrip_ns =
-            u64::try_from(sent_at.elapsed().as_nanos()).unwrap_or(u64::MAX);
-        response.client_request_send_ns =
-            u64::try_from(request_send.as_nanos()).unwrap_or(u64::MAX);
-        response.client_request_bytes = request_bytes;
-        if response.request_id != request_id {
-            return Err(SessionError::InvalidResponse(
-                "request identity mismatch".into(),
-            ));
-        }
-        if !response.ok {
-            let error = response.error.ok_or_else(|| {
-                SessionError::InvalidResponse("error response has no body".into())
-            })?;
-            return Err(SessionError::Service {
-                code: error.code,
-                message: error.message,
-            });
-        }
-        Ok(response)
+        complete_response(response, &sent)
     }
 
     /// Waits only long enough for the optional graceful-close acknowledgement.
@@ -571,20 +527,12 @@ impl Connection {
         sent: SentRequest,
         timeout: Duration,
     ) -> Result<Response, SessionError> {
-        let SentRequest {
-            request_id,
-            receiver,
-            sent_at,
-            request_send,
-            request_bytes,
-            cancellable,
-        } = sent;
-        debug_assert!(!cancellable, "close requests are never cancellable");
-        let response = match receiver.recv_timeout(timeout) {
+        debug_assert!(!sent.cancellable, "close requests are never cancellable");
+        let response = match sent.receiver.recv_timeout(timeout) {
             Ok(response) => response.map_err(SessionError::Process),
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 if let Ok(mut pending) = self.pending.lock() {
-                    pending.remove(&request_id);
+                    pending.remove(&sent.request_id);
                 }
                 Err(SessionError::Process(
                     "producer did not acknowledge close before termination".into(),
@@ -593,33 +541,8 @@ impl Connection {
             Err(mpsc::RecvTimeoutError::Disconnected) => Err(SessionError::Process(
                 "producer response channel closed during close".into(),
             )),
-        }?;
-        let mut response = response;
-        response.client_roundtrip_ns =
-            u64::try_from(sent_at.elapsed().as_nanos()).unwrap_or(u64::MAX);
-        response.client_request_send_ns =
-            u64::try_from(request_send.as_nanos()).unwrap_or(u64::MAX);
-        response.client_request_bytes = request_bytes;
-        if response.request_id != request_id {
-            return Err(SessionError::InvalidResponse(
-                "request identity mismatch".into(),
-            ));
-        }
-        if !response.ok {
-            let error = response.error.ok_or_else(|| {
-                SessionError::InvalidResponse("error response has no body".into())
-            })?;
-            return Err(SessionError::Service {
-                code: error.code,
-                message: error.message,
-            });
-        }
-        Ok(response)
-    }
-
-    fn exchange(&self, request: &mut Request) -> Result<Response, SessionError> {
-        let sent = self.send(request)?;
-        self.wait(sent)
+        };
+        complete_response(response, &sent)
     }
 
     fn cancellation_handle(&self, project_id: String) -> Cancellation {
@@ -645,10 +568,319 @@ impl Connection {
     }
 }
 
-impl Drop for Connection {
+impl Drop for ProcessConnection {
     fn drop(&mut self) {
         self.terminate();
     }
+}
+
+/// The carrier of an owned, process-free producer: one program the bridge's
+/// owner has already opened, reached one synchronous frame at a time.
+///
+/// `handshake` returns the producer's startup frame and `exchange` takes
+/// exactly one length-prefixed request frame and returns exactly one
+/// length-prefixed response frame, the same bytes the stdio service writes.
+/// `close` releases the program; it is called exactly once, on every path,
+/// including failure. A bridge is no authority: it carries the answers of the
+/// producer its owner runs over the files its owner supplied, and it can never
+/// issue certification evidence.
+pub trait FrameBridge {
+    fn handshake(&mut self) -> Result<Vec<u8>, String>;
+    fn exchange(&mut self, request: &[u8]) -> Result<Vec<u8>, String>;
+    fn close(&mut self);
+    /// An owner-local identity of this program instance, used only to keep
+    /// session identities distinct. It is not a process id.
+    fn instance(&self) -> String;
+}
+
+/// The owned producer's open envelope: which program to open, and the bytes
+/// overlaid at that logical path when the program is a generated one. Absent
+/// and empty configuration differ. Deterministic CBOR, as every frame is.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OwnedOpenRequest<'a> {
+    project_id: &'a str,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    has_config: bool,
+    #[serde(skip_serializing_if = "<[u8]>::is_empty", with = "serde_bytes")]
+    config: &'a [u8],
+}
+
+/// Encodes the open envelope an owned reactor's `typefacts_open` reads.
+pub fn owned_open_envelope(
+    project_id: &str,
+    config: Option<&[u8]>,
+) -> Result<Vec<u8>, TypeFactsError> {
+    crate::encode(&OwnedOpenRequest {
+        project_id,
+        has_config: config.is_some(),
+        config: config.unwrap_or_default(),
+    })
+}
+
+/// A producer reached through a [`FrameBridge`]. Every answer is ready when
+/// `send` returns: there is no overlap, no cancellation, and no recovery. The
+/// first transport, decode, or service failure poisons it for good.
+struct BridgedConnection {
+    bridge: Mutex<Option<Box<dyn FrameBridge + Send>>>,
+    instance: String,
+    next_request_id: AtomicU64,
+    poisoned: AtomicBool,
+}
+
+impl BridgedConnection {
+    fn connect(mut bridge: Box<dyn FrameBridge + Send>) -> Result<Self, SessionError> {
+        let handshake = bridge
+            .handshake()
+            .map_err(SessionError::Handshake)
+            .and_then(|frame| single_frame_payload(&frame).map_err(SessionError::Handshake))
+            .and_then(|payload| {
+                decode::<Handshake>(&payload).map_err(|error| {
+                    SessionError::Handshake(format!("invalid startup frame: {error}"))
+                })
+            })
+            .and_then(|handshake| check_handshake(&handshake).map(|()| handshake));
+        if let Err(error) = handshake {
+            bridge.close();
+            return Err(error);
+        }
+        Ok(Self {
+            instance: bridge.instance(),
+            bridge: Mutex::new(Some(bridge)),
+            next_request_id: AtomicU64::new(1),
+            poisoned: AtomicBool::new(false),
+        })
+    }
+
+    fn send(&self, request: &mut Request) -> Result<SentRequest, SessionError> {
+        if self.poisoned.load(Ordering::Acquire) {
+            return Err(SessionError::Closed);
+        }
+        request.request_id = self.next_request_id.fetch_add(1, Ordering::Relaxed);
+        let sent_at = Instant::now();
+        let payload = encode_sidecar_request(request)?;
+        let mut frame = Vec::with_capacity(payload.len() + 4);
+        write_frame(&mut frame, &payload)?;
+        let request_bytes = u64::try_from(frame.len()).unwrap_or(u64::MAX);
+        let answer = (|| {
+            let mut bridge = self
+                .bridge
+                .lock()
+                .map_err(|_| "producer bridge is poisoned".to_owned())?;
+            let bridge = bridge
+                .as_mut()
+                .ok_or_else(|| "producer bridge is closed".to_owned())?;
+            let reply = bridge.exchange(&frame)?;
+            let payload = single_frame_payload(&reply)?;
+            decode_response_payload(&payload, None)
+        })();
+        if answer.is_err() {
+            self.poisoned.store(true, Ordering::Release);
+        }
+        let request_send = sent_at.elapsed();
+        let (sender, receiver) = mpsc::sync_channel(1);
+        let _ = sender.send(answer);
+        Ok(SentRequest {
+            request_id: request.request_id,
+            receiver,
+            sent_at,
+            request_send,
+            request_bytes,
+            cancellable: false,
+        })
+    }
+
+    fn wait(&self, sent: SentRequest) -> Result<Response, SessionError> {
+        let response = sent
+            .receiver
+            .try_recv()
+            .map_err(|_| SessionError::Process("bridged answer is missing".into()))
+            .and_then(|response| response.map_err(SessionError::Process));
+        let result = complete_response(response, &sent);
+        if result.is_err() {
+            self.poisoned.store(true, Ordering::Release);
+        }
+        result
+    }
+
+    fn release(&mut self) {
+        if let Ok(mut bridge) = self.bridge.lock()
+            && let Some(mut bridge) = bridge.take()
+        {
+            bridge.close();
+        }
+    }
+}
+
+impl Drop for BridgedConnection {
+    fn drop(&mut self) {
+        self.release();
+    }
+}
+
+enum Connection {
+    Process(ProcessConnection),
+    Bridged(BridgedConnection),
+}
+
+impl Connection {
+    fn send(&self, request: &mut Request) -> Result<SentRequest, SessionError> {
+        match self {
+            Self::Process(connection) => connection.send(request),
+            Self::Bridged(connection) => connection.send(request),
+        }
+    }
+
+    fn wait(&self, sent: SentRequest) -> Result<Response, SessionError> {
+        match self {
+            Self::Process(connection) => connection.wait(sent),
+            Self::Bridged(connection) => connection.wait(sent),
+        }
+    }
+
+    fn wait_for_close(
+        &self,
+        sent: SentRequest,
+        timeout: Duration,
+    ) -> Result<Response, SessionError> {
+        match self {
+            Self::Process(connection) => connection.wait_for_close(sent, timeout),
+            Self::Bridged(connection) => connection.wait(sent),
+        }
+    }
+
+    fn exchange(&self, request: &mut Request) -> Result<Response, SessionError> {
+        let sent = self.send(request)?;
+        self.wait(sent)
+    }
+
+    fn cancellation_handle(&self, project_id: String) -> Option<Cancellation> {
+        match self {
+            Self::Process(connection) => Some(connection.cancellation_handle(project_id)),
+            Self::Bridged(_) => None,
+        }
+    }
+
+    fn terminate(&mut self) {
+        match self {
+            Self::Process(connection) => connection.terminate(),
+            Self::Bridged(connection) => connection.release(),
+        }
+    }
+
+    fn process(&self) -> Option<&ProcessConnection> {
+        match self {
+            Self::Process(connection) => Some(connection),
+            Self::Bridged(_) => None,
+        }
+    }
+}
+
+/// The startup frame must name exactly this client's protocol, schema and
+/// build. Compatibility only: it authenticates nothing.
+fn check_handshake(handshake: &Handshake) -> Result<(), SessionError> {
+    let expected = (
+        v3::TYPE_FACTS_HANDSHAKE_PROTOCOL,
+        v3::TYPE_FACTS_SCHEMA_SHA256,
+        v3::TYPE_FACTS_BUILD_ID,
+    );
+    let actual = (
+        handshake.protocol,
+        handshake.schema_hash.as_str(),
+        handshake.build_id.as_str(),
+    );
+    if actual == expected {
+        Ok(())
+    } else {
+        Err(SessionError::Handshake(format!(
+            "expected protocol {}, schema {}, build {:?}; got protocol {}, schema {}, build {:?}",
+            expected.0, expected.1, expected.2, actual.0, actual.1, actual.2
+        )))
+    }
+}
+
+/// Decodes one response payload exactly as the process reader does,
+/// attaching a shared transition arena when the connection has one.
+fn decode_response_payload(
+    payload: &[u8],
+    arena: Option<&SharedTransitionArena>,
+) -> Result<Response, String> {
+    let decode_started = Instant::now();
+    let mut response = decode_trusted::<Response>(payload).map_err(|error| error.to_string())?;
+    response.client_response_bytes = u64::try_from(payload.len()).unwrap_or(u64::MAX);
+    if let Some(arena) = arena {
+        arena
+            .attach(&mut response)
+            .map_err(|error| error.to_string())?;
+    }
+    response.client_decode_ns =
+        u64::try_from(decode_started.elapsed().as_nanos()).unwrap_or(u64::MAX);
+    Ok(response)
+}
+
+/// The payload of exactly one length-prefixed frame: no short, oversized or
+/// trailing bytes.
+fn single_frame_payload(frame: &[u8]) -> Result<Vec<u8>, String> {
+    let mut reader = frame;
+    let payload = read_frame(&mut reader).map_err(|error| format!("bridged frame: {error}"))?;
+    if !reader.is_empty() {
+        return Err(format!(
+            "bridged frame carries {} trailing bytes",
+            reader.len()
+        ));
+    }
+    Ok(payload)
+}
+
+/// Finishes one collected answer the same way for every carrier: timings,
+/// request correlation, and service errors.
+fn complete_response(
+    response: Result<Response, SessionError>,
+    sent: &SentRequest,
+) -> Result<Response, SessionError> {
+    let mut response = response?;
+    response.client_roundtrip_ns =
+        u64::try_from(sent.sent_at.elapsed().as_nanos()).unwrap_or(u64::MAX);
+    response.client_request_send_ns =
+        u64::try_from(sent.request_send.as_nanos()).unwrap_or(u64::MAX);
+    response.client_request_bytes = sent.request_bytes;
+    if response.request_id != sent.request_id {
+        return Err(SessionError::InvalidResponse(
+            "request identity mismatch".into(),
+        ));
+    }
+    if !response.ok {
+        let error = response
+            .error
+            .ok_or_else(|| SessionError::InvalidResponse("error response has no body".into()))?;
+        return Err(SessionError::Service {
+            code: error.code,
+            message: error.message,
+        });
+    }
+    Ok(response)
+}
+
+/// A successful answer must be about the program and generation it was asked
+/// about.
+fn validate_response_identity(
+    response: &Response,
+    project_id: &str,
+    generation: u64,
+) -> Result<(), SessionError> {
+    if response.schema != v3::TYPE_FACTS_SCHEMA_V1
+        || response.project_id != project_id
+        || response.generation != generation
+    {
+        return Err(SessionError::InvalidResponse(format!(
+            "answer names schema {}, project {}, generation {}; asked schema {}, project {project_id}, generation {generation}",
+            response.schema,
+            response.project_id,
+            response.generation,
+            v3::TYPE_FACTS_SCHEMA_V1
+        )));
+    }
+    Ok(())
 }
 
 /// What [`Session::close`] found when it said goodbye.
@@ -679,7 +911,10 @@ pub enum CloseOutcome {
 /// Framing, request identities, handshake validation, Wire table transitions,
 /// and subprocess recovery are private implementation details.
 pub struct Session {
-    producer: Producer,
+    /// The process to relaunch on recovery. `None` for a bridged session,
+    /// which never relaunches, replays, or re-acquires: its first failure
+    /// closes it.
+    producer: Option<Producer>,
     project_id: String,
     generation: u64,
     session_id: crate::SourceHash,
@@ -755,9 +990,56 @@ impl Session {
         I: IntoIterator<Item = FileChange>,
     {
         let project_id = normalize_project_id(project_id.into())?;
-        let connection = Connection::spawn(&producer, &project_id)?;
+        let connection = Connection::Process(ProcessConnection::spawn(&producer, &project_id)?);
+        let mut session = Self::with_connection(Some(producer), project_id, connection);
+        session.exchange(request(
+            Operation::Open,
+            &session.project_id,
+            session.generation,
+        ))?;
+        let sources = sources.into_iter().collect::<Vec<_>>();
+        if !sources.is_empty() {
+            session.update(sources)?;
+        }
+        Ok(session)
+    }
+
+    /// Opens a session over a producer program its owner has already opened
+    /// for `project_id` (see [`FrameBridge`]). The answers decode, validate,
+    /// and expand exactly as a process session's do. A bridged session is
+    /// never relaunched or replayed, has no cancellation handle, and refuses
+    /// certification; its first failure closes it and drops its retained
+    /// state.
+    pub fn open_bridged(
+        bridge: Box<dyn FrameBridge + Send>,
+        project_id: impl Into<String>,
+    ) -> Result<Self, SessionError> {
+        let project_id = match normalize_project_id(project_id.into()) {
+            Ok(project_id) => project_id,
+            Err(error) => {
+                let mut bridge = bridge;
+                bridge.close();
+                return Err(error);
+            }
+        };
+        let connection = Connection::Bridged(BridgedConnection::connect(bridge)?);
+        let mut session = Self::with_connection(None, project_id, connection);
+        let opened = session.exchange(request(
+            Operation::Open,
+            &session.project_id,
+            session.generation,
+        ));
+        session.guard(opened)?;
+        Ok(session)
+    }
+
+    fn with_connection(
+        producer: Option<Producer>,
+        project_id: String,
+        connection: Connection,
+    ) -> Self {
         let session_id = new_session_id(&project_id, &connection);
-        let mut session = Self {
+        Self {
             producer,
             project_id,
             generation: 1,
@@ -777,17 +1059,7 @@ impl Session {
             last_table_changes: None,
             host_constants: Vec::new(),
             closed: false,
-        };
-        session.exchange(request(
-            Operation::Open,
-            &session.project_id,
-            session.generation,
-        ))?;
-        let sources = sources.into_iter().collect::<Vec<_>>();
-        if !sources.is_empty() {
-            session.update(sources)?;
         }
-        Ok(session)
     }
 
     /// Sets the host constants (ADR 0166) every later `invocations` and
@@ -809,7 +1081,7 @@ impl Session {
     pub fn cancellation_handle(&self) -> Option<Cancellation> {
         self.connection
             .as_ref()
-            .map(|connection| connection.cancellation_handle(self.project_id.clone()))
+            .and_then(|connection| connection.cancellation_handle(self.project_id.clone()))
     }
 
     pub fn take_last_exchange_timings(&mut self) -> Option<ExchangeTimings> {
@@ -852,6 +1124,14 @@ impl Session {
     /// `analyze` is a thin wrapper that groups a flat list and calls through to
     /// here, so there is one retained-analysis implementation rather than two.
     pub fn analyze_groups(
+        &mut self,
+        groups: &[DemandGroup<'_>],
+    ) -> Result<FactTable, SessionError> {
+        let result = self.analyze_groups_unguarded(groups);
+        self.guard(result)
+    }
+
+    fn analyze_groups_unguarded(
         &mut self,
         groups: &[DemandGroup<'_>],
     ) -> Result<FactTable, SessionError> {
@@ -919,7 +1199,9 @@ impl Session {
             &reference_locations,
             demand_roots_changed,
         ) {
-            Err(SessionError::Service { code, .. }) if code == "state-mismatch" => {
+            Err(SessionError::Service { code, .. })
+                if code == "state-mismatch" && self.can_recover() =>
+            {
                 // The producer lost the state this delta was relative to, so the
                 // next request must carry the complete demand set.
                 self.clear_retained_state();
@@ -956,7 +1238,7 @@ impl Session {
             // Exactly once. The re-ask is not wrapped again, so a producer that
             // keeps dying surfaces its failure instead of being retried
             // forever.
-            Err(error) if error.is_transport_failure() => {
+            Err(error) if error.is_transport_failure() && self.can_recover() => {
                 self.restart_and_replay()?;
                 Self::reject_foreign_locations(groups)?;
                 let complete = groups
@@ -1028,6 +1310,18 @@ impl Session {
     where
         I: IntoIterator<Item = FileChange>,
     {
+        let result = self.update_during_unguarded(changes, work);
+        self.guard(result)
+    }
+
+    fn update_during_unguarded<I, T>(
+        &mut self,
+        changes: I,
+        work: impl FnOnce() -> T,
+    ) -> Result<T, SessionError>
+    where
+        I: IntoIterator<Item = FileChange>,
+    {
         self.ensure_open()?;
         let changes = changes.into_iter().collect::<Vec<_>>();
         if changes.is_empty() {
@@ -1038,7 +1332,7 @@ impl Session {
         sending.changes.clone_from(&changes);
         let sent = match self.send_once(sending) {
             Ok(sent) => sent,
-            Err(error) if error.is_transport_failure() => {
+            Err(error) if error.is_transport_failure() && self.can_recover() => {
                 // The producer died before it could be told. Recover, then fall
                 // back to a plain update: nothing is in flight to overlap with.
                 self.restart_and_replay()?;
@@ -1085,12 +1379,16 @@ impl Session {
             .wait(sent);
         let wait = wait_started.elapsed();
         self.last_update_timings = Some(UpdateTimings { send, wait });
+        let generation = self.generation + 1;
+        let outcome = outcome.and_then(|response| {
+            validate_response_identity(&response, &self.project_id, generation).map(|()| response)
+        });
         match outcome {
             Ok(response) => {
                 self.commit_update(changes, response.affected);
                 Ok(())
             }
-            Err(error) if error.is_transport_failure() => {
+            Err(error) if error.is_transport_failure() && self.can_recover() => {
                 // This update is not in the replay state yet, so the replay
                 // restores everything before it and it is re-sent exactly once.
                 self.restart_and_replay()?;
@@ -1147,6 +1445,11 @@ impl Session {
     }
 
     pub fn configured_sources(&mut self) -> Result<Vec<SourceFile>, SessionError> {
+        let result = self.configured_sources_unguarded();
+        self.guard(result)
+    }
+
+    fn configured_sources_unguarded(&mut self) -> Result<Vec<SourceFile>, SessionError> {
         self.ensure_open()?;
         let response = self.exchange(request(
             Operation::Sources,
@@ -1173,6 +1476,14 @@ impl Session {
         &mut self,
         demand: &ModuleGraphDemand,
     ) -> Result<ModuleGraph, SessionError> {
+        let result = self.module_graph_unguarded(demand);
+        self.guard(result)
+    }
+
+    fn module_graph_unguarded(
+        &mut self,
+        demand: &ModuleGraphDemand,
+    ) -> Result<ModuleGraph, SessionError> {
         self.ensure_open()?;
         let mut modules = request(Operation::Modules, &self.project_id, self.generation);
         modules.module_graph = Some(ModuleGraphRequest {
@@ -1193,6 +1504,14 @@ impl Session {
     /// generation. The operation is read-only and leaves retained analysis
     /// state untouched.
     pub fn invocations(
+        &mut self,
+        demands: &[crate::InvocationDemand],
+    ) -> Result<crate::InvocationAnswer, SessionError> {
+        let result = self.invocations_unguarded(demands);
+        self.guard(result)
+    }
+
+    fn invocations_unguarded(
         &mut self,
         demands: &[crate::InvocationDemand],
     ) -> Result<crate::InvocationAnswer, SessionError> {
@@ -1243,6 +1562,14 @@ impl Session {
     /// Returns exact compiler value and recursive callable-path facts for
     /// verifier-owned query expressions. It never selects or invents a call.
     pub fn export_values(
+        &mut self,
+        demands: &[crate::ExportValueDemand],
+    ) -> Result<crate::ExportValueAnswer, SessionError> {
+        let result = self.export_values_unguarded(demands);
+        self.guard(result)
+    }
+
+    fn export_values_unguarded(
         &mut self,
         demands: &[crate::ExportValueDemand],
     ) -> Result<crate::ExportValueAnswer, SessionError> {
@@ -1298,13 +1625,23 @@ impl Session {
         context: crate::CertificationInvocationContext,
         demands: &[crate::ExportValueDemand],
     ) -> Result<crate::LiveExportValueAnswer, SessionError> {
-        let pin = self.producer.certification_pin.clone().ok_or_else(|| {
-            SessionError::ProducerProvenance(
-                "ordinary producer sessions cannot issue certification evidence".into(),
-            )
-        })?;
+        // Checked before any proof answer is acquired: a bridged session has
+        // no pinned producer and is refused here.
+        let pin = self
+            .producer
+            .as_ref()
+            .and_then(|producer| producer.certification_pin.clone())
+            .ok_or_else(|| {
+                SessionError::ProducerProvenance(
+                    "ordinary producer sessions cannot issue certification evidence".into(),
+                )
+            })?;
         let answer = self.export_values(demands)?;
-        let connection = self.connection.as_ref().ok_or(SessionError::Closed)?;
+        let connection = self
+            .connection
+            .as_ref()
+            .and_then(Connection::process)
+            .ok_or(SessionError::Closed)?;
         let demand_sha256 = crate::SourceHash::parse(answer.envelope.demand_sha256.to_string())?;
         let schema_sha256 = crate::SourceHash::parse(connection.handshake.schema_hash.clone())?;
         let evidence_root = live_invocation_evidence_root(
@@ -1349,13 +1686,23 @@ impl Session {
         context: crate::CertificationInvocationContext,
         demands: &[crate::InvocationDemand],
     ) -> Result<crate::LiveInvocationAnswer, SessionError> {
-        let pin = self.producer.certification_pin.clone().ok_or_else(|| {
-            SessionError::ProducerProvenance(
-                "ordinary producer sessions cannot issue certification evidence".into(),
-            )
-        })?;
+        // Checked before any proof answer is acquired: a bridged session has
+        // no pinned producer and is refused here.
+        let pin = self
+            .producer
+            .as_ref()
+            .and_then(|producer| producer.certification_pin.clone())
+            .ok_or_else(|| {
+                SessionError::ProducerProvenance(
+                    "ordinary producer sessions cannot issue certification evidence".into(),
+                )
+            })?;
         let answer = self.invocations(demands)?;
-        let connection = self.connection.as_ref().ok_or(SessionError::Closed)?;
+        let connection = self
+            .connection
+            .as_ref()
+            .and_then(Connection::process)
+            .ok_or(SessionError::Closed)?;
         let demand_sha256 = crate::SourceHash::parse(answer.envelope.demand_sha256.to_string())?;
         let schema_sha256 = crate::SourceHash::parse(connection.handshake.schema_hash.clone())?;
         let evidence_root = live_invocation_evidence_root(
@@ -1888,7 +2235,7 @@ impl Session {
 
     fn exchange(&mut self, mut request: Request) -> Result<Response, SessionError> {
         match self.exchange_once(&mut request) {
-            Err(error) if error.is_transport_failure() => {
+            Err(error) if error.is_transport_failure() && self.can_recover() => {
                 self.restart_and_replay()?;
                 self.exchange_once(&mut request)
             }
@@ -1903,6 +2250,7 @@ impl Session {
             .as_ref()
             .ok_or(SessionError::Closed)?
             .exchange(request)?;
+        validate_response_identity(&response, &self.project_id, request.generation)?;
         if operation == Operation::Symbols
             && response.symbol_evidence.is_empty()
             && !response.table_transition.is_empty()
@@ -1934,11 +2282,16 @@ impl Session {
     }
 
     fn restart_and_replay(&mut self) -> Result<(), SessionError> {
+        let Some(producer) = self.producer.as_ref() else {
+            return Err(SessionError::Process(
+                "a bridged producer is never restarted or replayed".into(),
+            ));
+        };
+        let connection = ProcessConnection::spawn(producer, &self.project_id);
         if let Some(mut connection) = self.connection.take() {
             connection.terminate();
         }
-        let connection = Connection::spawn(&self.producer, &self.project_id)?;
-        self.connection = Some(connection);
+        self.connection = Some(Connection::Process(connection?));
         self.restart_epoch = self.restart_epoch.checked_add(1).ok_or_else(|| {
             SessionError::ProducerProvenance("producer restart epoch overflow".into())
         })?;
@@ -1971,6 +2324,26 @@ impl Session {
             Ok(())
         }
     }
+
+    /// Whether a failure may be recovered by relaunching and replaying. Only a
+    /// process session can; a bridged one has no producer to relaunch.
+    fn can_recover(&self) -> bool {
+        self.producer.is_some()
+    }
+
+    /// A bridged session's first failure of any kind closes it: its program
+    /// is released, its retained state dropped, and no later call reuses a
+    /// possibly partly applied answer. A process session is unaffected.
+    fn guard<T>(&mut self, result: Result<T, SessionError>) -> Result<T, SessionError> {
+        if result.is_err() && !self.can_recover() {
+            self.closed = true;
+            self.clear_retained_state();
+            if let Some(mut connection) = self.connection.take() {
+                connection.terminate();
+            }
+        }
+        result
+    }
 }
 
 fn sha256_file(path: &Path) -> Result<crate::SourceHash, SessionError> {
@@ -1992,11 +2365,18 @@ fn sha256_file(path: &Path) -> Result<crate::SourceHash, SessionError> {
 }
 
 fn new_session_id(project_id: &str, connection: &Connection) -> crate::SourceHash {
+    let (image, instance) = match connection {
+        Connection::Process(connection) => (
+            connection.executable_sha256.to_string(),
+            connection.child.id().to_string(),
+        ),
+        Connection::Bridged(connection) => ("bridged".to_owned(), connection.instance.clone()),
+    };
     let mut hash = Sha256::new();
     hash_invocation_field(&mut hash, "solid-checker:typefacts:live-session:v1");
     hash_invocation_field(&mut hash, project_id);
-    hash_invocation_field(&mut hash, connection.executable_sha256.as_str());
-    hash_invocation_field(&mut hash, &connection.child.id().to_string());
+    hash_invocation_field(&mut hash, &image);
+    hash_invocation_field(&mut hash, &instance);
     hash_invocation_field(
         &mut hash,
         &SESSION_ID_COUNTER
@@ -2019,7 +2399,7 @@ fn new_session_id(project_id: &str, connection: &Connection) -> crate::SourceHas
 fn live_invocation_evidence_root(
     session_id: &crate::SourceHash,
     restart_epoch: u64,
-    connection: &Connection,
+    connection: &ProcessConnection,
     pin: &CertificationProducerPin,
     project_id: &str,
     generation: u64,
@@ -3628,7 +4008,7 @@ mod tests {
         // of each edit; only the newest overlay per path changes what a replayed
         // generation produces.
         let mut session = Session {
-            producer: Producer::at("/nonexistent"),
+            producer: Some(Producer::at("/nonexistent")),
             project_id: "/p/tsconfig.json".into(),
             generation: 1,
             session_id: crate::SourceHash::of("test-session"),
