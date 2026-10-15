@@ -1,5 +1,4 @@
 mod daemon_cache;
-mod dependency_program;
 mod idle_memory;
 mod json_output;
 mod snapshot_emission;
@@ -21,14 +20,23 @@ use solid_facts_backend::{
     SourceFile, TypeFactsProvider, TypeFactsSession, accepted_package_contract_statuses,
     analyze_project_accepted_measured_with_enablement, attest_import_identities,
     build_project_native_measured_with_program_hashes, contract_identity_scope,
-    default_typefacts_executable, dialect,
-    encode_inferred_entrypoint_workflow_with_external_targets,
+    default_typefacts_executable, encode_inferred_entrypoint_workflow_with_external_targets,
     external_package_contract_requirements, merge_contract_proposals, merge_plans,
     read_accepted_contract_catalog_with_trust, read_external_contract_catalog_with_trust,
     read_policy2_trust_configuration, read_proposal_dependency_catalog_for_generation,
     review_contract_document, semantic_demand_options_for_enablement, validate_contract_document,
 };
 use solid_reactive_ir::{RuntimeBuild, RuntimeEnvironment, RuntimeRendering, RuntimeTarget};
+// Shared with the library's check operation (moved from this binary).
+use solid_facts_backend::{
+    dependency_program,
+    source_redirects::{
+        canonical_symbol, canonical_symbol_aliases, entry_export_entity_indexed,
+        explicit_runtime_export_binding_count, is_bare_runtime_export_star,
+        resolve_relative_export, same_canonical_path, symbol_redirects,
+        validate_module_export_precedence,
+    },
+};
 
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -3218,39 +3226,16 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     // ADR 0297: the effective dependency selection, decided once and before
     // any mode or the daemon branch reads it, so a retained check serves the
     // selection a one-shot check analyzes.
-    if request.no_dependency_source && !request.dependency_sources.is_empty() {
-        return Err(
-            "--no-dependency-source cannot be combined with --dependency-source: \
-             one asks for contracts, the other for source"
-                .into(),
-        );
-    }
-    // Review round 1: the default holds only where the project establishes
-    // the resolver source selection reads and can take the sibling tsconfig;
-    // otherwise it stays contract mode and says why. An explicit selection
-    // states the premise itself and is never second-guessed.
-    let implicit_dependency_sources = defaults_to_dependency_sources(&request)
-        && match implicit_dependency_source_refusal(Path::new(&request.project_id)) {
-            None => true,
-            Some(reason) => {
-                eprintln!(
-                    "solid-checker: note: packages are not analyzed from source by default: \
-                     {reason}; every package binds through its contract \
-                     (--dependency-source '*' selects source anyway)"
-                );
-                false
-            }
-        };
-    if implicit_dependency_sources {
-        request.dependency_sources = vec!["*".into()];
-    }
-    if request.window_realm && request.dependency_sources.is_empty() {
-        return Err(
-            "--runtime-realm window applies only to dependency-source packages, \
-             and this run analyzes none"
-                .into(),
-        );
-    }
+    let (dependency_sources, implicit_dependency_sources) =
+        solid_facts_backend::check::effective_dependency_selection(
+            Path::new(&request.project_id),
+            &request.dependency_sources,
+            request.no_dependency_source,
+            defaults_to_dependency_sources(&request),
+            request.window_realm,
+            &mut |line| eprintln!("{line}"),
+        )?;
+    request.dependency_sources = dependency_sources;
     let emits_contract = !request.emit_contract.is_empty();
     let emits_contract_batch = !request.emit_contract_batch.is_empty();
     if emits_contract && emits_contract_batch {
@@ -3295,39 +3280,14 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     // An explicit `--dialect` overrides detection outright, refusal included.
     // That is the escape hatch for a resolved manifest that misreports what
     // will actually be installed, and the rule page says so.
-    let mut unsupported_runtime = None;
-    let dialect = match request.dialect.as_deref() {
-        Some(id) => dialect::by_id(id).ok_or_else(|| {
-            format!(
-                "unknown dialect {id:?}; known dialects: {}",
-                dialect::ALL
-                    .iter()
-                    .map(|dialect| dialect.id)
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )
-        })?,
-        None => {
-            let project = if request.contract_package_root.is_empty() {
-                Path::new(&request.project_id)
-            } else {
-                Path::new(&request.contract_package_root)
-            };
-            match dialect::detect_detailed(project) {
-                dialect::Detection::Installed { dialect, .. } => dialect,
-                dialect::Detection::Unsupported {
-                    installed,
-                    manifest,
-                    refusal,
-                    ..
-                } => {
-                    unsupported_runtime = Some((installed, manifest, refusal));
-                    dialect::default_dialect()
-                }
-                dialect::Detection::Defaulted { .. } => dialect::default_dialect(),
-            }
-        }
-    };
+    let (dialect, unsupported_runtime) = solid_facts_backend::check::select_dialect(
+        if request.contract_package_root.is_empty() {
+            Path::new(&request.project_id)
+        } else {
+            Path::new(&request.contract_package_root)
+        },
+        request.dialect.as_deref(),
+    )?;
     if !request.validate_contract_paths.is_empty() {
         for path in &request.validate_contract_paths {
             validate_contract_document(&fs::read(path)?)?;
@@ -3455,7 +3415,12 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     // there would be correct in a debug build and silently absent in every
     // shipped one -- and no gate here runs a release binary against an
     // unsupported install, so nothing would have caught it.
-    if let Some((installed, manifest, refusal)) = unsupported_runtime {
+    if let Some(solid_facts_backend::check::UnsupportedRuntime {
+        installed,
+        manifest,
+        refusal,
+    }) = unsupported_runtime
+    {
         if request.runtime.target.is_none() {
             eprintln!(
                 "solid-checker: note: browser host not inferred: {}: unsupported installed Solid runtime {installed}",
@@ -3477,11 +3442,9 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     }
     // ADR 0284: refused before the daemon branch, so a retained check
     // (ADR 0296) refuses exactly as a one-shot one does.
-    let dependency_host = if request.dependency_sources.is_empty() {
-        None
-    } else {
-        Some(dependency_program::host(&request.runtime)?)
-    };
+    if !request.dependency_sources.is_empty() {
+        dependency_program::host(&request.runtime)?;
+    }
     #[cfg(unix)]
     {
         if request.serve {
@@ -3518,63 +3481,31 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     // project keeps its own identity for reporting (ADR 0296); only the Type
     // Facts program and the analysis read the sibling.
     let logical_project_id = request.project_id.clone();
-    // The producer reads the generated program's bytes from a scratch file
-    // and opens them at the logical path beside the project's tsconfig.
-    let mut program_config: Option<String> = None;
+    // The ordinary check is the library's shared operation, exactly as the
+    // owned WASM host runs it; only this binary's formatting stays here.
+    if diagnostics && ordinary_check(&request) {
+        return run_ordinary_check(&request, dialect, implicit_dependency_sources, started);
+    }
+    // Every other mode opens the same program the same way, then does its own
+    // contract-generation or inspection work below.
+    let mut sessions = solid_facts_backend::check::ProcessSessions::new(
+        request.typefacts_executable.clone(),
+        producer_arguments(&request.typefacts_args),
+    );
+    let opened = solid_facts_backend::check::open_program(
+        &check_options(&request, dialect, implicit_dependency_sources),
+        &mut sessions,
+        &mut |line| eprintln!("{line}"),
+    )?;
+    request.project_id.clone_from(&opened.project_id);
+    // The producer read the generated program's bytes from a scratch file and
+    // opened them at the logical path beside the project's tsconfig.
+    let program_config = sessions.generated_config_argument();
     // Preparation's decisions, which the package boundary attaches to the
     // imports they were about.
-    let mut source_refusals = Vec::new();
-    let (dependency_sources, _generated) = match &dependency_host {
-        None => (None, None),
-        Some(host) => {
-            let mut configured = TypeFactsSession::open(
-                &request.typefacts_executable,
-                &request.project_id,
-                &producer_arguments(&request.typefacts_args),
-            )?;
-            let (notes, prepared) = dependency_program::prepare(
-                Path::new(&request.project_id),
-                &request.dependency_sources,
-                host,
-                dialect,
-                &mut configured,
-            )?;
-            drop(configured);
-            for note in &notes.lines {
-                eprintln!("{note}");
-            }
-            source_refusals = notes.refusals;
-            match prepared? {
-                None => (None, None),
-                Some(program) => match program.write_for_process() {
-                    Ok(generated) => {
-                        request.project_id = generated.path().to_string_lossy().into_owned();
-                        program_config =
-                            Some(format!("-project-config={}", generated.config().display()));
-                        (Some(program), Some(generated))
-                    }
-                    // Review round 1 of ADR 0297: the default adds no write
-                    // requirement a contract-mode run did not have.
-                    Err(error) if implicit_dependency_sources => {
-                        eprintln!(
-                            "solid-checker: note: packages are not analyzed from source by \
-                             default: {error}; every package binds through its contract"
-                        );
-                        (None, None)
-                    }
-                    Err(error) => return Err(error.into()),
-                },
-            }
-        }
-    };
-    let mut typescript = TypeFactsSession::open(
-        &request.typefacts_executable,
-        &request.project_id,
-        &producer_arguments(&request.typefacts_args)
-            .into_iter()
-            .chain(program_config.clone())
-            .collect::<Vec<_>>(),
-    )?;
+    let source_refusals = opened.source_refusals;
+    let dependency_sources = opened.dependency_sources;
+    let mut typescript = opened.typescript;
     if let Some(probe) = declaration_probe {
         emit_declaration_probe_plan(&mut typescript, &probe)?;
         return Ok(0);
@@ -4362,6 +4293,106 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     Ok(0)
 }
 
+/// Whether this request is an ordinary project check, which the library's
+/// shared check operation answers. Every contract-generation, inspection and
+/// probe mode keeps its own composition here.
+fn ordinary_check(request: &Request) -> bool {
+    request.emit_contract.is_empty()
+        && request.emit_contract_batch.is_empty()
+        && !request.check_contracts
+        && request.declaration_probe_plan.is_empty()
+        && request.runtime_module_resolutions.is_empty()
+        && request.contract_package_root.is_empty()
+        && request.proposal_dependency_catalog.is_empty()
+}
+
+fn check_options(
+    request: &Request,
+    dialect: &'static solid_facts_backend::dialect::Dialect,
+    implicit_dependency_sources: bool,
+) -> solid_facts_backend::check::Options {
+    solid_facts_backend::check::Options {
+        project_id: request.project_id.clone(),
+        dialect,
+        generation: request.generation,
+        sources: request.sources.clone(),
+        runtime: request.runtime.clone(),
+        presets: request.presets.clone(),
+        enable_rules: request.enable_rules.clone(),
+        feedback_facts: request.feedback_facts,
+        dependency_sources: request.dependency_sources.clone(),
+        implicit_dependency_sources,
+        window_realm: request.window_realm,
+        runtime_resolution: request.runtime_resolution,
+        bundled_contracts: request.bundled_contracts,
+        accepted_contract_catalog: request.accepted_contract_catalog.clone(),
+        receipt_trust_configuration: request.receipt_trust_configuration.clone(),
+    }
+}
+
+/// Runs the shared ordinary check with producer child processes, then renders
+/// its snapshot under the project's own identity.
+fn run_ordinary_check(
+    request: &Request,
+    dialect: &'static solid_facts_backend::dialect::Dialect,
+    implicit_dependency_sources: bool,
+    started: Instant,
+) -> Result<i32, Box<dyn std::error::Error>> {
+    let mut sessions = solid_facts_backend::check::ProcessSessions::new(
+        request.typefacts_executable.clone(),
+        producer_arguments(&request.typefacts_args),
+    );
+    let prelude = started.elapsed();
+    let outcome = solid_facts_backend::check::run(
+        &check_options(request, dialect, implicit_dependency_sources),
+        &mut sessions,
+        &mut |line| eprintln!("{line}"),
+    )?;
+    let emission = snapshot_emission::emit(
+        dialect,
+        &request.format,
+        &request.project_id,
+        &outcome.analysis.snapshot,
+        request.certify,
+        started.elapsed(),
+    )?;
+    io::stdout().write_all(&emission.output)?;
+    if std::env::var_os("SOLID_CHECKER_TIMINGS").is_some() {
+        let at = |elapsed: std::time::Duration| (prelude + elapsed).as_nanos();
+        let sidecar_spawn_ns = at(outcome.sidecar_spawn);
+        let source_setup_ns = at(outcome.source_setup);
+        let facts_complete_ns = at(outcome.facts_complete);
+        let import_identity = outcome.import_identity;
+        eprintln!(
+            "{}",
+            serde_json::json!({
+                "sidecarSpawnNs": sidecar_spawn_ns,
+                "sourcesFetchNs": source_setup_ns.saturating_sub(sidecar_spawn_ns),
+                "sourcesBytes": outcome.sources_bytes,
+                "sourcesWireBytes": 0,
+                "sourceSetupNs": source_setup_ns,
+                "sourceAnalysisNs": outcome.native_timings.source_analysis.as_nanos(),
+                "typeFactsNs": outcome.native_timings.type_facts.as_nanos(),
+                "factsTotalNs": facts_complete_ns.saturating_sub(source_setup_ns),
+                "importIdentityNs": outcome.import_identity_elapsed.as_nanos(),
+                "importIdentityFilesRequested": import_identity.requested,
+                "importIdentityFilesAttested": import_identity.attested,
+                "importIdentityFilesUnknown": import_identity.unknown,
+                "importIdentitySpecifiers": import_identity.specifiers,
+                "importIdentityModules": import_identity.modules,
+                "contractBindingsBound": outcome.analysis.program.contract_binding.bound,
+                "contractBindingsRefused": outcome.analysis.program.contract_binding.refused,
+                "irNs": outcome.diagnostic_timings.reactive_ir.as_nanos(),
+                "solveAndSnapshotNs": outcome.diagnostic_timings.solve_and_snapshot.as_nanos(),
+                "contractEmissionNs": 0,
+                "moduleInventoryNs": 0,
+                "totalNs": started.elapsed().as_nanos(),
+            })
+        );
+    }
+    Ok(emission.exit_code)
+}
+
 /// ADR 0297: an ordinary analysis whose host declares both a target and a
 /// build analyzes every Solid package from source, as `--dependency-source
 /// '*'` does, unless `--no-dependency-source` or an explicit selection says
@@ -4417,29 +4448,6 @@ fn defaults_to_dependency_sources(request: &Request) -> bool {
         && ordinary
         && request.dependency_sources.is_empty()
         && !request.no_dependency_source
-}
-
-/// Review round 1 of ADR 0297: why the default selection does not apply to
-/// `project`, or `None` when it does.
-///
-/// Source selection reads `exports` as Vite with the Solid plugin does
-/// (`solid`, `import` and `module` always set), and a target and build do
-/// not say that is how the project is built: a Node host never sets
-/// `solid`. The default therefore needs that plugin resolvable from the
-/// project (`dependency_sources::solid_vite_plugin`). The generated program
-/// is written to a scratch directory, never the project, so a read-only
-/// project needs nothing more.
-fn implicit_dependency_source_refusal(project: &Path) -> Option<String> {
-    use solid_facts_backend::dependency_sources::solid_vite_plugin;
-    if solid_vite_plugin(project).is_none() {
-        return Some(
-            "no Solid Vite plugin (@solidjs/vite-plugin, vite-plugin-solid, or one \
-             @solidjs/start ships) resolves from the project, so nothing establishes the \
-             resolver source selection reads `exports` with"
-                .into(),
-        );
-    }
-    None
 }
 
 #[cfg(test)]
@@ -7379,383 +7387,9 @@ fn runtime_symbol_redirects(
     })
 }
 
-/// ADR 0284: the redirects for the dependency-source mode. Every project file
-/// importing a selected package by its bare specifier is bound to the entry
-/// the package loads, and each relative import inside a package to the file
-/// it loads, when the compiler resolved them to declarations.
-fn dependency_source_redirects(
-    facts: &solid_facts::ProjectFacts,
-    typescript: &mut TypeFactsSession,
-    sources: &solid_facts_backend::dependency_sources::PreparedDependencyProgram,
-) -> Result<HashMap<String, String>, Box<dyn std::error::Error>> {
-    let mut rows = Vec::new();
-    for resolution in &sources.selection.resolutions {
-        match &resolution.importer {
-            Some(importer) => {
-                rows.push((
-                    importer.clone(),
-                    resolution.specifier.clone(),
-                    resolution.target.clone(),
-                ));
-            }
-            None => {
-                for file in &facts.files {
-                    let Ok(path) = Path::new(file.path.as_str()).canonicalize() else {
-                        continue;
-                    };
-                    if !(file
-                        .ast
-                        .imports
-                        .iter()
-                        .any(|import| import.module.as_str() == resolution.specifier)
-                        || file.ast.exports.iter().any(|export| {
-                            export.module.as_deref() == Some(resolution.specifier.as_str())
-                        }))
-                    {
-                        continue;
-                    }
-                    rows.push((
-                        path,
-                        resolution.specifier.clone(),
-                        resolution.target.clone(),
-                    ));
-                }
-            }
-        }
-    }
-    // Project barrels can be imported outside the configured roots. Their
-    // exact relative edges are needed to carry a star's demanded names to
-    // the selected runtime export, rather than to the declaration barrel.
-    for file in &facts.files {
-        let Ok(path) = Path::new(file.path.as_str()).canonicalize() else {
-            continue;
-        };
-        if sources.contains(&path) {
-            continue;
-        }
-        for module in file
-            .ast
-            .imports
-            .iter()
-            .filter(|edge| !edge.type_only)
-            .map(|edge| edge.module.as_str())
-            .chain(
-                file.ast
-                    .exports
-                    .iter()
-                    .filter(|edge| !edge.type_only)
-                    .filter_map(|edge| edge.module.as_deref()),
-            )
-            .filter(|module| module.starts_with('.'))
-        {
-            if let Ok(target) = resolve_relative_export(facts, &path, module) {
-                rows.push((path.clone(), module.to_owned(), target));
-            }
-        }
-    }
-    symbol_redirects(facts, typescript, rows, |_, target, declaration| {
-        let declaration = declaration
-            .canonicalize()
-            .unwrap_or_else(|_| declaration.to_path_buf());
-        (same_canonical_path(target, &declaration) && sources.project_files.contains(target))
-            || sources
-                .selection
-                .roots
-                .iter()
-                .any(|root| target.starts_with(root) && declaration.starts_with(root))
-    })
-}
-
 fn is_declaration_file(path: &Path) -> bool {
     let path = path.to_string_lossy();
     path.ends_with(".d.ts") || path.ends_with(".d.mts") || path.ends_with(".d.cts")
-}
-
-/// The redirects `rows` (importer, specifier, runtime target, all canonical)
-/// state, for the rows `admitted` accepts: each runtime-referenced value
-/// import the compiler resolved to declarations is bound to the export entity
-/// of the runtime file it loads. A source bound to two targets binds none.
-fn symbol_redirects(
-    facts: &solid_facts::ProjectFacts,
-    typescript: &mut TypeFactsSession,
-    rows: Vec<(PathBuf, String, PathBuf)>,
-    admitted: impl Fn(&Path, &Path, &Path) -> bool,
-) -> Result<HashMap<String, String>, Box<dyn std::error::Error>> {
-    let import_paths = rows
-        .iter()
-        .map(|(importer, _, _)| importer.to_string_lossy().into_owned())
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect::<Vec<_>>();
-    let graph = typescript
-        .module_graph(&typefacts::ModuleGraphDemand::default().import_paths(import_paths))?;
-    if !graph.is_complete() {
-        return Ok(HashMap::new());
-    }
-    let aliases = canonical_symbol_aliases(facts);
-    let files_by_path = facts
-        .files
-        .iter()
-        .filter_map(|file| {
-            Path::new(file.path.as_str())
-                .canonicalize()
-                .ok()
-                .map(|path| (path, file))
-        })
-        .collect::<HashMap<_, _>>();
-    let entities_by_location = facts
-        .typescript
-        .entities()
-        .map(|entity| (entity.location.clone(), entity))
-        .collect::<HashMap<_, _>>();
-    let mut declarations = HashMap::<(PathBuf, String), BTreeSet<PathBuf>>::new();
-    for import in &graph.imports {
-        if import.included_path.is_empty()
-            && !import.resolved_path.is_empty()
-            && let Ok(importer) = Path::new(import.specifier.path.as_ref()).canonicalize()
-        {
-            declarations
-                .entry((importer, import.text.to_string()))
-                .or_default()
-                .insert(Path::new(import.resolved_path.as_ref()).canonicalize()?);
-        }
-    }
-    let mut edge_targets = HashMap::<(PathBuf, String), BTreeSet<PathBuf>>::new();
-    for (importer, specifier, target) in &rows {
-        // Admission belongs to every edge, not just the outer import whose
-        // symbol is redirected. Otherwise an admitted relative barrel can
-        // traverse a row for a different installed copy (ADR 0297 round 3).
-        let Some(declaration) = declarations
-            .get(&(importer.clone(), specifier.clone()))
-            .filter(|paths| paths.len() == 1)
-            .and_then(|paths| paths.first())
-        else {
-            continue;
-        };
-        if !admitted(importer, target, declaration) {
-            continue;
-        }
-        edge_targets
-            .entry((importer.clone(), specifier.clone()))
-            .or_default()
-            .insert(target.clone());
-    }
-    let runtime_edges = edge_targets
-        .into_iter()
-        .filter_map(|(edge, targets)| {
-            (targets.len() == 1).then(|| (edge, targets.into_iter().next().unwrap()))
-        })
-        .collect::<HashMap<_, _>>();
-    let entity_at = |file: &solid_facts::FileFacts, span: solid_facts::core::Span| {
-        entities_by_location
-            .get(&typefacts::Location {
-                path: file.path.to_string().into(),
-                start_byte: u64::from(span.start),
-                end_byte: u64::from(span.end),
-            })
-            .copied()
-    };
-    let mut redirects = HashMap::<String, String>::new();
-    let mut ambiguous = HashSet::new();
-    for (importer_path, specifier, target_path) in rows {
-        // The declaration the compiler resolved this import to, which
-        // `admitted` judges beside the runtime target: another installed
-        // copy of the package resolves elsewhere (ADR 0284 review round 2).
-        // Or, for a relative import inside a package analyzed as source, the
-        // runtime file the compiler picked when the bundler loads another
-        // (`./read` is `read.js` to TypeScript, `read.mjs` to Vite; review
-        // round 1 of ADR 0290). `admitted` decides which kinds a caller takes.
-        let Some(declaration) = declarations
-            .get(&(importer_path.clone(), specifier.clone()))
-            .filter(|paths| paths.len() == 1)
-            .and_then(|paths| paths.first())
-        else {
-            continue;
-        };
-        if !admitted(&importer_path, &target_path, declaration) {
-            continue;
-        }
-        let Some(importer) = files_by_path.get(&importer_path).copied() else {
-            continue;
-        };
-        let mut pairs = Vec::new();
-        let imports = importer
-            .ast
-            .imports
-            .iter()
-            .filter(|import| !import.type_only && import.module.as_str() == specifier);
-        for import in imports {
-            let bindings = import.bindings.iter().filter(|binding| {
-                binding.runtime_referenced
-                    && !binding.type_only
-                    && matches!(
-                        binding.kind,
-                        solid_facts::ast::ImportKind::Named | solid_facts::ast::ImportKind::Default
-                    )
-            });
-            for binding in bindings {
-                let exported = match binding.kind {
-                    solid_facts::ast::ImportKind::Named => binding.imported.as_deref(),
-                    solid_facts::ast::ImportKind::Default => Some("default"),
-                    _ => None,
-                };
-                let Some(exported) = exported else {
-                    continue;
-                };
-                pairs.push((binding.local.span, exported.to_owned()));
-            }
-        }
-        for export in importer.ast.module_level_exports().filter(|export| {
-            !export.type_only
-                && export.module.as_deref() == Some(specifier.as_str())
-                && export.namespace.is_none()
-        }) {
-            for binding in export
-                .specifiers
-                .iter()
-                .filter(|binding| !binding.type_only)
-            {
-                if let Some(name) = importer.source_text(binding.local.span) {
-                    pairs.push((binding.local.span, name.to_owned()));
-                }
-            }
-        }
-        for (span, exported) in pairs {
-            let Some(source) = entity_at(importer, span) else {
-                continue;
-            };
-            let Ok(Some(target)) = redirected_export_entity(
-                facts,
-                &files_by_path,
-                &entities_by_location,
-                &runtime_edges,
-                &target_path,
-                &exported,
-                &mut HashSet::new(),
-            ) else {
-                continue;
-            };
-            let source = canonical_symbol(&source.symbol, &aliases);
-            let target = canonical_symbol(&target.symbol, &aliases);
-            if source.is_empty() || target.is_empty() || source == target {
-                continue;
-            }
-            if redirects
-                .get(&source)
-                .is_some_and(|existing| existing != &target)
-            {
-                redirects.remove(&source);
-                ambiguous.insert(source);
-            } else if !ambiguous.contains(&source) {
-                redirects.insert(source, target);
-            }
-        }
-    }
-    Ok(redirects)
-}
-
-/// Resolve the selected runtime graph, including bare re-exports. Explicit
-/// exports win; distinct star bindings refuse rather than picking one.
-/// `Ok(None)` is an enumerated absence. Missing, cyclic or ambiguous
-/// providers return `Err`, which a competing star must never treat as absence.
-fn redirected_export_entity<'a>(
-    facts: &'a solid_facts::ProjectFacts,
-    files: &HashMap<PathBuf, &'a solid_facts::FileFacts>,
-    entities: &HashMap<typefacts::Location, &'a typefacts::EntityFact>,
-    edges: &HashMap<(PathBuf, String), PathBuf>,
-    path: &Path,
-    name: &str,
-    visiting: &mut HashSet<(PathBuf, String)>,
-) -> Result<Option<&'a typefacts::EntityFact>, ()> {
-    let path = path.to_path_buf();
-    if !visiting.insert((path.clone(), name.to_owned())) {
-        return Err(());
-    }
-    let file = files.get(&path).copied().ok_or(())?;
-    let stars = validate_module_export_precedence(&file.ast, &path, name).map_err(|_| ())?;
-    let mut candidates = Vec::new();
-    for export in file
-        .ast
-        .module_level_exports()
-        .filter(|edge| !edge.type_only)
-    {
-        if let Some(binding) = export
-            .specifiers
-            .iter()
-            .chain(&export.declarations)
-            .find(|binding| !binding.type_only && binding.exported == name)
-        {
-            if let Some(module) = export.module.as_deref()
-                && let Some(target) = edges.get(&(path.clone(), module.to_owned()))
-            {
-                return redirected_export_entity(
-                    facts,
-                    files,
-                    entities,
-                    edges,
-                    target,
-                    file.source_text(binding.local.span).ok_or(())?,
-                    visiting,
-                )?
-                .map(Some)
-                .ok_or(());
-            }
-            return entry_export_entity_indexed(
-                facts,
-                files,
-                entities,
-                &path,
-                name,
-                &mut HashSet::new(),
-            )
-            .map(Some)
-            .ok_or(());
-        }
-        if stars && name != "default" && is_bare_runtime_export_star(export) {
-            let module = export.module.as_deref().ok_or(())?;
-            // An unknown competing provider can also publish this name.
-            // Missing resolution is not evidence that it exports nothing.
-            let target = edges.get(&(path.clone(), module.to_owned())).ok_or(())?;
-            if let Some(entity) = redirected_export_entity(
-                facts,
-                files,
-                entities,
-                edges,
-                target,
-                name,
-                &mut visiting.clone(),
-            )? {
-                candidates.push(entity);
-            }
-        }
-    }
-    if let Some(first) = candidates.first() {
-        return if candidates
-            .iter()
-            .all(|entity| entity.location == first.location)
-        {
-            Ok(Some(*first))
-        } else {
-            Err(())
-        };
-    }
-    if stars {
-        // No ESM export table is not proof that a CommonJS/opaque module
-        // contributes no names to the namespace the bundler constructs.
-        if file
-            .ast
-            .module_level_exports()
-            .any(|export| !export.type_only)
-        {
-            Ok(None)
-        } else {
-            Err(())
-        }
-    } else {
-        entry_export_entity_indexed(facts, files, entities, &path, name, &mut HashSet::new())
-            .map(Some)
-            .ok_or(())
-    }
 }
 
 /// Writes the analyzing program's own module inventory beside the contract.
@@ -9302,38 +8936,6 @@ fn take_unique_reexport_candidate<K: Ord, V>(
     }
 }
 
-/// Whether this syntax entry contributes every non-default name from its
-/// target module. `export * as namespace` is an explicit namespace binding,
-/// never an export-star entry.
-fn is_bare_runtime_export_star(export: &solid_facts::ast::ExportFact) -> bool {
-    !export.type_only
-        && export.kind == solid_facts::ast::ExportKind::All
-        && export.namespace.is_none()
-}
-
-fn explicit_runtime_export_binding_count(
-    export: &solid_facts::ast::ExportFact,
-    name: &str,
-) -> usize {
-    if export.type_only {
-        return 0;
-    }
-    if export.kind == solid_facts::ast::ExportKind::All {
-        return usize::from(export.namespace.as_deref() == Some(name));
-    }
-    let bindings = export
-        .specifiers
-        .iter()
-        .chain(&export.declarations)
-        .filter(|specifier| !specifier.type_only && specifier.exported == name)
-        .count();
-    if bindings == 0 && export.kind == solid_facts::ast::ExportKind::Default && name == "default" {
-        1
-    } else {
-        bindings
-    }
-}
-
 fn explicitly_exports_runtime_name(export: &solid_facts::ast::ExportFact, name: &str) -> bool {
     explicit_runtime_export_binding_count(export, name) > 0
 }
@@ -9362,97 +8964,6 @@ fn export_specifier_local_name<'a>(
     source
         .get(specifier.local.span.start as usize..specifier.local.span.end as usize)
         .unwrap_or(fallback)
-}
-
-fn is_direct_runtime_namespace_declaration(
-    ast: &solid_facts::ast::AstFacts,
-    declaration: &solid_facts::ast::ExportSpecifierFact,
-) -> bool {
-    !declaration.type_only && ast.declares_namespace_at(declaration.local.span)
-}
-
-/// Enforces the per-module explicit-before-star half of ECMA-262
-/// ResolveExport and returns whether this module's bare star entries should be
-/// consulted for `name`.
-///
-/// Candidate identity cannot enforce explicit-export uniqueness: two invalid
-/// explicit entries may point at the same runtime identity and collapse in the
-/// candidate map. Refuse that syntax before choosing either a local program
-/// summary or an accepted re-export summary.
-fn validate_module_export_precedence(
-    ast: &solid_facts::ast::AstFacts,
-    path: &Path,
-    name: &str,
-) -> Result<bool, Box<dyn std::error::Error>> {
-    // The reviewed TypeScript class+namespace merge publishes one runtime
-    // binding through two declaration statements. Do not generalize this by
-    // name: illegal duplicate const/class declarations also share a spelling
-    // (and may share a recovery symbol on a TypeScript-error program).
-    // Specifier/default/namespace-export entries remain separate entries.
-    let declaration_path = path.to_string_lossy();
-    let is_declaration_module = [".d.ts", ".d.mts", ".d.cts"]
-        .iter()
-        .any(|suffix| declaration_path.ends_with(suffix));
-    let mut declaration_entries = Vec::new();
-    let mut explicit_count = 0;
-    for export in ast.module_level_exports() {
-        let count = explicit_runtime_export_binding_count(export, name);
-        let declarations = if export.kind == solid_facts::ast::ExportKind::Named
-            && export.module.is_none()
-            && (!export.type_only || is_declaration_module)
-        {
-            export
-                .declarations
-                .iter()
-                .filter(|declaration| !declaration.type_only && declaration.exported == name)
-                .collect::<Vec<_>>()
-        } else {
-            Vec::new()
-        };
-        // Oxc correctly marks a bodyless overload signature as type-only in a
-        // runtime source file. A declaration module has no body by design, so
-        // its direct declaration entries are counted below as the authenticated
-        // type surface standing in for the separately materialized runtime.
-        let declarations_already_counted = if export.type_only {
-            0
-        } else {
-            declarations.len()
-        };
-        explicit_count += count - declarations_already_counted;
-        declaration_entries.extend(declarations);
-    }
-    let reviewed_class_namespace_merge = match declaration_entries.as_slice() {
-        [first, second] => {
-            (ast.declares_class_at(first.local.span)
-                && is_direct_runtime_namespace_declaration(ast, second))
-                || (ast.declares_class_at(second.local.span)
-                    && is_direct_runtime_namespace_declaration(ast, first))
-        }
-        _ => false,
-    };
-    let function_declarations = declaration_entries
-        .iter()
-        .map(|entry| ast.function_declaration_at(entry.local.span))
-        .collect::<Option<Vec<_>>>();
-    let reviewed_function_overload_set = function_declarations.as_ref().is_some_and(|entries| {
-        let implementation_count = entries.iter().filter(|entry| entry.has_body).count();
-        !entries.is_empty()
-            && ((implementation_count == 1 && !is_declaration_module)
-                || (implementation_count == 0 && is_declaration_module))
-    });
-    explicit_count += if reviewed_class_namespace_merge || reviewed_function_overload_set {
-        1
-    } else {
-        declaration_entries.len()
-    };
-    if explicit_count > 1 {
-        return Err(format!(
-            "emit package contract: module {} contains {explicit_count} explicit runtime export entries for {name:?}",
-            path.display()
-        )
-        .into());
-    }
-    Ok(name != "default" && explicit_count == 0)
 }
 
 #[cfg(test)]
@@ -9853,37 +9364,6 @@ struct GeneratedOwnerRequirements {
     argument_containers_by_symbol: HashMap<String, Vec<solid_reactive_ir::ArgumentContainer>>,
     argument_containers_by_function:
         HashMap<FunctionKey, Vec<solid_reactive_ir::ArgumentContainer>>,
-}
-
-fn canonical_symbol_aliases(facts: &solid_facts::ProjectFacts) -> HashMap<String, String> {
-    let mut aliases = facts
-        .typescript
-        .symbols()
-        .filter(|symbol| !symbol.alias_target().is_empty())
-        .map(|symbol| (symbol.id().to_owned(), symbol.alias_target().to_owned()))
-        .collect::<HashMap<_, _>>();
-    for _ in 0..aliases.len() {
-        let previous = aliases.clone();
-        let mut changed = false;
-        for target in aliases.values_mut() {
-            if let Some(next) = previous.get(target)
-                && next != target
-            {
-                *target = next.clone();
-                changed = true;
-            }
-        }
-        if !changed {
-            break;
-        }
-    }
-    aliases
-}
-
-fn canonical_symbol(symbol: &str, aliases: &HashMap<String, String>) -> String {
-    aliases
-        .get(symbol)
-        .map_or_else(|| symbol.to_owned(), Clone::clone)
 }
 
 /// Indexes exact owner requirements by canonical compiler symbol and by exact
@@ -10745,89 +10225,6 @@ fn runtime_binding_entity<'a>(
         &binding.runtime.export_name,
         &mut HashSet::new(),
     )
-}
-
-fn entry_export_entity_indexed<'a>(
-    facts: &'a solid_facts::ProjectFacts,
-    files_by_canonical_path: &HashMap<PathBuf, &'a solid_facts::FileFacts>,
-    entities_by_location: &HashMap<typefacts::Location, &'a typefacts::EntityFact>,
-    entry_file: &Path,
-    name: &str,
-    visiting: &mut HashSet<(PathBuf, String)>,
-) -> Option<&'a typefacts::EntityFact> {
-    let entry_file = entry_file.canonicalize().ok()?;
-    if !visiting.insert((entry_file.clone(), name.to_owned())) {
-        return None;
-    }
-    let file = files_by_canonical_path.get(&entry_file).copied()?;
-    let consult_export_stars =
-        validate_module_export_precedence(&file.ast, &entry_file, name).ok()?;
-    for export in file
-        .ast
-        .module_level_exports()
-        .filter(|export| !export.type_only)
-    {
-        if export.namespace.as_deref() == Some(name) {
-            let binding = export.namespace_binding.as_ref()?;
-            return entities_by_location
-                .get(&typefacts::Location {
-                    path: file.path.to_string().into(),
-                    start_byte: u64::from(binding.span.start),
-                    end_byte: u64::from(binding.span.end),
-                })
-                .copied();
-        }
-        if let Some(specifier) = export
-            .specifiers
-            .iter()
-            .chain(&export.declarations)
-            .find(|specifier| !specifier.type_only && specifier.exported == name)
-        {
-            let span = specifier.local.span;
-            let location = typefacts::Location {
-                path: file.path.to_string().into(),
-                start_byte: u64::from(span.start),
-                end_byte: u64::from(span.end),
-            };
-            if let Some(entity) = entities_by_location.get(&location) {
-                return Some(*entity);
-            }
-            if let Some(module) = export.module.as_deref()
-                && module.starts_with('.')
-            {
-                let target = resolve_relative_export(facts, &entry_file, module).ok()?;
-                let local_name = file.source_text(specifier.local.span).unwrap_or(name);
-                if let Some(entity) = entry_export_entity_indexed(
-                    facts,
-                    files_by_canonical_path,
-                    entities_by_location,
-                    &target,
-                    local_name,
-                    visiting,
-                ) {
-                    return Some(entity);
-                }
-            }
-        }
-        if consult_export_stars
-            && is_bare_runtime_export_star(export)
-            && let Some(module) = export.module.as_deref()
-            && module.starts_with('.')
-        {
-            let target = resolve_relative_export(facts, &entry_file, module).ok()?;
-            if let Some(entity) = entry_export_entity_indexed(
-                facts,
-                files_by_canonical_path,
-                entities_by_location,
-                &target,
-                name,
-                visiting,
-            ) {
-                return Some(entity);
-            }
-        }
-    }
-    None
 }
 
 fn unify_runtime_alias_summaries(
@@ -12397,28 +11794,6 @@ fn local_import_is_type_only(
         }
     }
     false
-}
-
-fn resolve_relative_export(
-    facts: &solid_facts::ProjectFacts,
-    source: &Path,
-    module: &str,
-) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let project_paths = facts.files.iter().map(|file| file.path.as_str());
-    let Some(target) =
-        solid_facts::resolve_relative_module_path(&source.to_string_lossy(), module, project_paths)
-    else {
-        return Err(format!(
-            "emit package contract: cannot resolve export-all {module:?} from {}",
-            source.display()
-        )
-        .into());
-    };
-    Ok(PathBuf::from(target))
-}
-
-fn same_canonical_path(left: &Path, right: &Path) -> bool {
-    left == right || left.canonicalize().is_ok_and(|left| left == right)
 }
 
 /// A per-project daemon holding the retained `NativeIncrementalSession` behind

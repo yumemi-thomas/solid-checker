@@ -45,9 +45,10 @@ use solid_facts_backend::{
 use solid_reactive_ir::CacheRetention;
 use solid_reactive_ir::RuntimeEnvironment;
 
-use super::{Request, dependency_program::PreparedDependencies, snapshot_emission};
+use super::{Request, snapshot_emission};
 use crate::daemon_cache::{CachedAnswer, CachedSnapshot, ContractFile};
 use crate::idle_memory;
+use solid_facts_backend::dependency_program::{self, PreparedDependencies};
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -531,7 +532,7 @@ impl OriginalProgram {
             .iter()
             .map(|source| source.path.clone())
             .collect();
-        let modules = super::dependency_program::program_modules(&mut typescript)?;
+        let modules = dependency_program::program_modules(&mut typescript)?;
         let mut sources = configured;
         sources.sort_by(|left, right| left.path.cmp(&right.path));
         let tracking = Tracking::new(&project, &project, &sources)?;
@@ -563,8 +564,8 @@ impl OriginalProgram {
         request: &Request,
         dialect: &'static solid_facts_backend::dialect::Dialect,
     ) -> Result<PreparedDependencies, Box<dyn Error>> {
-        let host = super::dependency_program::host(&request.runtime)?;
-        let (notes, program) = super::dependency_program::prepare_from(
+        let host = dependency_program::host(&request.runtime)?;
+        let (notes, program) = dependency_program::prepare_from(
             &self.project,
             &request.dependency_sources,
             &host,
@@ -836,12 +837,8 @@ impl State {
                 &[format!("-project-config={}", generated.display())],
             )?;
             let configured = typescript.configured_sources()?;
-            let folded = super::dependency_program::fold_sources(
-                &configured,
-                &program,
-                &request.runtime,
-                false,
-            );
+            let folded =
+                dependency_program::fold_sources(&configured, &program, &request.runtime, false);
             let mut session = NativeIncrementalSession::open_rewritten(
                 dialect,
                 project_id,
@@ -851,7 +848,7 @@ impl State {
             );
             let bound = program.clone();
             session.set_facts_transform(Box::new(move |facts, typescript| {
-                super::dependency_program::bind(facts, typescript, &bound)
+                dependency_program::bind(facts, typescript, &bound)
                     .map_err(|error| BackendError::Process(error.to_string()))
             }));
             Self::from_session(
@@ -920,7 +917,7 @@ impl State {
                 // An edited import can add a file to the program or drop
                 // one, and the inventory preparation reads is the open
                 // program's: reacquire it whole rather than patch it.
-                let modules = super::dependency_program::program_modules(&mut original.typescript)?;
+                let modules = dependency_program::program_modules(&mut original.typescript)?;
                 if modules != original.modules {
                     return Ok(Sync::Rebuild);
                 }
@@ -941,12 +938,8 @@ impl State {
             // reuse nothing unless it answers as it did. An edited file is an
             // ordinary edit only when neither its old nor its new text folds,
             // since an edit carries the program's own text.
-            let folded = super::dependency_program::fold_sources(
-                &self.sources,
-                program,
-                &request.runtime,
-                false,
-            );
+            let folded =
+                dependency_program::fold_sources(&self.sources, program, &request.runtime, false);
             if !folded.record.keys().eq(dependency.folds.keys()) {
                 return Ok(Sync::Reprepare(Box::new(prepared)));
             }
@@ -1456,7 +1449,7 @@ fn answer(
         .and_then(|dependency| dependency.prepared.program.as_ref())
     {
         Some(program) => {
-            let (selected, notes) = super::dependency_program::retain_exported_contracts(
+            let (selected, notes) = dependency_program::retain_exported_contracts(
                 Arc::make_mut(&mut facts),
                 program,
                 &mut contracts,

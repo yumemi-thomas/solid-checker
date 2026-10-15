@@ -11,6 +11,7 @@ pub use artifact_admission::AdmissionRefusal;
 mod artifact_resolution;
 mod bounded_json;
 mod cache;
+pub mod check;
 
 mod contract_certification;
 pub use contract_certification::report_certification_timing;
@@ -91,6 +92,7 @@ mod contract_document;
 mod contract_interface;
 mod contract_workflow;
 mod demand_plan;
+pub mod dependency_program;
 pub mod dependency_sources;
 mod diagnostics;
 pub mod dialect;
@@ -117,6 +119,7 @@ mod release_scope;
 mod runtime_probe_wire;
 mod runtime_probes;
 pub mod runtime_resolution;
+pub mod source_redirects;
 mod wire;
 
 pub use cache::{CacheStats, FactsCache};

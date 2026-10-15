@@ -10,26 +10,26 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use solid_facts::core::SourceHash;
-use solid_facts_backend::{
+use crate::{
     SourceFile, TypeFactsSession,
     dependency_sources::{Host, PreparedDependencyProgram, SelectionNotes, prepare_program},
     dialect::Dialect,
 };
+use solid_facts::core::SourceHash;
 use solid_reactive_ir::{RuntimeEnvironment, RuntimeTarget};
 
 /// What preparation answered: the notes it printed in a one-shot check, and
 /// the program, when any package was selected. Two equal values are the same
 /// program with the same notes.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct PreparedDependencies {
-    pub(crate) notes: SelectionNotes,
-    pub(crate) program: Option<PreparedDependencyProgram>,
+pub struct PreparedDependencies {
+    pub notes: SelectionNotes,
+    pub program: Option<PreparedDependencyProgram>,
 }
 
 /// Preparation's notes, beside its outcome: a refusal still prints the notes
 /// that preceded it.
-pub(crate) type Preparation = (
+pub type Preparation = (
     SelectionNotes,
     Result<Option<PreparedDependencyProgram>, String>,
 );
@@ -37,7 +37,7 @@ pub(crate) type Preparation = (
 /// The host a package entry is selected for. A package's entry depends on
 /// the host's target and build (review round 1 of ADR 0284), so neither may
 /// be left to a default.
-pub(crate) fn host(runtime: &RuntimeEnvironment) -> Result<Host, String> {
+pub fn host(runtime: &RuntimeEnvironment) -> Result<Host, String> {
     let (Some(target), Some(_)) = (runtime.target, runtime.build) else {
         return Err(
             "--dependency-source needs --runtime-target and --runtime-build: \
@@ -59,7 +59,7 @@ pub(crate) fn host(runtime: &RuntimeEnvironment) -> Result<Host, String> {
 ///
 /// The notes come back beside the outcome, so a refusal still prints the
 /// notes that preceded it.
-pub(crate) fn prepare(
+pub fn prepare(
     project: &Path,
     selection: &[String],
     host: &Host,
@@ -74,9 +74,7 @@ pub(crate) fn prepare(
 }
 
 /// Every file the open program holds, by path.
-pub(crate) fn program_modules(
-    original: &mut TypeFactsSession,
-) -> Result<Vec<PathBuf>, Box<dyn Error>> {
+pub fn program_modules(original: &mut TypeFactsSession) -> Result<Vec<PathBuf>, Box<dyn Error>> {
     Ok(original
         .module_graph(&typefacts::ModuleGraphDemand::default())?
         .modules
@@ -86,7 +84,7 @@ pub(crate) fn program_modules(
 }
 
 /// [`prepare`] from an inventory the caller already holds.
-pub(crate) fn prepare_from(
+pub fn prepare_from(
     project: &Path,
     selection: &[String],
     host: &Host,
@@ -115,20 +113,20 @@ pub(crate) fn prepare_from(
 }
 
 /// The sources a dependency-source program analyzes, folded.
-pub(crate) struct FoldedSources {
-    pub(crate) sources: Vec<SourceFile>,
+pub struct FoldedSources {
+    pub sources: Vec<SourceFile>,
     /// Per folded path, the digest of the program's own text.
-    pub(crate) program_hashes: HashMap<String, SourceHash>,
+    pub program_hashes: HashMap<String, SourceHash>,
     /// Per source inside a selected package, the digest of its folded text,
     /// or `None` when nothing folded: what a retained daemon compares to know
     /// the fold still answers as it did.
-    pub(crate) record: BTreeMap<String, Option<SourceHash>>,
+    pub record: BTreeMap<String, Option<SourceHash>>,
 }
 
 /// ADR 0284: under a declared host, a selected package's own host constants
 /// (`isServer`) fold as they do for contract emission, matching the browser
 /// entry the mode selected. The project's files are analyzed as before.
-pub(crate) fn fold_sources(
+pub fn fold_sources(
     sources: &[SourceFile],
     program: &PreparedDependencyProgram,
     runtime: &RuntimeEnvironment,
@@ -138,7 +136,7 @@ pub(crate) fn fold_sources(
     // explicit `--runtime-condition`s. ADR 0295: a declared Window realm
     // decides these files' `typeof window` guards too, and nothing else's.
     let conditions = runtime.selected_conditions();
-    let realm = window_realm.then(|| solid_facts_backend::dependency_sources::Host {
+    let realm = window_realm.then(|| crate::dependency_sources::Host {
         conditions: conditions.clone(),
         browser: true,
     });
@@ -155,8 +153,11 @@ pub(crate) fn fold_sources(
                 return file;
             }
             let path = file.path.clone();
-            let (mut folded, hashes) =
-                super::fold_host_constants_in_realm(vec![file], &conditions, realm.as_ref());
+            let (mut folded, hashes) = crate::host_constants::fold_host_constants_in_realm(
+                vec![file],
+                &conditions,
+                realm.as_ref(),
+            );
             let folded = folded.remove(0);
             record.insert(
                 path,
@@ -177,7 +178,7 @@ pub(crate) fn fold_sources(
 /// that scope premises and findings, and each selected import's redirect to
 /// the runtime file it loads. Redirects are read off `typescript`'s current
 /// generation, so they are recomputed for every generation, never carried.
-pub(crate) fn bind(
+pub fn bind(
     facts: &mut solid_facts::ProjectFacts,
     typescript: &mut TypeFactsSession,
     program: &PreparedDependencyProgram,
@@ -188,7 +189,8 @@ pub(crate) fn bind(
         .iter()
         .map(|root| root.to_string_lossy().into_owned())
         .collect();
-    let redirects = super::dependency_source_redirects(facts, typescript, program)?;
+    let redirects =
+        crate::source_redirects::dependency_source_redirects(facts, typescript, program)?;
     facts.runtime_symbol_redirects.extend(redirects);
     Ok(())
 }
@@ -197,16 +199,16 @@ pub(crate) fn bind(
 /// and artifact admission have been acquired. An internal external call is
 /// source analysis's obligation; an exported external value must preserve the
 /// exporting package's contract boundary when its target stays on contracts.
-pub(crate) fn retain_exported_contracts(
+pub fn retain_exported_contracts(
     facts: &mut solid_facts::ProjectFacts,
     program: &PreparedDependencyProgram,
     contracts: &mut solid_reactive_ir::contract_semantics::AcceptedContractIndex,
     boundary: &mut solid_reactive_ir::package_boundary::PackageBoundary,
-    refusals: &[solid_facts_backend::dependency_sources::SourceRefusal],
+    refusals: &[crate::dependency_sources::SourceRefusal],
     dialect: &'static Dialect,
 ) -> (BTreeSet<String>, SelectionNotes) {
     let mut selection = program.selection.clone();
-    let mut retained = solid_facts_backend::dependency_sources::UnsupportedBindings::default();
+    let mut retained = crate::dependency_sources::UnsupportedBindings::default();
     let mut notes = SelectionNotes::default();
     loop {
         let mut changed = false;
@@ -220,30 +222,26 @@ pub(crate) fn retain_exported_contracts(
             else {
                 continue;
             };
-            let eligible = |module: &str| {
-                solid_facts_backend::dependency_sources::package_name(module).is_some_and(|name| {
-                    !selection.package_names.contains(&name)
-                        && !dialect
-                            .vocabulary
-                            .primitive_defining_packages()
-                            .iter()
-                            .any(|package| {
-                                solid_facts_backend::dependency_sources::package_name(package)
-                                    .as_deref()
-                                    == Some(name.as_str())
-                            })
-                        && contracts.contract(file.path.as_str(), module).is_ok()
-                })
-            };
+            let eligible =
+                |module: &str| {
+                    crate::dependency_sources::package_name(module).is_some_and(|name| {
+                        !selection.package_names.contains(&name)
+                            && !dialect.vocabulary.primitive_defining_packages().iter().any(
+                                |package| {
+                                    crate::dependency_sources::package_name(package).as_deref()
+                                        == Some(name.as_str())
+                                },
+                            )
+                            && contracts.contract(file.path.as_str(), module).is_ok()
+                    })
+                };
             for (module, (span, form)) in exported_external_modules(&file.ast, &eligible) {
                 // Use selection names as well as manifest names (npm aliases).
                 let names = selection
                     .resolutions
                     .iter()
                     .filter(|edge| edge.target.starts_with(root))
-                    .filter_map(|edge| {
-                        solid_facts_backend::dependency_sources::package_name(&edge.specifier)
-                    })
+                    .filter_map(|edge| crate::dependency_sources::package_name(&edge.specifier))
                     .filter(|name| selection.package_names.contains(name))
                     .collect::<BTreeSet<_>>();
                 for exporting in names {
@@ -269,7 +267,7 @@ pub(crate) fn retain_exported_contracts(
         if !changed {
             break;
         }
-        match solid_facts_backend::dependency_sources::without_unredirected_packages(
+        match crate::dependency_sources::without_unredirected_packages(
             selection, &retained, &mut notes,
         ) {
             Some(remaining) => selection = remaining,
@@ -325,9 +323,8 @@ pub(crate) fn retain_exported_contracts(
             .chain(&notes.refusals)
             .cloned()
             .collect::<Vec<_>>();
-        let restored = solid_facts_backend::external_package_boundary(directory, facts, &refusals);
-        *contracts = std::mem::take(contracts)
-            .with_fallback(solid_facts_backend::requirement_index(&restored));
+        let restored = crate::external_package_boundary(directory, facts, &refusals);
+        *contracts = std::mem::take(contracts).with_fallback(crate::requirement_index(&restored));
         boundary.extend(restored);
     }
     (selection.package_names, notes)
