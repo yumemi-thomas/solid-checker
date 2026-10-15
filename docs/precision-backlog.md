@@ -1,5 +1,20 @@
 # Precision backlog
 
+P5 module-specifier literal spans, consumer held (2026-10-15, AST facts
+schema 63). `ImportFact`, `ExportFact`, `ImportEqualsFact` and
+`TypeImportFact` now record `specifier_span`: the owning Oxc string literal's
+own byte span, quotes included, beside the unchanged declaration span and
+cooked module text, as `ModuleLoadFact` already did. No consumer reads it;
+`AttestedImportIndex::specifier` still joins by containment, and findings are
+unchanged. A freshly extracted export with no module has no literal and
+records `None`. On a module-bearing fact, `None` comes only from decoding it
+without the field, and means the literal's location is unknown. `None` alone
+proves neither an absent import nor completeness. Equality with the producer's
+specifier positions is not claimed; a consumer that joins them owes its own
+control. The combined WASM host-boundary claim (P5a) stays held, and the
+supported-surface question (which forms a completeness check must cover) is a
+separate open claim.
+
 P3 boundary identity composition, open (2026-10-15; independent extraction
 review, `/tmp/sc-scratch.noindex/p3-independent/review.md`).
 `PackageBoundary::extend` transfers an optional identity without its private

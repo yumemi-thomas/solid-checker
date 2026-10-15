@@ -29,7 +29,7 @@ use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 62;
+pub const AST_FACTS_SCHEMA: u32 = 63;
 
 mod argument_completion;
 mod binding_references;
@@ -956,6 +956,13 @@ pub struct ImportBindingFact {
 pub struct ImportFact {
     pub span: Span,
     pub module: CompactString,
+    /// The module specifier literal's own span, quotes included (facts
+    /// schema 63). `span` is the whole declaration, which can hold other
+    /// strings with the same text (`import { "m" as x } from "m"`). `None`
+    /// only for a fact decoded without the field: its literal's location is
+    /// unknown, which says nothing about whether the import exists.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub specifier_span: Option<Span>,
     pub type_only: bool,
     pub bindings: Vec<ImportBindingFact>,
 }
@@ -991,6 +998,11 @@ pub struct ImportEqualsFact {
     pub span: Span,
     /// The specifier, cooked.
     pub module: CompactString,
+    /// The specifier literal's own span, quotes included (facts schema 63);
+    /// `None` only for a fact decoded without the field, whose literal's
+    /// location is unknown.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub specifier_span: Option<Span>,
     /// The binding `S`, whose references the binder resolves to this span.
     pub local: NamedSpan,
     pub type_only: bool,
@@ -1010,6 +1022,12 @@ pub struct TypeImportFact {
     pub span: Span,
     /// The specifier, cooked.
     pub module: CompactString,
+    /// The specifier literal's own span, quotes included (facts schema 63).
+    /// `span` also covers the qualifier and any type arguments, which may
+    /// hold another import type with the same text. `None` only for a fact
+    /// decoded without the field, whose literal's location is unknown.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub specifier_span: Option<Span>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub member: Option<CompactString>,
 }
@@ -1055,6 +1073,12 @@ pub struct ExportFact {
     pub kind: ExportKind,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub module: Option<CompactString>,
+    /// The module specifier literal's own span, quotes included (facts
+    /// schema 63), extracted exactly when `module` is. `None` for an export
+    /// with no module, and for a fact decoded without the field, whose
+    /// literal's location is unknown.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub specifier_span: Option<Span>,
     pub type_only: bool,
     /// `export * as name from "…"` publishes one namespace binding rather
     /// than contributing the target's names to an export-star set.
@@ -3398,6 +3422,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         self.imports.push(ImportFact {
             span: span(declaration.span),
             module: declaration.source.value.as_str().into(),
+            specifier_span: Some(span(declaration.source.span)),
             type_only: declaration.import_kind.is_type(),
             bindings,
         });
@@ -3411,6 +3436,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             self.import_equals.push(ImportEqualsFact {
                 span: declaration_span,
                 module: reference.expression.value.as_str().into(),
+                specifier_span: Some(span(reference.expression.span)),
                 local: NamedSpan {
                     span: span(declaration.id.span),
                 },
@@ -3441,6 +3467,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         self.type_imports.push(TypeImportFact {
             span: span(import.span),
             module: import.source.value.as_str().into(),
+            specifier_span: Some(span(import.source.span)),
             member,
         });
         walk::walk_ts_import_type(self, import);
@@ -3476,6 +3503,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 .source
                 .as_ref()
                 .map(|source| source.value.as_str().into()),
+            specifier_span: declaration.source.as_ref().map(|source| span(source.span)),
             type_only: declaration.export_kind.is_type(),
             namespace: None,
             namespace_binding: None,
@@ -3548,6 +3576,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             span: span(declaration.span),
             kind: ExportKind::Default,
             module: None,
+            specifier_span: None,
             type_only: false,
             namespace: None,
             namespace_binding: None,
@@ -3567,6 +3596,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             span: span(declaration.span),
             kind: ExportKind::All,
             module: Some(declaration.source.value.as_str().into()),
+            specifier_span: Some(span(declaration.source.span)),
             type_only: declaration.export_kind.is_type(),
             namespace: declaration.exported.as_ref().map(module_export_name),
             namespace_binding: declaration.exported.as_ref().map(|name| NamedSpan {
@@ -6328,6 +6358,301 @@ S.createErrorBoundary;
                 ("solid-js", None),
                 ("./deep", Some("Outer")),
             ]
+        );
+    }
+
+    /// The span of the `index`-th occurrence of `raw` in `source`. Tests pick
+    /// the occurrence they mean; the extractor never searches text.
+    fn occurrence(source: &str, raw: &str, index: usize) -> Span {
+        let (start, _) = source
+            .match_indices(raw)
+            .nth(index)
+            .unwrap_or_else(|| panic!("{raw:?} occurs fewer than {} times", index + 1));
+        Span::new(start as u32, (start + raw.len()) as u32)
+    }
+
+    fn sliced(source: &str, span: Option<Span>) -> &str {
+        let span = span.expect("a freshly extracted specifier records its literal");
+        &source[span.start as usize..span.end as usize]
+    }
+
+    /// Facts schema 63: each import and module-bearing export records the
+    /// owning string literal's own span, quotes included. The declaration can
+    /// hold other strings with the module's text -- an imported string name,
+    /// a comment, an attribute value -- and none of them is the literal.
+    #[test]
+    fn imports_and_exports_record_their_specifier_literal() {
+        let source = concat!(
+            "import \"side\";\n",
+            "import d from 'single';\n",
+            "import { \"m\" as named } from /* \"m\" */ \"m\";\n",
+            "import type { T } from \"types\";\n",
+            "import * as ns from \"ns\";\n",
+            "import j from \"./j.json\" with { type: \"json\" };\n",
+            "export { named as again } from \"m\";\n",
+            "export * as all from \"star-ns\";\n",
+            "export * from \"star\";\n",
+            "export { d };\n",
+            "export default 1;\n",
+        );
+        let facts = extract("/p/specifiers.ts", source).unwrap();
+        assert_eq!(facts.schema, 63);
+        let imports = facts
+            .imports
+            .iter()
+            .map(|fact| (fact.module.as_str(), fact.specifier_span))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            imports,
+            [
+                ("side", Some(occurrence(source, "\"side\"", 0))),
+                ("single", Some(occurrence(source, "'single'", 0))),
+                // The third `"m"` in the source: after the imported string
+                // name and the comment.
+                ("m", Some(occurrence(source, "\"m\"", 2))),
+                ("types", Some(occurrence(source, "\"types\"", 0))),
+                ("ns", Some(occurrence(source, "\"ns\"", 0))),
+                ("./j.json", Some(occurrence(source, "\"./j.json\"", 0))),
+            ]
+        );
+        // Declarations, counts, flags and bindings are what they were.
+        let declarations = facts
+            .imports
+            .iter()
+            .map(|fact| {
+                (
+                    &source[fact.span.start as usize..fact.span.end as usize],
+                    fact.type_only,
+                    fact.bindings.len(),
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            declarations,
+            [
+                ("import \"side\";", false, 1),
+                ("import d from 'single';", false, 1),
+                (
+                    "import { \"m\" as named } from /* \"m\" */ \"m\";",
+                    false,
+                    1
+                ),
+                ("import type { T } from \"types\";", true, 1),
+                ("import * as ns from \"ns\";", false, 1),
+                (
+                    "import j from \"./j.json\" with { type: \"json\" };",
+                    false,
+                    1
+                ),
+            ]
+        );
+        let exports = facts
+            .exports
+            .iter()
+            .map(|fact| (fact.kind, fact.module.as_deref(), fact.specifier_span))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            exports,
+            [
+                (
+                    ExportKind::Named,
+                    Some("m"),
+                    Some(occurrence(source, "\"m\"", 3))
+                ),
+                (
+                    ExportKind::All,
+                    Some("star-ns"),
+                    Some(occurrence(source, "\"star-ns\"", 0))
+                ),
+                (
+                    ExportKind::All,
+                    Some("star"),
+                    Some(occurrence(source, "\"star\"", 0))
+                ),
+                (ExportKind::Named, None, None),
+                (ExportKind::Default, None, None),
+            ]
+        );
+    }
+
+    /// Import-equals and import types record the literal too. An exported
+    /// import-equals keeps its module-free outer export, and the entity-name
+    /// form loads no module and stays unrecorded. Nested import types with
+    /// the same text keep distinct literals, neither one the qualifier or a
+    /// type argument.
+    #[test]
+    fn import_equals_and_type_imports_record_their_specifier_literal() {
+        let source = r#"import S = require("solid-js");
+import type T = require('./types');
+export import E = require("@solidjs/web");
+import Alias = S.createSignal;
+type A = import("a").X<import("a").Y>;
+type B = typeof import("b").c.d;
+type C = typeof import("a");
+"#;
+        let facts = extract("/p/App.ts", source).unwrap();
+        let equals = facts
+            .import_equals
+            .iter()
+            .map(|fact| (fact.module.as_str(), fact.specifier_span, fact.type_only))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            equals,
+            [
+                (
+                    "solid-js",
+                    Some(occurrence(source, "\"solid-js\"", 0)),
+                    false
+                ),
+                ("./types", Some(occurrence(source, "'./types'", 0)), true),
+                (
+                    "@solidjs/web",
+                    Some(occurrence(source, "\"@solidjs/web\"", 0)),
+                    false
+                ),
+            ]
+        );
+        let outer = facts
+            .exports
+            .iter()
+            .map(|fact| (fact.kind, fact.module.as_deref(), fact.specifier_span))
+            .collect::<Vec<_>>();
+        assert_eq!(outer, [(ExportKind::Named, None, None)]);
+        let types = facts
+            .type_imports
+            .iter()
+            .map(|fact| {
+                (
+                    fact.module.as_str(),
+                    fact.member.as_deref(),
+                    fact.specifier_span,
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            types,
+            [
+                ("a", Some("X"), Some(occurrence(source, "\"a\"", 0))),
+                ("a", Some("Y"), Some(occurrence(source, "\"a\"", 1))),
+                ("b", Some("c"), Some(occurrence(source, "\"b\"", 0))),
+                ("a", None, Some(occurrence(source, "\"a\"", 2))),
+            ]
+        );
+        // The outer import type contains the inner one's literal, and records
+        // its own.
+        let [first, second, ..] = facts.type_imports.as_slice() else {
+            panic!("import types: {:?}", facts.type_imports);
+        };
+        assert!(first.span.contains(second.specifier_span.unwrap()));
+        assert_ne!(first.specifier_span, second.specifier_span);
+    }
+
+    /// Byte offsets of the raw literal, whatever it spells: escapes stay raw
+    /// beside the cooked module, non-ASCII text and multibyte leading trivia
+    /// count in UTF-8 bytes, the empty literal is two quotes wide, and line or
+    /// control whitespace before the literal is never part of it.
+    #[test]
+    fn specifier_literals_are_raw_utf8_byte_spans() {
+        let source = concat!(
+            "/* ü — ✓ */ import a from \"p\\u006bg\";\n",
+            "import b from \"ünï\";\n",
+            "import c from \"\";\n",
+            "import e from\n\t\u{000C} \"next-line\";\n",
+        );
+        let facts = extract("/p/raw.ts", source).unwrap();
+        let rows = facts
+            .imports
+            .iter()
+            .map(|fact| {
+                (
+                    fact.module.as_str(),
+                    sliced(source, fact.specifier_span),
+                    fact.specifier_span,
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            rows,
+            [
+                (
+                    "pkg",
+                    "\"p\\u006bg\"",
+                    Some(occurrence(source, "\"p\\u006bg\"", 0))
+                ),
+                ("ünï", "\"ünï\"", Some(occurrence(source, "\"ünï\"", 0))),
+                ("", "\"\"", Some(occurrence(source, "\"\"", 0))),
+                (
+                    "next-line",
+                    "\"next-line\"",
+                    Some(occurrence(source, "\"next-line\"", 0))
+                ),
+            ]
+        );
+        let empty = facts.imports[2].specifier_span.unwrap();
+        assert_eq!(empty.end - empty.start, 2);
+    }
+
+    /// A fact decoded without the field records no literal location: `None`
+    /// is unknown, never an absent import, and decoding does not upgrade it.
+    /// Freshly extracted facts round-trip with the field, and a module-free
+    /// export serializes no field at all.
+    #[test]
+    fn a_decoded_specifier_span_defaults_to_unknown() {
+        let source = r#"import d from "m";
+export * from "n";
+export { d };
+import S = require("o");
+type T = import("p").Q;
+"#;
+        let facts = extract("/p/legacy.ts", source).unwrap();
+        fn legacy<T: Serialize + serde::de::DeserializeOwned>(fact: &T) -> (T, serde_json::Value) {
+            let mut value = serde_json::to_value(fact).unwrap();
+            assert!(
+                value
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("specifierSpan")
+                    .is_some(),
+                "{value}"
+            );
+            let decoded: T = serde_json::from_value(value.clone()).unwrap();
+            (decoded, value)
+        }
+        fn fresh<T: Serialize + serde::de::DeserializeOwned + PartialEq + std::fmt::Debug>(
+            fact: &T,
+        ) {
+            let decoded: T = serde_json::from_value(serde_json::to_value(fact).unwrap()).unwrap();
+            assert_eq!(&decoded, fact);
+        }
+        let (import, stripped) = legacy(&facts.imports[0]);
+        assert_eq!(import.specifier_span, None);
+        assert_eq!(import.module, "m");
+        assert_eq!(import.span, facts.imports[0].span);
+        assert_eq!(serde_json::to_value(&import).unwrap(), stripped);
+        fresh(&facts.imports[0]);
+        let (export, stripped) = legacy(&facts.exports[0]);
+        assert_eq!(export.specifier_span, None);
+        assert_eq!(export.module.as_deref(), Some("n"));
+        assert_eq!(serde_json::to_value(&export).unwrap(), stripped);
+        fresh(&facts.exports[0]);
+        let local = serde_json::to_value(&facts.exports[1]).unwrap();
+        assert!(local.get("specifierSpan").is_none(), "{local}");
+        fresh(&facts.exports[1]);
+        let (equals, stripped) = legacy(&facts.import_equals[0]);
+        assert_eq!(equals.specifier_span, None);
+        assert_eq!(serde_json::to_value(&equals).unwrap(), stripped);
+        fresh(&facts.import_equals[0]);
+        let (type_import, stripped) = legacy(&facts.type_imports[0]);
+        assert_eq!(type_import.specifier_span, None);
+        assert_eq!(serde_json::to_value(&type_import).unwrap(), stripped);
+        fresh(&facts.type_imports[0]);
+        let encoded = serde_json::to_value(&facts.imports[0]).unwrap();
+        assert_eq!(
+            encoded["specifierSpan"],
+            serde_json::json!({
+                "start": facts.imports[0].specifier_span.unwrap().start,
+                "end": facts.imports[0].specifier_span.unwrap().end,
+            })
         );
     }
 
