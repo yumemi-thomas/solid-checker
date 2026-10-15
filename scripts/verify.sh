@@ -234,6 +234,26 @@ SOLID_CHECKER_BIN="$checker_bin" \
   SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" bun scripts/ownership-gate.mjs \
   --require-retained --require-complete
 
+# The WASM package (P5 S2): its Node-API module and the owned check's two
+# reactors, built one after the other with the pins exported above. Then the
+# packed owned check, installed in isolation, against this checker with
+# --no-package-contracts. The gate builds nothing itself and fails on any
+# missing input; the bridge test records the update frames it replays, in the
+# same scratch tree outside the repository. See scripts/wasm-parity/README.md.
+step build-wasm-package
+bun install --cwd packages/wasm --ignore-scripts --no-progress --frozen-lockfile
+bun run --cwd packages/wasm build
+
+step wasm-parity
+wasm_parity_scratch=$(mktemp -d "${TMPDIR:-/tmp}/sc-wasm-parity.XXXXXX")
+mkdir -p "$wasm_parity_scratch/n2-tmp"
+TMPDIR="$wasm_parity_scratch/n2-tmp" TYPEFACTS_BRIDGE_FRAMES="$wasm_parity_scratch/update-frames" \
+  TYPEFACTS_TEST_BIN="$PWD/bin/solid-typefacts" \
+  cargo +1.97 test --profile "$cargo_profile" --manifest-path "$rust_manifest" \
+  -p typefacts --test bridge_process -- --exact bridged_answers_equal_process_answers
+SOLID_CHECKER_BIN="$checker_bin" SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" \
+  bun scripts/wasm-parity.mjs --scratch "$wasm_parity_scratch" --update-frames "$wasm_parity_scratch/update-frames"
+
 step build-session-bench
 cargo +1.97 build --release --manifest-path "$rust_manifest" \
   -p solid-facts-backend --bin solid-checker-session-bench

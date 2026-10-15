@@ -1,5 +1,48 @@
 # Precision backlog
 
+P5 S2 packaged owned check (2026-10-15). `solid-checker-wasm/owned.mjs` runs
+the S1 owned check from the package alone: the Type Facts producer and the
+checker, as two WebAssembly reactors in one worker over one validated
+in-memory mount. Native defaults and contract consumption are unchanged. The
+owned check consumes no contract tier, so its native reference is
+`--no-package-contracts`.
+
+- **Project identity:** `run_owned_check` now canonicalizes the absolute
+  project as native `--project` does, and every later reader sees only that
+  path. A relative project is refused.
+- **Gate:** `make wasm-parity` (in `make verify`) packs the package and
+  installs it with its declared closure and nothing above it. It compares the
+  owned check with the native check under Node 24.11.1 `--permission` and
+  Bun 1.4.0:
+  - the S1b consumer witness's 21 legacy cases, with its exact transplanted
+    expectations;
+  - W5's eight forged answers and the forged handshake;
+  - the W6 update replay;
+  - the package's lifecycle, poison, init, mount and isolation controls.
+
+  See `scripts/wasm-parity/README.md`. The S1 manual prototype is retired
+  into it.
+- **Held, not resolved:**
+  - **Errno:** a missing project is `os error 2` natively and `os error 44`
+    here.
+  - **Startup:** an unopenable project loses the native producer's pipe but is
+    a structured open refusal here.
+  - **Dangling `.solid-checker`:** native refuses on provenance; the WASI
+    producer's tsconfig parse refuses first.
+- **Limits (S2 only, never full-equivalence claims):**
+  - native discovery above a mount root;
+  - links leaving the root (pnpm stores);
+  - resolved link-chain equivalence beyond the gated cases;
+  - modes and permissions;
+  - memory: producer memory grows with reuse, and an empty ledger is no
+    bound;
+  - browser, Windows and other runtime versions;
+  - `rule-options.json`.
+- **Before full P5 and P7:** S3 must carry all fixtures, the corpus, the
+  oracle, phase-19, filesystem and memory through this gate. Then come full
+  native-equivalent JS/TS/npm WASM, the P7 switch-off, one actual release,
+  and D1–D8 deletion once the legacy-metadata obligations are rehomed.
+
 P5 S1 `--no-package-contracts`, corrected (2026-10-15; CODE review r1,
 `/tmp/sc-scratch.noindex/p5-owned-producer-roundtrip-code-review-r1.md`).
 The flag runs the ordinary check consuming no package contract's claims from
@@ -52,7 +95,8 @@ discovery entirely, so an import a tier covered lost its obligation.
   - the `package_requirements` unit tests (installed, `paths`-mapped,
     unresolved installed against missing, authored version and subpath
     exactness, selected source and core);
-  - the owned-check WASI harness.
+  - the WASM parity gate (`scripts/wasm-parity`), which carries the S1
+    owned-check harness's cases.
 - **Remaining, as held:**
   - A package with no Solid dependency that no tier covers is read as plain
     code, exactly as by default. That is the P1 non-Solid premise.

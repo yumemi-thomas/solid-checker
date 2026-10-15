@@ -254,6 +254,7 @@ packages/wasm/solid-checker-wasm.wasi-browser.js
 packages/wasm/solid-checker-wasm.wasi.cjs
 packages/wasm/solid-checker-wasm.wasm32-wasi*.wasm
 packages/wasm/wasi-worker*.mjs
+packages/wasm/owned/
 /.typefacts/
 
 # Bulk phase-21 measurement dumps. These are 20-70 MB machine-readable

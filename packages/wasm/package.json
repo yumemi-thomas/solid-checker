@@ -15,14 +15,23 @@
     "solid-checker-wasm.wasm32-wasi.wasm",
     "wasi-worker.mjs",
     "wasi-worker-browser.mjs",
+    "owned.mjs",
+    "owned.d.ts",
+    "owned-artifacts.mjs",
+    "owned-client.mjs",
+    "owned-host.mjs",
+    "owned-mount.mjs",
+    "owned-worker.mjs",
+    "owned-worker-core.mjs",
+    "owned",
     "scripts"
   ],
   "scripts": {
-    "build": "bun ./scripts/build.mjs --release",
+    "build": "bun ./scripts/build.mjs --release && bun ./scripts/build-owned.mjs",
     "build:debug": "bun ./scripts/build.mjs",
+    "build:owned": "bun ./scripts/build-owned.mjs",
     "prototype:self-contained": "bun ./prototypes/self-contained.mjs",
     "prototype:module-graph": "bun ./prototypes/module-graph-equivalence.mjs",
-    "prototype:owned-check": "bun ./prototypes/owned-check.mjs",
     "test": "bun ./node_modules/vitest/vitest.mjs run --config vitest.config.mjs test/*.test.mjs"
   },
   "napi": {
@@ -44,7 +53,8 @@
     "vitest": "^4.1.11"
   },
   "dependencies": {
-    "@napi-rs/wasm-runtime": "^1.1.6"
+    "@napi-rs/wasm-runtime": "1.1.6",
+    "@tybys/wasm-util": "0.10.3"
   },
   "engines": {
     "node": ">=20"

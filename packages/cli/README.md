@@ -88,9 +88,9 @@ What the flag does not change:
 - **Other versions:** a version of an authored package that the authored tier
   does not name is likewise plain.
 
-The flag is also the native reference for the experimental WASM owned-producer
-check (`packages/wasm/prototypes/owned-check.md`). That check is manual
-evidence, not a packaged WASM provider.
+The flag is also the native reference for the WASM package's owned check
+(`solid-checker-wasm/owned.mjs`; see that package's README, "Owned check"),
+which `make wasm-parity` compares with it.
 
 ## Development feedback
 

@@ -95,11 +95,16 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.97
         with:
-          targets: wasm32-wasip1-threads
+          targets: wasm32-wasip1-threads, wasm32-wasip1
       # The action's targets input covers only the toolchain it installs;
       # the build resolves its toolchain through rust-toolchain.toml, which
       # needs its own copy of the target's std.
-      - run: rustup target add wasm32-wasip1-threads --toolchain 1.97
+      - run: rustup target add wasm32-wasip1-threads wasm32-wasip1 --toolchain 1.97
+      # The owned check's producer reactor (packages/wasm/scripts/build-owned.mjs).
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache-dependency-path: go.sum
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.0
@@ -115,6 +120,10 @@ jobs:
         working-directory: packages/wasm
       - name: Build WASI package
         working-directory: packages/wasm
+        # The owned reactors link the tag as their build id, so the producer's
+        # handshake and the checker agree, as in the native release.
+        env:
+          SOLID_CHECKER_BUILD_ID: ${{ github.ref_name }}
         run: |
           bun pm pkg set "version=${GITHUB_REF_NAME#v}"
           bun run build
@@ -134,6 +143,15 @@ jobs:
             packages/wasm/solid-checker-wasm.wasm32-wasi.wasm
             packages/wasm/wasi-worker.mjs
             packages/wasm/wasi-worker-browser.mjs
+            packages/wasm/owned.mjs
+            packages/wasm/owned.d.ts
+            packages/wasm/owned-artifacts.mjs
+            packages/wasm/owned-client.mjs
+            packages/wasm/owned-host.mjs
+            packages/wasm/owned-mount.mjs
+            packages/wasm/owned-worker.mjs
+            packages/wasm/owned-worker-core.mjs
+            packages/wasm/owned/
           if-no-files-found: error
 
   publish:

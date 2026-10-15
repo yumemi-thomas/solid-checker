@@ -48,7 +48,7 @@ test("each table row claims its own owner's paths", () => {
     ["fixtures/reactive-ir/store-flow/App.tsx", ["coverage", "ownership-gate"]],
     ["fixtures/findings-snapshots/engine__oxlint-conformance.json", ["coverage", "ownership-gate"]],
     ["packages/cli/lib/rules-solid-v2.json", ["bun-test-cli"]],
-    ["packages/wasm/src/index.ts", ["bun-test-wasm"]],
+    ["packages/wasm/src/index.ts", ["bun-test-wasm", "wasm-parity"]],
   ];
   for (const [path, checks] of expected) {
     assert.deepEqual(classify(path)?.checks, checks, path);
@@ -130,6 +130,22 @@ test("a change that needs no checker skips the debug build", () => {
   const plan = planFor(["rust/crates/solid-facts/src/ast.rs"]);
   assert.deepEqual(withoutUniversal(plan.checks), ["build-typefacts", "facts-lib"]);
   assert.ok(!plan.checks.includes("build-debug"));
+});
+
+test("every check a row selects is executed exactly once", () => {
+  for (const row of ROWS) {
+    const plan = planFor([`${row.prefix}probe`]);
+    for (const check of row.checks) {
+      assert.equal(plan.checks.filter((id) => id === check).length, 1, `${row.prefix}: ${check}`);
+    }
+  }
+});
+
+test("a WASM package change runs the parity gate once, before the package tests", () => {
+  const plan = planFor(["packages/wasm/owned-client.mjs", "packages/wasm/owned-mount.mjs"]);
+  assert.equal(plan.full, false);
+  assert.deepEqual(plan.unmapped, []);
+  assert.deepEqual(plan.checks, ["build-typefacts", ...UNIVERSAL, "wasm-parity", "bun-test-wasm"]);
 });
 
 test("the universal handoff set precedes tests in every mapped plan", () => {

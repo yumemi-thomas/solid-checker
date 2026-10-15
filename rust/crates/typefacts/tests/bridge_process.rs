@@ -1,7 +1,7 @@
 //! The bridged producer carrier against the process carrier, both over the
 //! real producer. The bridge here drives a real child synchronously, one frame
 //! at a time, which is exactly what an owned WASI reactor answers; the WASI
-//! build itself is exercised by the owned-check harness.
+//! build itself is exercised by the WASM parity gate (`scripts/wasm-parity`).
 
 use std::{
     fs,
@@ -75,9 +75,9 @@ struct ChildBridge {
     recording: Option<Recording>,
 }
 
-/// Every frame one bridge carried, written for the owned-check harness to
-/// replay into the producer's WASI reactor over the same tree
-/// (`packages/wasm/prototypes/owned-check.mjs --update-frames`).
+/// Every frame one bridge carried, written for the WASM parity gate to replay
+/// into the packaged producer reactor over the same tree
+/// (`scripts/wasm-parity.mjs --update-frames`).
 struct Recording {
     directory: PathBuf,
     project: PathBuf,

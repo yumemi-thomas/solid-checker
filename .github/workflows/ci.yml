@@ -169,11 +169,17 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.97
         with:
-          targets: wasm32-wasip1-threads
+          targets: wasm32-wasip1-threads, wasm32-wasip1
       # The action's targets input covers only the toolchain it installs;
       # the build resolves its toolchain through rust-toolchain.toml, which
       # needs its own copy of the target's std.
-      - run: rustup target add wasm32-wasip1-threads --toolchain 1.97
+      - run: rustup target add wasm32-wasip1-threads wasm32-wasip1 --toolchain 1.97
+      # The owned check's producer reactor is the Type Facts producer built
+      # for wasip1 (packages/wasm/scripts/build-owned.mjs).
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache-dependency-path: go.sum
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.0

@@ -179,7 +179,7 @@ that same check; do not fan out into unrelated full-suite commands.
 | solid-facts-backend process/diagnostics | `backend-process` | coverage compare, universal set |
 | dialects, contracts at the process boundary | `contract-process` | contract conformance, universal set |
 | fixtures or expected findings | coverage compare (fresh debug binary) | ownership gate, universal set |
-| packages/cli or packages/wasm | `bun run --cwd packages/cli test` (or `packages/wasm`) | universal set |
+| packages/cli or packages/wasm | `bun run --cwd packages/cli test` (or `packages/wasm`) | `make wasm-parity` for packages/wasm, universal set |
 | release or broad architectural work | — | `make verify` |
 
 `make verify-delta` mechanizes this table: it reads the changed paths (the

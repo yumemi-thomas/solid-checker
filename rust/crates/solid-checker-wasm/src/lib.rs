@@ -530,6 +530,77 @@ pub extern "C" fn run_owned_check() -> u32 {
     run_reactor(owned::check)
 }
 
+/// The project the owned check analyzes, named as the native check names it:
+/// the native command line canonicalizes `--project` before anything reads it,
+/// and every later reader sees only that canonical path. WASI resolves links
+/// and `..` against the mounted tree, so this is the same operation over the
+/// same bytes. A relative path is refused rather than resolved: a reactor has
+/// no working directory for it to be relative to.
+#[cfg(any(test, all(feature = "reactor", target_family = "wasm")))]
+fn canonical_project(project_id: &str) -> Result<String, Box<dyn std::error::Error>> {
+    let project = Path::new(project_id);
+    if !project.is_absolute() {
+        return Err(format!("project {project_id} is not an absolute path").into());
+    }
+    Ok(project.canonicalize()?.to_string_lossy().into_owned())
+}
+
+#[cfg(test)]
+mod canonical_project_tests {
+    use super::canonical_project;
+
+    fn scratch(name: &str) -> std::path::PathBuf {
+        let root =
+            std::env::temp_dir().join(format!("solid-checker-wasm-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("project/node_modules")).unwrap();
+        std::fs::write(root.join("project/tsconfig.json"), "{}\n").unwrap();
+        root.canonicalize().unwrap()
+    }
+
+    /// Every spelling native `--project` accepts names the one canonical file.
+    #[test]
+    fn a_linked_or_dotted_project_is_named_by_its_canonical_path() {
+        let root = scratch("spellings");
+        let canonical = root.join("project/tsconfig.json");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink("project", root.join("alias")).unwrap();
+        let mut spellings = vec![
+            canonical.clone(),
+            root.join("project/node_modules/../tsconfig.json"),
+            root.join("project/./tsconfig.json"),
+        ];
+        if cfg!(unix) {
+            spellings.push(root.join("alias/tsconfig.json"));
+        }
+        for spelling in spellings {
+            assert_eq!(
+                canonical_project(&spelling.to_string_lossy()).unwrap(),
+                canonical.to_string_lossy(),
+                "{}",
+                spelling.display()
+            );
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_relative_project_is_refused_and_a_missing_one_fails_as_native_does() {
+        assert_eq!(
+            canonical_project("tsconfig.json").unwrap_err().to_string(),
+            "project tsconfig.json is not an absolute path"
+        );
+        let root = scratch("missing");
+        let missing = root.join("project/absent/tsconfig.json");
+        let error = canonical_project(&missing.to_string_lossy()).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            missing.canonicalize().unwrap_err().to_string()
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+}
+
 #[cfg(feature = "reactor")]
 #[unsafe(no_mangle)]
 pub extern "C" fn output_pointer() -> u32 {
@@ -571,10 +642,7 @@ pub extern "C" fn output_length() -> u32 {
 /// here authenticates either.
 #[cfg(all(feature = "reactor", target_family = "wasm"))]
 mod owned {
-    use std::{
-        error::Error,
-        path::{Component, Path},
-    };
+    use std::{error::Error, path::Path};
 
     use serde::{Deserialize, Serialize};
     use solid_facts_backend::{
@@ -735,24 +803,12 @@ mod owned {
     }
 
     pub(super) fn check(request_json: &str) -> Result<String, Box<dyn Error>> {
-        let request: OwnedCheckRequest = serde_json::from_str(request_json)?;
+        let mut request: OwnedCheckRequest = serde_json::from_str(request_json)?;
+        // From here on the request names the project only by its canonical
+        // path, exactly as the native check's request does; a missing project
+        // fails here as it does natively.
+        request.project_id = super::canonical_project(&request.project_id)?;
         let project = Path::new(&request.project_id);
-        // The native check canonicalizes its project before anything reads it.
-        // WASI has no realpath, so the host must already name the project by
-        // its canonical path: anything that is not even lexically normal is
-        // refused, and a missing project fails here as it does natively.
-        if !project.is_absolute()
-            || project
-                .components()
-                .any(|component| matches!(component, Component::CurDir | Component::ParentDir))
-        {
-            return Err(format!(
-                "project {} is not a normal absolute path",
-                request.project_id
-            )
-            .into());
-        }
-        std::fs::metadata(project)?;
         let mut notes = Vec::<String>::new();
         let mut note = |line: &str| notes.push(line.to_owned());
         let (dialect, unsupported) = check::select_dialect(project, request.dialect.as_deref())?;

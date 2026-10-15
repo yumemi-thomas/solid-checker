@@ -130,6 +130,14 @@ export const CHECKS = {
   },
   "bun-test-cli": { command: ["bun", "run", "--cwd", "packages/cli", "test"] },
   "bun-test-wasm": { command: ["bun", "run", "--cwd", "packages/wasm", "test"] },
+  "wasm-parity": {
+    why:
+      "the owned check ships two reactors built from rust/ and apps/ beside the package's own " +
+      "worker and transport; only the packed package, installed in isolation and compared with the " +
+      "native check, shows a package change kept that answer. It goes through the Makefile, which " +
+      "builds the package and records the update frames before the gate, which builds nothing",
+    command: ["make", "wasm-parity"],
+  },
   // The universal handoff set, appended to every plan.
   "fmt-check": {
     command: ["cargo", TOOLCHAIN, "fmt", "--manifest-path", MANIFEST, "--all", "--", "--check"],
@@ -227,7 +235,7 @@ export const ROWS = [
     checks: ["probe-harness", "contract-process", "bun-test-cli"],
   })),
   { prefix: "packages/cli/", owner: "packages/cli", checks: ["bun-test-cli"] },
-  { prefix: "packages/wasm/", owner: "packages/wasm", checks: ["bun-test-wasm"] },
+  { prefix: "packages/wasm/", owner: "packages/wasm", checks: ["bun-test-wasm", "wasm-parity"] },
 ].sort((a, b) => b.prefix.length - a.prefix.length);
 
 /** The table row a path belongs to, or `null` when nothing claims it. */
@@ -272,6 +280,9 @@ export function planFor(paths) {
     ...["probe-harness"].filter((id) => selected.has(id)),
     ...["facts-lib", "ir-lib", "backend-process", "contract-process"].filter((id) => selected.has(id)),
     ...["coverage", "ownership-gate", "conformance"].filter((id) => selected.has(id)),
+    // Before the WASM package's own tests: its Make target builds the package
+    // (owned artifacts included) that those tests load on a fresh tree.
+    ...["wasm-parity"].filter((id) => selected.has(id)),
     ...["bun-test-cli", "bun-test-wasm"].filter((id) => selected.has(id)),
   ];
   return { full: false, unmapped, decisions, checks: ordered };
