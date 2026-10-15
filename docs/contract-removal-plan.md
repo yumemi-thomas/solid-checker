@@ -297,6 +297,13 @@ Recorded for what remains:
   P4 inference, P5 and P7 remain open, and D1–D8 wait for one actual release
   after P7.
 
+At 59cd8a0, the listed P2 remainder audit identified no further neutral
+vocabulary move required before P7 for ordinary analysis survival. Keep the
+documented contract-only state and deliberate prototype edge until their
+consumers are removed at D2/D3; preserve/rehome live source-boundary SC9005
+production under P7's obligation-retention design. This does not mark all
+of P2 or inventory row 13 complete.
+
 ### P4 and P6a status
 
 Current ordinary native host-free requests select no dependency source.

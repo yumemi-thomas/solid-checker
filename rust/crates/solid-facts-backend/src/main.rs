@@ -605,52 +605,11 @@ fn fold_host_constants_in_realm(
     Vec<SourceFile>,
     HashMap<String, solid_facts::core::SourceHash>,
 ) {
-    let conditions = conditions.iter().cloned().collect::<Vec<_>>();
-    let mut program_hashes = HashMap::new();
-    let Some(host) = solid_facts_backend::host_constants::declared_host(&conditions) else {
-        return (sources, program_hashes);
-    };
-    let window_realm = window_realm.filter(|_| host == solid_dialect::HostTargetCondition::Browser);
-    let folded = sources
-        .into_iter()
-        .map(|mut file| {
-            let path = Path::new(&file.path);
-            let folds = solid_facts_backend::host_constants::host_constants_of_module(
-                path,
-                &file.source,
-                host,
-                None,
-            )
-            .into_iter()
-            .map(|resolved| resolved.fold)
-            .collect::<Vec<_>>();
-            let text = match window_realm {
-                Some(cycle_host) => {
-                    let acyclic = || {
-                        solid_facts_backend::dependency_sources::outside_import_cycles(
-                            path, cycle_host,
-                        )
-                    };
-                    solid_facts::ast::fold_host_constant_branches_in_window_realm(
-                        path,
-                        &file.source,
-                        &folds,
-                        &solid_facts::ast::WindowRealm { acyclic: &acyclic },
-                    )
-                }
-                None => solid_facts::ast::fold_host_constant_branches(path, &file.source, &folds),
-            };
-            if let Some(text) = text {
-                program_hashes.insert(
-                    file.path.clone(),
-                    solid_facts::core::SourceHash::of(file.source.as_ref()),
-                );
-                file.source = text.into();
-            }
-            file
-        })
-        .collect();
-    (folded, program_hashes)
+    solid_facts_backend::host_constants::fold_host_constants_in_realm(
+        sources,
+        conditions,
+        window_realm,
+    )
 }
 
 fn contract_emission_target_sources(

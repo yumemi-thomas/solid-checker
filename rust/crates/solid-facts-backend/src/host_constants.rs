@@ -29,13 +29,15 @@
 //! array target, a target that re-exports the name, or targets that disagree
 //! (`isDev` differs between `web.js` and `web.dev.js`) folds nothing.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
 use serde::de::{Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
 use sha2::{Digest, Sha256};
 use solid_dialect::HostTargetCondition;
 use solid_facts::ast::{HostConstantFold, exported_boolean_constant, named_value_imports};
+
+use crate::SourceFile;
 
 /// The host a certification's conditions declare, when they declare exactly
 /// one and it is a host a fold is defined for.
@@ -376,6 +378,59 @@ impl<'de> Deserialize<'de> for Ordered {
         }
         deserializer.deserialize_any(OrderedVisitor)
     }
+}
+
+/// The emission fold (`fold_emission_host_constants` in the binary), and under
+/// `window_realm` (ADR 0295, a selected dependency-source file of a declared
+/// browser host) the module's Window-realm comparisons too. `window_realm` is
+/// the host its import cycles are resolved for; a host the conditions do not
+/// declare as `browser` folds no realm.
+pub fn fold_host_constants_in_realm(
+    sources: Vec<SourceFile>,
+    conditions: &BTreeSet<String>,
+    window_realm: Option<&crate::dependency_sources::Host>,
+) -> (
+    Vec<SourceFile>,
+    HashMap<String, solid_facts::core::SourceHash>,
+) {
+    let conditions = conditions.iter().cloned().collect::<Vec<_>>();
+    let mut program_hashes = HashMap::new();
+    let Some(host) = declared_host(&conditions) else {
+        return (sources, program_hashes);
+    };
+    let window_realm = window_realm.filter(|_| host == solid_dialect::HostTargetCondition::Browser);
+    let folded = sources
+        .into_iter()
+        .map(|mut file| {
+            let path = Path::new(&file.path);
+            let folds = host_constants_of_module(path, &file.source, host, None)
+                .into_iter()
+                .map(|resolved| resolved.fold)
+                .collect::<Vec<_>>();
+            let text = match window_realm {
+                Some(cycle_host) => {
+                    let acyclic =
+                        || crate::dependency_sources::outside_import_cycles(path, cycle_host);
+                    solid_facts::ast::fold_host_constant_branches_in_window_realm(
+                        path,
+                        &file.source,
+                        &folds,
+                        &solid_facts::ast::WindowRealm { acyclic: &acyclic },
+                    )
+                }
+                None => solid_facts::ast::fold_host_constant_branches(path, &file.source, &folds),
+            };
+            if let Some(text) = text {
+                program_hashes.insert(
+                    file.path.clone(),
+                    solid_facts::core::SourceHash::of(file.source.as_ref()),
+                );
+                file.source = text.into();
+            }
+            file
+        })
+        .collect();
+    (folded, program_hashes)
 }
 
 #[cfg(test)]
