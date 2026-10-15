@@ -297,6 +297,25 @@ Recorded for what remains:
   P4 inference, P5 and P7 remain open, and D1–D8 wait for one actual release
   after P7.
 
+### P4 and P6a status
+
+Current ordinary native host-free requests select no dependency source.
+Existing contract-backed behavior remains transitional. Positive host-free
+selection and contract-free inference are held. After consumption is disabled,
+affected package obligations must remain explicitly uncertifiable unless
+independently discharged by valid source, type or runtime evidence; this
+obligation-retention claim is a P7 precondition, not established here. No new
+host-free routing is required for the current no-selection predicate. P5
+remains required.
+
+P6a: the two ADR 0299 fixtures `object-member-namespace-escape` and
+`object-member-initialization` no longer opt out of dependency sources; their
+findings are unchanged on the default route, with and without every contract
+tier, where preparation selects no dependency source for them. P6 stays
+partial: ordinary contract-consumption fixtures and callers migrate at P7, not
+at D, and receiver-level source binding for the unchanged sibling, P5 and P7
+remain open.
+
 ## Risks
 
 - Every new source path needs review rounds; so far each round has found
