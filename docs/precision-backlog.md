@@ -1,5 +1,37 @@
 # Precision backlog
 
+P5 S3a owned WASI path resolution (2026-10-16). The S3 parity baseline found the
+owned check refusing, or falling back to open obligations, wherever an installed
+dependency source imported `../…`: under `@tybys/wasm-util` 0.10.3 every WASI
+path with `..` reached the wrong file, because its lexical `normalizeString`
+cuts at the first separator rather than the last. The owned worker now runs a
+vendored, attributed copy of that runtime (`packages/wasm/vendor/wasm-util`,
+NOTICE and `owned.patch`) whose six path imports resolve paths physically,
+component by component, and whose `path_readlink` truncates as POSIX does. No
+other runtime machinery changed; the old napi entry still uses the installed
+package.
+
+- **Pinned by:**
+  - `fixtures/reactive-ir/dependency-source-dotdot`: the `../` dependency import
+    gives the violation natively and through the package;
+  - the WASM parity gate's `path-semantics`: 261 real WASI path rows from Rust
+    and Go control guests against host POSIX, where the old layer fails 144
+    pinned repaired rows and cannot finish 7 more; plus `dotdot-fixture` and
+    `dotdot-missing`. The rows include links whose stored target ends in `/`:
+    that slash requires a directory just as a slash in the request does.
+- **Retained, not changed:**
+  - Go's own guest-side lexical `..` cleaning (`syscall/fs_wasip1.go`);
+  - upstream mutation semantics: a final trailing slash is dropped, and only
+    the parent resolves physically;
+  - memfs's 0 size for symlinks;
+  - the async and unimported path functions;
+  - `fd_readdir`'s following entry stat, and `poll_oneoff`.
+- **The 32-substitution bound** is the macOS reference. A no-follow
+  `O_DIRECTORY` open of a link answers ENOTDIR, as the macOS host does.
+- **Not established here:** whether this removes every one of the nine
+  measured app drifts. That is the post-implementation re-measure's
+  question.
+
 P5 S2 packaged owned check (2026-10-15). `solid-checker-wasm/owned.mjs` runs
 the S1 owned check from the package alone: the Type Facts producer and the
 checker, as two WebAssembly reactors in one worker over one validated

@@ -19,6 +19,7 @@ import {
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import * as pathSemantics from "./wasm-parity/path-semantics.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const gateFiles = join(repositoryRoot, "scripts/wasm-parity");
@@ -168,7 +169,7 @@ while (pending.length) {
 }
 
 // The gate's own files beside the install, so their imports resolve there.
-for (const file of ["driver.mjs", "fault-worker.mjs", "cbor.mjs", "url-hooks.mjs", "old-entry.mjs"]) {
+for (const file of ["driver.mjs", "fault-worker.mjs", "cbor.mjs", "url-hooks.mjs", "old-entry.mjs", "path-semantics.mjs"]) {
   copyFileSync(join(gateFiles, file), join(consumer, file));
 }
 // Corrupted copies of the package: one artifact byte flipped, and the same
@@ -295,6 +296,10 @@ const TREES = {
   "w5-decoy": [typedProject({ "Hello.tsx": w1Files["Hello.tsx"] })],
   "spellings": [typedProject({ "Hello.tsx": w1Files["Hello.tsx"] }), root => symlinkSync(".", join(root, "alias"))],
   "sc9013": [join(repositoryRoot, "rust/crates/solid-facts-backend/tests/fixtures/unsupported-runtime-v1")],
+  // S3a: the `../` dependency-source fixture, and the same tree with the
+  // imported module missing.
+  "dotdot-fixture": [fixture("dependency-source-dotdot")],
+  "dotdot-missing": [fixture("dependency-source-dotdot"), root => rmSync(join(root, "node_modules/dep-dotdot/src/lib/read.js"))],
 };
 const trees = Object.fromEntries(Object.entries(TREES).map(([name, [source, mutate]]) => [name, freeze(name, source, mutate)]));
 
@@ -378,6 +383,60 @@ const SPELLINGS = [
 for (const [name, projectId] of SPELLINGS) native[name] = runNative(trees.spellings, caseRequest(trees.spellings, projectId).argv, name);
 native.sc9013 = runNative(trees.sc9013, caseRequest(trees.sc9013).argv, "sc9013");
 const w2Request = caseRequest(trees["w2-real-typings-clean"]);
+const DOTDOT = ["dotdot-fixture", "dotdot-missing"];
+for (const name of DOTDOT) {
+  requests[name] = caseRequest(trees[name]);
+  native[name] = runNative(trees[name], requests[name].argv);
+  tscResults[name] = tsc(trees[name]);
+}
+// The same sources against the published Solid 2 rc.13 types (the oracle's
+// audited install) instead of the fixture's stub: TypeScript must be silent.
+{
+  const typed = join(scratch, "dotdot-published", "project");
+  cpSync(trees["dotdot-fixture"].root, typed, { recursive: true });
+  for (const stub of ["node_modules/solid-js", "node_modules/@solidjs", "solid-js.d.ts"]) rmSync(join(typed, stub), { recursive: true });
+  cpSync(oracleInstall, join(typed, "node_modules"), { recursive: true, dereference: true });
+  writeFileSync(join(typed, "tsconfig.json"), `${JSON.stringify({
+    compilerOptions: {
+      target: "ES2022", module: "ESNext", moduleResolution: "Bundler", jsx: "preserve", jsxImportSource: "@solidjs/web",
+      lib: ["ES2022", "DOM"], types: [], skipLibCheck: true, strict: true, noEmit: true,
+    },
+    include: ["*.ts", "*.tsx"],
+  }, null, 2)}\n`);
+  tscResults["dotdot-published"] = tsc({ root: typed });
+}
+
+// --- path semantics (S3a) -----------------------------------------------------------
+// The control guests run against one disk tree and its mounted copy; each
+// mutating row gets a fresh guest copy and a separate host copy.
+const guestBuild = join(repositoryRoot, "rust/target/wasm-parity-guests");
+const pathCases = join(scratch, "paths");
+mkdirSync(join(pathCases, "guests"), { recursive: true });
+const guests = {};
+for (const [name, built] of [["rust", join(guestBuild, "wasm32-wasip1/release/path-control.wasm")], ["go", join(guestBuild, "path-control-go.wasm")]]) {
+  if (!existsSync(built)) fail(`${built} is missing; build it first (make wasm-parity)`);
+  guests[name] = join(pathCases, "guests", `${name}.wasm`);
+  copyFileSync(built, guests[name]);
+}
+const pathRoot = join(pathCases, "tree");
+pathSemantics.buildTree(pathRoot);
+const pathMutations = pathSemantics.mutationRows().map(row => ({
+  row, guestRoot: pathSemantics.copyTree(pathRoot, "guest"), hostRoot: pathSemantics.copyTree(pathRoot, "host"),
+}));
+const pathStdlib = pathSemantics.stdlibRows(pathRoot);
+const hostRequest = join(pathCases, "host-request.json");
+writeFileSync(hostRequest, `${JSON.stringify({
+  root: pathRoot,
+  rows: [...pathSemantics.rows(), ...pathStdlib.rust, ...pathStdlib.go],
+  mutations: pathMutations.map(({ row, hostRoot }) => ({ row, root: hostRoot })),
+})}\n`);
+const hostRun = run(nodePath, [join(gateFiles, "path-host.mjs"), hostRequest, join(pathCases, "host.json")]);
+if (hostRun.status !== 0) fail(`the host path reference failed: ${hostRun.stderr}`);
+const pathHost = JSON.parse(readFileSync(join(pathCases, "host.json"), "utf8"));
+const pathExpectations = JSON.parse(readFileSync(join(gateFiles, "path-expectations.json"), "utf8"));
+// The host reference outlives the scratch tree, beside the guests' raw rows.
+mkdirSync(join(evidence, "paths"), { recursive: true });
+for (const name of ["host-request.json", "host.json"]) copyFileSync(join(pathCases, name), join(evidence, "paths", name));
 
 // Mounts that must refuse.
 const mountCases = join(scratch, "mounts");
@@ -415,6 +474,8 @@ const plan = {
   mounts: { outsideLink: join(mountCases, "outside-link/project"), fifo: join(mountCases, "fifo/project") },
   outside,
   updateFrames,
+  dotdot: DOTDOT.map(name => ({ name, root: trees[name].root, request: requests[name].request })),
+  pathSemantics: { root: pathRoot, guests, mutations: pathMutations.map(({ row, guestRoot }) => ({ row, root: guestRoot })) },
 };
 const DECLARED = [
   ...STANDARD, "w5-faults", "w7-bad-handshake", "lifecycle-reuse", "lifecycle-close",
@@ -424,7 +485,7 @@ const DECLARED = [
   "init-corrupt-digest", "init-corrupt-module", "concurrent", "mount-outside-link", "mount-fifo",
   "mount-non-normal", "mount-duplicate", "mount-undeclared-parent", "mount-unsupported-kind",
   "option-unknown", "spelling-alias", "spelling-dotdot", "spelling-relative", "sc9013", "canary",
-  "w6-update-replay",
+  "w6-update-replay", "dotdot-fixture", "dotdot-missing", "path-semantics",
 ];
 
 const engines = {};
@@ -439,7 +500,7 @@ for (const engine of ["node", "bun"]) {
     ? [
       "--permission", "--allow-worker",
       `--allow-fs-read=${consumer}`, `--allow-fs-read=${cases}`, `--allow-fs-read=${mountCases}`,
-      `--allow-fs-read=${updateFrames}`, `--allow-fs-read=${recording.root}`, `--allow-fs-read=${out}`,
+      `--allow-fs-read=${updateFrames}`, `--allow-fs-read=${recording.root}`, `--allow-fs-read=${pathCases}`, `--allow-fs-read=${out}`,
       `--allow-fs-write=${out}`, "--import", `file://${join(consumer, "url-hooks.mjs")}`,
       join(consumer, "driver.mjs"), planPath,
     ]
@@ -664,6 +725,49 @@ for (const [engine, { driver, urls, oldEntry }] of Object.entries(engines)) {
   check(same(at("sc9013")?.transport?.calls, []), `${label("sc9013")}: the producer was reached`);
   check(at("sc9013")?.snapshot?.findings?.map(finding => finding.id).join() === "SC9013", `${label("sc9013")}: not the SC9013 refusal`);
 
+  // S3a fixture: native and owned answer the same exact violation at the
+  // positive call, nothing at the negative, and TypeScript is silent against
+  // the stub and the published types.
+  {
+    const tree = trees["dotdot-fixture"];
+    const source = readFileSync(join(tree.root, "App.tsx"), "utf8");
+    const start = source.indexOf("useLabel(name)");
+    const expectedRows = [{ id: "SC1001", rule: "strict-read-untracked", kind: "violation", path: join(tree.root, "App.tsx"), startByte: start, endByte: start + "useLabel(name)".length }];
+    equalToNative(label("dotdot-fixture"), at("dotdot-fixture"), native["dotdot-fixture"]);
+    check(native["dotdot-fixture"].snapshot?.status === "violation" && same(findingRows(native["dotdot-fixture"].snapshot), expectedRows),
+      `dotdot-fixture: native ${JSON.stringify(findingRows(native["dotdot-fixture"].snapshot))}`);
+    check(at("dotdot-fixture")?.transport?.exchanges > 0, `${label("dotdot-fixture")}: the producer was not reached`);
+    const missing = trees["dotdot-missing"];
+    const message = `--dependency-source "dep-dotdot": ${missing.root}/node_modules/dep-dotdot/src/hooks/index.jsx imports "../lib/read.js", which resolves to no source file`;
+    check(native["dotdot-missing"].status === 2 && native["dotdot-missing"].stdout === "" && same(native["dotdot-missing"].notes, [`solid-checker-rust: ${message}`]),
+      `dotdot-missing: native ${native["dotdot-missing"].status} ${JSON.stringify(native["dotdot-missing"].notes)}`);
+    check(at("dotdot-missing")?.ok === false && at("dotdot-missing").error === message && at("dotdot-missing").snapshot === undefined,
+      `${label("dotdot-missing")}: ${JSON.stringify(at("dotdot-missing"))?.slice(0, 400)}`);
+    for (const name of ["dotdot-fixture", "dotdot-missing", "dotdot-published"]) {
+      check(tscResults[name]?.status === 0 && tscResults[name].output === "", `${name}: tsc ${JSON.stringify(tscResults[name])}`);
+    }
+  }
+
+  // S3a path semantics: every owned row equals host POSIX on the same tree,
+  // or its pinned override; the old layer fails exactly the repaired rows.
+  {
+    const layers = at("path-semantics");
+    const ids = Object.keys(pathHost).sort();
+    check(ids.length === pathExpectations.rowCount, `${label("path-semantics")}: ${ids.length} rows, pinned ${pathExpectations.rowCount}`);
+    const fails = new Set(pathExpectations.oldLayerFails);
+    const notRun = new Set(pathExpectations.oldLayerNotRun);
+    for (const id of ids) {
+      const override = pathExpectations.overrides[id];
+      const expected = override ? { errno: override.errno, detail: override.detail } : pathHost[id];
+      check(same(layers?.owned?.[id], expected), `${label(`path/${id}`)}: owned ${JSON.stringify(layers?.owned?.[id])}, expected ${JSON.stringify(expected)}`);
+      const old = layers?.old?.[id];
+      if (notRun.has(id)) check(old === undefined, `${label(`path/${id}`)}: the old layer ran a row it cannot finish`);
+      else if (fails.has(id)) check(old !== undefined && !same(old, expected), `${label(`path/${id}`)}: the old layer did not fail a repaired row: ${JSON.stringify(old)}`);
+      else check(same(old, expected), `${label(`path/${id}`)}: the old layer differs on an unrepaired row: ${JSON.stringify(old)}`);
+    }
+    for (const id of [...fails, ...notRun, ...Object.keys(pathExpectations.overrides)]) check(id in pathHost, `path-expectations names unknown row ${id}`);
+  }
+
   const canary = at("canary");
   if (engine === "node") {
     check(canary?.spawn === "ERR_ACCESS_DENIED" && canary?.read === "ERR_ACCESS_DENIED", `${label("canary")}: ${JSON.stringify(canary)}`);
@@ -673,7 +777,11 @@ for (const [engine, { driver, urls, oldEntry }] of Object.entries(engines)) {
     for (const module of ["owned-worker.mjs", "owned-worker-core.mjs", "owned-host.mjs"]) {
       check(urls.includes(`file://${installed}/${module}`), `${engine}: ${module} was not resolved from the installed package (worker hooks absent?)`);
     }
-    for (const [module, prefix] of [["@tybys/wasm-util", "node_modules/@tybys/wasm-util/"], ["@napi-rs/wasm-runtime/fs", "node_modules/@napi-rs/wasm-runtime/"]]) {
+    // The owned worker's WASI runtime is the package's own vendored copy.
+    for (const module of ["vendor/wasm-util/lib/mjs/wasi/index.mjs", "vendor/wasm-util/lib/mjs/wasi/preview1.mjs", "vendor/wasm-util/lib/mjs/wasi/physical.mjs"]) {
+      check(urls.includes(`file://${installed}/${module}`), `${engine}: ${module} was not resolved from the installed package`);
+    }
+    for (const [module, prefix] of [["@napi-rs/wasm-runtime/fs", "node_modules/@napi-rs/wasm-runtime/"]]) {
       check(urls.some(url => url.startsWith(`file://${consumer}/${prefix}`)), `${engine}: ${module} was not resolved from the isolated install`);
     }
   } else {
@@ -698,6 +806,8 @@ const summary = {
   inputs: {
     nativeChecker: { path: nativeChecker, sha256: sha256(readFileSync(nativeChecker)) },
     nativeTypefacts: { path: nativeTypefacts, sha256: sha256(readFileSync(nativeTypefacts)) },
+    guests: Object.fromEntries(Object.entries(guests).map(([name, path]) => [name, sha256(readFileSync(path))])),
+    pathExpectationsSha256: sha256(readFileSync(join(gateFiles, "path-expectations.json"))),
     node: { path: nodePath, sha256: sha256(readFileSync(nodePath)), version: versionOf(nodePath) },
     bun: { path: bunPath, sha256: sha256(readFileSync(bunPath)), version: versionOf(bunPath) },
     updateFrames: { directory: updateFrames, root: recording.root, exchanges: recording.exchanges.length },

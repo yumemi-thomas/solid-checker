@@ -124,13 +124,47 @@ The pre-S2 entry (`require`, `import`, `checkSync`) runs from the same
 install under both engines. The packed `main`, `browser` and `types` fields,
 the absence of an `exports` map, and every pre-S2 packed file are checked.
 
+**Path semantics (S3a).** The owned worker's WASI runtime is the package's
+vendored `@tybys/wasm-util` copy, and the Node run must resolve it from the
+install.
+
+- **The controls:** `path-semantics.mjs` builds one disk tree of shapes:
+  - `..` at depths 1–4;
+  - `..` after a symlinked directory;
+  - relative, absolute and chained links;
+  - a dangling link and a loop;
+  - `again/again/f`;
+  - `f/.`, `f/..`, `missing/..`;
+  - trailing slashes, in the request and in stored link targets;
+  - a pnpm-like store inside the tree.
+
+  Two control guests (`guests/path-control`, raw WASI calls in Rust;
+  `guests/path-control-go`, Go `os` calls) run 261 rows over its mounted
+  copy. The rows cover every repaired operation crossed with the lookup
+  flags, dirfds (preopen, opened directory, file, closed), mutation flags
+  (`CREAT`/`EXCL`/`TRUNC`/`APPEND`, mkdir/rmdir/unlink), readlink buffers
+  (0, 1, len−1, len, len+16 with sentinels) and Rust std and Go stdlib rows.
+- **The reference:** `path-host.mjs` computes host POSIX on the same tree,
+  always under Node.
+- **What must hold:** every owned row equals the host, except the five
+  overrides pinned with reasons in `path-expectations.json` (WASI-level
+  ENOTCAPABLE and EBADF, unchanged ENOSYS, Go's guest lexical cleaning, the
+  retained final-slash drop). The upstream runtime must fail exactly the
+  pinned repaired rows and match the rest.
+- **The fixture:** `dotdot-fixture` and `dotdot-missing` run the
+  `dependency-source-dotdot` fixture, and the same tree with its `../`
+  module removed, against native. `tsc` must be silent on both, and on the
+  published rc.13 types.
+
 ## Evidence
 
 Each run writes `rust/target/wasm-parity/<timestamp>/`:
 - `summary.json`, recording images, engines, the packed tarball and
   manifest, and the dependency closure;
 - the raw native stdout and stderr of every native run;
-- each engine's plan, driver output, URL log and old-entry output.
+- each engine's plan, driver output, URL log and old-entry output;
+- `paths/host.json` and `paths/host-request.json`, the host POSIX answers
+  every path-semantics row was compared with.
 
 The scratch tree is removed only when the run passes.
 

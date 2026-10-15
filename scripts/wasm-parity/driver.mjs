@@ -273,6 +273,36 @@ record("option-unknown", await attempt(async () => {
 // Project spellings, each against its own native run.
 for (const spelling of plan.spellings) record(spelling.name, await once(spelling.root, spelling.request));
 
+// S3a: the semantic fixture with a `../` dependency import, and the same tree
+// with that module missing, each through a fresh public checker.
+for (const item of plan.dotdot) record(item.name, await once(item.root, item.request));
+
+// S3a: the control guests' real WASI path calls, through the owned runtime
+// and, as the old-layer control, through the pinned upstream one.
+{
+  const semantics = await import("./path-semantics.mjs");
+  const { WASI: Owned } = await import("solid-checker-wasm/vendor/wasm-util/lib/mjs/wasi/index.mjs");
+  const { WASI: Old } = await import("@tybys/wasm-util");
+  const { memfs } = await import("@napi-rs/wasm-runtime/fs");
+  const { root, guests, mutations } = plan.pathSemantics;
+  const rust = new WebAssembly.Module(readFileSync(guests.rust));
+  const go = new WebAssembly.Module(readFileSync(guests.go));
+  const lookups = semantics.rows();
+  const stdlib = semantics.stdlibRows(root);
+  const layers = {};
+  for (const [label, WASI] of [["owned", Owned], ["old", Old]]) {
+    const run = (module, list, tree, checks) => semantics.runGuest({
+      WASI, memfs, materializeMount, mount: validateMount(owned.mountDirectory(tree)), module, checks,
+      rowArguments: list.map(row => semantics.guestArgument(row, tree)),
+    });
+    const runnable = list => (label === "old" ? list.filter(semantics.oldLayerRuns) : list);
+    const results = { ...run(rust, runnable([...lookups, ...stdlib.rust]), root), ...run(go, stdlib.go, root) };
+    for (const { row, root: copy } of mutations) Object.assign(results, run(rust, [row], copy, { [row.id]: `${copy}/${row.check}` }));
+    layers[label] = results;
+  }
+  record("path-semantics", layers);
+}
+
 // An unsupported installed runtime is answered before any producer program.
 record("sc9013", await once(plan.cases.sc9013.root, plan.cases.sc9013.request));
 
@@ -290,7 +320,7 @@ record("sc9013", await once(plan.cases.sc9013.root, plan.cases.sc9013.request));
   const directory = plan.updateFrames;
   const recording = JSON.parse(readFileSync(join(directory, "frames.json"), "utf8"));
   const { producer } = await loadArtifacts();
-  const { WASI } = await import("@tybys/wasm-util");
+  const { WASI } = await import("solid-checker-wasm/vendor/wasm-util/lib/mjs/wasi/index.mjs");
   const { memfs } = await import("@napi-rs/wasm-runtime/fs");
   const { fs, vol } = memfs({}, "/");
   materializeMount(vol, validateMount(owned.mountDirectory(recording.root)));

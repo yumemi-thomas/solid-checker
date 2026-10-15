@@ -126,6 +126,14 @@ package trusted as a unit; it does not authenticate it. The producer
 handshake checks compatibility only. Neither reactor can read the host disk:
 both see only the mount. Certification is not served.
 
+**WASI runtime.** The worker runs the package's own copy of the pinned
+`@tybys/wasm-util` 0.10.3 WASI runtime (`vendor/wasm-util`; see its NOTICE,
+LICENSE, UPSTREAM.json and `owned.patch`). Its path imports resolve paths
+physically, as the host does: symlinks per component, `..` from the directory
+actually reached. The upstream runtime's lexical `..` handling sent paths such
+as `src/../lib/x.js` to the wrong file. Go's own guest-side lexical `..`
+cleaning in the producer is not something a host layer can change.
+
 **Tested:**
 - Node 24.11.1 and Bun 1.4.0 on macOS arm64, through `make wasm-parity`
   (scripts/wasm-parity/README.md);

@@ -7,7 +7,9 @@
 // a caller passes to `createOwnedChecker` or `check` reaches `adapters`. The
 // adapters exist for the repository's parity gate, which wraps the producer's
 // exports or these imports to inject faults as negative controls.
-import { WASI } from "@tybys/wasm-util";
+// The pinned @tybys/wasm-util WASI runtime, vendored with physical path
+// resolution (vendor/wasm-util/NOTICE). Only this worker uses the copy.
+import { WASI } from "./vendor/wasm-util/lib/mjs/wasi/index.mjs";
 import { memfs } from "@napi-rs/wasm-runtime/fs";
 import { createTransport } from "./owned-host.mjs";
 import { materializeMount } from "./owned-mount.mjs";

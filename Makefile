@@ -87,7 +87,7 @@ ARCHIVE_ENV = SOLID_CHECKER_RC3_ARCHIVE_ROOT="$(ARCHIVES_ROOT)/2.0.0-rc.3/node_m
   SOLID_CHECKER_RC9_ARCHIVE_ROOT="$(ARCHIVES_ROOT)/2.0.0-rc.9/node_modules" \
   SOLID_CHECKER_RC13_ARCHIVE_ROOT="$(ARCHIVES_ROOT)/2.0.0-rc.13/node_modules"
 
-.PHONY: build build-typefacts build-rust build-checker-debug build-checker-release build-wasm-package package test test-rust test-probe-harness test-cli verify verify-delta verify-performance phase0-baseline phase16-report phase16-check phase18-audit phase19-audit phase20-ledger phase21-ledger compiler-facts-identity corpus contract-corpus contract-differential contract-conformance contracts contracts-check coverage coverage-update tsc-oracle tsc-oracle-provision audited-archives-provision tsc-ownership ownership-gate obligation-audit wasm-parity clean clean-verify
+.PHONY: build build-typefacts build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-parity-guests package test test-rust test-probe-harness test-cli verify verify-delta verify-performance phase0-baseline phase16-report phase16-check phase18-audit phase19-audit phase20-ledger phase21-ledger compiler-facts-identity corpus contract-corpus contract-differential contract-conformance contracts contracts-check coverage coverage-update tsc-oracle tsc-oracle-provision audited-archives-provision tsc-ownership ownership-gate obligation-audit wasm-parity clean clean-verify
 
 build: build-rust
 
@@ -123,12 +123,21 @@ package: build-typefacts
 build-wasm-package: build-typefacts
 	$(CERTIFICATION_ENV) SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" $(BUN) run --cwd packages/wasm build
 
+# The WASM parity gate's path-semantics control guests (S3a): a Rust program
+# making raw WASI path calls, and a Go program making os calls. Neither is part
+# of the rust/ workspace or the producer's source identity.
+build-wasm-parity-guests:
+	cargo +$(RUST_TOOLCHAIN) build --locked --manifest-path scripts/wasm-parity/guests/path-control/Cargo.toml \
+	  --target wasm32-wasip1 --release --target-dir rust/target/wasm-parity-guests
+	GOOS=wasip1 GOARCH=wasm GOTOOLCHAIN=local go build -trimpath \
+	  -o rust/target/wasm-parity-guests/path-control-go.wasm ./scripts/wasm-parity/guests/path-control-go
+
 # The owned check, packed and installed in isolation, against the native
 # ordinary check with --no-package-contracts (scripts/wasm-parity.mjs). The
 # gate builds nothing: the package, the native checker and the bridge test's
 # recorded update frames are made here first, and the gate fails on any it
 # cannot find. Uncached, by design.
-wasm-parity: build-wasm-package build-checker-debug tsc-oracle-provision
+wasm-parity: build-wasm-package build-checker-debug tsc-oracle-provision build-wasm-parity-guests
 	scratch=$$(mktemp -d "$${TMPDIR:-/tmp}/sc-wasm-parity.XXXXXX") && mkdir -p "$$scratch/n2-tmp" && \
 	  TMPDIR="$$scratch/n2-tmp" TYPEFACTS_BRIDGE_FRAMES="$$scratch/update-frames" \
 	  $(CERTIFICATION_ENV) SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" \

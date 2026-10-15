@@ -24,6 +24,7 @@
     "owned-worker.mjs",
     "owned-worker-core.mjs",
     "owned",
+    "vendor",
     "scripts"
   ],
   "scripts": {

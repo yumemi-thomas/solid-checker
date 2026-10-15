@@ -243,6 +243,10 @@ SOLID_CHECKER_BIN="$checker_bin" \
 step build-wasm-package
 bun install --cwd packages/wasm --ignore-scripts --no-progress --frozen-lockfile
 bun run --cwd packages/wasm build
+cargo +1.97 build --locked --manifest-path scripts/wasm-parity/guests/path-control/Cargo.toml \
+  --target wasm32-wasip1 --release --target-dir rust/target/wasm-parity-guests
+GOOS=wasip1 GOARCH=wasm GOTOOLCHAIN=local go build -trimpath \
+  -o rust/target/wasm-parity-guests/path-control-go.wasm ./scripts/wasm-parity/guests/path-control-go
 
 step wasm-parity
 wasm_parity_scratch=$(mktemp -d "${TMPDIR:-/tmp}/sc-wasm-parity.XXXXXX")

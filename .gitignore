@@ -442,6 +442,8 @@ docs/package-contract-v2/phase21/*measurement.json
 !fixtures/reactive-ir/dependency-source-program/node_modules/**
 !fixtures/reactive-ir/dependency-source-program/legacy/node_modules/
 !fixtures/reactive-ir/dependency-source-program/legacy/node_modules/**
+!fixtures/reactive-ir/dependency-source-dotdot/node_modules/
+!fixtures/reactive-ir/dependency-source-dotdot/node_modules/**
 !fixtures/reactive-ir/dependency-source-default-include/node_modules/
 !fixtures/reactive-ir/dependency-source-default-include/node_modules/**
 !fixtures/reactive-ir/dependency-source-context-getter/node_modules/
