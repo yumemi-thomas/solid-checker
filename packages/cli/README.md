@@ -180,12 +180,22 @@ The `default` format prints the same style of source frames, severity markers,
 evidence labels, and error summary used by Oxlint. Use `--format json` for
 machine-readable findings or `--format text` for compact output.
 
-Optimized macOS and Linux checks retain a per-project TypeScript and analysis
-session for up to two idle minutes, so repeated invocations reuse coherent
-facts instead of rebuilding the project. Set `SOLID_CHECKER_DAEMON=0` to force
-a one-shot check or `SOLID_CHECKER_DAEMON_IDLE_SECS=<seconds>` to change the
-idle lifetime. The default process-tree resident-memory ceiling is 2048 MiB;
-change it with `SOLID_CHECKER_DAEMON_MAX_RSS_MB=<MiB>` (`0` disables it).
+Optimized macOS and Linux checks that have no effective `--dependency-source`
+selection retain a per-project TypeScript and analysis session for up to two
+idle minutes, so repeated invocations reuse coherent facts instead of
+rebuilding the project. A check whose effective selection is nonempty (a named
+list, `*`, or the `*` that a declared `--runtime-target` and `--runtime-build`
+select by default) is **never** served from a retained session: it runs the
+one-shot path and opens new TypeScript programs for every invocation, so no
+program or inventory from an earlier invocation answers it (ADR 0311). That
+costs a full project check per invocation, which an adapter that lints many
+files pays synchronously; it does not promise one filesystem snapshot within a
+single run. Pass `--no-dependency-source` (or set `dependencySource: false`)
+to bind packages through contracts and keep the retained session. Set
+`SOLID_CHECKER_DAEMON=0` to force a one-shot check for every mode or
+`SOLID_CHECKER_DAEMON_IDLE_SECS=<seconds>` to change the idle lifetime of a
+retained session. The default process-tree resident-memory ceiling is 2048
+MiB; change it with `SOLID_CHECKER_DAEMON_MAX_RSS_MB=<MiB>` (`0` disables it).
 `SOLID_CHECKER_TIMINGS=1` writes cache-hit, generation, latency, and payload
 telemetry as JSON on stderr.
 

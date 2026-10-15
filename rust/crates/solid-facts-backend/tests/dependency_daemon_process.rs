@@ -1,6 +1,12 @@
-//! ADR 0296: a retained dependency-source check (ADRs 0284, 0291) answers
-//! exactly what a fresh one-shot check answers: the same canonical JSON and
-//! the same notes, cold, warm, and after each kind of input change.
+//! ADR 0311 (which supersedes ADR 0296's retention of dependency-source
+//! programs): a check whose effective `--dependency-source` selection is
+//! nonempty is a one-shot check even when the daemon is requested, and answers
+//! what a disabled daemon answers, cold, repeated, after each kind of input
+//! change and after the change is restored. A check with no selection keeps its
+//! daemon, and the base daemon regressions here (idle, truncation, membership,
+//! relative paths, failed refresh) are built with an explicit
+//! `--no-dependency-source`, so none of them silently becomes a one-shot test.
+//! `dependency_fresh_native_process.rs` holds the freshness and routing cases.
 //!
 //! Every case runs on a copy of a fixture in a temporary directory, never on
 //! the checked-in tree: a live daemon owns a sibling tsconfig in its project's
@@ -114,15 +120,6 @@ impl Run {
         })
     }
 
-    /// The retained program's generation: 1 after the analyzed program was
-    /// opened, one more for every edit it took instead.
-    fn generation(&self) -> Option<u64> {
-        self.stderr.lines().find_map(|line| {
-            let value: serde_json::Value = serde_json::from_str(line).ok()?;
-            (value["mode"] == "retained-daemon").then(|| value["generation"].as_u64())?
-        })
-    }
-
     fn notes(&self) -> Vec<&str> {
         self.stderr
             .lines()
@@ -153,14 +150,25 @@ fn command(typefacts: &str, project: &Path, selection: &[&str], retained: bool) 
     for specifier in selection {
         command.args(["--dependency-source", specifier]);
     }
+    // No selection is the base check, stated rather than left to the implicit
+    // default, which a Solid Vite plugin in the project would turn on.
+    if selection.is_empty() {
+        command.arg("--no-dependency-source");
+    }
     command
 }
 
 fn check(typefacts: &str, project: &Path, selection: &[&str], retained: bool) -> Run {
-    finish(command(typefacts, project, selection, retained), retained)
+    // `retained` asks for the daemon; ADR 0311: only a check with no selection
+    // gets it.
+    finish(
+        command(typefacts, project, selection, retained),
+        retained && selection.is_empty(),
+    )
 }
 
-/// Run `command`, which must succeed, through a daemon iff `retained`.
+/// Run `command`, which must succeed, through a daemon iff `retained` says it
+/// is expected to be.
 fn finish(mut command: Command, retained: bool) -> Run {
     let output = command.output().unwrap();
     let stderr = String::from_utf8(output.stderr).unwrap();
@@ -200,7 +208,7 @@ fn selection_of(name: &str) -> Vec<String> {
 }
 
 #[test]
-fn a_retained_dependency_source_check_is_the_one_shot_check() {
+fn a_requested_daemon_never_serves_a_dependency_source_check() {
     let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
         return;
     };
@@ -211,20 +219,28 @@ fn a_retained_dependency_source_check_is_the_one_shot_check() {
             vec!["*"],
         ];
         for (index, selection) in selections.iter().enumerate() {
+            assert!(!selection.is_empty(), "{name}");
             let scratch = Scratch::new(name, &format!("same-{name}-{index}"));
+            let sockets = SocketDir::new(&format!("same-{index}"));
             let context = format!("{name} {selection:?}");
             let fresh = check(&typefacts, &scratch.project, selection, false);
             assert!(
                 scratch.siblings().is_empty(),
                 "{context}: one-shot left its sibling"
             );
-            let cold = check(&typefacts, &scratch.project, selection, true);
-            assert_eq!(cold.cache_hit(), Some(false), "{context}");
-            let warm = check(&typefacts, &scratch.project, selection, true);
-            assert_eq!(warm.cache_hit(), Some(true), "{context}");
+            let requested = || {
+                let mut requested = command(&typefacts, &scratch.project, selection, true);
+                requested.env("TMPDIR", &sockets.0);
+                requested
+            };
+            let cold = finish(requested(), false);
+            assert_eq!(cold.cache_hit(), None, "{context}");
+            let warm = finish(requested(), false);
+            assert_eq!(warm.cache_hit(), None, "{context}");
             assert_same(&cold, &fresh, &context);
             assert_same(&warm, &fresh, &context);
-            // A retained program writes nothing into the project either: its
+            assert!(sockets.sockets().is_empty(), "{context}: a daemon started");
+            // Nothing is written into the project: the generated
             // configuration is a scratch file opened at a logical path.
             let siblings = scratch.siblings();
             assert!(siblings.is_empty(), "{context}: {siblings:?}");
@@ -232,55 +248,51 @@ fn a_retained_dependency_source_check_is_the_one_shot_check() {
     }
 }
 
-/// How a retained daemon took a change.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum Taken {
-    /// As an edit of the retained analyzed program.
-    Edit,
-    /// By opening the analyzed program again.
-    Reopened,
-}
-
-/// Cold daemon, `mutate`, then two retained checks and a forced fresh one:
-/// both retained answers are the fresh answer, the second from the cache,
-/// the daemon took the change as `taken` says, and the mutation moved
-/// something, so the agreement is not vacuous.
+/// A daemon-requested dependency-source check, a repeat, `mutate`, one more
+/// and a forced disabled one, then the tree restored: every requested answer
+/// is the disabled answer, none of them touches a daemon, the mutation moved
+/// the findings (so the agreement is not vacuous), and the restoration returns
+/// the first answer.
 fn mutation_case(
     typefacts: &str,
     name: &str,
     tag: &str,
     selection: &[&str],
-    taken: Taken,
     prepare: impl FnOnce(&Scratch),
     mutate: impl FnOnce(&Scratch),
 ) {
     let scratch = Scratch::new(name, tag);
+    let sockets = SocketDir::new(tag);
     prepare(&scratch);
-    let before = check(typefacts, &scratch.project, selection, true);
-    let warm = check(typefacts, &scratch.project, selection, true);
-    assert_eq!(warm.cache_hit(), Some(true), "{tag}");
+    let requested = || {
+        let mut requested = command(typefacts, &scratch.project, selection, true);
+        requested.env("TMPDIR", &sockets.0);
+        finish(requested, false)
+    };
+    let before = requested();
+    let repeat = requested();
+    assert_same(&repeat, &before, tag);
+    let backup = scratch.root.join("backup");
+    copy_tree(&scratch.project, &backup);
     mutate(&scratch);
-    let retained = check(typefacts, &scratch.project, selection, true);
-    assert_eq!(retained.cache_hit(), Some(false), "{tag}");
-    assert_eq!(
-        retained.generation(),
-        Some(match taken {
-            Taken::Edit => 2,
-            Taken::Reopened => 1,
-        }),
-        "{tag}: {}",
-        retained.stderr
-    );
-    let again = check(typefacts, &scratch.project, selection, true);
-    assert_eq!(again.cache_hit(), Some(true), "{tag}");
+    let after = requested();
     let fresh = check(typefacts, &scratch.project, selection, false);
-    assert_same(&retained, &fresh, tag);
-    assert_same(&again, &fresh, tag);
+    assert_same(&after, &fresh, tag);
     assert_ne!(
         before.json()["findings"],
         fresh.json()["findings"],
         "{tag}: the mutation moved nothing"
     );
+    fs::remove_dir_all(&scratch.project).unwrap();
+    copy_tree(&backup, &scratch.project);
+    let restored = requested();
+    assert_same(&restored, &before, tag);
+    assert_same(
+        &restored,
+        &check(typefacts, &scratch.project, selection, false),
+        tag,
+    );
+    assert!(sockets.sockets().is_empty(), "{tag}: a daemon started");
 }
 
 fn edit(path: &Path, from: &str, to: &str) {
@@ -299,7 +311,6 @@ fn an_edited_package_runtime_file_is_the_one_shot_answer() {
         "dependency-source",
         "package-edit",
         &["dep-hooks"],
-        Taken::Edit,
         |_| {},
         |scratch| {
             edit(
@@ -322,7 +333,6 @@ fn a_nearer_mjs_beside_a_js_closure_file_is_the_one_shot_answer() {
         "dependency-source-all",
         "mjs",
         &["*"],
-        Taken::Reopened,
         |scratch| fs::remove_file(scratch.path(mjs)).unwrap(),
         |scratch| {
             fs::copy(
@@ -344,7 +354,6 @@ fn a_changed_exports_map_is_the_one_shot_answer() {
         "dependency-source",
         "exports",
         &["dep-hooks"],
-        Taken::Reopened,
         |_| {},
         |scratch| {
             edit(
@@ -367,7 +376,6 @@ fn an_edited_project_file_is_the_one_shot_answer() {
             "dependency-source",
             &format!("project-edit-{}", selection[0].replace('*', "all")),
             selection,
-            Taken::Edit,
             |_| {},
             |scratch| {
                 edit(
@@ -391,7 +399,6 @@ fn an_edited_host_fold_runtime_target_is_the_one_shot_answer() {
         "dependency-source-proxy-store",
         "host-fold",
         &["dep-query"],
-        Taken::Reopened,
         |_| {},
         |scratch| {
             edit(
@@ -415,7 +422,6 @@ fn an_edited_folded_package_file_is_the_one_shot_answer() {
         "dependency-source-proxy-store",
         "folded-edit",
         &["dep-query"],
-        Taken::Reopened,
         |_| {},
         |scratch| {
             edit(
@@ -545,7 +551,7 @@ fn a_declared_host_analyzes_every_solid_package_from_source_by_default() {
 }
 
 #[test]
-fn a_retained_default_check_is_the_one_shot_check() {
+fn a_requested_daemon_for_the_default_is_one_shot_and_an_opted_out_check_keeps_its_daemon() {
     let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
         return;
     };
@@ -555,11 +561,13 @@ fn a_retained_default_check_is_the_one_shot_check() {
     let (cold_ok, cold) = invoke(&typefacts, &scratch.project, &HOST, true);
     let (warm_ok, warm) = invoke(&typefacts, &scratch.project, &HOST, true);
     assert!(cold_ok && warm_ok, "{}\n{}", cold.stderr, warm.stderr);
-    assert_eq!(cold.cache_hit(), Some(false), "{}", cold.stderr);
-    assert_eq!(warm.cache_hit(), Some(true), "{}", warm.stderr);
+    // ADR 0311: the default is the effective selection `*`, so a requested
+    // daemon is bypassed, cold and repeated.
+    assert_eq!(cold.cache_hit(), None, "{}", cold.stderr);
+    assert_eq!(warm.cache_hit(), None, "{}", warm.stderr);
     assert_same(&cold, &fresh, "default cold");
     assert_same(&warm, &fresh, "default warm");
-    // The retained default is the explicit `*` selection's daemon.
+    // The explicit `*` is the same one-shot check.
     let explicit = invoke(
         &typefacts,
         &scratch.project,
@@ -567,28 +575,40 @@ fn a_retained_default_check_is_the_one_shot_check() {
         true,
     )
     .1;
-    assert_eq!(explicit.cache_hit(), Some(true), "{}", explicit.stderr);
+    assert_eq!(explicit.cache_hit(), None, "{}", explicit.stderr);
     assert_same(&explicit, &fresh, "explicit `*` against the default");
-    // An opted-out retained check is a contract-mode daemon's answer.
+    // An opted-out check has no selection and keeps its contract-mode daemon:
+    // a real cold and a real warm hit.
     let opted_out = with_host(&["--no-dependency-source"]);
     let retained = invoke(&typefacts, &scratch.project, &opted_out, true).1;
+    let warm_retained = invoke(&typefacts, &scratch.project, &opted_out, true).1;
     let one_shot = invoke(&typefacts, &scratch.project, &opted_out, false).1;
     assert!(retained.cache_hit().is_some(), "{}", retained.stderr);
+    assert_eq!(
+        warm_retained.cache_hit(),
+        Some(true),
+        "{}",
+        warm_retained.stderr
+    );
     assert_same(&retained, &one_shot, "opted out");
+    assert_same(&warm_retained, &one_shot, "opted out, warm");
     assert!(source_notes(&retained).is_empty(), "{}", retained.stderr);
 }
 
 // Review round 1 of ADR 0296.
 
 /// Finding 1: a refresh that fails part-way has already read the edits it
-/// failed on. The request after it must still answer them.
+/// failed on. The request after it must still answer them. This is a base
+/// daemon case; the dependency-source failure case is one-shot and lives in
+/// `dependency_fresh_native_process.rs`.
 #[test]
 fn an_aborted_refresh_does_not_consume_its_edits() {
     let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
         return;
     };
-    for selection in [&["dep-hooks"][..], &[][..]] {
-        let tag = format!("aborted-{}", selection.len());
+    {
+        let selection: &[&str] = &[];
+        let tag = "aborted-base".to_owned();
         let scratch = Scratch::new("dependency-source", &tag);
         // A second project file, after `App.tsx` in the order a refresh
         // reads them.
@@ -605,17 +625,9 @@ fn an_aborted_refresh_does_not_consume_its_edits() {
         // manifest, which preparation reads after both programs took the
         // edit, or a project file the refresh reads after `App.tsx` and
         // refuses as not UTF-8.
-        let broken = if selection.is_empty() {
-            scratch.path("Zed.tsx")
-        } else {
-            scratch.path("node_modules/dep-hooks/package.json")
-        };
+        let broken = scratch.path("Zed.tsx");
         let original = fs::read(&broken).unwrap();
-        if selection.is_empty() {
-            fs::write(&broken, b"export {};\n// \xff\xfe\n").unwrap();
-        } else {
-            fs::write(&broken, b"{ not json").unwrap();
-        }
+        fs::write(&broken, b"export {};\n// \xff\xfe\n").unwrap();
         let failed = command(&typefacts, &scratch.project, selection, true)
             .output()
             .unwrap();
@@ -666,7 +678,6 @@ fn an_import_edit_that_changes_program_membership_is_the_one_shot_answer() {
             "dependency-source",
             &format!("membership-{direction}"),
             &["dep-hooks"],
-            Taken::Reopened,
             |scratch| helper_program(scratch, from),
             |scratch| fs::write(scratch.path("App.tsx"), to).unwrap(),
         );
@@ -712,7 +723,7 @@ fn a_relative_catalog_path_is_read_from_the_callers_directory() {
                 .args(["--accepted-contracts", "catalog.json"]);
             command
         };
-        let warm = finish(from(&with_catalog, true), true);
+        let warm = finish(from(&with_catalog, true), selection.is_empty());
         assert_same(&warm, &finish(from(&with_catalog, false), false), &tag);
         let fresh = from(&without, false).output().unwrap();
         assert!(
@@ -752,6 +763,18 @@ impl SocketDir {
         assert_eq!(sockets.len(), 1, "{sockets:?}");
         sockets.into_iter().next().unwrap()
     }
+
+    /// Every daemon socket in this private directory, possibly none.
+    fn sockets(&self) -> Vec<PathBuf> {
+        fs::read_dir(&self.0)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .filter(|path| {
+                path.extension()
+                    .is_some_and(|extension| extension == "sock")
+            })
+            .collect()
+    }
 }
 
 impl Drop for SocketDir {
@@ -769,7 +792,7 @@ fn the_idle_watchdog_spares_an_active_request() {
     let scratch = Scratch::new("dependency-source", "idle");
     let sockets = SocketDir::new("idle");
     let retained = || {
-        let mut command = command(&typefacts, &scratch.project, &["dep-hooks"], true);
+        let mut command = command(&typefacts, &scratch.project, &[], true);
         command
             .env("TMPDIR", &sockets.0)
             .env("SOLID_CHECKER_DAEMON_IDLE_SECS", "1");
@@ -800,7 +823,7 @@ fn a_truncated_daemon_response_is_not_an_answer() {
     let scratch = Scratch::new("dependency-source", "truncated");
     let sockets = SocketDir::new("truncated");
     let retained = || {
-        let mut command = command(&typefacts, &scratch.project, &["dep-hooks"], true);
+        let mut command = command(&typefacts, &scratch.project, &[], true);
         command.env("TMPDIR", &sockets.0);
         command
     };
@@ -830,7 +853,7 @@ fn a_truncated_daemon_response_is_not_an_answer() {
     });
     let output = retained().output().unwrap();
     relay.join().unwrap();
-    let fresh = check(&typefacts, &scratch.project, &["dep-hooks"], false);
+    let fresh = check(&typefacts, &scratch.project, &[], false);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert_eq!(
         String::from_utf8_lossy(&output.stdout),
@@ -1001,6 +1024,9 @@ fn a_read_only_project_is_analyzed_from_source() {
         for arguments in [HOST.to_vec(), with_host(&["--dependency-source", "*"])] {
             let (success, run) = invoke(&typefacts, &scratch.project, &arguments, retained);
             assert!(success, "retained {retained} {arguments:?}: {}", run.stderr);
+            // Asking for the daemon never reaches one for a dependency-source
+            // check (ADR 0311).
+            assert_eq!(run.cache_hit(), None, "retained {retained}: {}", run.stderr);
             assert_eq!(
                 stdout(&run),
                 stdout(&writable),

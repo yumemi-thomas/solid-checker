@@ -30513,6 +30513,44 @@ shorter than its header is a daemon failure; and fields the daemon drops
 inputs) keep a check one-shot in both modes. Still open: a request that fails
 costs the next one a full reopen.
 
+## A dependency-source check is a fresh one-shot check (2026-10-15, ADR 0311)
+
+Cross-request status. A check whose effective `--dependency-source` selection
+is nonempty (named, `*`, or the implicit `*`) no longer reaches the retained
+daemon; `--serve` with a selection refuses first. So the retained original
+inventory and the equal-`prepared` analyzed facts of ADR 0296 no longer answer
+it, and the three unwatched-input cases it named (an in-place declaration edit,
+a deleted declaration, an edited extended tsconfig) plus an untracked helper
+acquired through a declaration edit are fresh. Each was red at the previous
+commit (a requested daemon answered the stale observation with `cacheHit` true
+at generation 2) and is green after. No snapshot moved; the one-shot gates
+(coverage, ownership, contract corpus, tsc oracle) force the daemon off.
+
+Cost, measured once on matched release images and not a benchmark: a warm
+native repeat on `probus-hk` is about 5.3 s instead of 0.21 s, and the real
+ESLint adapter pays about 5.4 s per file pass (six native calls, 32.2 s
+against 6.8 s on six passes). A contract opt-out keeps its daemon and the
+adapter's cross-pass cache (unchanged retention behavior; one run observed
+nearly equal six-pass lint time, 4388 against 4385 ms).
+
+Open, unchanged by this entry:
+- in-run coherence (RS3): the original open, the selector walk and the analyzed
+  open read at different instants, and nothing joins them;
+- complete input freshness for positive source authority (B2) and the
+  primitive-runtime question (RS1); a producer filesystem-operation manifest
+  is a held candidate that needs its own premise (non-VFS reads, overlay
+  clones, virtual libraries, cached resolutions, conflicting observations of
+  one path, an explicit coherence policy);
+- the base-mode daemon keeps its trust limits (stamp-unchanged files are not
+  reread; declarations, extended configs and untracked `node_modules` files are
+  not watched) and its findings can depend on them; it is neither improved nor
+  certified;
+- the unreachable dependency worker in `daemon.rs` and its obsolete wire field
+  remain, to be removed by a separate reviewed cleanup that must show no
+  contract behavior or rollback path goes with it;
+- the retained session library, WASM and adapter callbacks that do not invoke
+  the native executable are outside this routing.
+
 ## Source is the default under a declared host (2026-10-14, ADR 0297)
 
 An ordinary analysis with both `--runtime-target` and `--runtime-build` and no

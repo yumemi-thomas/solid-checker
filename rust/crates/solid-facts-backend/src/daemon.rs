@@ -11,10 +11,14 @@
 //! whole session; changed file contents become incremental overlay updates.
 //! The response body is byte-identical to one-shot output.
 //!
-//! A `--dependency-source` daemon (ADR 0296) serves one selection under one
-//! runtime host. It also retains the project's own program and, before every
-//! answer, prepares and folds again and compares both with what it holds;
-//! any difference reopens the analyzed program.
+//! A check whose effective `--dependency-source` selection is nonempty is not
+//! served from here (ADR 0311): the executable runs the one-shot path, which
+//! opens a new original program for preparation and a new analyzed program, so
+//! no program, inventory or fact table of an earlier invocation answers it.
+//! `--serve` refuses such a selection before it touches a socket, a program or
+//! a producer. ADR 0296 retained those programs and trusted what the base
+//! daemon trusts; the dependency-source worker below is no longer reached, and
+//! removing it is a separate change.
 use std::{
     collections::{BTreeMap, HashSet},
     error::Error,
@@ -137,6 +141,12 @@ pub fn eligible(request: &Request) -> bool {
         // Runtime resolution runs project code per check and is not part of
         // the retained identity (ADR 0220).
         && !request.runtime_resolution
+        // ADR 0311: an effective dependency-source selection is answered by a
+        // fresh one-shot check, whatever preparation later selects. The
+        // selection is the named list, `*`, or the implicit `*` that `main`
+        // applies before this call. The decision reads the request, never an
+        // earlier answer or a preparation output.
+        && request.dependency_sources.is_empty()
         && retained_format(&request.format)
         && carried(request)
 }
@@ -1039,6 +1049,16 @@ fn directory_stamp(path: &Path) -> Option<FileStamp> {
 }
 
 pub fn serve(request: &Request) -> Result<i32, Box<dyn Error>> {
+    // ADR 0311: first, before the live-socket early success, the bind, any
+    // state or any producer. `--serve` is handled before `eligible`, and the
+    // implicit default excludes it, so a bare `--serve` stays a base server.
+    if !request.dependency_sources.is_empty() {
+        return Err(
+            "--serve does not retain a --dependency-source program (ADR 0311): \
+             a dependency-source check is a one-shot check"
+                .into(),
+        );
+    }
     let implementation = implementation_identity()?;
     let mut request = request.clone();
     request.dependency_sources = normalized_selection(&request.dependency_sources);
@@ -2005,13 +2025,54 @@ mod tests {
     };
 
     use super::{
-        CheckHeader, CheckRequest, FileRefresh, ProcessMemory, cache_retention_from, enabled_from,
-        explicit_inputs, fingerprint_file, hash_file, inference_inputs_current,
-        macho_build_identity, normalize_enablement, parse_process_memory,
-        process_tree_resident_bytes_from, refresh_file_with, retained_format, socket_path,
+        CheckHeader, CheckRequest, FileRefresh, ProcessMemory, Request, cache_retention_from,
+        eligible, enabled_from, explicit_inputs, fingerprint_file, hash_file,
+        inference_inputs_current, macho_build_identity, normalize_enablement, parse_process_memory,
+        process_tree_resident_bytes_from, refresh_file_with, retained_format, serve, socket_path,
         socket_path_in_domain, timing_value, verify_implementation,
     };
     use solid_reactive_ir::{CacheRetention, RuntimeEnvironment};
+
+    /// An ordinary check of an absolute project, daemon-eligible in every
+    /// respect but its effective dependency-source selection.
+    fn ordinary(selection: &[&str]) -> Request {
+        serde_json::from_value(serde_json::json!({
+            "projectId": "/project/tsconfig.json",
+            "generation": 1,
+            "sources": [],
+            "typefactsExecutable": "/bin/typefacts",
+            "dependencySources": selection,
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn an_effective_dependency_selection_is_never_eligible() {
+        // ADR 0311. The request alone decides: a named list, `*`, a
+        // duplicate, a mix and a selection that selects nothing all bypass.
+        assert!(eligible(&ordinary(&[])));
+        for selection in [
+            &["dep"][..],
+            &["*"][..],
+            &["dep", "dep"][..],
+            &["dep", "*"][..],
+            &["package-that-selects-nothing"][..],
+            &[""][..],
+        ] {
+            assert!(!eligible(&ordinary(selection)), "{selection:?}");
+        }
+    }
+
+    #[test]
+    fn serve_refuses_a_selection_before_it_reads_anything_else() {
+        // The refusal is the first statement: this project, producer and
+        // runtime do not exist, and no socket is bound.
+        for selection in [&["dep"][..], &["*"][..], &[""][..]] {
+            let error = serve(&ordinary(selection)).unwrap_err().to_string();
+            assert!(error.contains("ADR 0311"), "{error}");
+            assert!(error.contains("one-shot check"), "{error}");
+        }
+    }
 
     #[test]
     fn release_default_and_explicit_daemon_policy_are_unambiguous() {

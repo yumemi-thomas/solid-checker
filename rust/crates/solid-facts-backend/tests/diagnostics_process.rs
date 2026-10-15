@@ -5,6 +5,10 @@ mod support;
 #[path = "dependency_daemon_process.rs"]
 mod dependency_daemon_process;
 
+// ADR 0311: a dependency-source check is a fresh one-shot check.
+#[path = "dependency_fresh_native_process.rs"]
+mod dependency_fresh_native_process;
+
 use support::{assert_rule_findings, diagnostic_fixture, findings_for_rule};
 
 #[test]
