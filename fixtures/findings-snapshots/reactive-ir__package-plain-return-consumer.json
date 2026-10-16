@@ -2,16 +2,6 @@
   "status": "uncertifiable",
   "findings": [
     {
-      "rule": "package-contract-incomplete",
-      "code": "SC9005",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/package-plain-return-consumer/App.tsx",
-      "start": 18,
-      "end": 29,
-      "fixes": 0
-    },
-    {
       "rule": "unaudited-solid-release",
       "code": "SC9014",
       "kind": "uncertifiable",

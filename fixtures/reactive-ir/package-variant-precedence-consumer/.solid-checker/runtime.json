@@ -1,5 +1,0 @@
-{
-  "target": "browser",
-  "build": "development",
-  "dependencySource": false
-}

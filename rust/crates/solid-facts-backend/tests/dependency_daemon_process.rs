@@ -4,8 +4,8 @@
 //! what a disabled daemon answers, cold, repeated, after each kind of input
 //! change and after the change is restored. A check with no selection keeps its
 //! daemon, and the base daemon regressions here (idle, truncation, membership,
-//! relative paths, failed refresh) are built with an explicit
-//! `--no-dependency-source`, so none of them silently becomes a one-shot test.
+//! failed refresh) declare no host, so none of them silently becomes a
+//! one-shot test.
 //! `dependency_fresh_native_process.rs` holds the freshness and routing cases.
 //!
 //! Every case runs on a copy of a fixture in a temporary directory, never on
@@ -140,20 +140,19 @@ fn command(typefacts: &str, project: &Path, selection: &[&str], retained: bool) 
         .env("SOLID_CHECKER_DAEMON_IDLE_SECS", "20")
         .env("SOLID_CHECKER_TIMINGS", "1")
         .args(["--format", "json", "--project"])
-        .arg(project.join("tsconfig.json"))
-        .args([
+        .arg(project.join("tsconfig.json"));
+    // No selection is the base check. It declares no host, so the implicit
+    // default, which a declared target and build turn on, cannot apply.
+    if !selection.is_empty() {
+        command.args([
             "--runtime-target",
             "browser",
             "--runtime-build",
             "development",
         ]);
+    }
     for specifier in selection {
         command.args(["--dependency-source", specifier]);
-    }
-    // No selection is the base check, stated rather than left to the implicit
-    // default, which a Solid Vite plugin in the project would turn on.
-    if selection.is_empty() {
-        command.arg("--no-dependency-source");
     }
     command
 }
@@ -499,59 +498,48 @@ fn a_declared_host_analyzes_every_solid_package_from_source_by_default() {
         defaulted.stderr
     );
 
-    // The opt-out is contract mode, and contract mode answers differently
-    // here, so the agreement above is not vacuous.
-    let opted_out = ok(&with_host(&["--no-dependency-source"]));
-    assert!(source_notes(&opted_out).is_empty(), "{}", opted_out.stderr);
+    // No selection answers differently here, so the agreement above is not
+    // vacuous.
+    let unselected = ok(&[]);
+    assert!(
+        source_notes(&unselected).is_empty(),
+        "{}",
+        unselected.stderr
+    );
     assert_ne!(
-        String::from_utf8_lossy(&opted_out.stdout),
+        String::from_utf8_lossy(&unselected.stdout),
         String::from_utf8_lossy(&defaulted.stdout),
-        "contract mode answers differently here"
+        "no selection answers differently here"
     );
 
-    // Without both a target and a build nothing is selected: the answer is
-    // the opted-out one, without a note.
+    // Without both a target and a build nothing is selected, without a note.
     for partial in [
         &["--runtime-target", "browser"][..],
         &["--runtime-build", "development"][..],
-        &[][..],
     ] {
         let run = ok(partial);
         assert!(source_notes(&run).is_empty(), "{partial:?}: {}", run.stderr);
-        let mut opted = partial.to_vec();
-        opted.push("--no-dependency-source");
-        assert_same(&run, &ok(&opted), &format!("{partial:?} is contract mode"));
     }
 
-    // Contract inspection keeps contracts under a declared host. It exits 1
-    // for the packages here that have none.
-    let inspect = |args: &[&str]| invoke(&typefacts, &scratch.project, args, false);
-    let (inspected_ok, inspected) = inspect(&with_host(&["--check-contracts"]));
-    assert!(source_notes(&inspected).is_empty(), "{}", inspected.stderr);
-    let (opted_ok, opted) = inspect(&with_host(&["--check-contracts", "--no-dependency-source"]));
-    assert_eq!(inspected_ok, opted_ok);
-    assert!(!inspected.stdout.is_empty(), "{}", inspected.stderr);
-    assert_same(&inspected, &opted, "--check-contracts");
-
-    // The opt-out and a selection contradict each other.
+    // The contract opt-out is retired, and refused rather than ignored.
     let (success, refused) = invoke(
         &typefacts,
         &scratch.project,
-        &with_host(&["--no-dependency-source", "--dependency-source", "*"]),
+        &with_host(&["--no-dependency-source"]),
         false,
     );
     assert!(!success);
     assert!(
         refused
             .stderr
-            .contains("--no-dependency-source cannot be combined with --dependency-source"),
+            .contains("--no-dependency-source was removed"),
         "{}",
         refused.stderr
     );
 }
 
 #[test]
-fn a_requested_daemon_for_the_default_is_one_shot_and_an_opted_out_check_keeps_its_daemon() {
+fn a_requested_daemon_for_the_default_is_one_shot_and_a_hostless_check_keeps_its_daemon() {
     let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
         return;
     };
@@ -577,12 +565,12 @@ fn a_requested_daemon_for_the_default_is_one_shot_and_an_opted_out_check_keeps_i
     .1;
     assert_eq!(explicit.cache_hit(), None, "{}", explicit.stderr);
     assert_same(&explicit, &fresh, "explicit `*` against the default");
-    // An opted-out check has no selection and keeps its contract-mode daemon:
-    // a real cold and a real warm hit.
-    let opted_out = with_host(&["--no-dependency-source"]);
-    let retained = invoke(&typefacts, &scratch.project, &opted_out, true).1;
-    let warm_retained = invoke(&typefacts, &scratch.project, &opted_out, true).1;
-    let one_shot = invoke(&typefacts, &scratch.project, &opted_out, false).1;
+    // A check declaring no host has no selection and keeps its daemon: a real
+    // cold and a real warm hit.
+    let hostless: [&str; 0] = [];
+    let retained = invoke(&typefacts, &scratch.project, &hostless, true).1;
+    let warm_retained = invoke(&typefacts, &scratch.project, &hostless, true).1;
+    let one_shot = invoke(&typefacts, &scratch.project, &hostless, false).1;
     assert!(retained.cache_hit().is_some(), "{}", retained.stderr);
     assert_eq!(
         warm_retained.cache_hit(),
@@ -590,8 +578,8 @@ fn a_requested_daemon_for_the_default_is_one_shot_and_an_opted_out_check_keeps_i
         "{}",
         warm_retained.stderr
     );
-    assert_same(&retained, &one_shot, "opted out");
-    assert_same(&warm_retained, &one_shot, "opted out, warm");
+    assert_same(&retained, &one_shot, "hostless");
+    assert_same(&warm_retained, &one_shot, "hostless, warm");
     assert!(source_notes(&retained).is_empty(), "{}", retained.stderr);
 }
 
@@ -694,47 +682,6 @@ fn an_import_edit_that_changes_program_membership_is_the_one_shot_answer() {
             before.json()["findings"],
             fresh.json()["findings"],
             "{tag}: the mutation moved nothing"
-        );
-    }
-}
-
-/// Finding 3: a relative path is the caller's, not the daemon's.
-#[test]
-fn a_relative_catalog_path_is_read_from_the_callers_directory() {
-    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
-        return;
-    };
-    for selection in [&["dep-hooks"][..], &[][..]] {
-        let tag = format!("relative-{}", selection.len());
-        let scratch = Scratch::new("dependency-source", &tag);
-        let with_catalog = scratch.root.join("a");
-        let without = scratch.root.join("b");
-        fs::create_dir_all(&with_catalog).unwrap();
-        fs::create_dir_all(&without).unwrap();
-        fs::write(
-            with_catalog.join("catalog.json"),
-            r#"{"format":"solid-checker-accepted-contract-catalog","catalogVersion":2,"contracts":[]}"#,
-        )
-        .unwrap();
-        let from = |directory: &Path, retained: bool| {
-            let mut command = command(&typefacts, &scratch.project, selection, retained);
-            command
-                .current_dir(directory)
-                .args(["--accepted-contracts", "catalog.json"]);
-            command
-        };
-        let warm = finish(from(&with_catalog, true), selection.is_empty());
-        assert_same(&warm, &finish(from(&with_catalog, false), false), &tag);
-        let fresh = from(&without, false).output().unwrap();
-        assert!(
-            !fresh.status.success(),
-            "{tag}: one-shot read a missing catalog"
-        );
-        let retained = from(&without, true).output().unwrap();
-        assert!(
-            !retained.status.success(),
-            "{tag}: the daemon read the first caller's catalog: {}",
-            String::from_utf8_lossy(&retained.stderr)
         );
     }
 }
@@ -940,20 +887,25 @@ fn the_default_needs_a_solid_vite_plugin() {
         "an explicit selection needs no plugin: {}",
         explicit.stderr
     );
-    let opted_out = ok(&with_host(&["--no-dependency-source"]));
-    assert_ne!(stdout(&opted_out), stdout(&explicit), "not vacuous");
+    // With no plugin installed the declared host selects nothing.
+    let unselected = ok(&HOST);
+    assert_ne!(stdout(&unselected), stdout(&explicit), "not vacuous");
     assert!(
-        !opted_out.stderr.contains(NO_PLUGIN),
+        source_notes(&unselected).is_empty(),
         "{}",
-        opted_out.stderr
+        unselected.stderr
+    );
+    assert!(
+        unselected.stderr.contains(NO_PLUGIN),
+        "{}",
+        unselected.stderr
     );
 
-    let contract_mode = |run: &Run, context: &str| {
-        assert_eq!(stdout(run), stdout(&opted_out), "{context}");
+    let unselected_mode = |run: &Run, context: &str| {
+        assert_eq!(stdout(run), stdout(&unselected), "{context}");
         assert!(source_notes(run).is_empty(), "{context}: {}", run.stderr);
         assert!(run.stderr.contains(NO_PLUGIN), "{context}: {}", run.stderr);
     };
-    contract_mode(&ok(&HOST), "no plugin installed");
     // A manifest naming no version is no installation, as for `solid-js`.
     let versionless = scratch.path("node_modules/vite-plugin-solid");
     fs::create_dir_all(&versionless).unwrap();
@@ -962,14 +914,14 @@ fn the_default_needs_a_solid_vite_plugin() {
         r#"{"name":"vite-plugin-solid"}"#,
     )
     .unwrap();
-    contract_mode(&ok(&HOST), "a versionless plugin manifest");
+    unselected_mode(&ok(&HOST), "a versionless plugin manifest");
     // SolidStart alone is not the plugin; the one it ships is.
     scratch.install("@solidjs/start");
-    contract_mode(&ok(&HOST), "SolidStart without its plugin");
+    unselected_mode(&ok(&HOST), "SolidStart without its plugin");
     scratch.install("@solidjs/start/node_modules/vite-plugin-solid");
     assert_same(&ok(&HOST), &explicit, "the plugin SolidStart ships");
     fs::remove_dir_all(scratch.path("node_modules/@solidjs/start")).unwrap();
-    contract_mode(&ok(&HOST), "SolidStart removed");
+    unselected_mode(&ok(&HOST), "SolidStart removed");
     for plugin in ["vite-plugin-solid", "@solidjs/vite-plugin"] {
         let _ = fs::remove_dir_all(scratch.path("node_modules").join("vite-plugin-solid"));
         let _ = fs::remove_dir_all(scratch.path("node_modules/@solidjs/vite-plugin"));
@@ -1040,1135 +992,6 @@ fn a_read_only_project_is_analyzed_from_source() {
         }
     }
     assert!(scratch.siblings().is_empty());
-}
-
-/// The closure digest of a one-manifest fixture resolution, as
-/// `artifact_resolution::closure_digest` computes it.
-fn manifest_closure_digest(manifest: &str) -> String {
-    use sha2::{Digest, Sha256};
-    let mut hash = Sha256::new();
-    hash.update(b"solid-checker:artifact-closure:v1");
-    hash.update(1u64.to_be_bytes());
-    for text in ["Manifest", "./package.json", manifest] {
-        hash.update(u64::try_from(text.len()).unwrap().to_be_bytes());
-        hash.update(text.as_bytes());
-    }
-    hash.update([0]);
-    hash.update(0u64.to_be_bytes());
-    hash.update(0u64.to_be_bytes());
-    format!("{:x}", hash.finalize())
-}
-
-/// `package-plain-return-consumer` with its `reactive-package` made a Solid
-/// package with runtime source, its fixture resolution rebound to the new
-/// manifest, `App.tsx` replaced by `app`, and its accepted contract
-/// authorized: `isReady` closes `returns`, `isReadyOpen` leaves it open.
-/// Answers the scratch and the trust configuration, outside the project.
-fn accepted_solid_package(tag: &str, app: &str) -> (Scratch, PathBuf) {
-    accepted_solid_package_with(tag, app, |_| {})
-}
-
-fn accepted_solid_package_with(
-    tag: &str,
-    app: &str,
-    setup: impl FnOnce(&Scratch),
-) -> (Scratch, PathBuf) {
-    use sha2::{Digest, Sha256};
-    use solid_facts_backend::fixture_authorization::{
-        authorize_fixture_contract, read_fixture_contract_request,
-    };
-    let scratch = Scratch::new("package-plain-return-consumer", tag).with_solid_vite_plugin();
-    let package = scratch.path("node_modules/reactive-package");
-    let digest = |bytes: &[u8]| format!("{:x}", Sha256::digest(bytes));
-    let old = digest(&fs::read(package.join("package.json")).unwrap());
-    let manifest = r#"{"name":"reactive-package","version":"1.0.0","types":"index.d.ts","module":"index.js","peerDependencies":{"solid-js":"*"}}"#;
-    fs::write(package.join("package.json"), manifest).unwrap();
-    fs::write(
-        package.join("index.js"),
-        "export function isReady() { return true; }\nexport function isReadyOpen() { return true; }\n",
-    )
-    .unwrap();
-    let new = digest(manifest.as_bytes());
-    let rebind = |path: PathBuf| {
-        let text = fs::read_to_string(&path)
-            .unwrap()
-            .replace(&old, &new)
-            .replace(
-                &manifest_closure_digest(&format!("sha256:{old}")),
-                &manifest_closure_digest(&format!("sha256:{new}")),
-            );
-        fs::write(path, text).unwrap();
-    };
-    rebind(scratch.path(".solid-checker/authorize-contract.json"));
-    rebind(package.join("solid-reactivity.json"));
-    fs::write(scratch.path("App.tsx"), app).unwrap();
-    setup(&scratch);
-    let authorization = authorize_fixture_contract(
-        &scratch.project,
-        &read_fixture_contract_request(&scratch.project).unwrap(),
-    )
-    .unwrap();
-    let trust = scratch.root.join("trust.json");
-    fs::write(&trust, authorization.trust_configuration).unwrap();
-    (scratch, trust)
-}
-
-const NAMED_APP: &str = r#"import { isReady, isReadyOpen } from "reactive-package";
-
-export function Status() {
-  return <div>{isReady() ? "ready" : "waiting"}</div>;
-}
-
-export function StatusOpen() {
-  return <div>{isReadyOpen() ? "ready" : "waiting"}</div>;
-}
-"#;
-
-const NAMESPACE_APP: &str = r#"import * as reactive from "reactive-package";
-
-export function Status() {
-  return <div>{reactive.isReady() ? "ready" : "waiting"}</div>;
-}
-
-export function StatusOpen() {
-  return <div>{reactive.isReadyOpen() ? "ready" : "waiting"}</div>;
-}
-"#;
-
-/// Review round 3: a relative barrel cannot authorize a rejected recursive
-/// edge to another installed copy, even when both manifests name the same
-/// package and version. Both body orders are type-valid.
-fn check_recursive_reexport_copy(nested_reads: bool) {
-    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
-        return;
-    };
-    let app = "import { createSignal } from 'solid-js';\nimport { isReadyOpen as read } from './nested/barrel';\nexport function App() { const [ready] = createSignal(true); const value = read(ready); return <div>{value ? 'yes' : 'no'}</div>; }";
-    let (scratch, _) =
-        accepted_solid_package_with(&format!("recursive-copy-{nested_reads}"), app, |scratch| {
-            fs::copy(
-                fixture("dependency-source-all").join("solid-js.d.ts"),
-                scratch.path("solid-js.d.ts"),
-            )
-            .unwrap();
-            let outer = scratch.path("node_modules/reactive-package");
-            edit(
-                &outer.join("index.d.ts"),
-                "isReadyOpen()",
-                "isReadyOpen(source?: () => boolean)",
-            );
-            let nested = scratch.path("nested/node_modules/reactive-package");
-            copy_tree(&outer, &nested);
-            let read = "export function isReadyOpen(source) { return source(); }";
-            let plain = "export function isReadyOpen(source) { return true; }";
-            fs::write(
-                outer.join("index.js"),
-                if nested_reads { plain } else { read },
-            )
-            .unwrap();
-            fs::write(
-                nested.join("index.js"),
-                if nested_reads { read } else { plain },
-            )
-            .unwrap();
-            fs::write(
-                scratch.path("nested/barrel.ts"),
-                "export { isReadyOpen } from 'reactive-package';",
-            )
-            .unwrap();
-            let config_path = scratch.path("tsconfig.json");
-            let mut config: serde_json::Value =
-                serde_json::from_slice(&fs::read(&config_path).unwrap()).unwrap();
-            config["include"] = serde_json::json!([]);
-            config["files"] = serde_json::json!(["App.tsx", "jsx.d.ts", "solid-js.d.ts"]);
-            fs::write(config_path, serde_json::to_vec_pretty(&config).unwrap()).unwrap();
-        });
-    let run = |selection: &'static str| {
-        let (success, run) = invoke(
-            &typefacts,
-            &scratch.project,
-            &with_host(&["--dependency-source", selection]),
-            false,
-        );
-        assert!(success, "{}", run.stderr);
-        run
-    };
-    let explicit = run("reactive-package");
-    assert!(
-        explicit.json()["findings"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|finding| finding["id"] == "SC9011" && finding["kind"] == "uncertifiable"),
-        "nested reads {nested_reads}: {}",
-        stdout(&explicit)
-    );
-    assert!(
-        !explicit.json()["findings"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|finding| finding["kind"] == "violation"),
-        "{}",
-        stdout(&explicit)
-    );
-    let wildcard = run("*");
-    assert_eq!(
-        wildcard.json()["findings"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|finding| finding["id"] == "SC1001" && finding["kind"] == "violation"),
-        nested_reads,
-        "{}",
-        stdout(&wildcard)
-    );
-    if !nested_reads {
-        assert!(
-            wildcard.json()["findings"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .all(|finding| finding["id"] == "SC9014"),
-            "{}",
-            stdout(&wildcard)
-        );
-    }
-}
-
-#[test]
-fn round3_duplicates_minimal() {
-    check_recursive_reexport_copy(false);
-}
-
-#[test]
-fn round3_duplicates_reverse() {
-    check_recursive_reexport_copy(true);
-}
-
-/// Build a second fixture-accepted package bound to the exact importing
-/// runtime file, then merge its catalog with the first package's catalog.
-fn authorize_external_test_package(scratch: &Scratch, name: &str) {
-    use sha2::{Digest, Sha256};
-    use solid_facts_backend::fixture_authorization::{
-        authorize_fixture_contract, read_fixture_contract_request,
-    };
-    let base = fixture("package-plain-return-consumer");
-    let old = format!(
-        "{:x}",
-        Sha256::digest(fs::read(base.join("node_modules/reactive-package/package.json")).unwrap())
-    );
-    let package = scratch.path(&format!("node_modules/{name}"));
-    let manifest = fs::read(package.join("package.json")).unwrap();
-    let new = format!("{:x}", Sha256::digest(&manifest));
-    let rebind = |text: String| {
-        text.replace(&old, &new)
-            .replace(
-                &manifest_closure_digest(&format!("sha256:{old}")),
-                &manifest_closure_digest(&format!("sha256:{new}")),
-            )
-            .replace("reactive-package", name)
-    };
-    let mut document: serde_json::Value = serde_json::from_str(&rebind(
-        fs::read_to_string(base.join("node_modules/reactive-package/solid-reactivity.json"))
-            .unwrap(),
-    ))
-    .unwrap();
-    let mut request: serde_json::Value = serde_json::from_str(&rebind(
-        fs::read_to_string(base.join(".solid-checker/authorize-contract.json")).unwrap(),
-    ))
-    .unwrap();
-    let version: serde_json::Value = serde_json::from_slice(&manifest).unwrap();
-    document["package"]["version"] = version["version"].clone();
-    request["import"]["packageVersion"] = version["version"].clone();
-    request["import"]["importer"] = "node_modules/reactive-package/index.js".into();
-    if name == "clsx" {
-        document["summaries"]
-            .as_object_mut()
-            .unwrap()
-            .remove("summary-plain-return");
-        document["entrypoints"]["."]["exports"] =
-            serde_json::json!({"clsx": "summary-returns-open"});
-        let mut export = request["import"]["exports"]["isReadyOpen"].clone();
-        export["declarations"]["exportName"] = "clsx".into();
-        export["runtime"]["exportName"] = "clsx".into();
-        request["import"]["exports"] = serde_json::json!({"clsx": export});
-    }
-    fs::write(
-        package.join("solid-reactivity.json"),
-        serde_json::to_vec_pretty(&document).unwrap(),
-    )
-    .unwrap();
-    let catalog_path = scratch.path(".solid-checker/accepted-contracts.json");
-    let mut catalog: serde_json::Value =
-        serde_json::from_slice(&fs::read(&catalog_path).unwrap()).unwrap();
-    fs::write(
-        scratch.path(".solid-checker/authorize-contract.json"),
-        serde_json::to_vec_pretty(&request).unwrap(),
-    )
-    .unwrap();
-    authorize_fixture_contract(
-        &scratch.project,
-        &read_fixture_contract_request(&scratch.project).unwrap(),
-    )
-    .unwrap();
-    let external: serde_json::Value =
-        serde_json::from_slice(&fs::read(&catalog_path).unwrap()).unwrap();
-    catalog["contracts"]
-        .as_array_mut()
-        .unwrap()
-        .extend(external["contracts"].as_array().unwrap().iter().cloned());
-    fs::write(catalog_path, serde_json::to_vec_pretty(&catalog).unwrap()).unwrap();
-}
-
-fn check_accepted_external_value_provenance(external: &str, tag: &str, body: &str) {
-    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
-        return;
-    };
-    let (scratch, trust) = accepted_solid_package_with(
-        &format!("open-provenance-{external}-{tag}"),
-        NAMED_APP,
-        |scratch| {
-            let package = scratch.path(&format!("node_modules/{external}"));
-            if external == "clsx" {
-                copy_tree(
-                    &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/clsx-2.1.1"),
-                    &package,
-                );
-            } else {
-                fs::create_dir_all(&package).unwrap();
-                fs::write(package.join("package.json"), r#"{"name":"external-package","version":"1.0.0","types":"index.d.ts","module":"index.js"}"#).unwrap();
-                fs::write(
-                    package.join("index.d.ts"),
-                    "export declare function isReadyOpen(): boolean;",
-                )
-                .unwrap();
-                fs::write(
-                    package.join("index.js"),
-                    "export function isReadyOpen() { return true; }",
-                )
-                .unwrap();
-            }
-            let (imported, call) = if external == "clsx" {
-                ("clsx", "x('ok')")
-            } else {
-                ("isReadyOpen", "x()")
-            };
-            fs::write(scratch.path("node_modules/reactive-package/index.js"), format!("import {{ {imported} as x }} from '{external}'; {}\nexport function isReady() {{ return true; }}", body.replace("x()", call))).unwrap();
-            if external == "clsx" && tag != "discarded" {
-                edit(
-                    &scratch.path("node_modules/reactive-package/index.d.ts"),
-                    "isReadyOpen(): boolean",
-                    "isReadyOpen(): string",
-                );
-            }
-        },
-    );
-    authorize_external_test_package(&scratch, external);
-    let trust = trust.to_string_lossy();
-    let run = |extra: &[&str]| {
-        let mut args = with_host(&[]);
-        args.extend(["--receipt-trust-configuration", trust.as_ref()]);
-        args.extend(extra);
-        let (success, run) = invoke(&typefacts, &scratch.project, &args, false);
-        assert!(success, "{external}/{tag}: {}", run.stderr);
-        run
-    };
-    let contracts = run(&["--no-dependency-source"]);
-    assert!(
-        contracts.json()["findings"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|finding| finding["id"] == "SC9005" && finding["kind"] == "uncertifiable"),
-        "{}",
-        stdout(&contracts)
-    );
-    for selection in ["reactive-package", "*"] {
-        let selected = run(&["--dependency-source", selection]);
-        assert!(selected.stderr.contains(&format!("accepted unselected package {external}")) || selected.json()["packageSummaries"].as_array().unwrap().iter().any(|summary| summary["name"] == external && summary["evidence"] == "accepted"), "{external}/{tag}: {}", stdout(&selected));
-        if tag == "discarded" {
-            assert!(
-                !selected.stderr.contains("accepted unselected package"),
-                "{}",
-                selected.stderr
-            );
-        } else {
-            assert_eq!(
-                selected.json()["findings"],
-                contracts.json()["findings"],
-                "{external}/{tag}/{selection}"
-            );
-            assert!(
-                selected
-                    .stderr
-                    .contains(&format!("accepted unselected package {external}")),
-                "{}",
-                selected.stderr
-            );
-        }
-    }
-}
-
-macro_rules! open_provenance_test {
-    ($name:ident, $external:literal, $tag:literal, $body:literal) => {
-        #[test]
-        fn $name() {
-            check_accepted_external_value_provenance($external, $tag, $body);
-        }
-    };
-}
-
-open_provenance_test!(
-    round3_external_class_field,
-    "external-package",
-    "class-field",
-    "class C { value = x(); } const c = new C(); export function isReadyOpen() { return c.value; }"
-);
-open_provenance_test!(
-    round3_external_class_export,
-    "external-package",
-    "class-export",
-    "export class C { value = x(); } export function isReadyOpen() { return new C().value; }"
-);
-open_provenance_test!(
-    round3_external_assign_object,
-    "external-package",
-    "assign-object",
-    "const obj = { value: false }; Object.assign(obj, { value: x() }); export { obj }; export function isReadyOpen() { return obj.value; }"
-);
-open_provenance_test!(
-    round3_clsx_class_field,
-    "clsx",
-    "class-field",
-    "class C { value = x(); } const c = new C(); export function isReadyOpen() { return c.value; }"
-);
-open_provenance_test!(
-    round3_clsx_class_export,
-    "clsx",
-    "class-export",
-    "export class C { value = x(); } export function isReadyOpen() { return new C().value; }"
-);
-open_provenance_test!(
-    round3_clsx_assign_object,
-    "clsx",
-    "assign-object",
-    "const obj = { value: false }; Object.assign(obj, { value: x() }); export { obj }; export function isReadyOpen() { return obj.value; }"
-);
-open_provenance_test!(
-    round3_external_mutation_closure,
-    "external-package",
-    "mutation-closure",
-    "const obj = { value: false }; function set(value) { obj.value = value; } export const update = () => set(x()); export function isReadyOpen() { return obj.value; }"
-);
-open_provenance_test!(
-    round3_external_getter,
-    "external-package",
-    "getter",
-    "const obj = { get value() { return x(); } }; export function isReadyOpen() { return obj.value; }"
-);
-open_provenance_test!(
-    round3_external_discarded_control,
-    "external-package",
-    "discarded",
-    "x(); export function isReadyOpen() { return true; }"
-);
-open_provenance_test!(
-    round3_clsx_discarded_control,
-    "clsx",
-    "discarded",
-    "x(); export function isReadyOpen() { return true; }"
-);
-
-/// Exact re-export edges select runtime source, in project and package
-/// barrels alike. A reactive runtime read proves a violation where contract
-/// mode could only leave the re-export's return claim uncertifiable.
-#[test]
-fn reexport_barrels_redirect_exact_bindings_and_retain_unselected_contracts() {
-    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
-        return;
-    };
-    for (tag, barrel, in_package) in [
-        (
-            "named",
-            "export { isReady, isReadyOpen } from 'reactive-package';",
-            false,
-        ),
-        ("star", "export * from 'reactive-package';", false),
-        ("star-chain", "export * from './inner';", false),
-        ("star-mixed", "export * from 'reactive-package';", false),
-        (
-            "star-unselected-provider",
-            "export * from 'reactive-package'; export * from 'external-star-provider';",
-            false,
-        ),
-        (
-            "star-same-binding",
-            "export * from 'reactive-package'; export * from './other';",
-            false,
-        ),
-        (
-            "star-ambiguous",
-            "export * from 'reactive-package'; export * from './other';",
-            false,
-        ),
-        (
-            "star-opaque-provider",
-            "export * from 'reactive-package'; export * from './opaque.js';",
-            false,
-        ),
-        (
-            "star-explicit",
-            "export * from 'reactive-package'; export { isReadyOpen } from './other';",
-            false,
-        ),
-        (
-            "default-as",
-            "export { isReady, default as isReadyOpen } from 'reactive-package';",
-            false,
-        ),
-        (
-            "files-only-named",
-            "export { isReady, isReadyOpen } from 'reactive-package';",
-            false,
-        ),
-        (
-            "files-only-star",
-            "export * from 'reactive-package';",
-            false,
-        ),
-        (
-            "files-only-default-as",
-            "export { isReady, default as isReadyOpen } from 'reactive-package';",
-            false,
-        ),
-        (
-            "closure-named",
-            "export { isReady, isReadyOpen } from 'reactive-package';",
-            true,
-        ),
-        ("closure-star", "export * from 'reactive-package';", true),
-        (
-            "closure-default-as",
-            "export { isReady, default as isReadyOpen } from 'reactive-package';",
-            true,
-        ),
-    ] {
-        let specifier = if in_package {
-            "barrel-package"
-        } else {
-            "./barrel"
-        };
-        let mut app = NAMED_APP.replace("reactive-package", specifier);
-        app = format!("import {{ createSignal }} from 'solid-js';\n{}", app.replace("  return <div>{isReadyOpen() ?", "  const [ready] = createSignal(true);\n  const value = isReadyOpen(ready);\n  return <div>{value ?"));
-        let source_read_line = app
-            .lines()
-            .position(|line| line.contains("const value = isReadyOpen(ready)"))
-            .unwrap()
-            + 1;
-        let plain_line = app
-            .lines()
-            .position(|line| line.contains("return <div>{isReady()"))
-            .unwrap()
-            + 1;
-        if tag == "star-mixed" {
-            app.push_str("\nimport { isReadyOpen as directOpen } from 'reactive-package';\nexport function DirectStatusOpen() { return <div>{directOpen() ? 'ready' : 'waiting'}</div>; }\n");
-        }
-        let (scratch, trust) = accepted_solid_package_with(
-            &format!("reexport-{tag}"),
-            &app,
-            |scratch| {
-                fs::copy(
-                    fixture("dependency-source-all").join("solid-js.d.ts"),
-                    scratch.path("solid-js.d.ts"),
-                )
-                .unwrap();
-                fs::write(scratch.path("node_modules/reactive-package/index.js"), "export function isReady() { return true; }\nexport function isReadyOpen(source) { return source(); }\n").unwrap();
-                edit(
-                    &scratch.path("node_modules/reactive-package/index.d.ts"),
-                    "isReadyOpen()",
-                    "isReadyOpen(source?: () => boolean)",
-                );
-                if matches!(
-                    tag,
-                    "star-same-binding" | "star-ambiguous" | "star-explicit"
-                ) {
-                    fs::write(scratch.path("other.ts"), if tag == "star-same-binding" { "export * from 'reactive-package';" } else { "export function isReadyOpen(_source?: () => boolean): boolean { return true; }" }).unwrap();
-                }
-                if tag == "star-opaque-provider" {
-                    fs::write(
-                        scratch.path("opaque.js"),
-                        "exports.isReadyOpen = () => true;",
-                    )
-                    .unwrap();
-                    fs::write(
-                        scratch.path("opaque.d.ts"),
-                        "export declare const another: number;",
-                    )
-                    .unwrap();
-                    let config_path = scratch.path("tsconfig.json");
-                    let mut config: serde_json::Value =
-                        serde_json::from_slice(&fs::read(&config_path).unwrap()).unwrap();
-                    config["compilerOptions"]["allowJs"] = true.into();
-                    config["include"]
-                        .as_array_mut()
-                        .unwrap()
-                        .push("*.js".into());
-                    fs::write(config_path, serde_json::to_vec_pretty(&config).unwrap()).unwrap();
-                }
-                if tag == "star-unselected-provider" {
-                    let external = scratch.path("node_modules/external-star-provider");
-                    fs::create_dir_all(&external).unwrap();
-                    fs::write(external.join("package.json"), r#"{"name":"external-star-provider","version":"1.0.0","types":"index.d.ts","module":"index.js"}"#).unwrap();
-                    // TypeScript is clean, but this unselected runtime
-                    // provider contributes a competing binding.
-                    fs::write(
-                        external.join("index.d.ts"),
-                        "export declare const another: number;",
-                    )
-                    .unwrap();
-                    fs::write(
-                        external.join("index.js"),
-                        "export const isReadyOpen = () => true;",
-                    )
-                    .unwrap();
-                }
-                let importer = if in_package {
-                    let package = scratch.path("node_modules/barrel-package");
-                    fs::create_dir_all(&package).unwrap();
-                    fs::write(package.join("package.json"), r#"{"name":"barrel-package","version":"1.0.0","types":"index.d.ts","module":"index.js","peerDependencies":{"solid-js":"*"}}"#).unwrap();
-                    fs::write(package.join("index.d.ts"), barrel).unwrap();
-                    fs::write(package.join("index.js"), barrel).unwrap();
-                    "node_modules/barrel-package/index.js"
-                } else {
-                    fs::write(scratch.path("barrel.ts"), barrel).unwrap();
-                    if tag == "star-chain" {
-                        fs::write(
-                            scratch.path("inner.ts"),
-                            "export * from 'reactive-package';",
-                        )
-                        .unwrap();
-                        "inner.ts"
-                    } else {
-                        "barrel.ts"
-                    }
-                };
-                if tag.starts_with("files-only") {
-                    let config_path = scratch.path("tsconfig.json");
-                    let mut config: serde_json::Value =
-                        serde_json::from_slice(&fs::read(&config_path).unwrap()).unwrap();
-                    config["include"] = serde_json::json!([]);
-                    config["files"] = serde_json::json!(["App.tsx", "jsx.d.ts", "solid-js.d.ts"]);
-                    fs::write(config_path, serde_json::to_vec_pretty(&config).unwrap()).unwrap();
-                }
-                let request_path = scratch.path(".solid-checker/authorize-contract.json");
-                let mut request: serde_json::Value =
-                    serde_json::from_slice(&fs::read(&request_path).unwrap()).unwrap();
-                request["import"]["importer"] = if tag == "star-mixed" {
-                    "App.tsx"
-                } else {
-                    importer
-                }
-                .into();
-                if tag.contains("default-as") {
-                    let package = scratch.path("node_modules/reactive-package");
-                    let declarations = fs::read_to_string(package.join("index.d.ts")).unwrap();
-                    fs::write(
-                        package.join("index.d.ts"),
-                        format!("{declarations}\nexport default isReadyOpen;\n"),
-                    )
-                    .unwrap();
-                    let runtime = fs::read_to_string(package.join("index.js")).unwrap();
-                    fs::write(
-                        package.join("index.js"),
-                        format!("{runtime}\nexport default isReadyOpen;\n"),
-                    )
-                    .unwrap();
-                    let document_path = package.join("solid-reactivity.json");
-                    let mut document: serde_json::Value =
-                        serde_json::from_slice(&fs::read(&document_path).unwrap()).unwrap();
-                    document["entrypoints"]["."]["exports"]["default"] =
-                        "summary-returns-open".into();
-                    fs::write(document_path, serde_json::to_vec_pretty(&document).unwrap())
-                        .unwrap();
-                    let mut export = request["import"]["exports"]["isReadyOpen"].clone();
-                    export["declarations"]["exportName"] = "default".into();
-                    export["runtime"]["exportName"] = "default".into();
-                    request["import"]["exports"]["default"] = export;
-                }
-                fs::write(request_path, serde_json::to_vec_pretty(&request).unwrap()).unwrap();
-            },
-        );
-        let trust = trust.to_string_lossy();
-        // The ambiguous-star negative deliberately has TS2308. The checker
-        // must refuse its runtime join, not choose TypeScript's recovery arm.
-        if let Ok(tsc) = std::env::var("SOLID_CHECKER_TEST_TSC")
-            && tag != "star-ambiguous"
-        {
-            let output = Command::new("node")
-                .arg(tsc)
-                .args(["--noEmit", "--project"])
-                .arg(scratch.path("tsconfig.json"))
-                .output()
-                .unwrap();
-            assert!(
-                output.status.success(),
-                "{tag}: tsc: {}{}",
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr)
-            );
-        }
-        let run = |extra: &[&str]| {
-            let mut args = with_host(&[]);
-            args.extend(["--receipt-trust-configuration", trust.as_ref()]);
-            args.extend(extra);
-            let (success, run) = invoke(&typefacts, &scratch.project, &args, false);
-            assert!(success, "{tag}: {}", run.stderr);
-            run
-        };
-        let contracts = run(&["--no-dependency-source"]);
-        let explicit = if in_package {
-            vec![
-                "--dependency-source",
-                "barrel-package",
-                "--dependency-source",
-                "reactive-package",
-            ]
-        } else {
-            vec!["--dependency-source", "reactive-package"]
-        };
-        for args in [vec![], vec!["--dependency-source", "*"], explicit] {
-            let selected = run(&args);
-            assert!(
-                !selected
-                    .notes()
-                    .iter()
-                    .any(|note| note.contains("dependency source reactive-package")
-                        && note.contains("its contract stays")),
-                "{tag}: {}",
-                selected.stderr
-            );
-            let proves_read = !matches!(
-                tag,
-                "star-ambiguous"
-                    | "star-explicit"
-                    | "star-unselected-provider"
-                    | "star-opaque-provider"
-            );
-            assert_eq!(
-                selected.json()["findings"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .any(|finding| finding["id"] == "SC1001"
-                        && finding["kind"] == "violation"
-                        && finding["primaryLocation"]["line"] == source_read_line),
-                proves_read,
-                "{tag}: {args:?}: {}",
-                stdout(&selected)
-            );
-            if matches!(tag, "star-unselected-provider" | "star-opaque-provider") {
-                assert!(
-                    selected.json()["findings"]
-                        .as_array()
-                        .unwrap()
-                        .iter()
-                        .any(|finding| finding["id"] == "SC9011"
-                            && finding["kind"] == "uncertifiable"),
-                    "{}",
-                    stdout(&selected)
-                );
-            }
-            assert!(
-                !selected.json()["findings"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .any(|finding| finding["kind"] == "violation"
-                        && finding["primaryLocation"]["line"] == plain_line),
-                "{tag}: plain return: {}",
-                stdout(&selected)
-            );
-            for obligation in contracts.json()["findings"].as_array().unwrap() {
-                assert!(
-                    selected.json()["findings"]
-                        .as_array()
-                        .unwrap()
-                        .iter()
-                        .any(|finding| {
-                            ["path", "line", "column"].iter().all(|key| {
-                                finding["primaryLocation"][key]
-                                    == obligation["primaryLocation"][key]
-                            }) && finding["id"] == obligation["id"]
-                                && finding["kind"] == obligation["kind"]
-                                || finding["id"] == "SC1001"
-                                    && finding["kind"] == "violation"
-                                    && finding["primaryLocation"]["line"] == source_read_line
-                                    && proves_read
-                        }),
-                    "{tag}: {args:?}: lost obligation {obligation}; selected {}",
-                    stdout(&selected)
-                );
-            }
-        }
-        if in_package {
-            let retained = run(&["--dependency-source", "barrel-package"]);
-            assert_eq!(
-                stdout(&retained),
-                stdout(&contracts),
-                "{tag}: accepted unselected target"
-            );
-            assert!(
-                retained
-                    .notes()
-                    .iter()
-                    .any(|note| note.contains("accepted unselected package reactive-package")),
-                "{tag}: {}",
-                retained.stderr
-            );
-        }
-        let findings = contracts.json()["findings"].as_array().unwrap().clone();
-        // Exact stars retain the same open return claim as named exports.
-        // Ambiguous, shadowed and unresolved providers bind no package claim.
-        let binds_open = !matches!(
-            tag,
-            "star-ambiguous"
-                | "star-explicit"
-                | "star-unselected-provider"
-                | "star-opaque-provider"
-                | "star-same-binding"
-        );
-        assert_eq!(
-            findings
-                .iter()
-                .any(|finding| finding["id"] == "SC9005" && finding["kind"] == "uncertifiable"),
-            binds_open,
-            "{tag}: {findings:#?}"
-        );
-        assert!(
-            !findings
-                .iter()
-                .any(|finding| finding["kind"] == "violation"),
-            "{tag}: {findings:#?}"
-        );
-    }
-}
-
-#[test]
-fn only_literal_bare_module_loads_retain_the_named_imports_contract() {
-    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
-        return;
-    };
-    for (tag, load) in [
-        (
-            "literal",
-            "export async function load() { return import('reactive-package'); }",
-        ),
-        (
-            "nonliteral",
-            "export async function load(name: string) { return import(name); }",
-        ),
-        (
-            "relative",
-            "export async function load() { return import('./barrel'); }",
-        ),
-    ] {
-        let app = format!("{NAMED_APP}\n{load}\n");
-        let (scratch, trust) =
-            accepted_solid_package_with(&format!("module-load-{tag}"), &app, |scratch| {
-                fs::write(scratch.path("barrel.ts"), "export const value = true;").unwrap();
-            });
-        let trust = trust.to_string_lossy();
-        let run = |extra: &[&str]| {
-            let mut args = with_host(&[]);
-            args.extend(["--receipt-trust-configuration", trust.as_ref()]);
-            args.extend(extra);
-            let (success, run) = invoke(&typefacts, &scratch.project, &args, false);
-            assert!(success, "{tag}: {}", run.stderr);
-            run
-        };
-        let selected = run(&[]);
-        let contracts = run(&["--no-dependency-source"]);
-        if tag != "literal" {
-            assert!(
-                selected.json()["findings"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .all(|finding| finding["id"] == "SC9014"),
-                "{tag}: {}",
-                stdout(&selected)
-            );
-            assert!(
-                !selected
-                    .notes()
-                    .iter()
-                    .any(|note| note.contains("dependency source reactive-package")
-                        && note.contains("its contract stays")),
-                "{tag}: {}",
-                selected.stderr
-            );
-            continue;
-        }
-        assert_eq!(stdout(&selected), stdout(&contracts), "{tag}");
-        assert!(
-            stdout(&selected).contains("SC9005"),
-            "{tag}: {}",
-            stdout(&selected)
-        );
-        assert!(
-            selected
-                .notes()
-                .iter()
-                .any(|note| note.contains("dependency source reactive-package")
-                    && note.contains("its contract stays")),
-            "{tag}: {}",
-            selected.stderr
-        );
-    }
-}
-
-/// An exact source re-export may end at an unselected declaration. Absence
-/// of that external package's accepted contract is source analysis's
-/// obligation, not a reason to retain every export of the selected package.
-#[test]
-fn reexport_to_an_unaccepted_external_package_keeps_source_selection() {
-    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
-        return;
-    };
-    let app = "import { createSignal } from 'solid-js';\nimport { isReadyOpen } from 'reactive-package';\nexport function Status() { const [ready] = createSignal(true); const value = isReadyOpen(ready); return <div>{value}</div>; }";
-    let (scratch, trust) = accepted_solid_package_with("unaccepted-reexport", app, |scratch| {
-        fs::copy(
-            fixture("dependency-source-all").join("solid-js.d.ts"),
-            scratch.path("solid-js.d.ts"),
-        )
-        .unwrap();
-        edit(
-            &scratch.path("node_modules/reactive-package/index.d.ts"),
-            "isReadyOpen()",
-            "isReadyOpen(source?: () => boolean)",
-        );
-        fs::write(
-            scratch.path("node_modules/reactive-package/index.js"),
-            "export { isReady, isReadyOpen } from 'external-package';",
-        )
-        .unwrap();
-        let external = scratch.path("node_modules/external-package");
-        fs::create_dir_all(&external).unwrap();
-        fs::write(external.join("package.json"), r#"{"name":"external-package","version":"1.0.0","types":"index.d.ts","module":"index.js"}"#).unwrap();
-        fs::write(external.join("index.d.ts"), "export declare function isReady(): boolean; export declare function isReadyOpen(source?: () => boolean): boolean;").unwrap();
-        fs::write(external.join("index.js"), "export function isReady() { return true; } export function isReadyOpen(source) { return source(); }").unwrap();
-    });
-    let trust = trust.to_string_lossy();
-    let mut args = with_host(&[]);
-    args.extend(["--receipt-trust-configuration", trust.as_ref()]);
-    let (success, selected) = invoke(&typefacts, &scratch.project, &args, false);
-    assert!(success, "{}", selected.stderr);
-    assert!(
-        !selected
-            .notes()
-            .iter()
-            .any(|note| note.contains("dependency source reactive-package")
-                && note.contains("its contract stays")),
-        "{}",
-        selected.stderr
-    );
-    assert!(
-        selected.json()["findings"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|finding| finding["id"] == "SC9011" && finding["kind"] == "uncertifiable"),
-        "{}",
-        stdout(&selected)
-    );
-    assert!(
-        !selected.json()["findings"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|finding| finding["kind"] == "violation"),
-        "{}",
-        stdout(&selected)
-    );
-}
-
-#[test]
-fn config_only_namespace_edges_do_not_retain_runtime_packages() {
-    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
-        return;
-    };
-    let (scratch, trust) =
-        accepted_solid_package_with("config-only-namespace", NAMED_APP, |scratch| {
-            fs::write(
-                scratch.path("vite.config.ts"),
-                "import * as reactive from 'reactive-package'; export default reactive;",
-            )
-            .unwrap();
-        });
-    let trust = trust.to_string_lossy();
-    let mut args = with_host(&[]);
-    args.extend(["--receipt-trust-configuration", trust.as_ref()]);
-    let (success, selected) = invoke(&typefacts, &scratch.project, &args, false);
-    assert!(success, "{}", selected.stderr);
-    assert!(
-        selected.json()["findings"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .all(|finding| finding["id"] == "SC9014"),
-        "{}",
-        stdout(&selected)
-    );
-    assert!(
-        !selected
-            .notes()
-            .iter()
-            .any(|note| note.contains("dependency source reactive-package")
-                && note.contains("its contract stays")),
-        "{}",
-        selected.stderr
-    );
-}
-
-/// Review round 1 of ADR 0297: a package imported through a namespace
-/// binding is not selected, so the namespace keeps its accepted contract.
-/// Selecting it removed the contract, which nothing redirects a namespace
-/// member to, and `isReadyOpen`'s open `returns` was then reported nowhere.
-#[test]
-fn a_namespace_import_keeps_its_accepted_contract() {
-    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
-        return;
-    };
-    let answers = |tag: &str, app: &str| {
-        let (scratch, trust) = accepted_solid_package(tag, app);
-        let trust = trust.to_string_lossy().into_owned();
-        let run = |rest: &[&str]| {
-            let mut args = with_host(&[]);
-            args.extend(["--receipt-trust-configuration", trust.as_str()]);
-            args.extend(rest);
-            let (success, run) = invoke(&typefacts, &scratch.project, &args, false);
-            assert!(success, "{tag} {rest:?}: {}", run.stderr);
-            run
-        };
-        (run(&[]), run(&["--no-dependency-source"]))
-    };
-    // The control: named imports are redirected, so the package is selected
-    // and its contract unbound.
-    let (named, named_contracts) = answers("namespace-control", NAMED_APP);
-    assert!(
-        stdout(&named_contracts).contains("SC9005"),
-        "{}",
-        named_contracts.stderr
-    );
-    assert_ne!(
-        stdout(&named),
-        stdout(&named_contracts),
-        "the package is selectable"
-    );
-
-    let (namespace, namespace_contracts) = answers("namespace", NAMESPACE_APP);
-    assert!(
-        stdout(&namespace_contracts).contains("isReadyOpen"),
-        "{}",
-        stdout(&namespace_contracts)
-    );
-    assert_eq!(stdout(&namespace), stdout(&namespace_contracts));
-    assert!(
-        namespace.notes().iter().any(|note| note
-            .contains("dependency source reactive-package: imported through a namespace binding")),
-        "{}",
-        namespace.stderr
-    );
-}
-
-#[test]
-fn a_namespace_reexport_keeps_the_exact_members_accepted_contract() {
-    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
-        return;
-    };
-    for (tag, declaration, app) in [
-        (
-            "direct",
-            "export * as ns from 'reactive-package';",
-            "import { ns } from './barrel';",
-        ),
-        (
-            "chain",
-            "export * as ns from './inner';",
-            "import { ns } from './barrel';",
-        ),
-        (
-            "star-namespace-import",
-            "export * from 'reactive-package';",
-            "import * as ns from './barrel';",
-        ),
-    ] {
-        let app = format!(
-            "{app}\nexport function Status() {{ return <div>{{ns.isReady() ? 'ready' : 'waiting'}}</div>; }}\nexport function StatusOpen() {{ return <div>{{ns.isReadyOpen() ? 'ready' : 'waiting'}}</div>; }}\n"
-        );
-        let (scratch, trust) =
-            accepted_solid_package_with(&format!("contract-namespace-{tag}"), &app, |scratch| {
-                fs::write(scratch.path("barrel.ts"), declaration).unwrap();
-                let importer = if tag == "chain" {
-                    fs::write(
-                        scratch.path("inner.ts"),
-                        "export * from 'reactive-package';",
-                    )
-                    .unwrap();
-                    "inner.ts"
-                } else {
-                    "barrel.ts"
-                };
-                let path = scratch.path(".solid-checker/authorize-contract.json");
-                let mut request: serde_json::Value =
-                    serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-                request["import"]["importer"] = importer.into();
-                fs::write(path, serde_json::to_vec_pretty(&request).unwrap()).unwrap();
-            });
-        if let Ok(tsc) = std::env::var("SOLID_CHECKER_TEST_TSC") {
-            let output = Command::new("node")
-                .arg(tsc)
-                .args(["--noEmit", "--project"])
-                .arg(&scratch.project)
-                .output()
-                .unwrap();
-            assert!(
-                output.status.success(),
-                "{tag}: {}{}",
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr)
-            );
-        }
-        let trust = trust.to_string_lossy();
-        let mut args = with_host(&[]);
-        args.extend([
-            "--receipt-trust-configuration",
-            trust.as_ref(),
-            "--no-dependency-source",
-        ]);
-        let (success, run) = invoke(&typefacts, &scratch.project, &args, false);
-        assert!(success, "{tag}: {}", run.stderr);
-        let json = run.json();
-        let findings = json["findings"].as_array().unwrap();
-        assert!(
-            !findings
-                .iter()
-                .any(|finding| finding["kind"] == "violation")
-        );
-        let findings = findings
-            .iter()
-            .filter(|finding| finding["id"] == "SC9005")
-            .collect::<Vec<_>>();
-        assert_eq!(findings.len(), 1, "{tag}: {findings:#?}");
-        assert_eq!(findings[0]["id"], "SC9005", "{tag}: {findings:#?}");
-        assert_eq!(findings[0]["kind"], "uncertifiable");
-        assert!(
-            findings[0]["message"]
-                .as_str()
-                .unwrap()
-                .contains("isReadyOpen")
-        );
-    }
 }
 
 /// The same for a namespace import inside a selected package's own source:

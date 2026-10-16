@@ -34,7 +34,6 @@ export interface OwnedCheckRequest {
   presets?: string[]
   enableRules?: string[]
   dependencySources?: string[]
-  noDependencySource?: boolean
   windowRealm?: boolean
 }
 

@@ -2,16 +2,6 @@
   "status": "uncertifiable",
   "findings": [
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/package-prototype-instance-mutation-consumer/App.tsx",
-      "start": 124,
-      "end": 150,
-      "fixes": 0
-    },
-    {
       "rule": "unaudited-solid-release",
       "code": "SC9014",
       "kind": "uncertifiable",

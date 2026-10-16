@@ -29,34 +29,15 @@ receive the normal unknown-id error. CI compiles the single-dialect variant so
 shared infrastructure cannot grow an accidental dependency on a compiler or
 catalog it does not declare.
 
-Package behavior enters WASM only through `acceptedContracts`. Each entry pairs
-a stable main schema-version-1 document's exact JSON text, its proof-issued
-receipt's exact JSON text, and the
-host's full Phase-7 `ResolvedImport`: exact package identity, independently
-selected runtime and declarations, resolution traces, export identities, and
-canonical dependency closure. Rust validates and normalizes all three before
-analysis sees a semantic claim.
-
-The document and receipt are strings rather than parsed JSON values because a
-receipt binds the document's exact bytes; parsing and reserializing would
-silently change that wire identity.
-
-The field is optional only because a project may have no accepted external
-behavior. Omitting an import never falls back to package-name matching: this
-request carries no package files and no import attestation, so source analysis
-cannot run here, and every runtime import or re-export of a bare specifier
-(Solid core and `node:` built-ins excepted) that no accepted contract answers
-keeps an open requirement, reported as `package-contract-incomplete` where it
-matters. For package behaviour from source, use the [owned check](#owned-check). Hosts should use the same artifact-acquisition
-adapter as the Node CLI and must not manufacture closure digests from contract
-bytes.
-
-`acceptedContracts` is the only way package behavior enters. The compiled-in
-certified tier this build once carried is retired (ADR 0228), and the authored
-tier is not served here: it admits on the Solid runtime installed beside the
-package, which a host with no filesystem cannot show. `installedPackages`,
-`exportConditions` and `bundledContracts` are still accepted, so an older host's
-request decodes, and have no effect.
+No package contract is consumed (P7 of the contract-removal plan), and a
+request naming `acceptedContracts` is refused. This request carries no package
+files and no import attestation, so source analysis cannot run here: every
+runtime import or re-export of a bare specifier (Solid core and `node:`
+built-ins excepted) keeps an open requirement, reported as
+`package-contract-incomplete` (`SC9005`) where it matters. For package
+behaviour from source, use the [owned check](#owned-check). `installedPackages`,
+`exportConditions` and `bundledContracts` are still accepted, so an older
+host's request decodes, and have no effect.
 
 Rule configuration is not yet transported through the WASM `CheckRequest`.
 The adapter cannot read `.solid-checker/rule-options.json` and exposes no rule
@@ -91,11 +72,9 @@ await checker.close()
 ```
 
 **What it answers.** A check answers exactly what the native ordinary check
-answers with `--no-package-contracts` over the same files. Native defaults
-and contract consumption are unchanged. No package contract is read from any
-tier, so an import a tier covers stays an open obligation. The request takes
-the native options: `runtime`, `dependencySources`, `noDependencySource`,
-`windowRealm`, `dialect`, `presets`, `enableRules`. `projectId` must be
+answers over the same files. No package contract is read from any tier, so an
+import a tier covers stays an open obligation. The request takes the native
+options: `runtime`, `dependencySources`, `windowRealm`, `dialect`, `presets`, `enableRules`. `projectId` must be
 absolute, and is canonicalized against the mount exactly as native
 `--project` is.
 

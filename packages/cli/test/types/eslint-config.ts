@@ -4,9 +4,6 @@ import solidChecker, { type SolidCheckerSettings } from "solid-checker/eslint";
 const settings: SolidCheckerSettings = {
   project: "./tsconfig.json",
   dialect: "solid-v2",
-  acceptedContracts: ".solid-checker/accepted-contracts.json",
-  receiptTrustConfiguration: "../trust.json",
-  dependencySource: false,
   runtime: {
     target: "browser",
     rendering: "csr",

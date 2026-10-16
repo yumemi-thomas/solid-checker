@@ -259,7 +259,7 @@ cargo +1.97 test --manifest-path rust/Cargo.toml -p solid-reactive-ir --lib
 SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" cargo +1.97 test --manifest-path rust/Cargo.toml -p solid-facts-backend --test diagnostics_process
 
 # contract-process
-SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" cargo +1.97 test --manifest-path rust/Cargo.toml -p solid-facts-backend --test contracts_process --test dialects_process
+SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" cargo +1.97 test --manifest-path rust/Cargo.toml -p solid-facts-backend --test dialects_process
 
 # coverage compare (after Rust source changes, point at the fresh debug binary)
 SOLID_CHECKER_BIN="$PWD/rust/target/debug/solid-checker-rust" \

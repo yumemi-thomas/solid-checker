@@ -3,7 +3,7 @@
 `make wasm-parity` (a `make verify` step) checks the owned check that
 `solid-checker-wasm/owned.mjs` ships. The package is packed, then installed
 in isolation, and run against the native ordinary check with
-`--no-package-contracts` over the same frozen bytes at the same absolute
+the ordinary check over the same frozen bytes at the same absolute
 paths. The gate replaces the S1 manual prototype
 (`packages/wasm/prototypes/owned-check.mjs`), whose cases and assertions it
 carries.

@@ -1,44 +1,14 @@
 {
-  "status": "violation",
+  "status": "uncertifiable",
   "findings": [
     {
-      "rule": "package-contract-incomplete",
-      "code": "SC9005",
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/package-owned-computation-consumer/App.tsx",
-      "start": 50,
-      "end": 56,
-      "fixes": 0
-    },
-    {
-      "rule": "package-contract-incomplete",
-      "code": "SC9005",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/package-owned-computation-consumer/App.tsx",
-      "start": 360,
-      "end": 377,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-write-in-owned-scope",
-      "code": "SC2001",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/package-owned-computation-consumer/App.tsx",
-      "start": 366,
-      "end": 377,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-write-in-owned-scope",
-      "code": "SC2001",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/package-owned-computation-consumer/App.tsx",
-      "start": 943,
-      "end": 954,
+      "start": 1200,
+      "end": 1207,
       "fixes": 0
     },
     {

@@ -270,8 +270,7 @@ one-shot path and opens new TypeScript programs for every invocation, so no
 program or inventory from an earlier invocation answers it (ADR 0311). That
 costs a full project check per invocation, which an adapter that lints many
 files pays synchronously; it does not promise one filesystem snapshot within a
-single run. Pass `--no-dependency-source` (or set `dependencySource: false`)
-to bind packages through contracts and keep the retained session. Set
+single run. A check that declares no host keeps the retained session. Set
 `SOLID_CHECKER_DAEMON=0` to force a one-shot check for every mode or
 `SOLID_CHECKER_DAEMON_IDLE_SECS=<seconds>` to change the idle lifetime of a
 retained session. The default process-tree resident-memory ceiling is 2048
@@ -383,16 +382,13 @@ package the project loads from its runtime source instead of its contract
 (`@solidjs/vite-plugin`, `vite-plugin-solid`, or the one `@solidjs/start`
 ships) and its tsconfig directory is writable; otherwise it keeps contracts
 and reports a note saying why. Packages it cannot read that way, and packages
-imported through a namespace, keep their contracts. Nothing in the adapter's
+imported through a namespace, stay uncertifiable. Nothing in the adapter's
 cache identity follows installed package bytes, so such a run is reused only
 by the rules of one lint pass over a file and analyzed again on the next,
 including when the same `SourceCode` object is linted again. A custom
 `command` whose `commandArgs` hold a host, a selection, or an option the
-adapter cannot read is treated the same way. Set
-`settings.solidChecker.dependencySource` to `false` to bind every package
-through its contract instead (`--no-dependency-source`); the snapshot is then
-cached across passes as before. The `browser-v2` config sets a target without
-a build, so it keeps contracts.
+adapter cannot read is treated the same way. The `browser-v2` config sets a
+target without a build, so it selects no package source.
 
 Package contracts reach the adapter the way they reach the CLI: the analysis
 discovers the project's `.solid-checker/` catalogs itself, and

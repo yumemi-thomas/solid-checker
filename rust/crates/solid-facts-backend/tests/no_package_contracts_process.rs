@@ -107,33 +107,20 @@ fn the_requirement_boundary_survives_without_any_contract() {
     );
     assert!(
         rows[0].2.contains(
-            "uncontracted-package has no entrypoint/export summary for imported export readCount"
+            "uncontracted-package is not analyzed from source here, so the behaviour of imported export readCount is unknown"
         ),
         "{rows:?}"
     );
 }
 
-/// Every fixture whose imports a project catalog names. The default check
-/// refuses each catalog's obsolete authorization; the disabled one never
-/// reads it, and keeps the same imports open for the reason it has instead:
-/// no contract is consumed.
+/// Every fixture whose imports a project catalog names. No check reads a
+/// catalog's contract (P7); each keeps the same imports open for the reason it
+/// has: no contract is consumed.
 const CATALOGED: &[&str] = &[
-    "package-callback-arguments-consumer",
-    "package-callback-consumer",
-    "package-consumer",
     "package-contract-install-shapes",
     "package-contract-paths-shadow",
-    "package-parameter-member-consumer",
-    "package-repeated-open-claim",
     "package-return-consumer",
-    "package-store-consumer",
-    "package-store-destructure",
-    "package-structured-return",
-    "package-structured-unresolved",
     "package-unknown-callback-consumer",
-    "package-unknown-export",
-    "package-unknown-returns-consumer",
-    "package-variant-precedence-consumer",
 ];
 
 /// Every distinct finding site, as `(id, kind, start, end)`.
@@ -181,7 +168,7 @@ fn a_cataloged_import_stays_open_without_its_contract() {
             false,
         ));
         assert!(
-            findings(&default)
+            !findings(&default)
                 .iter()
                 .any(|(_, _, message)| message.contains("discovered reactivity contract")),
             "{name}: {default}"

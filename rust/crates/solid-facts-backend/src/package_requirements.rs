@@ -71,13 +71,9 @@ pub fn external_package_boundary(
 /// contract-removal plan). Nothing in such a request shows what a package
 /// does or which installation a specifier names, so every runtime import or
 /// re-export of a bare specifier, Solid core excepted, keeps an open
-/// requirement. `node:` built-ins are not packages. `answered` names the
-/// `(importer, specifier)` pairs something else in the request answers.
+/// requirement. `node:` built-ins are not packages.
 #[must_use]
-pub fn unsupplied_package_boundary(
-    facts: &solid_facts::ProjectFacts,
-    answered: &std::collections::BTreeSet<(String, String)>,
-) -> PackageBoundary {
+pub fn unsupplied_package_boundary(facts: &solid_facts::ProjectFacts) -> PackageBoundary {
     let mut boundary = PackageBoundary::default();
     for file in &facts.files {
         let imports = file
@@ -99,11 +95,7 @@ pub fn unsupplied_package_boundary(
             if name.contains(':') || solid_dialect::primitive_defining_package(&name) {
                 continue;
             }
-            let pair = (file.path.as_str().to_owned(), specifier.to_owned());
-            if answered.contains(&pair) {
-                continue;
-            }
-            let key = ImportKey::new(&pair.0, pair.1);
+            let key = ImportKey::new(file.path.as_str(), specifier);
             boundary.record(
                 key.clone(),
                 Some(&name),

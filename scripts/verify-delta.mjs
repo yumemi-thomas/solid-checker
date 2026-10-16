@@ -95,7 +95,7 @@ export const CHECKS = {
   "contract-process": {
     command: [
       "cargo", TOOLCHAIN, "test", "--manifest-path", MANIFEST, "-p", "solid-facts-backend",
-      "--test", "contracts_process", "--test", "dialects_process",
+      "--test", "dialects_process",
     ],
     env: { SOLID_TYPEFACTS_BIN: join(ROOT, TYPEFACTS) },
   },

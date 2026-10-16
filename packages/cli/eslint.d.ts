@@ -31,35 +31,12 @@ export interface SolidCheckerSettings {
   command?: string;
   /** Arguments placed before solid-checker's generated CLI arguments. */
   commandArgs?: string[];
-  /**
-   * Receipt-issued stable-v1 contract catalog for exact imports. A relative
-   * path resolves against `cwd`.
-   */
-  acceptedContracts?: string;
-  /**
-   * Policy-2 issuer trust (`--receipt-trust-configuration`), the file
-   * `contract certify --trust-configuration-output` wrote. Without it a
-   * discovered policy-2 catalog is not read, and one named by
-   * `acceptedContracts` fails the analysis. The withheld catalog is reported
-   * by the `contract-note` rule. A relative path resolves against
-   * `cwd`; its bytes are part of the analysis cache identity.
-   */
-  receiptTrustConfiguration?: string;
   /** Force a dialect instead of detecting it from the project. */
   dialect?: "solid-v2" | (string & {});
   /** Exact runtime selection used for artifact cases and rendering proofs. */
   runtime?: SolidCheckerRuntimeSettings;
-  /**
-   * Whether installed Solid packages are analyzed from their runtime source.
-   * When `runtime` declares both `target` and `build` and the project installs
-   * a Solid Vite plugin, the checker does so by default and keeps package
-   * contracts for what it cannot read (ADR 0297). `false` passes
-   * `--no-dependency-source`, binding every package through its contract. A
-   * run that may read package source reuses its analysis within one lint pass
-   * over a file only, so an edited installed package is seen on the next pass,
-   * even when ESLint lints the same `SourceCode` object again.
-   */
-  dependencySource?: boolean;
+  // `acceptedContracts`, `receiptTrustConfiguration` and `dependencySource`
+  // were removed with package-contract consumption; setting one is refused.
   /** Opt-in Vite client resolver observation; executes project config. Off by default. */
   runtimeResolution?: "required" | "off";
   /** Read a canonical JSON snapshot instead of starting an analysis process. */

@@ -1,41 +1,41 @@
 {
-  "status": "violation",
+  "status": "uncertifiable",
   "findings": [
     {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "violation",
-      "severity": "error",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/package-leaf-registration-consumer/App.tsx",
       "start": 339,
       "end": 345,
       "fixes": 0
     },
     {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "violation",
-      "severity": "error",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/package-leaf-registration-consumer/App.tsx",
       "start": 582,
       "end": 599,
       "fixes": 0
     },
     {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "violation",
-      "severity": "error",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/package-leaf-registration-consumer/App.tsx",
       "start": 741,
       "end": 747,
       "fixes": 0
     },
     {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
-      "severity": "error",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/package-leaf-registration-consumer/App.tsx",
       "start": 910,
       "end": 921,
@@ -49,16 +49,6 @@
       "path": "fixtures/reactive-ir/package-leaf-registration-consumer/App.tsx",
       "start": 1070,
       "end": 1087,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/package-leaf-registration-consumer/App.tsx",
-      "start": 1294,
-      "end": 1302,
       "fixes": 0
     },
     {

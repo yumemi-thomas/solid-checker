@@ -123,8 +123,6 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/write-scope-optimistic-store-rc3/node_modules/**
 !fixtures/reactive-ir/flush-read-role/node_modules/
 !fixtures/reactive-ir/flush-read-role/node_modules/**
-!fixtures/reactive-ir/solid2-contract-callback-variants-node/node_modules/
-!fixtures/reactive-ir/solid2-contract-callback-variants-node/node_modules/**
 !fixtures/reactive-ir/ported-structure-v2/node_modules/
 !fixtures/reactive-ir/ported-structure-v2/node_modules/**
 !fixtures/reactive-ir/release-triple-*/node_modules/
@@ -277,8 +275,6 @@ docs/package-contract-v2/phase21/*measurement.json
 !fixtures/reactive-ir/partial-structural-return-consumer/node_modules/**
 !fixtures/reactive-ir/package-effectful-member-consumer/node_modules/
 !fixtures/reactive-ir/package-effectful-member-consumer/node_modules/**
-!fixtures/reactive-ir/package-open-callbacks-eager-argument/node_modules/
-!fixtures/reactive-ir/package-open-callbacks-eager-argument/node_modules/**
 !fixtures/reactive-ir/package-own-tracked-read-consumer/node_modules/
 !fixtures/reactive-ir/package-own-tracked-read-consumer/node_modules/**
 

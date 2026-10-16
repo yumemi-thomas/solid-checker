@@ -779,87 +779,40 @@ function flagValue(args, flag) {
   return index === -1 ? undefined : args[index + 1];
 }
 
-test("receiptTrustConfiguration reaches the checker absolute, and its bytes are cache identity", () => {
-  const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-trust-"));
-  const project = join(root, "app", "tsconfig.json");
-  mkdirSync(join(root, "app"));
-  writeFileSync(project, "{}\n");
-  const trustPath = join(root, "trust.json");
-  writeFileSync(trustPath, "{\"issuers\":[]}\n");
-  const { command, commandArgs, invocations } = recordingAnalyzer(root);
-  // Relative to `cwd`, like `project` and `snapshotPath` -- not to the
-  // tsconfig directory the checker runs in.
-  const context = settings => ({
-    filename: join(root, "app", "App.tsx"),
-    physicalFilename: join(root, "app", "App.tsx"),
-    settings: { solidChecker: { command, commandArgs, project, cwd: root, ...settings } },
-    options: []
-  });
-  plugin._testing.snapshotCache.clear();
-  const trusted = context({
-    receiptTrustConfiguration: "trust.json",
-    acceptedContracts: "catalog.json"
-  });
-  plugin._testing.loadSnapshot(trusted);
-  plugin._testing.loadSnapshot(trusted);
-  assert.equal(invocations().length, 1, "unchanged trust bytes reuse the snapshot");
-  assert.equal(flagValue(invocations()[0], "--receipt-trust-configuration"), trustPath);
-  assert.equal(flagValue(invocations()[0], "--accepted-contracts"), join(root, "catalog.json"));
-
-  // Same path, new bytes: a persistent ESLint session must not serve the
-  // verdict the old trust produced.
-  writeFileSync(trustPath, "{\"issuers\":[\"replaced\"]}\n");
-  plugin._testing.loadSnapshot(trusted);
-  assert.equal(invocations().length, 2, "edited trust bytes re-run the analysis");
-
-  // And no trust is a different identity from any trust.
-  plugin._testing.loadSnapshot(context({ acceptedContracts: "catalog.json" }));
-  assert.equal(invocations().length, 3);
-  assert.equal(flagValue(invocations()[2], "--receipt-trust-configuration"), undefined);
-  plugin._testing.snapshotCache.clear();
-});
-
-test("an unreadable receiptTrustConfiguration is a clear ESLint error, not an analysis", () => {
-  const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-trust-missing-"));
+test("settings retired with package-contract consumption are refused, not ignored", () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-retired-"));
   const project = join(root, "tsconfig.json");
   writeFileSync(project, "{}\n");
-  const filename = join(root, "App.js");
   const { command, commandArgs, invocations } = recordingAnalyzer(root);
   plugin._testing.snapshotCache.clear();
-  const config = [{
-    plugins: { "solid-checker": plugin },
-    settings: { solidChecker: {
-      command, commandArgs, project, cwd: root, receiptTrustConfiguration: "missing-trust.json"
-    } },
-    rules: { "solid-checker/certification": "error" }
-  }];
-  assert.throws(
-    () => new Linter({ cwd: root }).verify("export {};\n", config, { filename }),
-    error =>
-      error.message.includes("settings.solidChecker.receiptTrustConfiguration") &&
-      error.message.includes(join(root, "missing-trust.json")) &&
-      error.message.includes("ENOENT")
-  );
-  assert.equal(invocations().length, 0, "the checker never starts on a bad trust path");
-
-  // Not cached: supplying the file recovers in the same process.
-  writeFileSync(join(root, "missing-trust.json"), "{}\n");
-  assert.deepEqual(new Linter({ cwd: root }).verify("export {};\n", config, { filename }), []);
-  assert.equal(invocations().length, 1);
+  for (const [name, value] of [
+    ["acceptedContracts", "catalog.json"],
+    ["receiptTrustConfiguration", "trust.json"],
+    ["dependencySource", false]
+  ]) {
+    assert.throws(
+      () => plugin._testing.loadSnapshot({
+        filename: join(root, "App.tsx"),
+        physicalFilename: join(root, "App.tsx"),
+        settings: { solidChecker: { command, commandArgs, project, [name]: value } },
+        options: []
+      }),
+      new RegExp(`settings\\.solidChecker\\.${name} was removed`)
+    );
+  }
+  assert.equal(invocations().length, 0, "the checker never starts");
   plugin._testing.snapshotCache.clear();
 });
 
-test("a withheld-catalog note reaches ESLint once per linted file, as a warning", () => {
+test("a note reaches ESLint once per linted file, as a warning", () => {
   const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-note-"));
   const project = join(root, "tsconfig.json");
   writeFileSync(project, "{}\n");
   // The native checker's notice, in shape: exit 0, findings on stdout, the
   // note on stderr, which the adapter used to drop.
   const note =
-    "solid-checker: note: project catalog /p/.solid-checker/accepted-contracts.json was not read: " +
-    "policy-2 receipts need a trusted issuer and no trust configuration was supplied, so the " +
-    "contracts for @kobalte/core are not admitted and the analysis proceeds as if the catalog " +
-    "was absent; pass --receipt-trust-configuration <trust.json> to admit them";
+    "solid-checker: note: packages are not analyzed from source by default: no Solid Vite " +
+    "plugin resolves from the project; their behaviour stays uncertifiable";
   const { command, commandArgs, invocations } = recordingAnalyzer(
     root,
     `process.stderr.write(${JSON.stringify(`timing noise\n${note}\n`)});`
@@ -881,9 +834,8 @@ test("a withheld-catalog note reaches ESLint once per linted file, as a warning"
     assert.equal(messages[0].severity, 1);
     assert.equal(messages[0].line, 1);
     assert.equal(messages[0].column, 1);
-    assert.match(messages[0].message, /^\[solid-checker note\] project catalog /);
+    assert.match(messages[0].message, /^\[solid-checker note\] packages are not analyzed/);
     assert.ok(!messages[0].message.includes("timing noise"), "only note lines surface");
-    assert.match(messages[0].message, /settings\.solidChecker\.receiptTrustConfiguration/);
   }
   assert.equal(invocations().length, 1, "the note rides the cached snapshot");
 
@@ -943,30 +895,6 @@ test("a withheld-catalog note reaches ESLint once per linted file, as a warning"
   plugin._testing.snapshotCache.clear();
 });
 
-test("a named catalog that needs trust fails naming the ESLint setting", () => {
-  const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-named-"));
-  const project = join(root, "tsconfig.json");
-  writeFileSync(project, "{}\n");
-  const analyzer = join(root, "analyzer.mjs");
-  writeFileSync(analyzer, `process.stderr.write("--accepted-contracts c.json: policy-2 acceptance receipt requires authenticated issuer provenance; pass --receipt-trust-configuration <trust.json> naming the issuer that certified it");
-process.exit(2);
-`);
-  const context = {
-    filename: join(root, "App.tsx"),
-    physicalFilename: join(root, "App.tsx"),
-    settings: { solidChecker: {
-      command: process.execPath, commandArgs: [analyzer], project, acceptedContracts: "c.json"
-    } },
-    options: []
-  };
-  plugin._testing.snapshotCache.clear();
-  assert.throws(
-    () => plugin._testing.loadSnapshot(context),
-    /authenticated issuer provenance[\s\S]*settings\.solidChecker\.receiptTrustConfiguration/
-  );
-  plugin._testing.snapshotCache.clear();
-});
-
 test("a run that reads package source is reused within one file's pass only (ADR 0297)", () => {
   const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-source-"));
   try {
@@ -991,34 +919,21 @@ test("a run that reads package source is reused within one file's pass only (ADR
     plugin._testing.loadSnapshot(first);
     plugin._testing.loadSnapshot(Object.create(first));
     assert.equal(invocations().length, 1, "every rule of one pass shares its analysis");
-    assert.equal(invocations()[0].includes("--no-dependency-source"), false);
     plugin._testing.loadSnapshot(context(host));
     assert.equal(invocations().length, 2, "a later pass analyzes again");
     assert.equal(plugin._testing.snapshotCache.size, 0, "nothing enters the cross-pass cache");
 
-    // The opt-out reaches native and restores the cross-pass cache.
-    const optOut = { ...host, dependencySource: false };
-    plugin._testing.loadSnapshot(context(optOut));
-    plugin._testing.loadSnapshot(context(optOut));
-    assert.equal(invocations().length, 3);
-    assert.equal(invocations()[2].includes("--no-dependency-source"), true);
-
     // A target alone selects nothing, so the cross-pass cache stands.
     plugin._testing.loadSnapshot(context({ runtime: { target: "browser" } }));
     plugin._testing.loadSnapshot(context({ runtime: { target: "browser" } }));
-    assert.equal(invocations().length, 4);
+    assert.equal(invocations().length, 3);
 
     // A host or selection spelled in commandArgs counts as reading source.
     for (const extra of [["--runtime-build", "development"], ["--dependency-source", "*"]]) {
       plugin._testing.loadSnapshot(context({ runtime: { target: "browser" } }, extra));
       plugin._testing.loadSnapshot(context({ runtime: { target: "browser" } }, extra));
     }
-    assert.equal(invocations().length, 8);
-
-    assert.throws(
-      () => plugin._testing.loadSnapshot(context({ dependencySource: "off" })),
-      /settings\.solidChecker\.dependencySource must be a boolean/
-    );
+    assert.equal(invocations().length, 7);
   } finally {
     plugin._testing.snapshotCache.clear();
     rmSync(root, { recursive: true, force: true });
@@ -1055,8 +970,7 @@ process.stdout.write(JSON.stringify({ status: "certified", findings: [],
 
 // `--no-package-contracts` reads catalog files and installed package entries
 // the cross-pass key does not follow, so a run with it is analyzed afresh every
-// pass -- with or without the adapter's own dependencySource opt-out -- while
-// the rules of one pass still share one analysis. The same token consumed as a
+// pass, while the rules of one pass still share one analysis. The same token consumed as a
 // value option's value is a value, and changes nothing.
 test("a run with --no-package-contracts is reused within one pass only", () => {
   const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-contracts-off-"));
@@ -1094,8 +1008,8 @@ test("a run with --no-package-contracts is reused within one pass only", () => {
     edit();
     assert.deepEqual(messages(off), ["after-edit 2", "after-edit 2"],
       "the next pass analyzes afresh and sees the changed input");
-    assert.deepEqual(messages(off, { dependencySource: false }), ["after-edit 3", "after-edit 3"],
-      "the dependencySource opt-out does not restore cross-pass reuse");
+    assert.deepEqual(messages(off), ["after-edit 3", "after-edit 3"],
+      "nor does a third");
     assert.equal(plugin._testing.snapshotCache.size, 0, "nothing enters the cross-pass cache");
     assert.equal(runs(), 3);
 
@@ -1205,29 +1119,24 @@ test("commandArgs are read at native's option positions (ADR 0297 review)", () =
     const host = { runtime: { target: "browser", build: "development" } };
     plugin._testing.snapshotCache.clear();
 
-    // A condition spelled like the opt-out is a condition: native defaults to
+    // A condition spelled like a flag is a condition: native defaults to
     // source, so no pass reuses another's analysis.
-    const condition = ["--runtime-condition", "--no-dependency-source"];
+    const condition = ["--runtime-condition", "--no-package-contracts"];
     assert.equal(lint(host, condition), "before-edit");
     edit();
     assert.equal(lint(host, condition), "after-edit", "a later pass analyzes again");
     assert.equal(runs(), 2);
     assert.equal(plugin._testing.snapshotCache.size, 0);
 
-    // The opt-out as an option is contract mode, cached across passes.
-    lint(host, ["--no-dependency-source"]);
-    lint(host, ["--no-dependency-source"]);
-    assert.equal(runs(), 3);
-
     // An option the adapter cannot read leaves arity unknown: taken as source.
-    lint({}, ["--some-future-option", "--no-dependency-source"]);
-    lint({}, ["--some-future-option", "--no-dependency-source"]);
-    assert.equal(runs(), 5);
+    lint({}, ["--some-future-option", "--certify"]);
+    lint({}, ["--some-future-option", "--certify"]);
+    assert.equal(runs(), 4);
 
-    // The setting is the adapter's own opt-out, whatever commandArgs hold.
-    lint({ ...host, dependencySource: false }, condition);
-    lint({ ...host, dependencySource: false }, condition);
-    assert.equal(runs(), 6);
+    // Without a host or an unknown option, the cross-pass cache stands.
+    lint({}, ["--certify"]);
+    lint({}, ["--certify"]);
+    assert.equal(runs(), 5);
   } finally {
     plugin._testing.snapshotCache.clear();
     rmSync(root, { recursive: true, force: true });

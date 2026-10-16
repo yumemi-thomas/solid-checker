@@ -1,5 +1,5 @@
 {
-  "status": "violation",
+  "status": "uncertifiable",
   "findings": [
     {
       "rule": "unaudited-solid-release",
@@ -19,16 +19,6 @@
       "path": "fixtures/reactive-ir/inferred-host-reachability/src/main.tsx",
       "start": 388,
       "end": 451,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/inferred-host-reachability/src/probe/competing.ts",
-      "start": 48,
-      "end": 61,
       "fixes": 0
     }
   ]

@@ -151,13 +151,11 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
             } else {
                 (
                     format!(
-                        "the reactivity contract for {module} has no entrypoint/export summary for {} export {export}; solid-checker cannot tell whether it reads reactive values, takes tracked callbacks, or returns accessors, so code flowing through it cannot be certified",
+                        "{module} is not analyzed from source here, so the behaviour of {} export {export} is unknown; solid-checker cannot tell whether it reads reactive values, takes tracked callbacks, or returns accessors, so code flowing through it cannot be certified",
                         if *reexported { "re-exported" } else { "imported" }
                     ),
                     (terms.removed_export_hint)(module, export).unwrap_or_else(|| {
-                        format!(
-                            "Generate a stable-v1 proposal for the exact installed artifact, prove export {export}'s required semantic leaves (including any complete-negative claims), issue its receipt, and register the exact document/receipt pair in .solid-checker/accepted-contracts.json. See docs/package-contracts.md for the workflow."
-                        )
+                        PACKAGE_BEHAVIOUR_UNKNOWN_HINT.to_owned()
                     }),
                 )
             }
@@ -226,10 +224,10 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         }
         StaticDefectKind::ReactiveSourceUncaptured { source, callee } => (
             format!(
-                "the reactive source {source:?} is passed to {callee}, whose reactive behaviour is not described anywhere: it has no body in this project, no package contract entry, and is not a Solid primitive; whether reads through it stay tracked cannot be certified"
+                "the reactive source {source:?} is passed to {callee}, whose reactive behaviour is not described anywhere: it has no body this analysis reads and is not a Solid primitive; whether reads through it stay tracked cannot be certified"
             ),
             format!(
-                "If {callee} comes from a package, add a receipt-issued stable-v1 contract for its exact artifact and callback operation. Otherwise, route the call through a project-local adapter whose body makes invocation or retention explicit. See docs/package-contracts.md."
+                "If {callee} comes from a package, it is not analyzed from source here: {PACKAGE_SOURCE_PREMISE} Otherwise, route the call through a project-local adapter whose body makes invocation or retention explicit."
             ),
         ),
         StaticDefectKind::ReactiveDispatchUnresolved {
@@ -876,6 +874,14 @@ pub fn suppress_findings_owned_by_enabled_rules(
     });
 }
 
+/// What lets ordinary analysis read a package's runtime source (ADR 0297),
+/// stated where a package's behaviour is reported unknown.
+const PACKAGE_SOURCE_PREMISE: &str = "installed Solid packages are analyzed from their runtime source when the run declares a runtime target and build (--runtime-target, --runtime-build) and a Solid Vite plugin resolves from the project, or when --dependency-source names them.";
+
+/// The hint of the package-behaviour-unknown form of `SC9005` (P7 of the
+/// contract-removal plan): no package contract is consumed.
+const PACKAGE_BEHAVIOUR_UNKNOWN_HINT: &str = "Package contracts are no longer consumed: installed Solid packages are analyzed from their runtime source when the run declares a runtime target and build (--runtime-target, --runtime-build) and a Solid Vite plugin resolves from the project, or when --dependency-source names them. A package source analysis cannot read stays uncertifiable.";
+
 /// Projects one seed. Used by the backend for package-contract issues that
 /// are discovered after the reactive [`Program`] has been built.
 #[must_use]
@@ -1213,10 +1219,10 @@ fn collapse_unaccepted_contract_defects(
             let listed = exports[..named].join(", ");
             let remainder = exports.len() - named;
             finding.message = format!(
-                "this project has no accepted reactivity contract for {module}; solid-checker \
-                 cannot tell whether its exports read reactive values, take tracked callbacks, or \
-                 return accessors, so code flowing through them cannot be certified. {} export{} \
-                 used across {} import site{}: {listed}{}",
+                "{module} is not analyzed from source here, so its behaviour is unknown; \
+                 solid-checker cannot tell whether its exports read reactive values, take tracked \
+                 callbacks, or return accessors, so code flowing through them cannot be \
+                 certified. {} export{} used across {} import site{}: {listed}{}",
                 exports.len(),
                 if exports.len() == 1 { "" } else { "s" },
                 group.len(),
@@ -1227,12 +1233,7 @@ fn collapse_unaccepted_contract_defects(
                     format!(", and {remainder} more")
                 }
             );
-            finding.hint = format!(
-                "Accept one contract for {module} and every site above is answered at once: \
-                 generate a stable-v1 proposal for the exact installed artifact, certify it, and \
-                 register the document/receipt pair under .solid-checker/. See \
-                 docs/package-contracts.md for the workflow."
-            );
+            finding.hint = PACKAGE_BEHAVIOUR_UNKNOWN_HINT.to_owned();
             finding
                 .related_locations
                 .extend(group[1..].iter().map(|defect| defect.location.clone()));

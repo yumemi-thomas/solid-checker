@@ -1,5 +1,44 @@
 # Precision backlog
 
+P7 switch-off: no package contract is consumed (2026-10-16). Ordinary
+analysis, one-shot and retained, native and WASM, binds no catalog, authored
+tier or bundled contract; the package boundary comes from
+`package_requirements` alone (`check::package_inputs`). An import a tier still
+covers keeps an open requirement (`SC9005`), never silence, and the message now
+says the package "is not analyzed from source here, so its behaviour is
+unknown". `--no-dependency-source`, the fixture key `dependencySource: false`,
+WASM `noDependencySource` and `acceptedContracts`, and the ESLint settings
+`acceptedContracts`, `receiptTrustConfiguration` and `dependencySource` are
+refused with a message; `--accepted-contracts` and
+`--receipt-trust-configuration` are refused for a project check.
+`--no-package-contracts` is accepted as a no-op. Rollback is `git revert` of
+this one commit.
+
+- **Corpus sweep** (49 projects, release binary, default mode): violations
+  537 -> 537, none added and none removed; uncertifiable 3,705 -> 3,711 (45
+  sites added, 39 removed). Every removed uncertifiable was a contract claim
+  (an open `callbacks`/`returns` leaf of an authored contract, a
+  contract-derived `missing-owner` or `leaf-owner-forbidden-call` at a
+  `createTimer`/`createPointerListeners` call, or an `SC9012` over a
+  contract's possible implementations); each such package is now one
+  package-behaviour-unknown `SC9005` per project with the sites as related
+  locations.
+- **Fixtures:** 25 contract-mechanics fixtures deleted (accepted catalogs,
+  context premises, open claims, bundled contracts). The 58 `authorize-contract.json`
+  markers are gone and coverage refuses one. 49 snapshots moved to
+  source-only: 0 violations added; 34 lost contract-proven violations and now
+  carry `SC9005`. `package-argument-container-consumer` and
+  `tuple-contract-iteration-veto` became `certified`: their stub packages
+  declare no Solid dependency, so, like any non-Solid package, they read as
+  plain code, and no reactive value reaches them. Their READMEs still
+  describe the retired contract claim.
+- **Held, not regressed:** the contract-proven violations those fixtures
+  pinned (callback timing, owner requirements, returned accessors, prototype
+  instances, host-conditioned browser claims) have no source-analysis
+  replacement unless the package is selected as dependency source. Package
+  source selection still needs a declared target and build and a Solid Vite
+  plugin; a host-free run leaves every Solid package uncertifiable.
+
 P5 minimum for `checkSync` (2026-10-16). The host-supplied WASM entry carries
 no package files and no import attestation, so its package boundary was empty
 and a package import no accepted contract answered read as plain code. Every

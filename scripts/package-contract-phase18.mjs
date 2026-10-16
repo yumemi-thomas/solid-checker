@@ -156,10 +156,8 @@ const SOURCE_OWNERS = [
     path: "rust/crates/solid-facts-backend/src/first_party_bundles.rs",
     markers: ["load_receipt_issued_embedded_contract("]
   },
-  {
-    path: "rust/crates/solid-checker-wasm/src/lib.rs",
-    markers: ["accepted_contracts: Vec<HostAcceptedContract>", "load_external_contract_index("]
-  },
+  // The WASM adapter consumes no package contract since P7 of the
+  // contract-removal plan; it refuses `acceptedContracts`.
   {
     path: "packages/cli/scripts/generate-package-contract.mjs",
     markers: ["Stable package-contract proposal producer.", "This file never reads a summary."]
@@ -186,19 +184,7 @@ const SOURCE_OWNERS = [
   }
 ];
 
-const STABLE_BOUNDARY_TESTS = [
-  {
-    path: "packages/wasm/test/resolved-imports.test.mjs",
-    required: [
-      "temporary schema-version-2 documents have no compatibility decoder",
-      "/schema version 2.*expected 1/i",
-      "legacy schema-version-1 documents have no compatibility decoder",
-      "delete legacy.format;",
-      "/contract document cannot be decoded.*missing field.*format/i"
-    ],
-    forbidden: ["solid-checker-wasm-v2-", "/schema version 1.*expected 2/i"]
-  }
-];
+const STABLE_BOUNDARY_TESTS = [];
 
 // Per-dialect documents again, for the same reason: a rule manifest or
 // assembly manifest whose version this gate never asserted would be outside

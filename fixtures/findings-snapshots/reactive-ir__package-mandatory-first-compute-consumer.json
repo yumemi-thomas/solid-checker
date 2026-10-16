@@ -1,14 +1,44 @@
 {
-  "status": "violation",
+  "status": "uncertifiable",
   "findings": [
     {
-      "rule": "reactive-write-in-owned-scope",
-      "code": "SC2001",
-      "kind": "violation",
-      "severity": "error",
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/package-mandatory-first-compute-consumer/App.tsx",
-      "start": 335,
-      "end": 347,
+      "start": 206,
+      "end": 214,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-mandatory-first-compute-consumer/App.tsx",
+      "start": 356,
+      "end": 364,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-mandatory-first-compute-consumer/App.tsx",
+      "start": 521,
+      "end": 529,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-mandatory-first-compute-consumer/App.tsx",
+      "start": 578,
+      "end": 586,
       "fixes": 0
     },
     {

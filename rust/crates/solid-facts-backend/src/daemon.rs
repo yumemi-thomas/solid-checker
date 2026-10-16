@@ -39,8 +39,7 @@ use solid_facts::core::SourceHash;
 use solid_facts_backend::{
     BackendError, DiagnosticSession, NativeIncrementalSession, RequestedRuleEnablement,
     SourceChange, SourceFile, TypeFactsSession, accepted_contract_catalog_members,
-    discovered_contract_paths, imported_package_roots, read_policy2_trust_configuration,
-    semantic_demand_options_for_enablement,
+    discovered_contract_paths, imported_package_roots, semantic_demand_options_for_enablement,
 };
 use solid_reactive_ir::CacheRetention;
 use solid_reactive_ir::RuntimeEnvironment;
@@ -1375,52 +1374,28 @@ fn answer(
         .as_ref()
         .map(|dependency| dependency.prepared.notes.refusals.clone())
         .unwrap_or_default();
-    let mut boundary =
-        solid_facts_backend::external_package_boundary(directory, &facts, &source_refusals);
-    let requirements = solid_facts_backend::requirement_index(&boundary);
-    let trust = (!check.receipt_trust_configuration.is_empty())
-        .then(|| read_policy2_trust_configuration(Path::new(&check.receipt_trust_configuration)))
-        .transpose()?;
-    // The same contract acquisition the one-shot path performs, and for the
-    // same reason it has to be the same: this daemon is *on by default in a
-    // release build*, so it -- not the one-shot path -- is what an ordinary
-    // user runs. It had its own, older acquisition: one
-    // `accepted-contracts.json` and no artifact admission at all. So a case
-    // set went undiscovered, an acceptance certified from another file never
-    // applied, and the compiled-in tier was invisible. Measured on a project
-    // importing a bundled `@solid-primitives/keyed@1.5.3`: the release binary
-    // answered "no receipt-accepted contract matches this exact import" with
-    // the daemon on and read the contract with it off.
-    // Withheld catalogs are reported by the client, which prints to the
-    // user's terminal; this process's stderr goes nowhere. So the notice is
-    // answered with the snapshot. See `check`.
+    // The same package inputs the one-shot path reads: no package contract is
+    // consumed from any tier (P7 of the contract-removal plan).
     let catalog_scopes = solid_facts_backend::nested_catalog_candidates(
         directory,
         facts.files.iter().map(|file| file.path.as_str()),
     );
-    let selection = solid_facts_backend::select_project_catalogs_in(
-        directory,
-        &catalog_scopes,
-        &check.accepted_contract_catalog,
-        trust.is_some(),
-    )?;
     // Capture discovery's exact input generation before it runs. A refusal
     // needs only its witness; success retains the complete graph-input closure.
     let mut inference_inputs = inference_inputs_for_check(state, check);
-    let solid_facts_backend::InferredAcceptedContracts {
-        mut contracts,
-        hosts,
-        note: inference_note,
-    } = solid_facts_backend::inferred_project_accepted_contracts_with_note(
+    let (
+        mut boundary,
+        solid_facts_backend::InferredAcceptedContracts {
+            mut contracts,
+            hosts,
+            note: inference_note,
+        },
+    ) = solid_facts_backend::check::package_inputs(
         directory,
-        &selection.admitted,
-        &selection.nested,
-        trust.as_ref(),
-        check.bundled_contracts,
-        &check.runtime,
-        state.dialect.vocabulary,
         &facts,
-        requirements,
+        &source_refusals,
+        &check.runtime,
+        state.dialect,
     )?;
     if let Some(inputs) = &mut inference_inputs
         && let Some(hosts) = &hosts
@@ -1466,7 +1441,6 @@ fn answer(
     };
     let notice: Arc<str> = dependency_notes
         .into_iter()
-        .chain(selection.notice())
         .chain(inference_note)
         .collect::<Vec<_>>()
         .join("\n")
@@ -1502,8 +1476,7 @@ fn answer(
     .into();
     let status: Arc<str> = analysis.snapshot.status.as_str().into();
     let modules = imported_package_roots(&facts);
-    let install_lookups =
-        solid_facts_backend::importer_admission_inputs(directory, &selection.nested, &facts)?;
+    let install_lookups = solid_facts_backend::importer_admission_inputs(directory, &[], &facts)?;
     // An unreadable witness, or a change while discovery/analysis ran, prevents
     // caching. The ordinary answer still follows the existing refusal path.
     state.last = match inference_inputs.filter(|inputs| inference_inputs_current(inputs)) {

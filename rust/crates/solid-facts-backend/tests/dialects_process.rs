@@ -396,20 +396,6 @@ fn retired_policy1_async_contract_no_longer_supplies_behavior() {
 }
 
 #[test]
-fn retired_policy1_reactive_reads_no_longer_supply_behavior() {
-    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
-        return;
-    }
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    let findings = project_snapshot_findings_with(
-        root.join("fixtures/reactive-ir/package-consumer/tsconfig.json"),
-        Some("solid-v2"),
-        &["--preset", "preferences"],
-    );
-    assert!(findings.iter().all(|finding| finding["id"] != "SC8014"));
-}
-
-#[test]
 fn solid_two_write_wording_follows_source_provenance() {
     if env::var("SOLID_TYPEFACTS_BIN").is_err() {
         return;

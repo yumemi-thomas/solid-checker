@@ -1,5 +1,5 @@
 {
-  "status": "violation",
+  "status": "uncertifiable",
   "findings": [
     {
       "rule": "strict-read-untracked",
@@ -14,21 +14,11 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/package-tracked-optional-callback-consumer/App.tsx",
-      "start": 480,
-      "end": 487,
-      "fixes": 0
-    },
-    {
-      "rule": "package-contract-incomplete",
-      "code": "SC9005",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/package-tracked-optional-callback-consumer/App.tsx",
-      "start": 627,
-      "end": 641,
+      "start": 449,
+      "end": 457,
       "fixes": 0
     },
     {
@@ -77,8 +67,28 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/package-tracked-optional-callback-consumer/App.tsx",
+      "start": 1189,
+      "end": 1197,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-tracked-optional-callback-consumer/App.tsx",
       "start": 1371,
       "end": 1379,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-tracked-optional-callback-consumer/App.tsx",
+      "start": 1526,
+      "end": 1534,
       "fixes": 0
     },
     {

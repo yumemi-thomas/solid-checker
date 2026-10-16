@@ -1,4 +1,0 @@
-{
-  "target": "node",
-  "conditions": ["node", "import"]
-}

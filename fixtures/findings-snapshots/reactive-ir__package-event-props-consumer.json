@@ -2,13 +2,33 @@
   "status": "uncertifiable",
   "findings": [
     {
-      "rule": "package-contract-incomplete",
-      "code": "SC9005",
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/package-event-props-consumer/App.tsx",
-      "start": 63,
-      "end": 67,
+      "start": 449,
+      "end": 456,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-event-props-consumer/App.tsx",
+      "start": 540,
+      "end": 547,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-event-props-consumer/App.tsx",
+      "start": 858,
+      "end": 865,
       "fixes": 0
     },
     {

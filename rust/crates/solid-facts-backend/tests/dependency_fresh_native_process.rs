@@ -384,15 +384,14 @@ fn every_effective_dependency_selection_bypasses_the_daemon() {
     assert_same(&requested, &disabled, "wired");
 }
 
-/// What stays retained: a check with no effective selection, built from the
-/// explicit opt-out or from a verified non-defaulting request (a target
-/// alone, a build alone, no host), takes the real cold then warm daemon.
+/// What stays retained: a check with no effective selection, built from a
+/// verified non-defaulting request (a target alone, a build alone, no host),
+/// takes the real cold then warm daemon.
 #[test]
 fn a_check_with_no_effective_selection_keeps_its_daemon() {
     let typefacts = armed!();
     let scratch = Scratch::new("dependency-source", "base").with_solid_vite_plugin();
     let cases: Vec<(&str, Vec<&'static str>)> = vec![
-        ("opt-out", with_host(&["--no-dependency-source"])),
         ("target-only", vec!["--runtime-target", "browser"]),
         ("build-only", vec!["--runtime-build", "development"]),
         ("no-host", vec![]),
@@ -401,8 +400,7 @@ fn a_check_with_no_effective_selection_keeps_its_daemon() {
         let sockets = SocketDir::new(name);
         let disabled = invoke(&typefacts, &scratch.project, args, false, None, &[]);
         assert!(disabled.success, "{name}: {}", disabled.stderr);
-        // The case really is base: no dependency-source note, and the
-        // opted-out answer is this answer.
+        // The case really is base: no dependency-source note.
         assert!(
             !disabled.stderr.contains("dependency source"),
             "{name}: {}",
@@ -508,7 +506,9 @@ fn a_base_daemon_refuses_a_wire_request_carrying_a_selection() {
     let typefacts = armed!();
     let scratch = Scratch::new("dependency-source", "wire");
     let sockets = SocketDir::new("wire");
-    let args = with_host(&["--no-dependency-source"]);
+    // No Solid Vite plugin in this scratch, so the declared host selects
+    // nothing and the check is retained.
+    let args = HOST.to_vec();
     let cold = invoke(
         &typefacts,
         &scratch.project,
@@ -974,7 +974,7 @@ fn a_producer_config_failure_after_success_is_an_error_and_the_repair_recovers()
 }
 
 /// The implicit default is refused for an unwritable generated-program
-/// directory with a note and an ordinary contract-mode answer; an explicit
+/// directory with a note and an answer with no selection; an explicit
 /// selection errors. Both are unchanged by the routing.
 #[test]
 fn an_unwritable_program_directory_keeps_its_fallback_and_its_refusal() {
@@ -985,15 +985,7 @@ fn an_unwritable_program_directory_keeps_its_fallback_and_its_refusal() {
     let program_dir = blocker.join("programs");
     let env = [("SOLID_CHECKER_PROGRAM_DIR", program_dir.as_path())];
     let sockets = SocketDir::new("unwritable");
-    let opted_out = invoke(
-        &typefacts,
-        &scratch.project,
-        &with_host(&["--no-dependency-source"]),
-        false,
-        None,
-        &[],
-    );
-    assert!(opted_out.success, "{}", opted_out.stderr);
+    let mut unselected = None;
     for daemon in [false, true] {
         let implicit = invoke(
             &typefacts,
@@ -1012,7 +1004,12 @@ fn an_unwritable_program_directory_keeps_its_fallback_and_its_refusal() {
             implicit.stderr
         );
         assert!(!implicit.used_daemon(), "{}", implicit.stderr);
-        assert_eq!(implicit.text(), opted_out.text(), "daemon {daemon}");
+        let text = implicit.text();
+        assert_eq!(
+            unselected.get_or_insert_with(|| text.clone()),
+            &text,
+            "daemon {daemon}"
+        );
         let explicit = invoke(
             &typefacts,
             &scratch.project,

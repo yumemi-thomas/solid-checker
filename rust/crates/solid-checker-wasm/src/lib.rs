@@ -11,9 +11,9 @@ use serde::Deserialize;
 use solid_facts::TypeScriptTable;
 use solid_facts_backend::SemanticDemandGroup;
 use solid_facts_backend::{
-    AcceptedContractSource, AnalysisInputs, BackendError, ResolvedImport, SemanticDemandOptions,
-    SourceFile, TypeFactsProvider, analyze_project_inputs_measured_with_enablement,
-    build_project_native_measured_with_demands, load_external_contract_index,
+    AnalysisInputs, BackendError, ResolvedImport, SemanticDemandOptions, SourceFile,
+    TypeFactsProvider, analyze_project_inputs_measured_with_enablement,
+    build_project_native_measured_with_demands,
 };
 
 #[derive(Deserialize)]
@@ -27,9 +27,8 @@ struct CheckRequest {
     generation: u64,
     sources: Vec<SourceFile>,
     type_facts: TypeScriptTable,
-    /// Receipt-validated stable-v1 contracts paired with the host's full
-    /// exact artifact-resolution records. Missing entries remain
-    /// uncertifiable; this boundary has no name-only compatibility path.
+    /// Retired (P7 of the contract-removal plan): a request naming any is
+    /// refused, because no package contract is consumed.
     #[serde(default)]
     accepted_contracts: Vec<HostAcceptedContract>,
     /// What the host resolved each imported specifier to, in its own installed
@@ -79,6 +78,7 @@ struct HostInstalledPackage {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[expect(dead_code, reason = "decoded only to refuse it (P7)")]
 struct HostAcceptedContract {
     /// Exact UTF-8 document bytes. A parsed JSON value cannot preserve the
     /// wire digest bound by the receipt.
@@ -213,6 +213,15 @@ pub fn check_sync(request_json: String) -> napi::Result<String> {
 
 pub fn check(request_json: &str) -> Result<String, Box<dyn std::error::Error>> {
     let request: CheckRequest = serde_json::from_str(request_json)?;
+    // P7 of the contract-removal plan: no package contract is consumed.
+    if !request.accepted_contracts.is_empty() {
+        return Err(
+            "acceptedContracts is no longer read: package contracts are not \
+             consumed, so every package import stays uncertifiable here; the owned check \
+             analyzes packages from source"
+                .into(),
+        );
+    }
     let dialect = match request.dialect.as_deref() {
         None => solid_facts_backend::dialect::default_dialect(),
         Some(id) => solid_facts_backend::dialect::by_id(id)
@@ -229,39 +238,10 @@ pub fn check(request_json: &str) -> Result<String, Box<dyn std::error::Error>> {
     )?;
     // P5 of the contract-removal plan: this request supplies no package files
     // and no import attestation, so source analysis cannot run here. Every
-    // package import an accepted contract does not answer keeps an open
-    // requirement (SC9005) rather than reading as plain code.
-    let answered = request
-        .accepted_contracts
-        .iter()
-        .map(|contract| {
-            (
-                contract.import.importer.clone(),
-                contract.import.specifier.clone(),
-            )
-        })
-        .collect();
-    let boundary = solid_facts_backend::unsupplied_package_boundary(&facts, &answered);
-    let encoded = request
-        .accepted_contracts
-        .into_iter()
-        .map(|contract| {
-            (
-                contract.document.into_bytes(),
-                contract.receipt.into_bytes(),
-                contract.import,
-            )
-        })
-        .collect::<Vec<_>>();
-    let contracts =
-        load_external_contract_index(encoded.iter().map(|(document, receipt, import)| {
-            AcceptedContractSource {
-                document,
-                receipt,
-                import,
-            }
-        }))?
-        .with_fallback(solid_facts_backend::requirement_index(&boundary));
+    // package import keeps an open requirement (SC9005) rather than reading as
+    // plain code.
+    let boundary = solid_facts_backend::unsupplied_package_boundary(&facts);
+    let contracts = solid_facts_backend::requirement_index(&boundary);
     let (analysis, _) = analyze_project_inputs_measured_with_enablement(
         dialect,
         Path::new(&request.project_id),
@@ -683,7 +663,7 @@ mod owned {
     use serde::{Deserialize, Serialize};
     use solid_facts_backend::{
         RuntimeEnvironment, Snapshot, TypeFactsSession,
-        check::{self, ContractConsumption, ProducerSessions},
+        check::{self, ProducerSessions},
         dependency_sources::PreparedDependencyProgram,
     };
 
@@ -840,6 +820,14 @@ mod owned {
 
     pub(super) fn check(request_json: &str) -> Result<String, Box<dyn Error>> {
         let mut request: OwnedCheckRequest = serde_json::from_str(request_json)?;
+        if request.no_dependency_source {
+            return Err(
+                "noDependencySource was removed: package contracts are no longer \
+                 consumed, so a package is analyzed from source or its behaviour stays \
+                 uncertifiable"
+                    .into(),
+            );
+        }
         // From here on the request names the project only by its canonical
         // path, exactly as the native check's request does; a missing project
         // fails here as it does natively.
@@ -869,13 +857,11 @@ mod owned {
         // ADR 0297, exactly as the native ordinary check decides it.
         let default_applies = request.runtime.target.is_some()
             && request.runtime.build.is_some()
-            && request.dependency_sources.is_empty()
-            && !request.no_dependency_source;
+            && request.dependency_sources.is_empty();
         let (dependency_sources, implicit_dependency_sources) =
             check::effective_dependency_selection(
                 project,
                 &request.dependency_sources,
-                request.no_dependency_source,
                 default_applies,
                 request.window_realm,
                 &mut note,
@@ -893,10 +879,6 @@ mod owned {
             implicit_dependency_sources,
             window_realm: request.window_realm,
             runtime_resolution: false,
-            consumption: ContractConsumption::Disabled,
-            bundled_contracts: false,
-            accepted_contract_catalog: String::new(),
-            receipt_trust_configuration: String::new(),
         };
         let outcome = check::run(&options, &mut OwnedSessions, &mut note)?;
         Ok(serde_json::to_string(&OwnedCheckResponse {

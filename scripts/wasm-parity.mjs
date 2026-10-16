@@ -322,10 +322,6 @@ function caseRequest(tree, projectId = join(tree.root, "tsconfig.json")) {
   if (metadata.frameworkTransforms) runtime.frameworkTransforms = metadata.frameworkTransforms;
   const request = { projectId, runtime, dependencySources: metadata.dependencySources ?? [] };
   for (const specifier of request.dependencySources) argv.push("--dependency-source", specifier);
-  if (metadata.dependencySource === false) {
-    argv.push("--no-dependency-source");
-    request.noDependencySource = true;
-  }
   if (metadata.realm !== undefined) {
     argv.push("--runtime-realm", metadata.realm);
     request.windowRealm = metadata.realm === "window";

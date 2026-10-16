@@ -37,15 +37,9 @@ function stderrNotices(stderr) {
     .filter(line => line.length > 0);
 }
 
-const TRUST_REMEDY =
-  "In ESLint, set settings.solidChecker.receiptTrustConfiguration to that trust file.";
-
-/** A note as an ESLint message, naming the setting behind the flag it cites. */
+/** A note as an ESLint message. */
 function noticeMessage(notice) {
-  const remedy = notice.includes("--receipt-trust-configuration")
-    ? `\n\n${TRUST_REMEDY}`
-    : "";
-  return `[solid-checker note] ${notice}${remedy}`;
+  return `[solid-checker note] ${notice}`;
 }
 
 /**
@@ -179,27 +173,21 @@ function configuredPath(config, name) {
 }
 
 /**
- * The receipt trust configuration, as a cache identity: its resolved path and
- * the digest of its bytes. The native daemon already hashes the file into its
- * cached-answer inputs; this is the same rule for the adapter's in-process
- * snapshot cache, so an edited or replaced trust file re-runs the analysis in
- * a persistent ESLint session instead of serving a verdict it no longer
- * supports. An unreadable file is a configuration error, reported before any
- * analysis starts and not cached, so fixing the file recovers.
+ * Settings retired with package-contract consumption (P7 of the
+ * contract-removal plan). Each is refused rather than ignored, so a
+ * configuration that relied on it learns that it no longer applies.
  */
-function receiptTrust(config) {
-  const path = configuredPath(config, "receiptTrustConfiguration");
-  if (path == null) return null;
-  let bytes;
-  try {
-    bytes = readFileSync(path);
-  } catch (error) {
-    throw new Error(
-      "solid-checker adapter could not read settings.solidChecker.receiptTrustConfiguration " +
-      `${path}: ${error.message}`
-    );
+const RETIRED_SETTINGS = ["acceptedContracts", "receiptTrustConfiguration", "dependencySource"];
+
+function refuseRetiredSettings(config) {
+  for (const name of RETIRED_SETTINGS) {
+    if (config[name] !== undefined) {
+      throw new Error(
+        `settings.solidChecker.${name} was removed: package contracts are no longer ` +
+        "consumed, so a package is analyzed from source or its behaviour stays uncertifiable"
+      );
+    }
   }
-  return { path, sha256: createHash("sha256").update(bytes).digest("hex") };
 }
 
 // Identity only; native owns recognition and host proof. Inventory/presence is
@@ -254,20 +242,6 @@ function inferenceFingerprint(project, runtime) {
 }
 
 /**
- * `settings.solidChecker.dependencySource`: `false` passes
- * `--no-dependency-source`, binding every package through its contract;
- * unset or `true` leaves the native default (ADR 0297).
- */
-function dependencySourceSetting(config) {
-  const value = config.dependencySource;
-  if (value == null) return null;
-  if (typeof value !== "boolean") {
-    throw new Error("settings.solidChecker.dependencySource must be a boolean");
-  }
-  return value;
-}
-
-/**
  * The native options that consume the next argument as their value, exactly
  * as `request_from_args` (rust/crates/solid-facts-backend/src/main.rs) reads
  * them, and its value-less flags. A value is never an option: in
@@ -303,23 +277,20 @@ const SOURCE_OPTIONS = new Set([
 
 /**
  * What `commandArgs` say about package source, read at the positions native
- * reads options: `optOut` for `--no-dependency-source` as an option, `source`
- * for a host or selection option, `contractsOff` for `--no-package-contracts`
+ * reads options: `source` for a host or selection option, `contractsOff` for `--no-package-contracts`
  * as an option, and `opaque` for an option this table does not know, whose
  * arity -- and so whether a later token is an option at all -- is unknown. A
  * token that is no option is a wrapper's own argument (a script path); native
  * refuses one.
  */
 function commandArgsSource(userArgs) {
-  const read = { optOut: false, source: false, opaque: false, contractsOff: false };
+  const read = { source: false, opaque: false, contractsOff: false };
   for (let index = 0; index < userArgs.length; index++) {
     const argument = String(userArgs[index]);
     if (!argument.startsWith("-")) continue;
     if (NATIVE_VALUE_OPTIONS.has(argument)) {
       if (SOURCE_OPTIONS.has(argument)) read.source = true;
       index++;
-    } else if (argument === "--no-dependency-source") {
-      read.optOut = true;
     } else if (argument === "--no-package-contracts") {
       read.contractsOff = true;
     } else if (!NATIVE_FLAGS.has(argument)) {
@@ -331,16 +302,14 @@ function commandArgsSource(userArgs) {
 
 /**
  * Whether the native run may analyze installed package source (ADR 0297):
- * under a declared target and build it does unless opted out, and a host or
- * selection in `commandArgs` may make it so. An option the adapter cannot
+ * under a declared target and build it does, and a host or selection in
+ * `commandArgs` may make it so. An option the adapter cannot
  * read makes the answer unknown, and unknown is taken as source.
  * Over-answering is the safe side; it only costs the cross-pass cache.
  */
-function readsPackageSource(userArgs, runtime, dependencySource) {
-  if (dependencySource === false) return false;
+function readsPackageSource(userArgs, runtime) {
   const read = commandArgsSource(userArgs);
   if (read.opaque) return true;
-  if (read.optOut) return false;
   return Boolean(runtime?.target && runtime?.build) || read.source;
 }
 
@@ -349,11 +318,10 @@ function readsPackageSource(userArgs, runtime, dependencySource) {
  * package source is (see `readsPackageSource`), and so is one checking with
  * `--no-package-contracts`: its result depends on the project's catalog files
  * and on installed package entries, none of which the cross-pass key follows,
- * so it is analyzed afresh every pass -- whatever `dependencySource` says.
+ * so it is analyzed afresh every pass.
  */
-function passOnly(userArgs, runtime, dependencySource) {
-  return commandArgsSource(userArgs).contractsOff ||
-    readsPackageSource(userArgs, runtime, dependencySource);
+function passOnly(userArgs, runtime) {
+  return commandArgsSource(userArgs).contractsOff || readsPackageSource(userArgs, runtime);
 }
 
 /**
@@ -421,12 +389,10 @@ function loadSnapshot(context) {
   const commandArgs = config.command || process.env.SOLID_CHECKER_BIN
     ? userArgs
     : [join(__dirname, "bin", "solid-checker.mjs")];
-  const acceptedContracts = configuredPath(config, "acceptedContracts");
-  const trust = receiptTrust(config);
+  refuseRetiredSettings(config);
   const dialect = config.dialect ?? null;
   const presets = [...new Set(Array.isArray(config.preset) ? config.preset : [])].sort();
   const runtime = runtimeConfiguration(config);
-  const dependencySource = dependencySourceSetting(config);
   const runtimeResolution = config.runtimeResolution ?? "off";
   if (!["required", "off"].includes(runtimeResolution)) {
     throw new Error("settings.solidChecker.runtimeResolution must be required or off");
@@ -441,19 +407,16 @@ function loadSnapshot(context) {
     command,
     commandArgs,
     project,
-    acceptedContracts,
-    trust,
     dialect,
     presets,
     enableRules,
     runtime,
-    dependencySource,
     runtimeResolution,
     inferredHostInputs
   });
   // ADR 0297: a run that reads installed package source is reused within one
   // file's pass only (`passCache`). An observed runtime is never reused.
-  const pass = !observesRuntime && passOnly(userArgs, runtime, dependencySource)
+  const pass = !observesRuntime && passOnly(userArgs, runtime)
     ? passCache(context) ?? new Map()
     : null;
   const store = (value) => (pass ?? snapshotCache).set(key, value);
@@ -491,9 +454,6 @@ function loadSnapshot(context) {
   ];
   if (dialect) args.push("--dialect", dialect);
   if (runtimeResolution === "required") args.push("--runtime-resolution", "required");
-  if (dependencySource === false) args.push("--no-dependency-source");
-  if (acceptedContracts) args.push("--accepted-contracts", acceptedContracts);
-  if (trust) args.push("--receipt-trust-configuration", trust.path);
   for (const preset of presets) args.push("--preset", preset);
   for (const rule of enableRules) args.push("--enable-rule", rule);
   if (runtime?.target) args.push("--runtime-target", runtime.target);
@@ -522,14 +482,7 @@ function loadSnapshot(context) {
   }
   if (result.status !== 0) {
     const stderr = result.stderr.trim();
-    // A named policy-2 catalog without trust refuses by citing the CLI flag;
-    // name the setting that supplies it here.
-    const remedy = !trust && stderr.includes("--receipt-trust-configuration")
-      ? `\n\n${TRUST_REMEDY}`
-      : "";
-    throw failure(
-      `solid-checker adapter analysis failed (${result.status}): ${stderr}${remedy}`
-    );
+    throw failure(`solid-checker adapter analysis failed (${result.status}): ${stderr}`);
   }
   let snapshot;
   try {

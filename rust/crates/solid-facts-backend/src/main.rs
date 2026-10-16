@@ -87,10 +87,10 @@ struct Request {
     /// depend on nothing but its own catalogs.
     #[serde(default = "enabled")]
     bundled_contracts: bool,
-    /// Consume no package contract from any tier (`--no-package-contracts`):
-    /// no bundled, authored, discovered, nested or explicit catalog. The
-    /// package boundary and every obligation it raises stay. This is the
-    /// reference configuration of the owned WASM check.
+    /// `--no-package-contracts`. An ordinary check consumes no package
+    /// contract from any tier (P7 of the contract-removal plan), so for it
+    /// this only refuses the contract-mode inputs it names; it is accepted
+    /// for compatibility.
     #[serde(default)]
     no_package_contracts: bool,
     #[serde(default)]
@@ -138,12 +138,6 @@ struct Request {
     /// `--runtime-target browser` and `--dependency-source`.
     #[serde(default)]
     window_realm: bool,
-    /// ADR 0297: `--no-dependency-source`. An ordinary analysis under a
-    /// declared target and build analyzes every Solid package from source
-    /// (`*`) unless this is set; with it, packages bind through contracts as
-    /// they did before that default. Refused beside `--dependency-source`.
-    #[serde(default)]
-    no_dependency_source: bool,
     /// Full Phase-7 exact package resolution for the artifact being emitted.
     #[serde(default)]
     contract_resolution: String,
@@ -3236,7 +3230,6 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         solid_facts_backend::check::effective_dependency_selection(
             Path::new(&request.project_id),
             &request.dependency_sources,
-            request.no_dependency_source,
             defaults_to_dependency_sources(&request),
             request.window_realm,
             &mut |line| eprintln!("{line}"),
@@ -3490,6 +3483,29 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 return Err(
                     format!("--no-package-contracts cannot be combined with {flag}").into(),
                 );
+            }
+        }
+    }
+    // P7 of the contract-removal plan: an ordinary check consumes no package
+    // contract, so a catalog or trust handed to one would be silently unread.
+    if ordinary_check(&request) {
+        for (present, flag) in [
+            (
+                !request.accepted_contract_catalog.is_empty(),
+                "--accepted-contracts",
+            ),
+            (
+                !request.receipt_trust_configuration.is_empty(),
+                "--receipt-trust-configuration",
+            ),
+        ] {
+            if present {
+                return Err(format!(
+                    "{flag} is not read by a project check: package contracts are no \
+                     longer consumed, so a package is analyzed from source or its \
+                     behaviour stays uncertifiable"
+                )
+                .into());
             }
         }
     }
@@ -4372,14 +4388,6 @@ fn check_options(
         implicit_dependency_sources,
         window_realm: request.window_realm,
         runtime_resolution: request.runtime_resolution,
-        consumption: if request.no_package_contracts {
-            solid_facts_backend::check::ContractConsumption::Disabled
-        } else {
-            solid_facts_backend::check::ContractConsumption::ExistingTiers
-        },
-        bundled_contracts: request.bundled_contracts && !request.no_package_contracts,
-        accepted_contract_catalog: request.accepted_contract_catalog.clone(),
-        receipt_trust_configuration: request.receipt_trust_configuration.clone(),
     }
 }
 
@@ -4448,8 +4456,8 @@ fn run_ordinary_check(
 
 /// ADR 0297: an ordinary analysis whose host declares both a target and a
 /// build analyzes every Solid package from source, as `--dependency-source
-/// '*'` does, unless `--no-dependency-source` or an explicit selection says
-/// otherwise. A package `*` does not select or refuses keeps its contract.
+/// '*'` does, unless an explicit selection says otherwise. A package `*` does
+/// not select or refuses stays uncertifiable.
 ///
 /// Every other mode keeps the selection it was given. Contract emission and
 /// its batch, the module inventory and resolutions it reads, probe and
@@ -4497,10 +4505,7 @@ fn defaults_to_dependency_sources(request: &Request) -> bool {
         && request.execute_contract_certification.is_empty()
         && request.verify_policy2_discovery.is_empty()
         && env!("CARGO_BIN_NAME") == "solid-checker-rust";
-    declared_host
-        && ordinary
-        && request.dependency_sources.is_empty()
-        && !request.no_dependency_source
+    declared_host && ordinary && request.dependency_sources.is_empty()
 }
 
 #[cfg(test)]
@@ -4527,9 +4532,6 @@ mod default_dependency_source_tests {
         assert!(!defaults_to_dependency_sources(&request(true, false)));
         assert!(!defaults_to_dependency_sources(&request(false, true)));
         assert!(!defaults_to_dependency_sources(&request(false, false)));
-        let mut opted_out = request(true, true);
-        opted_out.no_dependency_source = true;
-        assert!(!defaults_to_dependency_sources(&opted_out));
         let mut named = request(true, true);
         named.dependency_sources = vec!["dep".into()];
         assert!(!defaults_to_dependency_sources(&named));
@@ -4689,7 +4691,6 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
     let mut contract_package_root = String::new();
     let mut runtime = RuntimeEnvironment::default();
     let mut window_realm = false;
-    let mut no_dependency_source = false;
     let mut help = false;
     let mut serve = false;
     let mut args = arguments.into_iter();
@@ -4961,7 +4962,14 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
                 args.next()
                     .ok_or("--dependency-source needs a package specifier")?,
             ),
-            "--no-dependency-source" => no_dependency_source = true,
+            "--no-dependency-source" => {
+                return Err(
+                    "--no-dependency-source was removed: package contracts are no \
+                     longer consumed, so a package is analyzed from source or its behaviour \
+                     stays uncertifiable"
+                        .into(),
+                );
+            }
             "--runtime-realm" => {
                 window_realm =
                     parse_runtime_realm(&args.next().ok_or("--runtime-realm needs a value")?)?;
@@ -5148,7 +5156,6 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         runtime_module_resolutions,
         dependency_sources,
         window_realm,
-        no_dependency_source,
         contract_resolution,
         emit_proposal_plan,
         merge_contract_paths,
@@ -5256,11 +5263,6 @@ fn print_help() {
                                         project's own Vite, which runs its config\n\
                                         (SOLID_CHECKER_RUNTIME_RESOLVER names the\n\
                                         worker script); off (default)\n\
-           --accepted-contracts <PATH>  Load a host-acquired catalog of stable-v1\n\
-                                        documents, proof receipts, and exact resolved imports\n\
-           --receipt-trust-configuration <PATH>\n\
-                                        Load policy-2 issuer trust selected outside the project;\n\
-                                        without it a discovered policy-2 catalog is not read\n\
            --preset <NAME>              Enable a catalog preset (repeatable)\n\
            --enable-rule <NAME>         Explicitly enable one rule (repeatable)\n\
            --runtime-target <browser|node>\n\
@@ -5269,13 +5271,11 @@ fn print_help() {
                                         Select the build mode explicitly\n\
            --dependency-source <SPECIFIER>\n\
                                         Analyze an installed package from its runtime source\n\
-                                        instead of its contract (repeatable; `*` selects every\n\
+                                        (repeatable; `*` selects every\n\
                                         Solid package). Requires --runtime-target and\n\
                                         --runtime-build; with both declared, `*` is the default\n\
-           --no-dependency-source       Bind every package through its contract even under a\n\
-                                        declared target and build\n\
-           --no-package-contracts       Consume no package contract's claims from any tier;\n\
-                                        an import a tier covers stays an open obligation\n\
+           --no-package-contracts       Accepted for compatibility: no ordinary check consumes\n\
+                                        a package contract\n\
            --runtime-realm <window>     Declare that the dependency-source packages run\n\
                                         in an HTML Window realm, which decides their\n\
                                         `typeof window`/`typeof document` guards.\n\
