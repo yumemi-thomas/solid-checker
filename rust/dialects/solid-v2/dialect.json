@@ -2,8 +2,6 @@
   "schemaVersion": 2,
   "id": "solid-v2",
   "ruleManifest": "packages/cli/lib/rules-solid-v2.json",
-  "bundleIndex": "pkg/contracts/bundled/solid-v2/bundle-index.json",
-  "reviewBundleIndex": "rust/crates/solid-dialect/contracts/solid-v2/bundle-index.json",
   "compilerIdentity": {
     "document": "docs/package-contract-v2/phase4/compiler-identity.json",
     "adapter": "rust/dialects/solid-v2/compiler/src/lib.rs",
@@ -11,18 +9,5 @@
     "report": "docs/package-contract-v2/phase4/2026-08-27-compiler-facts.md",
     "cargoPackage": "solidjs-compiler",
     "cargoSourcePrefix": "git+https://github.com/yumemi-thomas/solid?"
-  },
-  "contracts": [
-    {
-      "package": "solid-js",
-      "probeRuntime": true
-    },
-    {
-      "package": "@solidjs/web",
-      "probeRuntime": true
-    },
-    {
-      "package": "@solidjs/signals"
-    }
-  ]
+  }
 }

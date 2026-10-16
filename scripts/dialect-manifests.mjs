@@ -31,14 +31,12 @@ export function loadDialectManifests({ requireArtifacts = false, projectRoot = r
         fail(`${source} id ${manifest.id} must match directory ${entry.name}`);
       }
       requiredString(manifest.ruleManifest, "ruleManifest", source);
-      requiredString(manifest.bundleIndex, "bundleIndex", source);
-      requiredString(manifest.reviewBundleIndex, "reviewBundleIndex", source);
       if (requireArtifacts && !existsSync(join(projectRoot, manifest.ruleManifest))) {
         fail(`${source} references missing ${manifest.ruleManifest}`);
       }
-      for (const field of ["bundleIndex", "reviewBundleIndex"]) {
-        if (requireArtifacts && !existsSync(join(projectRoot, manifest[field]))) {
-          fail(`${source} references missing ${manifest[field]}`);
+      for (const field of ["bundleIndex", "reviewBundleIndex", "contracts"]) {
+        if (field in manifest) {
+          fail(`${source} ${field} was removed with package contracts`);
         }
       }
       // The compiler each dialect is assembled against is per-dialect data,
@@ -73,43 +71,11 @@ export function loadDialectManifests({ requireArtifacts = false, projectRoot = r
           }
         }
       }
-      if (!Array.isArray(manifest.contracts) || manifest.contracts.length === 0) {
-        fail(`${source} requires at least one contract`);
-      }
-      for (const contract of manifest.contracts) {
-        requiredString(contract.package, "contracts[].package", source);
-        const allowed = new Set(["package", "probeRuntime", "probeModes"]);
-        for (const field of Object.keys(contract)) {
-          if (!allowed.has(field)) {
-            fail(`${source} contracts[].${field} is not part of the normalized bundle inventory`);
-          }
-        }
-        if (
-          typeof contract.probeRuntime !== "undefined" &&
-          typeof contract.probeRuntime !== "boolean"
-        ) {
-          fail(`${source} contracts[].probeRuntime must be a boolean`);
-        }
-        // A contract may state its claims for fewer than all four condition
-        // modes when a build under some condition is a different artifact.
-        if (typeof contract.probeModes !== "undefined") {
-          const modes = contract.probeModes;
-          const known = ["client", "server", "development", "production"];
-          if (!Array.isArray(modes) || modes.length === 0) {
-            fail(`${source} contracts[].probeModes must be a non-empty array`);
-          } else if (modes.some(mode => !known.includes(mode))) {
-            fail(`${source} contracts[].probeModes must be drawn from ${known.join(", ")}`);
-          } else if (!contract.probeRuntime) {
-            fail(`${source} contracts[].probeModes has no meaning without probeRuntime`);
-          }
-        }
-      }
       return { ...manifest, source: relative(projectRoot, source) };
     })
     .sort((left, right) => left.id.localeCompare(right.id));
 
   const ids = new Set();
-  const packages = new Set();
   const ruleManifests = new Set();
   for (const manifest of manifests) {
     if (ids.has(manifest.id)) fail(`duplicate id ${manifest.id}`);
@@ -118,12 +84,6 @@ export function loadDialectManifests({ requireArtifacts = false, projectRoot = r
       fail(`duplicate ruleManifest ${manifest.ruleManifest}`);
     }
     ruleManifests.add(manifest.ruleManifest);
-    for (const contract of manifest.contracts) {
-      if (packages.has(`${manifest.id}/${contract.package}`)) {
-        fail(`${manifest.id} declares ${contract.package} twice`);
-      }
-      packages.add(`${manifest.id}/${contract.package}`);
-    }
   }
   return manifests;
 }

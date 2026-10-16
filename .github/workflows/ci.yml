@@ -194,5 +194,4 @@ jobs:
       - run: bun install --cwd packages/cli --ignore-scripts --no-progress --frozen-lockfile
       - run: bun packages/cli/node_modules/vitest/vitest.mjs run --config packages/cli/vitest.config.mjs scripts/*.test.mjs
       - run: jq empty schema/*.json
-      - run: find pkg/contracts/bundled -type f -name '*.json' -exec jq empty {} +
       - run: make test-cli

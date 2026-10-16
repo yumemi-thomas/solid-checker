@@ -1,3 +1,0 @@
-function snapshot(value) {
-  return snapshotNext(value);
-}

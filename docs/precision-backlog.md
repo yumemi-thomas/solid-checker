@@ -1,5 +1,16 @@
 # Precision backlog
 
+D5 (2026-10-16): the dialect's negative authority is deleted with every
+artifact that fed it: `NEGATIVE_ROWS` and its scoped rows, the audited-archive
+table and slices, `scripts/audited-archives.mjs` and its provisioning step,
+`pkg/contracts/bundled/` (including the retained Solid 1.x audit records),
+`solid-dialect/contracts/`, `benchmarks/package-contract-v2/phase0/`, the
+runtime lock test, and the `bundleIndex`, `reviewBundleIndex` and `contracts`
+fields of `dialect.json` (now refused). Nothing in ordinary analysis read
+them, so no finding moves. The dialect tests that cross-checked the
+vocabulary against the bundled contracts are gone; the removed-export map is
+now checked against the dialect's own audited export table.
+
 D2 (2026-10-16): contract consumption and emission are deleted from the IR.
 `SemanticLookup` binds no contract, `AnalysisInputs` is `{boundary, hosts}`,
 and the accepted-contract index, certification, proof, canonical identity,

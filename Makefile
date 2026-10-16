@@ -21,27 +21,7 @@ export SOLID_CHECKER_PROBE_NODE = $(PROBE_NODE)
 
 CERTIFICATION_ENV = $(TYPEFACTS_CERTIFICATION_ENV)
 
-# The published archives the Solid 2.0 negative table's implementation-audited
-# rows quote by byte range. The cited ranges are checked into
-# `rust/crates/solid-dialect/audited-slices/` and their digests are verified
-# with no install; this arms the stronger arm, which re-reads the real archive
-# and asserts the checked-in slice is still exactly those bytes of the pinned
-# file. `test-rust` depends on `audited-archives-provision` (idempotent: it
-# short-circuits on an archive
-# whose stamp and `package.json` digest already match
-# `rust/crates/solid-dialect/audited-archives.json`). One root per release,
-# because the test reads one variable per release; rc.6 and rc.9 are armed here
-# too, so a default run reads every cited archive rather than only rc.3's.
-#
-# Not the tsc-oracle install: that is the *audited release* and moves with it,
-# while a row's archive stays those bytes for as long as the row does.
-ARCHIVES_ROOT = $(CURDIR)/rust/target/audited-archives/solid-v2
-ARCHIVE_ENV = SOLID_CHECKER_RC3_ARCHIVE_ROOT="$(ARCHIVES_ROOT)/2.0.0-rc.3/node_modules" \
-  SOLID_CHECKER_RC6_ARCHIVE_ROOT="$(ARCHIVES_ROOT)/2.0.0-rc.6/node_modules" \
-  SOLID_CHECKER_RC9_ARCHIVE_ROOT="$(ARCHIVES_ROOT)/2.0.0-rc.9/node_modules" \
-  SOLID_CHECKER_RC13_ARCHIVE_ROOT="$(ARCHIVES_ROOT)/2.0.0-rc.13/node_modules"
-
-.PHONY: build build-typefacts build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update tsc-oracle tsc-oracle-provision audited-archives-provision tsc-ownership ownership-gate obligation-audit wasm-parity clean clean-verify
+.PHONY: build build-typefacts build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit wasm-parity clean clean-verify
 
 build: build-rust
 
@@ -102,8 +82,8 @@ wasm-parity: build-wasm-package build-checker-debug tsc-oracle-provision build-w
 
 test: test-rust test-cli
 
-test-rust: build-typefacts audited-archives-provision
-	$(CERTIFICATION_ENV) $(ARCHIVE_ENV) SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_TEST_BIN="$(CURDIR)/bin/solid-typefacts" SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" cargo +$(RUST_TOOLCHAIN) $(CARGO_TEST_RUNNER) --manifest-path $(RUST_MANIFEST) --workspace
+test-rust: build-typefacts
+	$(CERTIFICATION_ENV) SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_TEST_BIN="$(CURDIR)/bin/solid-typefacts" SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" cargo +$(RUST_TOOLCHAIN) $(CARGO_TEST_RUNNER) --manifest-path $(RUST_MANIFEST) --workspace
 
 test-cli:
 	$(BUN) install --cwd packages/cli --ignore-scripts --no-progress --frozen-lockfile
@@ -152,12 +132,6 @@ verify-delta:
 # to run on a version mismatch.
 tsc-oracle-provision:
 	$(BUN) scripts/tsc-oracle.mjs provision --dialect all
-
-# The archives the negative rows quote, each fetched at its exact version and
-# refused unless its tarball hashes to the integrity pinned in
-# rust/crates/solid-dialect/audited-archives.json.
-audited-archives-provision:
-	$(BUN) scripts/audited-archives.mjs provision
 
 # Needs the checker as well as the compiler: each case declares what TypeScript
 # says *and* what this checker says about the same bytes.

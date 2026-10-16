@@ -1,3 +1,0 @@
-function snapshot(e) {
-    return snapshotNext(e);
-}

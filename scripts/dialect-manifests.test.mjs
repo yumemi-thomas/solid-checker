@@ -7,8 +7,8 @@ import { test } from "vitest";
 import { loadDialectManifests } from "./dialect-manifests.mjs";
 
 /**
- * The compiler wiring every manifest must declare, so that these cases can be
- * about the package inventory. `compilerIdentity` has its own cases below.
+ * The compiler wiring every manifest must declare. `compilerIdentity` has its
+ * own cases below.
  */
 const compilerIdentity = {
   document: "docs/solid-v9/compiler-identity.json",
@@ -20,7 +20,7 @@ const compilerIdentity = {
 };
 
 /** Loads one synthetic dialect tree through the real validator. */
-function load(contracts, identity = compilerIdentity) {
+function load(extra = {}, identity = compilerIdentity) {
   const projectRoot = mkdtempSync(join(tmpdir(), "solid-checker-manifest-"));
   const dialect = join(projectRoot, "rust", "dialects", "solid-v9");
   mkdirSync(dialect, { recursive: true });
@@ -30,62 +30,37 @@ function load(contracts, identity = compilerIdentity) {
       schemaVersion: 2,
       id: "solid-v9",
       ruleManifest: "packages/cli/lib/rules-solid-v9.json",
-      bundleIndex: "pkg/contracts/bundled/solid-v9/bundle-index.json",
-      reviewBundleIndex: "rust/crates/solid-dialect/contracts/solid-v9/bundle-index.json",
       ...(identity === null ? {} : { compilerIdentity: identity }),
-      contracts
+      ...extra
     })
   );
   return () => loadDialectManifests({ projectRoot });
 }
 
-const generated = { package: "solid-js", probeRuntime: true };
-
-const overlay = { package: "@solid-primitives/scheduled" };
-
-test("the manifest is only a package inventory plus normalized bundle indexes", () => {
-  const manifests = load([generated, overlay])();
-  assert.deepEqual(
-    manifests[0].contracts.map(contract => contract.package),
-    ["solid-js", "@solid-primitives/scheduled"]
-  );
+test("the manifest names the dialect, its rules and its compiler", () => {
+  const manifests = load()();
+  assert.equal(manifests[0].id, "solid-v9");
 });
 
-test("legacy per-document generator and bundle fields are refused", () => {
-  assert.throws(
-    load([{ ...generated, bundledContract: "pkg/contracts/bundled/solid-v9/solid-js.json" }]),
-    /bundledContract is not part of the normalized bundle inventory/
-  );
-});
-
-test("probeRuntime must be a boolean when present", () => {
-  assert.throws(load([{ ...generated, probeRuntime: "true" }]), /probeRuntime must be a boolean/);
-});
-
-test("probe modes require an enabled runtime probe", () => {
-  assert.throws(
-    load([{ package: "solid-js", probeModes: ["client"] }]),
-    /has no meaning without probeRuntime/
-  );
-});
-
-test("one package cannot be declared twice in a dialect", () => {
-  assert.throws(
-    load([generated, generated]),
-    /declares solid-js twice/
-  );
+test("the package-contract fields are refused", () => {
+  for (const field of ["bundleIndex", "reviewBundleIndex", "contracts"]) {
+    assert.throws(
+      load({ [field]: "x" }),
+      new RegExp(`${field} was removed with package contracts`)
+    );
+  }
 });
 
 // The gate that checks a dialect's compiler against its identity documents
 // reads these paths from here. A dialect that declared nothing would have been
 // assembled and never checked, so absence has to fail the manifest.
 test("a dialect must declare the compiler its identity gate checks", () => {
-  assert.throws(load([generated], null), /requires compilerIdentity/);
+  assert.throws(load({}, null), /requires compilerIdentity/);
   for (const field of Object.keys(compilerIdentity)) {
     const partial = { ...compilerIdentity };
     delete partial[field];
     assert.throws(
-      load([generated], partial),
+      load({}, partial),
       new RegExp(`requires non-empty compilerIdentity\\.${field}`),
       `compilerIdentity.${field} must be required`
     );
@@ -94,7 +69,7 @@ test("a dialect must declare the compiler its identity gate checks", () => {
 
 test("unknown compiler wiring fields are refused", () => {
   assert.throws(
-    load([generated], { ...compilerIdentity, babelPlugin: "solid-v9/babel" }),
+    load({}, { ...compilerIdentity, babelPlugin: "solid-v9/babel" }),
     /compilerIdentity.babelPlugin is not part of the compiler wiring/
   );
 });

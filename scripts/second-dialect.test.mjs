@@ -27,11 +27,10 @@ import { carriedSolidMajors, dialectStubProblems } from "./lib/dialect-stubs.mjs
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 /**
- * A tree with this repository's `rust/dialects/` plus a synthetic `solid-v3`,
- * its rule manifest, and the bundle-index files its manifest must name.
+ * A tree with this repository's `rust/dialects/` plus a synthetic `solid-v3`
+ * and its rule manifest.
  *
- * Only what the enumerators read is copied: these tests are about discovery,
- * not about whether a dialect's contracts are real.
+ * Only what the enumerators read is copied: these tests are about discovery.
  */
 const withSecondDialect = (body) => {
   const root = mkdtempSync(join(tmpdir(), "solid-second-dialect-"));
@@ -42,8 +41,6 @@ const withSecondDialect = (body) => {
       schemaVersion: 2,
       id: "solid-v3",
       ruleManifest: "packages/cli/lib/rules-solid-v3.json",
-      bundleIndex: "pkg/contracts/bundled/solid-v3/bundle-index.json",
-      reviewBundleIndex: "rust/crates/solid-dialect/contracts/solid-v3/bundle-index.json",
       compilerIdentity: {
         document: "docs/solid-v3/compiler-identity.json",
         adapter: "rust/dialects/solid-v3/compiler/src/lib.rs",
@@ -52,7 +49,6 @@ const withSecondDialect = (body) => {
         cargoPackage: "solidjs-v3-compiler",
         cargoSourcePrefix: "git+https://example.invalid/solid?",
       },
-      contracts: [{ package: "solid-js" }],
     };
     mkdirSync(join(root, "rust/dialects/solid-v3"), { recursive: true });
     writeFileSync(

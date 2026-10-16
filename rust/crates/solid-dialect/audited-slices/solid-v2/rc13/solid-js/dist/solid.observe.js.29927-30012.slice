@@ -1,3 +1,0 @@
-const createMemo = (...args) => {
-  return (_createMemo || createMemo$1)(...args);
-};

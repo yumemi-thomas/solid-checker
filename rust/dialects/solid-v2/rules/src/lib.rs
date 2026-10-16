@@ -903,35 +903,16 @@ fn v2_removed_export_hint(module: &str, export: &str) -> Option<String> {
 mod removed_export_tests {
     use super::{V2_REMOVED_EXPORTS, v2_removed_export_hint};
 
-    /// A name the bundled 2.0 contract still exports is not removed: hinting
-    /// "migrate away" for it would be wrong, and SC9005 for it is a genuine
-    /// contract gap. This holds the map to the shipped export list.
+    /// A name `solid-js` still exports is not removed: hinting "migrate away"
+    /// for it would be wrong. This holds the map to the audited export table.
     #[test]
-    fn removed_exports_are_absent_from_the_bundled_contract() {
-        let contract = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../../crates/solid-dialect/contracts/solid-v2/solid-js.json");
-        let contract: serde_json::Value =
-            serde_json::from_str(&std::fs::read_to_string(&contract).unwrap()).unwrap();
-        let entrypoints = contract["entrypoints"]
-            .as_object()
-            .expect("bundled contract has entrypoints");
-        let exports = entrypoints
-            .values()
-            .flat_map(|entrypoint| {
-                entrypoint["cases"]
-                    .as_array()
-                    .expect("bundled entrypoint has artifact cases")
-            })
-            .map(|case| {
-                case["exports"]
-                    .as_object()
-                    .expect("bundled artifact case has exact exports")
-            })
-            .collect::<Vec<_>>();
+    fn removed_exports_are_absent_from_the_export_table() {
         for (name, _) in V2_REMOVED_EXPORTS {
             assert!(
-                exports.iter().all(|case| !case.contains_key(*name)),
-                "{name} is exported by the bundled solid-v2 contract, so it is not a removed API and must leave V2_REMOVED_EXPORTS"
+                solid_dialect::exports::solid_v2_solid_js::VALUES
+                    .iter()
+                    .all(|(exported, _)| exported != name),
+                "{name} is exported by solid-js, so it is not a removed API and must leave V2_REMOVED_EXPORTS"
             );
         }
     }

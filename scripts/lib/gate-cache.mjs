@@ -12,9 +12,8 @@
 //   (a) the unit's own tree on disk -- every file under the fixture project,
 //       walked from the filesystem rather than from `git ls-files`, because an
 //       untracked file changes the answer exactly as much as a tracked one;
-//   (b) the binaries the unit executes: the checker (which carries
-//       `pkg/contracts/bundled/**` compiled in via `include_bytes!`), the
-//       TypeFacts producer, and its `.buildinfo` stamp;
+//   (b) the binaries the unit executes: the checker, the TypeFacts
+//       producer, and its `.buildinfo` stamp;
 //   (c) the gate script and every local module it can reach, plus all of
 //       `scripts/lib/**` unconditionally -- import tracing is an
 //       over-approximation on purpose, and an unresolvable dynamic import

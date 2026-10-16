@@ -21,15 +21,6 @@ export function certificationEnvironment(root, environment = process.env) {
     SOLID_TYPEFACTS_SOURCE_MANIFEST_SHA256: `sha256:${typefactsDigest(root)}`,
     TYPEFACTS_TEST_BIN: join(root, "bin/solid-typefacts"),
     SOLID_TYPEFACTS_BIN: join(root, "bin/solid-typefacts"),
-    // The archives the negative rows quote, from `make audited-archives-provision`
-    // (scripts/audited-archives.mjs) -- not the tsc-oracle install, which is
-    // the audited release and moves with it.
-    ...Object.fromEntries(
-      ["3", "6", "9"].map(release => [
-        `SOLID_CHECKER_RC${release}_ARCHIVE_ROOT`,
-        join(root, `rust/target/audited-archives/solid-v2/2.0.0-rc.${release}/node_modules`)
-      ])
-    )
   };
   return result;
 }

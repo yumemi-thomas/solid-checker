@@ -1,4 +1,0 @@
-function createRoot(init, options) {
-  const owner = createOwner(options);
-  return runWithOwner(owner, () => init(() => owner.dispose()));
-}

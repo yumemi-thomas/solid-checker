@@ -1,3 +1,0 @@
-function useContext(context) {
-  return getContext(context);
-}
