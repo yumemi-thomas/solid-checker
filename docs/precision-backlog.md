@@ -1,5 +1,30 @@
 # Precision backlog
 
+## 2026-10-16 — Callback proof budgets belong to individual roots
+
+`ReadConsumerSummaries` previously retained one 128-node graph across every
+callback queried in an analysis generation. Unrelated earlier consumers could
+therefore exhaust the allowance for a later one-node proof. Each uncached
+callback literal now gets an independent graph with the same 128-node limit.
+Completed mode results (including unproven results) are memoized by exact file
+and literal span within that generation, after the per-read body/default and
+function-shape guards. No partial graph survives into another root's proof.
+
+A generated process regression has 140 independent mixed tracked/untracked
+consumers: before the fix, 12 valid roots remained uncertifiable; afterward all
+140 close. A single root reaching 129 other consumers and an unknown consumer
+both stay explicitly uncertifiable. Its source passes `tsc --noEmit` against
+published Solid RC.13 typings. Receiver, escape, lifetime, context-depth and
+least-fixpoint closure restrictions remain in force; this changes no execution
+roles or package-source premises.
+
+The fresh default-mode corpus is unchanged at 3,433 uncertifiable and 537
+violation rows, with no added/removed findings or project errors. Aggregate
+project wall time was 79.06 seconds versus the previous 79.33 seconds; the
+slowest project was 20.95 versus 21.21 seconds. These single runs show no
+observed slowdown, not a performance improvement. This repairs a demonstrated
+size/order limitation but makes no corpus-reduction claim.
+
 ## 2026-10-16 — Options-field carriers compose closed source contexts
 
 Extended `ReadConsumerSummaries::context` to compose a callback written as an

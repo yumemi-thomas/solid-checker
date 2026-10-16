@@ -2,7 +2,7 @@
 //! Never install a synthetic ExecutionRole: mixed safe roles prove only the
 //! absence of a strict-read invocation, not write legality or ownership.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use super::{
     attribute_function_within, callback_runs_outside_tracking, component_prop_literal,
@@ -85,6 +85,7 @@ enum Site<'f> {
 pub(crate) struct ReadConsumerSummaries<'a, 'facts> {
     lookup: &'a SemanticLookup<'facts>,
     nodes: Vec<Node>,
+    literal_modes: HashMap<(String, Span), Option<u8>>,
 }
 
 impl<'a, 'facts> ReadConsumerSummaries<'a, 'facts> {
@@ -92,6 +93,7 @@ impl<'a, 'facts> ReadConsumerSummaries<'a, 'facts> {
         Self {
             lookup,
             nodes: Vec::new(),
+            literal_modes: HashMap::new(),
         }
     }
 
@@ -133,13 +135,25 @@ impl<'a, 'facts> ReadConsumerSummaries<'a, 'facts> {
         {
             return None;
         }
-        let (slot, site) = self.literal_slot(file, literal.span)?;
-        let root = self.intern(slot)?;
-        if !self.siblings_are_arrows(file, root, site) {
-            return None;
+        let key = (file.path.to_string(), literal.span);
+        if let Some(modes) = self.literal_modes.get(&key) {
+            return *modes;
         }
-        let closed = self.solve();
-        closed[root]
+        // MAX_NODES bounds one proof, not all unrelated callbacks visited
+        // earlier in this generation. Never reuse budget-dependent partial
+        // nodes from a previous root. Memoize only the complete root result,
+        // after the read-specific body/default guards above have passed.
+        self.nodes.clear();
+        let modes = (|| {
+            let (slot, site) = self.literal_slot(file, literal.span)?;
+            let root = self.intern(slot)?;
+            if !self.siblings_are_arrows(file, root, site) {
+                return None;
+            }
+            self.solve()[root]
+        })();
+        self.literal_modes.insert(key, modes);
+        modes
     }
 
     fn slot(

@@ -16,6 +16,88 @@ mod no_package_contracts_process;
 use support::{assert_rule_findings, diagnostic_fixture, findings_for_rule};
 
 #[test]
+fn callback_proof_budget_is_per_root_and_stays_bounded() {
+    use std::{fs, process::Command, time::SystemTime};
+    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let fixture = root.join("fixtures/reactive-ir/project-callback-uses");
+    let unique = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let scratch = std::env::temp_dir().join(format!(
+        "solid-checker-callback-budget-{}-{unique}",
+        std::process::id()
+    ));
+    fs::create_dir_all(scratch.join("node_modules/solid-js")).unwrap();
+    fs::write(
+        scratch.join("node_modules/solid-js/package.json"),
+        r#"{"name":"solid-js","version":"2.0.0-rc.13"}"#,
+    )
+    .unwrap();
+    for name in ["tsconfig.json", "solid-js.d.ts"] {
+        fs::copy(fixture.join(name), scratch.join(name)).unwrap();
+    }
+    let mut source =
+        String::from("import { createSignal, createMemo, untrack } from 'solid-js';\n");
+    for index in 0..140 {
+        // Mixed safe modes require the closed consumer proof, rather than
+        // the earlier all-tracked execution-role classifier.
+        source.push_str(&format!(
+            "function consume{index}(read: () => number) {{ createMemo(read); untrack(read); }}\n\
+             export function Independent{index}() {{ const [count] = createSignal(0); consume{index}(() => count()); return <div />; }}\n"
+        ));
+    }
+    source.push_str("function oversized(read: () => number) {\n");
+    for index in 0..129 {
+        source.push_str(&format!("consume{index}(read);\n"));
+    }
+    source.push_str(
+        "}\nexport function Oversized() { const [count] = createSignal(0); oversized(() => count()); return <div />; }\n\
+         declare function unknown(read: () => number): void;\n\
+         export function Unknown() { const [count] = createSignal(0); unknown(() => count()); return <div />; }\n",
+    );
+    fs::write(scratch.join("Budget.tsx"), &source).unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+        .env("SOLID_TYPEFACTS_BIN", typefacts)
+        .env("SOLID_CHECKER_DAEMON", "0")
+        .args(["--format", "json", "--project"])
+        .arg(scratch.join("tsconfig.json"))
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let snapshot: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let rows = snapshot["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|row| row["id"] == "SC1001")
+        .collect::<Vec<_>>();
+    for name in ["Oversized", "Unknown"] {
+        let owner = source.find(&format!("export function {name}()")).unwrap();
+        let start = owner + source[owner..].find("() => count()").unwrap() + "() => ".len();
+        let row = rows
+            .iter()
+            .find(|row| row["primaryLocation"]["startByte"].as_u64() == Some(start as u64))
+            .unwrap_or_else(|| panic!("{name} must stay uncertifiable"));
+        assert_eq!(row["kind"], "uncertifiable");
+    }
+    assert_eq!(
+        rows.len(),
+        2,
+        "unrelated small proofs must not exhaust each other's allowance; scratch: {}",
+        scratch.display()
+    );
+    fs::remove_dir_all(scratch).unwrap();
+}
+
+#[test]
 fn routed_options_callbacks_compose_source_contexts() {
     let Some(findings) = diagnostic_fixture("forwarded-tracked-compute") else {
         return;
