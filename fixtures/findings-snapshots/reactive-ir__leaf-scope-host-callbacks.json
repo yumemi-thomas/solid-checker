@@ -90,6 +90,46 @@
       "start": 2892,
       "end": 2905,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/Focus.tsx",
+      "start": 286,
+      "end": 305,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/Focus.tsx",
+      "start": 655,
+      "end": 674,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/Focus.tsx",
+      "start": 798,
+      "end": 816,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/Focus.tsx",
+      "start": 1332,
+      "end": 1344,
+      "fixes": 0
     }
   ]
 }

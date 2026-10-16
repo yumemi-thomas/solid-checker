@@ -16,6 +16,59 @@ mod no_package_contracts_process;
 use support::{assert_rule_findings, diagnostic_fixture, findings_for_rule};
 
 #[test]
+fn leaf_focus_requires_runtime_body_and_event_dispatch_evidence() {
+    let Some(findings) = diagnostic_fixture("leaf-scope-host-callbacks") else {
+        return;
+    };
+    let source =
+        include_str!("../../../../fixtures/reactive-ir/leaf-scope-host-callbacks/Focus.tsx");
+    let rows = findings
+        .iter()
+        .filter(|row| {
+            row["primaryLocation"]["path"]
+                .as_str()
+                .is_some_and(|path| path.ends_with("/Focus.tsx"))
+        })
+        .collect::<Vec<_>>();
+    for (name, expression, expected) in [
+        (
+            "OptionalDomFocus",
+            "props.dialog?.focus",
+            Some(("SC9012", "uncertifiable")),
+        ),
+        (
+            "FocusWithListener",
+            "props.dialog?.focus",
+            Some(("SC9012", "uncertifiable")),
+        ),
+        (
+            "UnknownFocus",
+            "props.target.focus",
+            Some(("SC9012", "uncertifiable")),
+        ),
+        ("ExactInertFocus", "target.focus", None),
+        (
+            "ExactForbiddenFocus",
+            "target.focus",
+            Some(("SC3001", "violation")),
+        ),
+    ] {
+        let function = source.find(&format!("export function {name}(")).unwrap();
+        let start = function + source[function..].find(expression).unwrap();
+        let actual = rows.iter().find(|row| {
+            row["primaryLocation"]["startByte"].as_u64() == Some(start as u64)
+                && row["primaryLocation"]["endByte"].as_u64()
+                    == Some((start + expression.len()) as u64)
+        });
+        assert_eq!(actual.is_some(), expected.is_some(), "{name}: {rows:#?}");
+        if let (Some(row), Some((code, kind))) = (actual, expected) {
+            assert_eq!(row["id"], code, "{name}: {row:#?}");
+            assert_eq!(row["kind"], kind, "{name}: {row:#?}");
+        }
+    }
+}
+
+#[test]
 fn local_member_dispatch_requires_only_tracked_exact_callers() {
     let Some(findings) = diagnostic_fixture("literal-argument-member-dispatch") else {
         return;

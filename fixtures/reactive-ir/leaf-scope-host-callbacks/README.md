@@ -18,3 +18,18 @@
 | `CallRunsReceiver` | `leaf-owner-forbidden-call` violation | `call` runs `register` |
 
 `solid-js.d.ts` is copied from `leaf-scope-exact-method`, except that the setter takes an updater, as `@solidjs/signals`' `Setter<T>` does.
+
+`Focus.tsx` pins the unresolved DOM focus boundary. An optional DOM reference
+and a caller-supplied `focus` implementation remain SC9012 uncertifiable,
+including when a focus listener visibly registers cleanup. The listener's
+registration does not prove whether it will run at this focus call. Exact local
+instances are controls: an inert `focus` method is clean and a method that calls
+`onCleanup` produces SC3001. No trust follows from the method's spelling or its
+DOM type. The new file also passes `tsc --noEmit` against published Solid
+2.0.0-rc.13 typings without this fixture's stub.
+
+The [HTML focus update steps](https://html.spec.whatwg.org/multipage/interaction.html#focus-update-steps)
+fire blur/focus events during focusing. Discharging a leaf obligation therefore
+requires exact runtime dispatch and evidence about synchronously invoked
+listeners, including listeners on the previously focused element and ancestors.
+The existing `Listener` case covers registration alone, not event dispatch.

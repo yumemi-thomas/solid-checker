@@ -1,5 +1,40 @@
 # Precision backlog
 
+## 2026-10-16 — DOM focus in a settled callback remains uncertifiable
+
+Reproduced `ai-memory-ui/src/components/confirm-dialog.tsx:22` with the current
+release checker and explicit browser/development source selection:
+`onSettled(() => { dialog?.focus(); })` still produces SC9012 at the member
+callee. This is a leaf-callback obligation from `cleanup::member_call_operations`,
+not the parameter-member dispatch family narrowed by the preceding slice.
+The optional mutable reference has no exact inspectable implementation in this
+analysis. The installed `@solidjs/signals@2.0.0-rc.13` runtime also makes
+`onSettled` a leaf owner only under a live children-capable owner; that call-site
+context remains open for this exported component.
+
+A DOM declaration alone cannot discharge the obligation. The
+[HTML focus update steps](https://html.spec.whatwg.org/multipage/interaction.html#focus-update-steps)
+fire blur/focus events as part of focusing. Synchronous listeners can call
+cleanup, flush, or primitive APIs on the active stack, and can be attached to
+the previous focus target or event-path ancestors rather than the focused
+element itself. No whole-call inertness claim follows from a zero-argument
+signature or the absence of inline callbacks. No method-name whitelist or
+host-free inference was added.
+
+Added `leaf-scope-host-callbacks/Focus.tsx` and exact-span process assertions:
+optional DOM and unknown custom targets remain uncertifiable; a visible
+focus-listener registration does not close dispatch; exact local inert and
+cleanup-registering methods are clean and SC3001 violation controls respectively.
+The file type-checks against published RC.13 typings with no fixture stub.
+There is no analyzer behavior change and no reduction in application findings.
+
+Remaining proof requirements: exact current receiver/method identity, synchronous
+focus/blur listener reachability and execution context, and the live-owner
+premise. These are runtime/call-graph gaps; adding general compiler or Type
+Facts fields without a consumer proof would not close them. The existing
+standard-library argument walk is not a general audit of host reentrancy;
+this regression pins optional/unresolved focus, not every DOM invocation form.
+
 ## 2026-10-16 — Local member dispatch inherits exact caller contexts
 
 Followed the previously open `ai-memory-ui` `pageSlice` call at
