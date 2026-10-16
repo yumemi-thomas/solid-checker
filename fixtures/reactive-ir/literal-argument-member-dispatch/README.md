@@ -59,3 +59,16 @@ The added `untrack` declaration is copied from the published Solid RC.13
 typings. `TrackedDispatch.tsx` passes `tsc --noEmit` against the real published
 RC.13 packages without this fixture stub. The armed native tests assert exact
 call-argument spans and the uncertifiable finding kind.
+
+`LocalEvent`, `ChainedEvent` and `LocalTimer` extend the same exact-caller proof
+to the event/deferred contexts that already exclude a direct dispatch call.
+`MixedEvent` retains its obligation because an additional eager call executes
+in the component body. `EventDefaultCaller` keeps the conservative default-
+initializer refusal. The 32-helper bound, exact-reference census and eval,
+escape, mutation and recursion vetoes still apply. No method identity or
+execution role is inferred from these exclusions.
+
+`DeclarationDispatch.tsx` applies the same proof to synchronous local function
+declarations. The declaration called only from tracked JSX is clean; a
+declaration also handed to an unknown consumer remains uncertifiable. This
+does not close callers of top-level or exported helpers.

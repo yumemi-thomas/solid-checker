@@ -16,6 +16,93 @@ mod no_package_contracts_process;
 use support::{assert_rule_findings, diagnostic_fixture, findings_for_rule};
 
 #[test]
+fn local_declaration_dispatch_rejects_escapes() {
+    let Some(findings) = diagnostic_fixture("literal-argument-member-dispatch") else {
+        return;
+    };
+    let source = include_str!(
+        "../../../../fixtures/reactive-ir/literal-argument-member-dispatch/DeclarationDispatch.tsx"
+    );
+    let rows = findings
+        .iter()
+        .filter(|row| {
+            row["primaryLocation"]["path"]
+                .as_str()
+                .is_some_and(|path| path.ends_with("/DeclarationDispatch.tsx"))
+                && row["analysisContext"] == "parameter-member-target-unresolved"
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(rows.len(), 1, "{rows:#?}");
+    for (marker, expression, unresolved) in [
+        ("function LocalDeclaration", "pageSlice(props.items)", false),
+        (
+            "function EscapedDeclaration",
+            "pageSlice(props.items)",
+            true,
+        ),
+    ] {
+        let definition = source.find(marker).unwrap();
+        let argument =
+            definition + source[definition..].find(expression).unwrap() + "pageSlice(".len();
+        let row = rows
+            .iter()
+            .find(|row| row["primaryLocation"]["startByte"].as_u64() == Some(argument as u64));
+        assert_eq!(row.is_some(), unresolved, "{marker}: {rows:#?}");
+        if let Some(row) = row {
+            assert_eq!(row["id"], "SC9012");
+            assert_eq!(row["kind"], "uncertifiable");
+        }
+    }
+}
+
+#[test]
+fn member_dispatch_keeps_the_source_invocation_context() {
+    let Some(findings) = diagnostic_fixture("forwarded-tracked-compute") else {
+        return;
+    };
+    let source = include_str!(
+        "../../../../fixtures/reactive-ir/forwarded-tracked-compute/MemberContexts.tsx"
+    );
+    let rows = findings
+        .iter()
+        .filter(|row| {
+            row["primaryLocation"]["path"]
+                .as_str()
+                .is_some_and(|path| path.ends_with("/MemberContexts.tsx"))
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(rows.len(), 6, "{rows:#?}");
+    for (name, helper, unresolved) in [
+        ("TrackedMember", "trackedMember", false),
+        ("MixedMember", "mixedMember", true),
+        ("DeferredMember", "deferredMember", false),
+        ("UnknownMember", "unknownMember", true),
+        ("DefaultMember", "defaultMember", true),
+    ] {
+        let function = source.find(&format!("export function {name}(")).unwrap();
+        let call = function + source[function..].find(&format!("{helper}(")).unwrap();
+        let argument = call + helper.len() + 1;
+        let argument_end = argument + "{ read: () => count() }".len();
+        let row = rows.iter().find(|row| {
+            row["id"] == "SC9012"
+                && row["primaryLocation"]["startByte"].as_u64() == Some(argument as u64)
+                && row["primaryLocation"]["endByte"].as_u64() == Some(argument_end as u64)
+        });
+        assert_eq!(row.is_some(), unresolved, "{name}: {rows:#?}");
+        if let Some(row) = row {
+            assert_eq!(row["kind"], "uncertifiable", "{name}: {row:#?}");
+        }
+        let read = argument + "{ read: () => ".len();
+        let row = rows.iter().find(|row| {
+            row["id"] == "SC1001"
+                && row["primaryLocation"]["startByte"].as_u64() == Some(read as u64)
+                && row["primaryLocation"]["endByte"].as_u64() == Some((read + 7) as u64)
+        });
+        assert_eq!(row.is_some(), unresolved, "{name}: {rows:#?}");
+    }
+}
+
+#[test]
 fn named_event_prop_forwarding_requires_an_exclusive_reference_census() {
     let Some(findings) = diagnostic_fixture("forwarded-event-prop") else {
         return;
@@ -142,7 +229,7 @@ fn local_member_dispatch_requires_only_tracked_exact_callers() {
                 && row["analysisContext"] == "parameter-member-target-unresolved"
         })
         .collect::<Vec<_>>();
-    assert_eq!(rows.len(), 9, "{rows:#?}");
+    assert_eq!(rows.len(), 11, "{rows:#?}");
     for (name, occurrence, unresolved) in [
         ("DirectTracked", 0, false),
         ("LocalTracked", 0, false),
@@ -160,6 +247,11 @@ fn local_member_dispatch_requires_only_tracked_exact_callers() {
         ("StoredCaller", 0, true),
         ("GetterDefaultCaller", 0, true),
         ("JsxDefaultCaller", 0, true),
+        ("LocalEvent", 0, false),
+        ("ChainedEvent", 0, false),
+        ("LocalTimer", 0, false),
+        ("MixedEvent", 0, true),
+        ("EventDefaultCaller", 0, true),
     ] {
         let function = source.find(&format!("export function {name}(")).unwrap();
         let call = source[function..]

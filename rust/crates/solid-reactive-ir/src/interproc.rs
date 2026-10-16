@@ -260,6 +260,11 @@ pub(crate) struct ParameterMemberInvocation {
     /// (`String.replace`, `Number.toFixed`). Whatever the caller passes, the
     /// implementation that runs is that built-in (ADR 0190).
     pub(crate) primitive_builtin: bool,
+    /// The member is invoked in a source-proven context where the dispatch
+    /// read rules already exclude a direct call (tracked, event or deferred).
+    /// Retain the invocation for identity/dependency comparisons, but do not
+    /// project an untracked dispatch question to the helper's caller.
+    pub(crate) dispatch_read_excluded: bool,
 }
 
 /// Whether Type Facts resolved `callee`, validly and to exactly one
@@ -1428,6 +1433,22 @@ fn discover_interprocedural_graph(
                 .position(|candidate| *candidate == receiver)
         {
             let primitive_builtin = primitive_builtin_member_call(file, call.callee, lookup);
+            let dispatch_read_excluded = !file.ast.functions.iter().any(|function| {
+                function.span.contains(call.span) && !function.body.contains(call.span)
+            }) && matches!(
+                semantic_execution_role(
+                    file,
+                    call.callee,
+                    &allowed,
+                    symbols.entities,
+                    symbols.names,
+                    lookup,
+                ),
+                ExecutionRole::TrackedJsx
+                    | ExecutionRole::EventCallback
+                    | ExecutionRole::DeferredCallback
+                    | ExecutionRole::DiscardedRendering
+            );
             let entry = (
                 owner_span,
                 ParameterMemberInvocation {
@@ -1435,6 +1456,7 @@ fn discover_interprocedural_graph(
                     path,
                     in_owner_body,
                     primitive_builtin,
+                    dispatch_read_excluded,
                 },
             );
             if !contribution.invoked_parameter_members.contains(&entry) {
@@ -5198,8 +5220,9 @@ pub(super) struct InterproceduralResultReadContext<'a, 'b> {
 /// A local helper can inherit the dispatch rule's existing caller exclusions.
 /// Tracked expressions need no untracked-read dispatch proof. A compiler-proven
 /// component-property getter runs at its consumer, where reads are projected,
-/// rather than in the JSX-building function. Neither answer selects a member
-/// implementation or installs an execution role.
+/// rather than in the JSX-building function. Events, deferred callbacks and
+/// discarded code share the direct dispatch rule's exclusions. These answers
+/// select no member implementation and install no execution role.
 fn local_dispatch_exclusion_depth(
     file: &solid_facts::FileFacts,
     span: Span,
@@ -5228,27 +5251,13 @@ fn local_dispatch_exclusion_depth(
         lookup.symbol_names(),
         lookup,
     );
-    if role == ExecutionRole::TrackedJsx {
-        return Some(0);
-    }
-    if role == ExecutionRole::DeferredCallback
-        && file
-            .compiler
-            .semantic_model
-            .operations
-            .iter()
-            .any(|operation| {
-                use solid_facts::compiler::{CompilerExecutionDisposition, CompilerOperationKind};
-                operation.kind == CompilerOperationKind::ComponentProperty
-                    && operation.execution.disposition
-                        == CompilerExecutionDisposition::ComponentPropertyGetter
-                    && operation.span.contains(span)
-                    && !file
-                        .ast
-                        .functions_within(operation.span)
-                        .any(|function| function.span.contains(span))
-            })
-    {
+    if matches!(
+        role,
+        ExecutionRole::TrackedJsx
+            | ExecutionRole::EventCallback
+            | ExecutionRole::DeferredCallback
+            | ExecutionRole::DiscardedRendering
+    ) {
         return Some(0);
     }
     if !matches!(
@@ -5262,7 +5271,7 @@ fn local_dispatch_exclusion_depth(
         return None;
     }
     let helper = containing_ast_function(&file.ast, span)?;
-    if helper.kind != FunctionKind::Arrow
+    if !matches!(helper.kind, FunctionKind::Arrow | FunctionKind::Declaration)
         || helper.r#async
         || helper.generator
         || !helper.body.contains(span)
@@ -5704,10 +5713,11 @@ fn interprocedural_result_reads_for_file(
                 parameter,
                 path,
                 primitive_builtin,
+                dispatch_read_excluded,
                 ..
             } in &invoked_parameter_members[target]
             {
-                if *primitive_builtin {
+                if *primitive_builtin || *dispatch_read_excluded {
                     continue;
                 }
                 let Some(argument) = call.arguments.get(*parameter) else {

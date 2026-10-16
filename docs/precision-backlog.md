@@ -1,5 +1,56 @@
 # Precision backlog
 
+## 2026-10-16 — Dispatch summaries preserve source invocation context
+
+The next corpus reduction addresses a shared context loss rather than adding
+method-name trust. A source helper such as `useFrame` can invoke
+`options.enabled()` only in the tracked compute of `createEffect`, yet its
+caller previously received `parameter-member-targets-diverge` because the
+property arrow had no callable summary. Dispatch implementation is still
+unknown, but that read executes under the source-proven observer, regardless
+of the caller's setup context.
+
+`ParameterMemberInvocation::dispatch_read_excluded` retains the existing
+direct-dispatch exclusions (tracked JSX, event, deferred or discarded code)
+at the source invocation. Only the caller's read-dispatch question is skipped;
+the invocation and the bit remain in dependency state, so a source-context
+change invalidates the retained result. A second eager/unresolved occurrence
+remains a separate invocation and keeps its obligation. Parameter defaults
+are refused explicitly. The local caller-context traversal now shares these
+same exclusions for exact helper chains, retaining its 32-helper bound and
+reference/eval/escape/mutation/cycle vetoes. No new execution role, method
+identity or host inference is introduced, and leaf-scope checks are unchanged.
+The same bounded caller proof now admits synchronous local function
+declarations as well as immutable arrows. Escaped declarations stay open;
+top-level/exported helper inference is not broadened.
+
+Regressions extend `literal-argument-member-dispatch` with event/timer helper
+chains and eager/default controls. `forwarded-tracked-compute` adds exact
+cross-file member-callback cases: tracked/deferred callers are clean while
+mixed, unknown and default-initializer callers remain uncertifiable. Armed
+process assertions check both dispatch and reactive-read spans and kinds.
+An IR dependency-state regression checks invalidation when the context bit
+changes. New sources pass `tsc --noEmit` against published RC.13 typings,
+without the fixture stub. Snapshots remain scoped to these two projects.
+
+Fresh default-mode release sweeps of the same 49 configured project entries
+reduce uncertifiable rows from 3,599 to 3,446 (153 removed, 4.3%) across 14
+applications. All 537 violation rows retain the same sites; no finding is
+added, no violation is removed, and no project errors. The removed SC9012
+contexts are 77 `parameter-member-target-unresolved`, 51
+`parameter-member-targets-diverge` and 25 `parameter-member-path-unresolved`.
+The initial source-context/local-arrow change removed 103; admitting exact
+local declarations removes another 50. Counts are configured-project rows,
+not a new audit of unique runtime defects. The sweep uses the saved P7 corpus
+manifest because the former tracked manifest was deleted; the ignored local
+sweep script accepts that path through `SWEEP_CORPUS`.
+
+Remaining limits include unresolved package source, true eager/untracked
+member calls, mutable or escaped functions, unknown consumers, callback
+defaults, recursion/depth limits and separate leaf-scope runtime behavior.
+Function-valued property summary gaps remain open where the source invocation
+itself needs an untracked-read proof. No blanket package or DOM trust was added.
+
 ## 2026-10-16 — Callback props invoked by exclusive named DOM handlers
 
 Followed `ai-memory-ui`'s `ScopePageScreen` callback prop reads at

@@ -46,3 +46,17 @@ test asserts the exact read spans and finding kinds. The new sources were also
 checked with `tsc --noEmit` against the real published Solid 2.0.0-rc.13 typings
 in the audited oracle install, without the fixture's declaration stub. No
 TypeScript diagnostic is duplicated.
+
+`MemberContexts.tsx` and `member-helpers.ts` pin the corresponding source-visible
+object-member callback case. A helper can invoke `options.read()` only in a
+tracked memo or a deferred host callback; its caller does not acquire an
+untracked dispatch obligation merely because the exact property function has
+no summary node. The invocation's context is retained in the internal member
+summary and its cache dependency state. This proves the context, not the
+property's implementation. The caller-supplied reactive reads in `TrackedMember`
+and `DeferredMember` are clean. `MixedMember`, `UnknownMember` and `DefaultMember`
+retain both the dispatch and callback-read obligations: a tracked use cannot
+override an eager, unresolved or default-initializer use. The mixed exported
+helper also retains its open-boundary dispatch obligation. The armed process
+test checks exact caller spans across files. Both files pass `tsc --noEmit`
+against published RC.13 typings without this fixture's stub.

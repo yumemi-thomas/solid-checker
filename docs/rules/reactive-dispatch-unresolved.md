@@ -44,7 +44,8 @@ const visible = () => pageSlice(props.items);
 return <div>{visible().length}</div>;
 ```
 
-The checker requires an immutable local arrow, an exact census of its references,
+The checker requires an immutable local arrow or an unwritten local function
+declaration, an exact census of its references,
 and only direct calls whose contexts are accounted for. It also follows local
 helper chains into component-property expressions the compiler proves it lowers
 to getters: those execute when the consuming component reads the property,
@@ -56,6 +57,30 @@ An additional eager call, an escaped or aliased helper, a mutable binding,
 an async helper, a recursive cycle, visible direct eval, or missing context
 evidence keeps the obligation. The local traversal is bounded to 32 helpers;
 cross-file helpers and deferred callback factories are not covered by this proof.
+
+The same caller traversal covers compiler-proven event and deferred contexts,
+where a direct dispatch call is already excluded. A mixed eager invocation
+still keeps the obligation, and constructing a callback does not execute its
+parameter defaults.
+
+### Source helper member callbacks
+
+When an analyzed helper invokes an argument's member only under a proven
+tracked or deferred context, that invocation does not become an untracked
+dispatch question at the helper's caller. For example:
+
+```ts
+function trackedOptions(options: { enabled: () => boolean }) {
+  return createMemo(() => options.enabled());
+}
+```
+
+The source invocation's context travels with the internal member summary and
+its cache dependency state. No runtime implementation is chosen from its type
+or property name. An additional eager call, unknown callback consumer or
+callback default leaves the corresponding obligation open. These exclusions
+affect read-dispatch obligations only; leaf-scope cleanup/flush/primitive
+obligations still need their separate proofs.
 
 ### `omit` predicates (Solid 2.0.0-rc.9)
 

@@ -115,3 +115,33 @@ export function JsxDefaultCaller(props: Props) {
   const visible = () => pageSlice(props.items);
   return <div>{opaque((value = visible()) => value)}</div>;
 }
+
+// The direct event exclusion also holds one exact local helper away.
+export function LocalEvent(props: Props) {
+  const visible = () => pageSlice(props.items);
+  return <div onClick={() => { visible(); }} />;
+}
+
+export function ChainedEvent(props: Props) {
+  const inner = () => pageSlice(props.items);
+  const visible = () => inner();
+  const handler = () => { visible(); };
+  return <div onClick={handler} />;
+}
+
+export function LocalTimer(props: Props) {
+  const visible = () => pageSlice(props.items);
+  setTimeout(() => { visible(); }, 0);
+  return <div />;
+}
+
+export function MixedEvent(props: Props) {
+  const visible = () => pageSlice(props.items);
+  visible();
+  return <div onClick={() => { visible(); }} />;
+}
+
+export function EventDefaultCaller(props: Props) {
+  const visible = () => pageSlice(props.items);
+  return <div onClick={() => { opaque((value = visible()) => value); }} />;
+}

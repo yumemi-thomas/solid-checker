@@ -4021,6 +4021,7 @@ mod tests {
             path: vec!["of".into(), "values".into()],
             in_owner_body: true,
             primitive_builtin: false,
+            dispatch_read_excluded: false,
         }]];
         let direct_view = InterproceduralResultView {
             invoked_parameter_members: &direct_members,
@@ -4044,5 +4045,13 @@ mod tests {
             InterproceduralResultDependency::InlineFunction("fixture.tsx".into(), nodes[0].span);
         assert!(direct_view.dependency_matches(&direct_state, &inline));
         assert!(!captured_view.dependency_matches(&direct_state, &inline));
+        let mut tracked_members = direct_members.clone();
+        tracked_members[0][0].dispatch_read_excluded = true;
+        let tracked_view = InterproceduralResultView {
+            invoked_parameter_members: &tracked_members,
+            ..direct_view
+        };
+        assert!(!tracked_view.dependency_matches(&direct_state, &dependency));
+        assert!(!tracked_view.dependency_matches(&direct_state, &inline));
     }
 }
