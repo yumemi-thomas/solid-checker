@@ -17,10 +17,8 @@ export interface OwnedMount {
 /** The native ordinary check's options, as the owned check accepts them. */
 export interface OwnedCheckRequest {
   /**
-   * Absolute; canonicalized as native `--project` is, against the mount or the
-   * directory. In directory mode a spelling through host links outside the
-   * directory is projected into it only as README.md, "Project spelling",
-   * states; every other outcome is an explicit error.
+   * Absolute; canonicalized as native `--project` is, against the mount or,
+   * in directory mode, the host (README.md, "Project spelling").
    */
   projectId: string
   dialect?: string
@@ -83,11 +81,13 @@ export declare class OwnedMountError extends Error {}
 export declare function createOwnedChecker(options: { mount: OwnedMount }): Promise<OwnedChecker>
 /**
  * Starts one owned checker over a host directory read on demand (Node and
- * Bun, POSIX hosts). `directory` is resolved to its real path once; both
- * reactors read only under it, through one read-only store that records
- * every read. The caller keeps that directory, and the path from `/` to it,
- * unchanged while the checker lives: a change detected after a check
- * rejects that check and every later one, and is never answered.
+ * Bun, POSIX hosts). `directory` is resolved to its real path once. Both
+ * reactors read the host's namespace as a native check does -- the directory,
+ * what lies above it, and wherever a link leads -- through one read-only store
+ * that records every read. The caller keeps the path from `/` to the
+ * directory, and everything a check reaches, unchanged while the checker
+ * lives: a change detected after a check rejects that check and every later
+ * one, and is never answered.
  */
 export declare function createOwnedChecker(options: { directory: string }): Promise<OwnedChecker>
 

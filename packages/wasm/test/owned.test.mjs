@@ -105,7 +105,7 @@ test("input that changes after it was read rejects that check, the queued ones a
   }
 });
 
-test("a check that reaches a link leaving the root is rejected with that reason, never answered", async () => {
+test("a check that reaches a link leaving the root follows it on the host, as native does", async () => {
   const { top, root, remove } = project({
     "tsconfig.json": '{ "compilerOptions": { "strict": true, "noEmit": true }, "files": ["App.ts", "escape/Out.ts"] }\n',
     "App.ts": "export const answer = 42;\n",
@@ -115,8 +115,9 @@ test("a check that reaches a link leaving the root is rejected with that reason,
     nodeFs.writeFileSync(join(top, "outside/Out.ts"), "export const out = 1;\n");
     nodeFs.symlinkSync("../outside", join(root, "escape"));
     const checker = await createOwnedChecker({ directory: root });
-    await assert.rejects(checker.check({ projectId: `${root}/tsconfig.json` }),
-      /^OwnedCheckerError: the owned checker is poisoned: the owned checker's input faulted: .*a link leads outside the directory root/);
+    const answer = await checker.check({ projectId: `${root}/tsconfig.json` });
+    assert.equal(answer.ok, true, JSON.stringify(answer).slice(0, 400));
+    assert.equal(answer.snapshot.status, "certified");
     await checker.close();
   } finally {
     remove();

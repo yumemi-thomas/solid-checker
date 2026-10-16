@@ -145,53 +145,58 @@ not fit large projects (a check typically reads a few percent of the tree,
   real path once, on the calling thread.
 - **The store.** Both reactors share one store. Each host read is recorded
   once, keyed by operation and physical path: `lstat` (with the identity
-  `dev, ino, mode, nlink, size, mtimeNs, ctimeNs`), `readlink`, a directory
-  listing taken between two `lstat`s, and a file's bytes, read once with
-  `fstat` before and after. Every later answer comes from these records.
+  below), `readlink`, a directory listing taken between two `lstat`s, and a
+  file's bytes, read once with `fstat` before and after. Every later answer
+  comes from these records.
   Paths resolve as a kernel resolves one syscall, with at most 32 link
   substitutions. Listings are ordered by name bytes on every engine.
-- **Namespace.** It is the mount's: nothing above the directory exists except
-  the directories leading to it, each listing only the next one. Anything
-  else outside it is absent to both reactors, with no host read. The one
-  exception is the request's project spelling (next item), and it is never
-  visible to a reactor's own calls.
+- **The identity.** For every file and link, wherever it lies, and for every
+  directory inside the directory the checker was created for, the identity is
+  `dev, ino, mode, nlink, size, mtimeNs, ctimeNs`. For a directory outside it
+  -- `/`, the ancestors, a store a link leads to -- it is `dev, ino, mode`
+  only: such a directory is shared with the rest of the host, and its
+  timestamps, size and link count move with unrelated activity beside the
+  paths a check walks through it (`$TMPDIR`, a home directory). The entries a
+  check reaches in it are their own records, and a listing of it is its own
+  record, so a replaced directory, a changed reached entry and a changed
+  listing are all detected. A change to only its timestamps, size or link
+  count is not detected, and those fields are answered as first recorded,
+  not as current. No consumer in the two reactors is known to read them; that
+  is a reading of today's sources, not a guarantee for future ones.
+- **The preopen.** Each WASI runtime opens `/` once when it is created, as the
+  anchor every path resolves from; it never reads that descriptor (listings
+  are taken by path). Native analysis needs only search permission on `/`, so
+  that one open is answered from `/`'s recorded `lstat` without a host open.
+  Any other open or listing of `/`, by either reactor, is a real host
+  operation, denied as the host denies it.
+- **Namespace.** It is the host's. Native discovery reads above the project
+  without bound: the nearest `node_modules/solid-js` selects the dialect,
+  TypeScript looks up `node_modules` and `package.json` in every ancestor, host
+  inference looks for a workspace root, and `extends` or `paths` may name files
+  above the project. So any path a reactor reaches -- inside the directory,
+  above it, or through a link leading anywhere -- is answered from its own
+  host records, `/` and the directory's ancestors included, and nothing is
+  answered absent unless the host says so. A hoisted install above the
+  directory, a pnpm store outside it and a project path spelled through a host
+  link (macOS `/tmp` or `/var`) are therefore read as native reads them.
+  `directory` names the canonical directory the checker is created for: its
+  identity is checked at start and after every check, and it anchors the
+  precondition. A mount, by contrast, is closed: nothing above its root
+  exists in it.
 - **Project spelling.** Native `--project` is canonicalized by the host's
-  `realpath(3)` before anything reads it; the checker does the same through
-  WASI, inside the namespace. A spelling that passes through a host place
-  outside it -- macOS `/tmp` or `/var`, or a link of the caller's to the
-  project -- fails there with `NotFound`. Only then the checker asks the
-  store once, through its `solid_owned_host` imports (`owned-projection.mjs`),
-  what the spelling names when those outside places are read from the host:
-  - outside places reached from the spelling itself, or from links that are
-    themselves outside, are read with `lstat` and `readlink` only, recorded and
-    revalidated like every other record; a link inside the directory that
-    leads outside is still the input fault below;
-  - a path that ends inside the directory is used only if every component
-    below the directory is an exact entry of its parent's listing, the
-    directory's own listing first. Those listings are recorded and revalidated
-    too. Native canonicalization needs search permission only, so a listing
-    that fails (`EACCES` on a search-only parent, for example) is refused as
-    `listing … to confirm its spelling failed`, where native answers;
-  - the projected path is native's under the further assumption that the host
-    applies no other name canonicalization: case-insensitive names, Unicode
-    normalization and firmlinks are not resolved. A listing without the exact
-    name is refused as `not spelled as its directory entry`. A case variant
-    *inside* the directory is answered as WASI canonicalizes it, which may
-    keep the request's spelling where native would not;
-  - a path that ends outside the directory is refused as `outside the
-    directory root`, a missing or dangling one as `ENOENT`, and `ENOTDIR`,
-    `EACCES`, `EPERM` and a link loop as those errors.
-
-  A mount has no host to ask: an outside spelling there stays `ENOENT`.
+  `realpath(3)`; the checker canonicalizes it through WASI over the same host
+  namespace, the same physical walk. One difference is held: on a
+  case-insensitive volume `realpath(3)` rewrites a name to its directory
+  entry's spelling, and the WASI walk keeps the request's (or a link target's)
+  spelling, so the output may spell such a path differently.
 - **Precondition.** The caller keeps the host namespace from `/` through the
-  directory, everything a check reaches, and the host names and link targets
-  outside the directory that a project spelling passes through, unchanged
-  while the checker lives. The store issues ordinary path-string calls, so it
-  is not a sandbox: it cannot stop the operating system following a link
-  someone swaps in.
+  directory, and everything a check reaches -- inside the directory or not --
+  unchanged while the checker lives. The store issues ordinary path-string
+  calls, so it is not a sandbox: it cannot stop the operating system
+  following a link someone swaps in.
 - **What is detected.** After every check, every record the checker ever
-  captured is performed again and compared exactly: identity, link target,
-  listing, and each recorded error. Any difference rejects that check and
+  captured is performed again and compared exactly: identity (as above), link
+  target, listing, and each recorded error. Any difference rejects that check and
   every later one, and the answer is discarded. When every record validates,
   there was an instant between the check's last read and the start of
   validation at which the host held every recorded byte, identity, target,
@@ -201,14 +206,11 @@ not fit large projects (a check typically reads a few percent of the tree,
   timestamps) is not detected. Stat fields outside the identity (`atime`,
   which reading may itself change; `blksize`; `blocks`) are captured once and
   are not part of that claim. The answer is not claimed current at delivery.
-- **What is refused.** These are input faults: a link whose target leads
-  outside the directory, as soon as that target is read (by the store's own
-  resolution or by the guest's `readlink`, since a guest that followed it
-  itself would otherwise be told "absent" where the host has a file; a link
-  no check reads is not refused), a kind other than file, directory or link,
+- **What is refused.** These are input faults: a kind other than file, directory or link,
   a name or link target that is not UTF-8, any host error other than the
-  expected ones, and any write. The expected errors (`ENOENT`, `ENOTDIR`, `EACCES`, `EPERM`, `EINVAL`
-  from `readlink` of a non-link, `ELOOP`) are recorded and answered as the
+  expected ones, and any write, wherever the path lies. The expected errors
+  (`ENOENT`, `ENOTDIR`, `EACCES`, `EPERM`, `EINVAL` from `readlink` of a
+  non-link, `ELOOP`) are recorded and answered as the
   host gave them. An open that would create, truncate or append is refused
   before any host access; the host file is only ever opened read-only. The
   first input fault is final: it rejects the current, queued and later checks

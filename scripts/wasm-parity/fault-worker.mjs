@@ -4,7 +4,7 @@
 // every run through it is a negative control, and nothing it answers is
 // compared as a fact.
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { parentPort, workerData } from "node:worker_threads";
 import { serve } from "solid-checker-wasm/owned-worker-core.mjs";
 import { FAULTS, cborOpenEnvelope } from "./cbor.mjs";
@@ -161,7 +161,7 @@ const adapters = {
 
 if (mode === "canary") {
   // Under the Node permission model a worker may neither start a process nor
-  // read outside the granted trees.
+  // write outside the granted tree.
   const attempt = action => {
     try {
       action();
@@ -176,7 +176,7 @@ if (mode === "canary") {
       const result = spawnSync(process.execPath, ["-e", "0"]);
       if (result.error) throw result.error;
     }),
-    read: attempt(() => readFileSync(outside)),
+    write: attempt(() => writeFileSync(outside, "the canary\n", { flag: "wx" })),
   });
 }
 

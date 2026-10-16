@@ -334,6 +334,11 @@ for (const item of plan.g3.permission) {
   record(item.name, { precondition, observation: records.find(message => message.type === "observation").outcome, ...result });
 }
 
+// S3d: inputs above the directory root, in directory mode, and two of them in
+// a closed mount.
+for (const item of plan.a2.cases) record(item.name, await onceDirectory(item.root, item.request));
+for (const item of plan.a2.mount) record(item.name, await once(item.root, item.request));
+
 // S3a: the control guests' real WASI path calls, through the owned runtime
 // and, as the old-layer control, through the pinned upstream one.
 {

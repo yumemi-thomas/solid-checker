@@ -12,7 +12,7 @@ import { memfs } from "@napi-rs/wasm-runtime/fs";
 // The runtime the owned worker runs: the vendored copy, with the C-vendor
 // repair (unsigned iovec buffer addresses).
 import { WASI as OwnedWASI } from "../vendor/wasm-util/lib/mjs/wasi/index.mjs";
-import { boundaryImports, coveredImports, OwnedBoundaryError, protocolImports, u32 } from "../owned-boundary.mjs";
+import { boundaryImports, checkImportInventory, coveredImports, OwnedBoundaryError, protocolImports, u32 } from "../owned-boundary.mjs";
 import { createTransport } from "../owned-host.mjs";
 
 const EFAULT = 21;
@@ -144,6 +144,34 @@ test("the checker's protocol imports are normalized as u32 and malformed values 
   assert.deepEqual(seen.at(-1), ["copy_result", [0x80000005, HIGH, 16]]);
   assert.throws(() => wrapped.exchange(1, 0.5, 1), OwnedBoundaryError);
   assert.throws(() => wrapped.close(), OwnedBoundaryError);
+});
+
+/** A module importing `entries` ([module, name, kind]); functions are () -> (). */
+function importing(entries) {
+  const text = value => [...new TextEncoder().encode(value)];
+  const body = entries.flatMap(([from, name, kind]) => [
+    from.length, ...text(from), name.length, ...text(name), ...(kind === "memory" ? [0x02, 0x00, 0x01] : [0x00, 0x00]),
+  ]);
+  const imports = [entries.length, ...body];
+  return new WebAssembly.Module(new Uint8Array([
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x04, 0x01, 0x60, 0x00, 0x00, 0x02, imports.length, ...imports,
+  ]));
+}
+
+test("each reactor's whole import list must be what the worker serves it", () => {
+  for (const [file, role] of [["solid-checker.wasm", "checker"], ["solid-typefacts.wasm", "producer"]]) {
+    checkImportInventory(new WebAssembly.Module(readFileSync(new URL(`../owned/${file}`, import.meta.url))), role);
+  }
+  checkImportInventory(importing([["wasi_snapshot_preview1", "fd_write"], ["solid_typefacts", "open"]]), "checker");
+  for (const [role, entries] of [
+    ["producer", [["solid_typefacts", "open"]]],
+    ["checker", [["solid_typefacts", "toString"]]],
+    ["checker", [["solid_owned_host", "project"]]],
+    ["checker", [["wasi_snapshot_preview1", "sock_accept"]]],
+    ["checker", [["solid_typefacts", "open", "memory"]]],
+  ]) {
+    assert.throws(() => checkImportInventory(importing(entries), role), OwnedBoundaryError, JSON.stringify(entries));
+  }
 });
 
 test("the transport reads the producer's output above 2 GiB, and refuses an output outside its memory", () => {

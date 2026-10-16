@@ -148,3 +148,22 @@ export function protocolImports(imports) {
   }
   return Object.freeze(wrapped);
 }
+
+const TYPEFACTS_IMPORTS = new Set(["open", "handshake", "exchange", "result_length", "copy_result", "close"]);
+
+/**
+ * Refuses `module` unless every import it declares is a function this
+ * worker serves to that reactor: preview1 names the boundary covers, and for
+ * the checker alone the six `solid_typefacts` functions.
+ */
+export function checkImportInventory(module, role, coveredPreview1 = coveredImports) {
+  const allowed = {
+    wasi_snapshot_preview1: new Set(coveredPreview1),
+    ...(role === "checker" ? { solid_typefacts: TYPEFACTS_IMPORTS } : {}),
+  };
+  for (const { module: from, name, kind } of WebAssembly.Module.imports(module)) {
+    if (kind !== "function" || !allowed[from]?.has(name)) {
+      throw new OwnedBoundaryError(`the ${role} imports ${kind} ${from}.${name}, which the owned worker does not serve it`);
+    }
+  }
+}

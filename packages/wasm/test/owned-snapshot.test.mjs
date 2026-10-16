@@ -10,6 +10,7 @@ import { afterEach, test } from "vitest";
 import { createDirectoryStore, hostSource, identityOf, OwnedInputFault } from "../owned-snapshot.mjs";
 // The runtime's own bound, which the owned worker passes to the store.
 import { MAX_SUBSTITUTIONS as LINKS } from "../vendor/wasm-util/lib/mjs/wasi/physical.mjs";
+import { WASI } from "../vendor/wasm-util/lib/mjs/wasi/index.mjs";
 
 const trees = [];
 afterEach(() => {
@@ -91,7 +92,8 @@ test("a file is captured once and answered from its record, with descriptors, po
   assert.equal(read(fs, path), "hello");
   assert.equal(calls.filter(([name]) => name === "open").length, opens, "the second open reads no host file");
   assert.equal(store.validate(), undefined);
-  assert.deepEqual(store.metrics().counts, { L: 2, R: 0, D: 0, F: 1 });
+  // The file, the root, and each of the root's ancestors below `/`.
+  assert.deepEqual(store.metrics().counts, { L: root.split("/").length, R: 0, D: 0, F: 1 });
 });
 
 test("readlink of a regular file answers EINVAL as a recorded, revalidated outcome", () => {
@@ -144,50 +146,153 @@ test("a store without the runtime's loop error and link bound refuses to start",
   }
 });
 
-test("a link leading outside the root faults when it is reached, and the fault is sticky", () => {
+test("a link leading outside the root is followed on the host and recorded like any other record", () => {
   const { top, root } = tree({ "a.txt": "x", escape: { link: "../outside" }, back: { link: "../root/a.txt" } });
   nodeFs.mkdirSync(join(top, "outside"));
   nodeFs.writeFileSync(join(top, "outside/secret.txt"), "secret");
-  const { store, fs, calls } = open(root);
+  const { store, fs } = open(root);
   assert.deepEqual(fs.readdirSync(root, { withFileTypes: true }).map(entry => [entry.name, entry.isSymbolicLink()]),
     [["a.txt", false], ["back", true], ["escape", true]]);
-  assert.ok(fs.lstatSync(`${root}/escape`, { bigint: true }).isSymbolicLink(), "an unfollowed escaping link answers");
-  assert.equal(read(fs, `${root}/back`), "x", "a link that leaves through an ancestor and returns is inside");
-  assert.throws(() => fs.statSync(`${root}/escape/secret.txt`, { bigint: true }), faulted(/a link leads outside the directory root/));
-  const before = calls.length;
-  assert.throws(() => read(fs, `${root}/a.txt`), error => error === store.fault());
-  assert.throws(() => fs.realpathSync("/", "utf8"), error => error === store.fault());
-  assert.equal(calls.length, before, "no host call after the fault");
-  assert.equal(store.validate(), store.fault());
-  assert.ok(!calls.some(([, path]) => typeof path === "string" && path.includes("outside/secret")));
+  assert.equal(read(fs, `${root}/back`), "x");
+  assert.equal(read(fs, `${root}/escape/secret.txt`), "secret");
+  assert.deepEqual(fs.readdirSync(`${root}/escape`, { withFileTypes: true }).map(entry => entry.name), ["secret.txt"]);
+  assert.deepEqual(store.observe("R", `${root}/escape`), { ok: true });
+  assert.deepEqual(store.observe("F", `${top}/outside/secret.txt`), { ok: true });
+  assert.equal(store.validate(), undefined);
+  nodeFs.writeFileSync(join(top, "outside/secret.txt"), "changed!");
+  assert.match(store.validate().message, /outside\/secret\.txt: changed since it was read/);
 });
 
-test("a guest reading a link whose target leaves the root faults, even if it would follow the link itself", () => {
-  const { top, root } = tree({ inside: { link: "missing/../a.txt" }, dangling: { link: "nowhere" }, escape: { link: "../outside" },
+test("readlink answers a link's exact target wherever it leads", () => {
+  const { root } = tree({ inside: { link: "missing/../a.txt" }, dangling: { link: "nowhere" }, escape: { link: "../outside" },
     absolute: { link: "/etc/hosts" }, through: { link: "../root/a.txt" }, "a.txt": "x" });
-  const { fs } = open(root);
-  assert.equal(fs.readlinkSync(`${root}/dangling`), "nowhere", "a target missing inside the root is only dangling");
-  assert.equal(fs.readlinkSync(`${root}/through`), "../root/a.txt", "a target through an ancestor and back is inside");
+  const { store, fs } = open(root);
+  assert.equal(fs.readlinkSync(`${root}/dangling`), "nowhere");
+  assert.equal(fs.readlinkSync(`${root}/through`), "../root/a.txt");
   assert.equal(fs.readlinkSync(`${root}/inside`), "missing/../a.txt");
-  assert.throws(() => fs.readlinkSync(`${root}/escape`), faulted(/a link leads outside the directory root/));
-  const absolute = open(root);
-  assert.throws(() => absolute.fs.readlinkSync(`${root}/absolute`), faulted(/a link leads outside the directory root/));
-  assert.ok(!nodeFs.existsSync(join(top, "outside")), "the escaping target does not even exist: it still faults");
+  assert.equal(fs.readlinkSync(`${root}/escape`), "../outside");
+  assert.equal(fs.readlinkSync(`${root}/absolute`), "/etc/hosts");
+  assert.throws(() => fs.statSync(`${root}/escape`, { bigint: true }), code("ENOENT"));
+  assert.throws(() => fs.readlinkSync(`${root}/a.txt`), code("EINVAL"));
+  assert.equal(store.fault(), undefined);
 });
 
-test("ancestors are virtual, nothing else outside the root is read, and only / is realpath'd", () => {
+test("the root's ancestors and what lies under them are the host's: a hoisted install above the root is read", () => {
   const { top, root } = tree({ "a.txt": "x" });
+  nodeFs.mkdirSync(join(top, "node_modules/solid-js"), { recursive: true });
+  nodeFs.writeFileSync(join(top, "node_modules/solid-js/package.json"), '{"name":"solid-js","version":"2.0.0-rc.13"}\n');
   nodeFs.writeFileSync(join(top, "sibling.txt"), "sibling");
-  const { fs, calls } = open(root);
+  const { store, fs, calls } = open(root);
   const parent = fs.lstatSync(top, { bigint: true });
-  assert.ok(parent.isDirectory());
-  assert.deepEqual(fs.readdirSync(top, { withFileTypes: true }).map(entry => entry.name), ["root"]);
+  assert.equal(identityOf(parent), identityOf(nodeFs.lstatSync(top, { bigint: true })), "an ancestor's stats are its own, not virtual");
+  assert.deepEqual(fs.readdirSync(top, { withFileTypes: true }).map(entry => entry.name).sort(), ["node_modules", "root", "sibling.txt"]);
+  assert.equal(read(fs, `${root}/../node_modules/solid-js/package.json`), '{"name":"solid-js","version":"2.0.0-rc.13"}\n');
+  assert.equal(read(fs, join(top, "sibling.txt")), "sibling");
   assert.ok(fs.statSync("/", { bigint: true }).isDirectory());
-  assert.throws(() => fs.lstatSync(join(top, "sibling.txt"), { bigint: true }), code("ENOENT"));
-  assert.throws(() => fs.openSync(`${root}/../sibling.txt`, 0, 0o666), code("ENOENT"));
+  assert.throws(() => fs.lstatSync(join(top, "absent/package.json"), { bigint: true }), code("ENOENT"));
+  assert.deepEqual(store.observe("L", join(top, "absent")), { ok: false, code: "ENOENT" });
+  // Only the preopen `/` is realpath'd, and only by its own answer.
   assert.equal(fs.realpathSync("/", "utf8"), "/");
-  assert.ok(calls.every(([, path]) => typeof path !== "string" || path === root || path.startsWith(`${root}/`)), JSON.stringify(calls));
-  assert.throws(() => fs.realpathSync(root, "utf8"), faulted(/realpathSync is only consumed for the preopen/));
+  assert.ok(calls.filter(([name]) => name === "realpath").every(([, path]) => path === root), JSON.stringify(calls));
+  assert.equal(store.validate(), undefined);
+  // A listing above the root is a record like any other: an added entry is a change.
+  nodeFs.writeFileSync(join(top, "added.txt"), "added");
+  assert.match(store.validate().message, new RegExp(`D ${top}: changed since it was read: listing`));
+  // Recorded absence above the root is revalidated too: an install appearing later is a change.
+  const absence = open(root);
+  assert.throws(() => absence.fs.lstatSync(join(top, "later/package.json"), { bigint: true }), code("ENOENT"));
+  assert.equal(absence.store.validate(), undefined);
+  nodeFs.mkdirSync(join(top, "later"));
+  assert.match(absence.store.validate().message, /later: changed since it was read/);
+  assert.throws(() => open(root).fs.realpathSync(root, "utf8"), faulted(/realpathSync is only consumed for the preopen/));
+});
+
+test("the kind rules hold outside the root as inside it", () => {
+  const { top, root } = tree({});
+  execFileSync("mkfifo", [join(top, "pipe")]);
+  const { fs } = open(root);
+  assert.throws(() => fs.lstatSync(join(top, "pipe"), { bigint: true }), faulted(/is not a regular file, directory or link/));
+});
+
+test("the runtime's preopen of / is an anchor, with no host open; a guest's own open or listing of / is the host's", () => {
+  const { root } = tree({ "a.txt": "x" });
+  // A host on which `/` can be searched but not opened or listed for reading.
+  const denied = code => Object.assign(new Error(code), { code });
+  const overrides = {
+    open: path => { if (path === "/") throw denied("EACCES"); return hostSource.open(path); },
+    readdir: path => { if (path === "/") throw denied("EACCES"); return hostSource.readdir(path); },
+  };
+  const runtime = fs => new WASI({ version: "preview1", args: [], env: {}, fs, preopens: { "/": "/" } });
+  // Without the anchor the runtime's own open of `/` needs read permission.
+  assert.throws(() => runtime(open(root, { overrides }).fs), code("EACCES"));
+  const { store, fs, calls } = open(root, { overrides });
+  store.preopen(() => runtime(fs));
+  store.preopen(() => runtime(fs));
+  assert.equal(store.anchors(), 2, "one anchor per runtime");
+  assert.ok(!calls.some(([name, path]) => name === "open" && path === "/"), "no host open of /");
+  assert.equal(store.observe("F", "/"), undefined);
+  assert.deepEqual(store.observe("L", "/"), { ok: true });
+  // What lies below `/` is reached by search alone.
+  assert.equal(read(fs, `${root}/a.txt`), "x");
+  // A guest's own reads of `/` are real host operations, denied and recorded.
+  assert.throws(() => fs.openSync("/", 0, 0o666), code("EACCES"));
+  assert.throws(() => fs.readdirSync("/", { withFileTypes: true }), code("EACCES"));
+  assert.deepEqual(store.observe("F", "/"), { ok: false, code: "EACCES" });
+  assert.deepEqual(store.observe("D", "/"), { ok: false, code: "EACCES" });
+  // Outside the window an open of `/` is never an anchor, and the window does not nest.
+  assert.throws(() => store.preopen(() => store.preopen(() => 0)), faulted(/preopen windows do not nest/));
+});
+
+test("a preopen window is one anchor for the whole construction: a second open is the host's, nesting faults even after the anchor", () => {
+  const { root } = tree({ "a.txt": "x" });
+  const denied = code => Object.assign(new Error(code), { code });
+  const overrides = { open: path => { if (path === "/") throw denied("EACCES"); return hostSource.open(path); } };
+  const runtime = fs => new WASI({ version: "preview1", args: [], env: {}, fs, preopens: { "/": "/" } });
+  // A second direct open of `/` in one window is a real host open, denied.
+  const second = open(root, { overrides });
+  assert.throws(() => second.store.preopen(() => {
+    runtime(second.fs);
+    second.fs.openSync("/", "r", 0o666);
+  }), code("EACCES"));
+  assert.equal(second.store.anchors(), 1);
+  assert.deepEqual(second.store.observe("F", "/"), { ok: false, code: "EACCES" });
+  // A constructor that throws closes the window; the next window anchors again.
+  assert.throws(() => second.store.preopen(() => { throw new Error("constructor failed"); }), /constructor failed/);
+  second.store.preopen(() => runtime(second.fs));
+  assert.equal(second.store.anchors(), 2);
+  assert.equal(second.store.fault(), undefined);
+  // Nesting is refused for the whole construction, after the anchor too.
+  const nested = open(root, { overrides });
+  assert.throws(() => nested.store.preopen(() => {
+    runtime(nested.fs);
+    nested.store.preopen(() => runtime(nested.fs));
+  }), faulted(/preopen windows do not nest/));
+  assert.equal(nested.store.anchors(), 1);
+  assert.match(nested.store.fault().message, /preopen windows do not nest/);
+  assert.throws(() => nested.store.preopen(() => runtime(nested.fs)), error => error === nested.store.fault());
+});
+
+test("a directory outside the root is validated as the same directory, not by its timestamps", () => {
+  const { top, root } = tree({ "a.txt": "x" });
+  nodeFs.mkdirSync(join(top, "outside"));
+  nodeFs.writeFileSync(join(top, "outside/read.txt"), "read");
+  const { store, fs } = open(root);
+  assert.equal(read(fs, join(top, "outside/read.txt")), "read");
+  // Unrelated activity beside what the check read: the shared directories
+  // change their timestamps and link counts, not their identity.
+  nodeFs.writeFileSync(join(top, "outside/other.txt"), "other");
+  nodeFs.mkdirSync(join(top, "unrelated"));
+  assert.equal(store.validate(), undefined);
+  // A replaced directory is a different directory.
+  nodeFs.renameSync(join(top, "outside"), join(top, "moved"));
+  nodeFs.mkdirSync(join(top, "outside"));
+  nodeFs.writeFileSync(join(top, "outside/read.txt"), "read");
+  assert.match(store.validate().message, /outside: changed since it was read/);
+  // Inside the root the full identity stands: an added entry is a change.
+  const second = open(root);
+  assert.equal(read(second.fs, `${root}/a.txt`), "x");
+  nodeFs.writeFileSync(join(root, "b.txt"), "b");
+  assert.match(second.store.validate().message, /changed since it was read/);
 });
 
 test("permission errors pass through as the host's errno, are recorded, and a later change is detected", () => {

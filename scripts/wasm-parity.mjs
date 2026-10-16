@@ -13,7 +13,7 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
-  appendFileSync, chmodSync, copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, readFileSync,
+  appendFileSync, chmodSync, copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, readFileSync, renameSync,
   readdirSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync,
 } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
@@ -415,7 +415,6 @@ const g3Sub = freeze("g3-sub", root => {
 const osAlias = path => (path.startsWith("/private/var/") || path.startsWith("/private/tmp/") ? path.slice("/private".length) : undefined);
 if (process.platform === "darwin" && !osAlias(g3.root)) fail(`${g3.root} has no macOS /private alias`);
 const g3Case = g3.caseRoot;
-const caseInsensitive = existsSync(join(g3.root, "TSCONFIG.JSON"));
 const G3 = {
   equal: [
     ["g3-canonical", join(g3.root, "tsconfig.json")],
@@ -423,6 +422,9 @@ const G3 = {
     ["g3-host-link-chain", join(g3Case, "hop1/tsconfig.json")],
     ["g3-host-link-dotdot", `${g3Case}/alias/../project/tsconfig.json`],
     ...(osAlias(g3.root) ? [["g3-os-alias", osAlias(join(g3.root, "tsconfig.json"))]] : []),
+    // S3d: the directory's namespace is the host's, so a project outside it
+    // is read as native reads it.
+    ["g3-outside-root", join(g3Case, "elsewhere/tsconfig.json")],
   ],
   // [name, spelling, the package's error (exact, or a pattern), native's stderr line or "answers"]
   refused: [
@@ -431,14 +433,11 @@ const G3 = {
     ["g3-notdir", join(g3Case, "file/tsconfig.json"), / \(os error 54\)$/, "Not a directory (os error 20)"],
     ["g3-loop", join(g3Case, "loopA/tsconfig.json"), / \(os error 32\)$/, "Too many levels of symbolic links (os error 62)"],
   ],
-  // Held contrasts: recorded beside native, never counted as equivalence.
+  // Held contrasts (A4, names the host matches case-insensitively): recorded
+  // beside native, never counted as equivalence.
   held: [
-    ["g3-outside-root", join(g3Case, "elsewhere/tsconfig.json"),
-      `project ${join(g3Case, "elsewhere/tsconfig.json")} resolves on the host to ${join(g3Case, "other/tsconfig.json")}, outside the directory root ${g3.root}`],
-    ["g3-name-variant", join(g3Case, "variant"), caseInsensitive
-      ? `project ${join(g3Case, "variant")}: ${join(g3.root, "TSCONFIG.JSON")} is not spelled as its directory entry; name-insensitive aliases are not resolved`
-      : "No such file or directory (os error 44)"],
-    ["g3-inside-case", join(g3.root, "TSCONFIG.JSON"), undefined],
+    ["g3-name-variant", join(g3Case, "variant")],
+    ["g3-inside-case", join(g3.root, "TSCONFIG.JSON")],
   ],
 };
 for (const [name, projectId] of [...G3.equal, ...G3.refused, ...G3.held]) {
@@ -467,19 +466,65 @@ const G3_PERMISSION = [
   { name: "g3-read-denied-parent", tree: g3Sub, projectId: join(g3Sub.caseRoot, "subalias/tsconfig.json"),
     observe: ["D", deniedParent], denied: { op: "readdir", path: deniedParent }, exists: join(deniedParent, "proj/tsconfig.json") },
 ];
-// No manifest walk here: it would need the very permission each tree denies.
-function runNativeDenied(item) {
-  const result = spawnSync(nativeChecker, caseRequest(item.tree, item.projectId).argv, {
+// No manifest walk here: it would need the very permission a tree denies.
+function runNativeRaw(label, argv) {
+  const result = spawnSync(nativeChecker, argv, {
     cwd: repositoryRoot, env: { ...process.env, SOLID_CHECKER_DAEMON: "0", SOLID_TYPEFACTS_BIN: nativeTypefacts }, maxBuffer: 1 << 30,
   });
-  const directory = join(evidence, "native", item.name);
+  const directory = join(evidence, "native", label);
   mkdirSync(directory, { recursive: true });
   writeFileSync(join(directory, "stdout"), result.stdout);
   writeFileSync(join(directory, "stderr"), result.stderr);
   const stderr = result.stderr.toString("utf8");
-  return { status: result.status, notes: stderr === "" ? [] : stderr.replace(/\n$/, "").split("\n") };
+  return {
+    status: result.status,
+    snapshot: result.status === 0 ? JSON.parse(result.stdout.toString("utf8")) : undefined,
+    notes: stderr === "" ? [] : stderr.replace(/\n$/, "").split("\n"),
+  };
 }
-for (const item of G3_PERMISSION) native[item.name] = runNativeDenied(item);
+for (const item of G3_PERMISSION) native[item.name] = runNativeRaw(item.name, caseRequest(item.tree, item.projectId).argv);
+
+// --- S3d: inputs above the directory root ---------------------------------------------
+// Each project is the directory the owned check is given, and what native
+// discovery finds above it -- the install, the Solid runtime that selects
+// the dialect, a selected dependency source -- sits outside it. Native walks
+// there without bound; directory mode reads the host as native does. Each
+// case's whole tree, the project and what lies beside it, is manifested
+// before the runs and checked after both engines.
+const hoist = root => renameSync(join(root, "node_modules"), besideRoot(root, "node_modules"));
+const runtimeStub = version => `${JSON.stringify({ name: "solid-js", version })}\n`;
+const A2 = {
+  "a2-hoisted": freeze("a2-hoisted", typedProject(w1Files), hoist),
+  "a2-unsupported-major": freeze("a2-unsupported-major", typedProject(w1Files), root => {
+    hoist(root);
+    writeFileSync(besideRoot(root, "node_modules/solid-js/package.json"), runtimeStub("1.9.14"));
+  }),
+  "a2-local-override": freeze("a2-local-override", typedProject(w1Files), root => {
+    mkdirSync(besideRoot(root, "node_modules/solid-js"), { recursive: true });
+    writeFileSync(besideRoot(root, "node_modules/solid-js/package.json"), runtimeStub("1.9.14"));
+  }),
+  "a2-absent": freeze("a2-absent", typedProject(w1Files), root => rmSync(join(root, "node_modules"), { recursive: true })),
+  "a2-store-link": freeze("a2-store-link", typedProject(w1Files), root => {
+    mkdirSync(besideRoot(root, ".store"));
+    renameSync(join(root, "node_modules"), besideRoot(root, ".store/node_modules"));
+    symlinkSync(".store/node_modules", besideRoot(root, "node_modules"));
+  }),
+  "a2-dependency-source": freeze("a2-dependency-source", fixture("dependency-source-program"), hoist),
+  "a2-dependency-missing": freeze("a2-dependency-missing", fixture("dependency-source-program"), root => {
+    hoist(root);
+    rmSync(besideRoot(root, "node_modules/dep-hooks/src/read.js"));
+  }),
+};
+const a2Before = {};
+for (const [name, tree] of Object.entries(A2)) {
+  a2Before[name] = snapshotTree(tree.caseRoot);
+  writeFileSync(join(tree.caseRoot, "..", `${name}.case-manifest.json`), `${JSON.stringify(a2Before[name], null, 2)}\n`);
+  requests[name] = caseRequest(tree);
+  native[name] = runNative(tree, requests[name].argv);
+}
+// The same unsupported runtime above a closed mount: the mount has no
+// ancestors, so it is not seen there (the legacy mount contract).
+const A2_MOUNT = ["a2-hoisted", "a2-unsupported-major"];
 const w2Request = caseRequest(trees["w2-real-typings-clean"]);
 const DOTDOT = ["dotdot-fixture", "dotdot-missing"];
 for (const name of DOTDOT) {
@@ -543,10 +588,13 @@ mkdirSync(join(mountCases, "outside"), { recursive: true });
 symlinkSync("../outside", join(mountCases, "outside-link/project/escape"));
 mkdirSync(join(mountCases, "fifo/project"), { recursive: true });
 if (run("mkfifo", [join(mountCases, "fifo/project/pipe")]).status !== 0) fail("mkfifo failed");
-// An existing file outside every granted tree, so a denial is the permission
-// model's and not a missing file's.
-const outside = join(repositoryRoot, "Makefile");
-if (!existsSync(outside)) fail(`${outside} is missing; the canary needs an existing file outside the granted trees`);
+// A file outside the Node driver's only write grant, for the canary to try
+// to create: the permission model must deny it. (Bun has no permission
+// model; there it is created, inside this scratch.)
+const outside = join(scratch, "canary-write.txt");
+// S3d: directory mode follows the outside link as native does.
+native.outsideLinkReached = runNativeRaw("directory-outside-link-reached",
+  ["--format", "json", "--project", join(mountCases, "outside-link/project/escape/tsconfig.json"), "--no-package-contracts"]);
 
 // --- the driver, under both engines -----------------------------------------------
 const plan = {
@@ -582,6 +630,10 @@ const plan = {
       observe: item.observe, denied: item.denied, exists: item.exists,
     })),
   },
+  a2: {
+    cases: Object.entries(A2).map(([name, tree]) => ({ name, root: tree.root, request: requests[name].request })),
+    mount: A2_MOUNT.map(name => ({ name: `mount:${name}`, root: A2[name].root, request: requests[name].request })),
+  },
 };
 const DECLARED = [
   ...STANDARD, "w5-faults", "w7-bad-handshake", "lifecycle-reuse", "lifecycle-close",
@@ -598,6 +650,8 @@ const DECLARED = [
   // P5 S3c: project spellings through host links outside the directory root.
   ...[...G3.equal, ...G3.refused, ...G3.held].map(([name]) => name), "mount:g3-host-link",
   ...G3_PERMISSION.map(item => item.name),
+  // P5 S3d: inputs above the directory root, and the closed mount beside them.
+  ...Object.keys(A2), ...A2_MOUNT.map(name => `mount:${name}`),
 ];
 
 const engines = {};
@@ -610,12 +664,11 @@ for (const engine of ["node", "bun"]) {
   writeFileSync(urlLog, "");
   const args = engine === "node"
     ? [
-      "--permission", "--allow-worker",
-      `--allow-fs-read=${consumer}`, `--allow-fs-read=${cases}`, `--allow-fs-read=${mountCases}`,
-      `--allow-fs-read=${updateFrames}`, `--allow-fs-read=${recording.root}`, `--allow-fs-read=${pathCases}`, `--allow-fs-read=${out}`,
-      // g3-os-alias reads the OS link itself (`/var` or `/tmp`), read-only;
-      // the grants are path-string prefixes.
-      ...(osAlias(g3.root) ? [`--allow-fs-read=${osAlias(g3.root).split("/").slice(0, 2).join("/")}`] : []),
+      // Directory mode reads the host as a native check does (S3d): above
+      // its directory, through links, wherever discovery leads, so reads are
+      // granted everywhere. Writes are granted only to this engine's results,
+      // and no process may be spawned; the canary checks both.
+      "--permission", "--allow-worker", "--allow-fs-read=/",
       `--allow-fs-write=${out}`, "--import", `file://${join(consumer, "url-hooks.mjs")}`,
       join(consumer, "driver.mjs"), planPath,
     ]
@@ -648,6 +701,7 @@ chmodSync(deniedParent, 0o755);
 for (const item of G3_PERMISSION) check(same(snapshotTree(item.tree.root), item.tree.manifest), `${item.name}: the tree moved during the run`);
 check(lstatSync(join(lockedDirectory, "inner")).isSymbolicLink() && lstatSync(join(deniedParent, "proj/tsconfig.json")).isFile(),
   "the permission trees' paths do not exist after the denials were lifted");
+for (const [name, tree] of Object.entries(A2)) check(same(snapshotTree(tree.caseRoot), a2Before[name]), `${name}: the case tree, above the root included, moved during the run`);
 
 // --- comparison -------------------------------------------------------------------
 const hostOf = (transport, faulted = false) => transport && ({
@@ -892,15 +946,15 @@ for (const [engine, { driver, urls, oldEntry }] of Object.entries(engines)) {
     for (const id of [...fails, ...notRun, ...Object.keys(pathExpectations.overrides)]) check(id in pathHost, `path-expectations names unknown row ${id}`);
   }
 
-  // S3c: a spelling through host links outside the root answers as native,
-  // with the canonical spelling's producer traffic; every other outcome is its
-  // own exact refusal before any producer program; held contrasts are only
-  // recorded. A mount has no host to ask.
+  // S3c/S3d: a spelling through host links outside the root answers as
+  // native, with the canonical spelling's producer traffic; every other
+  // outcome is native's own failure kind before any producer program; held
+  // contrasts are only recorded. A mount is closed: it keeps ENOENT.
   {
     const canonical = at("g3-canonical");
     for (const [name] of G3.equal) {
       equalToNative(label(name), at(name), native[name]);
-      check(same(at(name)?.transport, canonical?.transport), `${label(name)}: transport ${JSON.stringify(at(name)?.transport)}`);
+      if (name !== "g3-outside-root") check(same(at(name)?.transport, canonical?.transport), `${label(name)}: transport ${JSON.stringify(at(name)?.transport)}`);
     }
     const refusal = (name, expected) => {
       const answer = at(name);
@@ -911,14 +965,12 @@ for (const [engine, { driver, urls, oldEntry }] of Object.entries(engines)) {
       refusal(name, expected);
       check(native[name].status !== 0 && native[name].notes.at(-1)?.endsWith(nativeLine), `${name}: native ${native[name].status} ${JSON.stringify(native[name].notes)}`);
     }
-    for (const [name, , expected] of G3.held) {
-      if (expected !== undefined) refusal(name, expected);
+    for (const [name] of G3.held) {
       held[`${engine}:${name}`] = {
         native: { status: native[name].status, notes: native[name].notes },
         package: at(name)?.ok ? { ok: true, equalToNative: JSON.stringify(at(name).snapshot) === JSON.stringify(native[name].snapshot) && same(at(name).notes, native[name].notes) } : { ok: false, error: at(name)?.error },
       };
     }
-    check(native["g3-outside-root"].status === 0, `g3-outside-root: native ${native["g3-outside-root"].status}`);
     refusal("mount:g3-host-link", "No such file or directory (os error 44)");
     const [eacces, readDenied] = ["g3-eacces", "g3-read-denied-parent"].map(at);
     for (const [name, value] of [["g3-eacces", eacces], ["g3-read-denied-parent", readDenied]]) {
@@ -927,11 +979,37 @@ for (const [engine, { driver, urls, oldEntry }] of Object.entries(engines)) {
     check(same(eacces?.observation, { ok: false, code: "EACCES" }), `${label("g3-eacces")}: observation ${JSON.stringify(eacces?.observation)}`);
     refusal("g3-eacces", / \(os error 2\)$/);
     check(native["g3-eacces"].status !== 0 && native["g3-eacces"].notes.at(-1)?.endsWith("Permission denied (os error 13)"), `g3-eacces: native ${JSON.stringify(native["g3-eacces"])}`);
-    check(same(readDenied?.observation, { ok: false, code: "EACCES" }), `${label("g3-read-denied-parent")}: observation ${JSON.stringify(readDenied?.observation)}`);
-    const spelling = join(g3Sub.caseRoot, "subalias/tsconfig.json");
-    refusal("g3-read-denied-parent", new RegExp(`^project ${spelling.replaceAll(/[.*+?^${}()|[\]\\/]/g, "\\$&")}: listing ${deniedParent.replaceAll(/[.*+?^${}()|[\]\\/]/g, "\\$&")} to confirm its spelling failed: .* \\(os error 2\\); the spelling is unconfirmed, not absent$`));
-    held[`${engine}:g3-read-denied-parent`] = { native: native["g3-read-denied-parent"], package: { ok: false, error: readDenied?.error } };
-    check(native["g3-read-denied-parent"].status === 0, `g3-read-denied-parent: native ${JSON.stringify(native["g3-read-denied-parent"])}`);
+    // Search permission is all native needs, and all the owned check now
+    // uses: the denied listing is never taken.
+    check(readDenied?.observation === null, `${label("g3-read-denied-parent")}: the denied listing was read: ${JSON.stringify(readDenied?.observation)}`);
+    equalToNative(label("g3-read-denied-parent"), readDenied, native["g3-read-denied-parent"]);
+  }
+
+  // S3d: what native finds above the directory root, the owned check finds
+  // in directory mode: the dialect's runtime (an unsupported major refuses
+  // as SC9013 there too), the install, a link to it outside the root, a
+  // selected dependency source, and a local install's precedence. A failure
+  // native reports is the same failure. A closed mount sees none of it.
+  {
+    for (const [name] of Object.entries(A2)) {
+      const reference = native[name];
+      if (reference.status === 0) equalToNative(label(name), at(name), reference);
+      else {
+        const message = reference.notes.at(-1)?.replace(/^solid-checker-rust: /, "");
+        check(at(name)?.ok === false && at(name).error === message, `${label(name)}: ${JSON.stringify(at(name))?.slice(0, 400)} vs native ${message}`);
+      }
+    }
+    check(native["a2-unsupported-major"].snapshot?.findings?.map(finding => finding.id).join() === "SC9013", "a2-unsupported-major: native is not SC9013");
+    check(native["a2-local-override"].snapshot?.findings?.every(finding => finding.id !== "SC9013"), "a2-local-override: native refused the project");
+    check(native["a2-hoisted"].snapshot?.findings?.length > 0, "a2-hoisted: native found nothing to compare");
+    for (const name of A2_MOUNT) {
+      const mounted = at(`mount:${name}`);
+      held[`${engine}:mount:${name}`] = {
+        native: { status: native[name].status, ids: native[name].snapshot?.findings?.map(finding => finding.id) },
+        package: mounted?.ok ? { ok: true, ids: mounted.snapshot?.findings?.map(finding => finding.id), equalToNative: JSON.stringify(mounted.snapshot) === JSON.stringify(native[name].snapshot) } : { ok: false, error: mounted?.error },
+      };
+    }
+    check(at("mount:a2-unsupported-major")?.snapshot?.findings?.every(finding => finding.id !== "SC9013"), `${label("mount:a2-unsupported-major")}: a closed mount saw the runtime above it`);
   }
 
   // Directory mode answers exactly as the mount does for every ordinary case:
@@ -946,17 +1024,19 @@ for (const [engine, { driver, urls, oldEntry }] of Object.entries(engines)) {
   check(unreached?.ok === false && unreached.error === "No such file or directory (os error 44)",
     `${label("directory-outside-link-unreached")}: ${JSON.stringify(unreached)}`);
   const reached = at("directory-outside-link-reached");
-  check(reached?.rejected === true && reached.message.startsWith("the owned checker is poisoned: the owned checker's input faulted: ") &&
-    reached.message.endsWith(`: a link leads outside the directory root ${plan.mounts.outsideLink}`),
-  `${label("directory-outside-link-reached")}: ${JSON.stringify(reached)}`);
+  // S3d: the link is followed on the host, as native follows it, to a
+  // directory with no tsconfig.json.
+  check(reached?.ok === false && reached.error === "No such file or directory (os error 44)" && same(reached.transport?.calls, []) &&
+    native.outsideLinkReached.status !== 0 && native.outsideLinkReached.notes.at(-1)?.endsWith("No such file or directory (os error 2)"),
+  `${label("directory-outside-link-reached")}: ${JSON.stringify(reached)} vs native ${JSON.stringify(native.outsideLinkReached)}`);
 
   const canary = at("canary");
   if (engine === "node") {
-    check(canary?.spawn === "ERR_ACCESS_DENIED" && canary?.read === "ERR_ACCESS_DENIED", `${label("canary")}: ${JSON.stringify(canary)}`);
+    check(canary?.spawn === "ERR_ACCESS_DENIED" && canary?.write === "ERR_ACCESS_DENIED", `${label("canary")}: ${JSON.stringify(canary)}`);
     const allowed = [`file://${consumer}/`];
     const strays = urls.filter(url => !url.startsWith("node:") && !allowed.some(prefix => url.startsWith(prefix)));
     check(strays.length === 0, `${engine}: modules resolved outside the isolated install: ${JSON.stringify(strays)}`);
-    for (const module of ["owned-worker.mjs", "owned-worker-core.mjs", "owned-host.mjs", "owned-boundary.mjs", "owned-snapshot.mjs", "owned-projection.mjs"]) {
+    for (const module of ["owned-worker.mjs", "owned-worker-core.mjs", "owned-host.mjs", "owned-boundary.mjs", "owned-snapshot.mjs"]) {
       check(urls.includes(`file://${installed}/${module}`), `${engine}: ${module} was not resolved from the installed package (worker hooks absent?)`);
     }
     // The owned worker's WASI runtime is the package's own vendored copy.
@@ -969,7 +1049,7 @@ for (const [engine, { driver, urls, oldEntry }] of Object.entries(engines)) {
   } else {
     // Bun has no permission model: the same worker may do both, which is why
     // the Bun row shows engine behaviour and not isolation.
-    check(canary?.spawn === "allowed" && canary?.read === "allowed", `${label("canary")}: ${JSON.stringify(canary)}`);
+    check(canary?.spawn === "allowed" && canary?.write === "allowed", `${label("canary")}: ${JSON.stringify(canary)}`);
   }
   for (const [key, url] of Object.entries(driver.resolved)) {
     check(url.startsWith(`file://${consumer}/node_modules/`), `${engine}: ${key} resolved to ${url}`);

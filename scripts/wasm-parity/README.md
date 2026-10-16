@@ -118,7 +118,9 @@ witness's operation sequence.
   spelling, plus a relative project, refused;
 - an unsupported installed `solid-js` (SC9013), answered equal to native with
   no producer call;
-- the Node worker's spawn and out-of-tree read, both denied.
+- the Node worker's spawn and its write outside its results tree, both
+  denied. Reads are granted everywhere, since directory mode reads the host as
+  native does (S3d).
 
 **Directory mode (S3b).** Every answering and refusal case, the three project
 spellings and SC9013 run a second time through
@@ -128,24 +130,43 @@ witness comparisons above carry over. Two link controls are pinned:
 - a link leaving the root that no check reaches does not refuse;
 - a check that reaches it is rejected with the store's reason.
 
-**Project spelling (S3c).** One directory tree, `g3`, has the links and
+**Project spelling (S3c, S3d).** One directory tree, `g3`, has the links and
 shapes beside its root, and every spelling also runs natively as itself:
 - equal to native, with the canonical spelling's producer traffic: an
   outside link into the root, a two-link outside chain, `alias/../project`,
   and the scratch through macOS's own `/var` or `/tmp` link (required on
-  macOS; the Node driver may read that one link);
+  macOS; the Node driver may read that one link); and, since directory mode
+  reads the host's namespace (S3d), a link to a project outside the root;
 - exact refusals with no producer call, beside native's own error: a missing
   path through the link, a dangling link, a file as a directory, a link loop;
-- recorded only, as held contrasts where native answers: a link to a project
-  outside the root, a case-variant link target, and a case variant inside
-  the root;
+- recorded only, as held contrasts (A4): a case-variant link target, and a
+  case variant inside the root;
 - a mount given the outside spelling keeps `ENOENT`;
 - two permission trees, each denial checked real before any run and lifted
   only after both engines' checks and validation: an outside directory
-  without search permission (refused `EACCES`; native fails too), and a
-  search-only parent inside the root (refused as a failed listing; native
-  answers). For each, the gate's observing worker reads back the store's own
-  record at the denied path.
+  without search permission (refused `EACCES`; native fails too; the gate's
+  observing worker reads back the store's own record at the denied path),
+  and a search-only parent inside the root (equal to native; the observing
+  worker shows its listing was never taken).
+
+**Inputs above the directory (S3d).** Seven trees put what native discovery
+finds beside the project instead of in it, each run natively and in
+directory mode, each whole case tree manifested before the runs and checked
+after both engines:
+- `a2-hoisted`: the project's install hoisted above it (real rc.13 types and
+  a real violation): equal;
+- `a2-unsupported-major`: a Solid 1.x runtime above it: SC9013 in both;
+- `a2-local-override`: a 1.x runtime above it and the project's own rc.13
+  install: the nearest wins in both;
+- `a2-absent`: no install anywhere: equal;
+- `a2-store-link`: the hoisted `node_modules` a link into a store beside it:
+  equal;
+- `a2-dependency-source` and `a2-dependency-missing`: a selected dependency
+  source hoisted above the project, and the same with its imported module
+  removed: equal, or the same failure.
+
+`mount:a2-hoisted` and `mount:a2-unsupported-major` record the closed mount
+beside them: it sees nothing above its root, by contract.
 
 The pre-S2 entry (`require`, `import`, `checkSync`) runs from the same
 install under both engines. The packed `main`, `browser` and `types` fields,

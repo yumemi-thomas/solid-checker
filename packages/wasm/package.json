@@ -22,7 +22,6 @@
     "owned-client.mjs",
     "owned-host.mjs",
     "owned-mount.mjs",
-    "owned-projection.mjs",
     "owned-snapshot.mjs",
     "owned-worker.mjs",
     "owned-worker-core.mjs",

@@ -1,6 +1,54 @@
 # Precision backlog
 
+P5 S3d inputs above the directory (A2, 2026-10-16; CODE pending). Directory
+mode answered every path above the directory, and everything outside it,
+absent without a host read (virtual ancestors listing only the next
+component). Native discovery reads there without bound -- the nearest
+`node_modules/solid-js` for the dialect (`dialect.rs`), TypeScript's
+`node_modules` and `package.json` lookups, host inference's workspace and
+client roots (`inferred_host.rs`), dependency sources, installed patches,
+package requirements, and `extends`/`paths` above a project -- so a hoisted
+install silently fell back to the v2 default dialect and unresolved imports,
+and a Solid 1.x runtime above the directory was not refused. One primitive
+caused all of them, so one change answers them: the directory store's
+namespace is now the host's (`owned-snapshot.mjs`). Every path a reactor
+reaches is read and recorded from the host and revalidated after every
+check; a link is followed wherever it leads; the directory is the checker's
+anchor (identity checked at start and on validation) and the scope of the
+precondition, not an extent.
+
+- **Consequences:** S3c's projection protocol (`solid_owned_host`,
+  `projection.rs`, `owned-projection.mjs`) is removed: WASI canonicalization
+  now resolves a host-link spelling itself. A project outside the directory
+  and a search-only parent now answer as native where S3c refused them. A
+  link leaving the directory is no longer an input fault. Mount mode is
+  unchanged and closed.
+- **Pinned by:** `packages/wasm/test/owned-snapshot.test.mjs` (ancestors' own
+  stats and listings, a hoisted install read, revalidated absence above the
+  root, links followed anywhere, the kind rules outside the root), the gate's
+  `a2-*` cases and the reworked `g3` and `directory-outside-link-reached`
+  cases on Node and Bun.
+- **The preopen is an anchor:** each WASI runtime opens `/` once, as its
+  preopen, and never reads that descriptor. With `/` a real record that open
+  would have needed read permission on `/`, which native analysis does not
+  (search suffices), so on a host where `/` is search-only both runtimes
+  failed to start. That one open is answered from `/`'s recorded `lstat`;
+  every other open or listing of `/` is the host's, denied as the host
+  denies it (`owned-snapshot.test.mjs`, `owned-worker-core.test.mjs`, with an
+  injected search-only `/`; no real search-only `/` was set up).
+- **Identity outside the directory:** a directory outside it validates as
+  `dev, ino, mode` (its timestamps, size and link count move with unrelated
+  activity); a change to only those fields is not detected, and they are
+  answered as first recorded. Files and links keep the full identity
+  everywhere, as do directories inside the directory.
+- **Held:** a name the host matches case-insensitively (a case-variant
+  spelling or link target) is kept as spelled, where macOS `realpath(3)`
+  rewrites it (A4); the directory's own capture uses the engine's JavaScript
+  `realpathSync`.
+
 P5 S3c project spelling through host links (G3, 2026-10-16; CODE pending).
+Superseded by S3d: its projection is removed, and its refusals for a project
+outside the directory and a failed parent listing now answer as native.
 In directory mode, a `projectId` that passes through a host place outside the
 directory -- macOS `/tmp` or `/var`, or a caller's own link to the project --
 failed with `ENOENT` (`os error 44`) where native answers: the store answers

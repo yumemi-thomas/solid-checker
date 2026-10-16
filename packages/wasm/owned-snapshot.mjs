@@ -1,6 +1,6 @@
-// The owned check's directory store (P5 S3b, B): a project read from the
-// host disk on demand, recorded once, and shared by both reactors as their
-// only filesystem.
+// The owned check's directory store (P5 S3b, B; S3d): a project read from
+// the host disk on demand, recorded once, and shared by both reactors as
+// their only filesystem.
 //
 // What it answers. Every guest-visible answer is computed from host records
 // keyed by (primitive, physical path), each captured at most once:
@@ -14,28 +14,53 @@
 // Paths are resolved as a kernel resolves one syscall (cwd "/"): component
 // by component through L records, `..` against the directory reached,
 // links substituted at most `links` times (the WASI runtime's own bound),
-// the final link followed only where the syscall follows it. The root is the
-// canonical directory; `/` and its
-// ancestors are virtual directories listing only the next component, and
-// anything else outside the root is ENOENT without a host call -- the eager
-// mount's namespace. A link whose target leads outside the root is an input
-// fault as soon as its target is read -- by this store's own resolution or
-// by the guest's `readlink` -- because a guest that follows it itself would
-// otherwise be answered "absent" where the host has a file.
+// the final link followed only where the syscall follows it.
+//
+// The namespace is the host's (S3d). Native discovery reads above the
+// project without bound -- the nearest `node_modules/solid-js` for the
+// dialect, TypeScript's `node_modules` and `package.json` lookups, a
+// workspace root for host inference, `extends` and `paths` above the
+// project -- so a path anywhere, `/` and the root's ancestors included, is
+// answered from its own host records, and a link is followed wherever its
+// target leads, as the kernel follows it. Nothing outside the directory is
+// answered absent unless the host says so. The root is the canonical
+// directory the checker was created for: its identity is checked at start
+// and on every validation, and it anchors the precondition below.
 //
 // What it claims. The caller keeps the host namespace from `/` through the
-// root, and everything a check reaches, unchanged while the checker lives
-// (premise P). The store issues Node path-string syscalls, so it is no
+// root, and everything a check reaches -- inside the root or not --
+// unchanged while the checker lives (premise P). The store issues Node
+// path-string syscalls, so it is no
 // sandbox: it cannot stop the OS following a link someone swaps in. After
 // each check, `validate()` re-performs every record ever captured and
-// compares it exactly (L by identity, R by bytes, D by listing, F by L
-// identity or by the open errno). If every record validates, and a change
+// compares it exactly: L by identity, R by target bytes, D by listing (its
+// entries, or its errno), F by L identity or by the open errno. The identity
+// is (dev, ino, mode, nlink, size, mtimeNs, ctimeNs) for every file and link
+// and for every directory inside the root; for a directory outside the root
+// it is (dev, ino, mode) only, because such a directory is shared with the
+// rest of the host and its timestamps, size and link count move with
+// unrelated activity beside the paths a check walks through it. Its entries
+// that a check reaches are their own records, and a listing of it is its own
+// record, so a replaced directory or a changed reached entry or listing is
+// detected; a change to only its timestamps, size or link count is not, and
+// those fields are answered from the record, not claimed current (no
+// consumer in the reactors is known to read them; that is a source
+// observation, not a guarantee). If every record validates, and a change
 // always changes the identity (no same-size rewrite restored within one
 // timestamp tick: coarse-clock filesystems weaken this), there was an
 // instant between the last capture and the start of validation at which the
 // host held every recorded file's bytes, identity, link target, listing and
 // error. Stat fields outside the identity (atime, which reading itself may
 // change; blksize; blocks) are captured once and are not part of that claim.
+//
+// The preopen. The WASI runtime opens `/` once when it is constructed, as its
+// one preopen: an anchor for resolving every path, which it never reads (a
+// listing is taken by path, a directory descriptor is only ever fstat'd).
+// Native analysis needs only search permission on `/` to reach what lies
+// below it. So that one open, inside `preopen(construct)`, is answered from
+// `/`'s L record without a host open; every other open or listing of `/` --
+// a guest's own -- is a real host operation, recorded and denied as the host
+// denies it.
 //
 // What it refuses. Any other host error, a capture that changed while it was
 // taken, a kind other than file, directory or link, a name or target that is
@@ -45,7 +70,6 @@
 // An error is never answered as absence or as empty content.
 import * as nodeFs from "node:fs";
 import { posix } from "node:path";
-import { HOST_ERRNOS } from "./owned-projection.mjs";
 
 export class OwnedInputFault extends Error {
   constructor(message) {
@@ -145,16 +169,6 @@ function dirent(name, type) {
   });
 }
 
-const zero = 0n;
-const virtualStats = index => Object.freeze({
-  dev: zero, ino: BigInt(index + 1), mode: 0o40755n, nlink: 1n, uid: zero, gid: zero, rdev: zero,
-  size: zero, blksize: zero, blocks: zero,
-  atimeMs: zero, mtimeMs: zero, ctimeMs: zero, birthtimeMs: zero,
-  atimeNs: zero, mtimeNs: zero, ctimeNs: zero, birthtimeNs: zero,
-  isFile: () => false, isDirectory: () => true, isSymbolicLink: () => false, isFIFO: () => false,
-  isSocket: () => false, isCharacterDevice: () => false, isBlockDevice: () => false,
-});
-
 // The errors this store answers, as memfs throws them: an `Error` whose
 // `code` wasm-util's `handleError` maps. Only these leave a call unfaulted.
 const answers = new WeakSet();
@@ -188,18 +202,10 @@ export function createDirectoryStore({ input, root, rootIdentity, loopError, lin
   const loops = new WeakSet();
   let nextFd = FIRST_FD;
   let fault;
-
-  const ancestors = new Map();
-  for (let path = posix.dirname(root), index = 0; ; path = posix.dirname(path), index++) {
-    ancestors.set(path, index);
-    if (path === "/") break;
-  }
-  const nextComponent = directory => {
-    const rest = root.slice(directory === "/" ? 1 : directory.length + 1);
-    return rest.split("/")[0];
-  };
-  const place = path => (path === root || path.startsWith(`${root}/`)) ? "inside"
-    : ancestors.has(path) ? "ancestor" : "outside";
+  // While `preopen` constructs a WASI runtime: `constructing` for the whole
+  // of `construct`, `anchorAvailable` until its one open of `/` is answered.
+  let constructing = false;
+  let anchorAvailable = false;
 
   const raise = (path, reason) => {
     fault ??= new OwnedInputFault(`the owned checker's input faulted: ${path}: ${reason}`);
@@ -209,6 +215,18 @@ export function createDirectoryStore({ input, root, rootIdentity, loopError, lin
     if (fault) throw fault;
   };
   const describe = error => error?.code ?? `${error?.name ?? "Error"}: ${error?.message ?? error}`;
+
+  // A directory outside the root is shared with the rest of the host: its
+  // mtime, ctime, size and link count move whenever anything is created
+  // beside the paths a check walks through it ($TMPDIR, a home directory).
+  // What resolving through it consumes is that it is the same directory
+  // (dev, ino, mode); each entry a check reaches is its own record, and a
+  // listing it takes is its own record. Inside the root, which the caller
+  // vouches for, a directory's full identity stands.
+  const inside = path => path === root || path.startsWith(`${root}/`);
+  const identityAt = (path, stats, directory = stats.isDirectory()) => (directory && !inside(path)
+    ? ["directory", stats.dev, stats.ino, stats.mode].join(",")
+    : identityOf(stats));
 
   // One host call, its expected errors as an outcome and anything else a fault.
   const attempt = (primitive, path, action) => {
@@ -232,7 +250,7 @@ export function createDirectoryStore({ input, root, rootIdentity, loopError, lin
     if (!outcome.ok) return { ok: false, code: outcome.code };
     const stats = outcome.value;
     if (!kindOf(stats)) throw raise(path, "is not a regular file, directory or link");
-    return { ok: true, stats: Object.freeze(stats), identity: identityOf(stats) };
+    return { ok: true, stats: Object.freeze(stats), identity: identityAt(path, stats) };
   };
   const captureR = path => {
     const outcome = attempt("R", path, () => source.readlink(path));
@@ -248,7 +266,7 @@ export function createDirectoryStore({ input, root, rootIdentity, loopError, lin
   };
   const identityNow = path => {
     try {
-      return identityOf(source.lstat(path));
+      return identityAt(path, source.lstat(path));
     } catch (error) {
       throw raise(path, `changed while it was captured (${describe(error)})`);
     }
@@ -277,7 +295,7 @@ export function createDirectoryStore({ input, root, rootIdentity, loopError, lin
     let bytes = null;
     try {
       const sameAs = (stats, when) => {
-        if (identityOf(stats) !== lstat.identity) throw raise(path, `changed ${when} it was read`);
+        if (identityAt(path, stats, lstat.stats.isDirectory()) !== lstat.identity) throw raise(path, `changed ${when} it was read`);
       };
       const first = source.fstat(fd);
       sameAs(first, "before");
@@ -334,9 +352,6 @@ export function createDirectoryStore({ input, root, rootIdentity, loopError, lin
     throw raise(root, "is not the directory the checker was created for");
   }
 
-  const lstatOf = path => (place(path) === "ancestor"
-    ? { ok: true, stats: virtualStats(ancestors.get(path)), virtual: true }
-    : L(path));
   const loop = path => {
     const error = loopError(`${path}: too many levels of symbolic links`);
     loops.add(error);
@@ -344,65 +359,44 @@ export function createDirectoryStore({ input, root, rootIdentity, loopError, lin
   };
 
   /** Kernel-style resolution of one syscall's path; throws the errno. */
-  const resolve = (spelling, followFinal, viaLink = false) => {
+  const resolve = (spelling, followFinal) => {
     if (typeof spelling !== "string" || spelling.includes("\0")) throw raise(String(spelling), "is not a path string");
     const path = spelling.startsWith("/") ? spelling : `/${spelling}`;
     const pending = path.split("/").filter(component => component !== "");
     if (path.length > 1 && path.endsWith("/")) pending.push(".");
     let current = "/";
     let substitutions = 0;
-    let followed = viaLink;
-    const finish = (at, lstat) => {
-      if (followed && place(at) !== "inside") throw raise(path, `a link leads outside the directory root ${root}`);
-      return { path: at, lstat };
-    };
+    const finish = (at, lstat) => ({ path: at, lstat });
     while (pending.length > 0) {
       const name = pending.shift();
       const last = pending.length === 0;
       if (name === "." || name === "..") {
         if (name === "..") current = posix.dirname(current);
-        if (last) return finish(current, lstatOf(current));
+        if (last) return finish(current, L(current));
         continue;
       }
       const next = current === "/" ? `/${name}` : `${current}/${name}`;
-      if (place(next) === "outside") {
-        if (followed) throw raise(next, `a link leads outside the directory root ${root}`);
-        throw expected("ENOENT");
-      }
-      const lstat = lstatOf(next);
+      const lstat = L(next);
       if (!lstat.ok) throw expected(lstat.code);
       if (lstat.stats.isSymbolicLink() && (!last || followFinal)) {
         if (++substitutions > links) throw loop(path);
         const target = R(next);
         if (!target.ok) throw raise(next, `is a link whose target cannot be read (${target.code})`);
-        followed = true;
         const components = target.text.split("/").filter(component => component !== "");
         if (target.text === "") throw expected("ENOENT");
         if (target.text.endsWith("/") && components.length > 0) components.push(".");
         if (target.text.startsWith("/")) current = "/";
         pending.unshift(...components);
-        if (components.length === 0 && last) return finish(current, lstatOf(current));
+        if (components.length === 0 && last) return finish(current, L(current));
         continue;
       }
       if (last) return finish(next, lstat);
       if (!lstat.stats.isDirectory()) throw expected("ENOTDIR");
       current = next;
     }
-    return finish(current, lstatOf(current));
+    return finish(current, L(current));
   };
 
-  // A link's target, read from `at`, must stay inside the root: walked
-  // physically from the link's directory, it may pass through the ancestors
-  // but may not end or continue outside. A target that does not exist inside
-  // the root is only dangling, and answered as such later.
-  const checkTarget = (at, text) => {
-    if (text === "") return;
-    try {
-      resolve(text.startsWith("/") ? text : `${posix.dirname(at)}/${text}`, false, true);
-    } catch (error) {
-      if (!answers.has(error) && !loops.has(error)) throw error;
-    }
-  };
 
   const fdEntry = fd => {
     const entry = fds.get(fd);
@@ -439,12 +433,16 @@ export function createDirectoryStore({ input, root, rootIdentity, loopError, lin
       const { path: at, lstat } = resolve(path, (bits & O_NOFOLLOW) === 0);
       if (lstat.stats.isSymbolicLink()) throw loop(at);
       if ((bits & O_DIRECTORY) !== 0 && !lstat.stats.isDirectory()) throw expected("ENOTDIR");
-      let bytes = null;
-      if (!lstat.virtual) {
-        const opened = F(at, lstat);
-        if (!opened.ok) throw expected(opened.code);
-        bytes = opened.bytes;
+      if (anchorAvailable && path === "/" && flags === "r") {
+        anchorAvailable = false;
+        if (!lstat.stats.isDirectory()) throw raise("/", "the preopen is not a directory");
+        const fd = nextFd++;
+        fds.set(fd, { path: at, stats: lstat.stats, bytes: null, directory: true, anchor: true });
+        return fd;
       }
+      const opened = F(at, lstat);
+      if (!opened.ok) throw expected(opened.code);
+      const { bytes } = opened;
       const fd = nextFd++;
       fds.set(fd, { path: at, stats: lstat.stats, bytes, directory: lstat.stats.isDirectory() });
       return fd;
@@ -473,19 +471,16 @@ export function createDirectoryStore({ input, root, rootIdentity, loopError, lin
     }),
     readlinkSync: withFault((path, options) => {
       if (options !== undefined) throw raise(String(path), "readlinkSync options are not consumed");
-      const { path: at, lstat } = resolve(path, false);
-      if (lstat.virtual) throw expected("EINVAL");
+      const { path: at } = resolve(path, false);
       const target = R(at);
       if (!target.ok) throw expected(target.code);
-      checkTarget(at, target.text);
       return target.text;
     }),
     readdirSync: withFault((path, options) => {
       if (options?.withFileTypes !== true || Object.keys(options).length !== 1) {
         throw raise(String(path), "readdirSync options are not consumed");
       }
-      const { path: at, lstat } = resolve(path, true);
-      if (lstat.virtual) return [dirent(nextComponent(at), "directory")];
+      const { path: at } = resolve(path, true);
       const listing = D(at);
       if (!listing.ok) throw expected(listing.code);
       return listing.entries.map(([name, type]) => dirent(name, type));
@@ -533,93 +528,6 @@ export function createDirectoryStore({ input, root, rootIdentity, loopError, lin
     return fault;
   };
 
-  // The project projection (P5 S3c, G3): what the request's project
-  // spelling names when the host places outside this namespace that it
-  // passes through are read. Reached only through the checker's
-  // `solid_owned_host` imports (owned-projection.mjs), after WASI
-  // canonicalization failed with NotFound; never by a guest syscall.
-  //
-  // The walk is `resolve`'s, kernel-style, with one difference. A place
-  // outside the namespace that is reached from the spelling's own components,
-  // or from the target of a link that is itself outside, is read with the
-  // same L and R records as any other place, instead of being answered
-  // absent. One reached from the target of a link read inside the namespace
-  // is the input fault it is everywhere else. Ancestors stay virtual. No
-  // listing, open or file bytes outside the root are ever read, and guests
-  // never see these records: `resolve` answers an outside place before it
-  // looks any record up.
-  //
-  // A path that ends inside the root is projected only if every component
-  // below the root is an exact entry of its parent's listing, root first:
-  // a failed listing is `listing-unavailable` (its record kept and
-  // revalidated, never read as a missing name), a listing without the name
-  // is `name-variant`. The projection is native's under the further
-  // assumption that the host applies no other name canonicalization (case,
-  // Unicode normalization, firmlinks); this store cannot see one.
-  const projectAnswer = spelling => {
-    if (fault) return { tag: "faulted" };
-    try {
-      if (typeof spelling !== "string" || !spelling.startsWith("/") || spelling.includes("\0")) {
-        throw raise(String(spelling), "a project spelling is not an absolute path");
-      }
-      const pending = spelling.split("/").filter(name => name !== "").map(name => ({ name, from: "request" }));
-      if (spelling.length > 1 && spelling.endsWith("/")) pending.push({ name: ".", from: "request" });
-      let current = "/";
-      let substitutions = 0;
-      let outside = false;
-      const settle = answer => (outside ? answer : { tag: "not-outside" });
-      const hostError = code => settle({ tag: "host-error", errno: HOST_ERRNOS[code] });
-      while (pending.length > 0) {
-        const { name, from } = pending.shift();
-        const last = pending.length === 0;
-        if (name === "." || name === "..") {
-          if (name === "..") current = posix.dirname(current);
-          continue;
-        }
-        const next = current === "/" ? `/${name}` : `${current}/${name}`;
-        const where = place(next);
-        if (where === "outside") {
-          if (from === "inside-link") throw raise(next, `a link leads outside the directory root ${root}`);
-          outside = true;
-        }
-        const lstat = where === "outside" ? L(next) : lstatOf(next);
-        if (!lstat.ok) return hostError(lstat.code);
-        if (lstat.stats.isSymbolicLink()) {
-          if (++substitutions > links) return hostError("ELOOP");
-          const target = R(next);
-          if (!target.ok) throw raise(next, `is a link whose target cannot be read (${target.code})`);
-          if (target.text === "") return hostError("ENOENT");
-          const origin = where === "outside" ? "outside-link" : "inside-link";
-          // A link inside the namespace keeps the store's rule for every
-          // link it holds: its target may not end or continue outside.
-          if (origin === "inside-link") checkTarget(next, target.text);
-          const components = target.text.split("/").filter(component => component !== "")
-            .map(component => ({ name: component, from: origin }));
-          if (target.text.endsWith("/") && components.length > 0) components.push({ name: ".", from: origin });
-          if (target.text.startsWith("/")) current = "/";
-          pending.unshift(...components);
-          continue;
-        }
-        if (!last && !lstat.stats.isDirectory()) return hostError("ENOTDIR");
-        current = next;
-      }
-      if (!outside) return { tag: "not-outside" };
-      if (place(current) !== "inside") return { tag: "outside-root", path: current, root };
-      let parent = root;
-      for (const component of current === root ? [] : current.slice(root.length + 1).split("/")) {
-        const listing = D(parent);
-        if (!listing.ok) return { tag: "listing-unavailable", errno: HOST_ERRNOS[listing.code], directory: parent };
-        const entry = `${parent}/${component}`;
-        if (!listing.entries.some(([listed]) => listed === component)) return { tag: "name-variant", path: entry };
-        parent = entry;
-      }
-      return { tag: "projected", path: current };
-    } catch (error) {
-      if (error instanceof OwnedInputFault) return { tag: "faulted" };
-      raise(String(spelling), `project projection failed: ${describe(error)}`);
-      return { tag: "faulted" };
-    }
-  };
 
   /** One record's outcome as a frozen copy, for the repository's tests only. */
   const observe = (primitive, path) => {
@@ -628,6 +536,25 @@ export function createDirectoryStore({ input, root, rootIdentity, loopError, lin
     return Object.freeze(value.ok ? { ok: true } : { ok: false, code: value.code });
   };
 
+  /**
+   * Constructs a WASI runtime over `fs`: its one open of the preopen `/` is
+   * an anchor answered from `/`'s L record, with no host open. Only that
+   * open, and only during `construct`.
+   */
+  const preopen = construct => {
+    if (constructing) throw raise("/", "preopen windows do not nest");
+    constructing = true;
+    anchorAvailable = true;
+    try {
+      return construct();
+    } finally {
+      constructing = false;
+      anchorAvailable = false;
+    }
+  };
+  /** How many anchors are open, for the repository's tests only. */
+  const anchors = () => [...fds.values()].filter(entry => entry.anchor).length;
+
   return Object.freeze({
     fs: Object.freeze(fs),
     /** The sticky fault, if any. */
@@ -635,8 +562,9 @@ export function createDirectoryStore({ input, root, rootIdentity, loopError, lin
     validate,
     /** The canonical root this store answers for. */
     root,
-    projectAnswer,
     observe,
+    preopen,
+    anchors,
     /** Record counts and held bytes, for measurement only. */
     metrics: () => {
       const counts = { L: 0, R: 0, D: 0, F: 0 };

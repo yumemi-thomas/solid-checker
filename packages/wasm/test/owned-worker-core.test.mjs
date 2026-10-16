@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { MessageChannel } from "node:worker_threads";
 import { afterAll, test } from "vitest";
 import { loadArtifacts } from "../owned-artifacts.mjs";
-import { identityOf } from "../owned-snapshot.mjs";
+import { hostSource, identityOf } from "../owned-snapshot.mjs";
 import { serve } from "../owned-worker-core.mjs";
 
 const top = nodeFs.realpathSync(nodeFs.mkdtempSync(join(tmpdir(), "owned-worker-")));
@@ -55,6 +55,27 @@ test("a clean directory check answers", async () => {
   const answer = await worker.check(1);
   assert.equal(answer.type, "result");
   assert.equal(answer.status, 0);
+  worker.close();
+});
+
+test("a host where / can be searched but not read: both runtimes start and the check answers as on a readable /", async () => {
+  const denied = code => Object.assign(new Error(code), { code });
+  const searchOnly = {
+    ...hostSource,
+    open: path => { if (path === "/") throw denied("EACCES"); return hostSource.open(path); },
+    readdir: path => { if (path === "/") throw denied("EACCES"); return hostSource.readdir(path); },
+  };
+  let store;
+  const plain = await started({});
+  const expected = await plain.check(1);
+  plain.close();
+  const worker = await started({ source: searchOnly, store: directory => { store = directory; } });
+  assert.equal(worker.first.type, "ready");
+  const answer = await worker.check(1);
+  assert.equal(answer.type, "result");
+  assert.equal(answer.output, expected.output);
+  assert.equal(store.anchors(), 2);
+  assert.equal(store.observe("F", "/"), undefined);
   worker.close();
 });
 

@@ -533,33 +533,20 @@ pub extern "C" fn run_owned_check() -> u32 {
 /// The project the owned check analyzes, named as the native check names it:
 /// the native command line canonicalizes `--project` before anything reads it,
 /// and every later reader sees only that canonical path. WASI resolves links
-/// and `..` against the reactor's view of the tree -- the mount, or the
-/// directory store's root and its virtual ancestors -- so for a spelling
-/// inside that view this is the same operation over the same bytes. A
-/// spelling that passes through a host place outside the view fails there
-/// with `NotFound`; only then the host is asked to project it
-/// (`projection.rs`), and every outcome but an exact projection is an
-/// explicit error. A relative path is refused rather than resolved: a reactor
-/// has no working directory for it to be relative to.
+/// and `..` physically against the reactor's filesystem -- a mount's closed
+/// tree, or in directory mode the host's own namespace, read through the
+/// owned store -- so this is the same walk over the same bytes. It does not
+/// rewrite a name the host matched case-insensitively, as macOS
+/// `realpath(3)` does (a held difference). A relative path is refused rather
+/// than resolved: a reactor has no working directory for it to be relative
+/// to.
 #[cfg(any(test, all(feature = "reactor", target_family = "wasm")))]
 fn canonical_project(project_id: &str) -> Result<String, Box<dyn std::error::Error>> {
-    projection::resolve(project_id, Path::canonicalize, host_projection)
-}
-
-#[cfg(any(test, all(feature = "reactor", target_family = "wasm")))]
-mod projection;
-
-/// The host's answer for a spelling the view could not resolve.
-#[cfg(all(feature = "reactor", target_family = "wasm"))]
-fn host_projection(spelling: &str) -> Result<Vec<u8>, String> {
-    owned::project_answer(spelling)
-}
-
-/// Off the reactor there is no host to ask: the original error stands.
-#[cfg(all(test, not(all(feature = "reactor", target_family = "wasm"))))]
-#[allow(clippy::unnecessary_wraps)]
-fn host_projection(_spelling: &str) -> Result<Vec<u8>, String> {
-    Ok(vec![projection::UNAVAILABLE])
+    let project = Path::new(project_id);
+    if !project.is_absolute() {
+        return Err(format!("project {project_id} is not an absolute path").into());
+    }
+    Ok(project.canonicalize()?.to_string_lossy().into_owned())
 }
 
 #[cfg(test)]
@@ -657,19 +644,6 @@ pub extern "C" fn output_length() -> u32 {
 /// held under handle 0). The host is trusted to forward the producer's bytes
 /// unchanged and to keep the mounted tree immutable during a check; nothing
 /// here authenticates either.
-///
-/// Three more imports, from `solid_owned_host`, answer one question about the
-/// request's project spelling (`projection.rs`), asked at most once per
-/// check and only after WASI canonicalization failed with `NotFound`:
-///
-/// - `project(path, length) -> status` computes and holds the answer for the
-///   spelling's bytes;
-/// - `project_length()` is that answer's whole length;
-/// - `project_copy(destination, length) -> status` copies it, `length`
-///   exactly, and releases it.
-///
-/// A nonzero status (1: protocol, 21: a range outside this module's memory)
-/// carries no answer.
 #[cfg(all(feature = "reactor", target_family = "wasm"))]
 mod owned {
     use std::{error::Error, path::Path};
@@ -689,38 +663,6 @@ mod owned {
         fn result_length(handle: u32) -> u32;
         fn copy_result(handle: u32, destination: *mut u8, capacity: u32) -> u32;
         fn close(handle: u32) -> u32;
-    }
-
-    #[link(wasm_import_module = "solid_owned_host")]
-    unsafe extern "C" {
-        #[link_name = "project"]
-        fn host_project(path: *const u8, length: u32) -> u32;
-        #[link_name = "project_length"]
-        fn host_project_length() -> u32;
-        #[link_name = "project_copy"]
-        fn host_project_copy(destination: *mut u8, length: u32) -> u32;
-    }
-
-    /// The host's whole answer for `spelling`, or the protocol failure.
-    pub(super) fn project_answer(spelling: &str) -> Result<Vec<u8>, String> {
-        let length = u32::try_from(spelling.len())
-            .map_err(|_| "the project spelling is too long".to_owned())?;
-        // SAFETY: the host reads `length` bytes at `spelling` during this
-        // call only.
-        let status = unsafe { host_project(spelling.as_ptr(), length) };
-        if status != 0 {
-            return Err(format!("project answered status {status}"));
-        }
-        // SAFETY: a plain call into the host.
-        let answer = unsafe { host_project_length() };
-        let mut buffer = vec![0_u8; answer as usize];
-        // SAFETY: the host writes exactly `answer` bytes into the buffer it
-        // is handed, during this call only.
-        let status = unsafe { host_project_copy(buffer.as_mut_ptr(), answer) };
-        if status != 0 {
-            return Err(format!("project_copy answered status {status}"));
-        }
-        Ok(buffer)
     }
 
     fn take_result(handle: u32) -> Result<Vec<u8>, String> {

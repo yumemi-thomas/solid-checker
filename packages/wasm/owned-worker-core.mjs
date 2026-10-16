@@ -1,11 +1,10 @@
-// The owned check's worker loop (P5 S2, S3b, S3c): both reactors on one
+// The owned check's worker loop (P5 S2, S3b, S3d): both reactors on one
 // filesystem -- the in-memory volume of a validated mount, or the directory
 // store read on demand from the host -- one check per message, and the
 // transport's ledger checked after every check. Every import either reactor
 // declares goes through the owned boundary (owned-boundary.mjs), and each
 // reactor's whole import list is checked against what this worker serves it
-// before it is instantiated. Only the checker gets `solid_owned_host`, the
-// project projection (owned-projection.mjs).
+// before it is instantiated.
 //
 // The shipped worker (`owned-worker.mjs`) calls `serve(port)` with no
 // adapters, and the client posts only `init` and `check` messages, so nothing
@@ -22,10 +21,9 @@ import { WasiError } from "./vendor/wasm-util/lib/mjs/wasi/error.mjs";
 import { MAX_SUBSTITUTIONS } from "./vendor/wasm-util/lib/mjs/wasi/physical.mjs";
 import { WasiErrno } from "./vendor/wasm-util/lib/mjs/wasi/types.mjs";
 import { memfs } from "@napi-rs/wasm-runtime/fs";
-import { boundaryImports, coveredImports, protocolImports, u32 } from "./owned-boundary.mjs";
+import { boundaryImports, checkImportInventory, coveredImports, protocolImports, u32 } from "./owned-boundary.mjs";
 import { createTransport } from "./owned-host.mjs";
 import { materializeMount } from "./owned-mount.mjs";
-import { checkImportInventory, createProjectionHost, encodeProjection } from "./owned-projection.mjs";
 import { createDirectoryStore } from "./owned-snapshot.mjs";
 
 const textDecoder = new TextDecoder();
@@ -37,9 +35,11 @@ const WASI_ARGS = Object.freeze([]);
 const WASI_ENV = Object.freeze({});
 const wasiStrings = Object.freeze({ args: WASI_ARGS, env: Object.freeze([]) });
 
-function instantiate(module, fs, role, imports = {}) {
+function instantiate(module, fs, role, imports = {}, construct = build => build()) {
   checkImportInventory(module, role, coveredImports);
-  const wasi = new WASI({ version: "preview1", args: [...WASI_ARGS], fs, preopens: { "/": "/" }, env: { ...WASI_ENV } });
+  // The directory store answers the runtime's own open of its preopen `/`
+  // as an anchor (owned-snapshot.mjs, "The preopen").
+  const wasi = construct(() => new WASI({ version: "preview1", args: [...WASI_ARGS], fs, preopens: { "/": "/" }, env: { ...WASI_ENV } }));
   let memory;
   const preview1 = boundaryImports(module, wasi.getImportObject().wasi_snapshot_preview1, () => memory, wasiStrings);
   const instance = new WebAssembly.Instance(module, { wasi_snapshot_preview1: preview1, ...imports });
@@ -72,22 +72,16 @@ function exported(memory, pointer, length, what) {
  * With a directory, a check's answer is delivered only if the store raised
  * no fault and every record it holds still validates; otherwise the checker
  * is poisoned with the store's own reason, whatever the guest did.
- *
- * A check must also leave no project projection answer pending: one left
- * behind poisons the checker before it is released.
  */
 export function serve(port, adapters = {}) {
   let state = "waiting";
   let checker;
   let transport;
   let directory;
-  let projection;
   let checks = 0;
   const poison = (id, reason) => {
     state = "poisoned";
     port.postMessage({ type: "poison", id, reason });
-    // Terminal cleanup, after the poison is recorded: nothing held survives.
-    projection?.clear();
   };
   const initialize = async ({ checker: checkerBytes, producer: producerBytes, mount, directory: source }) => {
     const [checkerModule, producerModule] = await Promise.all([
@@ -99,6 +93,8 @@ export function serve(port, adapters = {}) {
       directory = createDirectoryStore({
         input: source.input, root: source.root, rootIdentity: source.identity,
         loopError: message => new WasiError(message, WasiErrno.ELOOP), links: MAX_SUBSTITUTIONS,
+        // Tests only: the host, with injected answers.
+        ...(adapters.source ? { source: adapters.source } : {}),
       });
       adapters.store?.(directory);
       fs = directory.fs;
@@ -107,20 +103,12 @@ export function serve(port, adapters = {}) {
       materializeMount(volume.vol, mount);
       fs = volume.fs;
     }
-    // The project question (S3c): a mount has no host to ask. A directory
-    // answer is encoded against the store's own root, an injected one too.
-    projection = createProjectionHost(spelling => {
-      if (!directory) return encodeProjection({ tag: "unavailable" });
-      const compute = () => directory.projectAnswer(spelling);
-      return encodeProjection(adapters.projection ? adapters.projection(spelling, compute) : compute(), directory.root);
-    });
-    const producer = instantiate(producerModule, fs, "producer");
+    const construct = directory ? directory.preopen : undefined;
+    const producer = instantiate(producerModule, fs, "producer", {}, construct);
     transport = createTransport(adapters.producer ? adapters.producer(producer.exports) : producer.exports);
     const imports = adapters.imports ? adapters.imports(transport.imports, producer.exports) : transport.imports;
-    const projectionImports = adapters.projectionImports ? adapters.projectionImports(projection.imports) : projection.imports;
-    checker = instantiate(checkerModule, fs, "checker", { solid_typefacts: protocolImports(imports), solid_owned_host: projectionImports });
+    checker = instantiate(checkerModule, fs, "checker", { solid_typefacts: protocolImports(imports) }, construct);
     transport.bind(checker.exports.memory);
-    projection.bind(checker.exports.memory);
     if (directory?.fault()) throw directory.fault();
   };
   const run = ({ id, requestJson }) => {
@@ -160,10 +148,6 @@ export function serve(port, adapters = {}) {
     }
     if (stats.livePrograms.length !== 0 || stats.pendingResults.length !== 0) {
       poison(id, `the check left programs ${JSON.stringify(stats.livePrograms)} and results ${JSON.stringify(stats.pendingResults)} behind`);
-      return;
-    }
-    if (projection.pending()) {
-      poison(id, "the check left a project projection answer behind");
       return;
     }
     const { livePrograms: _, ...counts } = stats;
