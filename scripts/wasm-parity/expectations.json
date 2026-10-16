@@ -346,18 +346,6 @@
         "equalWithoutTimings": true
       },
       {
-        "operation": "invocations",
-        "status": 0,
-        "equal": true,
-        "equalWithoutTimings": true
-      },
-      {
-        "operation": "exportvalues",
-        "status": 0,
-        "equal": true,
-        "equalWithoutTimings": true
-      },
-      {
         "operation": "sources",
         "status": 0,
         "equal": true,
@@ -427,7 +415,7 @@
   },
   "w7BadHandshake": {
     "status": 1,
-    "error": "TypeFacts session error: Type Facts compatibility handshake failed: expected protocol 77, schema sha256:4f847aa5054745ce5a4fe1f2f2c41cc1d6329dceb44c68e14e6d1d90474f149f, build \"dev\"; got protocol 77, schema sha256:4f847aa5054745ce5a4fe1f2f2c41cc1d6329dceb44c68e14e6d1d90474f149g, build \"dev\"",
+    "error": "TypeFacts session error: Type Facts compatibility handshake failed: expected protocol 78, schema sha256:3fc93f94e6d3f071f7ac4914d2ba7e74753cecc70a7ab126e55266d0bffd4f68, build \"dev\"; got protocol 78, schema sha256:3fc93f94e6d3f071f7ac4914d2ba7e74753cecc70a7ab126e55266d0bffd4f69, build \"dev\"",
     "host": {
       "opened": [
         1

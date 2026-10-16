@@ -15,9 +15,8 @@ use std::{
 };
 
 use typefacts::{
-    AnalysisDemand, CertificationInvocationContext, ExportValueDemand, FactTable, FrameBridge,
-    InvocationDemand, Location, ModuleGraphDemand, PrimitiveValueDomain, Producer, Session,
-    SessionError, SourceHash,
+    AnalysisDemand, FactTable, FrameBridge, Location, ModuleGraphDemand, PrimitiveValueDomain,
+    Producer, Session, SessionError,
     v3::{EntityDemand, FileChange, Request, Response},
 };
 
@@ -254,10 +253,6 @@ impl FrameBridge for ChildBridge {
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
-
-    fn instance(&self) -> String {
-        format!("test-child-{}", self.child.id())
-    }
 }
 
 struct Fixture {
@@ -404,43 +399,6 @@ fn bridged_answers_equal_process_answers() {
     let (mut process, mut bridged, closes) = open_pair(&fixture, true);
     assert!(bridged.cancellation_handle().is_none());
     assert!(process.cancellation_handle().is_some());
-
-    // Invocation and export-value answers, envelopes included, before any
-    // analysis: an invocation after an analysis crashes the producer's checker
-    // on both carriers (see the test below), a defect this test is not about.
-    let invocation = InvocationDemand {
-        location: location(&fixture, "local(2)", "local(2)"),
-        callable_depth: 1,
-        census: true,
-    };
-    let invoked = process
-        .invocations(std::slice::from_ref(&invocation))
-        .unwrap();
-    assert_eq!(
-        bridged
-            .invocations(std::slice::from_ref(&invocation))
-            .unwrap(),
-        invoked
-    );
-    assert_eq!(invoked.transcripts.len(), 1);
-    let exported = location(&fixture, "export const exported", "exported");
-    let export = ExportValueDemand {
-        location: exported.clone(),
-        implementation_location: Some(exported),
-        local_declaration_location: None,
-        callable_depth: 1,
-        parameter_premises: Vec::new(),
-    };
-    let valued = process
-        .export_values(std::slice::from_ref(&export))
-        .unwrap();
-    assert_eq!(
-        bridged
-            .export_values(std::slice::from_ref(&export))
-            .unwrap(),
-        valued
-    );
-    assert_eq!(valued.transcripts.len(), 1);
 
     let sources = process.configured_sources().unwrap();
     assert_eq!(bridged.configured_sources().unwrap(), sources);
@@ -635,38 +593,6 @@ fn bridged_answers_equal_process_answers_over_fixtures() {
 }
 
 #[test]
-fn bridged_sessions_refuse_certification_before_answering() {
-    let fixture = fixture("certify");
-    let (bridge, closes, exchanges) = ChildBridge::spawn(&fixture.project, Fault::None, 0, false);
-    let mut bridged =
-        Session::open_bridged(Box::new(bridge), fixture.project.to_string_lossy()).unwrap();
-    let before = exchanges.load(Ordering::SeqCst);
-    let context = CertificationInvocationContext::new(
-        SourceHash::of("snapshot").to_string(),
-        SourceHash::of("graph").to_string(),
-        [SourceHash::of("demand").to_string()],
-    )
-    .unwrap();
-    let invocation = InvocationDemand {
-        location: location(&fixture, "helper(value)", "helper(value)"),
-        callable_depth: 1,
-        census: true,
-    };
-    assert!(matches!(
-        bridged.certification_invocations(context, std::slice::from_ref(&invocation)),
-        Err(SessionError::ProducerProvenance(_))
-    ));
-    assert_eq!(
-        exchanges.load(Ordering::SeqCst),
-        before,
-        "a proof answer was acquired"
-    );
-    // The refusal acquired nothing, so the ordinary session stays usable.
-    assert_eq!(closes.load(Ordering::SeqCst), 0);
-    assert!(bridged.configured_sources().is_ok());
-}
-
-#[test]
 fn a_bad_handshake_refuses_the_bridge_and_releases_it() {
     let fixture = fixture("handshake");
     let (bridge, closes, exchanges) =
@@ -677,44 +603,6 @@ fn a_bad_handshake_refuses_the_bridge_and_releases_it() {
     ));
     assert_eq!(closes.load(Ordering::SeqCst), 1);
     assert_eq!(exchanges.load(Ordering::SeqCst), 0);
-}
-
-/// A real producer failure, not an injected one: an invocation demand after an
-/// analysis crashes the producer's checker (a pre-existing producer defect,
-/// reproduced with the pre-change image too). The process carrier hides it by
-/// relaunching and replaying; a bridge must not, so its session closes and is
-/// never reused.
-#[test]
-fn a_real_producer_crash_closes_a_bridge_while_a_process_recovers() {
-    let fixture = fixture("crash");
-    let (mut process, mut bridged, closes) = open_pair(&fixture, false);
-    let demand = demands(&fixture);
-    process.analyze(&demand).unwrap();
-    bridged.analyze(&demand).unwrap();
-    let invocation = InvocationDemand {
-        location: location(&fixture, "local(2)", "local(2)"),
-        callable_depth: 1,
-        census: true,
-    };
-    assert_eq!(
-        process
-            .invocations(std::slice::from_ref(&invocation))
-            .unwrap()
-            .transcripts
-            .len(),
-        1
-    );
-    assert!(
-        bridged
-            .invocations(std::slice::from_ref(&invocation))
-            .is_err()
-    );
-    assert_eq!(closes.load(Ordering::SeqCst), 1);
-    assert!(matches!(
-        bridged.configured_sources(),
-        Err(SessionError::Closed)
-    ));
-    process.close().unwrap();
 }
 
 #[test]

@@ -768,3 +768,10 @@ func isCallResolutionDiagnostic(code int32) bool {
 		return false
 	}
 }
+
+func invocationPropertyName(name string) (string, bool) {
+	if name == "" || !utf8.ValidString(name) || strings.HasPrefix(name, ast.InternalSymbolNamePrefix) {
+		return "", false
+	}
+	return name, true
+}

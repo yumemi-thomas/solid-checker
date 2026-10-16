@@ -6,11 +6,10 @@ use serde::{Deserialize, Serialize};
 use crate::{
     ArgumentMapping, ArgumentMappingReason, ArgumentMappingStatus, ArrayShape, AsyncFunctionFact,
     CallKind, CallTargetSet, Callability, ConstantValue, ConstantValueKind, Constructability,
-    ConstructionWitness, Declaration, DeclarationOwner, EntityFact, ExportValueDemand,
-    ExportValueTranscript, FileFact, InvocationDemand, InvocationEnvelope, InvocationTranscript,
-    Location, ModuleFact, ModuleImportFact, ObjectConstructionProperty, ObjectConstructionShape,
-    ParameterFact, PrimitiveLiteralCandidate, PrimitiveLiteralKind, PrimitiveValueDomain,
-    ReferenceSpace, ResolvedCall, ResolvedCallValidity, ResolvedDeclaration, RuntimeBindingKind,
+    ConstructionWitness, Declaration, DeclarationOwner, EntityFact, FileFact, Location, ModuleFact,
+    ModuleImportFact, ObjectConstructionProperty, ObjectConstructionShape, ParameterFact,
+    PrimitiveLiteralCandidate, PrimitiveLiteralKind, PrimitiveValueDomain, ReferenceSpace,
+    ResolvedCall, ResolvedCallValidity, ResolvedDeclaration, RuntimeBindingKind,
     RuntimeValueDomain, SourceBinding, SourceCall, SourceFunction, SourceHash, SymbolFact,
     TupleShape, TypeDescriptor,
 };
@@ -39,7 +38,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 /// `ResolvedCall::assertion_signature`, bit 1 `ResolvedCall::never_returns`.
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V19: u64 = 19;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:4f847aa5054745ce5a4fe1f2f2c41cc1d6329dceb44c68e14e6d1d90474f149f";
+    "sha256:3fc93f94e6d3f071f7ac4914d2ba7e74753cecc70a7ab126e55266d0bffd4f68";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -442,7 +441,9 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // consumer decodes with `deny_unknown_fields` and would reject the new fields,
 // so the number moves.
 // Protocol 77 (ADR 0172) adds exhaustive fresh literal return structures.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 77;
+// Protocol 78 removes the certification reads `invocations` and
+// `export-values` with their request and response fields.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 78;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",
@@ -468,12 +469,6 @@ pub enum Operation {
     /// `Sources` it is a read of the retained program: it carries no state
     /// token, edits no retained demand set, and advances no generation.
     Modules,
-    /// Demand-shaped invocation proof transcripts. This read does not retain
-    /// facts or disturb the editor-analysis state token.
-    Invocations,
-    /// Exact compiler value facts for verifier-owned exported-value query
-    /// expressions. This is distinct from a call transcript by construction.
-    ExportValues,
     Cancel,
     Close,
 }
@@ -570,27 +565,6 @@ pub struct Request {
     /// inventory alone.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub module_graph: Option<ModuleGraphRequest>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub invocation_demands: Vec<InvocationDemand>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub export_value_demands: Vec<ExportValueDemand>,
-    /// ADR 0166: host constants the requesting certification proved, read by
-    /// `invocations` and `export-values` only.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub host_constants: Vec<HostConstant>,
-}
-
-/// One import whose value the declared host fixes (ADR 0166): in the program
-/// module `importer`, the name `name` imported from `specifier` is the literal
-/// `value`. The producer applies it only to a reference the checker binds to
-/// exactly that import specifier.
-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct HostConstant {
-    pub importer: String,
-    pub specifier: String,
-    pub name: String,
-    pub value: bool,
 }
 
 /// The wire form of a module-graph demand.
@@ -699,14 +673,6 @@ pub struct Response {
     pub module_imports: Vec<ModuleImportFact>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub unknown_import_paths: Vec<Arc<str>>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub invocation_transcripts: Vec<InvocationTranscript>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub invocation_envelope: Option<InvocationEnvelope>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub export_value_transcripts: Vec<ExportValueTranscript>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub export_value_envelope: Option<InvocationEnvelope>,
     #[serde(skip)]
     pub client_decode_ns: u64,
     #[serde(skip)]

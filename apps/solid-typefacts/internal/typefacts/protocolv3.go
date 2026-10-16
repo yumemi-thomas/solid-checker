@@ -4,7 +4,11 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 77 (ADR 0172): fresh literal returns carry an
+// TypeFactsHandshakeProtocol is 78: the certification reads `invocations` and
+// `export-values` are removed with package contracts, together with their
+// request and response fields. A protocol-77 consumer could still send them.
+//
+// Protocol 77 (ADR 0172): fresh literal returns carry an
 // exhaustive construction tree with independent leaf identity evidence, and
 // control-flow censuses state body-end reachability. Absence remains open.
 // A protocol-76 consumer rejects these fields, so both endpoints move together.
@@ -529,8 +533,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 77
-	TypeFactsSchemaSHA256             = "sha256:4f847aa5054745ce5a4fe1f2f2c41cc1d6329dceb44c68e14e6d1d90474f149f"
+	TypeFactsHandshakeProtocol uint64 = 78
+	TypeFactsSchemaSHA256             = "sha256:3fc93f94e6d3f071f7ac4914d2ba7e74753cecc70a7ab126e55266d0bffd4f68"
 )
 
 type ServiceHandshake struct {
@@ -552,13 +556,8 @@ const (
 	// no state token, edits no retained demand set, and advances no
 	// generation.
 	LifecycleModules LifecycleOperation = "modules"
-	// LifecycleInvocations returns demand-shaped selected-signature, binding,
-	// callable-path and census proof facts without retaining them in the editor
-	// analysis table.
-	LifecycleInvocations  LifecycleOperation = "invocations"
-	LifecycleExportValues LifecycleOperation = "export-values"
-	LifecycleCancel       LifecycleOperation = "cancel"
-	LifecycleClose        LifecycleOperation = "close"
+	LifecycleCancel  LifecycleOperation = "cancel"
+	LifecycleClose   LifecycleOperation = "close"
 )
 
 type FileChangeV3 struct {
@@ -588,25 +587,7 @@ type LifecycleRequest struct {
 	// ModuleGraph selects how much of the resolved module graph a modules
 	// operation answers. It is read only by that operation; an absent demand
 	// there answers the module inventory alone.
-	ModuleGraph        *ModuleInventoryDemand `cbor:"moduleGraph,omitempty" json:"moduleGraph,omitempty"`
-	InvocationDemands  []InvocationDemand     `cbor:"invocationDemands,omitempty" json:"invocationDemands,omitempty"`
-	ExportValueDemands []ExportValueDemand    `cbor:"exportValueDemands,omitempty" json:"exportValueDemands,omitempty"`
-	// HostConstants (handshake protocol 72, ADR 0166) are imports whose value
-	// the requesting certification's declared host fixes. Read by invocations
-	// and export-values only, for that request.
-	HostConstants []HostConstant `cbor:"hostConstants,omitempty" json:"hostConstants,omitempty"`
-}
-
-// HostConstant says that in the program module Importer, the name Name
-// imported from the bare specifier Specifier is the literal Value (ADR 0166).
-// The Rust client proved it from the runtime bytes the declared host's
-// resolution selects; the producer applies it only to a reference the checker
-// binds to exactly that import specifier.
-type HostConstant struct {
-	Importer  string `cbor:"importer" json:"importer"`
-	Specifier string `cbor:"specifier" json:"specifier"`
-	Name      string `cbor:"name" json:"name"`
-	Value     bool   `cbor:"value" json:"value"`
+	ModuleGraph *ModuleInventoryDemand `cbor:"moduleGraph,omitempty" json:"moduleGraph,omitempty"`
 }
 
 // SymbolQueryV6 is one row in Rust's batched TSGo oracle request. Alias and
@@ -664,13 +645,9 @@ type LifecycleResponse struct {
 	// Modules, ModuleImports, and UnknownImportPaths carry a modules
 	// operation's answer. They are the flattened ModuleInventory: the protocol
 	// keeps response payloads flat, as sources and symbolEvidence already are.
-	Modules                []ModuleFact            `cbor:"modules,omitempty" json:"modules,omitempty"`
-	ModuleImports          []ModuleImportFact      `cbor:"moduleImports,omitempty" json:"moduleImports,omitempty"`
-	UnknownImportPaths     []string                `cbor:"unknownImportPaths,omitempty" json:"unknownImportPaths,omitempty"`
-	InvocationTranscripts  []InvocationTranscript  `cbor:"invocationTranscripts,omitempty" json:"invocationTranscripts,omitempty"`
-	InvocationEnvelope     *InvocationEnvelope     `cbor:"invocationEnvelope,omitempty" json:"invocationEnvelope,omitempty"`
-	ExportValueTranscripts []ExportValueTranscript `cbor:"exportValueTranscripts,omitempty" json:"exportValueTranscripts,omitempty"`
-	ExportValueEnvelope    *InvocationEnvelope     `cbor:"exportValueEnvelope,omitempty" json:"exportValueEnvelope,omitempty"`
+	Modules            []ModuleFact       `cbor:"modules,omitempty" json:"modules,omitempty"`
+	ModuleImports      []ModuleImportFact `cbor:"moduleImports,omitempty" json:"moduleImports,omitempty"`
+	UnknownImportPaths []string           `cbor:"unknownImportPaths,omitempty" json:"unknownImportPaths,omitempty"`
 }
 
 func ValidateLifecycleRequest(request LifecycleRequest) error {
@@ -682,7 +659,7 @@ func ValidateLifecycleRequest(request LifecycleRequest) error {
 	}
 	switch request.Operation {
 	case LifecycleOpen, LifecycleUpdate, LifecycleAnalyze, LifecycleSymbols,
-		LifecycleSources, LifecycleModules, LifecycleInvocations, LifecycleExportValues, LifecycleCancel, LifecycleClose:
+		LifecycleSources, LifecycleModules, LifecycleCancel, LifecycleClose:
 	default:
 		return fmt.Errorf("unsupported lifecycle operation %q", request.Operation)
 	}

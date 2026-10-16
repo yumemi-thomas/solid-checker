@@ -547,10 +547,6 @@ mod owned {
                 unsafe { close(self.handle) };
             }
         }
-
-        fn instance(&self) -> String {
-            format!("owned-reactor-{}", self.handle)
-        }
     }
 
     impl Drop for HostBridge {

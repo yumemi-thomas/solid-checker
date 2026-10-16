@@ -323,8 +323,6 @@ func TestFrameBodyRefusesMalformedFrames(t *testing.T) {
 func TestSharedEncoderKeepsBothSelections(t *testing.T) {
 	small := typefacts.LifecycleResponse{
 		Schema: typefacts.TypeFactsSchemaVersionV1, RequestID: 5, ProjectID: "/p/tsconfig.json", Generation: 1, OK: true,
-		InvocationEnvelope:  &typefacts.InvocationEnvelope{Generation: 1},
-		ExportValueEnvelope: &typefacts.InvocationEnvelope{Generation: 1},
 	}
 	large := typefacts.LifecycleResponse{
 		Schema: typefacts.TypeFactsSchemaVersionV1, RequestID: 6, ProjectID: "/p/tsconfig.json", Generation: 1, OK: true,

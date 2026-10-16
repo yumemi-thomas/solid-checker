@@ -11,13 +11,11 @@ use std::num::NonZeroU32;
 use std::sync::Arc;
 use thiserror::Error;
 
-mod invocation;
 mod retained_table;
 mod session;
 mod shared_transition_arena;
 pub mod v3;
 
-pub use invocation::*;
 pub use retained_table::{FactTable, Symbol};
 pub use session::{
     AnalysisDemand, Cancellation, CloseOutcome, DemandGroup, ExchangeTimings, FrameBridge,
@@ -1735,9 +1733,6 @@ mod tests {
             reference_paths: Vec::new(),
             cancel_request_id: 2,
             module_graph: None,
-            invocation_demands: Vec::new(),
-            export_value_demands: Vec::new(),
-            host_constants: Vec::new(),
         };
         assert_eq!(
             encode_sidecar_request(&request).unwrap(),

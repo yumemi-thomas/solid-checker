@@ -408,46 +408,6 @@ func (s *Session) lifecycle(
 		response.Modules = inventory.Modules
 		response.ModuleImports = inventory.Imports
 		response.UnknownImportPaths = inventory.UnknownImportPaths
-	case LifecycleInvocations:
-		if request.Generation != generation {
-			return fail("generation-mismatch", ErrGenerationMismatch)
-		}
-		s.closure.SetHostConstants(request.HostConstants)
-		answer, err := s.closure.InvocationTranscripts(ctx, request.InvocationDemands)
-		if err != nil {
-			if ctx.Err() != nil {
-				return fail("analysis-cancelled", ctx.Err())
-			}
-			return fail("invocations-failed", err)
-		}
-		if answer.Envelope.Generation != generation || len(answer.Transcripts) != len(request.InvocationDemands) {
-			return fail("invocations-failed", fmt.Errorf("invocation answer does not match generation or demand count"))
-		}
-		answer.Envelope.ProjectID = s.projectID
-		answer.Envelope.SchemaSHA256 = TypeFactsSchemaSHA256
-		answer.Envelope.ProducerBuild = s.producerBuild
-		response.InvocationTranscripts = answer.Transcripts
-		response.InvocationEnvelope = &answer.Envelope
-	case LifecycleExportValues:
-		if request.Generation != generation {
-			return fail("generation-mismatch", ErrGenerationMismatch)
-		}
-		s.closure.SetHostConstants(request.HostConstants)
-		answer, err := s.closure.ExportValueTranscripts(ctx, request.ExportValueDemands)
-		if err != nil {
-			if ctx.Err() != nil {
-				return fail("analysis-cancelled", ctx.Err())
-			}
-			return fail("export-values-failed", err)
-		}
-		if answer.Envelope.Generation != generation || len(answer.Transcripts) != len(request.ExportValueDemands) {
-			return fail("export-values-failed", fmt.Errorf("export-value answer does not match generation or demand count"))
-		}
-		answer.Envelope.ProjectID = s.projectID
-		answer.Envelope.SchemaSHA256 = TypeFactsSchemaSHA256
-		answer.Envelope.ProducerBuild = s.producerBuild
-		response.ExportValueTranscripts = answer.Transcripts
-		response.ExportValueEnvelope = &answer.Envelope
 	case LifecycleCancel:
 		// Cancellation is delivered through the active request's context by
 		// the transport adapter. This operation acknowledges that delivery.

@@ -83,22 +83,6 @@ type project struct {
 	// rather than once per returned-callable resolution. Checker-owned symbol
 	// pointers make it generation-scoped, like runtimePaths.
 	assignedSymbols map[*ast.SourceFile]map[*ast.Symbol]struct{}
-	// libraryStability memoizes unstableLibrarySymbolsLocked per file for the
-	// same checker generation (standardLibraryIdentityLocked, ADR 0149).
-	libraryStability map[*ast.SourceFile]map[*ast.Symbol]struct{}
-	// freshConsts memoizes freshBindingLocked per symbol, for the same
-	// generation: its reference walk covers the whole file.
-	freshConsts map[*ast.Symbol]bool
-	// primitiveBindings memoizes primitiveMutableBindingLocked per symbol,
-	// for the same generation: its write walk covers the whole file.
-	primitiveBindings map[*ast.Symbol]bool
-	// formImplementation is the implementation uncensusedInvokingFormCensusLocked
-	// is classifying, while it runs: the one whose own parameters a coercion
-	// operand may be proved primitive by (operandProvedPrimitiveLocked).
-	formImplementation *ast.Node
-	// hostConstants are the current request's host constants (ADR 0166),
-	// set by SetHostConstants before each invocations or export-values answer.
-	hostConstants map[hostConstantKey]bool
 	// ownLiteralSymbols memoizes ADR 0044's answer per symbol: the variable
 	// declaration a name is bound to when this program initialized it from an
 	// object or array literal, or nil. Keyed by symbol rather than by file
@@ -106,63 +90,6 @@ type project struct {
 	// use site, so the declaration is behind an alias. A premise twin is a
 	// different program with different symbols and never shares entries.
 	ownLiteralSymbols map[*ast.Symbol]*ast.Node
-	// contextProvisions memoizes ADR 0153's provision census per context
-	// symbol (nil when a reference fitted no class), and the installation scan
-	// once per package directory of the accepted program. Symbol-keyed like ownLiteralSymbols: a new
-	// generation's symbols never share an entry.
-	contextProvisions          map[*ast.Symbol]*contextProvisionResult
-	contextInstallationProgram *compiler.Program
-	contextInstallationScans   map[string]contextInstallationScan
-	// ADR 0153 item C: the accessor-installation census, per installed
-	// package, of the program it was computed over.
-	accessorInstallationProgram *compiler.Program
-	accessorInstallationScans   map[string]accessorPackageScan
-	// formTwin is set for exactly the duration of an uncensused-form census
-	// classified under a declared-signature premise (ADR 0038): the checked
-	// twin of the implementation's file whose checker answers every type and
-	// symbol question the form classifiers ask. Nil otherwise, which routes
-	// those questions to the accepted program's own checker. It is a field
-	// rather than a parameter because the classifiers are reached through
-	// canonicalSymbol and symbolIsAssignedLocked, which every other census
-	// shares; see formChecker.
-	formTwin *premiseTwin
-	// premiseCensuses memoizes, per generation, the outcome of classifying an
-	// implementation's form census under a declared-signature premise, keyed
-	// by the implementation's span and the exact annotation the twin carried.
-	// Every proof family of an export demands the same implementation
-	// transcript, and the twin — a program rebuild and a cold checker — is
-	// the one part of that transcript worth not paying nine times.
-	premiseCensuses map[premiseCensusKey]premiseCensusResult
-	// premiseWorth memoizes, per generation, whether a runtime-source
-	// declaration's own form census — or that of a callee reachable from it —
-	// records a form a type can clear, which is what decides whether a caller's
-	// twin is worth building for the argument premises it would carry
-	// (calleesWorthPremisingLocked).
-	premiseWorth map[*ast.Node]bool
-	// calleeInvocations memoizes what a callable's body does with its own
-	// parameters, per callee symbol *and the depth it was asked at*, for the
-	// accepted generation. The descent reads a whole body per callee and real
-	// packages call the same small helpers from every export, so the answer is
-	// asked for far more often than it changes.
-	//
-	// The depth belongs in the key because it is an input to the answer. The
-	// walk refuses below maxCalleeInvocationDepth, so a callee asked at depth 3
-	// has one body of headroom where the same callee asked at depth 0 has four,
-	// and the deeper question can be answered "no evidence" where the shallower
-	// one is answered exactly. Keying by symbol alone let a warm entry lend its
-	// headroom to a later, deeper question: an export certified or not
-	// depending on which *other* exports had been demanded before it, over the
-	// same source and the same binaries. Nothing in a receipt, a gate-cache key
-	// or a proof digest names the demand list, so that dependence had to go.
-	//
-	// Only an *exact* answer is stored — one computed without a depth cut, a
-	// cycle cut, or an exhausted budget. An exact answer met no cut, so it does
-	// not depend on the interprocedural cycle guard's contents either, and a
-	// hit returns precisely what recomputing at that same depth would. With the
-	// depth in the key that makes the emitted fact set a pure function of the
-	// program. Checker-owned symbol pointers make it generation-scoped, like
-	// assignedSymbols.
-	calleeInvocations map[calleeInvocationKey]*calleeInvocationFacts
 	// resolved-call caches are generation-scoped and populated only by
 	// resolvedCall demands. Signatures and symbols are checker-owned pointers,
 	// so every accepted update drops the maps as it installs the new checker.
@@ -355,8 +282,6 @@ func (p *project) ReleaseAnalysisState() {
 	}
 	p.checker = nil
 	p.checkerPool.drop()
-	p.premiseCensuses = nil
-	p.premiseWorth = nil
 	p.idsBySymbol = make(map[*ast.Symbol]typefacts.SymbolID)
 	p.symbolsByID = make(map[typefacts.SymbolID]*ast.Symbol)
 	p.exportedIdentities = nil
@@ -364,10 +289,6 @@ func (p *project) ReleaseAnalysisState() {
 	p.currentSourceFiles = nil
 	p.runtimePaths = nil
 	p.assignedSymbols = nil
-	p.libraryStability = nil
-	p.freshConsts = nil
-	p.primitiveBindings = nil
-	p.calleeInvocations = nil
 	p.resolvedDeclarations = nil
 	p.resolvedParameters = nil
 	p.callDiagnostics = nil
@@ -638,17 +559,11 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 	p.checker = typeChecker
 	p.checkerPool = program.GetCheckerPool().(*singleCheckerPool)
 	p.release = release
-	p.premiseCensuses = nil
-	p.premiseWorth = nil
 	p.fs = candidateFS
 	p.versions = candidateVersions
 	p.generation++
 	p.runtimePaths = nil
 	p.assignedSymbols = nil
-	p.libraryStability = nil
-	p.freshConsts = nil
-	p.primitiveBindings = nil
-	p.calleeInvocations = nil
 	if incremental && incrementalPath != "" && currentExportsKnown {
 		if p.exportedIdentities == nil {
 			p.exportedIdentities = make(map[*ast.Symbol]preservedExportIdentity)
@@ -1928,31 +1843,7 @@ func (p *project) canonicalSymbol(symbol *ast.Symbol) *ast.Symbol {
 // asking the accepted checker about it would answer about a node it never
 // checked; every symbol outside a twin census is the accepted program's.
 func (p *project) formChecker() *checker.Checker {
-	if p.formTwin != nil {
-		return p.formTwin.checker
-	}
 	return p.checker
-}
-
-// formProgram is formChecker's sibling: the program the form census is being
-// classified over, so a question about a file's role — whether it is the
-// default library — is asked of the same program that resolved the symbol.
-func (p *project) formProgram() *compiler.Program {
-	if p.formTwin != nil {
-		return p.formTwin.program
-	}
-	return p.program
-}
-
-// formIsRuntimeSourceFile is isCurrentSourceFile's reading for the form
-// census: the twin's own source file object is the accepted program's file at
-// that path re-parsed with one comment added, so a declaration inside it is
-// the same runtime bytes the accepted program carries.
-func (p *project) formIsRuntimeSourceFile(sourceFile *ast.SourceFile) bool {
-	if p.formTwin != nil && sourceFile == p.formTwin.file {
-		return true
-	}
-	return p.isCurrentSourceFile(sourceFile)
 }
 
 func declarationKind(node *ast.Node) string {
