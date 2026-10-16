@@ -39,6 +39,7 @@ pub(crate) fn collect_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraf
         .cloned()
         .collect::<HashSet<_>>();
     let setter_symbols = ctx.setters.keys().cloned().collect::<HashSet<_>>();
+    let source_call_targets = &draft.source_call_targets;
     draft.leaf_operations.extend(
         parallel_file_results(&ctx.facts.files, |file| {
             leaf_owner_operations_for_file(
@@ -47,6 +48,7 @@ pub(crate) fn collect_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraf
                 &safe_call_symbols,
                 &setter_symbols,
                 ctx.semantic_lookup,
+                source_call_targets,
             )
         })
         .into_iter()
@@ -60,6 +62,10 @@ pub(super) fn leaf_owner_operations_for_file(
     safe_call_symbols: &HashSet<SymbolId>,
     setter_symbols: &HashSet<SymbolId>,
     lookup: &SemanticLookup<'_>,
+    source_call_targets: &HashMap<
+        typefacts::Location,
+        crate::interproc::accessor_provenance::Callable,
+    >,
 ) -> Vec<LeafOwnerOperation> {
     let Some(file) = lookup.file_by_path(file.path.as_str()) else {
         return Vec::new();
@@ -73,6 +79,7 @@ pub(super) fn leaf_owner_operations_for_file(
         safe_call_symbols,
         setter_symbols,
         completions: &completions,
+        source_call_targets,
     };
     let mut operations = Vec::new();
     for owner_call in &file.ast.calls {
@@ -489,13 +496,14 @@ fn forbidden_operation_kind(
 ///
 /// This is the dynamic-extent half of the leaf-owner rules: `onCleanup` or
 /// `flush` in a helper called synchronously from a leaf callback throws at
-/// runtime exactly as the inline spelling does. Only the exact TypeScript
-/// entity join resolves a callee (see `SemanticLookup::function_for_symbol`);
-/// an unresolved, ambiguous, or package callee contributes nothing here and
-/// stays owned by the package-contract obligation surface.
+/// runtime exactly as the inline spelling does. A callee comes from an exact
+/// entity join or the shared source callable transport. An unresolved,
+/// ambiguous, or unavailable package callee stays explicitly uncertifiable.
 /// The project-wide lookups both leaf-scope walkers thread through every hop.
 #[derive(Clone, Copy)]
 struct LeafScopeResolution<'a, 'lookup> {
+    source_call_targets:
+        &'a HashMap<typefacts::Location, crate::interproc::accessor_provenance::Callable>,
     lookup: &'a SemanticLookup<'lookup>,
     symbol_names: &'a HashMap<SymbolId, SymbolId>,
     /// Calls that cannot open a leaf scope of their own: accessors, setters,
@@ -694,6 +702,52 @@ fn helper_forbidden_operations(
     } = resolution;
     if depth == 0 {
         return false;
+    }
+    // This map is the source analyzer's exact, stability-checked transport
+    // result, including the shared literal-receiver escape census. Reuse
+    // identity, never a signature's possible target or a read-only summary.
+    match resolution
+        .source_call_targets
+        .get(&location(call_file.path.shared(), call.callee))
+    {
+        Some(crate::interproc::accessor_provenance::Callable::Function { path, span }) => {
+            let Some((helper_file, helper)) = lookup.file_by_path(path).and_then(|file| {
+                file.ast
+                    .functions
+                    .iter()
+                    .find(|function| function.span == *span)
+                    .map(|function| (file, function))
+            }) else {
+                return false;
+            };
+            let values = crate::argument_values::parameter_values(
+                call_file,
+                call,
+                helper_file,
+                helper,
+                lookup,
+            );
+            let entry = match values.as_deref() {
+                Some(values) if !values.is_empty() => Entry::CalledWith { guaranteed, values },
+                _ => Entry::Called { guaranteed },
+            };
+            return function_forbidden_operations(
+                resolution,
+                helper_file,
+                helper,
+                kinds,
+                visited,
+                depth,
+                None,
+                entry,
+            );
+        }
+        Some(crate::interproc::accessor_provenance::Callable::Accessor(symbol))
+            if safe_call_symbols.contains(symbol) =>
+        {
+            return true;
+        }
+        _ => {}
     }
     if let Some((method_file, method, method_this)) =
         exact_instance_method(lookup, call_file, call, &exact_this)

@@ -1,5 +1,83 @@
 # Precision backlog
 
+## 2026-10-16 — Share exact source callable identity with leaf-scope analysis
+
+The leaf checker previously resolved direct functions, exact class instances
+and namespace exports, but did not consume the immutable callable transport
+already established by source analysis. `InterproceduralResult` now retains
+that exact target map and carries it through `ProgramDraft` to the leaf stage.
+The leaf stage walks the selected implementation with its existing completion,
+argument, default, synchronous-prefix and depth checks. A clean reactive-read
+summary is never treated as evidence of leaf safety. Accessor aliases must
+still name an already-proven safe accessor. Array-member aggregate targets
+retain their existing standard-library path.
+
+`ObjectPropertyFact.method` now distinguishes ordinary shorthand methods from
+getters/setters without changing the existing, stricter `data` fact. Callable
+transport admits receiver-inert methods using the shared receiver veto. When
+an object contains a method, all callable fields, including aliases and
+function expressions, must close their receiver channels; a sibling that
+leaks `this` refuses the whole holder. Unknown values, getters, setters,
+computed properties, prototypes, mutation and escape still withhold identity.
+An unused async sibling can close its receiver channel without granting
+ordinary transport of its async invocation.
+
+The existing exact disjoint-allocation proof for reflective writes is also
+consulted before a wildcard veto rejects a project-owned member. Every target
+must be proven distinct; unknown targets and named writes retain their veto.
+No new host or package behavior is inferred.
+
+An expanded mutation regression exposed an unsound old assumption: a missing
+initializer on `declare const target: object` was treated as `undefined` and
+therefore as disjoint from every object. A positive normalized `runtime_let`
+fact now distinguishes non-ambient runtime declarations, including in `.d.ts`
+and ambient namespaces. Only a proven runtime `let` can supply the old
+uninitialized-undefined case; uninitialized `var` and absent/older facts stay
+conservative. Fresh-target reflective writes remain admitted, opaque targets
+remain vetoes, and the retained test checks both directions. Direct eval and
+resolved standard-library code constructors withhold the new method receiver
+proofs. The new methods also require module-scoped source.
+The mutation graph's cycle key now includes the source path as well as the
+declaration span; coincident offsets in another file cannot skip an unknown
+input. Uninitialized namespace-lowered bindings also remain conservative.
+Returned callable identity is not constructability: constructor uses retain
+an explicit obligation, and a type assertion cannot make a returned method's
+body a proven leaf operation. A published-type-valid constructor assertion
+is pinned as a negative case.
+
+`leaf-source-call-targets` pins cross-file clean arrows/methods, proven cleanup
+registration and nested primitive creation, conditional/default execution,
+receiver use, mutation, escape, a leaking sibling and an unused async sibling.
+It also reproduces the newly exposed `cluster.selected()` read in an effect's
+apply callback. All sources pass `tsc --noEmit` against published Solid RC.13
+typings. A retained-session test changes only the factory method body to add
+cleanup, then reverses it, and makes a same-length receiver-sensitive edit:
+the caller's leaf proof must flip and retained/cold programs must agree while
+Type Facts source reuse remains positive.
+
+The fresh default-mode release sweep preserves every previous violation and
+adds one SC1001 violation: `kui`'s `App.tsx:836:46` reads
+`cluster.selected()` in an effect apply callback, whose execution is untracked.
+Nine leaf-scope uncertainties are discharged across `app-game`, `beacon-web`,
+`openbot` and `viviana-ui-web`. Broader callable visibility also exposes ten
+previously unreported reactive reads whose callback invocation context remains
+unknown, mainly through `clusterForFrame`, `session.identity` and
+`session.permits` in `kui`, plus `interrupt` in `every-deck-of-cards`.
+One existing `.getBoundingClientRect` uncertainty merely gains its qualified
+helper name. Comparing full finding multisets, including messages, gives ten
+removed and eleven added uncertifiable rows (one rename in each), with no
+project errors: **3,424 → 3,425 uncertifiable; 537 → 538 violations**.
+This improves coverage and proves nine formerly unknown calls; it does not
+achieve a net reduction in uncertainty. Source callback invocation remains the
+next missing proof for the newly visible reads. Receiver-sensitive methods,
+opaque mutation targets, escaped holders, parameter defaults and unavailable
+package or host behavior remain fail-closed.
+
+Validation: 276 IR unit tests, armed workspace/process tests, published RC.13
+TypeScript checks, coverage of 297 fixture projects, ownership and oracle
+gates, WASM parity and performance certification passed. Full `make verify`
+completed in 190.42 s; only the two new fixture snapshots were generated.
+
 ## 2026-10-16 — Structural demands recover formatted primitive chains
 
 The parameter-rooted member demand planner inspected the receiver's source

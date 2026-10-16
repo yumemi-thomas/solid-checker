@@ -406,3 +406,7 @@ docs/package-contract-v2/phase21/*measurement.json
 !fixtures/reactive-ir/tuple-iteration-veto/node_modules/**
 !fixtures/reactive-ir/tuple-contract-iteration-veto/node_modules/
 !fixtures/reactive-ir/tuple-contract-iteration-veto/node_modules/**
+!fixtures/reactive-ir/leaf-source-call-targets/node_modules/
+!fixtures/reactive-ir/leaf-source-call-targets/node_modules/**
+!fixtures/reactive-ir/leaf-source-call-targets-negative/node_modules/
+!fixtures/reactive-ir/leaf-source-call-targets-negative/node_modules/**

@@ -64,6 +64,7 @@ pub(super) struct Resolver<'a, 'facts> {
     blocked_contexts: HashSet<Location>,
     unkeyed_provider: bool,
     member_stability: MemberStability,
+    receiver_channels_opaque: bool,
 }
 
 /// ADR 0273: absence of a visible veto is an assumption, not a closed census.
@@ -1453,6 +1454,24 @@ impl Resolver<'_, '_> {
             blocked_contexts: HashSet::new(),
             unkeyed_provider: false,
             member_stability: MemberStability::index(facts, lookup),
+            receiver_channels_opaque: facts.files.iter().any(|file| {
+                file.ast
+                    .module_hazards
+                    .iter()
+                    .any(|hazard| hazard.kind == ast::ModuleHazardKind::Eval)
+                    || file.ast.calls.iter().any(|call| {
+                        lookup
+                            .resolved_callee_call(file, call.callee)
+                            .and_then(|resolved| resolved.declaration.as_ref())
+                            .is_some_and(|declaration| {
+                                declaration.standard_library
+                                    && (declaration
+                                        .qualified_name
+                                        .starts_with("FunctionConstructor")
+                                        || declaration.qualified_name.as_ref() == "eval")
+                            })
+                    })
+            }),
         };
         for file in &facts.files {
             for binding in &file.ast.bindings {
@@ -2164,6 +2183,14 @@ impl Resolver<'_, '_> {
                 }
                 let mut transported = false;
                 let value = self.value(call_file, call.callee, 24, &mut transported);
+                // Callable identity is not constructability. In particular,
+                // a type assertion cannot turn a returned method/arrow into
+                // a constructor whose body runs. Keep this transport surface
+                // explicit rather than projecting its ordinary-call summary.
+                if call.construct && transported {
+                    unavailable.insert(location(call_file.path.shared(), call.callee));
+                    continue;
+                }
                 if transported {
                     match value {
                         Some(Value::Callable(Callable::Function { path, span }))
@@ -2589,7 +2616,70 @@ impl Resolver<'_, '_> {
             }
             return Some(value);
         }
-        if closed_properties(file, span).is_some() {
+        if let Some(properties) = closed_properties(file, span) {
+            // Admitting a method must not let another field leak the holder
+            // through its receiver. Close every callable channel, including
+            // function-valued aliases; unknown values withhold transport.
+            if properties.iter().any(|property| property.method)
+                && (!module_scoped_source(file)
+                    || self.receiver_channels_opaque
+                    || !properties.iter().all(|property| {
+                        if property.value_kind == ast::RuntimeValueKind::Primitive {
+                            return true;
+                        }
+                        let value = file.ast.peel_ts_sugar_span(property.value);
+                        if let Some(function) = file
+                            .ast
+                            .functions
+                            .iter()
+                            .find(|function| function.span == value)
+                        {
+                            // Receiver closure is independent of when an async
+                            // body runs. Its invocation remains outside ordinary
+                            // callable transport; an unused sibling need not veto
+                            // this object's other exact methods.
+                            return function.kind == ast::FunctionKind::Arrow
+                                || crate::object_members::receiver_inert(file, function);
+                        }
+                        match self.value(
+                            file,
+                            property.shorthand_binding.unwrap_or(property.value),
+                            depth - 1,
+                            &mut false,
+                        ) {
+                            Some(Value::Callable(Callable::Function { path, span })) => self
+                                .lookup
+                                .file_by_path(&path)
+                                .and_then(|owner| {
+                                    owner
+                                        .ast
+                                        .functions
+                                        .iter()
+                                        .find(|function| function.span == span)
+                                        .map(|function| (owner, function))
+                                })
+                                .is_some_and(|(owner, function)| {
+                                    module_scoped_source(owner)
+                                        && (function.kind == ast::FunctionKind::Arrow
+                                            || crate::object_members::receiver_inert(
+                                                owner, function,
+                                            ))
+                                }),
+                            Some(Value::Callable(Callable::Accessor(symbol))) => {
+                                self.accessors.contains_key(&symbol)
+                            }
+                            Some(
+                                Value::Object { .. }
+                                | Value::Array { .. }
+                                | Value::Tuple { .. }
+                                | Value::VetoedTuple,
+                            ) => true,
+                            _ => false,
+                        }
+                    }))
+            {
+                return None;
+            }
             return Some(Value::Object {
                 path: file.path.to_string(),
                 span,
@@ -2724,6 +2814,7 @@ impl Resolver<'_, '_> {
         if let Stability::Vetoed(_site) =
             self.member_stability
                 .state_of(self.facts, file.path.as_str(), name)
+            && !self.dependency_member_stable(file.path.as_str(), object, name)
         {
             return None;
         }
@@ -2748,7 +2839,14 @@ impl Resolver<'_, '_> {
                 .functions
                 .iter()
                 .find(|f| f.span == *span)?;
-            if selected.kind != ast::FunctionKind::Arrow {
+            if selected.kind != ast::FunctionKind::Arrow
+                && (!module_scoped_source(self.lookup.file_by_path(path)?)
+                    || self.receiver_channels_opaque
+                    || !crate::object_members::receiver_inert(
+                        self.lookup.file_by_path(path)?,
+                        selected,
+                    ))
+            {
                 return None;
             }
         }
@@ -3499,7 +3597,7 @@ fn mutation_target_is_distinct(
     object: &Location,
     lookup: &SemanticLookup<'_>,
     depth: usize,
-    visited: &mut HashSet<Span>,
+    visited: &mut HashSet<(String, Span)>,
 ) -> bool {
     mutation_target_projected(file, span, &[], object, lookup, depth, visited)
 }
@@ -3514,7 +3612,7 @@ fn mutation_target_projected(
     object: &Location,
     lookup: &SemanticLookup<'_>,
     depth: usize,
-    visited: &mut HashSet<Span>,
+    visited: &mut HashSet<(String, Span)>,
 ) -> bool {
     if depth == 0 {
         return false;
@@ -3753,14 +3851,15 @@ fn mutation_target_projected(
     {
         return false;
     }
-    if !visited.insert(declaration) {
+    let key = (file.path.to_string(), declaration);
+    if !visited.insert(key.clone()) {
         return true;
     }
     let refers = |target: Span| {
         let target = file.ast.peel_ts_sugar_span(target);
         target == declaration || file.ast.reference_declaration(target) == Some(declaration)
     };
-    let initial = binding.initializer.is_none_or(|initial| {
+    let initial = binding.initializer.map_or(binding.runtime_let, |initial| {
         mutation_target_projected(file, initial, &keys, object, lookup, depth - 1, visited)
     });
     let writes = file
@@ -3806,7 +3905,7 @@ fn mutation_target_projected(
                     visited,
                 )
         });
-    visited.remove(&declaration);
+    visited.remove(&key);
     initial && writes && assignments
 }
 
@@ -3948,7 +4047,7 @@ fn mutation_parameter_inputs(
     object: &Location,
     lookup: &SemanticLookup<'_>,
     depth: usize,
-    visited: &mut HashSet<Span>,
+    visited: &mut HashSet<(String, Span)>,
 ) -> bool {
     if depth == 0
         || function.rest_parameter
@@ -4341,6 +4440,23 @@ fn direct_data_properties(file: &FileFacts, span: Span) -> Vec<&ast::ObjectPrope
 
 /// Literal syntax supplies member identity only when its entire own property
 /// set is closed. Nested properties/callback objects are never siblings.
+fn module_scoped_source(file: &FileFacts) -> bool {
+    if [".d.ts", ".d.mts", ".d.cts"]
+        .iter()
+        .any(|suffix| file.path.as_str().ends_with(suffix))
+    {
+        return false;
+    }
+    !file.ast.imports.is_empty()
+        || file.ast.exports.iter().any(|export| {
+            !file
+                .ast
+                .module_blocks
+                .iter()
+                .any(|block| block.contains(export.span))
+        })
+}
+
 pub(crate) fn closed_properties(
     file: &FileFacts,
     span: Span,
@@ -4366,7 +4482,18 @@ pub(crate) fn closed_properties(
     let mut names = HashSet::new();
     for property in &properties {
         let name = file.source_text(property.key)?.trim_matches(['\'', '"']);
-        if property.computed || !property.data || name == "__proto__" || !names.insert(name) {
+        let inert_method = property.method
+            && file
+                .ast
+                .functions
+                .iter()
+                .find(|function| function.span == property.value)
+                .is_some_and(|function| crate::object_members::receiver_inert(file, function));
+        if property.computed
+            || !(property.data || inert_method)
+            || name == "__proto__"
+            || !names.insert(name)
+        {
             return None;
         }
     }
@@ -4583,6 +4710,10 @@ mod tests {
                 false,
             ),
             (
+                "const location = {}; declare const other: object; Object.assign(other, input);",
+                false,
+            ),
+            (
                 "const location = {}; Object.assign([{}, {}][\"01\"], input);",
                 false,
             ),
@@ -4715,15 +4846,21 @@ mod tests {
             let dialect = solid_dialect::Solid2;
             let lookup =
                 SemanticLookup::new(&facts, &ast_indexes, &entities, &names, &dialect, true);
+            // A declaration at the same byte offsets in a different file is
+            // not a back edge and must not short-circuit an unknown input.
+            let mut visited = file
+                .ast
+                .bindings
+                .iter()
+                .flat_map(|binding| {
+                    binding
+                        .names
+                        .iter()
+                        .map(|name| ("different-module.ts".to_owned(), name.span))
+                })
+                .collect();
             assert_eq!(
-                mutation_target_is_distinct(
-                    &file,
-                    target,
-                    &object,
-                    &lookup,
-                    32,
-                    &mut HashSet::new()
-                ),
+                mutation_target_is_distinct(&file, target, &object, &lookup, 32, &mut visited),
                 distinct,
                 "{source}"
             );
@@ -4742,7 +4879,9 @@ mod tests {
             ("const result = { [key]: rows };", false),
             ("const result = { rows, rows: other };", false),
             ("const result = { get rows() { return read(); } };", false),
-            ("const result = { rows() { return read(); } };", false),
+            ("const result = { rows() { return read(); } };", true),
+            ("const result = { rows() { return this; } };", false),
+            ("const result = { rows() { return arguments; } };", false),
             ("const result = { __proto__: other, rows };", false),
         ] {
             let file = file(source);
@@ -4781,6 +4920,10 @@ mod tests {
             ),
             (
                 "function make() { return [{ query() { return read(); } }]; }",
+                true,
+            ),
+            (
+                "function make() { return [{ query() { return this; } }]; }",
                 false,
             ),
             ("function make() { return []; }", false),

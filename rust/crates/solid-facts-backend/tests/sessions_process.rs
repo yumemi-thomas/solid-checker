@@ -9,6 +9,107 @@ use solid_facts_backend::{
 };
 
 #[test]
+fn leaf_source_target_edits_match_cold_analysis() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let fixture = root.join("fixtures/reactive-ir/leaf-source-call-targets");
+    let directory = temporary_directory("leaf-source-target-edit");
+    for name in ["tsconfig.json", "solid-js.d.ts", "service.ts", "App.tsx"] {
+        fs::copy(fixture.join(name), directory.join(name)).unwrap();
+    }
+    let stub = directory.join("node_modules/solid-js");
+    fs::create_dir_all(&stub).unwrap();
+    fs::copy(
+        fixture.join("node_modules/solid-js/package.json"),
+        stub.join("package.json"),
+    )
+    .unwrap();
+    let project = directory
+        .join("tsconfig.json")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let service = directory
+        .join("service.ts")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let caller = directory
+        .join("App.tsx")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let source = fs::read_to_string(&service).unwrap();
+    let caller_source = fs::read_to_string(&caller).unwrap();
+    let site = caller_source.find("service.cleanLeaf()").unwrap() as u64;
+    let typescript = TypeFactsSession::open(&typefacts, &project, &[]).unwrap();
+    let (mut warm, _) =
+        NativeIncrementalSession::open_pipelined(dialect::default_dialect(), project, typescript)
+            .unwrap();
+    let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
+    let first = warm.analyze().unwrap();
+    let (initial, _) = incremental
+        .build(&first, dialect::default_dialect().vocabulary)
+        .unwrap();
+    let operations = |program: &solid_reactive_ir::Program| {
+        program
+            .leaf_operations
+            .iter()
+            .filter(|operation| {
+                operation.location.path.as_ref() == caller && operation.location.start_byte == site
+            })
+            .map(|operation| (operation.uncertain, operation.possible))
+            .collect::<Vec<_>>()
+    };
+    assert!(operations(&initial).is_empty());
+    for (version, edited_source, expected) in [
+        (
+            1,
+            source.replacen(
+                "cleanLeaf() { void 0; }",
+                "cleanLeaf() { onCleanup(() => {}); }",
+                1,
+            ),
+            vec![(false, false)],
+        ),
+        (2, source.clone(), vec![]),
+        (
+            3,
+            source.replacen("void 0;", "this;  ", 1),
+            vec![(true, false)],
+        ),
+        (4, source, vec![]),
+    ] {
+        let edited = warm
+            .edit(
+                vec![SourceChange {
+                    path: service.clone(),
+                    version,
+                    source: Some(edited_source),
+                    compiler_options: CompilerOptions::default(),
+                }],
+                None,
+            )
+            .unwrap();
+        assert!(warm.last_build_timings().source_files_reused > 0);
+        let cold =
+            solid_reactive_ir::build(&edited, dialect::default_dialect().vocabulary).unwrap();
+        let (retained, _) = incremental
+            .build(&edited, dialect::default_dialect().vocabulary)
+            .unwrap();
+        assert_eq!(operations(&retained), expected);
+        assert_eq!(retained, cold, "version {version}");
+    }
+    drop(warm);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn routed_callback_consumer_edits_refresh_retained_dispatch_contexts() {
     let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
         return;

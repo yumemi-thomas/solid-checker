@@ -330,6 +330,7 @@ impl FunctionBoundary for SummaryNode {
 #[derive(Clone)]
 pub(super) struct InterproceduralResult {
     pub(super) reads: Arc<[ReactiveRead]>,
+    pub(super) source_call_targets: Arc<HashMap<Location, accessor_provenance::Callable>>,
     pub(super) dispatch_obligations: Arc<[StaticDefect]>,
     pub(super) factory_instances: usize,
     pub(super) timings: InterproceduralTimings,
@@ -8636,6 +8637,7 @@ fn interprocedural_reads(
     let results_and_exports = phase_started.elapsed();
     InterproceduralResult {
         reads: result.into(),
+        source_call_targets: Arc::new(transported_calls),
         dispatch_obligations: dispatch_obligations.into(),
         factory_instances,
         timings: InterproceduralTimings {

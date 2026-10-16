@@ -253,6 +253,7 @@ pub(crate) fn collect_project<'facts>(
         draft.push_defect(obligation);
     }
     timings.absorb_interprocedural(&interprocedural.timings);
+    draft.source_call_targets = interprocedural.source_call_targets.clone();
     draft.strict_read_obligations += interprocedural.reads.len();
     draft.reads.extend(interprocedural.reads.iter().cloned());
     draft.apply_compute_reads = crate::execution_role::apply_compute_reads(

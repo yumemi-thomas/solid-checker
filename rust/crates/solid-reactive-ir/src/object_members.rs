@@ -749,7 +749,7 @@ fn receiver_closed<'a>(
     true
 }
 
-fn receiver_inert(file: &FileFacts, function: &ast::FunctionFact) -> bool {
+pub(crate) fn receiver_inert(file: &FileFacts, function: &ast::FunctionFact) -> bool {
     !function.generator
         && file.source_text(function.span).is_some_and(|text| {
             !["this", "arguments", "eval", "super", "\\"]

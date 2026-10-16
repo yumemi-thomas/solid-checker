@@ -3486,8 +3486,8 @@ fn lazy_default_render_witness(
     // Review round 1: an own `then` makes the module object a thenable. The
     // async loader's return resolves through it, so the promise `lazy` reads
     // `default` from fulfills with whatever `then` delivers, or never.
-    // `closed_properties` already refuses a `then` getter, method or
-    // computed key; this refuses the data property, quoted or not.
+    // `closed_properties` already refuses getters and computed keys; this
+    // refuses a stored function too, including receiver-inert methods.
     if properties.iter().any(|property| {
         file.source_text(property.key)
             .is_some_and(|key| key.trim_matches(['\'', '"']) == "then")

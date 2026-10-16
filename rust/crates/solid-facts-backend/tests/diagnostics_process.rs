@@ -16,6 +16,75 @@ mod no_package_contracts_process;
 use support::{assert_rule_findings, diagnostic_fixture, findings_for_rule};
 
 #[test]
+fn leaf_scopes_follow_exact_source_objects_without_trusting_receivers() {
+    let Some(findings) = diagnostic_fixture("leaf-source-call-targets") else {
+        return;
+    };
+    let source = include_str!("../../../../fixtures/reactive-ir/leaf-source-call-targets/App.tsx");
+    for (method, expected) in [
+        ("cleanLeaf", None),
+        ("arrowLeaf", None),
+        ("forbiddenLeaf", Some(("SC3001", "violation"))),
+        ("nestedLeaf", Some(("SC3001", "violation"))),
+        ("conditionalLeaf", Some(("SC3001", "uncertifiable"))),
+        ("defaultLeaf", Some(("SC9012", "uncertifiable"))),
+    ] {
+        let start = source.find(&format!("service.{method}(")).unwrap();
+        let rows = findings
+            .iter()
+            .filter(|row| {
+                row["primaryLocation"]["path"]
+                    .as_str()
+                    .is_some_and(|path| path.ends_with("/App.tsx"))
+                    && row["primaryLocation"]["startByte"].as_u64() == Some(start as u64)
+            })
+            .collect::<Vec<_>>();
+        if let Some((code, kind)) = expected {
+            assert_eq!(rows.len(), 1, "{method}: {rows:#?}");
+            assert_eq!(rows[0]["id"], code, "{method}");
+            assert_eq!(rows[0]["kind"], kind, "{method}");
+        } else {
+            assert!(rows.is_empty(), "{method}: {rows:#?}");
+        }
+    }
+    let selected = source.rfind("cluster.selected()").unwrap() as u64;
+    assert!(findings.iter().any(|row| {
+        row["id"] == "SC1001"
+            && row["kind"] == "violation"
+            && row["primaryLocation"]["path"]
+                .as_str()
+                .is_some_and(|path| path.ends_with("/App.tsx"))
+            && row["primaryLocation"]["startByte"].as_u64() == Some(selected)
+    }));
+    let findings = diagnostic_fixture("leaf-source-call-targets-negative").unwrap();
+    assert!(
+        findings
+            .iter()
+            .all(|row| row["id"] != "SC3001" || row["kind"] != "violation"),
+        "a constructor assertion cannot make the method body execute: {findings:#?}"
+    );
+    let source =
+        include_str!("../../../../fixtures/reactive-ir/leaf-source-call-targets-negative/App.tsx");
+    for method in [
+        "receiverLeaf",
+        "mutableLeaf",
+        "escapedLeaf",
+        "untouchedLeaf",
+    ] {
+        let start = source.find(&format!("service.{method}(")).unwrap() as u64;
+        assert!(
+            findings.iter().any(|row| row["id"] == "SC9012"
+                && row["kind"] == "uncertifiable"
+                && row["primaryLocation"]["path"].as_str().is_some_and(
+                    |path| path.ends_with("/leaf-source-call-targets-negative/App.tsx")
+                )
+                && row["primaryLocation"]["startByte"].as_u64() == Some(start)),
+            "{method}: {findings:#?}"
+        );
+    }
+}
+
+#[test]
 fn formatted_primitive_receivers_demand_exact_builtin_declarations() {
     let Some(findings) = diagnostic_fixture("literal-argument-member-dispatch") else {
         return;

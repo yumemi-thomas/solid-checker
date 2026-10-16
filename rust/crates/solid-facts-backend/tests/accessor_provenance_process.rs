@@ -270,18 +270,21 @@ fn transported_member_helper_edits_match_cold_in_both_directions() {
     );
     let template_write =
         format!("{original}\nconst other = {{ ready: () => 0 }}; other[`ready`] = () => 0;\n");
+    let opaque_target_assign = format!(
+        "{original}\ndeclare const target: object; declare const patch: object; Object.assign(target, patch);\n"
+    );
     for (version, source, reads) in [
         (1, without_read, false),
         (2, original.clone(), true),
         (3, unrelated_write, false),
         (4, original.clone(), true),
-        (5, unknown_assign, false),
+        (5, unknown_assign, true),
         (6, original.clone(), true),
-        (7, spread_assign, false),
+        (7, spread_assign, true),
         (8, original.clone(), true),
         (9, first_slot_assign, false),
         (10, original.clone(), true),
-        (11, later_slot_assign, false),
+        (11, later_slot_assign, true),
         (12, original.clone(), true),
         (13, wrapped_write, false),
         (14, original.clone(), true),
@@ -290,7 +293,9 @@ fn transported_member_helper_edits_match_cold_in_both_directions() {
         (17, wrapped_descriptor, false),
         (18, original.clone(), true),
         (19, template_write, false),
-        (20, original, true),
+        (20, original.clone(), true),
+        (21, opaque_target_assign, false),
+        (22, original, true),
     ] {
         let facts = session
             .edit(
@@ -313,7 +318,7 @@ fn transported_member_helper_edits_match_cold_in_both_directions() {
         assert_eq!(
             consumer_read(&cold),
             reads,
-            "the helper summary or unrelated member-name write must change transport"
+            "the helper summary and exact mutation target must decide transport, edit {version}"
         );
         assert_eq!(
             warm, cold,

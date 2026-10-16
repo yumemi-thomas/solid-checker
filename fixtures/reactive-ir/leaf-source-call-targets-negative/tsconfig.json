@@ -1,0 +1,5 @@
+{
+  "extends": "../leaf-source-call-targets/tsconfig.json",
+  "files": ["App.tsx", "../leaf-source-call-targets/service.ts", "../leaf-source-call-targets/solid-js.d.ts"],
+  "include": []
+}

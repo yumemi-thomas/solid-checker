@@ -37,6 +37,8 @@ use typefacts::Location;
 /// of its signature rather than ambient mutation of a shared function body.
 #[derive(Default)]
 pub(crate) struct ProgramDraft {
+    pub(crate) source_call_targets:
+        Arc<HashMap<Location, crate::interproc::accessor_provenance::Callable>>,
     pub(crate) apply_compute_reads: HashSet<Location>,
     pub(crate) development_feedback: Vec<crate::development_feedback::DevelopmentFile>,
     pub(crate) reads: Vec<ReactiveRead>,

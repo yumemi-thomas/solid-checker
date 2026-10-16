@@ -765,6 +765,10 @@ pub struct BindingFact {
     /// mutable declarations are false.
     #[serde(default)]
     pub immutable: bool,
+    /// A non-ambient lexical runtime `let`, outside namespace lowering.
+    /// Missing ambient initializers never establish an undefined value.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub runtime_let: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub initializer: Option<Span>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1305,9 +1309,9 @@ pub struct ObjectPropertyFact {
     #[serde(default)]
     pub runtime_type_escape: bool,
     /// Whether this is a plain **data** property: `kind: Init` and not a
-    /// method. A getter, setter, or method makes `value` a function whose body
-    /// runs on access, so the property's runtime value is not the thing
-    /// written here.
+    /// method. A getter or setter can run its body on access; a shorthand
+    /// method stores a function with a receiver channel. Consumers that admit
+    /// methods must consult the separate `method` fact and close that channel.
     ///
     /// This is the fact that lets a consumer prove a literal's property set is
     /// *closed against accessors*, and so conclude something about every value
@@ -1319,6 +1323,10 @@ pub struct ObjectPropertyFact {
     /// can be judged.
     #[serde(default)]
     pub data: bool,
+    /// An ordinary shorthand method, excluding getters and setters. Its
+    /// function value is stored directly but has a receiver channel.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub method: bool,
     /// Declaration this shorthand property's value binding refers to, as
     /// resolved by the binder for that exact reference.
     ///
@@ -1838,6 +1846,7 @@ pub fn extract(path: impl Into<String>, source: &str) -> Result<AstFacts, AstFac
     let execution_semantics_valid = built.errors.is_empty();
     let semantic = built.semantic;
     let mut collector = Collector::new(source, semantic.scoping());
+    collector.ambient_variable = source_type.is_typescript_definition();
     collector.visit_program(&parsed.program);
     let mut facts = collector.finish(identity);
     if execution_semantics_valid {
@@ -1873,6 +1882,7 @@ struct Collector<'s, 'semantic> {
     module_hazards: Vec<ModuleHazardFact>,
     module_blocks: Vec<Span>,
     ambient_module_depth: usize,
+    ambient_variable: bool,
     identifiers: Vec<IdentifierFact>,
     reference_declarations: Vec<(Span, Span)>,
     awaits: Vec<Span>,
@@ -2028,6 +2038,7 @@ struct BindingMetadata {
     initializer_identifier: Option<NamedSpan>,
     initializer_value_kind: RuntimeValueKind,
     immutable: bool,
+    runtime_let: bool,
 }
 
 impl<'s, 'semantic> Collector<'s, 'semantic> {
@@ -2085,6 +2096,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             module_hazards: Vec::new(),
             module_blocks: Vec::new(),
             ambient_module_depth: 0,
+            ambient_variable: false,
             identifiers: Vec::new(),
             reference_declarations: Vec::new(),
             awaits: Vec::new(),
@@ -2365,6 +2377,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
                 _ => Vec::new(),
             },
             immutable: metadata.immutable,
+            runtime_let: metadata.runtime_let,
             initializer: metadata.initializer.map(span),
             call_initializer: metadata.call_initializer.map(span),
             initializer_function: metadata.initializer_function,
@@ -3093,6 +3106,13 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         walk::walk_new_expression(self, expression);
     }
 
+    fn visit_variable_declaration(&mut self, declaration: &oxc_ast::ast::VariableDeclaration<'a>) {
+        let previous = self.ambient_variable;
+        self.ambient_variable |= declaration.declare || self.ambient_module_depth != 0;
+        walk::walk_variable_declaration(self, declaration);
+        self.ambient_variable = previous;
+    }
+
     fn visit_variable_declarator(&mut self, declaration: &VariableDeclarator<'a>) {
         // The disposal is awaited where the block exits, which is after this
         // declarator; recording the declarator itself is the earlier, and so
@@ -3149,6 +3169,13 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                         .map(|expression| self.runtime_value_kind(expression))
                         .unwrap_or_default(),
                     immutable: declaration.kind == oxc_ast::ast::VariableDeclarationKind::Const,
+                    runtime_let: declaration.kind == oxc_ast::ast::VariableDeclarationKind::Let
+                        && !self.ambient_variable
+                        && self.ambient_module_depth == 0
+                        && !self
+                            .module_blocks
+                            .iter()
+                            .any(|block| block.contains(span(declaration.span))),
                 },
             ),
         );
@@ -4043,6 +4070,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             runtime_type_escape: contains_runtime_type_escape(&property.value),
             shorthand_binding: self.shorthand_binding(property),
             data: property.kind == PropertyKind::Init && !property.method,
+            method: property.kind == PropertyKind::Init && property.method,
         });
         walk::walk_object_property(self, property);
         self.method_names.pop();
@@ -5479,6 +5507,10 @@ export const short = async () => 2;
         assert!(shape.properties[0].entry_call.is_some());
         assert!(shape.properties[1].getter.is_none());
         assert!(shape.properties[2].getter.is_none());
+        assert!(!facts.object_properties[0].method);
+        assert!(!facts.object_properties[1].method);
+        assert!(facts.object_properties[2].method);
+        assert!(!facts.object_properties[2].data);
         for source in [
             "const o = { get x() { before(); return n(); } };",
             "const o = { get x() { const y = unknown; return n(); } };",
@@ -5516,6 +5548,30 @@ export const short = async () => 2;
                 "{source}"
             );
         }
+    }
+
+    #[test]
+    fn runtime_let_facts_do_not_turn_ambient_bindings_into_undefined() {
+        let source = "let local; declare let ambient: object; declare const opaque: object; var legacy; declare namespace External { let nested: object; } namespace Runtime { export let member: object; }";
+        let facts = extract("ambient.ts", source).unwrap();
+        for binding in &facts.bindings {
+            let name = binding.names[0].span;
+            assert_eq!(
+                binding.runtime_let,
+                &source[name.start as usize..name.end as usize] == "local"
+            );
+        }
+        let definition = extract(
+            "ambient.d.ts",
+            "let implicit: object; declare let explicit: object;",
+        )
+        .unwrap();
+        assert!(
+            definition
+                .bindings
+                .iter()
+                .all(|binding| !binding.runtime_let)
+        );
     }
 
     #[test]
