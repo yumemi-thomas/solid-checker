@@ -26,3 +26,36 @@ argument arrives (ADR 0190).
 
 The stub `solid-js.d.ts` declares only `createSignal`, whose tuple shape is
 the published one; no finding here depends on another signature.
+
+## Local dispatch caller contexts
+
+`TrackedDispatch.tsx` isolates the `pageSlice(items)` shape sampled in the
+application corpus. Its `readonly T[]` parameter supplies no proof that
+`.slice` has its native implementation. Instead, exact local caller contexts
+can make the untracked-read dispatch obligation unnecessary at this site.
+
+- `DirectTracked` is the existing direct JSX control.
+- `LocalTracked`, `ChainedTracked`, `ComponentProperty`, `WrappedCallee` and
+  the inner `ShadowedHelper` declaration are clean. The caller proof follows
+  exact immutable local arrows into tracked JSX or compiler-proven component
+  property getters, including transparent TypeScript call wrappers.
+- `MixedCalls`, `EscapedHelper`, `AsyncHelper`, `RecursiveHelper`,
+  `MutableHelper`, `StoredCaller`, `GetterDefaultCaller`, `JsxDefaultCaller`
+  and the outer `ShadowedHelper` declaration
+  keep SC9012 uncertifiable. One safe reference cannot discharge an unsafe or
+  unknown sibling reference.
+  Callback parameter defaults do not run when the surrounding JSX constructs
+  the callback, including inside a compiler-proven component-property getter.
+- `ClearedTracking` is an existing explicit-untrack control. The new proof
+  does not turn its callback into a tracked region or alter write/owner rules.
+- The armed direct-eval process twin inserts `eval("visible()")` into a private
+  copy and checks that the original obligation returns. No dynamic code is
+  inserted in the committed fixture, and no reference absence is trusted alone.
+- Generated 32- and 33-helper twins pin the recursion limit, including a shorter
+  caller proof cached before the longer one is checked. Cache reuse must retain
+  the full path depth and cannot turn an over-budget traversal into a proof.
+
+The added `untrack` declaration is copied from the published Solid RC.13
+typings. `TrackedDispatch.tsx` passes `tsc --noEmit` against the real published
+RC.13 packages without this fixture stub. The armed native tests assert exact
+call-argument spans and the uncertifiable finding kind.

@@ -1,6 +1,6 @@
 # value-flow-review
 
-Regression cases for the 2026-10-06 soundness reviews of ADRs 0209 to 0214 and of ADR 0215 itself (ADR 0215; `Leaf2.tsx` and `App2.tsx` hold the second round). Each one is a reproducer the review found to be certified clean, or reported, wrongly; each now stays an `SC9012` obligation, except `GeneratorMethod`, which is now clean. The program is closed (a private `package.json`), so the pass-through discharges (ADR 0213, 0214) apply.
+Regression cases for the 2026-10-06 soundness reviews of ADRs 0209 to 0214 and of ADR 0215 itself (ADR 0215; `Leaf2.tsx` and `App2.tsx` hold the second round). Each one is a reproducer the review found to be certified clean, or reported, wrongly; each stays an `SC9012` obligation except `GeneratorMethod` and `Destructured`, whose execution contexts are described below. The program is closed (a private `package.json`), so the pass-through discharges (ADR 0213, 0214) apply.
 
 | Case | File | Result | Why |
 | --- | --- | --- | --- |
@@ -13,7 +13,7 @@ Regression cases for the 2026-10-06 soundness reviews of ADRs 0209 to 0214 and o
 | `GetterArgument` | `Leaf.tsx` | `SC9012` | `Object.values` runs the literal's getter |
 | `Rejoined` | `App.tsx` | `SC9012` | `list.join` is assigned |
 | `OverwrittenPrevious` | `App.tsx` | `SC9012` | the updater writes its previous value |
-| `Destructured` | `App.tsx` | `SC9012` | `[list] = …` rebinds the parameter |
+| `Destructured` | `App.tsx` | none | `[list] = …` still prevents proving the member target, but the immutable local helper is called only from tracked JSX, so no untracked-read dispatch proof is needed there |
 | `LocalArray` | `App.tsx` | `SC9012` | a local `Array` shadows the global |
 | `ProtocolSeparator` | `App.tsx` | `SC9012` | `split` calls the separator's `Symbol.split` |
 | `MemoOptions` | `App.tsx` | `SC9012` | a memo with options |

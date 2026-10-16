@@ -1,5 +1,51 @@
 # Precision backlog
 
+## 2026-10-16 — Local member dispatch inherits exact caller contexts
+
+Followed the previously open `ai-memory-ui` `pageSlice` call at
+`src/components/data-grid.tsx:243`. Method identity remains unknown: a
+`readonly T[]` type does not prove the runtime `.slice` implementation.
+The call is inside an immutable local `visible` arrow, whose exact references
+are calls in `<Show when={...}>` and `<For each={...}>` expressions. Existing
+compiler facts state that these expressions become component-property getters.
+The missing fact was their use in the dispatch consumer, not a missing Type
+Facts field, compiler trace field, or package behavior model.
+
+`interproc::local_dispatch_exclusion_depth` closes the same-file
+reference census with AST declaration identities plus the Type Facts index.
+It follows only synchronous immutable local arrows, with a 32-helper bound,
+and inherits the existing direct-call dispatch exclusions for tracked JSX or
+compiler-proven component-property getters. It removes only parameter-member
+dispatch obligations at those sites. It selects no method implementation,
+installs no execution role, and grants no write or ownership permission.
+The getter exclusion defers reads to their consumer; it does not assert that
+arbitrary component props execute tracked.
+
+Extended `literal-argument-member-dispatch` with tracked, chained, property,
+transparent-wrapper and shadowing positives; mixed eager use, escape, async,
+recursion, mutable and stored-caller controls remain uncertifiable. An armed
+private-copy eval twin refuses the proof; generated 32/33-helper twins pin the
+depth bound with an already-cached shorter caller proof. Positive cache entries
+retain their full path depth so a warm cache cannot bypass the limit. New source
+passes `tsc --noEmit` against published Solid 2.0.0-rc.13 typings, without the
+fixture stub.
+Cross-file helpers, absent or conflicting reference/context evidence, and
+over-budget traversals remain open. No new host inference was introduced.
+Callback parameter defaults remain open even inside tracked JSX or a deferred
+component property: constructing the callback does not invoke its initializer.
+
+The focused RC.13 application check with explicit browser/development flags
+now has 65 uncertifiable finding rows instead of 67. The sampled `pageSlice`
+obligation and `audit.tsx:374`'s analogous `projectOptions` / `.includes`
+obligation disappear; no other finding is added or removed, and all 17
+violation sites are unchanged. The default-mode comparison is 99 to 97
+uncertifiable rows, again with the same 17 violation sites. This is one
+application's comparison, not a
+corpus-wide recall result. Coverage also removes the old `value-flow-review`
+`Destructured` obligation: parameter reassignment still prevents selecting the
+method, but its local helper's only caller is tracked JSX. No mutation or
+array-origin proof is weakened.
+
 ## 2026-10-16 — Query options callback: source selection already resolves the sampled gap
 
 Reproduced the saved `ai-memory-ui` finding at `src/components/shell.tsx:461`:

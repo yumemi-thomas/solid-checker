@@ -5195,6 +5195,152 @@ pub(super) struct InterproceduralResultReadContext<'a, 'b> {
     provenance: &'a accessor_provenance::Resolver<'a, 'b>,
 }
 
+/// A local helper can inherit the dispatch rule's existing caller exclusions.
+/// Tracked expressions need no untracked-read dispatch proof. A compiler-proven
+/// component-property getter runs at its consumer, where reads are projected,
+/// rather than in the JSX-building function. Neither answer selects a member
+/// implementation or installs an execution role.
+fn local_dispatch_exclusion_depth(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    allowed: &[Span],
+    lookup: &SemanticLookup<'_>,
+    following: &mut HashSet<Span>,
+    cache: &mut HashMap<Span, usize>,
+) -> Option<usize> {
+    use solid_facts::ast::{FunctionKind, IdentifierRole};
+
+    // Parameter initializers run when their function is invoked, not while
+    // its surrounding JSX expression or property getter builds that function.
+    if file
+        .ast
+        .functions
+        .iter()
+        .any(|function| function.span.contains(span) && !function.body.contains(span))
+    {
+        return None;
+    }
+    let role = semantic_execution_role(
+        file,
+        span,
+        allowed,
+        lookup.entities(),
+        lookup.symbol_names(),
+        lookup,
+    );
+    if role == ExecutionRole::TrackedJsx {
+        return Some(0);
+    }
+    if role == ExecutionRole::DeferredCallback
+        && file
+            .compiler
+            .semantic_model
+            .operations
+            .iter()
+            .any(|operation| {
+                use solid_facts::compiler::{CompilerExecutionDisposition, CompilerOperationKind};
+                operation.kind == CompilerOperationKind::ComponentProperty
+                    && operation.execution.disposition
+                        == CompilerExecutionDisposition::ComponentPropertyGetter
+                    && operation.span.contains(span)
+                    && !file
+                        .ast
+                        .functions_within(operation.span)
+                        .any(|function| function.span.contains(span))
+            })
+    {
+        return Some(0);
+    }
+    if !matches!(
+        role,
+        ExecutionRole::Unknown | ExecutionRole::UntrackedRendering
+    ) || file.ast.identifiers.iter().any(|id| {
+        // Direct eval can call a local binding without an identifier use.
+        // This spelling only refuses proof, including a shadowed eval.
+        id.role == IdentifierRole::Reference && file.source_text(id.span) == Some("eval")
+    }) {
+        return None;
+    }
+    let helper = containing_ast_function(&file.ast, span)?;
+    if helper.kind != FunctionKind::Arrow
+        || helper.r#async
+        || helper.generator
+        || !helper.body.contains(span)
+        || containing_ast_function(&file.ast, helper.span).is_none()
+        || lookup.function_component_status(file, helper) != ComponentStatus::No
+        || !lookup.function_value_is_current(file, helper)
+    {
+        return None;
+    }
+    if let Some(depth) = cache.get(&helper.span) {
+        return (following.len() + depth <= 32).then_some(*depth);
+    }
+    if following.len() >= 32 || !following.insert(helper.span) {
+        return None;
+    }
+    let proven = (|| {
+        let binding = function_binding_name(file, helper)?;
+        let symbol = lookup.entities().at(file.path.as_str(), binding.span)?;
+        if file.ast.jsx_elements.iter().any(|element| {
+            lookup.entities().at(file.path.as_str(), element.name.span) == Some(symbol)
+                || file.ast.reference_declaration(element.name.span) == Some(binding.span)
+        }) {
+            return None;
+        }
+        // The AST census includes undemanded references. Union the Type Facts
+        // index and refuse any reference that cannot be bound to this exact
+        // declaration in this file. A missing reference table proves nothing.
+        let mut references = file
+            .ast
+            .identifiers
+            .iter()
+            .filter(|id| {
+                id.role == IdentifierRole::Reference
+                    && file.ast.reference_declaration(id.span) == Some(binding.span)
+            })
+            .map(|id| id.span)
+            .collect::<HashSet<_>>();
+        for reference in lookup.symbol_references(symbol.as_str()) {
+            if reference.path.as_ref() != file.path.as_str() {
+                return None;
+            }
+            let reference = Span::new(
+                u32::try_from(reference.start_byte).ok()?,
+                u32::try_from(reference.end_byte).ok()?,
+            );
+            if reference != binding.span {
+                if file.ast.reference_declaration(reference) != Some(binding.span) {
+                    return None;
+                }
+                references.insert(reference);
+            }
+        }
+        if references.is_empty() {
+            return None;
+        }
+        let mut depth = 1;
+        for reference in references {
+            // A stored value, alias, JSX tag, .call/.bind use or argument is
+            // an escape. Only the exact identifier callee closes this census.
+            file.ast
+                .calls
+                .iter()
+                .find(|call| file.ast.peel_ts_sugar_span(call.callee) == reference)?;
+            let caller_depth =
+                local_dispatch_exclusion_depth(file, reference, allowed, lookup, following, cache)?;
+            depth = depth.max(caller_depth + 1);
+        }
+        Some(depth)
+    })();
+    following.remove(&helper.span);
+    if let Some(depth) = proven {
+        // Cache positive proofs with their full depth, not a boolean that
+        // could shorten a later traversal and make the bound order-dependent.
+        cache.insert(helper.span, depth);
+    }
+    proven
+}
+
 fn interprocedural_result_reads_for_file(
     file: &solid_facts::FileFacts,
     context: &InterproceduralResultReadContext<'_, '_>,
@@ -5229,6 +5375,7 @@ fn interprocedural_result_reads_for_file(
     let mut dependencies = HashSet::new();
     let mut seen = HashSet::new();
     let allowed = allowed_callback_spans(file, lookup);
+    let mut excluded_dispatch_helpers = HashMap::new();
     let result_indexes = context.result.indexes;
     // ADR 0283 instantiates only getters this file writes in a literal.
     let receives_getters = file.ast.object_get_shapes.iter().any(|shape| {
@@ -5739,7 +5886,27 @@ fn interprocedural_result_reads_for_file(
                 | ExecutionRole::DeferredCallback
                 | ExecutionRole::TrackedJsx
                 | ExecutionRole::DiscardedRendering
-        ) {
+        ) || (dispatch_obligations.len() > obligations_before
+            && dispatch_obligations[obligations_before..]
+                .iter()
+                .all(|defect| {
+                    matches!(
+                        defect.analysis_context.as_str(),
+                        "parameter-member-target-unresolved"
+                            | "parameter-member-targets-diverge"
+                            | "parameter-member-path-unresolved"
+                    )
+                })
+            && local_dispatch_exclusion_depth(
+                file,
+                call.callee,
+                &allowed,
+                lookup,
+                &mut HashSet::new(),
+                &mut excluded_dispatch_helpers,
+            )
+            .is_some())
+        {
             dispatch_obligations.truncate(obligations_before);
         }
         let object_callable = runs_in_unrendered_object_callable(file, call.callee, lookup);

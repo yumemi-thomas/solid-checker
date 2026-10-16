@@ -37,16 +37,6 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-flow-review/App.tsx",
-      "start": 808,
-      "end": 812,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/value-flow-review/App.tsx",
       "start": 1009,
       "end": 1024,
       "fixes": 0

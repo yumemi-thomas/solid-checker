@@ -16,6 +16,169 @@ mod no_package_contracts_process;
 use support::{assert_rule_findings, diagnostic_fixture, findings_for_rule};
 
 #[test]
+fn local_member_dispatch_requires_only_tracked_exact_callers() {
+    let Some(findings) = diagnostic_fixture("literal-argument-member-dispatch") else {
+        return;
+    };
+    let source = include_str!(
+        "../../../../fixtures/reactive-ir/literal-argument-member-dispatch/TrackedDispatch.tsx"
+    );
+    let rows = findings
+        .iter()
+        .filter(|row| {
+            row["primaryLocation"]["path"]
+                .as_str()
+                .is_some_and(|path| path.ends_with("/TrackedDispatch.tsx"))
+                && row["analysisContext"] == "parameter-member-target-unresolved"
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(rows.len(), 9, "{rows:#?}");
+    for (name, occurrence, unresolved) in [
+        ("DirectTracked", 0, false),
+        ("LocalTracked", 0, false),
+        ("ComponentProperty", 0, false),
+        ("ChainedTracked", 0, false),
+        ("MixedCalls", 0, true),
+        ("EscapedHelper", 0, true),
+        ("AsyncHelper", 0, true),
+        ("RecursiveHelper", 0, true),
+        ("ClearedTracking", 0, false),
+        ("ShadowedHelper", 0, true),
+        ("ShadowedHelper", 1, false),
+        ("WrappedCallee", 0, false),
+        ("MutableHelper", 0, true),
+        ("StoredCaller", 0, true),
+        ("GetterDefaultCaller", 0, true),
+        ("JsxDefaultCaller", 0, true),
+    ] {
+        let function = source.find(&format!("export function {name}(")).unwrap();
+        let call = source[function..]
+            .match_indices("pageSlice(props.items)")
+            .nth(occurrence)
+            .unwrap()
+            .0;
+        let start = function + call + "pageSlice(".len();
+        let row = rows
+            .iter()
+            .find(|row| row["primaryLocation"]["startByte"].as_u64() == Some(start as u64));
+        assert_eq!(row.is_some(), unresolved, "{name}/{occurrence}: {rows:#?}");
+        if let Some(row) = row {
+            assert_eq!(row["id"], "SC9012", "{name}: {row:#?}");
+            assert_eq!(row["kind"], "uncertifiable", "{name}: {row:#?}");
+        }
+    }
+}
+
+#[test]
+fn local_dispatch_eval_and_depth_limits_keep_obligations() {
+    use std::{fs, process::Command, time::SystemTime};
+    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let fixture = root.join("fixtures/reactive-ir/literal-argument-member-dispatch");
+    let unique = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let scratch = std::env::temp_dir().join(format!(
+        "solid-checker-tracked-dispatch-eval-{}-{unique}",
+        std::process::id()
+    ));
+    fs::create_dir_all(scratch.join("node_modules/solid-js")).unwrap();
+    fs::write(
+        scratch.join("node_modules/solid-js/package.json"),
+        r#"{"name":"solid-js","version":"2.0.0-rc.13"}"#,
+    )
+    .unwrap();
+    for name in ["tsconfig.json", "solid-js.d.ts"] {
+        fs::copy(fixture.join(name), scratch.join(name)).unwrap();
+    }
+    let source = fs::read_to_string(fixture.join("TrackedDispatch.tsx")).unwrap();
+    let source = source.replacen(
+        "  return <div>{visible().length}</div>;",
+        "  eval(\"visible()\");\n  return <div>{visible().length}</div>;",
+        1,
+    );
+    let function = source.find("export function LocalTracked(").unwrap();
+    let start =
+        function + source[function..].find("pageSlice(props.items)").unwrap() + "pageSlice(".len();
+    fs::write(scratch.join("TrackedDispatch.tsx"), source).unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+        .env("SOLID_TYPEFACTS_BIN", &typefacts)
+        .env("SOLID_CHECKER_DAEMON", "0")
+        .args(["--format", "json", "--project"])
+        .arg(scratch.join("tsconfig.json"))
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let snapshot: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let row = snapshot["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["primaryLocation"]["startByte"].as_u64() == Some(start as u64))
+        .expect("direct eval must keep the member dispatch uncertifiable");
+    assert_eq!(row["id"], "SC9012", "{row:#?}");
+    assert_eq!(row["kind"], "uncertifiable", "{row:#?}");
+
+    let mut bounded = String::from(
+        "function pageSlice(items: readonly number[]) { return items.slice(0, 2); }\n",
+    );
+    for depth in [32, 33] {
+        bounded.push_str(&format!(
+            "export function Depth{depth}(props: {{ items: readonly number[] }}) {{\n\
+             const h1 = () => {{ pageSlice(props.items); return h0(); }};\n\
+             const h0 = () => pageSlice(props.items);\n"
+        ));
+        for index in 2..depth {
+            bounded.push_str(&format!("const h{index} = () => h{}();\n", index - 1));
+        }
+        bounded.push_str(&format!(
+            "return <div>{{h{}().length}}</div>;\n}}\n",
+            depth - 1
+        ));
+    }
+    fs::write(scratch.join("TrackedDispatch.tsx"), &bounded).unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+        .env("SOLID_TYPEFACTS_BIN", &typefacts)
+        .env("SOLID_CHECKER_DAEMON", "0")
+        .args(["--format", "json", "--project"])
+        .arg(scratch.join("tsconfig.json"))
+        .output()
+        .unwrap();
+    fs::remove_dir_all(scratch).unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let snapshot: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    for depth in [32, 33] {
+        let function = bounded
+            .find(&format!("export function Depth{depth}("))
+            .unwrap();
+        let start = function
+            + bounded[function..]
+                .find("const h0 = () => pageSlice(")
+                .unwrap()
+            + "const h0 = () => pageSlice(".len();
+        let row = snapshot["findings"].as_array().unwrap().iter().find(|row| {
+            row["primaryLocation"]["startByte"].as_u64() == Some(start as u64)
+                && row["id"] == "SC9012"
+        });
+        assert_eq!(row.is_some(), depth == 33, "depth {depth}: {snapshot:#?}");
+        if let Some(row) = row {
+            assert_eq!(row["kind"], "uncertifiable", "{row:#?}");
+        }
+    }
+}
+
+#[test]
 fn typed_options_wrappers_preserve_source_callback_execution() {
     let Some(findings) = diagnostic_fixture("forwarded-tracked-compute") else {
         return;

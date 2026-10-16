@@ -33,6 +33,30 @@ reactivity analysis but cannot be established. Covered forms include:
 - a callback that runs whenever the call's **returned object is read**, which
   is rc.9's `omit(props, predicate)`. See below.
 
+### Local helpers and invocation context
+
+A synchronous local helper can inherit the same dispatch exclusions as a
+direct call. For example, a helper used only by tracked JSX does not need an
+untracked-read dispatch proof at its declaration:
+
+```tsx
+const visible = () => pageSlice(props.items);
+return <div>{visible().length}</div>;
+```
+
+The checker requires an immutable local arrow, an exact census of its references,
+and only direct calls whose contexts are accounted for. It also follows local
+helper chains into component-property expressions the compiler proves it lowers
+to getters: those execute when the consuming component reads the property,
+where the existing source analysis accounts for reads. This does not prove the
+runtime method is a built-in, make arbitrary props tracked, or establish any
+write or ownership permission.
+
+An additional eager call, an escaped or aliased helper, a mutable binding,
+an async helper, a recursive cycle, visible direct eval, or missing context
+evidence keeps the obligation. The local traversal is bounded to 32 helpers;
+cross-file helpers and deferred callback factories are not covered by this proof.
+
 ### `omit` predicates (Solid 2.0.0-rc.9)
 
 `@solidjs/signals@2.0.0-rc.9` accepts `omit(props, hidden)` with a single
