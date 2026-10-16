@@ -152,11 +152,43 @@ not fit large projects (a check typically reads a few percent of the tree,
   substitutions. Listings are ordered by name bytes on every engine.
 - **Namespace.** It is the mount's: nothing above the directory exists except
   the directories leading to it, each listing only the next one. Anything
-  else outside it is absent, with no host read.
+  else outside it is absent to both reactors, with no host read. The one
+  exception is the request's project spelling (next item), and it is never
+  visible to a reactor's own calls.
+- **Project spelling.** Native `--project` is canonicalized by the host's
+  `realpath(3)` before anything reads it; the checker does the same through
+  WASI, inside the namespace. A spelling that passes through a host place
+  outside it -- macOS `/tmp` or `/var`, or a link of the caller's to the
+  project -- fails there with `NotFound`. Only then the checker asks the
+  store once, through its `solid_owned_host` imports (`owned-projection.mjs`),
+  what the spelling names when those outside places are read from the host:
+  - outside places reached from the spelling itself, or from links that are
+    themselves outside, are read with `lstat` and `readlink` only, recorded and
+    revalidated like every other record; a link inside the directory that
+    leads outside is still the input fault below;
+  - a path that ends inside the directory is used only if every component
+    below the directory is an exact entry of its parent's listing, the
+    directory's own listing first. Those listings are recorded and revalidated
+    too. Native canonicalization needs search permission only, so a listing
+    that fails (`EACCES` on a search-only parent, for example) is refused as
+    `listing … to confirm its spelling failed`, where native answers;
+  - the projected path is native's under the further assumption that the host
+    applies no other name canonicalization: case-insensitive names, Unicode
+    normalization and firmlinks are not resolved. A listing without the exact
+    name is refused as `not spelled as its directory entry`. A case variant
+    *inside* the directory is answered as WASI canonicalizes it, which may
+    keep the request's spelling where native would not;
+  - a path that ends outside the directory is refused as `outside the
+    directory root`, a missing or dangling one as `ENOENT`, and `ENOTDIR`,
+    `EACCES`, `EPERM` and a link loop as those errors.
+
+  A mount has no host to ask: an outside spelling there stays `ENOENT`.
 - **Precondition.** The caller keeps the host namespace from `/` through the
-  directory, and everything a check reaches, unchanged while the checker
-  lives. The store issues ordinary path-string calls, so it is not a sandbox:
-  it cannot stop the operating system following a link someone swaps in.
+  directory, everything a check reaches, and the host names and link targets
+  outside the directory that a project spelling passes through, unchanged
+  while the checker lives. The store issues ordinary path-string calls, so it
+  is not a sandbox: it cannot stop the operating system following a link
+  someone swaps in.
 - **What is detected.** After every check, every record the checker ever
   captured is performed again and compared exactly: identity, link target,
   listing, and each recorded error. Any difference rejects that check and

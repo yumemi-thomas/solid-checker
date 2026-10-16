@@ -1,5 +1,37 @@
 # Precision backlog
 
+P5 S3c project spelling through host links (G3, 2026-10-16; CODE pending).
+In directory mode, a `projectId` that passes through a host place outside the
+directory -- macOS `/tmp` or `/var`, or a caller's own link to the project --
+failed with `ENOENT` (`os error 44`) where native answers: the store answers
+every outside place absent without a host read. `canonical_project` now asks
+the store, only after WASI canonicalization failed with `NotFound`, through
+three `solid_owned_host` imports (`solid-checker-wasm/src/projection.rs`,
+`packages/wasm/owned-projection.mjs`, `owned-snapshot.mjs` `projectAnswer`).
+
+- **Claimed:** a spelling resolved by symbolic-link substitution alone into the
+  directory, with every parent listing below the directory captured
+  successfully and containing each component's exact bytes, is answered as
+  native, under the further assumption that the host applies no other name
+  canonicalization. The success path asks nothing: a spelling WASI resolves,
+  or that fails other than `NotFound`, never reaches the import.
+- **Pinned by:** `packages/wasm/test/owned-projection*.test.mjs` (the encoder,
+  the import state machine, the import inventory, every walk outcome, injected
+  listing and lookup errors, a real search-only parent and a real
+  search-denied outside directory on each engine) and the parity gate's `g3`
+  cases on Node and Bun.
+- **Held, refused explicitly and still blockers to native equivalence:**
+  - a required parent listing that fails (a search-only parent: native
+    answers);
+  - a listing that faults (a name that is not UTF-8);
+  - case-insensitive, Unicode-normalized or firmlinked names, refused where
+    the listing lacks the exact name;
+  - a case variant inside the directory, which never reaches the projection;
+  - a path ending outside the directory (native analyzes it);
+  - the directory root's own capture, which uses the engine's JavaScript
+    `realpathSync` rather than `realpath(3)`;
+  - mount mode, which keeps `ENOENT`.
+
 P5 S3b directory mode and addresses above 2 GiB (2026-10-16; premise R2
 cleared, CODE pending). These lift the owned check's eager whole-tree mount
 budget, the G2 gap in the S3 baseline.

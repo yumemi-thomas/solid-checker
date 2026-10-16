@@ -45,6 +45,7 @@
 // An error is never answered as absence or as empty content.
 import * as nodeFs from "node:fs";
 import { posix } from "node:path";
+import { HOST_ERRNOS } from "./owned-projection.mjs";
 
 export class OwnedInputFault extends Error {
   constructor(message) {
@@ -532,11 +533,110 @@ export function createDirectoryStore({ input, root, rootIdentity, loopError, lin
     return fault;
   };
 
+  // The project projection (P5 S3c, G3): what the request's project
+  // spelling names when the host places outside this namespace that it
+  // passes through are read. Reached only through the checker's
+  // `solid_owned_host` imports (owned-projection.mjs), after WASI
+  // canonicalization failed with NotFound; never by a guest syscall.
+  //
+  // The walk is `resolve`'s, kernel-style, with one difference. A place
+  // outside the namespace that is reached from the spelling's own components,
+  // or from the target of a link that is itself outside, is read with the
+  // same L and R records as any other place, instead of being answered
+  // absent. One reached from the target of a link read inside the namespace
+  // is the input fault it is everywhere else. Ancestors stay virtual. No
+  // listing, open or file bytes outside the root are ever read, and guests
+  // never see these records: `resolve` answers an outside place before it
+  // looks any record up.
+  //
+  // A path that ends inside the root is projected only if every component
+  // below the root is an exact entry of its parent's listing, root first:
+  // a failed listing is `listing-unavailable` (its record kept and
+  // revalidated, never read as a missing name), a listing without the name
+  // is `name-variant`. The projection is native's under the further
+  // assumption that the host applies no other name canonicalization (case,
+  // Unicode normalization, firmlinks); this store cannot see one.
+  const projectAnswer = spelling => {
+    if (fault) return { tag: "faulted" };
+    try {
+      if (typeof spelling !== "string" || !spelling.startsWith("/") || spelling.includes("\0")) {
+        throw raise(String(spelling), "a project spelling is not an absolute path");
+      }
+      const pending = spelling.split("/").filter(name => name !== "").map(name => ({ name, from: "request" }));
+      if (spelling.length > 1 && spelling.endsWith("/")) pending.push({ name: ".", from: "request" });
+      let current = "/";
+      let substitutions = 0;
+      let outside = false;
+      const settle = answer => (outside ? answer : { tag: "not-outside" });
+      const hostError = code => settle({ tag: "host-error", errno: HOST_ERRNOS[code] });
+      while (pending.length > 0) {
+        const { name, from } = pending.shift();
+        const last = pending.length === 0;
+        if (name === "." || name === "..") {
+          if (name === "..") current = posix.dirname(current);
+          continue;
+        }
+        const next = current === "/" ? `/${name}` : `${current}/${name}`;
+        const where = place(next);
+        if (where === "outside") {
+          if (from === "inside-link") throw raise(next, `a link leads outside the directory root ${root}`);
+          outside = true;
+        }
+        const lstat = where === "outside" ? L(next) : lstatOf(next);
+        if (!lstat.ok) return hostError(lstat.code);
+        if (lstat.stats.isSymbolicLink()) {
+          if (++substitutions > links) return hostError("ELOOP");
+          const target = R(next);
+          if (!target.ok) throw raise(next, `is a link whose target cannot be read (${target.code})`);
+          if (target.text === "") return hostError("ENOENT");
+          const origin = where === "outside" ? "outside-link" : "inside-link";
+          // A link inside the namespace keeps the store's rule for every
+          // link it holds: its target may not end or continue outside.
+          if (origin === "inside-link") checkTarget(next, target.text);
+          const components = target.text.split("/").filter(component => component !== "")
+            .map(component => ({ name: component, from: origin }));
+          if (target.text.endsWith("/") && components.length > 0) components.push({ name: ".", from: origin });
+          if (target.text.startsWith("/")) current = "/";
+          pending.unshift(...components);
+          continue;
+        }
+        if (!last && !lstat.stats.isDirectory()) return hostError("ENOTDIR");
+        current = next;
+      }
+      if (!outside) return { tag: "not-outside" };
+      if (place(current) !== "inside") return { tag: "outside-root", path: current, root };
+      let parent = root;
+      for (const component of current === root ? [] : current.slice(root.length + 1).split("/")) {
+        const listing = D(parent);
+        if (!listing.ok) return { tag: "listing-unavailable", errno: HOST_ERRNOS[listing.code], directory: parent };
+        const entry = `${parent}/${component}`;
+        if (!listing.entries.some(([listed]) => listed === component)) return { tag: "name-variant", path: entry };
+        parent = entry;
+      }
+      return { tag: "projected", path: current };
+    } catch (error) {
+      if (error instanceof OwnedInputFault) return { tag: "faulted" };
+      raise(String(spelling), `project projection failed: ${describe(error)}`);
+      return { tag: "faulted" };
+    }
+  };
+
+  /** One record's outcome as a frozen copy, for the repository's tests only. */
+  const observe = (primitive, path) => {
+    const value = records.get(`${primitive}\0${path}`);
+    if (!value) return undefined;
+    return Object.freeze(value.ok ? { ok: true } : { ok: false, code: value.code });
+  };
+
   return Object.freeze({
     fs: Object.freeze(fs),
     /** The sticky fault, if any. */
     fault: () => fault,
     validate,
+    /** The canonical root this store answers for. */
+    root,
+    projectAnswer,
+    observe,
     /** Record counts and held bytes, for measurement only. */
     metrics: () => {
       const counts = { L: 0, R: 0, D: 0, F: 0 };

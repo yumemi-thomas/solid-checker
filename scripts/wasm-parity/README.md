@@ -128,6 +128,25 @@ witness comparisons above carry over. Two link controls are pinned:
 - a link leaving the root that no check reaches does not refuse;
 - a check that reaches it is rejected with the store's reason.
 
+**Project spelling (S3c).** One directory tree, `g3`, has the links and
+shapes beside its root, and every spelling also runs natively as itself:
+- equal to native, with the canonical spelling's producer traffic: an
+  outside link into the root, a two-link outside chain, `alias/../project`,
+  and the scratch through macOS's own `/var` or `/tmp` link (required on
+  macOS; the Node driver may read that one link);
+- exact refusals with no producer call, beside native's own error: a missing
+  path through the link, a dangling link, a file as a directory, a link loop;
+- recorded only, as held contrasts where native answers: a link to a project
+  outside the root, a case-variant link target, and a case variant inside
+  the root;
+- a mount given the outside spelling keeps `ENOENT`;
+- two permission trees, each denial checked real before any run and lifted
+  only after both engines' checks and validation: an outside directory
+  without search permission (refused `EACCES`; native fails too), and a
+  search-only parent inside the root (refused as a failed listing; native
+  answers). For each, the gate's observing worker reads back the store's own
+  record at the denied path.
+
 The pre-S2 entry (`require`, `import`, `checkSync`) runs from the same
 install under both engines. The packed `main`, `browser` and `types` fields,
 the absence of an `exports` map, and every pre-S2 packed file are checked.

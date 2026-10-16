@@ -9,7 +9,7 @@ import { parentPort, workerData } from "node:worker_threads";
 import { serve } from "solid-checker-wasm/owned-worker-core.mjs";
 import { FAULTS, cborOpenEnvelope } from "./cbor.mjs";
 
-const { mode, side, decoyProjectId, outside } = workerData;
+const { mode, side, decoyProjectId, outside, observe } = workerData;
 const report = message => side.postMessage(message);
 const copy = bytes => Buffer.from(bytes);
 
@@ -19,6 +19,8 @@ const programs = { opened: [], closed: [] };
 let real;
 let lifecycleIndex = 0;
 let current;
+// The directory store, for `observe` mode's read-only record view.
+let store;
 
 const output = () => copy(new Uint8Array(real.memory.buffer, real.output_pointer(), real.output_length()));
 const handleOf = bytes => bytes.readUInt32LE(0);
@@ -114,6 +116,9 @@ const faultNames = Object.keys(FAULTS);
 const adapters = {
   producer: producerAdapter,
   imports: importsAdapter,
+  store(directory) {
+    store = directory;
+  },
   beforeCheck(index) {
     lifecycleIndex = 0;
     if (mode === "error") throw new Error("injected error");
@@ -132,6 +137,10 @@ const adapters = {
     }
   },
   afterCheck() {
+    if (mode === "observe") {
+      const outcome = store?.observe(...observe);
+      report({ type: "observation", outcome: outcome ? { ...outcome } : null });
+    }
     if (current?.decoy) {
       const status = real.typefacts_close(current.decoy.handle);
       current.decoy.closeStatus = status;

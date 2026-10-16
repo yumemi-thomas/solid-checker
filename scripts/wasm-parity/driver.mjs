@@ -12,6 +12,7 @@ const owned = await import("solid-checker-wasm/owned.mjs");
 const { attach } = await import("solid-checker-wasm/owned-client.mjs");
 const { loadArtifacts } = await import("solid-checker-wasm/owned-artifacts.mjs");
 const { materializeMount, mountBuffers, validateMount } = await import("solid-checker-wasm/owned-mount.mjs");
+const { identityOf } = await import("solid-checker-wasm/owned-snapshot.mjs");
 
 const results = {
   engine: process.versions.bun ? `bun ${process.versions.bun}` : `node ${process.version}`,
@@ -290,6 +291,48 @@ for (const spelling of plan.spellings) record(`directory:${spelling.name}`, awai
 // with that module missing, each through a fresh public checker.
 for (const item of plan.dotdot) record(item.name, await once(item.root, item.request));
 for (const item of plan.dotdot) record(`directory:${item.name}`, await onceDirectory(item.root, item.request));
+
+// S3c: project spellings through host links outside the directory root, in
+// directory mode, and one in a mount, which has no host to ask.
+for (const item of plan.g3.cases) record(item.name, await onceDirectory(item.root, item.request));
+record("mount:g3-host-link", await once(plan.g3.mount.root, plan.g3.mount.request));
+// The permission shapes: the denial checked real on this engine, then one
+// check through the gate's observing worker, which reads back the store's
+// own record at the denied path (an internal, read-only view; never the
+// public API).
+for (const item of plan.g3.permission) {
+  const fs = await import("node:fs");
+  const deniedBy = (action, code) => {
+    try {
+      action();
+      return false;
+    } catch (error) {
+      return error?.code === code;
+    }
+  };
+  const precondition = {
+    denied: deniedBy(() => (item.denied.op === "lstat" ? fs.lstatSync(item.denied.path) : fs.readdirSync(item.denied.path)), "EACCES"),
+    exists: item.exists === undefined ? undefined : fs.lstatSync(item.exists).isFile(),
+  };
+  const channel = new MessageChannel();
+  const records = [];
+  channel.port1.on("message", message => records.push(message));
+  const worker = new Worker(new URL("./fault-worker.mjs", import.meta.url), {
+    workerData: { mode: "observe", side: channel.port2, observe: item.observe },
+    transferList: [channel.port2],
+  });
+  const exited = new Promise(resolve => worker.once("exit", resolve));
+  const { checker, producer } = await loadArtifacts();
+  const root = fs.realpathSync(item.root);
+  const directory = { input: item.root, root, identity: identityOf(fs.lstatSync(root, { bigint: true })) };
+  const api = await attach(worker, { checker, producer, directory, transfer: [checker, producer] });
+  const result = await settle(api.check(item.request));
+  await waitFor(() => records.some(message => message.type === "observation"), `${item.name} observation`);
+  await api.close();
+  await exited;
+  channel.port1.close();
+  record(item.name, { precondition, observation: records.find(message => message.type === "observation").outcome, ...result });
+}
 
 // S3a: the control guests' real WASI path calls, through the owned runtime
 // and, as the old-layer control, through the pinned upstream one.

@@ -16,7 +16,12 @@ export interface OwnedMount {
 
 /** The native ordinary check's options, as the owned check accepts them. */
 export interface OwnedCheckRequest {
-  /** Absolute; canonicalized against the mount exactly as native `--project` is. */
+  /**
+   * Absolute; canonicalized as native `--project` is, against the mount or the
+   * directory. In directory mode a spelling through host links outside the
+   * directory is projected into it only as README.md, "Project spelling",
+   * states; every other outcome is an explicit error.
+   */
   projectId: string
   dialect?: string
   generation?: number
