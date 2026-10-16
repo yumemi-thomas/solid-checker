@@ -211,6 +211,7 @@ pub use inferred_host::{
 };
 pub use package_requirements::{
     external_package_boundary, external_package_contract_requirements, requirement_index,
+    unsupplied_package_boundary,
 };
 pub use phase16_benchmark::phase16_benchmark_report;
 pub use proposal_generation::{

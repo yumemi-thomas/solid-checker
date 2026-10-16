@@ -1,5 +1,16 @@
 # Precision backlog
 
+P5 minimum for `checkSync` (2026-10-16). The host-supplied WASM entry carries
+no package files and no import attestation, so its package boundary was empty
+and a package import no accepted contract answered read as plain code. Every
+runtime import or re-export of a bare specifier (Solid core and `node:`
+built-ins excepted) now keeps an open requirement
+(`unsupplied_package_boundary`), so a package call that matters is reported
+`package-contract-incomplete`, never silently clean. Approximation: without
+resolution, a `paths` alias spelled like a bare specifier is treated as a
+package (uncertifiable, not a violation). Source analysis of packages in WASM
+is the owned check's. Pinned by `a_package_import_stays_an_open_requirement`.
+
 P5 S3d inputs above the directory (A2, 2026-10-16; CODE pending). Directory
 mode answered every path above the directory, and everything outside it,
 absent without a host read (virtual ancestors listing only the next

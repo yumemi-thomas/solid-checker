@@ -42,8 +42,12 @@ receipt binds the document's exact bytes; parsing and reserializing would
 silently change that wire identity.
 
 The field is optional only because a project may have no accepted external
-behavior. Omitting an import never falls back to package-name matching; that
-import remains uncertifiable. Hosts should use the same artifact-acquisition
+behavior. Omitting an import never falls back to package-name matching: this
+request carries no package files and no import attestation, so source analysis
+cannot run here, and every runtime import or re-export of a bare specifier
+(Solid core and `node:` built-ins excepted) that no accepted contract answers
+keeps an open requirement, reported as `package-contract-incomplete` where it
+matters. For package behaviour from source, use the [owned check](#owned-check). Hosts should use the same artifact-acquisition
 adapter as the Node CLI and must not manufacture closure digests from contract
 bytes.
 

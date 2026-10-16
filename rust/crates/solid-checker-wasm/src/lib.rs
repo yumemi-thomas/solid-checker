@@ -11,10 +11,9 @@ use serde::Deserialize;
 use solid_facts::TypeScriptTable;
 use solid_facts_backend::SemanticDemandGroup;
 use solid_facts_backend::{
-    AcceptedContractSource, AnalysisInputs, BackendError, PackageBoundary, ResolvedImport,
-    SemanticDemandOptions, SourceFile, TypeFactsProvider,
-    analyze_project_inputs_measured_with_enablement, build_project_native_measured_with_demands,
-    load_external_contract_index,
+    AcceptedContractSource, AnalysisInputs, BackendError, ResolvedImport, SemanticDemandOptions,
+    SourceFile, TypeFactsProvider, analyze_project_inputs_measured_with_enablement,
+    build_project_native_measured_with_demands, load_external_contract_index,
 };
 
 #[derive(Deserialize)]
@@ -228,6 +227,21 @@ pub fn check(request_json: &str) -> Result<String, Box<dyn std::error::Error>> {
         &mut typescript,
         SemanticDemandOptions::PREFERENCES,
     )?;
+    // P5 of the contract-removal plan: this request supplies no package files
+    // and no import attestation, so source analysis cannot run here. Every
+    // package import an accepted contract does not answer keeps an open
+    // requirement (SC9005) rather than reading as plain code.
+    let answered = request
+        .accepted_contracts
+        .iter()
+        .map(|contract| {
+            (
+                contract.import.importer.clone(),
+                contract.import.specifier.clone(),
+            )
+        })
+        .collect();
+    let boundary = solid_facts_backend::unsupplied_package_boundary(&facts, &answered);
     let encoded = request
         .accepted_contracts
         .into_iter()
@@ -246,12 +260,8 @@ pub fn check(request_json: &str) -> Result<String, Box<dyn std::error::Error>> {
                 receipt,
                 import,
             }
-        }))?;
-    // The shared analysis input. This request states no unanalyzable package,
-    // so the boundary is empty: an import nothing answers stays an ordinary
-    // uncertifiable path, exactly as before the boundary existed. A host
-    // protocol that states one is phase P5's (contract-removal plan).
-    let boundary = PackageBoundary::default();
+        }))?
+        .with_fallback(solid_facts_backend::requirement_index(&boundary));
     let (analysis, _) = analyze_project_inputs_measured_with_enablement(
         dialect,
         Path::new(&request.project_id),
@@ -301,6 +311,28 @@ mod tests {
         )
         .unwrap();
         assert_eq!(shared, serde_json::to_string(&legacy.snapshot).unwrap());
+    }
+
+    /// P5: with no package files and no attestation, a package import is an
+    /// open requirement, never plain code.
+    #[test]
+    fn a_package_import_stays_an_open_requirement() {
+        let source = "import { createSignal } from \"solid-js\";\nimport { watch } from \"reactive-package\";\nexport function App() {\n  const [count] = createSignal(0);\n  watch(() => count());\n  return null;\n}\n";
+        let request = serde_json::json!({
+            "projectId": "/p/tsconfig.json",
+            "generation": 1,
+            "sources": [{ "path": "/p/App.tsx", "source": source }],
+            "typeFacts": {
+                "schema": 3, "generation": 1, "projectId": "/p/tsconfig.json",
+                "sources": [{
+                    "path": "/p/App.tsx",
+                    "sha256": "sha256:a9c198f434cf2a82aec1fcc4bf3b8dfdd66b697b37d491cdd15f92dda85df77c"
+                }],
+                "entities": [], "symbols": [], "files": []
+            }
+        });
+        let snapshot = super::check(&request.to_string()).expect("checks");
+        assert!(snapshot.contains("SC9005"), "{snapshot}");
     }
 
     /// A request from a host written for the retired compiled-in tier still

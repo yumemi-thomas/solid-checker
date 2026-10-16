@@ -66,6 +66,59 @@ pub fn external_package_boundary(
     external_package_boundary_with(&DiskReader, project, facts, refusals)
 }
 
+/// The package boundary of a request that supplies no package files and no
+/// import attestation -- the WASM `checkSync` host protocol (P5 of the
+/// contract-removal plan). Nothing in such a request shows what a package
+/// does or which installation a specifier names, so every runtime import or
+/// re-export of a bare specifier, Solid core excepted, keeps an open
+/// requirement. `node:` built-ins are not packages. `answered` names the
+/// `(importer, specifier)` pairs something else in the request answers.
+#[must_use]
+pub fn unsupplied_package_boundary(
+    facts: &solid_facts::ProjectFacts,
+    answered: &std::collections::BTreeSet<(String, String)>,
+) -> PackageBoundary {
+    let mut boundary = PackageBoundary::default();
+    for file in &facts.files {
+        let imports = file
+            .ast
+            .imports
+            .iter()
+            .filter(|import| !import.type_only)
+            .map(|import| import.module.as_str());
+        let reexports = file
+            .ast
+            .exports
+            .iter()
+            .filter(|export| !export.type_only)
+            .filter_map(|export| export.module.as_deref());
+        for specifier in imports.chain(reexports) {
+            let Some(name) = crate::dependency_sources::package_name(specifier) else {
+                continue;
+            };
+            if name.contains(':') || solid_dialect::primitive_defining_package(&name) {
+                continue;
+            }
+            let pair = (file.path.as_str().to_owned(), specifier.to_owned());
+            if answered.contains(&pair) {
+                continue;
+            }
+            let key = ImportKey::new(&pair.0, pair.1);
+            boundary.record(
+                key.clone(),
+                Some(&name),
+                None,
+                BoundaryReason::new(
+                    UnanalyzableReason::ResolutionUnavailable,
+                    "the request supplies no package files or import resolution",
+                ),
+            );
+            boundary.require_legacy(key, UncertifiableImportReason::Unspecified);
+        }
+    }
+    boundary
+}
+
 /// The filesystem lookups the discovery below makes, and nothing else. A read
 /// error is an answer the discovery folds into "no manifest" at every site, so
 /// it returns the `io::Result` untouched and the boundary stays infallible.
