@@ -436,7 +436,7 @@ const branchDeclarationSource = `declare const described: { readonly value: numb
 // available witness for the catch-all row. It is also a strict-mode error, so
 // it cannot live in a checked-in fixture without manufacturing a TypeScript
 // diagnostic there; see
-// fixtures/package-contracts/uncensused-invoking-forms/README.md.
+// testdata/uncensused-invoking-forms.
 const withStatementSource = `export function withForm(bag: Record<string, unknown>): void {
 	with (bag) {
 		void 0;
@@ -1229,9 +1229,8 @@ func TestLocalDeclarationTranscriptRefusesADeclarationFile(t *testing.T) {
 
 // The contract fixture's own published bytes, classified.
 //
-// fixtures/package-contracts/uncensused-invoking-forms exists to run the
-// classifier over a real published ES module through ordinary contract
-// generation, but `uncensusedInvokingForms` is a *transcript* field and not a
+// testdata/uncensused-invoking-forms (formerly a contract fixture) holds a
+// real published ES module, but `uncensusedInvokingForms` is a *transcript* field and not a
 // contract field, so that fixture's generated `expected.json` and
 // `expected-proposal.json` carry no marker rows at all. Left there, the
 // fixture would pin only that the classifier does not crash — its README table
@@ -1244,10 +1243,7 @@ func TestLocalDeclarationTranscriptRefusesADeclarationFile(t *testing.T) {
 // because what is being pinned is the classification of these bytes; the
 // generator's own consumption of the fixture is pinned by the contract corpus.
 func TestUncensusedInvokingFormsClassifyThePublishedFixtureBytes(t *testing.T) {
-	fixture := filepath.Join(
-		"..", "..", "..", "..", "..",
-		"fixtures", "package-contracts", "uncensused-invoking-forms", "index.js",
-	)
+	fixture := filepath.Join("testdata", "uncensused-invoking-forms", "index.js")
 	published, err := os.ReadFile(fixture)
 	if err != nil {
 		t.Fatal(err)

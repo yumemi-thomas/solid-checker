@@ -1,8 +1,0 @@
-{
-  "name": "open-dynamic-import-attribution-package",
-  "version": "1.0.0",
-  "type": "module",
-  "exports": {
-    ".": "./index.js"
-  }
-}

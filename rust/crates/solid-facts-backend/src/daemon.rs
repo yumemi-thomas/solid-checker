@@ -116,8 +116,6 @@ fn enabled_from(setting: Option<&OsStr>, production_default: bool) -> bool {
 
 pub fn eligible(request: &Request) -> bool {
     request.sources.is_empty()
-        && request.emit_contract.is_empty()
-        && request.declaration_probe_plan.is_empty()
         // Runtime resolution runs project code per check and is not part of
         // the retained identity (ADR 0220).
         && !request.runtime_resolution
@@ -144,14 +142,7 @@ fn carried(request: &Request) -> bool {
         && Path::new(&request.project_id).is_absolute()
         // ADR 0295's Window realm is not part of the retained identity.
         && !request.window_realm
-        && request.contract_package_root.is_empty()
-        && request.runtime_module_resolutions.is_empty()
-        && request.proposal_dependency_catalog.is_empty()
-        && request.emit_contract_batch.is_empty()
-        && request.emit_module_inventory.is_empty()
         && !request.feedback_facts
-        // A check consuming no package contract is answered one-shot.
-        && !request.no_package_contracts
         && super::producer_arguments(&request.typefacts_args).is_empty()
 }
 

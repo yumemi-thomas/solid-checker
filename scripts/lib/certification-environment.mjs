@@ -19,11 +19,6 @@ export function certificationEnvironment(root, environment = process.env) {
     TYPEFACTS_BUILD_ID: buildId,
     SOLID_TYPEFACTS_CERTIFICATION_SHA256: digest(join(root, "bin/solid-typefacts")),
     SOLID_TYPEFACTS_SOURCE_MANIFEST_SHA256: `sha256:${typefactsDigest(root)}`,
-    SOLID_CHECKER_PROBE_HARNESS_SHA256: `sha256:${execFileSync(node, [
-      join(root, "scripts/probe-harness-source-identity.mjs"), "--build-id", buildId, "--write-stamp", "--digest"
-    ], { env: environment, encoding: "utf8" }).trim()}`,
-    SOLID_CHECKER_PROBE_NODE_SHA256: digest(node),
-    SOLID_CHECKER_EXPECT_PROBE_PINS: "1",
     TYPEFACTS_TEST_BIN: join(root, "bin/solid-typefacts"),
     SOLID_TYPEFACTS_BIN: join(root, "bin/solid-typefacts"),
     // The archives the negative rows quote, from `make audited-archives-provision`
@@ -36,13 +31,5 @@ export function certificationEnvironment(root, environment = process.env) {
       ])
     )
   };
-  delete result.SOLID_CHECKER_PROBE_BROWSER_SHA256;
-  delete result.SOLID_CHECKER_EXPECT_BROWSER_PIN;
-  if (environment.PROBE_BROWSER) {
-    result.SOLID_CHECKER_PROBE_BROWSER_SHA256 = `sha256:${execFileSync(node, [
-      join(root, "scripts/probe-browser-identity.mjs"), environment.PROBE_BROWSER
-    ], { env: environment, encoding: "utf8" }).trim()}`;
-    result.SOLID_CHECKER_EXPECT_BROWSER_PIN = "1";
-  }
   return result;
 }

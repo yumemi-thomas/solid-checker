@@ -1,6 +1,0 @@
-{
-  "name": "implementation-census-retained-argument",
-  "version": "1.0.0",
-  "type": "module",
-  "exports": { ".": { "types": "./index.d.ts", "import": "./index.js" } }
-}

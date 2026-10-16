@@ -4,17 +4,8 @@
 #[cfg(not(feature = "dialect-v2"))]
 compile_error!("solid-facts-backend requires at least one dialect feature");
 
-mod artifact_admission;
-mod authored_contracts;
-pub use artifact_admission::AdmissionRefusal;
-
-mod artifact_resolution;
-mod bounded_json;
 mod cache;
 pub mod check;
-
-mod contract_certification;
-pub use contract_certification::report_certification_timing;
 
 /// Whether published artifacts are flushed to stable storage before they are
 /// made visible. Atomic visibility never changes: every publication still
@@ -88,16 +79,11 @@ pub fn clone_or_copy_file(
     durable_sync(&output)?;
     Ok(false)
 }
-mod contract_document;
-mod contract_interface;
-mod contract_workflow;
 mod demand_plan;
 pub mod dependency_program;
 pub mod dependency_sources;
 mod diagnostics;
 pub mod dialect;
-mod evidence_sidecars;
-mod first_party_bundles;
 /// Authorizing a fixture-supplied contract, so a corpus can analyze a
 /// consumer against an accepted one. Never reached by an ordinary
 /// analysis: the trust it mints is returned to the caller, not written
@@ -108,98 +94,21 @@ mod host_inline;
 mod host_invocation;
 mod host_loadable;
 mod host_plugins;
-mod inferred_contract;
 mod inferred_host;
-mod installed_patches;
 mod package_requirements;
-mod phase16_benchmark;
-mod proposal_generation;
 mod release_scope;
-mod runtime_probe_wire;
-mod runtime_probes;
 pub mod runtime_resolution;
 pub mod source_redirects;
 mod wire;
 
 pub use cache::{CacheStats, FactsCache};
-pub use contract_certification::{
-    ArtifactSnapshot, ArtifactSnapshotError, AuthenticatedPolicy2Receipt,
-    BROWSER_EXECUTION_PROFILE, BuiltInReceiptEntry, CanonicalDependencyNodeIdentity,
-    CertificationPlan, CertificationPlanningError, CertificationPlanningTransaction,
-    CertificationRequest, CitedAcceptance, ConfiguredReceiptIssuer, ControlledExecution,
-    ControlledExecutionError, DependencyCompositionError, DependencyCompositionRequirement,
-    DependencyCompositionSchedule, DependencyEnvironmentEdge, DependencyEnvironmentEntry,
-    DependencyNodeIdentity, DependencyQueueNode, DependencyReceiptCompositionError,
-    EnvironmentImporter, EnvironmentPackage, FinalizedGraphNode, FinalizedPolicy2Contract,
-    FinalizedPolicy2Graph, IMPORT_FREE_EXECUTION_PROFILE, INERT_EXECUTION_PROFILE, LocalArtifact,
-    LockPinnedArchive, Policy2FinalizationError, Policy2ReceiptBindings, Policy2ReceiptError,
-    Policy2ReceiptProvenance, Policy2TrustConfiguration, Policy2TrustEntry, Policy2TrustStore,
-    ProbeGate, ProbeGateError, ProbeGateSchedule, ProbeHarnessConfiguration, ProbeHarnessError,
-    PublishedArchive, PublishedContractGraphPlan, PublishedGraphCertificationError,
-    PublishedGraphLockSelection, PublishedGraphNodeRequest, PublishedGraphPlanningError,
-    PublishedGraphSourceRequest, PublishedPolicy2Catalog, RECEIPT_WITNESS_FAMILIES,
-    RELATIVE_GRAPH_EXECUTION_PROFILE, ReceiptIssuerKind, ReceiptPublicationError, RecipeGatedPlan,
-    RecipeGatingError, SnapshotLimits, SnapshotVerifiedClosure, SnapshotVerifiedExports,
-    SnapshotVerifiedResolution, SourceResolutionEdge, TypeFactsCertificationError,
-    TypeFactsCertificationSchedule, TypeFactsProducerPin, UntrustedArtifactEnvelope,
-    VerifiedDependencyComposition, VerifiedProbeGateBatch, VerifiedTypeFactsEvidence,
-    WITHHELD_CLOSURE_NO_RECIPE, WithheldClosure, WitnessWireError, authenticate_policy2_receipt,
-    canonicalize_policy2_main, certify_published_contract_graph_case_set,
-    certify_value_only_case_set, decode_policy2_trust_configuration,
-    encode_policy2_trust_configuration, installed_package_snapshot_root,
-    issue_builtin_policy2_receipt, issue_policy2_receipt, plan_certification,
-    plan_published_contract_graph, policy2_artifact_acceptance_root,
-    policy2_artifact_acceptance_root_for_identity, policy2_dependency_environment_root,
-    policy2_main_closed_claims_root, policy2_main_semantic_digest, policy2_policy_digest,
-    policy2_resolved_import_root, policy2_trust_configuration_for_issuer, publish_policy2_catalog,
-};
-#[cfg(feature = "dialect-v2")]
-pub use contract_certification::{
-    CompilerCertificationConfiguration, CompilerCertificationError, CompilerCertificationSchedule,
-    LiveCompilerEvidenceBatch, VerifiedCompilerEvidence,
-    is_compiler_certification_session_argument, serve_compiler_certification_session,
-};
-pub use contract_document::SidecarDigests;
-pub use contract_interface::{
-    AcceptedContractSource, AcceptedDependencyEdge, AffectedClaimDomain, ArtifactResolutionFailure,
-    ArtifactResolver, ArtifactResolverChain, BundledEvidenceStore, CatalogMergeKey, ClosureEntry,
-    ClosureFileRole, ClosureHazard, ClosureHazardKind, ClosureInput, ClosureManifest,
-    ClosurePackageIdentity, ContractFailure, EvidenceKey, EvidenceStore, EvidenceStoreFailure,
-    HostResolutionAdapter, ImportRequest, LocalEvidenceStore, ReceiptStore, ResolutionAuthority,
-    ResolutionTrace, ResolutionTraceStep, ResolvedExportBinding, ResolvedExportTarget,
-    ResolvedFile, ResolvedImport, StandaloneResolutionAdapter, TypeFactsResolutionAdapter,
-    accepted_contract_catalog_members, catalog_merge_keys, discovered_catalog_paths,
-    load_accepted_contract, load_accepted_contract_index, load_authenticated_policy2_contract,
-    load_authenticated_policy2_embedded_contract, load_external_contract_index,
-    read_accepted_contract_catalog, read_accepted_contract_catalog_with_trust,
-    read_external_contract_catalog_with_trust, read_policy2_trust_configuration,
-    read_proposal_dependency_catalog_for_generation,
-};
-pub use contract_workflow::{
-    ContractWorkflowError, ProposalArtifacts, merge_plans, review as review_contract_document,
-};
 pub use diagnostics::{
-    ArtifactAdmissions, DiagnosticAnalysis, DiagnosticSession, DiagnosticTimings, Metrics,
-    NestedCatalogs, ProjectCatalogSelection, RequestedRuleEnablement, Snapshot, SnapshotEvidence,
-    SnapshotFinding, SnapshotFix, SnapshotTextEdit, SourceLocation, UnauthenticatedCatalog,
-    admission_input_paths, admission_refusal_details, admitted_project_artifacts, analysis_metrics,
-    analyze_project_accepted_measured_with_enablement,
-    analyze_project_inputs_measured_with_enablement, certified_catalog_self_admission,
-    discovered_contract_paths, discovered_rule_options_path, imported_package_roots,
-    importer_admission_inputs, nested_catalog_candidates, project_accepted_contracts,
-    select_project_catalogs, select_project_catalogs_in, semantic_demand_options_for_enablement,
+    DiagnosticAnalysis, DiagnosticSession, DiagnosticTimings, Metrics, RequestedRuleEnablement,
+    Snapshot, SnapshotEvidence, SnapshotFinding, SnapshotFix, SnapshotTextEdit, SourceLocation,
+    analysis_metrics, analyze_project_accepted_measured_with_enablement,
+    analyze_project_inputs_measured_with_enablement, discovered_contract_paths,
+    discovered_rule_options_path, imported_package_roots, semantic_demand_options_for_enablement,
     source_location, unsupported_runtime_snapshot,
-};
-pub use evidence_sidecars::{
-    EVIDENCE_SIDECAR_VERSION, EnvironmentIdentity, EvidenceCatalog, EvidenceSidecarDocuments,
-    EvidenceSidecarError, EvidenceSidecarReferences, FactDomainIdentity, FactTranscriptIdentity,
-    PROBE_EVIDENCE_FORMAT, PROOF_EVIDENCE_FORMAT, ProbeClaimMaterial, ProbeObservationMaterial,
-    ProbeOutcome, ProofClaimMaterial, ProofInputIdentity, SandboxIdentity, SandboxKind,
-    ToolIdentity, ValidatedEvidenceSidecars, emit_evidence_sidecars, validate_evidence_sidecars,
-};
-pub use first_party_bundles::{
-    BundleSelector, FirstPartyBundle, FirstPartyBundleError, bundled_first_party_contract_index,
-    solid2_rc3_bundles,
 };
 pub use inferred_host::{
     InferredAcceptedContracts, inferred_host_directory_digest, inferred_host_input_digest,
@@ -210,24 +119,6 @@ pub use package_requirements::{
     external_package_boundary, external_package_contract_requirements, requirement_index,
     unsupplied_package_boundary,
 };
-pub use phase16_benchmark::phase16_benchmark_report;
-pub use proposal_generation::{
-    ConstructedProposal, LocalProposalClaim, PlannedProposal, PositiveOperationCandidate,
-    ProbeCandidate, ProofObligation, ProofObligationKind, ProofPlannedProposal, ProposalAnalysis,
-    ProposalGenerationError, ProposalPlan, ProposalSubject, construct_proposal, emit_proposal,
-    plan_probes, plan_proofs,
-};
-pub use runtime_probe_wire::{
-    PlannedRuntimeProbes, RuntimeProbeWireError, evaluate_runtime_probe_runs, plan_runtime_probes,
-};
-pub use runtime_probes::{
-    ArtifactModeMatrix, BoundaryPhase, CleanupPhase, DrainStep, IsolationIdentity,
-    PROBE_TRANSCRIPT_FORMAT, PROBE_TRANSCRIPT_VERSION, ProbeAuthority, ProbeContradictionRecord,
-    ProbeEvent, ProbeEventClass, ProbeEventKind, ProbeEventMatch, ProbeMode, ProbePolicy,
-    ProbeRecipe, ProbeRun, ProbeRunOutcome, ProbeScenario, ProbeSessionRequest, ProbeTranscript,
-    ResponseState, RuntimeProbeError, RuntimeProbeEvaluation, RuntimeProbePlan, SettlementState,
-    StreamState, TransitionState, evaluate_runtime_probes,
-};
 /// The shared analysis input an in-memory adapter builds without the
 /// filesystem (phase P3 of the contract-removal plan).
 pub use solid_reactive_ir::{
@@ -236,256 +127,6 @@ pub use solid_reactive_ir::{
 pub use wire::{
     SemanticDemandGroup, SourceChange, SourceFile, TypeFactsExchangeTimings, TypeFactsProvider,
 };
-
-/// Validates one stable-v1 main document without exposing its wire model.
-/// Analyzer use still requires exact artifact selection and a receipt through
-/// [`load_accepted_contract`].
-pub fn validate_contract_document(bytes: &[u8]) -> Result<(), ContractFailure> {
-    contract_document::decode(bytes)?.normalize()?;
-    Ok(())
-}
-
-/// Which call domains each export of a stable-v1 document states as closed,
-/// as `(artifact case id, export, domain names)`.
-///
-/// **Diagnostic, and deliberately so.** Nothing decides anything from this;
-/// it exists so a certification run can report what its receipt actually
-/// binds beside what its planner derived. A closure present as a candidate
-/// and absent here, with no withheld record, is one lost outside every
-/// mechanism meant to account for it — see
-/// `docs/precision-backlog.md` § "A certified contract can be weaker than the
-/// proposal it came from".
-pub struct DocumentClosedDomains {
-    pub artifact_case: String,
-    pub export: String,
-    pub closed: Vec<&'static str>,
-}
-
-pub fn document_closed_call_domains(
-    bytes: &[u8],
-) -> Result<Vec<DocumentClosedDomains>, ContractFailure> {
-    let normalized = contract_document::decode(bytes)?.normalize()?;
-    let mut rows = Vec::new();
-    for case in normalized.artifact_cases() {
-        for (name, export) in &case.exports {
-            let closed = solid_reactive_ir::contract_semantics::ClaimDomain::ALL
-                .into_iter()
-                .filter(|domain| !export.claim_state(*domain).is_open())
-                .map(|domain| match domain {
-                    solid_reactive_ir::contract_semantics::ClaimDomain::Callbacks => "callbacks",
-                    solid_reactive_ir::contract_semantics::ClaimDomain::Reads => "reads",
-                    solid_reactive_ir::contract_semantics::ClaimDomain::Writes => "writes",
-                    solid_reactive_ir::contract_semantics::ClaimDomain::Creates => "creates",
-                    solid_reactive_ir::contract_semantics::ClaimDomain::Invalidates => {
-                        "invalidates"
-                    }
-                    solid_reactive_ir::contract_semantics::ClaimDomain::Throws => "throws",
-                    solid_reactive_ir::contract_semantics::ClaimDomain::Returns => "returns",
-                    solid_reactive_ir::contract_semantics::ClaimDomain::Cleanups => "cleanups",
-                    solid_reactive_ir::contract_semantics::ClaimDomain::Disposals => "disposals",
-                    solid_reactive_ir::contract_semantics::ClaimDomain::Computations => {
-                        "computations"
-                    }
-                })
-                .collect::<Vec<_>>();
-            if !closed.is_empty() {
-                rows.push(DocumentClosedDomains {
-                    artifact_case: case.id.clone(),
-                    export: name.clone(),
-                    closed,
-                });
-            }
-        }
-    }
-    Ok(rows)
-}
-
-/// Plans policy-2 certification from one stable-v1 open proposal without
-/// exposing its wire model. Artifact bytes and the independently acquired
-/// resolution are replayed by [`plan_certification`] before any demand IDs are
-/// returned to orchestration.
-pub fn plan_contract_document_certification(
-    document: &[u8],
-    import_request: ImportRequest,
-    resolved_import: ResolvedImport,
-    artifact: UntrustedArtifactEnvelope,
-) -> Result<CertificationPlan, CertificationPlanningError> {
-    CertificationPlanningTransaction::new().plan_contract_document(
-        document,
-        import_request,
-        resolved_import,
-        artifact,
-    )
-}
-
-/// Encodes one exact artifact's analyzer inference as an unaccepted
-/// stable-v1 proposal. Every proposed closure is opened before emission;
-/// only the proof checker can later finalize it and issue a receipt.
-pub fn encode_inferred_contract_proposal(
-    inferred: &solid_reactive_ir::PackageContract,
-    resolved: &ResolvedImport,
-    pretty: bool,
-) -> Result<Vec<u8>, ContractFailure> {
-    let proposal = inferred_contract::normalize_inferred_contract(inferred, resolved)?;
-    contract_document::encode(&proposal, &SidecarDigests::default(), pretty)
-}
-
-/// Emits the stable-v1 main proposal and its separately bound proof plan.
-/// Neither artifact carries analyzer acceptance authority.
-pub fn encode_inferred_contract_workflow(
-    inferred: &solid_reactive_ir::PackageContract,
-    resolved: &ResolvedImport,
-    pretty: bool,
-) -> Result<ProposalArtifacts, ContractWorkflowError> {
-    let normalized =
-        inferred_contract::normalize_inferred_contract_with_candidates(inferred, resolved)?;
-    contract_workflow::encode_proposal_artifacts(
-        &normalized.contract,
-        normalized.closure_candidates,
-        normalized.withheld,
-        normalized.declined,
-        normalized.inherited,
-        pretty,
-    )
-}
-
-/// Emits one exact entrypoint's analyzer inference while keeping the resolved
-/// package subpath explicit at the construction seam. A caller cannot reuse
-/// an export map inferred for `.` to answer `./web`, even when both subpaths
-/// happen to expose the same public names.
-pub fn encode_inferred_entrypoint_workflow(
-    package_name: &str,
-    package_version: &str,
-    requested_entrypoint: &str,
-    exports: std::collections::BTreeMap<String, solid_reactive_ir::ContractExport>,
-    resolved: &ResolvedImport,
-    pretty: bool,
-) -> Result<ProposalArtifacts, ContractWorkflowError> {
-    encode_inferred_entrypoint_workflow_with_external_targets(
-        package_name,
-        package_version,
-        requested_entrypoint,
-        exports,
-        resolved,
-        &std::collections::BTreeSet::new(),
-        pretty,
-    )
-}
-
-/// Proposal-only graph acquisition seam. External targets are untrusted
-/// candidates admitted solely so native dependency-graph planning can replay
-/// them against child archives; this function never accepts or certifies them.
-pub fn encode_inferred_entrypoint_workflow_with_external_targets(
-    package_name: &str,
-    package_version: &str,
-    requested_entrypoint: &str,
-    exports: std::collections::BTreeMap<String, solid_reactive_ir::ContractExport>,
-    resolved: &ResolvedImport,
-    external_targets: &std::collections::BTreeSet<(String, String)>,
-    pretty: bool,
-) -> Result<ProposalArtifacts, ContractWorkflowError> {
-    if requested_entrypoint != resolved.requested_entrypoint {
-        return Err(ContractFailure::IdentityMismatch {
-            reason: format!(
-                "inferred entrypoint {requested_entrypoint:?} does not match resolved entrypoint {:?}",
-                resolved.requested_entrypoint
-            ),
-        }
-        .into());
-    }
-    let inferred = solid_reactive_ir::PackageContract {
-        package: solid_reactive_ir::ContractPackage {
-            name: package_name.to_owned(),
-            version: package_version.to_owned(),
-            integrity: String::new(),
-        },
-        entrypoints: [(
-            requested_entrypoint.to_owned(),
-            solid_reactive_ir::ContractEntrypoint { exports },
-        )]
-        .into(),
-        source_path: String::new(),
-    };
-    inferred
-        .validate()
-        .map_err(|reason| ContractFailure::InvalidSemanticModel { reason })?;
-    let normalized =
-        inferred_contract::normalize_inferred_contract_with_candidates_and_external_targets(
-            &inferred,
-            resolved,
-            external_targets,
-        )?;
-    contract_workflow::encode_proposal_artifacts(
-        &normalized.contract,
-        normalized.closure_candidates,
-        normalized.withheld,
-        normalized.declined,
-        normalized.inherited,
-        pretty,
-    )
-}
-
-/// Proposes explicit inert initialization from a byte-bound parser premise.
-/// Certification independently replays the proof and package loading scope.
-pub fn encode_inert_entrypoint_workflow(
-    resolved: &ResolvedImport,
-    proof: &solid_facts::ast::InertJavaScriptModule,
-    pretty: bool,
-) -> Result<ProposalArtifacts, ContractWorkflowError> {
-    if resolved.runtime.digest.trim_start_matches("sha256:") != proof.source_sha256()
-        || !(resolved.runtime.path.ends_with(".mjs") || resolved.runtime.path.ends_with(".js"))
-        || resolved.transform.is_some()
-        || !resolved.exports.is_empty()
-    {
-        return Err(ContractFailure::IdentityMismatch {
-            reason: "inert initialization proposal does not match the exact runtime/export census"
-                .into(),
-        }
-        .into());
-    }
-    let (package, mut case) = artifact_resolution::proposal_identity(resolved)?;
-    case.initialization =
-        Some(solid_reactive_ir::contract_semantics::ModuleInitializationClaim::Inert);
-    let contract =
-        solid_reactive_ir::contract_semantics::ContractProposal::new(package, vec![case])
-            .normalize()
-            .map_err(|error| ContractFailure::InvalidSemanticModel {
-                reason: error.to_string(),
-            })?;
-    contract_workflow::encode_proposal_artifacts(&contract, vec![], vec![], vec![], vec![], pretty)
-}
-
-/// Merges independently analyzed exact artifact cases without exposing compact
-/// summary mechanics to JavaScript orchestration.
-pub fn merge_contract_proposals<'a>(
-    documents: impl IntoIterator<Item = &'a [u8]>,
-    pretty: bool,
-) -> Result<Vec<u8>, ContractFailure> {
-    let mut package = None;
-    let mut cases = Vec::new();
-    for document in documents {
-        let contract = contract_document::decode(document)?.normalize()?;
-        if let Some(expected) = &package {
-            if expected != contract.package() {
-                return Err(ContractFailure::IdentityMismatch {
-                    reason: "proposal documents describe different package identities".into(),
-                });
-            }
-        } else {
-            package = Some(contract.package().clone());
-        }
-        cases.extend_from_slice(contract.artifact_cases());
-    }
-    let package = package.ok_or_else(|| ContractFailure::InvalidSemanticModel {
-        reason: "proposal merge requires at least one document".into(),
-    })?;
-    let contract = solid_reactive_ir::contract_semantics::ContractProposal::new(package, cases)
-        .normalize()
-        .map_err(|error| ContractFailure::InvalidSemanticModel {
-            reason: error.to_string(),
-        })?;
-    contract_document::encode(&contract, &SidecarDigests::default(), pretty)
-}
 
 #[must_use]
 pub fn default_typefacts_executable() -> String {

@@ -1,6 +1,0 @@
-{
-  "name": "probe-browser-source-only",
-  "version": "1.0.0",
-  "type": "module",
-  "exports": { ".": { "types": "./index.d.ts", "default": "./index.ts" } }
-}

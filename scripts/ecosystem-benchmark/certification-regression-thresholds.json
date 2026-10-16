@@ -1,6 +1,0 @@
-{
-  "global": {
-    "maxCertificationRegressions": 0,
-    "minAuthorityCoveredRows": 120
-  }
-}

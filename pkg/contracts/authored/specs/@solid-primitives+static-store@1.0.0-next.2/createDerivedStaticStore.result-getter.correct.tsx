@@ -1,7 +1,0 @@
-import { createSignal } from "solid-js";
-import { createDerivedStaticStore } from "@solid-primitives/static-store";
-export default function App() {
-  const [count] = createSignal(0);
-  createDerivedStaticStore(() => ({ value: 1 }));
-  return <p>derived</p>;
-}

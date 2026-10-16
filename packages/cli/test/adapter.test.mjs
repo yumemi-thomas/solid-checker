@@ -1158,7 +1158,7 @@ test("the adapter's native option table is native's argv parser", () => {
     const consumes = /args\s*\.next\(\)/.test(body.slice(arm.index + arm[0].length, end));
     for (const [, name] of arm[1].matchAll(/"([^"]+)"/g)) (consumes ? values : flags).add(name);
   });
-  assert.ok(values.size > 40, "the parser was found");
+  assert.ok(values.size > 15, "the parser was found");
   assert.deepEqual([...plugin._testing.nativeValueOptions].sort(), [...values].sort());
   assert.deepEqual([...plugin._testing.nativeFlags].sort(), [...flags].sort());
 });

@@ -1,5 +1,22 @@
 # Precision backlog
 
+D3, D4 and D7 together (2026-10-16): the contract emission, certification,
+probe and evidence pipeline is deleted, with the measurement history built on
+it. Removed: every non-ordinary CLI mode (emission and its batch, module
+inventory, proposal plans, merge, review, validation, probe planning,
+certification planning and execution, policy-2 discovery, the compiler
+certification session), the backend's contract modules (`contract_*`,
+`artifact_*`, `authored_contracts`, `installed_patches`, `proposal_generation`,
+`inferred_contract`, `runtime_probes`, `evidence_sidecars`,
+`first_party_bundles`, `phase16_benchmark`), the catalog, admission and
+lockfile readers left in `diagnostics.rs`, the bundles, phase-16 bench and
+authorize binaries, `pkg/contracts/authored/`, `fixtures/package-contracts/`,
+the `contract` CLI commands and their scripts, the contract corpus, the probe
+harness pins, the ecosystem benchmark, the phase 0/13/16/18/19/20/21 ledgers,
+the coverage census, certification metric, Solid Primitives checkpoint and
+corpus, app-import metric and the registry memo. Every removed flag is refused
+with a message. No finding moves: coverage is unchanged by this commit.
+
 D1 (2026-10-16): consumption deleted from ordinary analysis, the daemon,
 inspection, fixture authorization and the WASM request. The unconsumed-tier
 provenance is gone with it, so the package boundary is exactly

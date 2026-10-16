@@ -245,30 +245,18 @@ function inferenceFingerprint(project, runtime) {
  * The native options that consume the next argument as their value, exactly
  * as `request_from_args` (rust/crates/solid-facts-backend/src/main.rs) reads
  * them, and its value-less flags. A value is never an option: in
- * `--runtime-condition --no-dependency-source` the second token is a
- * condition (review round 1 of ADR 0297).
+ * `--runtime-condition --certify` the second token is a condition (review
+ * round 1 of ADR 0297).
  */
 const NATIVE_VALUE_OPTIONS = new Set([
-  "--project", "-project", "--typefacts", "--dialect", "--accepted-contracts",
-  "--proposal-dependencies", "--receipt-trust-configuration", "--conditions",
-  "--preset", "--enable-rule", "--format", "--runtime-resolution", "--daemon-runtime",
-  "--validate-contract", "--emit-contract", "--emit-contract-batch",
-  "--contract-batch-results", "--declaration-probe-plan", "--emit-module-inventory",
-  "--dependency-source", "--runtime-realm", "--runtime-module-resolutions",
-  "--contract-resolution", "--emit-proposal-plan", "--merge-contract",
-  "--merge-contract-output", "--merge-proposal-plan", "--merge-proposal-plan-output",
-  "--review-contract", "--review-output", "--runtime-probe-proposal",
-  "--runtime-probe-proposal-plan", "--runtime-probe-request", "--runtime-probe-plan-output",
-  "--runtime-probe-runs", "--runtime-probe-evaluation-output",
-  "--plan-contract-certification", "--certification-plan-output",
-  "--execute-contract-certification", "--verify-policy2-discovery", "--package-name",
-  "--package-version", "--contract-entry-file", "--contract-package-root",
-  "--runtime-target", "--runtime-build", "--rendering", "--program-boundary",
-  "--runtime-condition", "--runtime-conditions", "--framework-transform"
+  "--project", "-project", "--typefacts", "--dialect", "--conditions", "--preset",
+  "--enable-rule", "--format", "--runtime-resolution", "--daemon-runtime",
+  "--dependency-source", "--runtime-realm", "--runtime-target", "--runtime-build",
+  "--rendering", "--program-boundary", "--runtime-condition", "--runtime-conditions",
+  "--framework-transform"
 ]);
 const NATIVE_FLAGS = new Set([
-  "--certify", "--feedback-facts", "--check-contracts", "--no-bundled-contracts",
-  "--serve", "--help", "-h", "--no-dependency-source", "--no-package-contracts"
+  "--certify", "--feedback-facts", "--serve", "--help", "-h", "--no-package-contracts"
 ]);
 /** Options whose presence may select package source under the native default. */
 const SOURCE_OPTIONS = new Set([

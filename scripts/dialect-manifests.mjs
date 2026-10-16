@@ -2,7 +2,6 @@
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
-import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 export const root = fileURLToPath(new URL("..", import.meta.url));
@@ -129,45 +128,11 @@ export function loadDialectManifests({ requireArtifacts = false, projectRoot = r
   return manifests;
 }
 
-function run(command, args) {
-  const result = spawnSync(command, args, { cwd: root, stdio: "inherit", env: process.env });
-  if (result.error) throw result.error;
-  if (result.status !== 0) process.exit(result.status ?? 1);
-}
-
-function generateContracts(check) {
-  loadDialectManifests({ requireArtifacts: check });
-  const args = [
-    "+1.97",
-    "run",
-    "--profile",
-    process.env.SOLID_CHECKER_CARGO_PROFILE || "dev",
-    "--manifest-path",
-    "rust/Cargo.toml",
-    "-p",
-    "solid-facts-backend",
-    "--bin",
-    "solid-contract-bundles",
-    "--",
-    "--root",
-    root,
-  ];
-  if (check) args.push("--check");
-  run("cargo", args);
-}
-
-function checkComposedContracts() {
-  generateContracts(true);
-}
-
 const invokedDirectly =
   process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1]);
 if (invokedDirectly) {
   const command = process.argv[2] ?? "validate";
-  if (command === "generate-contracts") generateContracts(false);
-  else if (command === "check-contracts") generateContracts(true);
-  else if (command === "check-composed-contracts") checkComposedContracts();
-  else if (command === "validate") {
+  if (command === "validate") {
     const manifests = loadDialectManifests({ requireArtifacts: true });
     console.log(`validated ${manifests.length} dialect assembly manifests`);
   } else {

@@ -26,10 +26,3 @@ test("the optional nextest path retains doctests and records individual timings"
   assert.match(runner, /"test", "--profile", profile, \.\.\.common, "--doc"/);
   assert.match(read("scripts/nextest.toml"), /\[profile.verify.junit\][\s\S]*path = "junit.xml"/);
 });
-
-test("both conformance Cargo drivers honor the verification profile", () => {
-  assert.match(verify, /SOLID_CHECKER_CARGO_PROFILE="\$cargo_profile"/);
-  for (const path of ["scripts/check-bundled-contracts.mjs", "scripts/dialect-manifests.mjs"]) {
-    assert.match(read(path), /"--profile",\s*process.env.SOLID_CHECKER_CARGO_PROFILE \|\| "dev"/);
-  }
-});

@@ -368,15 +368,15 @@ mod tests {
         for source in [
             include_str!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
-                "/../../../fixtures/package-contracts/restricted-type-erasure/reflect.ts"
+                "/src/ast/inert_erasure/reflect.ts"
             )),
             include_str!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
-                "/../../../fixtures/package-contracts/restricted-type-erasure/inert-import.ts"
+                "/src/ast/inert_erasure/inert-import.ts"
             )),
             include_str!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
-                "/../../../fixtures/package-contracts/restricted-type-erasure/inert-unsupported.ts"
+                "/src/ast/inert_erasure/inert-unsupported.ts"
             )),
         ] {
             assert!(inert_erasure(source).is_none());

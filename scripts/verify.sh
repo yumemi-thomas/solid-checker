@@ -116,47 +116,24 @@ TYPEFACTS_BUILD_ID="${SOLID_CHECKER_BUILD_ID:-dev}" scripts/build-typefacts.sh
 # ---------------------------------------------------------------------------
 # The Makefile's CERTIFICATION_ENV, for every step below that builds.
 #
-# These four digests are read by `option_env!`, so they are part of the crate
-# fingerprint and can only be supplied at compile time. Without them a build
-# refuses Type Facts certification and probe authority *by design* — and a
-# test binary built that way turns every probe-gate assertion into a silent
-# early return, which is exactly what `make verify` used to do while reporting
-# a green run. `SOLID_CHECKER_EXPECT_PROBE_PINS=1` turns that silence into a
-# loud failure (see
-# `probe_harness::tests::a_build_that_must_carry_probe_pins_carries_them`).
+# These two digests are read by `option_env!`, so they are part of the crate
+# fingerprint and can only be supplied at compile time.
 #
 # Compute these before *every* Cargo build, including Clippy and feature
 # checks, so preflight and tests do not alternate unpinned/pinned builds.
 step certification-pins
 if ! command -v node >/dev/null 2>&1; then
-  echo "make verify: node is required (the certification pins compiled into the verifier are" >&2
-  echo "  computed from the harness source manifest and the Node executable it launches)." >&2
+  echo "make verify: node is required (the Type Facts source manifest pin is computed with it)." >&2
   exit 127
 fi
 probe_node="${PROBE_NODE:-$(node -e 'process.stdout.write(require("fs").realpathSync(process.execPath))')}"
 SOLID_TYPEFACTS_CERTIFICATION_SHA256="sha256:$(shasum -a 256 bin/solid-typefacts | awk '{print $1}')"
 SOLID_TYPEFACTS_SOURCE_MANIFEST_SHA256="sha256:$(node scripts/typefacts-source-identity.mjs --build-id "${SOLID_CHECKER_BUILD_ID:-dev}" --digest)"
-SOLID_CHECKER_PROBE_HARNESS_SHA256="sha256:$(node scripts/probe-harness-source-identity.mjs --build-id "${SOLID_CHECKER_BUILD_ID:-dev}" --write-stamp --digest)"
-SOLID_CHECKER_PROBE_NODE_SHA256="sha256:$(shasum -a 256 "$probe_node" | awk '{print $1}')"
-SOLID_CHECKER_EXPECT_PROBE_PINS=1
 export SOLID_TYPEFACTS_CERTIFICATION_SHA256 SOLID_TYPEFACTS_SOURCE_MANIFEST_SHA256
-export SOLID_CHECKER_PROBE_HARNESS_SHA256 SOLID_CHECKER_PROBE_NODE_SHA256
-export SOLID_CHECKER_EXPECT_PROBE_PINS
-# The resolved real path, not only its digest: every step below that resolves a
-# Node executable of its own — the probe-gate tracers, and
-# `scripts/check-bundled-contracts.mjs`, which recomputes these same pins for
-# its `cargo run` — must use the executable whose bytes were just hashed
-# rather than re-resolving `node` from `PATH`.
+# The runtime resolver (ADR 0220) runs project config with this Node.
 PROBE_NODE="$probe_node"
-export PROBE_NODE
-# ADR 0033: the optional browser pin. Only when the operator names a
-# headless-shell executable; otherwise the browser profile refuses and its
-# tracers skip, exactly as on a machine without one.
-if [ -n "${PROBE_BROWSER:-}" ]; then
-  SOLID_CHECKER_PROBE_BROWSER_SHA256="sha256:$(node scripts/probe-browser-identity.mjs "$PROBE_BROWSER")"
-  SOLID_CHECKER_EXPECT_BROWSER_PIN=1
-  export PROBE_BROWSER SOLID_CHECKER_PROBE_BROWSER_SHA256 SOLID_CHECKER_EXPECT_BROWSER_PIN
-fi
+SOLID_CHECKER_PROBE_NODE="$probe_node"
+export PROBE_NODE SOLID_CHECKER_PROBE_NODE
 
 SOLID_CHECKER_BUILD_ID="${SOLID_CHECKER_BUILD_ID:-dev}"
 TYPEFACTS_BUILD_ID="$SOLID_CHECKER_BUILD_ID"
@@ -268,62 +245,6 @@ SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" \
 step bun-test
 bun run --cwd packages/cli test
 
-# The ecosystem runner's own tests, among them the wall-time budget the pinned
-# report has to meet. Until 2026-09-06 nothing here ran them: a pin taken at
-# 224 s against the 150 s ceiling passed every gate below and failed only when
-# the runner suite was run by hand. The budget is a host fact as much as a
-# code fact — the same binary measures 85-105 s on mains and 170-200 s on
-# battery in Low Power Mode — so a failure here is judged with `pmset -g` in
-# hand (docs/precision-backlog.md, 2026-09-06).
-step ecosystem-runner-test
-bun packages/cli/node_modules/vitest/vitest.mjs run \
-  --config packages/cli/vitest.config.mjs scripts/ecosystem-benchmark/*.test.mjs
-
-# Phase 0 is immutable historical evidence. Validate its pinned bytes and
-# internal invariants; never regenerate it from the current dependency graph.
-step phase0-baseline
-bun scripts/package-contract-v2-phase0.mjs --check
-
-# Phase 16 pins full-corpus reachability/refusals and the accepted-corpus
-# compactness/load/query measurements. Expensive ecosystem generation is a
-# separately refreshed authority; this check refuses drift in any of its inputs.
-step phase16-corpus
-bun scripts/package-contract-v2-phase16.mjs --check
-
-# Phase 18 proves that every live main producer, consumer, bundle, fixture,
-# receipt, manifest, cache, and documentation path uses the first stable public
-# schema version 1 without rewriting independent version namespaces.
-step phase18-stable-cut
-bun scripts/package-contract-phase18.mjs
-
-# Phase 19A keeps policy 1 active while pinning the exact authority/refusal
-# baseline and a Rust-owned, internal policy-2 manifest and digest. This gate
-# fails if the audit rendering, producer identities, or issuance-shortcut
-# inventory drifts before the atomic policy cut.
-step phase19-policy
-bun scripts/package-contract-phase19.mjs
-
-# Phase 20 is the live row-disposition authority. Its generated ledger must
-# remain byte-identical to the checked full-corpus report, including ordinary
-# receipt loads, typed applicability, and complete dependency plans.
-step phase20-ledger
-bun scripts/package-contract-v2-phase20-ledger.mjs --check
-
-# Phase 21 freezes the exact 30-row Phase 20 refusal cohort before tracking
-# proof-preserving reductions. Its taxonomy must retain the upstream and CJS
-# controls while keeping semantic terminal classes authoritative over prose.
-step phase21-ledger
-bun scripts/package-contract-v2-phase21-ledger.mjs --check
-
-# Proposal orchestration can change a refusal envelope without changing the
-# normalized Rust model. Keep the exact generator corpus in the local handoff
-# authority as well as its dedicated CI workflow so snapshot drift cannot hide
-# behind library and CLI unit coverage.
-step contract-corpus
-SOLID_CHECKER_NATIVE_BIN="$checker_bin" \
-  SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" \
-  bun scripts/contract-corpus.mjs
-
 # AGENTS.md's absolute rule, as a gate: no rule's positive case may also be a
 # `tsc` error against the real published Solid typings. Provisioning installs
 # the audited package versions and verifies them, so a drifted install fails
@@ -331,9 +252,7 @@ SOLID_CHECKER_NATIVE_BIN="$checker_bin" \
 # every case as well, so it takes the same fresh verification build as coverage
 # and ownership -- the packaged binary may lag rust/ source.
 step tsc-oracle-test
-# The whole glob, exactly as CI's contracts job runs it: naming individual
-# files here once let a contract-generation regression reach CI that every
-# local handoff had missed, because verify gated 5 of the 17 test files.
+# The whole glob, exactly as CI's contracts job runs it.
 SOLID_CHECKER_NATIVE_BIN="$checker_bin" \
   SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" \
   bun packages/cli/node_modules/vitest/vitest.mjs run \
@@ -359,13 +278,6 @@ jq empty fixtures/tsc-oracle/*.json
 jq empty fixtures/obligation-cases/*.json
 find pkg/contracts/bundled -type f -name '*.json' -exec jq empty {} +
 bun scripts/dialect-manifests.mjs validate
-
-step conformance
-bun scripts/check-bundled-contracts.mjs
-bun scripts/check-contract-pins.mjs
-bun scripts/dialect-manifests.mjs check-composed-contracts
-# ADR 0198: the authored tier is exactly what its specs and probe results build.
-bun scripts/author-contracts.mjs check
 
 step ""
 summarize
