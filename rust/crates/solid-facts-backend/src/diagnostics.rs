@@ -29,7 +29,6 @@ pub struct Snapshot {
     pub feedback_facts: Vec<solid_reactive_ir::DevelopmentFile>,
     pub status: String,
     pub findings: Vec<SnapshotFinding>,
-    pub package_summaries: Vec<PackageSummary>,
     pub metrics: Metrics,
 }
 
@@ -92,25 +91,6 @@ pub struct SourceLocation {
     pub end_byte: u64,
     pub line: usize,
     pub column: usize,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PackageSummary {
-    pub name: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub version: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub contract_hash: String,
-    /// `accepted` when an import this analysis read binds the contract;
-    /// `refused` when a project catalog holds an acceptance for the package
-    /// that no import was admitted to, with `detail` saying why. Presence in a
-    /// catalog is never enough for `accepted`.
-    pub evidence: String,
-    /// Why a `refused` acceptance was not admitted. Empty for `accepted`.
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub detail: String,
-    pub exports_analyzed: usize,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -487,12 +467,7 @@ impl DiagnosticSession {
         if validate_host_inputs && let Some(hosts) = inputs.hosts {
             crate::inferred_host::validate_inputs(hosts)?;
         }
-        let mut snapshot = snapshot_with_package_summaries(
-            sources,
-            accepted_package_summaries(facts, contracts),
-            metrics,
-            findings,
-        );
+        let mut snapshot = snapshot_of(sources, metrics, findings);
         snapshot.feedback_facts = program.development_feedback.clone();
         if program.runtime_configuration.permits_proof() {
             snapshot
@@ -866,7 +841,6 @@ pub fn unsupported_runtime_snapshot(
             }],
             fixes: Vec::new(),
         }],
-        package_summaries: Vec::new(),
         metrics: Metrics {
             files_analyzed: 0,
             functions_analyzed: 0,
@@ -877,12 +851,7 @@ pub fn unsupported_runtime_snapshot(
     }
 }
 
-fn snapshot_with_package_summaries(
-    sources: &[SourceFile],
-    package_summaries: Vec<PackageSummary>,
-    metrics: Metrics,
-    findings: Vec<Finding>,
-) -> Snapshot {
+fn snapshot_of(sources: &[SourceFile], metrics: Metrics, findings: Vec<Finding>) -> Snapshot {
     let has_violation = findings.iter().any(|finding| finding.kind == "violation");
     let has_unresolved = findings
         .iter()
@@ -947,134 +916,8 @@ fn snapshot_with_package_summaries(
         feedback_facts: Vec::new(),
         status: status.into(),
         findings,
-        package_summaries,
         metrics,
     }
-}
-
-/// The value of [`PackageSummary::evidence`] for a contract an import binds.
-pub const PACKAGE_EVIDENCE_ACCEPTED: &str = "accepted";
-/// The value of [`PackageSummary::evidence`] for a project-catalog acceptance
-/// no import of this analysis was admitted to.
-pub const PACKAGE_EVIDENCE_REFUSED: &str = "refused";
-
-/// Said of a refused acceptance whose package the admission rule's steps 1-3
-/// did not refuse: the receipt, artifact and environment hold, and still no
-/// import this analysis read selected it.
-const NOT_SELECTED_BY_ANY_IMPORT: &str = "a project catalog entry exists for this package and \
-     was not admitted: no import this analysis read selected it (resolved file, export \
-     conditions or case agreement)";
-
-/// What the analysis read, and what it was offered and refused.
-///
-/// `accepted` is decided by binding, the way the analysis decides it: an
-/// import (or `export … from`) in a project file whose exact importer and
-/// specifier, or whose specifier admitted by artifact, selects a contract.
-/// Presence in the index is not that. A project catalog's entries are keyed on
-/// the certification importer `contract certify` writes beside the package,
-/// which is never a project file, so every one of them sits in the index
-/// whether or not this tree admitted it -- and listing the index said
-/// `accepted` of an acceptance whose receipt states no environment, and of one
-/// carried into a tree whose installs differ. Measured on kobalte core
-/// (phase22, 2026-09-26): `vite-plugin-solid`, and `@solid-primitives/form`
-/// under signals rc.6.
-///
-/// Every such catalog entry that nothing bound is reported `refused`, with
-/// the admission rule's own sentence when it names the package
-/// ([`admission_refusal_details`], carried on the index by specifier), and a
-/// plain statement that no import selected it otherwise.
-fn accepted_package_summaries(
-    facts: &ProjectFacts,
-    contracts: &AcceptedContractIndex,
-) -> Vec<PackageSummary> {
-    let summary = |package: &solid_reactive_ir::contract_semantics::PackageIdentity,
-                   digest: &str,
-                   evidence: &str,
-                   detail: &str| PackageSummary {
-        name: package.name.clone(),
-        version: package.version.clone(),
-        contract_hash: digest.into(),
-        evidence: evidence.into(),
-        detail: detail.into(),
-        exports_analyzed: 0,
-    };
-    let mut summaries = Vec::new();
-    for file in &facts.files {
-        let modules = file
-            .ast
-            .imports
-            .iter()
-            .filter(|import| !import.type_only)
-            .map(|import| import.module.as_str())
-            .chain(
-                file.ast
-                    .exports
-                    .iter()
-                    .filter(|export| !export.type_only)
-                    .filter_map(|export| export.module.as_deref()),
-            );
-        for module in modules {
-            if let Ok(contract) = contracts.contract(file.path.as_str(), module) {
-                summaries.push(summary(
-                    contract.package(),
-                    contract.semantic_identity().semantic_digest.as_str(),
-                    PACKAGE_EVIDENCE_ACCEPTED,
-                    "",
-                ));
-            }
-        }
-    }
-    let accepted = summaries
-        .iter()
-        .map(|row| {
-            (
-                row.name.clone(),
-                row.version.clone(),
-                row.contract_hash.clone(),
-            )
-        })
-        .collect::<std::collections::BTreeSet<_>>();
-    for (binding, refusal) in contracts.all_semantic_identities() {
-        let semantics = &binding.semantics;
-        let key = (
-            semantics.package.name.clone(),
-            semantics.package.version.clone(),
-            semantics.semantic_digest.as_str().to_owned(),
-        );
-        if accepted.contains(&key) {
-            continue;
-        }
-        summaries.push(summary(
-            &semantics.package,
-            semantics.semantic_digest.as_str(),
-            PACKAGE_EVIDENCE_REFUSED,
-            refusal.unwrap_or(NOT_SELECTED_BY_ANY_IMPORT),
-        ));
-    }
-    summaries.sort_by(|left, right| {
-        (
-            &left.name,
-            &left.version,
-            &left.contract_hash,
-            &left.evidence,
-            &left.detail,
-        )
-            .cmp(&(
-                &right.name,
-                &right.version,
-                &right.contract_hash,
-                &right.evidence,
-                &right.detail,
-            ))
-    });
-    summaries.dedup_by(|left, right| {
-        left.name == right.name
-            && left.version == right.version
-            && left.contract_hash == right.contract_hash
-            && left.evidence == right.evidence
-            && left.detail == right.detail
-    });
-    summaries
 }
 
 pub fn analysis_metrics(
@@ -1307,380 +1150,11 @@ pub fn discovered_contract_paths(
     Ok(paths)
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PackageContractStatus {
-    pub name: String,
-    pub status: String,
-    /// Exact registry integrity recovered from the active package-manager
-    /// lock. Proposal generation requires this identity and refuses local,
-    /// linked, or otherwise unattested packages.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub installed_integrity: Option<String>,
-    /// Why the status is what it is, when the status alone does not say it —
-    /// the two disagreeing versions behind `stale`, for instance.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub detail: Option<String>,
-    /// What the user should do about this status, or `None` when the contract
-    /// already certifies. Built by [`contract_remedy`] so the report and the
-    /// analysis error cannot print divergent instructions.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub remedy: Option<String>,
-    pub contract_path: String,
-    /// The analysed files whose imports of this package resolve to this row's
-    /// installed artifact, relative to the project directory. Present only
-    /// when the name alone does not identify the artifact: the package is
-    /// installed as more than one artifact across the importing files (one row
-    /// each), or its importers find it somewhere other than the project
-    /// directory's own lookup -- a sub-package's `node_modules` in a monorepo
-    /// analysed from its root. A single-package project never carries it.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub importers: Vec<String>,
-}
-
-impl PackageContractStatus {
-    /// Whether this status blocks contract-backed certification. These are the
-    /// statuses `--check-contracts` counts and exits non-zero on.
-    ///
-    /// `unbound` is one of them and is produced only by
-    /// [`package_contract_statuses`], the `--check-contracts` path: a contract
-    /// no import binds certifies nothing, so the report must not count it as
-    /// coverage. The analysis path
-    /// ([`package_contract_statuses_with`]) never produces it, because a
-    /// refusal is deliberately silent in the findings.
-    pub fn needs_action(&self) -> bool {
-        matches!(
-            self.status.as_str(),
-            "missing" | "unverified" | "stale" | "unbound" | "unsupported-runtime"
-        )
-    }
-}
-
-/// Why acceptances for each package were not admitted, replayed from one
-/// directory; see [`accepted_package_contract_statuses`].
-pub type RefusalReplay<'a> = dyn Fn(&Path) -> Result<BTreeMap<String, String>, BackendError> + 'a;
-
-/// Reports external receipt coverage and the separately identified built-in
-/// runtime foundation. Built-in model selection is not artifact certification.
-/// Coverage is complete only when every exact imported specifier binds in the
-/// already receipt-validated normalized index.
-///
-/// An external package has one row per installed artifact its importers
-/// resolve to, each looked up from the importing files ([`imported_artifacts`])
-/// and counted over those files' import rows only.
-///
-/// `refusals` names, per installed package, why an acceptance that exists for
-/// it in a project catalog or the compiled-in tier was not admitted
-/// ([`admission_refusal_details`]), replayed from the directory it is handed:
-/// the project directory for a row whose importers reach the project
-/// directory's own install, and the install directory of the row's artifact
-/// otherwise, because that is where its admission was replayed from. It only
-/// adds to the detail of a status that is not `certified`, and never changes
-/// a status.
-pub fn accepted_package_contract_statuses(
-    dialect: &'static Dialect,
-    project: &Path,
-    facts: &ProjectFacts,
-    contracts: &AcceptedContractIndex,
-    refusals: &RefusalReplay,
-) -> Result<Vec<PackageContractStatus>, BackendError> {
-    let project_directory = project
-        .parent()
-        .ok_or_else(|| BackendError::Contract("tsconfig has no parent".into()))?;
-    let mut replayed = BTreeMap::<PathBuf, BTreeMap<String, String>>::new();
-    let mut refusals_from = |directory: &Path| -> Result<BTreeMap<String, String>, BackendError> {
-        if let Some(refusals) = replayed.get(directory) {
-            return Ok(refusals.clone());
-        }
-        let answer = refusals(directory)?;
-        replayed.insert(directory.to_path_buf(), answer.clone());
-        Ok(answer)
-    };
-    // Asking the vocabulary rather than matching the id. The list was the same
-    // three names written out again, and the `_ => &[]` arm a third dialect
-    // would have landed in reports "no package needs a contract" for exactly
-    // the packages that dialect ships -- a silent wrong answer, not a gap.
-    let first_party = dialect.vocabulary.primitive_defining_packages();
-    let resolved = facts.resolved_imports.as_ref();
-    let mut statuses = Vec::new();
-    for module in imported_package_roots(facts) {
-        if let Some(core_package) = core_runtime_package_for_status(&module, facts) {
-            let modeled = dialect
-                .vocabulary
-                .primitive_defining_packages()
-                .contains(&core_package);
-            statuses.push(PackageContractStatus {
-                name: module,
-                // `unsupported-runtime` is retained deliberately although a
-                // build carrying only the Solid 2 vocabulary cannot produce
-                // it: v2's `primitive_defining_packages` is the whole union
-                // across dialects, so every core package it can see is
-                // modelled. It is kept for the same reason `Version::V1` is --
-                // the seam has to exist before the next dialect needs it, and
-                // a status silently dropped from `--check-contracts` output
-                // and from the certification-blocking set is harder to
-                // reinstate than one that was never removed. See ADR 0110 and
-                // the retirement plan's step-3 notes.
-                status: if modeled { "builtin" } else { "unsupported-runtime" }.into(),
-                installed_integrity: None,
-                detail: Some(if modeled {
-                    format!("built-in runtime model {}; no package receipt is required; model selection is not installed-artifact authentication", dialect.vocabulary.runtime_model_identity())
-                } else {
-                    format!("this core package is outside the {} runtime model", dialect.id)
-                }),
-                remedy: (!modeled).then(|| "select a compatible Solid dialect and runtime; a core package contract cannot extend the built-in model".into()),
-                contract_path: String::new(),
-                importers: Vec::new(),
-            });
-            continue;
-        }
-        let artifacts = imported_artifacts(project_directory, facts, &module)?;
-        // The artifact the project directory's own lookup finds. A row whose
-        // importers find exactly that one is the row this report always
-        // printed, so it names no importers and a single-package project reads
-        // byte-identically.
-        let project_artifact = discover_package_directory(project_directory, &module)?
-            .map(|directory| artifact_key(&directory));
-        let split = artifacts.len() > 1;
-        for artifact in artifacts {
-            let installed = artifact
-                .directory
-                .as_deref()
-                .map(read_installed_manifest)
-                .transpose()?
-                .flatten();
-            let manifest = installed.as_ref().map(|(_, manifest)| manifest);
-            if !first_party.contains(&module.as_str()) && !manifest.is_some_and(manifest_uses_solid)
-            {
-                continue;
-            }
-            let importers = if split || artifact.key != project_artifact {
-                artifact
-                    .importers
-                    .iter()
-                    .map(|importer| {
-                        Path::new(importer)
-                            .strip_prefix(project_directory)
-                            .map_or_else(|_| importer.clone(), |path| path.display().to_string())
-                    })
-                    .collect()
-            } else {
-                Vec::new()
-            };
-            // Where this artifact's admission was evaluated from: the project
-            // directory when its importers reach the project directory's own
-            // install, which keeps a single-package project byte-identical,
-            // and otherwise the directory whose `node_modules` holds it, where
-            // the lockfile governing that copy is found.
-            let admission_directory = match &artifact.base {
-                Some(base) if artifact.key != project_artifact => base.as_path(),
-                _ => project_directory,
-            };
-            let refusals = refusals_from(admission_directory)?;
-            let mut status = artifact_contract_status(
-                project_directory,
-                admission_directory,
-                &module,
-                installed.as_ref(),
-                resolved,
-                &artifact.importers,
-                contracts,
-                &refusals,
-            )?;
-            status.importers = importers;
-            statuses.push(status);
-        }
-    }
-    // Stable: the rows of one name keep their artifact order.
-    statuses.sort_by(|left, right| left.name.cmp(&right.name));
-    Ok(statuses)
-}
-
-/// One installed artifact of a package name, with the analysed files whose
-/// imports find it.
-struct ImportedArtifact {
-    /// [`artifact_key`] of `directory`; `None` when no importer finds the
-    /// package installed at all.
-    key: Option<PathBuf>,
-    /// The package directory as the first importer's lookup spells it.
-    directory: Option<PathBuf>,
-    /// The directory whose `node_modules` holds `directory`.
-    base: Option<PathBuf>,
-    importers: std::collections::BTreeSet<String>,
-}
-
 /// What identifies an installed artifact across lookup spellings: two
 /// sub-packages' `node_modules/<name>` links into one package-manager store
 /// directory are one artifact.
 fn artifact_key(directory: &Path) -> PathBuf {
     fs::canonicalize(directory).unwrap_or_else(|_| directory.to_path_buf())
-}
-
-/// The installed artifacts `module` resolves to from the analysed files that
-/// import it, each looked up from the importing file's own location -- the
-/// `node_modules` walk the analysis's resolution performs per file, not one
-/// lookup from the project directory. A monorepo root analyses sub-packages
-/// whose dependencies are installed under their own `node_modules` and nowhere
-/// at the root; looking only from the project directory left those packages
-/// out of `contract check` while the analysis raised obligations for them.
-///
-/// The importers are the files that name the package in an import and the
-/// files an attested import row resolves into the package (an aliased
-/// specifier), which is every file whose rows the status counts. Sorted by
-/// artifact key, so the output is deterministic.
-fn imported_artifacts(
-    project_directory: &Path,
-    facts: &ProjectFacts,
-    module: &str,
-) -> Result<Vec<ImportedArtifact>, BackendError> {
-    let mut importers = std::collections::BTreeSet::new();
-    for file in &facts.files {
-        if file
-            .ast
-            .imports
-            .iter()
-            .any(|import| package_root(&import.module) == module)
-        {
-            importers.insert(file.path.to_string());
-        }
-    }
-    if let Some(resolved) = &facts.resolved_imports {
-        for (importer, import) in resolved.iter() {
-            if resolved_package_name(import) == Some(module) {
-                importers.insert(importer.to_owned());
-            }
-        }
-    }
-    let mut lookups = HashMap::<PathBuf, Option<(PathBuf, PathBuf)>>::new();
-    let mut artifacts = BTreeMap::<Option<PathBuf>, ImportedArtifact>::new();
-    for importer in importers {
-        let from = Path::new(&importer)
-            .parent()
-            .unwrap_or(project_directory)
-            .to_path_buf();
-        let install = match lookups.get(&from) {
-            Some(install) => install.clone(),
-            None => {
-                let install = discover_package_install(&from, module)?;
-                lookups.insert(from, install.clone());
-                install
-            }
-        };
-        let (base, directory) = install.unzip();
-        let key = directory.as_deref().map(artifact_key);
-        artifacts
-            .entry(key.clone())
-            .or_insert_with(|| ImportedArtifact {
-                key,
-                directory,
-                base,
-                importers: std::collections::BTreeSet::new(),
-            })
-            .importers
-            .insert(importer);
-    }
-    Ok(artifacts.into_values().collect())
-}
-
-/// The package an attested import resolved into, as `contract check` and the
-/// obligation discovery both name it: the resolver's own identity first.
-fn resolved_package_name(import: &solid_facts::AttestedImport) -> Option<&str> {
-    import
-        .resolver_package_name
-        .as_deref()
-        .or(import.package_name.as_deref())
-}
-
-/// The status of one installed artifact of `module`, counted over the
-/// attested import rows of `importers` only. Its lockfile integrity is read
-/// from `admission_directory`, where its admission was evaluated from.
-#[allow(clippy::too_many_arguments)]
-fn artifact_contract_status(
-    project_directory: &Path,
-    admission_directory: &Path,
-    module: &str,
-    installed: Option<&(PathBuf, PackageManifest)>,
-    resolved: Option<&solid_facts::AttestedImportIndex>,
-    importers: &std::collections::BTreeSet<String>,
-    contracts: &AcceptedContractIndex,
-    refusals: &BTreeMap<String, String>,
-) -> Result<PackageContractStatus, BackendError> {
-    let module = module.to_owned();
-    let package_directory = installed.map(|(directory, _)| directory.as_path());
-    let installed_integrity = package_directory
-        .map(|directory| installed_package_integrity(admission_directory, directory))
-        .transpose()?
-        .flatten();
-    let imports = resolved
-        .into_iter()
-        .flat_map(|imports| imports.iter())
-        .filter(|(importer, import)| {
-            resolved_package_name(import) == Some(module.as_str()) && importers.contains(*importer)
-        })
-        .collect::<Vec<_>>();
-    let bound = imports
-        .iter()
-        .filter(|(importer, import)| contracts.contract(importer, &import.text).is_ok())
-        .count();
-    let (status, detail, remedy, contract_path) = if !imports.is_empty() && bound == imports.len() {
-        (
-            "certified".into(),
-            None,
-            None,
-            "receipt-issued stable-v1 index".into(),
-        )
-    } else {
-        let status = if bound == 0 { "missing" } else { "unbound" };
-        let detail = if imports.is_empty() {
-            "exact import identity facts are unavailable".to_owned()
-        } else if bound == 0 {
-            format!(
-                "none of the {} exact imported artifact case(s) has a matching receipt",
-                imports.len()
-            )
-        } else {
-            format!(
-                "{bound} of {} exact imported artifact case(s) have matching receipts",
-                imports.len()
-            )
-        };
-        let detail = Some(match refusals.get(&module) {
-            Some(refusal) => format!("{detail}; {refusal}"),
-            None => detail,
-        });
-        let root = package_directory.map_or_else(
-            || format!("node_modules/{module}"),
-            |path| {
-                path.strip_prefix(project_directory)
-                    .unwrap_or(path)
-                    .display()
-                    .to_string()
-            },
-        );
-        let remedy = installed_integrity.as_ref().map_or_else(
-            || {
-                Some(
-                    "the package manager supplied no exact registry integrity; linked or local packages remain uncertifiable"
-                        .into(),
-                )
-            },
-            |integrity| {
-                Some(format!(
-                    "solid-checker contract certify --package-root {root} --integrity {integrity} --catalog .solid-checker/accepted-contracts.json --issuer-configuration <issuer.json> --trust-configuration-output <trust.json>, run from this project; it adds the package to the project catalog, which `solid-checker contract check --receipt-trust-configuration <trust.json>` then reads"
-                ))
-            },
-        );
-        (status.into(), detail, remedy, String::new())
-    };
-    Ok(PackageContractStatus {
-        name: module,
-        status,
-        installed_integrity,
-        detail,
-        remedy,
-        contract_path,
-        importers: Vec::new(),
-    })
 }
 
 /// Why an acceptance that exists for an installed package was not admitted by
@@ -1753,66 +1227,13 @@ pub fn admission_refusal_details(
     Ok(details)
 }
 
-/// Reporting-only classification. An alias counts as core only when every
-/// exact import occurrence resolves to the same defining package. This does
-/// not authenticate its bytes or grant semantics to the source program.
-fn core_runtime_package_for_status<'a>(
-    module: &'a str,
-    facts: &'a ProjectFacts,
-) -> Option<&'a str> {
-    if solid_dialect::primitive_defining_package(module) {
-        return Some(module);
-    }
-    let resolved = facts.resolved_imports.as_ref()?;
-    let mut selected = None;
-    for file in &facts.files {
-        for import in file
-            .ast
-            .imports
-            .iter()
-            .filter(|import| package_root(&import.module) == module)
-        {
-            let solid_facts::SpecifierAttestation::Attested(answer) =
-                resolved.specifier(file.path.as_str(), import.span, &import.module)
-            else {
-                return None;
-            };
-            if answer.resolution != solid_facts::ImportResolution::NodeModules {
-                return None;
-            }
-            let package = answer
-                .resolver_package_name
-                .as_deref()
-                .or(answer.package_name.as_deref())?;
-            if !solid_dialect::primitive_defining_package(package)
-                || selected.is_some_and(|other| other != package)
-            {
-                return None;
-            }
-            selected = Some(package);
-        }
-    }
-    selected
-}
-
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PackageManifest {
     #[serde(default)]
     version: String,
-    #[serde(default)]
-    dependencies: HashMap<String, serde_json::Value>,
-    #[serde(default)]
-    peer_dependencies: HashMap<String, serde_json::Value>,
-    #[serde(default)]
-    optional_dependencies: HashMap<String, serde_json::Value>,
 }
 
-/// The installed package directory and its parsed manifest, read once.
-///
-/// Ambient-module and virtual test projects have no installed package and no
-/// manifest; both cases yield `None`, which every caller reads as "there is no
-/// installed version to disagree with".
 /// The specifiers this project may import under an existing acceptance,
 /// because the installed artifact their importers reach is the one that
 /// acceptance names.
@@ -3705,20 +3126,6 @@ fn manifest_keyed_lockfile_integrity(
         }
     }
     Ok(None)
-}
-
-fn manifest_uses_solid(manifest: &PackageManifest) -> bool {
-    [
-        &manifest.dependencies,
-        &manifest.peer_dependencies,
-        &manifest.optional_dependencies,
-    ]
-    .iter()
-    .any(|dependencies| {
-        dependencies
-            .keys()
-            .any(|name| solid_dialect::ecosystem_dependency(name))
-    })
 }
 
 fn discover_package_directory(

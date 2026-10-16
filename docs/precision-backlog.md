@@ -1,5 +1,28 @@
 # Precision backlog
 
+D1 (2026-10-16): consumption deleted from ordinary analysis, the daemon,
+inspection, fixture authorization and the WASM request. The unconsumed-tier
+provenance is gone with it, so the package boundary is exactly
+`package_requirements`: an installed package whose manifest names a Solid
+package. `--check-contracts`/`contract check`, `packageSummaries`,
+`solid-contract-authorize`, the `shared-host-plugin.json` fixture premise, WASM
+`acceptedContracts` and the daemon's catalog, trust and lockfile inputs are
+removed.
+
+- **Held, decision for the owner:** a package whose manifest names no Solid
+  dependency reads as plain code, as every such package always did unless a
+  tier covered it. The corpus sweep (49 projects) moves no violation and
+  drops 3 `SC9005` sites, all `@tanstack/virtual-core` (ai-memory-ui, openbot,
+  probus-hk), which the authored tier covered. Marking every installed
+  package instead was measured: +683 `SC9005`, mostly build tooling (vite,
+  vitest, zod, clsx). A reactive callable handed to such a package
+  (`runUnknown(readCount)`, the retired `package-unknown-callback-consumer`)
+  is certified. `package-return-consumer` moved to `certified` for the same
+  reason.
+- **Kept until D3/D4:** the emission and certification modes still read
+  catalogs, trust and the authored tier, so `project_accepted_contracts`,
+  catalog selection, admission and `contract_interface` remain for them.
+
 P7 switch-off: no package contract is consumed (2026-10-16). Ordinary
 analysis, one-shot and retained, native and WASM, binds no catalog, authored
 tier or bundled contract; the package boundary comes from

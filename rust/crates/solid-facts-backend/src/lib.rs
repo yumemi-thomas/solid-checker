@@ -102,7 +102,6 @@ mod first_party_bundles;
 /// consumer against an accepted one. Never reached by an ordinary
 /// analysis: the trust it mints is returned to the caller, not written
 /// into the project.
-pub mod fixture_authorization;
 mod host_config;
 pub mod host_constants;
 mod host_inline;
@@ -181,9 +180,8 @@ pub use contract_workflow::{
 };
 pub use diagnostics::{
     ArtifactAdmissions, DiagnosticAnalysis, DiagnosticSession, DiagnosticTimings, Metrics,
-    NestedCatalogs, PackageContractStatus, PackageSummary, ProjectCatalogSelection,
-    RequestedRuleEnablement, Snapshot, SnapshotEvidence, SnapshotFinding, SnapshotFix,
-    SnapshotTextEdit, SourceLocation, UnauthenticatedCatalog, accepted_package_contract_statuses,
+    NestedCatalogs, ProjectCatalogSelection, RequestedRuleEnablement, Snapshot, SnapshotEvidence,
+    SnapshotFinding, SnapshotFix, SnapshotTextEdit, SourceLocation, UnauthenticatedCatalog,
     admission_input_paths, admission_refusal_details, admitted_project_artifacts, analysis_metrics,
     analyze_project_accepted_measured_with_enablement,
     analyze_project_inputs_measured_with_enablement, certified_catalog_self_admission,
@@ -206,8 +204,7 @@ pub use first_party_bundles::{
 pub use inferred_host::{
     InferredAcceptedContracts, inferred_host_directory_digest, inferred_host_input_digest,
     inferred_host_input_paths, inferred_host_input_paths_for_project,
-    inferred_host_input_paths_for_sources, inferred_project_accepted_contracts,
-    inferred_project_accepted_contracts_with_note,
+    inferred_host_input_paths_for_sources, inferred_project_accepted_contracts_with_note,
 };
 pub use package_requirements::{
     external_package_boundary, external_package_contract_requirements, requirement_index,

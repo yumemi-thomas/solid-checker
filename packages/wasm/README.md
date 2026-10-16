@@ -29,8 +29,8 @@ receive the normal unknown-id error. CI compiles the single-dialect variant so
 shared infrastructure cannot grow an accidental dependency on a compiler or
 catalog it does not declare.
 
-No package contract is consumed (P7 of the contract-removal plan), and a
-request naming `acceptedContracts` is refused. This request carries no package
+No package contract is consumed, and `acceptedContracts` is no longer part of
+the request. This request carries no package
 files and no import attestation, so source analysis cannot run here: every
 runtime import or re-export of a bare specifier (Solid core and `node:`
 built-ins excepted) keeps an open requirement, reported as

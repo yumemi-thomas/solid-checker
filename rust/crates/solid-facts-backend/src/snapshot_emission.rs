@@ -421,7 +421,6 @@ mod tests {
             feedback_facts: Vec::new(),
             status: status.into(),
             findings: Vec::new(),
-            package_summaries: Vec::new(),
             metrics: Metrics {
                 files_analyzed: 1,
                 functions_analyzed: 2,
@@ -524,9 +523,6 @@ mod tests {
                     "path": "App.tsx", "startByte": 1, "endByte": 2,
                     "line": 1, "column": 1
                 }
-            }],
-            "packageSummaries": [{
-                "name": "solid-js", "evidence": "reviewed", "exportsAnalyzed": 3
             }],
             "metrics": {
                 "filesAnalyzed": 1, "functionsAnalyzed": 1,

@@ -312,18 +312,12 @@ pub fn retain_exported_contracts(
         // Initial acquisition saw these roots as source and consequently did
         // not request their ordinary external-package obligations. Restore
         // those requirements together with the contract boundary.
-        let project = Path::new(&facts.project_id);
-        let directory = if project.is_dir() {
-            project
-        } else {
-            project.parent().unwrap_or_else(|| Path::new("."))
-        };
         let refusals = refusals
             .iter()
             .chain(&notes.refusals)
             .cloned()
             .collect::<Vec<_>>();
-        let restored = crate::external_package_boundary(directory, facts, &refusals);
+        let restored = crate::external_package_boundary(facts, &refusals);
         *contracts = std::mem::take(contracts).with_fallback(crate::requirement_index(&restored));
         boundary.extend(restored);
     }

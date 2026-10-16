@@ -70,11 +70,10 @@ export const CHECKS = {
   "build-debug": {
     why:
       "coverage and the ownership gate must run a fresh debug binary, not a packaged one that can lag " +
-      "rust/ source; solid-contract-authorize is built with it because coverage runs it for any fixture " +
-      "asking to be analyzed against an accepted contract, and looks for it beside the checker",
+      "rust/ source",
     command: [
       "cargo", TOOLCHAIN, "build", "--manifest-path", MANIFEST,
-      "-p", "solid-facts-backend", "--bin", "solid-checker-rust", "--bin", "solid-contract-authorize",
+      "-p", "solid-facts-backend", "--bin", "solid-checker-rust",
     ],
   },
   "facts-lib": {

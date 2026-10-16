@@ -309,12 +309,8 @@ pub fn run(
 /// The package inputs of an ordinary check, one-shot or retained: the package
 /// boundary and the requirement-only index host inference runs over.
 ///
-/// No package contract is consumed from any tier (P7 of the contract-removal
-/// plan). An import a tier covers keeps its obligation open: the tier is why
-/// this build would not read that package as plain code. Either refusal ends
-/// the check with no snapshot: provenance that cannot be established is never
-/// an empty index, and a covered import whose installation cannot be
-/// inspected is never dropped.
+/// No package contract exists to consume. Every import the boundary refuses
+/// keeps an open requirement (`SC9005`).
 pub fn package_inputs(
     directory: &Path,
     facts: &solid_facts::ProjectFacts,
@@ -328,22 +324,10 @@ pub fn package_inputs(
     ),
     Box<dyn Error>,
 > {
-    let provenance =
-        crate::package_requirements::UnconsumedContractProvenance::acquire(directory, facts)?;
-    let (boundary, notes) =
-        crate::package_requirements::external_package_boundary_without_contracts(
-            directory,
-            facts,
-            source_refusals,
-            &provenance,
-        )?;
-    let requirements = crate::requirement_index(&boundary).with_admission_refusals_for(notes);
+    let boundary = crate::external_package_boundary(facts, source_refusals);
+    let requirements = crate::requirement_index(&boundary);
     let inferred = crate::inferred_project_accepted_contracts_with_note(
         directory,
-        &[],
-        &[],
-        None,
-        false,
         runtime,
         dialect.vocabulary,
         facts,

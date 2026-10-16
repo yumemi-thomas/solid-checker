@@ -374,8 +374,9 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // 226 adds ADR 0301's contract-star-consumer hand-stated document.
       // 227 adds tuple-contract-iteration-veto's authored main document.
       // 207 after P7 of the contract-removal plan deleted 25 contract
-      // consumption fixtures.
-      stableMainDocuments: 207,
+      // consumption fixtures; 201 after D1 deleted the three provenance
+      // fixtures.
+      stableMainDocuments: 201,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,
@@ -397,8 +398,8 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // the Solid 1.x retirement deleted (ADR 0110). Like the main-document
       // count above, this enumerates checked-in files rather than measuring an
       // analysis answer.
-      // 10 after P7 deleted the consumption fixtures' catalogs.
-      obsoletePolicy1Catalogs: 10,
+      // 10 after P7 deleted the consumption fixtures' catalogs; 7 after D1.
+      obsoletePolicy1Catalogs: 7,
       proofVersion: 2,
       receiptVersion: 2,
       policyStatus: "active",

@@ -1,7 +1,7 @@
 //! Native-only, non-evaluating application discovery (ADR 0270).
 
+use crate::BackendError;
 use crate::host_config::{self, Config, EntryMode};
-use crate::{BackendError, NestedCatalogs};
 use sha2::{Digest, Sha256};
 use solid_facts::ast::{
     AST_FACTS_SCHEMA, BindingShape, ExportKind, FunctionFact, FunctionKind, HostConstantIdentity,
@@ -51,15 +51,6 @@ const CONFIGS: &[&str] = &[
     "vite.config.cts",
     "vite.config.cjs",
 ];
-const PLUGIN_FILES: &[&str] = &["package.json", "dist/esm/index.mjs", "dist/cjs/index.cjs"];
-// Synthetic fixture premise. Production always uses the complete installed
-// closure catalog in host_plugins; only external fixture-issuer trust permits
-// these three small files to stand in for the audited root provider.
-const PLUGIN_DIGESTS: &[[&str; 3]] = &[[
-    "fed4bed6f4a6ce0719e72e8308ea5ada389bc930519349c354be337f9b4eadce",
-    "b2060696e245071869811d26c121e7cc4b0b1de94e0eba6c4193f1f241488682",
-    "cab1d97f7d2ab2b149a1e58d34f6686ffbf878f031c9b5b0e3be0f91e6e3434f",
-]];
 
 /// Discovery refusal is explanation only, never diagnostic authority.
 #[derive(Debug)]
@@ -134,16 +125,7 @@ pub fn inferred_host_input_paths_for_sources(
         paths.dedup();
         return paths;
     }
-    // The fixture marker is not authority, but enumerating with the broadest
-    // possible fixture premise cannot omit a successful caller's inputs.
-    // An audit refusal under that premise is an exact refusal witness too.
-    let marker = directory.join(".solid-checker/shared-host-plugin.json");
-    paths.push(marker.clone());
-    let fixture_possible = fs::read(&marker)
-        .ok()
-        .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
-        == Some(serde_json::Value::Bool(true));
-    let config = match configuration(directory, &mut paths, fixture_possible) {
+    let config = match configuration(directory, &mut paths) {
         Ok(config) => config,
         Err(_) => {
             paths.sort();
@@ -737,22 +719,6 @@ fn tsconfig_inputs(
     Ok(())
 }
 
-fn audited_start_plugin(directory: &Path, inputs: &mut Vec<PathBuf>) -> Option<()> {
-    let root = crate::host_plugins::installed(directory, "@solidjs/vite-plugin", inputs)?;
-    let digests = PLUGIN_FILES
-        .iter()
-        .map(|name| {
-            let path = root.join(name);
-            inputs.push(path.clone());
-            Some(format!("{:x}", Sha256::digest(fs::read(path).ok()?)))
-        })
-        .collect::<Option<Vec<_>>>()?;
-    PLUGIN_DIGESTS
-        .iter()
-        .any(|pin| pin.iter().zip(&digests).all(|(pin, digest)| *pin == digest))
-        .then_some(())
-}
-
 fn side_inputs(directory: &Path, inputs: &mut Vec<PathBuf>) -> Result<(), DiscoveryRefusal> {
     // Vite's default PostCSS discovery loads JavaScript and named plugins in
     // Node. Include absence above the leaf too; JSON is not an inert exemption.
@@ -792,18 +758,13 @@ fn side_inputs(directory: &Path, inputs: &mut Vec<PathBuf>) -> Result<(), Discov
     Ok(())
 }
 
-fn configuration(
-    directory: &Path,
-    inputs: &mut Vec<PathBuf>,
-    fixture_authority: bool,
-) -> Result<Config, DiscoveryRefusal> {
-    configuration_in_generation(directory, inputs, fixture_authority, None)
+fn configuration(directory: &Path, inputs: &mut Vec<PathBuf>) -> Result<Config, DiscoveryRefusal> {
+    configuration_in_generation(directory, inputs, None)
 }
 
 fn configuration_in_generation(
     directory: &Path,
     inputs: &mut Vec<PathBuf>,
-    fixture_authority: bool,
     generation: Option<&BTreeMap<String, String>>,
 ) -> Result<Config, DiscoveryRefusal> {
     side_inputs(directory, inputs)?;
@@ -862,21 +823,8 @@ fn configuration_in_generation(
         .map_err(|reason| DiscoveryRefusal::at(path, &source, reason.offset, reason.reason))?;
     let mut audited_packages = crate::host_plugins::PackageAudits::new();
     for name in &config.plugins {
-        if name == "@solidjs/vite-plugin" && config.mode == EntryMode::ClientStart {
-            if !fixture_authority || audited_start_plugin(directory, inputs).is_none() {
-                crate::host_plugins::audit(
-                    directory,
-                    name,
-                    inputs,
-                    &mut audited_packages,
-                    generation,
-                )
-                .map_err(|reason| DiscoveryRefusal::new(path, reason))?;
-            }
-        } else {
-            crate::host_plugins::audit(directory, name, inputs, &mut audited_packages, generation)
-                .map_err(|reason| DiscoveryRefusal::new(path, reason))?;
-        }
+        crate::host_plugins::audit(directory, name, inputs, &mut audited_packages, generation)
+            .map_err(|reason| DiscoveryRefusal::new(path, reason))?;
     }
     if config.plugins.contains("@tanstack/router-plugin/vite") {
         // JSON can point at executable virtual-route modules. Options alone
@@ -2508,7 +2456,6 @@ fn discovery_inputs(
     directory: &Path,
     facts: &ProjectFacts,
     dialect: &dyn solid_dialect::Dialect,
-    fixture_authority: bool,
 ) -> Result<DiscoveryInputs, DiscoveryRefusal> {
     let _stage = HostStage::new("host-discovery-config");
     if !dialect.models_server_functions() {
@@ -2532,10 +2479,9 @@ fn discovery_inputs(
     }
     let mut paths_observed = Vec::new();
     application_inputs(&directory, &project, &mut paths_observed)?;
-    paths_observed.push(directory.join(".solid-checker/shared-host-plugin.json"));
     // Refusal consumes only its witness. No app inventory, request parsing,
     // or manifest hashing is needed before the configuration can be admitted.
-    let config = configuration(&directory, &mut paths_observed, fixture_authority)?;
+    let config = configuration(&directory, &mut paths_observed)?;
     let paths = paths_targets(&directory, &project)?;
     Ok(DiscoveryInputs {
         directory,
@@ -2550,20 +2496,12 @@ fn discovered_index(
     directory: &Path,
     facts: &ProjectFacts,
     dialect: &dyn solid_dialect::Dialect,
-    fixture_authority: bool,
     packages: Option<&AcceptedContractIndex>,
 ) -> Result<ProjectHostIndex, DiscoveryRefusal> {
-    let inputs = discovery_inputs(directory, facts, dialect, fixture_authority)?;
+    let inputs = discovery_inputs(directory, facts, dialect)?;
     let mut index = discovered_index_with_inputs(&inputs, facts, dialect, packages)?;
     if !index.is_empty() {
-        attach_discovery_inputs(
-            &mut index,
-            &inputs,
-            facts,
-            dialect,
-            fixture_authority,
-            packages,
-        )?;
+        attach_discovery_inputs(&mut index, &inputs, facts, dialect, packages)?;
     }
     Ok(index)
 }
@@ -2573,7 +2511,6 @@ fn attach_discovery_inputs(
     prepared: &DiscoveryInputs,
     facts: &ProjectFacts,
     dialect: &dyn solid_dialect::Dialect,
-    fixture_authority: bool,
     packages: Option<&AcceptedContractIndex>,
 ) -> Result<(), DiscoveryRefusal> {
     let _stage = HostStage::new("host-discovery-replay");
@@ -2605,13 +2542,8 @@ fn attach_discovery_inputs(
     let config_replay = HostStage::new("host-discovery-config-replay");
     let mut current_inputs = Vec::new();
     application_inputs(directory, project, &mut current_inputs)?;
-    current_inputs.push(directory.join(".solid-checker/shared-host-plugin.json"));
-    let current = configuration_in_generation(
-        directory,
-        &mut current_inputs,
-        fixture_authority,
-        Some(&index.manifest.inputs),
-    )?;
+    let current =
+        configuration_in_generation(directory, &mut current_inputs, Some(&index.manifest.inputs))?;
     let paths = paths_targets(directory, project)?;
     current_inputs.sort();
     current_inputs.dedup();
@@ -3504,61 +3436,20 @@ impl InferredAcceptedContracts {
     }
 }
 
-/// The old acquisition remains the authority for both views. Explicit runtime
-/// selections bypass discovery; browser admission is confined to its importer
-/// partition and never becomes a no-target fallback.
-#[allow(clippy::too_many_arguments)]
-pub fn inferred_project_accepted_contracts(
-    directory: &Path,
-    catalogs: &[PathBuf],
-    nested: &[NestedCatalogs],
-    trust: Option<&crate::Policy2TrustConfiguration>,
-    bundled: bool,
-    runtime: &RuntimeEnvironment,
-    dialect: &dyn solid_dialect::Dialect,
-    facts: &ProjectFacts,
-    requirements: AcceptedContractIndex,
-) -> Result<InferredAcceptedContracts, BackendError> {
-    inferred_project_accepted_contracts_with_note(
-        directory,
-        catalogs,
-        nested,
-        trust,
-        bundled,
-        runtime,
-        dialect,
-        facts,
-        requirements,
-    )
-}
-
 /// Native run note. The caller must replay it through the existing note channel
-/// on fresh analyses and cached daemon answers alike.
-#[allow(clippy::too_many_arguments)]
+/// on fresh analyses and cached daemon answers alike. Explicit runtime
+/// selections bypass discovery.
 pub fn inferred_project_accepted_contracts_with_note(
     directory: &Path,
-    catalogs: &[PathBuf],
-    nested: &[NestedCatalogs],
-    trust: Option<&crate::Policy2TrustConfiguration>,
-    bundled: bool,
     runtime: &RuntimeEnvironment,
     dialect: &dyn solid_dialect::Dialect,
     facts: &ProjectFacts,
     requirements: AcceptedContractIndex,
 ) -> Result<InferredAcceptedContracts, BackendError> {
     let conditions = runtime.selected_conditions();
-    let admission = HostStage::new("contract-admission-baseline");
-    let baseline = crate::project_accepted_contracts(
-        directory,
-        catalogs,
-        nested,
-        trust,
-        bundled,
-        &conditions,
-        facts,
-        requirements.clone(),
-    )?;
-    drop(admission);
+    // No package contract is consumed: the baseline and the browser view are
+    // both the requirement-only index.
+    let baseline = requirements.clone();
     if runtime.target.is_some() {
         return Ok(InferredAcceptedContracts::without_host(baseline, None));
     }
@@ -3585,16 +3476,7 @@ pub fn inferred_project_accepted_contracts_with_note(
             )),
         ));
     }
-    // External issuer trust, not a project marker, admits synthetic fixtures.
-    let fixture_authority = trust.is_some_and(|trust| {
-        trust.persistent_local_scope() == Some(crate::fixture_authorization::FIXTURE_ISSUER_SCOPE)
-    }) && fs::read(
-        directory.join(".solid-checker/shared-host-plugin.json"),
-    )
-    .ok()
-    .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
-        == Some(serde_json::Value::Bool(true));
-    let inputs = match discovery_inputs(directory, facts, dialect, fixture_authority) {
+    let inputs = match discovery_inputs(directory, facts, dialect) {
         Ok(inputs) => inputs,
         Err(reason) => {
             return Ok(InferredAcceptedContracts::without_host(
@@ -3618,45 +3500,14 @@ pub fn inferred_project_accepted_contracts_with_note(
             ));
         }
     };
-    // Package checking only adds module refusals (provisional NodeModules
-    // requests skip the final load proof). It cannot create a browser
-    // scope in an already-empty graph. Report that proved refusal directly;
-    // exact browser artifact admission is needed only for a surviving graph.
-    let admission = HostStage::new("contract-admission-browser");
-    let browser = match crate::project_accepted_contracts(
-        directory,
-        catalogs,
-        nested,
-        trust,
-        bundled,
-        &BTreeSet::from(["browser".into()]),
-        facts,
-        requirements,
-    ) {
-        Ok(browser) => browser,
-        Err(error) => {
-            return Ok(InferredAcceptedContracts::without_host(
-                baseline,
-                refused(format!(
-                    "{}: browser artifact admission failed: {error}",
-                    directory.display()
-                )),
-            ));
-        }
-    };
-    drop(admission);
+    let browser = requirements;
     // The provisional graph schedules manifest capture; it supplies no final
     // authority. Build the admitted graph only after that capture, inside the
     // replay below, and compare every observation with the complete generation.
     // Both complete contract indexes remain independent (ADR 0140).
-    if let Err(reason) = attach_discovery_inputs(
-        &mut index,
-        &inputs,
-        facts,
-        dialect,
-        fixture_authority,
-        Some(&browser),
-    ) {
+    if let Err(reason) =
+        attach_discovery_inputs(&mut index, &inputs, facts, dialect, Some(&browser))
+    {
         return Ok(InferredAcceptedContracts::without_host(
             baseline,
             refused(reason.message()),
@@ -4256,8 +4107,8 @@ mod tests {
                 );
             }
             let provisional =
-                discovered_index(&directory, &facts, dialect.vocabulary, false, None).unwrap();
-            let prepared = discovery_inputs(&directory, &facts, dialect.vocabulary, false).unwrap();
+                discovered_index(&directory, &facts, dialect.vocabulary, None).unwrap();
+            let prepared = discovery_inputs(&directory, &facts, dialect.vocabulary).unwrap();
             let package_checked = discovered_index_with_inputs(
                 &prepared,
                 &facts,
@@ -4393,8 +4244,7 @@ mod tests {
                     );
                     observed.runtime_resolutions = Some(runtime);
                     let index =
-                        discovered_index(&directory, &observed, dialect.vocabulary, false, None)
-                            .unwrap();
+                        discovered_index(&directory, &observed, dialect.vocabulary, None).unwrap();
                     assert_eq!(
                         index.browser_site(target.to_str().unwrap(), 0, 1),
                         expected && name != "reachability",
@@ -4568,7 +4418,7 @@ mod tests {
             }
             let mut inputs = Vec::new();
             let decision = application_inputs(&app, &project, &mut inputs)
-                .and_then(|()| configuration(&app, &mut inputs, false));
+                .and_then(|()| configuration(&app, &mut inputs));
             assert_eq!(
                 decision.is_ok(),
                 case["browser"] == true,
@@ -4606,7 +4456,7 @@ mod tests {
                 fs::write(scratch.join("other.ts"), "export default {plugins:[]};").unwrap();
                 assert!(
                     application_inputs(&app, &project, &mut Vec::new())
-                        .and_then(|()| configuration(&app, &mut Vec::new(), false))
+                        .and_then(|()| configuration(&app, &mut Vec::new()))
                         .is_err(),
                     "{case}"
                 );
@@ -4637,7 +4487,7 @@ mod tests {
                     assert_ne!(bytes, inferred_host_input_digest(&target).unwrap());
                     assert!(
                         application_inputs(&app, &project, &mut Vec::new())
-                            .and_then(|()| configuration(&app, &mut Vec::new(), false))
+                            .and_then(|()| configuration(&app, &mut Vec::new()))
                             .is_err()
                     );
                 }
@@ -4921,28 +4771,6 @@ mod tests {
         assert!(
             !inputs.contains(&scratch.join("node_modules/node_modules/@solidjs/web/package.json"))
         );
-        fs::remove_dir_all(scratch).unwrap();
-    }
-
-    #[test]
-    fn fixture_integration_identity_accepts_exact_bytes_and_refuses_a_modified_loader() {
-        let source = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../../fixtures/reactive-ir/node_modules/@solidjs/vite-plugin");
-        let scratch =
-            std::env::temp_dir().join(format!("solid-host-plugin-{}", std::process::id()));
-        let plugin = scratch.join("node_modules/@solidjs/vite-plugin");
-        for name in PLUGIN_FILES {
-            let target = plugin.join(name);
-            fs::create_dir_all(target.parent().unwrap()).unwrap();
-            fs::copy(source.join(name), target).unwrap();
-        }
-        assert!(audited_start_plugin(&scratch, &mut Vec::new()).is_some());
-        fs::write(
-            plugin.join("dist/esm/index.mjs"),
-            "import '../../../../src/App.tsx';",
-        )
-        .unwrap();
-        assert!(audited_start_plugin(&scratch, &mut Vec::new()).is_none());
         fs::remove_dir_all(scratch).unwrap();
     }
 

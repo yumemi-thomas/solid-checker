@@ -1635,38 +1635,6 @@ pub fn accepted_contract_catalog_members(path: &Path) -> Result<Vec<PathBuf>, Co
     Ok(paths)
 }
 
-/// Every non-core `(importer spelling, specifier)` one catalog's entries name,
-/// with the base its relative importers resolve against.
-///
-/// The catalog is decoded exactly as every catalog reader decodes it (limits,
-/// `deny_unknown_fields`, format and version, the entry-count limit), so its
-/// `status`, bindings and other envelope fields are structurally decoded, but
-/// none of them confers authority or selects what is returned: every entry is
-/// named. No contract document or receipt is opened, nothing is authenticated
-/// and nothing is normalized. Core entries are left out exactly as
-/// [`read_external_contract_catalog_with_trust`] leaves them out. The importer
-/// spelling is returned raw; establishing its identity is the caller's.
-pub(crate) fn catalog_named_entries(
-    path: &Path,
-    bytes: &[u8],
-) -> Result<(PathBuf, Vec<(String, String)>), ContractFailure> {
-    let (catalog, base) = decode_accepted_contract_catalog_bytes(path, bytes)?;
-    Ok((
-        base,
-        catalog
-            .contracts
-            .into_iter()
-            .filter(|entry| {
-                !solid_dialect::core_runtime_contract_reference(
-                    &entry.import.package_name,
-                    &entry.import.specifier,
-                )
-            })
-            .map(|entry| (entry.import.importer, entry.import.specifier))
-            .collect(),
-    ))
-}
-
 fn decode_accepted_contract_catalog(
     path: &Path,
 ) -> Result<(AcceptedCatalogDocument, PathBuf), ContractFailure> {

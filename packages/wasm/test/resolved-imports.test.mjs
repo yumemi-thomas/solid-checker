@@ -37,8 +37,8 @@ test("a project importing no package is certified", () => {
   assert.equal(check(request("export const answer = 42;\n")).status, "certified");
 });
 
-// P7 of the contract-removal plan: no package contract is consumed, so a host
-// still handing one in is refused rather than silently ignored.
+// No package contract is consumed, so a host still handing one in is refused
+// rather than silently ignored.
 test("acceptedContracts is refused", () => {
   assert.throws(
     () =>
@@ -47,7 +47,7 @@ test("acceptedContracts is refused", () => {
           acceptedContracts: [{ document: "{}", receipt: "{}", import: {} }]
         })
       ),
-    /acceptedContracts is no longer read/
+    /unknown field `acceptedContracts`/
   );
 });
 

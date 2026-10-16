@@ -11,9 +11,8 @@ use serde::Deserialize;
 use solid_facts::TypeScriptTable;
 use solid_facts_backend::SemanticDemandGroup;
 use solid_facts_backend::{
-    AnalysisInputs, BackendError, ResolvedImport, SemanticDemandOptions, SourceFile,
-    TypeFactsProvider, analyze_project_inputs_measured_with_enablement,
-    build_project_native_measured_with_demands,
+    AnalysisInputs, BackendError, SemanticDemandOptions, SourceFile, TypeFactsProvider,
+    analyze_project_inputs_measured_with_enablement, build_project_native_measured_with_demands,
 };
 
 #[derive(Deserialize)]
@@ -27,10 +26,6 @@ struct CheckRequest {
     generation: u64,
     sources: Vec<SourceFile>,
     type_facts: TypeScriptTable,
-    /// Retired (P7 of the contract-removal plan): a request naming any is
-    /// refused, because no package contract is consumed.
-    #[serde(default)]
-    accepted_contracts: Vec<HostAcceptedContract>,
     /// What the host resolved each imported specifier to, in its own installed
     /// tree. Accepted and unused: only the compiled-in accepted contracts read
     /// it, and that tier is retired (ADR 0228). The authored tier is not served
@@ -74,18 +69,6 @@ struct HostInstalledPackage {
     /// files are the certified archive's. Absent admits nothing.
     #[serde(default)]
     snapshot_root: Option<String>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-#[expect(dead_code, reason = "decoded only to refuse it (P7)")]
-struct HostAcceptedContract {
-    /// Exact UTF-8 document bytes. A parsed JSON value cannot preserve the
-    /// wire digest bound by the receipt.
-    document: String,
-    /// Exact UTF-8 receipt bytes.
-    receipt: String,
-    import: ResolvedImport,
 }
 
 #[derive(Deserialize)]
@@ -213,15 +196,6 @@ pub fn check_sync(request_json: String) -> napi::Result<String> {
 
 pub fn check(request_json: &str) -> Result<String, Box<dyn std::error::Error>> {
     let request: CheckRequest = serde_json::from_str(request_json)?;
-    // P7 of the contract-removal plan: no package contract is consumed.
-    if !request.accepted_contracts.is_empty() {
-        return Err(
-            "acceptedContracts is no longer read: package contracts are not \
-             consumed, so every package import stays uncertifiable here; the owned check \
-             analyzes packages from source"
-                .into(),
-        );
-    }
     let dialect = match request.dialect.as_deref() {
         None => solid_facts_backend::dialect::default_dialect(),
         Some(id) => solid_facts_backend::dialect::by_id(id)
@@ -329,157 +303,6 @@ mod tests {
                 "snapshotRoot":"sha256:00"}]}"#,
         );
         assert!(stated.is_ok());
-    }
-}
-
-/// Testable internal seam for the future atomic policy-2 cut. It is not a
-/// Node-API export and the active WASM request still accepts policy 1 only.
-#[doc(hidden)]
-pub fn authenticate_policy2_contract_for_wasm(
-    canonical_main: &[u8],
-    receipt: &[u8],
-    expected: &solid_facts_backend::Policy2ReceiptBindings,
-    provenance: solid_facts_backend::Policy2ReceiptProvenance<'_>,
-) -> Result<
-    solid_facts_backend::AuthenticatedPolicy2Receipt,
-    solid_facts_backend::Policy2ReceiptError,
-> {
-    solid_facts_backend::authenticate_policy2_receipt(canonical_main, receipt, expected, provenance)
-}
-
-#[cfg(test)]
-mod policy2_receipt_tests {
-    use std::collections::BTreeMap;
-
-    use solid_facts_backend::{
-        ConfiguredReceiptIssuer, Policy2ReceiptBindings, Policy2ReceiptProvenance,
-        Policy2TrustEntry, Policy2TrustStore, ReceiptIssuerKind, canonicalize_policy2_main,
-        issue_policy2_receipt, policy2_main_semantic_digest, policy2_policy_digest,
-    };
-
-    use super::authenticate_policy2_contract_for_wasm;
-
-    const MAIN: &[u8] = include_bytes!("../../../../pkg/contracts/bundled/solid-v2/solid-js.json");
-    const OTHER: &[u8] =
-        include_bytes!("../../../../pkg/contracts/bundled/solid-v2/solidjs-signals.json");
-
-    fn root(value: u8) -> String {
-        format!("sha256:{value:064x}")
-    }
-
-    fn witness_roots() -> BTreeMap<String, String> {
-        [
-            "package-identity",
-            "manifest-entrypoint",
-            "export-resolution",
-            "artifact-declarations",
-            "export-identity",
-            "module-closure",
-            "selected-signature",
-            "argument-binding",
-            "rest-spread-coverage",
-            "callable-path",
-            "operation-reachability",
-            "operation-cardinality",
-            "recursive-value-shape",
-            "guard-partition",
-            "compiler-reconciliation",
-            "accepted-dependency-composition",
-            "domain-exhaustiveness",
-        ]
-        .into_iter()
-        .enumerate()
-        .map(|(index, family)| (family.into(), root((index + 20) as u8)))
-        .collect()
-    }
-
-    fn bindings(main: &[u8]) -> Policy2ReceiptBindings {
-        Policy2ReceiptBindings {
-            importer: "/workspace/src/App.tsx".into(),
-            specifier: "fixture-package".into(),
-            resolved_import_root: root(0),
-            artifact_acceptance_root: root(19),
-            semantic_digest: policy2_main_semantic_digest(main).unwrap(),
-            artifact_provenance_root: root(1),
-            snapshot_root: root(2),
-            package_root: root(3),
-            manifest_root: root(4),
-            artifacts_root: root(5),
-            declarations_root: root(6),
-            transform_root: root(7),
-            exports_root: root(8),
-            closure_root: root(9),
-            demand_graph_root: root(10),
-            verified_positive_root: root(11),
-            witness_roots: witness_roots(),
-            producer_sessions_root: root(13),
-            dependency_receipts_root: root(14),
-            dependency_trust_root: root(15),
-            probe_gate_root: root(16),
-            closed_claims_root: root(17),
-            verifier_source_digest: root(18),
-            verifier_build_digest: root(19),
-            dependency_environment_root: String::new(),
-            cited_acceptances: Vec::new(),
-        }
-    }
-
-    fn trust(
-        issuer: &ConfiguredReceiptIssuer,
-        bindings: &Policy2ReceiptBindings,
-    ) -> Policy2TrustStore {
-        Policy2TrustStore::new(
-            [Policy2TrustEntry {
-                kind: ReceiptIssuerKind::Portable,
-                key_id: issuer.key_id().into(),
-                public_key: issuer.public_key(),
-                scope: issuer.scope().into(),
-                allowed_policy_digests: vec![policy2_policy_digest().into()],
-                allowed_verifier_builds: vec![bindings.verifier_build_digest.clone()],
-                revoked_at_epoch: None,
-            }],
-            1,
-        )
-        .unwrap()
-    }
-
-    #[test]
-    fn wasm_internal_loader_authenticates_only_a_configured_portable_root() {
-        let main = canonicalize_policy2_main(MAIN).unwrap();
-        let bindings = bindings(&main);
-        let issuer = ConfiguredReceiptIssuer::portable("wasm-release-chain", [31; 32]).unwrap();
-        let receipt = issue_policy2_receipt(&main, &bindings, &issuer).unwrap();
-        let trust = trust(&issuer, &bindings);
-        authenticate_policy2_contract_for_wasm(
-            &main,
-            &receipt,
-            &bindings,
-            Policy2ReceiptProvenance::Portable {
-                trust_store: &trust,
-            },
-        )
-        .unwrap();
-    }
-
-    #[test]
-    fn wasm_internal_loader_rejects_cross_main_receipt_replay() {
-        let main = canonicalize_policy2_main(MAIN).unwrap();
-        let other = canonicalize_policy2_main(OTHER).unwrap();
-        let bindings = bindings(&main);
-        let issuer = ConfiguredReceiptIssuer::portable("wasm-release-chain", [32; 32]).unwrap();
-        let receipt = issue_policy2_receipt(&main, &bindings, &issuer).unwrap();
-        let trust = trust(&issuer, &bindings);
-        assert!(
-            authenticate_policy2_contract_for_wasm(
-                &other,
-                &receipt,
-                &bindings,
-                Policy2ReceiptProvenance::Portable {
-                    trust_store: &trust,
-                },
-            )
-            .is_err()
-        );
     }
 }
 

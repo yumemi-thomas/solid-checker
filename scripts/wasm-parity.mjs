@@ -244,16 +244,6 @@ const w1Files = {
   "Row.tsx": oracleCode("no-destructure"),
   "Hello.tsx": "export function Hello() {\n  return <div>hello</div>;\n}\n",
 };
-const respellImporter = (root, spelling) => {
-  const path = join(root, ".solid-checker/accepted-contracts.json");
-  const catalog = JSON.parse(readFileSync(path, "utf8"));
-  for (const entry of catalog.contracts) entry.import.importer = spelling.replaceAll("{project}", root);
-  writeFileSync(path, `${JSON.stringify(catalog, null, 2)}\n`);
-};
-const dangling = relativePath => root => {
-  rmSync(join(root, relativePath), { recursive: true });
-  symlinkSync("missing-target", join(root, relativePath));
-};
 const usesGate = 'import { Gate } from "./Gate";\nexport function Use() {\n  return <Gate />;\n}\n';
 const TREES = {
   "w1-real-typings-violation": [typedProject(w1Files)],
@@ -261,19 +251,6 @@ const TREES = {
   "w2-uncertifiable": [fixture("package-contract-absent")],
   "w3-dependency-source-program": [fixture("dependency-source-program")],
   "w3-visible-js": [fixture("dependency-source-integrity-r2-visible-js")],
-  "p1-unknown-callback": [fixture("package-unknown-callback-consumer")],
-  "p1-paths-shadow": [fixture("package-contract-paths-shadow")],
-  "p1-install-shapes": [fixture("package-contract-install-shapes")],
-  ...Object.fromEntries([
-    ["absolute", "{project}/App.ts"], ["dotdot", "{project}/node_modules/../App.ts"], ["symlink", "alias/App.ts"],
-  ].map(([variant, spelling]) => [`p1-key-${variant}`, [fixture("package-unknown-callback-consumer"), root => {
-    symlinkSync(".", join(root, "alias"));
-    respellImporter(root, spelling);
-  }]])),
-  "refuse-dangling-catalog-root": [fixture("package-unknown-callback-consumer"), dangling(".solid-checker")],
-  "refuse-dangling-plain-catalog": [fixture("package-unknown-callback-consumer"), dangling(".solid-checker/accepted-contracts.json")],
-  "refuse-dangling-installation": [fixture("package-contract-install-shapes"), dangling("node_modules/ambient-package")],
-  "install-absent": [fixture("package-contract-install-shapes"), root => rmSync(join(root, "node_modules/ambient-package"), { recursive: true })],
   "w4-omission": [fixture("dependency-source-program"), root => rmSync(join(root, "node_modules/dep-hooks/src/read.js"))],
   "w4-project-intact": [typedProject({ ...w1Files, "Use.tsx": usesGate })],
   "w4-project-omitted": [typedProject({ ...w1Files, "Use.tsx": usesGate }), root => {
@@ -707,7 +684,6 @@ const findingRows = snapshot => (snapshot?.findings ?? []).map(finding => ({
   id: finding.id, rule: finding.rule, kind: finding.kind, path: finding.primaryLocation?.path,
   startByte: finding.primaryLocation?.startByte, endByte: finding.primaryLocation?.endByte,
 }));
-const disabledNote = "package contracts are not consumed in this check (--no-package-contracts)";
 const expectRejection = (label, value, message, prefix = false) =>
   check(value?.rejected === true && (prefix ? value.message.startsWith(message) : value.message === message),
     `${label}: ${JSON.stringify(value)} is not the rejection ${JSON.stringify(message)}`);
@@ -731,9 +707,6 @@ for (const name of Object.keys(expectations.answering)) {
   check(same(reference.snapshot?.metrics, expected.metrics), `${name}: metrics ${JSON.stringify(reference.snapshot?.metrics)}`);
   check(same(reference.snapshot?.premises, expected.premises), `${name}: premises ${JSON.stringify(reference.snapshot?.premises)}`);
   if (expected.tsc) check(same(render(tscResults[name], tree), expected.tsc), `${name}: tsc ${JSON.stringify(tscResults[name])}`);
-  if (name.startsWith("p1-unknown") || name.startsWith("p1-key")) {
-    check(reference.snapshot?.findings?.[0]?.evidence?.some(step => step.message.startsWith(disabledNote)), `${name}: no Disabled note`);
-  }
   for (const [engine, { driver }] of Object.entries(engines)) {
     const result = driver.cases[name];
     equalToNative(`${engine}/${name}`, result, reference);

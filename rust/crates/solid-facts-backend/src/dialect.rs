@@ -1583,7 +1583,6 @@ mod tests {
             snapshot.metrics.files_analyzed, 0,
             "nothing was read; reporting otherwise would overstate what happened"
         );
-        assert!(snapshot.package_summaries.is_empty());
     }
 
     /// A named major with no vocabulary behind it refuses.

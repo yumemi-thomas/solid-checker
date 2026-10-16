@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
 use solid_facts_backend::{
     BackendError, ImportIdentityMeasurement, RequestedRuleEnablement, SemanticDemandOptions,
-    SourceFile, TypeFactsProvider, TypeFactsSession, accepted_package_contract_statuses,
+    SourceFile, TypeFactsProvider, TypeFactsSession,
     analyze_project_accepted_measured_with_enablement, attest_import_identities,
     build_project_native_measured_with_program_hashes, contract_identity_scope,
     default_typefacts_executable, encode_inferred_entrypoint_workflow_with_external_targets,
@@ -74,8 +74,6 @@ struct Request {
     certify: bool,
     #[serde(default)]
     feedback_facts: bool,
-    #[serde(default)]
-    check_contracts: bool,
     /// Resolve every module load through the project's own bundler, which
     /// runs its config (ADR 0220).
     #[serde(default)]
@@ -3464,7 +3462,6 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 !request.emit_contract.is_empty() || emits_contract_batch,
                 "contract emission",
             ),
-            (request.check_contracts, "--check-contracts"),
             (
                 !request.declaration_probe_plan.is_empty(),
                 "--declaration-probe-plan",
@@ -3772,8 +3769,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                     } else {
                         Some(PathBuf::from(&request.accepted_contract_catalog))
                     };
-                    let requirements =
-                        external_package_contract_requirements(&package_root, &facts);
+                    let requirements = external_package_contract_requirements(&facts);
                     let trust = (!request.receipt_trust_configuration.is_empty())
                         .then(|| {
                             read_policy2_trust_configuration(Path::new(
@@ -3939,12 +3935,6 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     // one-shot path's equivalent of what `NativeIncrementalSession::attested`
     // does for a retained session: the same scope rule, issued at the one point
     // where the session is live and the whole file set is known.
-    //
-    // `--check-contracts` needs it for the same reason and not merely for
-    // symmetry: that report answers "is my contract coverage complete?", and a
-    // contract every import refuses covers nothing. Skipping the attestation
-    // there let the report call such a contract `published` while the analysis
-    // refused it everywhere.
     let mut import_identity = ImportIdentityMeasurement::default();
     if diagnostics {
         let scope = contract_identity_scope(&facts);
@@ -3975,170 +3965,6 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         .elapsed()
         .as_nanos()
         .saturating_sub(facts_complete_ns);
-    if diagnostics && request.check_contracts {
-        if request.runtime.target.is_none() {
-            eprintln!(
-                "solid-checker: note: browser host not inferred: {}: contract coverage inspection uses explicit artifact conditions",
-                facts.project_id
-            );
-        }
-        let project = Path::new(&facts.project_id);
-        let directory = if project.is_dir() {
-            project
-        } else {
-            project.parent().unwrap_or_else(|| Path::new("."))
-        };
-        let requirements = external_package_contract_requirements(directory, &facts);
-        // Every catalog the local tier holds, not just `accepted-contracts.json`:
-        // certification publishes a case set for a package with more than one
-        // artifact case, and opening only the older spelling is what left a
-        // freshly certified contract unread. See `discovered_catalog_paths`.
-        // A discovered catalog that needs trust nobody supplied is withheld,
-        // not fatal: see `select_project_catalogs`.
-        let trust = (!request.receipt_trust_configuration.is_empty())
-            .then(|| {
-                read_policy2_trust_configuration(Path::new(&request.receipt_trust_configuration))
-            })
-            .transpose()?;
-        // The catalogs of the directories between each analysed file and the
-        // project, too: a monorepo root analyses a package's files, and that
-        // package's own catalog applies to them. See `NestedCatalogs`.
-        let selection = solid_facts_backend::select_project_catalogs_in(
-            directory,
-            &solid_facts_backend::nested_catalog_candidates(
-                directory,
-                facts.files.iter().map(|file| file.path.as_str()),
-            ),
-            &request.accepted_contract_catalog,
-            trust.is_some(),
-        )?;
-        if let Some(notice) = selection.notice() {
-            eprintln!("{notice}");
-        }
-        let catalogs = selection.admitted.clone();
-        let catalog = catalogs.first().cloned();
-        // Every tier, in the one order they are folded in. The *selected*
-        // condition set, not the raw `--runtime-condition` list:
-        // `selected_conditions` folds in `--runtime-target`, `--runtime-build`
-        // and `--rendering`, which is what a Solid app with SSR actually knows
-        // about itself. An app resolves different runtime files on the server
-        // and in the browser, and what its author can state is the environment,
-        // not the export-condition names the package happens to use. Declaring
-        // nothing still admits nothing, so the zero-configuration path is
-        // unchanged.
-        let contracts = solid_facts_backend::project_accepted_contracts(
-            directory,
-            &catalogs,
-            &selection.nested,
-            trust.as_ref(),
-            request.bundled_contracts,
-            &request.runtime.selected_conditions(),
-            &facts,
-            requirements,
-        )?;
-        let _ = &catalog;
-        // Why a package with an acceptance on hand is still `missing`: the
-        // same admission steps replayed, reported rather than decided. A
-        // nested catalog's, replayed from its own directory, explain only
-        // what the project-wide tiers left unexplained. The project-wide tiers
-        // are replayed from the directory each row's admission was evaluated
-        // from: the project directory, or the install directory of an
-        // artifact only some importers reach.
-        let refusals = |from: &Path| {
-            let mut refusals = solid_facts_backend::admission_refusal_details(from, &catalogs)?;
-            for scope in &selection.nested {
-                for (package, refusal) in solid_facts_backend::admission_refusal_details(
-                    &scope.directory,
-                    &scope.admitted,
-                )? {
-                    refusals.entry(package).or_insert(refusal);
-                }
-            }
-            selection.extend_refusals(&mut refusals);
-            Ok(refusals)
-        };
-        let statuses =
-            accepted_package_contract_statuses(dialect, project, &facts, &contracts, &refusals)?;
-        let actionable = statuses
-            .iter()
-            .filter(|status| status.needs_action())
-            .collect::<Vec<_>>();
-        let stale = statuses
-            .iter()
-            .filter(|status| status.status == "stale")
-            .count();
-        // The contract report has no "default" rendering distinct from text,
-        // and `contract check` is meant to be run with no flags at all, so the
-        // unspecified format resolves to text instead of failing.
-        match request.format.as_str() {
-            "json" => {
-                let report = serde_json::json!({
-                    "packages": statuses,
-                    // `missing` keeps its original meaning: the number of
-                    // packages whose contract cannot certify. `stale` breaks
-                    // out the drift subset so CI can report it separately.
-                    "missing": actionable.len(),
-                    "stale": stale,
-                });
-                let mut stdout = io::stdout().lock();
-                stdout.write_all(&json_output::go_compatible(&report, true)?)?;
-                stdout.write_all(b"\n")?;
-            }
-            "text" | "default" | "full" => {
-                for status in &statuses {
-                    println!(
-                        "{}: {} ({})",
-                        status.name, status.status, status.contract_path
-                    );
-                    // Only when the name alone does not say which installed
-                    // artifact this row is; see `PackageContractStatus::importers`.
-                    if !status.importers.is_empty() {
-                        const SHOWN: usize = 5;
-                        let mut listed = status
-                            .importers
-                            .iter()
-                            .take(SHOWN)
-                            .map(String::as_str)
-                            .collect::<Vec<_>>()
-                            .join(", ");
-                        if status.importers.len() > SHOWN {
-                            listed.push_str(&format!(
-                                ", and {} more",
-                                status.importers.len() - SHOWN
-                            ));
-                        }
-                        println!("  imported by {} file(s): {listed}", status.importers.len());
-                    }
-                    if let Some(detail) = &status.detail {
-                        println!("  {detail}");
-                    }
-                    if let Some(remedy) = &status.remedy {
-                        println!("  -> {remedy}");
-                    }
-                }
-                if statuses.is_empty() {
-                    println!("No imported Solid packages need contracts.");
-                } else if actionable.is_empty() {
-                    println!(
-                        "\nNo external package contract requirements remain; built-in runtime model support is reported separately."
-                    );
-                } else {
-                    println!(
-                        "\n{} of {} package contracts need action{}.",
-                        actionable.len(),
-                        statuses.len(),
-                        if stale > 0 {
-                            format!(" ({stale} stale)")
-                        } else {
-                            String::new()
-                        }
-                    );
-                }
-            }
-            format => return Err(format!("unsupported format {format:?}").into()),
-        }
-        return Ok(i32::from(!actionable.is_empty()));
-    }
     if diagnostics {
         // Every catalog the local tier holds. `contract certify` publishes a
         // *case set* whenever a package resolves to more than one artifact case,
@@ -4151,8 +3977,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         } else {
             project.parent().unwrap_or_else(|| Path::new("."))
         };
-        let mut boundary =
-            solid_facts_backend::external_package_boundary(directory, &facts, &source_refusals);
+        let mut boundary = solid_facts_backend::external_package_boundary(&facts, &source_refusals);
         let requirements = solid_facts_backend::requirement_index(&boundary);
         let trust = (!request.receipt_trust_configuration.is_empty())
             .then(|| {
@@ -4194,10 +4019,6 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         } = if request.emit_contract.is_empty() && request.emit_contract_batch.is_empty() {
             solid_facts_backend::inferred_project_accepted_contracts_with_note(
                 directory,
-                &discovered_catalogs,
-                &selection.nested,
-                trust.as_ref(),
-                request.bundled_contracts,
                 &request.runtime,
                 dialect.vocabulary,
                 &facts,
@@ -4363,7 +4184,6 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
 fn ordinary_check(request: &Request) -> bool {
     request.emit_contract.is_empty()
         && request.emit_contract_batch.is_empty()
-        && !request.check_contracts
         && request.declaration_probe_plan.is_empty()
         && request.runtime_module_resolutions.is_empty()
         && request.contract_package_root.is_empty()
@@ -4484,7 +4304,6 @@ fn defaults_to_dependency_sources(request: &Request) -> bool {
         && request.proposal_dependency_catalog.is_empty()
         && request.package_name.is_empty()
         && request.package_version.is_empty()
-        && !request.check_contracts
         && !request.feedback_facts
         && !request.runtime_resolution
         && request.validate_contract_paths.is_empty()
@@ -4569,7 +4388,6 @@ mod default_dependency_source_tests {
             }),
             ("package-name", |r| r.package_name = P.into()),
             ("package-version", |r| r.package_version = P.into()),
-            ("check-contracts", |r| r.check_contracts = true),
             ("feedback-facts", |r| r.feedback_facts = true),
             ("runtime-resolution", |r| r.runtime_resolution = true),
             ("validate-contract", |r| {
@@ -4655,7 +4473,6 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
     let mut format = "default".to_owned();
     let mut certify = false;
     let mut feedback_facts = false;
-    let mut check_contracts = false;
     let mut runtime_resolution = false;
     let mut bundled_contracts = true;
     let mut no_package_contracts = false;
@@ -4919,7 +4736,13 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
             "--format" => format = args.next().ok_or("--format needs a value")?,
             "--certify" => certify = true,
             "--feedback-facts" => feedback_facts = true,
-            "--check-contracts" => check_contracts = true,
+            "--check-contracts" => {
+                return Err(
+                    "--check-contracts was removed: package contracts are no longer \
+                     consumed"
+                        .into(),
+                );
+            }
             "--runtime-resolution" => {
                 runtime_resolution = match args.next().as_deref() {
                     Some("required") => true,
@@ -5143,7 +4966,6 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         format,
         certify,
         feedback_facts,
-        check_contracts,
         runtime_resolution,
         bundled_contracts,
         no_package_contracts,
@@ -5256,9 +5078,6 @@ fn print_help() {
                                 finding in place; text; json (default: default)\n\
            --dialect <ID>               Solid dialect (default: detect from solid-js; fallback: solid-v2)\n\
            --certify                    Exit 1 unless the project is certified\n\
-           --check-contracts            Report imported Solid packages whose contract is\n\
-                                        missing, unverified, or stale (audited against a\n\
-                                        version this project no longer installs)\n\
            --runtime-resolution <MODE>  required: resolve module loads through the\n\
                                         project's own Vite, which runs its config\n\
                                         (SOLID_CHECKER_RUNTIME_RESOLVER names the\n\
