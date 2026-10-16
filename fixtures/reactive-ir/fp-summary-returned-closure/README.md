@@ -27,20 +27,20 @@ Scope and approximations:
 - A getter (`get big() {}`) is a property whose value is the function, so it is
   held back by the same test (the baseline folded it too: `createGetter`). A
   method (`small() {}`) is a summary node of its own and was never folded.
-- The closure's reads are **not** attributed to a later `m.busy()` call in a
-  component body, so `const b = m.busy()` written in the body is no longer
-  reported through the hook call. That claim needs the member call resolved to
-  the anonymous literal, which has no symbol. Round-4 accessor transport retains
-  an SC9012 dispatch obligation at an exact returned callable whose body has
-  calls/member reads but whose implementation is absent from the producer's
-  function universe. It does not synthesize a summary node or borrow JSX/event
-  execution. The hook's construction still gains no guessed read violation.
+- A later call needs exact transport to the returned callable and structural
+  body facts for that function. The backend now records direct returned
+  expressions and direct property/tuple member function literals using their
+  exact spans, preserving transparent TypeScript wrappers. Admitted calls can
+  project the closure's reads at invocation; construction still reads nothing.
+  Missing bodies, unstable receivers and unsupported transport stay explicitly
+  uncertifiable. The IR does not synthesize a missing implementation or borrow
+  JSX/event execution for an eager call.
 
 | Case | Finding | Why |
 | --- | --- | --- |
 | `createMutation()` called in `Screen`, `m.busy()` only in a JSX attribute | none | the closure runs in a tracked position |
 | `createResetter()` with a block-bodied property closure, called from a handler | none | same hook shape, handler |
-| `createFlag()` returning `[s, () => s() > 0]` | none (`SC9012` at `positive()`, here and in `RemoteFlag`) | tuple element closure; since ADR 0282 the destructured slot resolves to that exact inline arrow, which keeps the same outside-the-function-universe obligation as `m.busy()` |
+| `createFlag()` returning `[s, () => s() > 0]` | none | the exact tuple element now has structural body facts and runs in tracked JSX |
 | a property closure that calls a bound helper | none | the call edge is inside the closure |
 | getter in the returned object | none | held back as a property function |
 | method in the returned object | none | a node of its own, never folded |
@@ -52,3 +52,8 @@ Scope and approximations:
 **Stub.** `solid-js.d.ts` copies `createSignal` and `createMemo` verbatim from
 the rc.9 typings, as its header lists; `App.tsx` passes `tsc --noEmit`
 (strict) against the stub and against the real rc.9 install.
+
+`DirectReturns.tsx` adds a transparent-wrapper direct-return control. Its
+eager invocation reports SC1001 violation at `read()`; invocation only from
+tracked JSX is clean. It passes `tsc --noEmit` against published RC.13 typings
+without the fixture stub.

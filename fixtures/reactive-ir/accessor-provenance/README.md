@@ -33,14 +33,17 @@ alias/helper mutation and opaque helpers), member aliases and for-of/for-in
 writes. Receiver bindings may only be used in direct member invocations, apart
 from the exact provider-value handoff. Factories must return the literal itself,
 not an alias. ReturnedObjectAlias, ContextEscaped, ContextMemberAlias and
-ExportedReceiver pin those return/receiver refusals. Async members and implementations absent from the producer's
-function universe are refused; no synthetic nodes are admitted. Warm.tsx and
-warm-factory.ts pin the caller-only `other` to `value` edit with a named helper
-inside an anonymous returned arrow; the process test compares retained and cold
-IR with retained factory syntax/compiler facts. Graph reuse follows the ordinary
+ExportedReceiver pin those return/receiver refusals. Async members and implementations absent from the structural
+function facts are refused; no synthetic IR nodes are admitted. Returned literal
+functions now receive exact structural body facts, including property and tuple
+members. Warm.tsx and warm-factory.ts pin both caller-only `other` to `value`
+and reverse edits with a named helper inside an anonymous returned arrow. The
+reading member is projected at its invocation; the inert member is clean.
+The process test compares retained and cold IR with retained factory
+syntax/compiler facts. Graph reuse follows the ordinary
 source-discovery invalidation policy. Callback-parameter cases preserve the
 ordinary source/argument obligations without synthetic parameter inference.
-An exact callable missing from that universe keeps an SC9012 dispatch obligation
+An exact callable still missing from that universe keeps an SC9012 dispatch obligation
 when its body contains calls/member reads; an inert literal needs no such proof.
 MixedInstances and MixedSameInstance share makeDecor's definition obligation.
 

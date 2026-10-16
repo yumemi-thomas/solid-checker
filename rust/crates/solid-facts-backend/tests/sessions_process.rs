@@ -9,7 +9,7 @@ use solid_facts_backend::{
 };
 
 #[test]
-fn refused_anonymous_member_caller_edit_matches_cold_analysis() {
+fn returned_anonymous_member_caller_edit_matches_cold_analysis() {
     let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
         Ok(value) => value,
         Err(_) => return,
@@ -79,7 +79,7 @@ fn refused_anonymous_member_caller_edit_matches_cold_analysis() {
         timings.interprocedural_graph_reused_files,
         timings.source_discovery_reused_files
     );
-    assert!(retained.static_defects.iter().any(|defect| {
+    assert!(!retained.static_defects.iter().any(|defect| {
         defect.location.path.as_ref() == caller
             && defect.analysis_context == "returned-callable-outside-source-universe"
             && matches!(
@@ -88,14 +88,41 @@ fn refused_anonymous_member_caller_edit_matches_cold_analysis() {
             )
     }));
     assert!(
-        !retained
+        retained
             .reads
             .iter()
             .any(|read| read.location.path.as_ref() == caller)
     );
     assert_eq!(
         retained, fresh,
-        "a refused anonymous member must not change the graph node universe across caller edits"
+        "returned callable body facts must be stable across caller-only edits"
+    );
+    let reverted_source = source.replace("store.value()", "store.other()");
+    let reverted = warm
+        .edit(
+            vec![SourceChange {
+                path: caller.clone(),
+                version: 2,
+                source: Some(reverted_source),
+                compiler_options: CompilerOptions::default(),
+            }],
+            None,
+        )
+        .unwrap();
+    let fresh_reverted =
+        solid_reactive_ir::build(&reverted, dialect::default_dialect().vocabulary).unwrap();
+    let (retained_reverted, _) = incremental
+        .build(&reverted, dialect::default_dialect().vocabulary)
+        .unwrap();
+    assert!(
+        !retained_reverted
+            .reads
+            .iter()
+            .any(|read| read.location.path.as_ref() == caller)
+    );
+    assert_eq!(
+        retained_reverted, fresh_reverted,
+        "returning to the inert member must remove the read in retained and cold IR"
     );
     drop(warm);
     fs::remove_dir_all(directory).unwrap();

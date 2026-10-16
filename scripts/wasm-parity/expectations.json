@@ -762,7 +762,7 @@
       ],
       "metrics": {
         "filesAnalyzed": 4,
-        "functionsAnalyzed": 11,
+        "functionsAnalyzed": 14,
         "proofObligations": 4,
         "cachedSummaries": 0,
         "unresolvedObligations": 1

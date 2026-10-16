@@ -1,5 +1,48 @@
 # Precision backlog
 
+## 2026-10-16 — Returned callable expressions have structural body facts
+
+Found a concrete source-fact omission in backend `structural_functions`:
+the fallback for an unbound returned function compared the whole return
+statement span with the function expression span. It therefore omitted
+direct anonymous returns, and literal property/tuple function values had no
+fallback either. Exact transport could identify those functions but kept
+`returned-callable-outside-source-universe` rather than synthesizing a body.
+
+Structural discovery now matches the peeled returned expression and direct
+literal property/tuple values, including expression-body returns. Anonymous
+facts carry their exact function expression location; they do not mint a
+binding symbol. Existing transport, stable receiver, mutation, async, context
+and source-universe guards still determine whether a call may use the body.
+No synthetic IR node, package trust or host inference was added. Ordinary
+callbacks passed to opaque functions do not gain a source-function entry from
+this return-position branch.
+
+The structural-fact unit test pins direct/wrapped/object/tuple locations and
+an unrelated callback negative. The retained-session regression now switches
+from an inert member to a reading member and back, requiring cold/retained
+equality and preserving graph reuse in both directions. `DirectReturns.tsx`
+proves the eager call reads a signal while tracked invocation is clean.
+Two existing `accessor-provenance` call sites now correctly gain SC1001
+violations: `Body`'s `store.selected()` and the same call in `FactoryApply`.
+The exact closure is `() => rows()`; the existing `store.rows()` controls
+already pin those execution contexts. A callback whose timing remains unknown
+keeps SC1001 uncertifiable. New/affected positive cases pass `tsc --noEmit`
+against published RC.13 typings without the fixture stubs.
+
+Fresh default-mode release comparison across the same 49 project entries:
+uncertifiable rows 3,446 to 3,434 (12 removed), all 537 violation rows unchanged,
+no added findings and no project errors. Removed rows include the exact
+`ai-memory-ui` returned `search.open`/`search.palette` calls and analogous
+factory/member calls in five other applications. The two fixture snapshots
+travel with the body-fact change. Most remaining returned-callable rows are
+still vetoed by tuple/shared-object stability or unsupported transport; those
+limits were not relaxed. The earlier isolated label reproducer was already
+correct; it was removed rather than used to justify a behavior change.
+The WASM visible-JavaScript case retains identical findings, proof obligations
+and native/guest parity; its function metric is updated from 11 to 14 because
+the three returned getter bodies now also have structural function facts.
+
 ## 2026-10-16 — Dispatch summaries preserve source invocation context
 
 The next corpus reduction addresses a shared context loss rather than adding

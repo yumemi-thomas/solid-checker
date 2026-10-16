@@ -1879,9 +1879,19 @@ fn structural_functions(file: &FileFacts) -> Vec<typefacts::SourceFunction> {
                 file.ast
                     .returns
                     .iter()
+                    .chain(
+                        file.ast
+                            .functions
+                            .iter()
+                            .filter_map(|owner| owner.expression_return.as_ref()),
+                    )
                     .any(|returned| {
-                        returned.value == solid_facts::ast::ReturnValueKind::Function
-                            && returned.span == function.span
+                        returned
+                            .argument
+                            .into_iter()
+                            .chain(returned.elements().iter().flatten().copied())
+                            .chain(returned.properties().iter().map(|property| property.value))
+                            .any(|value| file.ast.peel_ts_sugar_span(value) == function.span)
                     })
                     .then(|| typefacts_location(file.path.as_str(), function.span))
             });
@@ -1997,6 +2007,46 @@ mod tests {
     /// The wire schema the in-memory stub claims; the real value comes from
     /// the producer's handshake, which no stub performs.
     const STUB_SCHEMA: u64 = 2;
+
+    #[test]
+    fn returned_literal_functions_have_exact_structural_body_facts() {
+        let file = test_file_facts(
+            "returned.ts",
+            r#"
+function direct() { return (() => 1) as () => number; }
+function object() { return { run: () => 2 }; }
+function tuple() { return [() => 3] as const; }
+function opaque() { consume(() => 4); }
+"#,
+        );
+        let facts = structural_functions(&file);
+        for (text, present) in [
+            ("() => 1", true),
+            ("() => 2", true),
+            ("() => 3", true),
+            ("() => 4", false),
+        ] {
+            let function = file
+                .ast
+                .functions
+                .iter()
+                .find(|function| file.source_text(function.span) == Some(text))
+                .unwrap();
+            let fact = facts
+                .iter()
+                .find(|fact| fact.body.start_byte == u64::from(function.body.start));
+            assert_eq!(fact.is_some(), present, "{text}: {facts:#?}");
+            if let Some(fact) = fact {
+                assert_eq!(
+                    fact.name,
+                    typefacts_location(file.path.as_str(), function.span)
+                );
+                assert_eq!(fact.body.end_byte, u64::from(function.body.end));
+                assert!(fact.arrow);
+                assert!(!fact.exported);
+            }
+        }
+    }
 
     struct Compiler;
     impl CompilerFactsProvider for Compiler {

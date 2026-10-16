@@ -16,6 +16,36 @@ mod no_package_contracts_process;
 use support::{assert_rule_findings, diagnostic_fixture, findings_for_rule};
 
 #[test]
+fn returned_literal_body_facts_project_reads_only_at_invocation() {
+    let Some(findings) = diagnostic_fixture("fp-summary-returned-closure") else {
+        return;
+    };
+    let source = include_str!(
+        "../../../../fixtures/reactive-ir/fp-summary-returned-closure/DirectReturns.tsx"
+    );
+    let rows = findings
+        .iter()
+        .filter(|row| {
+            row["primaryLocation"]["path"]
+                .as_str()
+                .is_some_and(|path| path.ends_with("/DirectReturns.tsx"))
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(rows.len(), 1, "{rows:#?}");
+    let start = source.find("const value = read()").unwrap() + "const value = ".len();
+    assert_eq!(
+        rows[0]["primaryLocation"]["startByte"].as_u64(),
+        Some(start as u64)
+    );
+    assert_eq!(
+        rows[0]["primaryLocation"]["endByte"].as_u64(),
+        Some((start + 6) as u64)
+    );
+    assert_eq!(rows[0]["id"], "SC1001");
+    assert_eq!(rows[0]["kind"], "violation");
+}
+
+#[test]
 fn local_declaration_dispatch_rejects_escapes() {
     let Some(findings) = diagnostic_fixture("literal-argument-member-dispatch") else {
         return;

@@ -2,46 +2,6 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/fp-summary-returned-closure/App.tsx",
-      "start": 673,
-      "end": 679,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/fp-summary-returned-closure/App.tsx",
-      "start": 1035,
-      "end": 1042,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/fp-summary-returned-closure/App.tsx",
-      "start": 1271,
-      "end": 1279,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/fp-summary-returned-closure/App.tsx",
-      "start": 1544,
-      "end": 1548,
-      "fixes": 0
-    },
-    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -62,33 +22,13 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
       "severity": "warning",
-      "path": "fixtures/reactive-ir/fp-summary-returned-closure/Remote.tsx",
-      "start": 319,
-      "end": 325,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/fp-summary-returned-closure/Remote.tsx",
-      "start": 344,
-      "end": 349,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/fp-summary-returned-closure/Remote.tsx",
-      "start": 480,
-      "end": 488,
+      "path": "fixtures/reactive-ir/fp-summary-returned-closure/DirectReturns.tsx",
+      "start": 242,
+      "end": 248,
       "fixes": 0
     },
     {
