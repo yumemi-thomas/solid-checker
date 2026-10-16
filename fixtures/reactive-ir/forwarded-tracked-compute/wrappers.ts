@@ -26,3 +26,29 @@ export async function trackedLater<T>(read: () => T) {
 export function forwarded<T>(read: () => T) {
   return createMemo(read);
 }
+
+// A typed application adapter around a source-visible tracked helper.
+export const wrapped: typeof tracked = ((read: () => unknown) =>
+  tracked(() => {
+    const options = read();
+    return options;
+  })) as typeof tracked;
+
+export const wrappedAndEager: typeof tracked = ((read: () => unknown) => {
+  read();
+  return tracked(() => read());
+}) as typeof tracked;
+
+export const wrappedSnapshot: typeof tracked = ((read: () => unknown) => {
+  const snapshot = untrack(read);
+  return () => snapshot;
+}) as typeof tracked;
+
+export const wrappedLater: typeof tracked = ((read: () => unknown) => {
+  const later = () => read();
+  return later;
+}) as typeof tracked;
+
+declare function external(read: () => unknown): () => unknown;
+export const wrappedUnknown: typeof tracked = ((read: () => unknown) =>
+  external(read)) as typeof tracked;

@@ -1,5 +1,41 @@
 # Precision backlog
 
+## 2026-10-16 — Query options callback: source selection already resolves the sampled gap
+
+Reproduced the saved `ai-memory-ui` finding at `src/components/shell.tsx:461`:
+`useQuery(() => ({ enabled: open(), ... }))`, through the local typed wrapper
+in `src/lib/query.ts`, reaches `@tanstack/solid-query@6.0.0-rc.3`. Default
+analysis of `tsconfig.app.json` retains SC1001 uncertifiable because browser
+host inference refuses the unsupported `@inlang/paraglide-js` config import.
+It analyzes 77 files with 61 unresolved obligations.
+
+With explicit `--runtime-target browser --runtime-build development`,
+source selection includes the installed runtime implementations (111 files).
+The sampled read has no finding and unresolved obligations fall to 15. Raw
+uncertifiable finding rows fall from 99 to 67, while all 17 violation sites
+remain identical (none added or removed). These
+are snapshot metrics for one project, not corpus-wide findings counts or a
+claim that all remaining obligations are recoverable. The selected package's
+`useQuery` passes `createMemo(() => options())` to `useBaseQuery`; the local
+adapter forwards the application options callback into that source-visible
+compute. No Type Facts, compiler facts, host inference or analyzer change was
+needed. Inference remains refused; explicit flags assert runtime premises.
+
+Extended `forwarded-tracked-compute` with project-owned typed options adapters
+and an armed exact-span process test: tracked and explicit-untrack controls
+are clean, an additional eager invocation remains a violation, and returned or
+unknown callback execution remains uncertifiable. The new sources pass
+`tsc --noEmit` against published Solid 2.0.0-rc.13 typings without fixture stubs.
+This pins an existing source-analysis capability; it does not claim a new
+precision recovery or model arbitrary `useQuery` implementations by name.
+
+The adjacent `pageSlice` finding at `src/components/data-grid.tsx:243` remains
+SC9012 under both configurations: `src/lib/pagination.ts` invokes `.slice` on
+its `readonly T[]` parameter, supplied through `sorted()` / `filtered()` from
+`props.items`. A declared array type alone does not prove the runtime method
+target or exclude a caller-supplied override. This is a separate value-flow
+proof gap, not another missing host flag; it was not silenced in this slice.
+
 ## 2026-10-16 — Package contracts removed (P7, D1–D8)
 
 Ordinary native, retained and WASM analysis consume no catalog, authored tier

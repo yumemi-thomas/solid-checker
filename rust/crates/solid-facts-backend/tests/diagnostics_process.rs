@@ -16,6 +16,51 @@ mod no_package_contracts_process;
 use support::{assert_rule_findings, diagnostic_fixture, findings_for_rule};
 
 #[test]
+fn typed_options_wrappers_preserve_source_callback_execution() {
+    let Some(findings) = diagnostic_fixture("forwarded-tracked-compute") else {
+        return;
+    };
+    let source =
+        include_str!("../../../../fixtures/reactive-ir/forwarded-tracked-compute/QueryOptions.tsx");
+    let rows = findings
+        .iter()
+        .filter(|finding| {
+            finding["primaryLocation"]["path"]
+                .as_str()
+                .is_some_and(|path| path.ends_with("/QueryOptions.tsx"))
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(rows.len(), 3, "{rows:#?}");
+    for (wrapper, expected) in [
+        ("wrapped", None),
+        ("wrappedSnapshot", None),
+        ("wrappedAndEager", Some("violation")),
+        ("wrappedLater", Some("uncertifiable")),
+        ("wrappedUnknown", Some("uncertifiable")),
+    ] {
+        let expression = format!("{wrapper}(() => ({{ enabled: open() }}))");
+        let start =
+            source.find(&expression).expect("callback call") + expression.find("open()").unwrap();
+        let row = rows
+            .iter()
+            .find(|row| row["primaryLocation"]["startByte"].as_u64() == Some(start as u64));
+        match expected {
+            Some(kind) => {
+                let row = row.unwrap_or_else(|| panic!("{wrapper}: {rows:#?}"));
+                assert_eq!(row["id"], "SC1001", "{wrapper}: {row:#?}");
+                assert_eq!(row["kind"], kind, "{wrapper}: {row:#?}");
+                assert_eq!(
+                    row["primaryLocation"]["endByte"].as_u64(),
+                    Some((start + "open()".len()) as u64),
+                    "{wrapper}: {row:#?}"
+                );
+            }
+            None => assert!(row.is_none(), "{wrapper}: {row:#?}"),
+        }
+    }
+}
+
+#[test]
 fn returned_tuple_iteration_mutations_withdraw_only_the_proven_read() {
     use std::{fs, process::Command};
     let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
