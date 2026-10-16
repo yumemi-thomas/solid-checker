@@ -72,8 +72,11 @@ first two cases. The third makes the second reachable for argumentless calls.
    for calls with arguments, returned calls, computed calls and dialect
    primitives, so the `trim()` in `message.trim().split(" ")` was never
    resolved. An argumentless member call whose root names a parameter of an
-   enclosing function is now demanded too. The root is matched by spelling: a
-   shadowed name over-demands, which costs one fact and decides nothing.
+   enclosing function is now demanded too. The root follows AST member and
+   call-result receivers through transparent TypeScript wrappers to the exact
+   local parameter declaration. Whitespace and comments do not change the
+   demanded facts (2026-10-16). Traversing a call-result receiver only requests
+   its declaration; it establishes no runtime identity on its own.
 
 No built-in method of a primitive reads reactive state. A callback the helper
 passes to the built-in (`replace`'s replacer) is the helper's own call. It is

@@ -38,3 +38,23 @@ export function stamp(when: Date): number {
 export function words(message: string): string[] {
   return message.trim().split(" ");
 }
+
+export function formatted(input: string): string[] {
+  return input
+    .toLowerCase()
+    .split(" ");
+}
+
+export function commented(input: string): string[] {
+  return input /* receiver */ .trim().split(" ");
+}
+
+export function wrapped(input: string): string[] {
+  return ((input) as string).trim().split(" ");
+}
+
+export function formattedObject(input: Date): string {
+  return input
+    .getTime()
+    .toString();
+}

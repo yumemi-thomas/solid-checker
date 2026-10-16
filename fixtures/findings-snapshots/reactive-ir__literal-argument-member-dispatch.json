@@ -56,6 +56,16 @@
       "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/literal-argument-member-dispatch/Formatted.tsx",
+      "start": 578,
+      "end": 582,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/literal-argument-member-dispatch/source.ts",
       "start": 216,
       "end": 306,

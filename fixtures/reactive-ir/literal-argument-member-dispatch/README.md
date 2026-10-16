@@ -15,6 +15,11 @@ argument arrives (ADR 0190).
   `String.toUpperCase`.
 - `ChainedBuiltin`: clean; `message.trim().split(" ")` takes no argument at
   `trim`, so its resolved call is demanded because its root is a parameter.
+- `FormattedBuiltin`, `CommentedBuiltin`, `WrappedBuiltin`: clean; multiline
+  chains, comments and transparent wrappers preserve the exact receiver
+  declaration used to demand the existing primitive built-in proof.
+- `FormattedObject`: `Date.getTime` remains uncertifiable even with the
+  resolved declaration; formatting conveys no runtime identity.
 - `ObjectBuiltin`: `Date.getTime` is an object type's method, which a
   subclass can override, so `SC9012` stays.
 - `ObjectArgument`: resolved through the object's own member, unchanged.

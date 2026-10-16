@@ -16,6 +16,37 @@ mod no_package_contracts_process;
 use support::{assert_rule_findings, diagnostic_fixture, findings_for_rule};
 
 #[test]
+fn formatted_primitive_receivers_demand_exact_builtin_declarations() {
+    let Some(findings) = diagnostic_fixture("literal-argument-member-dispatch") else {
+        return;
+    };
+    let rows = findings
+        .iter()
+        .filter(|row| {
+            row["primaryLocation"]["path"]
+                .as_str()
+                .is_some_and(|path| path.ends_with("/Formatted.tsx"))
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(rows.len(), 1, "{rows:#?}");
+    let row = rows[0];
+    assert_eq!(row["id"], "SC9012");
+    assert_eq!(row["kind"], "uncertifiable");
+    let source = include_str!(
+        "../../../../fixtures/reactive-ir/literal-argument-member-dispatch/Formatted.tsx"
+    );
+    let start = source.find("formattedObject(when)").unwrap() + "formattedObject(".len();
+    assert_eq!(
+        row["primaryLocation"]["startByte"].as_u64(),
+        Some(start as u64)
+    );
+    assert_eq!(
+        row["primaryLocation"]["endByte"].as_u64(),
+        Some((start + "when".len()) as u64)
+    );
+}
+
+#[test]
 fn callback_proof_budget_is_per_root_and_stays_bounded() {
     use std::{fs, process::Command, time::SystemTime};
     let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {

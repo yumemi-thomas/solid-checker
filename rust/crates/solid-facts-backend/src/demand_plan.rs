@@ -939,29 +939,42 @@ fn local_nested_function_callee(file: &FileFacts, callee: solid_facts::core::Spa
 /// parameters (`name.trim()` inside `(name: string) => name.trim().split(…)`).
 /// The IR records it as a parameter-member invocation, and only its resolved
 /// declaration says whether the member is a primitive wrapper's built-in
-/// (ADR 0190). The root is matched by spelling, so a shadowed name
-/// over-demands, which costs a fact and decides nothing.
+/// (ADR 0190). Follow syntax and the exact local declaration so formatting,
+/// comments and transparent TypeScript wrappers cannot hide that demand.
 fn parameter_rooted_member_call(file: &FileFacts, call: &solid_facts::ast::CallFact) -> bool {
-    let callee = file.ast.peel_ts_sugar_span(call.callee);
-    let Some(text) = file.source_text(callee) else {
-        return false;
-    };
-    let root_length = text
-        .find(|character: char| {
-            !(character.is_alphanumeric() || character == '_' || character == '$')
-        })
-        .unwrap_or(text.len());
-    let (root, rest) = text.split_at(root_length);
-    if root.is_empty() || !(rest.starts_with('.') || rest.starts_with("?.")) {
+    let mut root = file.ast.peel_ts_sugar_span(call.callee);
+    let mut member_found = false;
+    loop {
+        if let Some(member) = file.ast.members.iter().find(|member| member.span == root) {
+            member_found = true;
+            root = file.ast.peel_ts_sugar_span(member.object);
+        } else if let Some(receiver_call) = file
+            .ast
+            .calls
+            .iter()
+            .find(|call| !call.construct && call.span == root)
+        {
+            // Preserve demands for the rest of a parameter-rooted chain,
+            // such as value.trim().toLowerCase(). This only asks for facts;
+            // it does not establish the returned receiver's runtime identity.
+            root = file.ast.peel_ts_sugar_span(receiver_call.callee);
+        } else {
+            break;
+        }
+    }
+    if !member_found {
         return false;
     }
+    let Some(declaration) = file.ast.reference_declaration(root) else {
+        return false;
+    };
     file.ast.functions.iter().any(|function| {
         function.span.contains(call.span)
             && function
                 .parameters
                 .iter()
                 .flat_map(|parameter| &parameter.names)
-                .any(|name| file.source_text(name.span) == Some(root))
+                .any(|name| name.span == declaration)
     })
 }
 

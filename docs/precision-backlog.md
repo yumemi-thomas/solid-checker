@@ -1,5 +1,36 @@
 # Precision backlog
 
+## 2026-10-16 — Structural demands recover formatted primitive chains
+
+The parameter-rooted member demand planner inspected the receiver's source
+text and required a dot immediately after its first identifier. A multiline
+`input\n .toLowerCase().replace(...)` or a comment before the dot therefore
+lost the resolved declaration of the argumentless first method. The existing
+primitive standard-library proof then lacked its required fact and emitted
+SC9012. The planner now follows AST member/call-result receivers and
+transparent TypeScript wrappers to the exact parameter declaration. Following
+a returned receiver merely requests a fact; it supplies no inferred runtime
+identity or new built-in behavior. Existing chained demands are preserved,
+and local shadows do not match an enclosing parameter by spelling.
+
+Unit tests pin multiline, commented, wrapped, optional, indexed, call-result-chain and
+shadowed cases. `literal-argument-member-dispatch/Formatted.tsx` adds cross-file
+positive cases and an object-typed `Date.getTime` negative control, with an
+exact-span process assertion. The sources pass `tsc --noEmit` against published
+Solid RC.13 typings. Only that fixture's snapshot changes, adding the new
+uncertifiable Date control. Object overrides, unknown member targets and
+missing dependency/host behavior remain fail-closed.
+
+The fresh default-mode corpus removes nine SC9012 rows across `app-game`,
+`donegeon-client`, `jibe-run` and `openbot`: 3,433 uncertifiable rows become
+3,424, all 537 violation rows are identical, and no finding or project error
+is added. The removed rows cover formatted primitive operations in HTML export,
+board-name normalization, slug normalization and OTP sanitization. This is a
+fact-demand repair, not a package-resolution change. The investigated large
+source-selection refusals involve custom Vite transforms, non-conventional
+config invocation or unproved generated-module dependencies; those are not
+relaxed to obtain a larger reduction.
+
 ## 2026-10-16 — Callback proof budgets belong to individual roots
 
 `ReadConsumerSummaries` previously retained one 128-node graph across every

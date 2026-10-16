@@ -2649,7 +2649,13 @@ function Card(props: { value: string }, parameter: () => string) {
                void head;\n\
                return message.trim().split(\" \");\n\
              }\n\
-             export const lower = (value?: string) => value?.toLowerCase().length;",
+             export const lower = (value?: string) => value?.toLowerCase().length;\n\
+             export function formatted(input: string) { return input\n .toLowerCase().split(' '); }\n\
+             export function commented(input: string) { return input /* receiver */ .trim().split(' '); }\n\
+             export function wrapped(input: string) { return ((input) as string).trim().split(' '); }\n\
+             export function chained(input: string) { const result = input.trim().toLowerCase(); return result; }\n\
+             export function shadowed(subject: string) { function inner() { const subject = 'x'; const out = subject.toUpperCase().toLowerCase(); return out; } return inner(); }\n\
+             export function indexed(input: string) { const result = input[0]?.toUpperCase(); return result; }",
         );
         let demands = semantic_demands(
             dialect::default_dialect(),
@@ -2671,6 +2677,24 @@ function Card(props: { value: string }, parameter: () => string) {
         };
         assert!(resolved("message.trim"), "inside a chain");
         assert!(resolved("value?.toLowerCase"), "an optional member call");
+        assert!(resolved("input\n .toLowerCase"), "a formatted chain");
+        assert!(
+            resolved("input /* receiver */ .trim"),
+            "a commented receiver"
+        );
+        assert!(
+            resolved("((input) as string).trim"),
+            "a transparent wrapper"
+        );
+        assert!(
+            resolved("input.trim().toLowerCase"),
+            "a call-result receiver in a chain"
+        );
+        assert!(
+            !resolved("subject.toUpperCase"),
+            "a local shadow is not the enclosing parameter"
+        );
+        assert!(resolved("input[0]?.toUpperCase"), "an indexed receiver");
         assert!(
             resolved("dialog?.focus"),
             "directly in a leaf-owner callback"
