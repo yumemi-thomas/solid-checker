@@ -28,7 +28,13 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use sha2::{Digest as _, Sha256};
 
-use crate::contract_semantics::{AcceptedContractIndex, UncertifiableImportReason};
+/// Why an import keeps an open requirement, as the requirement discovery
+/// recorded it.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum UncertifiableImportReason {
+    Unspecified,
+    ObsoletePolicy1,
+}
 
 /// One import occurrence: the importing file, in the canonical project
 /// identity Type Facts uses, and the specifier as written, subpath and alias
@@ -512,17 +518,6 @@ impl PackageBoundary {
             .take_while(move |(key, _)| key.importer == importer)
     }
 
-    /// The importer/specifier pairs whose accepted contract is withheld: the
-    /// keys with at least one recorded form the contract binder ever bound.
-    /// A key holding only loads the binder never bound denies nothing.
-    pub(crate) fn denied_import_edges(&self) -> BTreeSet<(String, String)> {
-        self.source_edges
-            .iter()
-            .filter(|(_, sites)| sites.iter().any(|site| site.form.is_contract_bound()))
-            .map(|(key, _)| (key.importer.clone(), key.specifier.clone()))
-            .collect()
-    }
-
     /// Adds `key` to the contract-era requirement set. A later reason for the
     /// same key replaces an earlier one, as the acceptance index's did.
     pub fn require_legacy(&mut self, key: ImportKey, reason: UncertifiableImportReason) {
@@ -564,20 +559,6 @@ impl PackageBoundary {
             .refusal_overrides
             .get(&ImportKey::new(importer, specifier))
             .map(Option::as_deref)
-    }
-
-    /// The contract-era requirement index these keys produced: missing-
-    /// evidence markers only, which a catalog may fill with accepted
-    /// semantics. One authoritative marker set while acquisition still folds
-    /// the requirement index into its tiers.
-    #[must_use]
-    pub fn legacy_requirement_index(&self) -> AcceptedContractIndex {
-        AcceptedContractIndex::default().with_uncertifiable_import_reasons(
-            self.legacy
-                .markers
-                .iter()
-                .map(|(key, reason)| ((key.importer.clone(), key.specifier.clone()), *reason)),
-        )
     }
 
     /// Folds `other` in: every cause of both, and `self`'s requirement and

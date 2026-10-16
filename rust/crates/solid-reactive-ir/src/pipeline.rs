@@ -2,18 +2,14 @@
 //! assembles a `Program`, plus the bounded-parallelism helpers.
 
 use std::{
-    borrow::Cow,
     cell::Cell,
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{HashMap, HashSet},
     sync::Arc,
     time::Instant,
 };
 
 use crate::cache::{BuildCaches, ReusePlan, build_typescript_indexes};
-use crate::contract_semantics::AcceptedContractIndex;
-use crate::contracts::{
-    ResolvedContractBinding, discover_boundary_defects, resolve_accepted_contract_imports,
-};
+use crate::contracts::discover_boundary_defects;
 use crate::hosts::ProjectHostIndex;
 use crate::identity::{SymbolId, SymbolName};
 use crate::indexes::{CachedAstFileIndex, EntitySymbols, ProjectIndexes, SemanticLookup};
@@ -23,8 +19,7 @@ use crate::source_discovery::{StageContext, discover_sources};
 use crate::symbols::{add_solid_import_names, patch_typescript_indexes};
 use crate::timings::{ReactiveIrStage, StageClock};
 use crate::{
-    ActionInvocation, AsyncRead, BuildError, BuildTimings, ContractExport,
-    ContractGenerationObligation, LeafOwnerOperation, ObligationCounts, ObligationReach,
+    ActionInvocation, AsyncRead, BuildError, BuildTimings, LeafOwnerOperation, ObligationCounts,
     OwnerRequirement, PrimitiveCreation, Program, ReactiveRead, ReactiveSourceKind, ReactiveWrite,
     RuleOptions, StaticDefect, StaticViolation, location_order,
 };
@@ -53,16 +48,8 @@ pub(crate) struct ProgramDraft {
     pub(crate) leaf_operations: Vec<LeafOwnerOperation>,
     pub(crate) directive_creations: Vec<PrimitiveCreation>,
     pub(crate) missing_owners: Vec<OwnerRequirement>,
-    pub(crate) creates_proposal_walk: crate::CreatesProposalWalk,
-    pub(crate) merged_props_returns: crate::returns_walk::MergedPropsReturns,
-    pub(crate) argument_container_returns: crate::returns_walk::ArgumentContainerReturns,
-    pub(crate) contract_exports: Arc<BTreeMap<String, ContractExport>>,
-    pub(crate) contract_generation_obligations: Vec<ContractGenerationObligation>,
     pub(crate) strict_read_obligations: usize,
     pub(crate) write_action_obligations: HashSet<(&'static str, String, u64, u64)>,
-    /// How contract binding answered, carried through so a refusal is
-    /// countable in the finished [`Program`].
-    pub(crate) contract_binding: crate::ContractBindingCounts,
     /// One static diagnostic per (rule, file, offset) identity, across the
     /// stages that share an identity space.
     pub(crate) seen_diagnostics: HashSet<(&'static str, Arc<str>, u64)>,
@@ -87,8 +74,8 @@ impl ProgramDraft {
         }
     }
 
-    /// Removes source-derived diagnostics and contract-generation obligations
-    /// whose primary operation the compiler proved it deleted.
+    /// Removes source-derived diagnostics whose primary operation the
+    /// compiler proved it deleted.
     ///
     /// These tables are intentionally filtered together at the last common
     /// pipeline seam. Their producers range from API-shape checks through the
@@ -120,16 +107,10 @@ impl ProgramDraft {
             .retain(|violation| retained(&violation.location));
         self.directive_creations
             .retain(|creation| retained(&creation.location));
-        self.contract_generation_obligations
-            .retain(|obligation| retained(&obligation.location));
     }
 
     /// Orders every table by location and assembles the final [`Program`].
-    pub(crate) fn into_program(
-        mut self,
-        factory_instances: usize,
-        obligation_reach: Vec<ObligationReach>,
-    ) -> Program {
+    pub(crate) fn into_program(mut self, factory_instances: usize) -> Program {
         self.reads
             .sort_by(|left, right| location_order(&left.location, &right.location));
         self.writes
@@ -146,8 +127,6 @@ impl ProgramDraft {
             .sort_by(|left, right| location_order(&left.location, &right.location));
         self.async_reads
             .sort_by(|left, right| location_order(&left.location, &right.location));
-        self.contract_generation_obligations
-            .sort_by(|left, right| location_order(&left.location, &right.location));
         Program {
             apply_compute_reads: self.apply_compute_reads,
             runtime_configuration: crate::RuntimeConfigurationPremise::Assumed,
@@ -161,18 +140,11 @@ impl ProgramDraft {
             directive_creations: self.directive_creations,
             missing_owners: self.missing_owners,
             async_reads: self.async_reads,
-            contract_exports: self.contract_exports,
-            contract_generation_obligations: self.contract_generation_obligations,
-            obligation_reach,
             obligation_counts: ObligationCounts {
                 strict_reads: self.strict_read_obligations,
                 writes_and_actions: self.write_action_obligations.len(),
                 factory_instances,
             },
-            contract_binding: self.contract_binding,
-            creates_proposal_walk: self.creates_proposal_walk,
-            merged_props_returns: self.merged_props_returns,
-            argument_container_returns: self.argument_container_returns,
         }
     }
 }
@@ -202,71 +174,34 @@ pub(crate) struct AnalysisContext<'a> {
     pub(crate) value_form_stores: &'a HashSet<SymbolId>,
     pub(crate) reachable_calls: &'a HashMap<Location, usize>,
     pub(crate) symbols_by_root: &'a HashMap<SymbolId, Vec<SymbolId>>,
-    pub(crate) contracted: &'a HashMap<SymbolId, ResolvedContractBinding>,
     pub(crate) rule_options: &'a RuleOptions,
 }
 
 /// What one analysis is given about the code it cannot read: the package
-/// boundary, and the accepted contracts that still answer for packages
-/// through phase P7 of the contract-removal plan. Both are complete inputs;
-/// neither is derived from the other inside the analysis.
+/// boundary, every import the analysis cannot answer from source, each with
+/// the cause recorded at the decision that found it.
 ///
-/// `hosts` is the execution evidence behind an inferred browser view (phase
-/// P4 of the plan), carried beside the contracts rather than inside them. The
-/// IR pipeline fingerprints it and never reads it: only the backend's
-/// projection of findings does. A host belongs with the view that was
-/// selected from it; [`Self::check_host_pairing`] states the pairing.
+/// `hosts` is the inferred execution host (phase P4 of the contract-removal
+/// plan). The IR pipeline fingerprints it and never reads it.
 #[derive(Clone, Copy, Debug)]
 pub struct AnalysisInputs<'a> {
     pub boundary: &'a PackageBoundary,
-    pub contracts: &'a AcceptedContractIndex,
     pub hosts: Option<&'a ProjectHostIndex>,
 }
 
-/// An analysis's host input and its browser view disagree about each other.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum HostPairingError {
-    /// The index asks for a browser/baseline fork but no host was supplied to
-    /// project the findings.
-    ForkWithoutHost,
-    /// A host was supplied but the index has no browser view built from it.
-    HostWithoutView,
-    /// The view was selected from a different host state than the one supplied.
-    SelectionMismatch,
-}
-
-impl std::fmt::Display for HostPairingError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str(match self {
-            Self::ForkWithoutHost => {
-                "inferred browser view has no host input; the host that selected it must accompany it"
-            }
-            Self::HostWithoutView => {
-                "host input has no browser view built from it to select imports"
-            }
-            Self::SelectionMismatch => {
-                "inferred browser view does not match the host input it accompanies; the host changed after the view was selected"
-            }
-        })
-    }
-}
-
-impl std::error::Error for HostPairingError {}
-
 impl<'a> AnalysisInputs<'a> {
-    /// Accepted contracts with no recorded boundary and no host: every caller
-    /// that has not been given one.
+    /// No recorded boundary and no host: every caller that has not been given
+    /// one.
     #[must_use]
-    pub fn contracts_only(contracts: &'a AcceptedContractIndex) -> Self {
+    pub fn empty() -> Self {
         static EMPTY: std::sync::OnceLock<PackageBoundary> = std::sync::OnceLock::new();
         Self {
             boundary: EMPTY.get_or_init(PackageBoundary::default),
-            contracts,
             hosts: None,
         }
     }
 
-    /// These inputs with the host that selected the contracts' browser view.
+    /// These inputs with an inferred host.
     #[must_use]
     pub fn with_hosts(self, hosts: &'a ProjectHostIndex) -> Self {
         Self {
@@ -275,36 +210,12 @@ impl<'a> AnalysisInputs<'a> {
         }
     }
 
-    /// Whether the host and the browser view agree: both absent, a view
-    /// without a host only for the browser half of a fork (which projects no
-    /// findings), and otherwise a host whose selection equals the view's.
-    ///
-    /// # Errors
-    ///
-    /// Names the disagreement. Nothing here substitutes the baseline or the
-    /// browser view for the other.
-    pub fn check_host_pairing(&self) -> Result<(), HostPairingError> {
-        match (self.hosts, self.contracts.browser_view_state()) {
-            (None, None) | (None, Some((_, false))) => Ok(()),
-            (None, Some((_, true))) => Err(HostPairingError::ForkWithoutHost),
-            (Some(_), None) => Err(HostPairingError::HostWithoutView),
-            (Some(hosts), Some((selection, _))) => {
-                if *selection == hosts.browser_view_selection() {
-                    Ok(())
-                } else {
-                    Err(HostPairingError::SelectionMismatch)
-                }
-            }
-        }
-    }
-
     /// The cache identity of the inputs. An empty boundary and an absent host
-    /// add nothing, so an identity is what it was before either existed; any
-    /// recorded cause, explanation included, and every byte of a host is part
-    /// of it.
+    /// add nothing; any recorded cause, explanation included, and every byte
+    /// of a host is part of it.
     #[must_use]
     pub fn cache_fingerprints(&self) -> Vec<[u8; 32]> {
-        let mut fingerprints = vec![self.contracts.cache_fingerprint()];
+        let mut fingerprints = Vec::new();
         if !self.boundary.is_empty() {
             fingerprints.push(self.boundary.digest());
         }
@@ -321,10 +232,10 @@ impl<'a> AnalysisInputs<'a> {
 }
 
 pub fn build(facts: &ProjectFacts, dialect: &dyn Dialect) -> Result<Program, BuildError> {
-    build_with_accepted_contracts_measured(
+    build_with_analysis_inputs_measured(
         facts,
         dialect,
-        &AcceptedContractIndex::default(),
+        AnalysisInputs::empty(),
         &RuleOptions::default(),
     )
     .map(|(program, _)| program)
@@ -346,21 +257,6 @@ pub fn build(facts: &ProjectFacts, dialect: &dyn Dialect) -> Result<Program, Bui
 /// and end their span on the [`StageClock`]; each late-stage cache sub-slot
 /// is handed to exactly one stage. See
 /// `docs/pipeline-orchestrator-redesign.md`.
-pub fn build_with_accepted_contracts_measured(
-    facts: &ProjectFacts,
-    dialect: &dyn Dialect,
-    contracts: &AcceptedContractIndex,
-    rule_options: &RuleOptions,
-) -> Result<(Program, BuildTimings), BuildError> {
-    build_with_analysis_inputs_measured(
-        facts,
-        dialect,
-        AnalysisInputs::contracts_only(contracts),
-        rule_options,
-    )
-}
-
-/// [`build_with_accepted_contracts_measured`] given a package boundary too.
 pub fn build_with_analysis_inputs_measured(
     facts: &ProjectFacts,
     dialect: &dyn Dialect,
@@ -377,29 +273,6 @@ pub fn build_with_analysis_inputs_measured(
     )
 }
 
-/// The accepted contracts, with each importer/specifier pair the boundary
-/// records a contract-bound source-edge refusal for withheld from every tier:
-/// importer-keyed, artifact-admitted, per-importer admitted, scoped and every
-/// browser view. Applied once, at the shared build seam after
-/// [`AcceptedContractIndex::external_packages`], so both a direct and a
-/// retained build see the same index.
-///
-/// The result is the borrowed input when nothing is recorded, or when what is
-/// recorded names only loads the binder never bound (a literal-only record
-/// denies nothing). This withholds accepted-contract semantics at the pair
-/// and nothing else: source declarations, alias roots and redirects are built
-/// independently of contracts and stay as they were.
-pub(crate) fn deny_recorded_edges<'a>(
-    contracts: Cow<'a, AcceptedContractIndex>,
-    boundary: &PackageBoundary,
-) -> Cow<'a, AcceptedContractIndex> {
-    let denied = boundary.denied_import_edges();
-    if denied.is_empty() {
-        return contracts;
-    }
-    Cow::Owned(contracts.into_owned().without_import_edges(&denied))
-}
-
 pub(crate) fn build_with_analysis_inputs_measured_incremental(
     facts: &ProjectFacts,
     dialect: &dyn Dialect,
@@ -408,18 +281,8 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     caches: BuildCaches<'_>,
     runtime_configuration: crate::RuntimeConfigurationPremise,
 ) -> Result<(Program, BuildTimings), BuildError> {
-    // A recorded refusal that the facts do not support is an error before any
-    // contract is withheld on its account: the check and the denial below read
-    // the same record, so a build never denies what it did not validate.
+    // A recorded refusal that the facts do not support is an error.
     crate::source_refusal::check(inputs.boundary, facts)?;
-    let external_contracts =
-        deny_recorded_edges(inputs.contracts.external_packages(), inputs.boundary);
-    let contracts = external_contracts.as_ref();
-    let inputs = AnalysisInputs {
-        boundary: inputs.boundary,
-        contracts,
-        hosts: inputs.hosts,
-    };
     let BuildCaches {
         ast_indexes: ast_indexes_cache,
         source_discovery: source_discovery_cache,
@@ -531,68 +394,16 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     add_solid_import_names(facts, entities, dialect, &mut symbol_names);
     build_timings.symbol_name_indexes = substage_started.elapsed();
     let substage_started = Instant::now();
-    let mut resolved_contracts = resolve_accepted_contract_imports(
-        facts,
-        contracts,
-        entities,
-        &symbol_names,
-        dialect,
-        &runtime_configuration,
-    );
-    // Concatenated, not interleaved: every table is ordered by location before
-    // anything reads its order, and no import is both bound and unbound.
-    let mut missing_contract_exports = std::mem::take(&mut resolved_contracts.missing_exports);
-    missing_contract_exports.extend(discover_boundary_defects(facts, inputs, entities, dialect));
+    // An import the analysis cannot answer from source is the package
+    // boundary's question.
+    let missing_contract_exports = discover_boundary_defects(facts, inputs, entities, dialect);
     build_timings.contract_resolution = substage_started.elapsed();
-    // Returned-member effects are installed during import resolution. Their
-    // tuple destructuring premise must be withdrawn before any graph/source
-    // consumer sees those synthetic bindings (ADR 0282).
-    let tuple_slots = facts
-        .files
-        .iter()
-        .flat_map(|file| {
-            file.ast
-                .bindings
-                .iter()
-                .filter(|binding| binding.shape == solid_facts::ast::BindingShape::Array)
-                .flat_map(|binding| binding.names.iter())
-                .filter_map(|name| entities.at(file.path.as_str(), name.span))
-        })
-        .collect::<HashSet<_>>();
-    let withdrawn = resolved_contracts
-        .bindings
-        .iter()
-        .filter(|binding| {
-            tuple_slots.contains(&binding.symbol) && binding.imported_name.ends_with(']')
-        })
-        .map(|binding| binding.symbol.clone())
-        .collect::<HashSet<_>>();
-    if !withdrawn.is_empty()
-        && SemanticLookup::new(
-            facts,
-            ast_indexes,
-            entities,
-            &symbol_names,
-            dialect,
-            &resolved_contracts,
-            rule_options.runtime.program_is_closed(),
-        )
-        .tuple_iteration_may_be_mutated()
-    {
-        resolved_contracts
-            .bindings
-            .retain(|binding| !withdrawn.contains(&binding.symbol));
-        resolved_contracts
-            .by_symbol
-            .retain(|symbol, _| !withdrawn.contains(symbol));
-    }
     let semantic_lookup = SemanticLookup::new(
         facts,
         ast_indexes,
         entities,
         &symbol_names,
         dialect,
-        &resolved_contracts,
         rule_options.runtime.program_is_closed(),
     );
     let semantic_lookup = &semantic_lookup;
@@ -610,7 +421,6 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
             Vec::new()
         },
         static_defects: missing_contract_exports,
-        contract_binding: resolved_contracts.counts,
         ..ProgramDraft::default()
     };
     let mut owned_reachable_calls = None;
@@ -625,7 +435,6 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         source_declarations,
         symbol_names: &symbol_names,
         semantic_lookup,
-        resolved_contracts: &resolved_contracts,
         runtime: &rule_options.runtime,
     };
     let discover = move || {
@@ -719,7 +528,6 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         value_form_stores: &source_discovery.value_form_stores,
         reachable_calls,
         symbols_by_root: &typescript_indexes.symbols_by_root,
-        contracted: &resolved_contracts.by_symbol,
         rule_options,
     };
     static_rules::static_prepass(&analysis, &mut draft);
@@ -765,19 +573,9 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         &mut build_timings,
     );
     clock.finish(&mut build_timings, ReactiveIrStage::OwnerFixedPoint);
-    // The generator's own `creates` proposal walk. It reads the same callee
-    // resolution, primitive vocabulary, and accepted-contract bindings every
-    // stage above reads, and it decides only whether a `creates: []` *proposal*
-    // may be made; the claim is proved or refused by the certifier's
-    // implementation census. See `crate::CreatesProposalWalk`.
-    draft.creates_proposal_walk = crate::creates_walk::collect_project(&analysis);
-    draft.merged_props_returns = crate::returns_walk::collect_merged_props_returns(&analysis);
-    draft.argument_container_returns =
-        crate::returns_walk::collect_argument_container_returns(&analysis);
     // Static and compatibility passes deliberately operate on source facts.
     // Apply the compiler's stronger "this code was not emitted" fact once,
-    // after every producer has run and before unresolved obligations are
-    // attributed to exported surfaces.
+    // after every producer has run.
     draft.discard_deleted_static_diagnostics(facts);
     crate::effect_execution::gate_diagnostics(semantic_lookup, &mut draft);
     crate::attribution::discharge_closed_program_export_dispatch(
@@ -788,18 +586,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         &typescript_indexes.symbols_by_root,
         &mut draft.static_defects,
     );
-    // Every stage that can file an unresolved obligation has run, so the
-    // attribution question is answerable exactly once, over the final defect
-    // list, rather than per stage over a partial one.
-    let obligation_reach = crate::attribution::obligation_reach(
-        facts,
-        semantic_lookup,
-        entities,
-        aliases,
-        &typescript_indexes.symbols_by_root,
-        &draft.static_defects,
-    );
-    let mut program = draft.into_program(factory_instances, obligation_reach);
+    let mut program = draft.into_program(factory_instances);
     program.runtime_configuration = runtime_configuration;
     clock.finish(&mut build_timings, ReactiveIrStage::FinalOrdering);
     build_timings.total = total_started.elapsed();

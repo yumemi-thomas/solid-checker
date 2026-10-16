@@ -442,36 +442,6 @@
       "fixes": 0
     },
     {
-      "rule": "package-contract-incomplete",
-      "code": "SC9005",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/project-callback-uses/forwarding.ts",
-      "start": 128,
-      "end": 132,
-      "fixes": 0
-    },
-    {
-      "rule": "package-contract-incomplete",
-      "code": "SC9005",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/project-callback-uses/forwarding.ts",
-      "start": 207,
-      "end": 211,
-      "fixes": 0
-    },
-    {
-      "rule": "package-contract-incomplete",
-      "code": "SC9005",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/project-callback-uses/forwarding.ts",
-      "start": 276,
-      "end": 280,
-      "fixes": 0
-    },
-    {
       "rule": "unaudited-solid-release",
       "code": "SC9014",
       "kind": "uncertifiable",
@@ -489,26 +459,6 @@
       "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
       "start": 432,
       "end": 444,
-      "fixes": 0
-    },
-    {
-      "rule": "package-contract-incomplete",
-      "code": "SC9005",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
-      "start": 1346,
-      "end": 1350,
-      "fixes": 0
-    },
-    {
-      "rule": "package-contract-incomplete",
-      "code": "SC9005",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
-      "start": 1498,
-      "end": 1502,
       "fixes": 0
     },
     {
@@ -619,26 +569,6 @@
       "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
       "start": 5011,
       "end": 5023,
-      "fixes": 0
-    },
-    {
-      "rule": "package-contract-incomplete",
-      "code": "SC9005",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
-      "start": 5912,
-      "end": 5916,
-      "fixes": 0
-    },
-    {
-      "rule": "package-contract-incomplete",
-      "code": "SC9005",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/project-callback-uses/wrappers.tsx",
-      "start": 6065,
-      "end": 6069,
       "fixes": 0
     },
     {

@@ -1,25 +1,4 @@
 {
-  "status": "uncertifiable",
-  "findings": [
-    {
-      "rule": "package-contract-incomplete",
-      "code": "SC9005",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/static-api-unresolved/App.tsx",
-      "start": 1185,
-      "end": 1191,
-      "fixes": 0
-    },
-    {
-      "rule": "package-contract-incomplete",
-      "code": "SC9005",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/static-api-unresolved/App.tsx",
-      "start": 1204,
-      "end": 1210,
-      "fixes": 0
-    }
-  ]
+  "status": "certified",
+  "findings": []
 }

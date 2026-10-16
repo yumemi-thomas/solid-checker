@@ -110,7 +110,7 @@ fn an_explicit_none_override_is_an_answer_and_absence_is_not() {
 }
 
 #[test]
-fn the_legacy_projection_is_exactly_the_old_requirement_index() {
+fn a_legacy_marker_answers_its_reason() {
     let mut boundary = PackageBoundary::default();
     let keys = [("/p/a.ts", "pkg"), ("/p/b.ts", "@s/x/sub")];
     for (importer, specifier) in keys {
@@ -119,10 +119,6 @@ fn the_legacy_projection_is_exactly_the_old_requirement_index() {
             UncertifiableImportReason::Unspecified,
         );
     }
-    let old = AcceptedContractIndex::default().with_uncertifiable_imports(
-        keys.map(|(importer, specifier)| (importer.to_owned(), specifier.to_owned())),
-    );
-    assert_eq!(boundary.legacy_requirement_index(), old);
     assert_eq!(
         boundary.legacy_reason("/p/a.ts", "pkg"),
         Some(UncertifiableImportReason::Unspecified)
@@ -139,10 +135,7 @@ fn the_legacy_projection_is_exactly_the_old_requirement_index() {
             "x",
         ),
     );
-    assert_eq!(
-        explained.legacy_requirement_index(),
-        AcceptedContractIndex::default()
-    );
+    assert_eq!(explained.legacy_reason("/p/a.ts", "pkg"), None);
 }
 
 #[test]
@@ -269,36 +262,35 @@ fn recorded_boundary() -> (PackageBoundary, ImportKey) {
 
 #[test]
 fn the_analysis_identity_vectors_of_a_boundary_with_no_source_edges_are_unchanged() {
-    let contracts = AcceptedContractIndex::default();
-    let index = contracts.cache_fingerprint();
     let inputs = |boundary: &PackageBoundary| {
         crate::AnalysisInputs {
             boundary,
-            contracts: &contracts,
             hosts: None,
         }
         .cache_fingerprints()
     };
-    assert_eq!(
-        crate::AnalysisInputs::contracts_only(&contracts).cache_fingerprints(),
-        vec![index]
+    assert!(
+        crate::AnalysisInputs::empty()
+            .cache_fingerprints()
+            .is_empty()
     );
-    assert_eq!(inputs(&PackageBoundary::default()), vec![index]);
+    assert!(inputs(&PackageBoundary::default()).is_empty());
     let (recorded, _) = recorded_boundary();
     let populated = inputs(&recorded);
-    assert_eq!(populated.len(), 2);
-    assert_eq!(populated[0], index);
+    assert_eq!(populated.len(), 1);
     assert_eq!(
-        hex(populated[1]),
+        hex(populated[0]),
         "e0c08052518b2734066e4fad48587e465b6bf682f1d121a8fe1b8bd20f71e09d"
     );
 }
 
 #[test]
 fn a_recorded_cause_is_part_of_the_analysis_identity_and_an_empty_boundary_is_not() {
-    let contracts = AcceptedContractIndex::default();
-    let plain = crate::AnalysisInputs::contracts_only(&contracts).cache_fingerprints();
-    assert_eq!(plain, vec![contracts.cache_fingerprint()]);
+    assert!(
+        crate::AnalysisInputs::empty()
+            .cache_fingerprints()
+            .is_empty()
+    );
     let mut boundary = PackageBoundary::default();
     boundary.record(
         ImportKey::new("/p/a.ts", "pkg"),
@@ -311,12 +303,10 @@ fn a_recorded_cause_is_part_of_the_analysis_identity_and_an_empty_boundary_is_no
     );
     let explained = crate::AnalysisInputs {
         boundary: &boundary,
-        contracts: &contracts,
         hosts: None,
     }
     .cache_fingerprints();
-    assert_eq!(explained.len(), 2);
-    assert_eq!(explained[0], plain[0]);
+    assert_eq!(explained, vec![boundary.digest()]);
     let mut reworded = PackageBoundary::default();
     reworded.record(
         ImportKey::new("/p/a.ts", "pkg"),
@@ -331,7 +321,6 @@ fn a_recorded_cause_is_part_of_the_analysis_identity_and_an_empty_boundary_is_no
         explained,
         crate::AnalysisInputs {
             boundary: &reworded,
-            contracts: &contracts,
             hosts: None,
         }
         .cache_fingerprints(),
@@ -413,10 +402,7 @@ fn every_part_of_a_source_edge_is_part_of_the_boundary_identity() {
     assert!(!base.is_empty());
     assert!(base.import("/p/a.ts", "pkg").is_none());
     assert_eq!(base.imports().count(), 0);
-    assert_eq!(
-        base.legacy_requirement_index(),
-        AcceptedContractIndex::default()
-    );
+    assert_eq!(base.legacy_reason("/p/a.ts", "pkg"), None);
 }
 
 /// Derived without this code: the same independent script as above, from the
@@ -457,8 +443,8 @@ fn extending_unions_sites_and_leaves_reasons_markers_and_overrides_alone() {
         left.imports().collect::<Vec<_>>()
     );
     assert_eq!(
-        folded.legacy_requirement_index(),
-        left.legacy_requirement_index()
+        folded.legacy_reason("/p/a.ts", "pkg"),
+        left.legacy_reason("/p/a.ts", "pkg")
     );
     // A key holding only source edges never becomes a package identity.
     let mut only = PackageBoundary::default();
@@ -472,17 +458,13 @@ fn extending_unions_sites_and_leaves_reasons_markers_and_overrides_alone() {
 #[test]
 fn a_source_edge_alone_makes_the_analysis_identity_carry_the_boundary() {
     use SourceEdgeForm::Import;
-    let contracts = AcceptedContractIndex::default();
     let boundary = with_edges(&[("/p/a.ts", "pkg", edge(Import, 3, 20))]);
     let vector = crate::AnalysisInputs {
         boundary: &boundary,
-        contracts: &contracts,
         hosts: None,
     }
     .cache_fingerprints();
-    assert_eq!(vector.len(), 2);
-    assert_eq!(vector[0], contracts.cache_fingerprint());
-    assert_eq!(vector[1], boundary.digest());
+    assert_eq!(vector, vec![boundary.digest()]);
 }
 
 #[test]

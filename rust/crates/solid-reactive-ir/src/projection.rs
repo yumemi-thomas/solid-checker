@@ -160,35 +160,6 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
                 )
             }
         }
-        StaticDefectKind::PackageContractEnvironmentDependent {
-            module,
-            export,
-            reexported,
-        } => (
-            format!(
-                "the reactivity contract for {module} has different certified behavior for conditional runtime targets at {} export {export}; no contract branch matches the selected runtime environment, so applying one would be a guess",
-                if *reexported { "re-exported" } else { "imported" }
-            ),
-            format!(
-                "Supply the exact runtime selection facts needed to choose one finite guard partition for {export}, or prove one artifact-independent summary. Unresolved guard selection joins possible operations monotonically and cannot certify guaranteed behavior. See docs/package-contracts.md for the workflow."
-            ),
-        ),
-        StaticDefectKind::UnknownCallbackExecution {
-            package,
-            entrypoint,
-            function,
-            parameter,
-            parameter_type,
-            required_execution,
-            claim_context,
-        } => (
-            format!(
-                "callback parameter {parameter} ({parameter_type}) of {package}{entrypoint}:{function} reaches a call whose execution timing is unknown; this callback cannot be certified"
-            ),
-            format!(
-                "Audit the implementation for {package}{entrypoint} export {function}, callback parameter {parameter}. Required behavior: {required_execution}. Generate an exact stable-v1 proposal with `solid-checker contract generate --package-root <package-root> --integrity <SRI> --entrypoint {entrypoint}`, prove the local open claim, issue a receipt, and register it in .solid-checker/accepted-contracts.json. Open-claim context: {claim_context}"
-            ),
-        ),
         StaticDefectKind::MissingEffectFunction => {
             let mut message = terms.missing_effect_message.to_string();
             let mut hint = terms.missing_effect_hint.to_string();
@@ -458,12 +429,6 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         }
         StaticDefectKind::PackageContractExportMissing { .. } => {
             "the imported package has a contract, but this export has no effect summary"
-        }
-        StaticDefectKind::PackageContractEnvironmentDependent { .. } => {
-            "the imported package has conditional effect summaries, but no runtime environment was selected"
-        }
-        StaticDefectKind::UnknownCallbackExecution { .. } => {
-            "TypeScript resolved the callable parameter, but no exact runtime contract proves when the external helper invokes it"
         }
         StaticDefectKind::ReactiveDispatchUnresolved { .. } => {
             "the call is type-correct, but exact runtime dispatch or equivalent reactive summaries are not proven"
@@ -1445,12 +1410,8 @@ fn coverage_group(seed: FindingSeed<'_>) -> Option<(&'static str, String)> {
             {
                 None
             }
-            StaticDefectKind::PackageContractExportMissing { module, .. }
-            | StaticDefectKind::PackageContractEnvironmentDependent { module, .. } => {
+            StaticDefectKind::PackageContractExportMissing { module, .. } => {
                 Some(("package-contract", package_of_specifier(module).to_owned()))
-            }
-            StaticDefectKind::UnknownCallbackExecution { function, .. } => {
-                Some(("own-export-contract", function.clone()))
             }
             StaticDefectKind::ReactiveDispatchUnresolved { callee, .. } => {
                 let context = defect.analysis_context.as_str();

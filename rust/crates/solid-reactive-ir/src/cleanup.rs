@@ -243,50 +243,6 @@ pub(super) fn leaf_owner_operations_for_file(
             let primitive =
                 call_primitive_name(callback_file, call, entities, symbol_names, dialect);
             let Some(primitive) = primitive else {
-                // ADR 0179: a package export whose accepted contract states a
-                // registration on its caller's owner, at the call, performs it
-                // here -- inside the leaf scope. On every call it is a
-                // violation; with `min: 0` it may not happen, a proof
-                // obligation (ADR 0231).
-                if let Some(registrations) = lookup
-                    .callee_symbol(callback_file, call.callee)
-                    .and_then(|symbol| lookup.contract_leaf_forbidden_operations(symbol))
-                    .filter(|registrations| !registrations.is_empty())
-                {
-                    let via = callback_file
-                        .source_text(call.callee)
-                        .unwrap_or_default()
-                        .to_owned();
-                    for registration in registrations {
-                        // ADR 0223: a guarded registration is a forbidden
-                        // operation only where its guard holds at this call.
-                        // Where it may hold, or the contract states `min: 0`,
-                        // the registration may happen: a proof obligation
-                        // (ADR 0231), never silence.
-                        let Some(guaranteed) =
-                            crate::owners::owner_requirement_at_call(registration, call)
-                        else {
-                            continue;
-                        };
-                        operations.push(LeafOwnerOperation {
-                            through_contract: true,
-                            kind: match registration.operation {
-                                crate::OwnerRequirementOperation::Cleanup => {
-                                    crate::LeafOwnerOperationKind::Cleanup
-                                }
-                                _ => crate::LeafOwnerOperationKind::Primitive(via.clone()),
-                            },
-                            owner: owner.to_string(),
-                            location: location(callback_file.path.shared(), call.callee),
-                            fix: None,
-                            call_site_gate: call_site_gate.clone(),
-                            uncertain: false,
-                            possible: !guaranteed,
-                            via: Some(via.clone()),
-                        });
-                    }
-                    continue;
-                }
                 // Not a primitive: an exactly-resolved in-project helper
                 // called here runs its synchronous extent in this leaf
                 // scope, so a forbidden operation inside it executes here.

@@ -25,65 +25,6 @@ use crate::owners::{
     returned_callback_invocation_sites, returned_primitive_invocation,
 };
 
-/// Invocation capability, distinct from lifecycle owner/cleanup capability.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum ObserverPresence {
-    Present,
-    Absent,
-    Unknown,
-}
-
-/// Do not use a helper's inferred call sites as proof of lazy-cache state.
-/// A direct tracked compute or compiler-censused JSX establishes presence;
-/// broader owner, deferred, getter and wrapper contexts remain unknown.
-pub(crate) fn observer_presence_at(
-    file: &solid_facts::FileFacts,
-    span: Span,
-    allowed: &[Span],
-    entities: &EntitySymbols,
-    symbol_names: &HashMap<SymbolId, SymbolId>,
-    lookup: &SemanticLookup<'_>,
-) -> ObserverPresence {
-    let role = semantic_execution_role(file, span, allowed, entities, symbol_names, lookup);
-    if role == ExecutionRole::TrackedJsx {
-        let jsx = file.compiler.tracked_regions.iter().any(|region| {
-            region.span.contains(span)
-                && !attribute_function_within(file, region.span, span, lookup)
-        });
-        let compute = file.ast.arguments_containing(span).any(|(call, index)| {
-            call_primitive_name(file, call, entities, symbol_names, lookup.dialect)
-                .as_ref()
-                .and_then(PrimitiveName::primitive)
-                .is_some_and(|primitive| {
-                    callback_execution_at_call(file, call, primitive, index, lookup).is_some()
-                        && lookup
-                            .dialect
-                            .callback_semantics_at(primitive, index, call.arguments.len())
-                            .tracks_reads
-                        && direct_callback_contains(file, call.arguments[index].span, span)
-                })
-        });
-        return if jsx || compute {
-            ObserverPresence::Present
-        } else {
-            ObserverPresence::Unknown
-        };
-    }
-    if matches!(
-        role,
-        ExecutionRole::UntrackedRendering
-            | ExecutionRole::ModuleInitialization
-            | ExecutionRole::EffectApply
-            | ExecutionRole::EventCallback
-            | ExecutionRole::DirectiveApply
-    ) && !missing_jsx_census(file, span, role)
-    {
-        ObserverPresence::Absent
-    } else {
-        ObserverPresence::Unknown
-    }
-}
-
 /// Whether the untracked-rendering role at `span` rests on the *absence* of a
 /// compiler census entry rather than on a compiler fact.
 ///
@@ -674,9 +615,6 @@ fn semantic_write_execution_role_within(
             }
         }
     }
-    if let Some(role) = contract_callback_result_literal_role(file, span, lookup, true) {
-        return role;
-    }
     let direct = semantic_execution_role(file, span, allowed, entities, symbol_names, lookup);
     // Directly in a component body the dev owner is the component's root, so
     // a guard that exempts roots exempts the body too. Only the body itself:
@@ -854,15 +792,7 @@ fn forwarded_event_prop_role(
         .functions_body_containing(span)
         .any(|literal| {
             component_prop_literal(file, literal.span).is_some_and(|(element, prop)| {
-                component_prop_reaches_only_events(
-                    file,
-                    element,
-                    None,
-                    prop,
-                    lookup,
-                    &mut HashSet::new(),
-                    &[],
-                )
+                component_prop_reaches_only_events(file, element, prop, lookup, &mut HashSet::new())
             })
         })
         .then_some(ExecutionRole::EventCallback)
@@ -1048,7 +978,6 @@ fn prop_reaches_only_events(
     prop: &str,
     lookup: &SemanticLookup<'_>,
     visiting: &mut HashSet<(String, Span, String)>,
-    chain: &[RenderHop],
 ) -> bool {
     if function.r#async || function.generator || function.rest_parameter {
         return false;
@@ -1100,19 +1029,12 @@ fn prop_reaches_only_events(
                 .find(|member| member.object == reference)
             {
                 file.source_text(member.property) != Some(prop)
-                    || member_reaches_only_events(
-                        file,
-                        function,
-                        member.span,
-                        lookup,
-                        visiting,
-                        chain,
-                    )
+                    || member_reaches_only_events(file, member.span, lookup, visiting)
             } else if let Some(view) = props_view_call(file, reference, lookup) {
                 match spread_onto(file, view) {
-                    Some(element) => spread_reaches_only_events(
-                        file, function, element, prop, lookup, visiting, chain,
-                    ),
+                    Some(element) => {
+                        spread_reaches_only_events(file, element, prop, lookup, visiting)
+                    }
                     None => match const_binding_of(file, view, lookup) {
                         Some(binding) => {
                             aliases.push(binding);
@@ -1122,7 +1044,7 @@ fn prop_reaches_only_events(
                     },
                 }
             } else if let Some(element) = spread_onto(file, reference) {
-                spread_reaches_only_events(file, function, element, prop, lookup, visiting, chain)
+                spread_reaches_only_events(file, element, prop, lookup, visiting)
             } else if let Some(binding) = const_binding_of(file, reference, lookup) {
                 // `const rest = props`, `const root = view as Props`: the same
                 // object under another name.
@@ -1143,11 +1065,9 @@ fn prop_reaches_only_events(
 /// [`prop_reaches_only_events`].
 fn member_reaches_only_events(
     file: &solid_facts::FileFacts,
-    function: &solid_facts::ast::FunctionFact,
     member: Span,
     lookup: &SemanticLookup<'_>,
     visiting: &mut HashSet<(String, Span, String)>,
-    chain: &[RenderHop],
 ) -> bool {
     use solid_facts::compiler::CallbackRoleKind;
     let event_handlers = || {
@@ -1174,15 +1094,7 @@ fn member_reaches_only_events(
             event_handlers().any(|callback| callback.span.contains(member))
         }
         Some((element, attribute)) => file.source_text(attribute.name).is_some_and(|next| {
-            component_prop_reaches_only_events(
-                file,
-                element,
-                Some(function),
-                next,
-                lookup,
-                visiting,
-                chain,
-            )
+            component_prop_reaches_only_events(file, element, next, lookup, visiting)
         }),
         None => {
             if event_handlers().any(|callback| {
@@ -1206,15 +1118,7 @@ fn member_reaches_only_events(
                 let Some((element, prop)) = component_prop_literal(file, literal) else {
                     continue;
                 };
-                if component_prop_reaches_only_events(
-                    file,
-                    element,
-                    Some(function),
-                    prop,
-                    lookup,
-                    visiting,
-                    chain,
-                ) {
+                if component_prop_reaches_only_events(file, element, prop, lookup, visiting) {
                     return true;
                 }
             }
@@ -1241,253 +1145,33 @@ fn spread_onto(
 /// only event dispatch; see [`prop_reaches_only_events`].
 fn spread_reaches_only_events(
     file: &solid_facts::FileFacts,
-    function: &solid_facts::ast::FunctionFact,
     element: &solid_facts::ast::JsxElementFact,
     prop: &str,
     lookup: &SemanticLookup<'_>,
     visiting: &mut HashSet<(String, Span, String)>,
-    chain: &[RenderHop],
 ) -> bool {
     if intrinsic_element(file, element) {
         return prop.starts_with("on") && !prop.contains(':');
     }
-    component_prop_reaches_only_events(file, element, Some(function), prop, lookup, visiting, chain)
+    component_prop_reaches_only_events(file, element, prop, lookup, visiting)
 }
 
 /// Whether the component `element` renders runs its prop `prop` only after
 /// the render: a project component whose every use of it is proven
-/// ([`prop_reaches_only_events`]), or a package component whose accepted
-/// contract says so ([`package_prop_runs_only_deferred`]).
-///
-/// `enclosing` is the component whose body writes `element` (`None` for the
-/// element that wrote the literal), and `chain` the elements that rendered
-/// each enclosing component, outermost first.
+/// ([`prop_reaches_only_events`]). A package component is never proven.
 fn component_prop_reaches_only_events(
     file: &solid_facts::FileFacts,
     element: &solid_facts::ast::JsxElementFact,
-    enclosing: Option<&solid_facts::ast::FunctionFact>,
     prop: &str,
     lookup: &SemanticLookup<'_>,
     visiting: &mut HashSet<(String, Span, String)>,
-    chain: &[RenderHop],
 ) -> bool {
     if let Some((next_file, next_function)) =
         lookup.function_called_at(file.path.as_str(), element.name.span)
     {
-        let mut next_chain = chain.to_vec();
-        next_chain.push(render_hop(file, element, enclosing, lookup));
-        return prop_reaches_only_events(
-            next_file,
-            next_function,
-            prop,
-            lookup,
-            visiting,
-            &next_chain,
-        );
+        return prop_reaches_only_events(next_file, next_function, prop, lookup, visiting);
     }
-    package_prop_runs_only_deferred(file, element, enclosing, prop, lookup, chain)
-}
-
-/// What one element in a render chain can put in the props object it hands
-/// the component it renders: its attributes by name, and its spreads.
-#[derive(Clone, Debug)]
-struct RenderHop {
-    attributes: Vec<String>,
-    spreads: HopSpreads,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum HopSpreads {
-    /// The element spreads nothing.
-    None,
-    /// Every spread is the enclosing component's props object, an alias of
-    /// it, or an `omit` view of it: a spread that adds no key the props did
-    /// not hold.
-    PropsViews,
-    /// Anything else may add any key.
-    Unknown,
-}
-
-fn render_hop(
-    file: &solid_facts::FileFacts,
-    element: &solid_facts::ast::JsxElementFact,
-    enclosing: Option<&solid_facts::ast::FunctionFact>,
-    lookup: &SemanticLookup<'_>,
-) -> RenderHop {
-    let attributes = element
-        .attributes
-        .iter()
-        .filter_map(|attribute| file.source_text(attribute.name).map(str::to_owned))
-        .collect();
-    let spreads = if element.spreads.is_empty() {
-        HopSpreads::None
-    } else if enclosing.is_some_and(|function| {
-        let views = props_key_preserving_views(file, function, lookup);
-        !views.is_empty()
-            && element.spreads.iter().all(|spread| {
-                symbol_at_reference(file, file.ast.peel_ts_sugar_span(spread.argument), lookup)
-                    .is_some_and(|symbol| views.contains(&symbol))
-            })
-    }) {
-        HopSpreads::PropsViews
-    } else {
-        HopSpreads::Unknown
-    };
-    RenderHop {
-        attributes,
-        spreads,
-    }
-}
-
-/// Whether the props object `at`'s element hands its component can hold no
-/// `key`: no element on the chain back to the one that wrote the literal
-/// writes it, and every spread on the way is a view of the props it received.
-fn key_absent(key: &str, at: &RenderHop, chain: &[RenderHop]) -> bool {
-    if at.attributes.iter().any(|attribute| attribute == key) {
-        return false;
-    }
-    match at.spreads {
-        HopSpreads::None => true,
-        HopSpreads::Unknown => false,
-        HopSpreads::PropsViews => chain
-            .split_last()
-            .is_some_and(|(parent, rest)| key_absent(key, parent, rest)),
-    }
-}
-
-/// The symbol a reference names: its entity row, or the binding it resolves
-/// to.
-fn symbol_at_reference(
-    file: &solid_facts::FileFacts,
-    reference: Span,
-    lookup: &SemanticLookup<'_>,
-) -> Option<SymbolId> {
-    lookup
-        .entities()
-        .at(file.path.as_str(), reference)
-        .cloned()
-        .or_else(|| {
-            lookup
-                .binding_at_reference(file.path.as_str(), reference)
-                .map(|(_, _, symbol)| symbol)
-        })
-}
-
-/// The props parameter of `function` and every `const` in its body bound to
-/// it, to an alias of such a binding (`view as Props`), or to an `omit` the
-/// dialect names over one: the values whose keys are a subset of the props
-/// object's. A merge can add keys and is not one of them. Empty when the props
-/// parameter is not one identifier.
-fn props_key_preserving_views(
-    file: &solid_facts::FileFacts,
-    function: &solid_facts::ast::FunctionFact,
-    lookup: &SemanticLookup<'_>,
-) -> Vec<SymbolId> {
-    let Some(parameter) = function.parameters.first() else {
-        return Vec::new();
-    };
-    if parameter.shape != solid_facts::ast::BindingShape::Identifier
-        || parameter.initializer.is_some()
-    {
-        return Vec::new();
-    }
-    let Some(symbol) = parameter
-        .names
-        .first()
-        .and_then(|name| lookup.entities().at(file.path.as_str(), name.span))
-    else {
-        return Vec::new();
-    };
-    let mut views = vec![symbol.clone()];
-    loop {
-        let before = views.len();
-        for binding in file.ast.bindings.iter().filter(|binding| {
-            binding.immutable
-                && binding.shape == solid_facts::ast::BindingShape::Identifier
-                && binding.names.len() == 1
-                && function.body.contains(binding.declaration)
-        }) {
-            let Some(name) = binding.names.first() else {
-                continue;
-            };
-            let Some(bound) = lookup.entities().at(file.path.as_str(), name.span) else {
-                continue;
-            };
-            if views.contains(bound) {
-                continue;
-            }
-            let Some(initializer) = binding.initializer else {
-                continue;
-            };
-            let initializer = file.ast.peel_ts_sugar_span(initializer);
-            let source = if let Some(call) = file.ast.call_at(initializer) {
-                let omits = lookup
-                    .primitive_at_call(file, call.span)
-                    .is_some_and(|primitive| lookup.dialect.splits_props(primitive));
-                let first = call.arguments.first().filter(|argument| !argument.spread);
-                match (omits, first) {
-                    (true, Some(argument)) => file.ast.peel_ts_sugar_span(argument.span),
-                    _ => continue,
-                }
-            } else {
-                initializer
-            };
-            if symbol_at_reference(file, source, lookup).is_some_and(|value| views.contains(&value))
-            {
-                views.push(bound.clone());
-            }
-        }
-        if views.len() == before {
-            return views;
-        }
-    }
-}
-
-/// ADR 0207: whether the package component `element` renders runs its prop
-/// `prop` only after the render, by its accepted contract.
-///
-/// The contract states an `event-handler-props` item on argument 0 itself,
-/// executed `deferred` (an external event or a queue, never the render's
-/// stack); the item is exhaustive for every un-namespaced `on…` member, so
-/// `prop` must be one. Every atom of the item's guard must be proven at this
-/// element: the one atom read is a `plain` kind at a top-level key, proven
-/// when no element on the render chain can put that key in the props object
-/// ([`key_absent`]). Any other atom proves nothing.
-fn package_prop_runs_only_deferred(
-    file: &solid_facts::FileFacts,
-    element: &solid_facts::ast::JsxElementFact,
-    enclosing: Option<&solid_facts::ast::FunctionFact>,
-    prop: &str,
-    lookup: &SemanticLookup<'_>,
-    chain: &[RenderHop],
-) -> bool {
-    use crate::contract_semantics::{GuardAtom, MemberClass, ValueKind};
-    if !MemberClass::EventHandlerProps.contains(prop) {
-        return false;
-    }
-    let Some(symbol) = lookup.callee_symbol(file, element.name.span) else {
-        return false;
-    };
-    let Some(claims) = lookup.contract_event_handler_props(symbol) else {
-        return false;
-    };
-    let hop = render_hop(file, element, enclosing, lookup);
-    claims.iter().any(|claim| {
-        claim.parameter == 0
-            && claim.path.is_empty()
-            && claim.execution == "deferred"
-            && claim.guard.iter().all(|atom| match atom {
-                GuardAtom::ValueKind {
-                    argument: 0,
-                    path,
-                    kind: ValueKind::Plain,
-                } => match path.as_slice() {
-                    [key] => key_absent(key, &hop, chain),
-                    _ => false,
-                },
-                _ => false,
-            })
-    })
+    false
 }
 
 /// The span of the call `reference` is the props argument of, when that call
@@ -1597,14 +1281,7 @@ fn call_argument_invocation_unproven(
                 Some(RuntimeArgumentBehavior::InlineCallback)
             ));
     }
-    !(direct
-        && lookup
-            .callee_symbol(file, call.callee)
-            .and_then(|symbol| lookup.contract_callbacks(symbol))
-            .is_some_and(|rows| {
-                rows.iter()
-                    .any(|row| row.parameter == index && row.execution == "inline")
-            }))
+    true
 }
 
 /// Whether `span` sits in a function literal that is merely *stored* where it
@@ -1936,9 +1613,6 @@ fn semantic_execution_role_within(
     if let Some(role) = returned_factory_callback_execution_role(file, span, lookup, classifying) {
         return role;
     }
-    if let Some(role) = contract_returned_invoker_callback_role(file, span, lookup, classifying) {
-        return role;
-    }
     if let Some(role) = inline_callback_execution_role(file, span, allowed, lookup, classifying) {
         return role;
     }
@@ -1964,16 +1638,6 @@ fn semantic_execution_role_within(
             })
     }) {
         return ExecutionRole::UntrackedCallback;
-    }
-    // Ahead of the allowed regions: an accepted contract that leaves its
-    // `callbacks` enumeration open makes every argument of the call one of
-    // unproven timing, but a slot it states as a guaranteed owned computation
-    // is proven to run during the call whatever else the export does with it.
-    if let Some(role) = contract_callback_result_literal_role(file, span, lookup, true) {
-        return role;
-    }
-    if let Some(role) = contract_owned_computation_callback_role(file, span, lookup) {
-        return role;
     }
     if let Some(role) = forwarded_tracked_compute_role(file, span, lookup) {
         return role;
@@ -2160,92 +1824,11 @@ fn forwarded_tracked_compute_role(
                     .callback_semantics_at(primitive, slot, outer.arguments.len())
                     .tracks_reads
         }
-        None => lookup
-            .callee_symbol(wrapper_file, outer.callee)
-            .and_then(|symbol| lookup.contract_guaranteed_callback_parameters(symbol))
-            .is_some_and(|parameters| parameters.contains(&slot)),
+        None => false,
     };
     if !tracked {
         return None;
     }
-    Some(
-        if attribute_function_within(file, call.arguments[index].span, span, lookup) {
-            ExecutionRole::Unknown
-        } else {
-            ExecutionRole::TrackedJsx
-        },
-    )
-}
-
-/// The context of an accessor read directly in a synchronous callback
-/// literal whose accepted, closed callback domain describes every use as a
-/// tracked invocation under a created owner. The callback may run zero times
-/// or on resource access: neither changes the context of a read when it runs.
-/// This answer must not establish execution, write legality, or ownership.
-pub(super) fn contract_tracked_accessor_read_role(
-    file: &solid_facts::FileFacts,
-    span: Span,
-    lookup: &SemanticLookup<'_>,
-) -> Option<ExecutionRole> {
-    if discarded_region_contains(file, span) {
-        return None;
-    }
-    if let Some(role) = contract_callback_result_literal_role(file, span, lookup, false) {
-        return Some(role);
-    }
-    let literal = containing_ast_function(&file.ast, span)?;
-    // Suspension, generator resumption, named self-escapes and parameter
-    // defaults need their own execution proof. Keep this slice to arrows.
-    if literal.r#async
-        || literal.generator
-        || literal.kind != solid_facts::ast::FunctionKind::Arrow
-        || !literal.body.contains(span)
-    {
-        return None;
-    }
-    file.ast.arguments_containing(span).find(|(call, index)| {
-        let argument = &call.arguments[*index];
-        !argument.spread
-            && file.ast.peel_ts_sugar_span(argument.span) == literal.span
-            && direct_callback_contains(file, argument.span, span)
-            && lookup.primitive_at_call(file, call.span).is_none()
-            && lookup
-                .callee_symbol(file, call.callee)
-                .is_some_and(|symbol| lookup.contract_callback_reads_are_tracked(symbol, *index))
-            && !attribute_function_within(file, argument.span, span, lookup)
-    })?;
-    Some(ExecutionRole::TrackedJsx)
-}
-
-/// ADR 0183: code directly in a function literal handed, as the whole
-/// argument, to an accepted contract export that states the slot is invoked
-/// on every call, during it, as the tracked compute of an owned computation
-/// the export creates ([`crate::ContractExport::guaranteed_callback_parameters`]).
-///
-/// That compute runs under the computation's own children-capable owner
-/// wherever the export is called, exactly as a `createMemo` compute does, so
-/// the role is the tracked callback's. A function nested in the literal, an
-/// element of an array or object written at the slot, a spread, and a function
-/// passed by name are not answered here. As for a primitive's tracked
-/// callback, a function handed on inside the literal, or written as an
-/// attribute value, is not proven to run in the compute's pass.
-fn contract_owned_computation_callback_role(
-    file: &solid_facts::FileFacts,
-    span: Span,
-    lookup: &SemanticLookup<'_>,
-) -> Option<ExecutionRole> {
-    let literal = containing_ast_function(&file.ast, span)?;
-    let (call, index) = file.ast.arguments_containing(span).find(|(call, index)| {
-        let argument = &call.arguments[*index];
-        !argument.spread
-            && file.ast.peel_ts_sugar_span(argument.span) == literal.span
-            && direct_callback_contains(file, argument.span, span)
-            && lookup.primitive_at_call(file, call.span).is_none()
-            && lookup
-                .callee_symbol(file, call.callee)
-                .and_then(|symbol| lookup.contract_guaranteed_callback_parameters(symbol))
-                .is_some_and(|parameters| parameters.contains(index))
-    })?;
     Some(
         if attribute_function_within(file, call.arguments[index].span, span, lookup) {
             ExecutionRole::Unknown
@@ -2582,49 +2165,7 @@ fn callee_callback_timing_within(
                 _ => return true,
             }
         }
-        // ADR 0152: the contract's returned value runs the argument on its own
-        // invoker's stack. The literal's role was read from the returned
-        // value's proven invocations, so its timing is proven exactly when
-        // each of them is; with none there is no role to have proven.
-        if contract_returned_invoker_slot(file, span, lookup)
-            .is_some_and(|invoker| invoker.span == call.span)
-        {
-            let sites = returned_callback_invocation_sites(file, call, lookup);
-            return sites.is_empty()
-                || sites.iter().any(|site| {
-                    if site.inherited_execution.is_some() {
-                        return false;
-                    }
-                    if !following.insert((site.path.clone(), site.span)) {
-                        return true;
-                    }
-                    lookup
-                        .files()
-                        .iter()
-                        .find(|candidate| candidate.path.as_str() == site.path)
-                        .is_none_or(|use_file| {
-                            callee_callback_timing_within(
-                                use_file, site.span, execution, lookup, following,
-                            )
-                        })
-                });
-        }
-        // A callee with no body in the project: a package export seen through
-        // its declarations, or a callee nothing resolves. Only an accepted
-        // contract row can say it invokes the argument during the call.
-        let direct = !argument.spread && file.ast.peel_ts_sugar_span(argument.span) == literal.span;
-        let contracted_inline = direct
-            && lookup
-                .callee_symbol(file, call.callee)
-                .and_then(|symbol| lookup.contract_callbacks(symbol))
-                .is_some_and(|rows| {
-                    rows.iter()
-                        .any(|row| row.parameter == index && row.execution == "inline")
-                });
-        if !contracted_inline {
-            return true;
-        }
-        span = call.span;
+        return true;
     }
 }
 
@@ -3327,60 +2868,6 @@ fn role_at_returned_invocations(
         // false positive in either direction.
         _ => Some(ExecutionRole::DeferredCallback),
     }
-}
-
-/// ADR 0152: the call and argument slot at which `span`'s own function is
-/// handed, directly, to an accepted contract export whose returned value
-/// invokes that slot on its invoker's stack
-/// ([`crate::ContractExport::returned_invocations`]).
-///
-/// The literal must *be* the argument -- not an element of an array or object
-/// written there, and not a spread -- and `span` must sit in the literal's own
-/// body rather than in a function nested in it, which is what
-/// [`direct_callback_contains`] answers.
-pub(super) fn contract_returned_invoker_slot<'f>(
-    file: &'f solid_facts::FileFacts,
-    span: Span,
-    lookup: &SemanticLookup<'_>,
-) -> Option<&'f solid_facts::ast::CallFact> {
-    file.ast
-        .arguments_containing(span)
-        .find_map(|(call, index)| {
-            let argument = &call.arguments[index];
-            if argument.spread || !direct_callback_contains(file, argument.span, span) {
-                return None;
-            }
-            let literal = containing_ast_function(&file.ast, span)?;
-            if file.ast.peel_ts_sugar_span(argument.span) != literal.span {
-                return None;
-            }
-            let symbol = lookup.callee_symbol(file, call.callee)?;
-            lookup
-                .contract_returned_invocations(symbol)?
-                .contains(&index)
-                .then_some(call)
-        })
-}
-
-/// ADR 0152: a callback handed to a contract export whose returned value runs
-/// it on its invoker's stack runs wherever that value is invoked, so its role
-/// is the role of the value's proven invocations -- the composition
-/// [`returned_factory_callback_execution_role`] makes for a dialect primitive,
-/// read here from the accepted contract's nested claim instead of the
-/// dialect. With no proven invocation it answers nothing, and the callback
-/// stays one of unproven timing ([`callee_callback_timing`]).
-fn contract_returned_invoker_callback_role(
-    file: &solid_facts::FileFacts,
-    span: Span,
-    lookup: &SemanticLookup<'_>,
-    classifying: &mut HashSet<(String, Span)>,
-) -> Option<ExecutionRole> {
-    let factory_call = contract_returned_invoker_slot(file, span, lookup)?;
-    role_at_returned_invocations(
-        returned_callback_invocation_sites(file, factory_call, lookup),
-        lookup,
-        classifying,
-    )
 }
 
 fn returned_callback_execution_role(
@@ -4469,135 +3956,19 @@ pub(super) fn allowed_callback_spans(
     let primitives = lookup.primitives(file);
     let mut spans = Vec::new();
     for (call_index, call) in file.ast.calls.iter().enumerate() {
-        let mut indices =
-            known_primitive(&primitives.calls[call_index]).map_or_else(Vec::new, |primitive| {
-                deferred_callback_positions(dialect, primitive, call.arguments.len())
-                    .into_iter()
-                    .filter(|index| {
-                        callback_execution_at_call(file, call, primitive, *index, lookup).is_some()
-                    })
-                    .collect()
-            });
-        let primitive_indices = indices.len();
-        if let Some(symbol) = lookup.callee_symbol(file, call.callee) {
-            if let Some(callbacks) = lookup.contract_callbacks(symbol) {
-                for callback in &callbacks {
-                    let exclusively_deferred = callbacks.iter().all(|candidate| {
-                        candidate.parameter != callback.parameter
-                            || candidate.execution == "deferred"
-                    });
-                    if callback.execution == "deferred"
-                        && exclusively_deferred
-                        && !indices.contains(&callback.parameter)
-                    {
-                        indices.push(callback.parameter);
-                    }
-                }
-            } else if lookup.unknown_contract_callback_export(symbol).is_some() {
-                // The contract explicitly does not prove when this callee runs
-                // a caller-supplied callback. The call site already carries
-                // that as an SC9005 obligation; additionally reporting a read
-                // inside the callback as a *proven* untracked read would
-                // assert exactly the timing the contract says it does not
-                // have. Treat every argument whose syntax leaves callability
-                // open as an unproven-timing callback so the read stays
-                // uncertifiable instead of becoming a violation.
-                for (index, argument) in call.arguments.iter().enumerate() {
-                    if !crate::runtime_semantics::literal_argument_is_not_callable(
-                        argument.runtime_value_kind,
-                    ) && !indices.contains(&index)
-                    {
-                        indices.push(index);
-                    }
-                }
-            }
-        }
-        for (position, index) in indices.into_iter().enumerate() {
-            let Some(argument) = call.arguments.get(index) else {
+        let Some(primitive) = known_primitive(&primitives.calls[call_index]) else {
+            continue;
+        };
+        for index in deferred_callback_positions(dialect, primitive, call.arguments.len()) {
+            if callback_execution_at_call(file, call, primitive, index, lookup).is_none() {
                 continue;
-            };
-            // A contract slot states when the callee runs a *function* it
-            // receives, never when the caller evaluates the argument. Only a
-            // function literal delivered as the value is wholly callback
-            // code; any other argument — `overlay()`, `...overlays()`, a
-            // member read — runs in the caller now, and only the functions
-            // written inside it can be the deferred code. Shielding the whole
-            // expression would turn a proven eager read into a callback one.
-            if position < primitive_indices
-                || argument.runtime_value_kind == solid_facts::ast::RuntimeValueKind::Function
-            {
+            }
+            if let Some(argument) = call.arguments.get(index) {
                 spans.push(argument.span);
-            } else {
-                spans.extend(
-                    file.ast
-                        .functions_within(argument.span)
-                        .map(|function| function.span),
-                );
             }
         }
     }
     spans
-}
-
-fn contract_callback_result_literal_role(
-    file: &solid_facts::FileFacts,
-    span: Span,
-    lookup: &SemanticLookup<'_>,
-    guaranteed: bool,
-) -> Option<ExecutionRole> {
-    if discarded_region_contains(file, span) {
-        return None;
-    }
-    let target = containing_ast_function(&file.ast, span)?;
-    if !target.body.contains(span) {
-        return None;
-    }
-    for (call, index) in file.ast.arguments_containing(span) {
-        let argument = &call.arguments[index];
-        let Some(producer) = file
-            .ast
-            .functions
-            .iter()
-            .find(|function| function.span == file.ast.peel_ts_sugar_span(argument.span))
-        else {
-            continue;
-        };
-        if !producer
-            .expression_return
-            .as_ref()
-            .and_then(|returned| returned.argument)
-            .is_some_and(|returned| file.ast.peel_ts_sugar_span(returned) == target.span)
-        {
-            continue;
-        }
-        let Some(symbol) = lookup.callee_symbol(file, call.callee) else {
-            continue;
-        };
-        if !lookup.contract_result_census_is_closed(symbol)
-            || !lookup
-                .resolved_callee_call(file, call.callee)
-                .is_some_and(|resolved| resolved.validity == typefacts::ResolvedCallValidity::Valid)
-        {
-            continue;
-        }
-        let Some(results) = lookup.contract_callback_results(symbol) else {
-            continue;
-        };
-        let mut matching = results
-            .iter()
-            .filter(|result| result.parameter == index)
-            .peekable();
-        if matching.peek().is_some()
-            && matching.all(|result| {
-                crate::local_access::callback_result_literal_is_tracked(
-                    file, argument, result, guaranteed,
-                )
-            })
-        {
-            return Some(ExecutionRole::TrackedJsx);
-        }
-    }
-    None
 }
 
 #[cfg(test)]

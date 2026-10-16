@@ -253,8 +253,6 @@ fn run_ordinary_check(
                 "importIdentityFilesUnknown": import_identity.unknown,
                 "importIdentitySpecifiers": import_identity.specifiers,
                 "importIdentityModules": import_identity.modules,
-                "contractBindingsBound": outcome.analysis.program.contract_binding.bound,
-                "contractBindingsRefused": outcome.analysis.program.contract_binding.refused,
                 "irNs": outcome.diagnostic_timings.reactive_ir.as_nanos(),
                 "solveAndSnapshotNs": outcome.diagnostic_timings.solve_and_snapshot.as_nanos(),
                 "contractEmissionNs": 0,

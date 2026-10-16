@@ -159,11 +159,6 @@ fn coverage_family_heading(family: &str) -> Option<(&'static str, &'static str, 
             "package",
             "packages",
         ),
-        "own-export-contract" => (
-            "callbacks this project's exports hand to code with unknown timing",
-            "export",
-            "exports",
-        ),
         "caller-supplied-member" => (
             "helpers that call a method on a value their caller supplies",
             "helper",

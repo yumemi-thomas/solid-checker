@@ -1,15 +1,4 @@
 {
-  "status": "uncertifiable",
-  "findings": [
-    {
-      "rule": "package-contract-incomplete",
-      "code": "SC9005",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/package-cyclic-unknown-callback-producer/index.ts",
-      "start": 231,
-      "end": 239,
-      "fixes": 0
-    }
-  ]
+  "status": "certified",
+  "findings": []
 }

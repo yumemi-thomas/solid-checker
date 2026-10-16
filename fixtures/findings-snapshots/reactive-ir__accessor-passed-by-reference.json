@@ -2,16 +2,6 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "package-contract-incomplete",
-      "code": "SC9005",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/accessor-passed-by-reference/App.tsx",
-      "start": 491,
-      "end": 495,
-      "fixes": 0
-    },
-    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",

@@ -23,16 +23,14 @@ use super::runtime_semantics::{
     retains_argument_value,
 };
 use super::{
-    CallbackSchedule, CallbackSummary, ContractAnalysis, ContractExport,
-    ContractGenerationObligation, ContractGraph, ContractSemantics, EntitySymbols, ExecutionRole,
+    CallbackSchedule, CallbackSummary, ContractGenerationObligation, EntitySymbols, ExecutionRole,
     FunctionBoundary, FunctionLookup, ProjectIndexes, ReactiveRead, ReactiveSourceKind,
     ReturnSummary, SemanticLookup, StaticDefect, StaticDefectKind, SymbolId,
     allowed_callback_spans, assigned_member_function_contains, call_primitive_name,
-    containing_summary_function_indexed, contract_callback_execution, contract_export_summaries,
-    contract_export_summaries_incremental, function_indices_by_path, function_lookup_for_path,
-    functions_for_path, items_by_containing_function, location, location_order,
-    propagate_returned_summary_deltas, propagate_summary_deltas, push_contract_callback,
-    push_unique_summary_read, semantic_execution_role,
+    containing_summary_function_indexed, contract_callback_execution, function_indices_by_path,
+    function_lookup_for_path, functions_for_path, items_by_containing_function, location,
+    location_order, propagate_returned_summary_deltas, propagate_summary_deltas,
+    push_contract_callback, push_unique_summary_read, semantic_execution_role,
 };
 use crate::cache::{
     CachedInterproceduralGraph, CachedInterproceduralResultFile, CachedInterproceduralResults,
@@ -307,8 +305,6 @@ impl FunctionBoundary for SummaryNode {
 pub(super) struct InterproceduralResult {
     pub(super) reads: Arc<[ReactiveRead]>,
     pub(super) dispatch_obligations: Arc<[StaticDefect]>,
-    pub(super) exports: Arc<BTreeMap<String, ContractExport>>,
-    pub(super) contract_generation_obligations: Arc<[ContractGenerationObligation]>,
     pub(super) factory_instances: usize,
     pub(super) timings: InterproceduralTimings,
 }
@@ -610,12 +606,6 @@ fn discover_summary_nodes(
     nodes
 }
 
-struct InterproceduralContracts<'a> {
-    reads: &'a HashMap<SymbolId, Vec<crate::ContractReadSite>>,
-    parameter_reads: &'a HashMap<SymbolId, Vec<crate::ContractParameterReadSite>>,
-    callbacks: &'a HashMap<SymbolId, Vec<CallbackSummary>>,
-}
-
 fn unknown_callback_execution_message(
     file: &solid_facts::FileFacts,
     callee: Span,
@@ -770,139 +760,6 @@ fn callback_argument_contracts(
         arguments.pop();
     }
     arguments
-}
-
-/// Whether a contract callback row carries argument descriptors that source
-/// discovery cannot bind at this call site.
-///
-/// A callback `arguments` row claims "this helper hands your callback a
-/// reactive value at parameter N". Source discovery materializes such a claim
-/// in exactly one shape: an inline function literal whose span *is* the
-/// argument, carrying an `accessor` descriptor. Every other schema-valid shape
-/// — a named function passed by reference, a `store-path`/`tuple`/`object`/
-/// `argument` descriptor — has no binding it can create, and dropping the
-/// claim silently would analyze the callback body as if the parameter were
-/// ordinary data. That is the fail-open direction, so the call site keeps an
-/// explicit obligation instead.
-///
-/// A descriptor beyond the literal's declared parameters is *not* unbound only
-/// when the literal can be *proven* blind to that argument slot, which takes
-/// two facts together:
-///
-/// - it is an arrow function, so there is no `arguments` object to read the
-///   slot through — `function (first) { arguments[1] }` observes argument 1
-///   without declaring it;
-/// - it declares no rest parameter, which is not one of `parameters` and
-///   absorbs every argument from `parameters.len()` onward —
-///   `(...args) => args[1]` likewise observes argument 1 without declaring it.
-///
-/// Only `index => …` — an arrow with a restless parameter list shorter than the
-/// descriptor row — is genuinely unable to depend on the described argument.
-/// Everything else fails closed.
-fn contract_callback_arguments_unbound(
-    file: &solid_facts::FileFacts,
-    invoked: Option<Span>,
-    callback: &CallbackSummary,
-) -> bool {
-    if callback.arguments.iter().all(Option::is_none) {
-        return false;
-    }
-    let Some(function) = invoked.and_then(|invoked| {
-        file.ast
-            .functions
-            .iter()
-            .find(|function| function.span == file.ast.peel_ts_sugar_span(invoked))
-    }) else {
-        return true;
-    };
-    // A non-arrow literal reaches every argument through `arguments`, and a
-    // rest parameter reaches every argument past the declared list, so neither
-    // can be shown blind to any descriptor slot.
-    let observes_every_argument =
-        function.kind != solid_facts::ast::FunctionKind::Arrow || function.rest_parameter;
-    callback
-        .arguments
-        .iter()
-        .enumerate()
-        .any(|(index, descriptor)| {
-            descriptor.as_ref().is_some_and(|descriptor| {
-                descriptor.kind != "accessor"
-                    && (observes_every_argument
-                        || function
-                            .parameters
-                            .get(index)
-                            .is_some_and(|parameter| !parameter.names.is_empty()))
-            })
-        })
-}
-
-/// The span of the value a contract `callbacks` row invokes at this call, when
-/// the call's own syntax names it exactly.
-///
-/// A row whose path is empty invokes the argument written at its slot, so the
-/// answer is that argument. A member-path row (item B of ways-to-improve
-/// § 3.3: `callHandler`'s `handler[0](…)`) invokes a member of that argument,
-/// and the answer is the member's value only when the argument is an array or
-/// object literal naming it exactly (`solid_facts::ast::ArgumentFact::
-/// literal_members`): `callHandler(e, [readCount, data])` invokes `readCount`.
-/// Anything else -- an identifier (`callHandler(e, handlerProp)`), a member
-/// expression, a path longer than one segment -- is `None`: the member is
-/// whatever the caller's value holds there, which this call does not show.
-///
-/// `None` is handled exactly as an empty-path row whose argument resolves to
-/// no symbol and no inline function has always been: nothing is folded and
-/// nothing is raised. That loses nothing modelled before this row could be
-/// stated, because the export it describes (`handler[0](…)` on a caller's
-/// value) had its `callbacks` open until item B, and a consumer read no row of
-/// it at all; and it never folds the *whole* argument, which would claim the
-/// caller's array or props object is itself called.
-pub(crate) fn contract_callback_invoked_value(
-    file: &solid_facts::FileFacts,
-    lookup: &SemanticLookup<'_>,
-    call: &solid_facts::ast::CallFact,
-    callback: &CallbackSummary,
-) -> Option<(solid_facts::ast::ArgumentFact, Option<Span>)> {
-    let argument = lookup
-        .callee_symbol(file, call.callee)
-        .and_then(|symbol| lookup.captured_argument(symbol, callback.parameter))
-        .or_else(|| call.arguments.get(callback.parameter))?;
-    let invoked = match callback.path.as_slice() {
-        // The historical answer for the argument itself, spread or not.
-        [] => Some(argument.span),
-        // A spread displaces the slot: the value there is not the literal.
-        _ if argument.spread => None,
-        [key] => argument
-            .literal_members
-            .iter()
-            .find(|member| member.key.as_str() == key)
-            .map(|member| member.value),
-        _ => None,
-    };
-    Some((argument.clone(), invoked))
-}
-
-/// The symbol a value written at `span` names: the compiler entity at the span
-/// itself or its transparent TypeScript operand, or -- for an identifier the
-/// binder resolves to a declaration in this file, whose reference inside a
-/// literal no demand asked the compiler about -- the entity at that
-/// declaration's name.
-fn value_symbol<'e>(
-    file: &solid_facts::FileFacts,
-    span: Span,
-    entities: &'e EntitySymbols,
-) -> Option<&'e SymbolId> {
-    entities
-        .get(&location(file.path.shared(), span))
-        .or_else(|| {
-            let peeled = file.ast.peel_ts_sugar_span(span);
-            entities.get(&location(file.path.shared(), peeled))
-        })
-        .or_else(|| {
-            let peeled = file.ast.peel_ts_sugar_span(span);
-            file.ast
-                .reference_declaration(peeled)
-                .and_then(|declaration| entities.get(&location(file.path.shared(), declaration)))
-        })
 }
 
 /// Parameters whose caller-supplied value this function *retains*.
@@ -1502,7 +1359,6 @@ fn discover_interprocedural_graph(
     nodes: &[SummaryNode],
     nodes_by_path: &HashMap<String, Vec<usize>>,
     symbols: InterproceduralGraphSymbols<'_>,
-    contracts: InterproceduralContracts<'_>,
     lookup: &SemanticLookup<'_>,
     accessors: &HashMap<SymbolId, (SymbolId, Location)>,
 ) -> InterproceduralGraphContribution {
@@ -1740,72 +1596,12 @@ fn discover_interprocedural_graph(
                 }
             }
         }
-        if !ambiguous_dispatch && let Some(contracted) = contracts.reads.get(symbol) {
-            for (display, _, declaration, kind, read_context) in contracted {
-                contribution.direct_reads.push((
-                    owner_span,
-                    SummaryRead {
-                        transported: false,
-                        contract_read_context: read_context.clone(),
-                        symbol: SymbolId::from(symbol),
-                        display: SymbolId::from(display.as_str()),
-                        kind: Some(kind.clone()),
-                        declaration: declaration.clone(),
-                        origin: location(file.path.shared(), call.span),
-                        origin_context: nodes[owner].name.clone().unwrap_or_default(),
-                        owner: nodes[owner].symbol.clone(),
-                        local: !site_on_every_completion(
-                            lookup,
-                            file,
-                            nodes[owner].span,
-                            call.span,
-                        ),
-                        conditional: false,
-                        undecided: false,
-                    },
-                ));
-            }
-        }
-        if !ambiguous_dispatch && let Some(contracted) = contracts.parameter_reads.get(symbol) {
-            for (parameter, _, _, _, _) in contracted {
-                let Some(argument) = call.arguments.get(*parameter) else {
-                    continue;
-                };
-                let Some(argument_symbol) = symbols
-                    .entities
-                    .get(&location(file.path.shared(), argument.span))
-                else {
-                    continue;
-                };
-                if let Some(owner_parameter) = nodes[owner]
-                    .parameters
-                    .iter()
-                    .position(|candidate| candidate == argument_symbol)
-                {
-                    // The parameter's own value is read, not a property of it,
-                    // so the access path is empty.
-                    let entry = (
-                        owner_span,
-                        ParameterMemberInvocation {
-                            parameter: owner_parameter,
-                            path: Vec::new(),
-                            in_owner_body,
-                            primitive_builtin: false,
-                        },
-                    );
-                    if !contribution.invoked_parameter_members.contains(&entry) {
-                        contribution.invoked_parameter_members.push(entry);
-                    }
-                }
-            }
-        }
         // A call written in a closure the owner only builds into its result
         // is not made when the owner is called, so its target's reads do not
         // propagate to the owner (`runs_in_retained_value_literal`). A call in
         // the owner's own tracked JSX region or component property getter runs
         // outside the owner's call (`runs_outside_owner_call`).
         if !ambiguous_dispatch
-            && !contracts.reads.contains_key(symbol)
             && !runs_in_retained_value_literal(file, call.span, &nodes[owner])
             && !runs_outside_owner_call(file, call.span, nodes[owner].body, lookup)
         {
@@ -1970,13 +1766,12 @@ fn discover_interprocedural_graph(
             // word `tracked` carries no schedule column, so the row's schedule
             // has to be recomposed from the same wrappers that produced it (see
             // the push below).
-            let chain: Option<ComposedChain> =
-                enclosing_callback_chain(file, call.callee, &contracts, lookup)
-                    .filter(|chain| !chain.wrappers.is_empty())
-                    .filter(|chain| {
-                        callback_chain_reaches_owner_body(file, chain, &nodes[callback_owner])
-                    })
-                    .map(|chain| (compose_callback_chain(&chain.wrappers), chain.wrappers));
+            let chain: Option<ComposedChain> = enclosing_callback_chain(file, call.callee, lookup)
+                .filter(|chain| !chain.wrappers.is_empty())
+                .filter(|chain| {
+                    callback_chain_reaches_owner_body(file, chain, &nodes[callback_owner])
+                })
+                .map(|chain| (compose_callback_chain(&chain.wrappers), chain.wrappers));
             let chain_execution: Option<Option<&'static str>> = chain
                 .as_ref()
                 .map(|(composed, _)| composed.map(|(word, _)| word));
@@ -2155,263 +1950,9 @@ fn discover_interprocedural_graph(
                 ));
             }
         }
-        if !ambiguous_dispatch && let Some(callbacks) = contracts.callbacks.get(symbol) {
-            // The map also keeps value enumerations for the result consumer.
-            // They are no callable edge, invoked parameter or re-pushed row.
-            for callback in callbacks.iter().filter(|callback| callback.is_invocation()) {
-                let Some((argument, invoked)) =
-                    contract_callback_invoked_value(file, lookup, call, callback)
-                else {
-                    continue;
-                };
-                let argument_location = location(file.path.shared(), argument.span);
-                if callback.invokes_member() {
-                    // Item B: the row calls a member of the argument. It is
-                    // folded exactly when the call's own syntax names that
-                    // member (see `contract_callback_invoked_value`), as an
-                    // inline row of the member's value would be; a member it
-                    // does not name is not folded at all, and the argument
-                    // is never read as the callable.
-                    if contract_callback_arguments_unbound(file, invoked, callback)
-                        && let Some((package, export)) = lookup.contract_export_identity(symbol)
-                    {
-                        contribution
-                            .contract_consumer_obligations
-                            .push(StaticDefect {
-                                kind: StaticDefectKind::PackageContractExportMissing {
-                                    module: package.to_owned(),
-                                    export: export.to_owned(),
-                                    reexported: false,
-                                    site: crate::ContractDefectSite::Argument,
-                                    admission_refusal: None,
-                                },
-                                location: argument_location.clone(),
-                                analysis_context: "unbound-contract-claims:callback arguments"
-                                    .into(),
-                                fixes: vec![],
-                                uncertain: false,
-                            });
-                    }
-                    // The argument is the owner's own parameter: the owner
-                    // hands its caller's value on, so it calls the caller's
-                    // member at the same path. Restated as the owner's row,
-                    // path unchanged; nothing of the owner's is invoked, so
-                    // no edge and no invoked parameter.
-                    if argument.spread {
-                        continue;
-                    }
-                    if let Some(argument_symbol) = symbols.entities.get(&argument_location)
-                        && let Some(&(callback_owner, parameter)) =
-                            function_lookup.parameter_owner.get(argument_symbol)
-                    {
-                        contribution.callbacks.push((
-                            nodes[callback_owner].span,
-                            CallbackSummary {
-                                parameter,
-                                execution: callback.execution.clone(),
-                                schedule: callback.schedule,
-                                clears_tracking: callback.clears_tracking,
-                                arguments: callback.arguments.clone(),
-                                owner: None,
-                                protocol: callback.protocol,
-                                path: callback.path.clone(),
-                            },
-                        ));
-                        continue;
-                    }
-                    let Some(invoked) = invoked else {
-                        continue;
-                    };
-                    if let Some(member_symbol) = value_symbol(file, invoked, symbols.entities) {
-                        if callback.execution == "inline" {
-                            contribution.edges.push((
-                                owner_span,
-                                InterproceduralGraphTarget::Symbol(member_symbol.clone()),
-                            ));
-                            if call_completes {
-                                contribution.guaranteed_edges.push((
-                                    owner_span,
-                                    InterproceduralGraphTarget::Symbol(member_symbol.clone()),
-                                ));
-                            }
-                        }
-                        // The member is the owner's own parameter: the owner's
-                        // caller's value is what gets called, as if the owner
-                        // had passed it bare to an empty-path row.
-                        if let Some(&(callback_owner, parameter)) =
-                            function_lookup.parameter_owner.get(member_symbol)
-                        {
-                            if callback.is_result_access() {
-                                contribution
-                                    .escaped_parameters
-                                    .push((nodes[callback_owner].span, parameter));
-                                continue;
-                            }
-                            if callback.execution == "inline" {
-                                contribution
-                                    .invoked_parameters
-                                    .push((owner_span, parameter));
-                            }
-                            contribution.callbacks.push((
-                                nodes[callback_owner].span,
-                                CallbackSummary {
-                                    parameter,
-                                    execution: callback.execution.clone(),
-                                    schedule: callback.schedule,
-                                    clears_tracking: callback.clears_tracking,
-                                    arguments: callback.arguments.clone(),
-                                    owner: None,
-                                    protocol: callback.protocol,
-                                    path: Vec::new(),
-                                },
-                            ));
-                        }
-                    } else if callback.execution == "inline"
-                        && let Some(target) =
-                            functions_for_path(nodes, nodes_by_path, file.path.as_str())
-                                .filter(|(_, node)| {
-                                    if lookup
-                                        .captured_argument(symbol, callback.parameter)
-                                        .is_some()
-                                        || lookup.contract_callback_results(symbol).is_some_and(
-                                            |results| {
-                                                results.iter().any(|result| {
-                                                    result.parameter == callback.parameter
-                                                })
-                                            },
-                                        )
-                                    {
-                                        node.span == file.ast.peel_ts_sugar_span(invoked)
-                                    } else {
-                                        invoked.contains(node.span)
-                                    }
-                                })
-                                .min_by_key(|(_, node)| node.span.end - node.span.start)
-                                .map(|(_, node)| node.span)
-                    {
-                        contribution
-                            .edges
-                            .push((owner_span, InterproceduralGraphTarget::LocalSpan(target)));
-                    }
-                    continue;
-                }
-                if contract_callback_arguments_unbound(file, invoked, callback)
-                    && let Some((package, export)) = lookup.contract_export_identity(symbol)
-                {
-                    contribution
-                        .contract_consumer_obligations
-                        .push(StaticDefect {
-                            kind: StaticDefectKind::PackageContractExportMissing {
-                                module: package.to_owned(),
-                                export: export.to_owned(),
-                                reexported: false,
-                                site: crate::ContractDefectSite::Argument,
-                                admission_refusal: None,
-                            },
-                            location: argument_location.clone(),
-                            analysis_context: "unbound-contract-claims:callback arguments".into(),
-                            fixes: vec![],
-                            uncertain: false,
-                        });
-                }
-                if let Some(argument_symbol) = symbols.entities.get(&argument_location) {
-                    if callback.execution == "inline" {
-                        contribution.edges.push((
-                            owner_span,
-                            InterproceduralGraphTarget::Symbol(argument_symbol.clone()),
-                        ));
-                        if call_completes {
-                            contribution.guaranteed_edges.push((
-                                owner_span,
-                                InterproceduralGraphTarget::Symbol(argument_symbol.clone()),
-                            ));
-                        }
-                    }
-                    if let Some(&(callback_owner, parameter)) =
-                        function_lookup.parameter_owner.get(argument_symbol)
-                    {
-                        // ADR 0139: what the dependency keeps in its result is
-                        // not a fact about this owner's result.
-                        if callback.is_result_access() {
-                            contribution
-                                .escaped_parameters
-                                .push((nodes[callback_owner].span, parameter));
-                            continue;
-                        }
-                        if callback.execution == "inline" {
-                            contribution
-                                .invoked_parameters
-                                .push((owner_span, parameter));
-                        }
-                        contribution.callbacks.push((
-                            nodes[callback_owner].span,
-                            CallbackSummary {
-                                parameter,
-                                execution: callback.execution.clone(),
-                                schedule: callback.schedule,
-                                clears_tracking: callback.clears_tracking,
-                                arguments: callback.arguments.clone(),
-                                owner: None,
-                                protocol: callback.protocol,
-                                path: Vec::new(),
-                            },
-                        ));
-                    }
-                } else if callback.execution == "inline"
-                    && let Some(target) =
-                        functions_for_path(nodes, nodes_by_path, file.path.as_str())
-                            .filter(|(_, node)| {
-                                if lookup
-                                    .captured_argument(symbol, callback.parameter)
-                                    .is_some()
-                                    || lookup.contract_callback_results(symbol).is_some_and(
-                                        |results| {
-                                            results.iter().any(|result| {
-                                                result.parameter == callback.parameter
-                                            })
-                                        },
-                                    )
-                                {
-                                    node.span == file.ast.peel_ts_sugar_span(argument.span)
-                                } else {
-                                    argument.span.contains(node.span)
-                                }
-                            })
-                            .min_by_key(|(_, node)| node.span.end - node.span.start)
-                            .map(|(_, node)| node.span)
-                {
-                    contribution
-                        .edges
-                        .push((owner_span, InterproceduralGraphTarget::LocalSpan(target)));
-                }
-            }
-        }
         for (argument_index, argument) in call.arguments.iter().enumerate() {
             let runtime_argument_callability =
                 lookup.smallest_contained_callability(file.path.as_str(), argument.span);
-            let unknown_contract_callback = lookup.unknown_contract_callback_export(symbol);
-            if let Some((package, export)) = unknown_contract_callback
-                && potentially_callable(runtime_argument_callability)
-                && !literal_argument_is_not_callable(argument.runtime_value_kind)
-                && argument.value != solid_facts::ast::ArgumentValueKind::Identifier
-            {
-                contribution
-                    .contract_consumer_obligations
-                    .push(StaticDefect {
-                        kind: StaticDefectKind::PackageContractExportMissing {
-                            module: package.to_owned(),
-                            export: export.to_owned(),
-                            reexported: false,
-                            site: crate::ContractDefectSite::Argument,
-                            admission_refusal: None,
-                        },
-                        location: location(file.path.shared(), argument.span),
-                        analysis_context: "unknown-contract-claims:callbacks".into(),
-                        fixes: vec![],
-                        uncertain: false,
-                    });
-                continue;
-            }
             if argument.value != solid_facts::ast::ArgumentValueKind::Identifier {
                 continue;
             }
@@ -2425,44 +1966,7 @@ fn discover_interprocedural_graph(
                 .parameter_owner
                 .get(argument_symbol)
                 .copied();
-            // A local wrapper cannot republish an authored result-use census
-            // as ordinary argument invocations. Result provenance has not been
-            // transported across this project call, so this parameter remains
-            // unaccounted for in the wrapper's callback domain.
-            if let Some((callback_owner, parameter)) = callback_owner_and_parameter
-                && lookup
-                    .contract_callback_results(symbol)
-                    .is_some_and(|results| {
-                        results
-                            .iter()
-                            .any(|result| result.parameter == argument_index)
-                    })
-            {
-                contribution
-                    .escaped_parameters
-                    .push((nodes[callback_owner].span, parameter));
-                continue;
-            }
             let Some((callback_owner, parameter)) = callback_owner_and_parameter else {
-                if let Some((package, export)) = unknown_contract_callback
-                    && potentially_callable(runtime_argument_callability)
-                {
-                    contribution
-                        .contract_consumer_obligations
-                        .push(StaticDefect {
-                            kind: StaticDefectKind::PackageContractExportMissing {
-                                module: package.to_owned(),
-                                export: export.to_owned(),
-                                reexported: false,
-                                site: crate::ContractDefectSite::Argument,
-                                admission_refusal: None,
-                            },
-                            location: location(file.path.shared(), argument.span),
-                            analysis_context: "unknown-contract-claims:callbacks".into(),
-                            fixes: vec![],
-                            uncertain: false,
-                        });
-                }
                 continue;
             };
             if !ambiguous_dispatch
@@ -2480,7 +1984,6 @@ fn discover_interprocedural_graph(
                     call,
                     argument_index,
                     &nodes[callback_owner],
-                    &contracts,
                     lookup,
                 );
                 // A chain that refuses to compose cannot restate the callee's
@@ -2563,7 +2066,7 @@ fn discover_interprocedural_graph(
                 // is relative to the wrapping call and the row is relative to
                 // the export.
                 let composed: Option<ComposedChain> =
-                    enclosing_callback_chain(file, call.span, &contracts, lookup)
+                    enclosing_callback_chain(file, call.span, lookup)
                         .filter(|chain| {
                             chain.wrappers.is_empty()
                                 || callback_chain_reaches_owner_body(
@@ -2573,13 +2076,8 @@ fn discover_interprocedural_graph(
                                 )
                         })
                         .and_then(|chain| {
-                            let mut wrappers = vec![callback_wrapper_at(
-                                file,
-                                call,
-                                argument_index,
-                                &contracts,
-                                lookup,
-                            )?];
+                            let mut wrappers =
+                                vec![callback_wrapper_at(file, call, argument_index, lookup)?];
                             wrappers.extend(chain.wrappers);
                             Some((compose_callback_chain(&wrappers), wrappers))
                         });
@@ -2716,40 +2214,6 @@ fn discover_interprocedural_graph(
                 continue;
             }
             let resolved_call = lookup.resolved_callee_call(file, call.callee);
-            if let Some((package, export)) = unknown_contract_callback
-                && potentially_callable(runtime_argument_callability)
-            {
-                if nodes[callback_owner].exported {
-                    contribution.contract_generation_obligations.push((
-                        nodes[callback_owner].span,
-                        unknown_callback_obligation(
-                            file,
-                            &nodes[callback_owner],
-                            call.callee,
-                            parameter,
-                            location(file.path.shared(), argument.span),
-                            lookup,
-                        ),
-                    ));
-                } else {
-                    contribution
-                        .contract_consumer_obligations
-                        .push(StaticDefect {
-                            kind: StaticDefectKind::PackageContractExportMissing {
-                                module: package.to_owned(),
-                                export: export.to_owned(),
-                                reexported: false,
-                                site: crate::ContractDefectSite::Argument,
-                                admission_refusal: None,
-                            },
-                            location: location(file.path.shared(), argument.span),
-                            analysis_context: "unknown-contract-claims:callbacks".into(),
-                            fixes: vec![],
-                            uncertain: false,
-                        });
-                }
-                continue;
-            }
             let runtime_behavior = resolved_call
                 .and_then(|resolved_call| {
                     argument_behavior(resolved_call, runtime_argument_callability, argument_index)
@@ -2832,9 +2296,6 @@ fn discover_interprocedural_graph(
                     }
                     RuntimeArgumentBehavior::ValueOnly => {}
                 }
-                continue;
-            }
-            if contracts.callbacks.contains_key(symbol) {
                 continue;
             }
             if !potentially_callable(runtime_argument_callability) {
@@ -3464,7 +2925,6 @@ fn callback_wrapper_at(
     file: &solid_facts::FileFacts,
     call: &solid_facts::ast::CallFact,
     argument: usize,
-    contracts: &InterproceduralContracts<'_>,
     lookup: &SemanticLookup<'_>,
 ) -> Option<CallbackWrapper> {
     let count = call.arguments.len();
@@ -3473,41 +2933,18 @@ fn callback_wrapper_at(
         .and_then(|call_index| super::known_primitive(&lookup.primitives(file).calls[call_index]));
     let primitive_execution =
         primitive_callback_execution(primitive, argument, count, lookup.dialect);
-    // The package contract rows for this slot, when no primitive answers it. A
-    // non-call row (a property read or coercion of the argument) wraps
-    // nothing: it is not an invocation of it. Nor does a member-path row: it
-    // calls a member of the argument, and the function written at this slot is
-    // not that member.
-    let rows = if primitive_execution.is_some() {
-        Vec::new()
-    } else {
-        lookup
-            .callee_symbol(file, call.callee)
-            .and_then(|symbol| contracts.callbacks.get(symbol))
-            .into_iter()
-            .flatten()
-            .filter(|callback| callback.parameter == argument && callback.invokes_argument())
-            .collect::<Vec<_>>()
-    };
-    let execution = primitive_execution
-        .map(std::borrow::Cow::Borrowed)
-        .or_else(|| {
-            rows.first()
-                .map(|callback| std::borrow::Cow::Owned(callback.execution.clone()))
-        })?;
-    let rows_clear = package_rows_clear(&rows, execution.as_ref());
-    Some(match execution.as_ref() {
+    // Only a primitive answers the slot: no other callee states what it does
+    // with the function it is handed.
+    let execution = primitive_execution?;
+    Some(match execution {
         "deferred" => CallbackWrapper::Deferred {
             clears_tracking: match primitive {
                 Some(primitive) => lookup
                     .dialect
                     .reports_untracked_reads_at(primitive, argument, count),
-                None => rows_clear,
+                None => false,
             },
         },
-        // A package contract row (`primitive` is `None` here) carries no
-        // schedule column, so its tracked wrapper has no established timing and
-        // the fold fails closed on it.
         "tracked" => CallbackWrapper::Tracked(primitive.and_then(|primitive| {
             lookup
                 .dialect
@@ -3526,27 +2963,8 @@ fn callback_wrapper_at(
         {
             CallbackWrapper::Detaching
         }
-        // A package contract row answers it from its own tracking word: an
-        // `inline` row reads back as clearing only where the document says
-        // `untracked` (`project_callbacks`), which the generator writes only
-        // for a proven `Detaching` chain. Reading such a row as transparent
-        // dropped the proven clear, and `createMemo(() => pkgUntrack(cb))`
-        // composed to `tracked`.
-        _ if primitive.is_none() && rows_clear => CallbackWrapper::Detaching,
         _ => CallbackWrapper::Transparent,
     })
-}
-
-/// Whether every package contract row for one callback slot states a clearing
-/// under the slot's word. One row that does not -- or that states another word
-/// -- is a slot whose listener the contract does not settle, and the wrapper
-/// keeps the transparent (or non-clearing deferred) reading. No rows is no
-/// statement at all.
-fn package_rows_clear(rows: &[&CallbackSummary], execution: &str) -> bool {
-    !rows.is_empty()
-        && rows
-            .iter()
-            .all(|callback| callback.execution == execution && callback.clears_tracking)
 }
 
 /// ADR 0183: whether the call at `span` is reached from `owner`'s own body
@@ -3653,7 +3071,6 @@ struct CallbackChain {
 fn enclosing_callback_chain(
     file: &solid_facts::FileFacts,
     nested: Span,
-    contracts: &InterproceduralContracts<'_>,
     lookup: &SemanticLookup<'_>,
 ) -> Option<CallbackChain> {
     let mut wrappers = Vec::new();
@@ -3702,9 +3119,7 @@ fn enclosing_callback_chain(
             span.end - span.start
         });
         let (call, argument) = enclosing[0];
-        wrappers.push(callback_wrapper_at(
-            file, call, argument, contracts, lookup,
-        )?);
+        wrappers.push(callback_wrapper_at(file, call, argument, lookup)?);
         span = call.span;
     }
     Some(CallbackChain {
@@ -3898,14 +3313,13 @@ fn forwarded_callback_ambient_execution(
     call: &solid_facts::ast::CallFact,
     argument: usize,
     owner: &SummaryNode,
-    contracts: &InterproceduralContracts<'_>,
     lookup: &SemanticLookup<'_>,
 ) -> ForwardedAmbientExecution {
-    let own = callback_wrapper_at(file, call, argument, contracts, lookup);
+    let own = callback_wrapper_at(file, call, argument, lookup);
     // An unknown wrapper is not an empty chain. Even an empty, classified
     // chain can stop inside a stored arrow rather than reach the parameter's
     // declaring function. Neither establishes export-relative timing.
-    let Some(chain) = enclosing_callback_chain(file, call.span, contracts, lookup)
+    let Some(chain) = enclosing_callback_chain(file, call.span, lookup)
         .filter(|chain| callback_chain_reaches_owner_body(file, chain, owner))
     else {
         return ForwardedAmbientExecution::Unknown;
@@ -4169,7 +3583,6 @@ struct StructuredReturnDiscovery<'a, 'facts> {
     structured_returns: &'a [Option<ReturnSummary>],
     accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
     source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
-    contract_returns: &'a HashMap<SymbolId, (ReturnSummary, Location)>,
     entities: &'a EntitySymbols,
     symbol_names: &'a HashMap<SymbolId, SymbolId>,
     lookup: &'a SemanticLookup<'facts>,
@@ -4213,17 +3626,6 @@ impl StructuredReturnDiscovery<'_, '_> {
             binding.kind,
             solid_facts::ast::ImportKind::Named | solid_facts::ast::ImportKind::Default
         ) {
-            return None;
-        }
-        // A reviewed package contract is the exact runtime owner for this
-        // binding. This covers both a direct package import and a relative
-        // project barrel whose TypeFacts runtime identity was joined to that
-        // package export. Do not require a project declaration in this case:
-        // doing so would turn a contracted external function back into
-        // SC9012 merely because it crossed a local re-export.
-        if let Some(symbol) = self.entities.at(file.path.as_str(), declaration)
-            && self.lookup.has_contract_binding(symbol)
-        {
             return None;
         }
         // TypeScript already resolved the import, including tsconfig paths,
@@ -4374,41 +3776,6 @@ impl StructuredReturnDiscovery<'_, '_> {
             }),
             _ => Some(returned.clone()),
         }
-    }
-
-    /// Resolve `const use = contractedFactory(callback); use()` when the
-    /// contract states that the factory returns a callable whose invocation
-    /// yields that callback's result. The outer binding and contracted callee
-    /// must both resolve exactly in this file; wider value flow stays unknown.
-    fn returned_callable_call_return(
-        &self,
-        file: &solid_facts::FileFacts,
-        call: &solid_facts::ast::CallFact,
-        fallback_label: &str,
-        depth: usize,
-    ) -> Option<ReturnSummary> {
-        if depth == 0 {
-            return None;
-        }
-        let initializer = self.binding_initializer(file, call.callee)?;
-        let factory_call = file
-            .ast
-            .calls
-            .iter()
-            .find(|candidate| candidate.span == initializer)?;
-        let symbol = self.entities.at(file.path.as_str(), factory_call.callee)?;
-        let returned = self
-            .contract_returns
-            .get(symbol)
-            .map(|(returned, _)| returned)
-            .filter(|returned| returned.kind == "callback-result-function")?;
-        let relation = ReturnSummary {
-            kind: "callback-result".into(),
-            parameter: returned.parameter,
-            prototype: None,
-            ..ReturnSummary::default()
-        };
-        self.instantiate_return(file, factory_call, &relation, fallback_label, depth - 1)
     }
 
     fn context_return(
@@ -4596,12 +3963,6 @@ impl StructuredReturnDiscovery<'_, '_> {
         {
             return Some(returned);
         }
-        if let Some(returned) = symbol
-            .and_then(|symbol| self.contract_returns.get(symbol))
-            .map(|(returned, _)| returned)
-        {
-            return self.instantiate_return(file, call, returned, fallback_label, depth - 1);
-        }
         if let Some(primitive) = super::known_primitive(&primitive)
             && self.lookup.dialect.creates_reactive_source(primitive)
         {
@@ -4617,11 +3978,6 @@ impl StructuredReturnDiscovery<'_, '_> {
             });
         }
         if let Some(returned) = self.reactive_proxy_return(file, call, fallback_label) {
-            return Some(returned);
-        }
-        if let Some(returned) =
-            self.returned_callable_call_return(file, call, fallback_label, depth - 1)
-        {
             return Some(returned);
         }
         if file.ast.members.iter().any(|member| {
@@ -5828,7 +5184,6 @@ fn remove_interprocedural_dependency_user(
 
 pub(super) struct InterproceduralResultReadContext<'a, 'b> {
     pub(super) result: InterproceduralResultView<'a>,
-    pub(super) contract_callbacks: &'a HashMap<SymbolId, Vec<CallbackSummary>>,
     pub(super) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
     pub(super) accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
     pub(super) entities: &'a EntitySymbols,
@@ -5859,7 +5214,6 @@ fn interprocedural_result_reads_for_file(
                 returned_bindings,
                 ..
             },
-        contract_callbacks,
         source_kinds,
         accessors,
         entities,
@@ -6083,8 +5437,6 @@ fn interprocedural_result_reads_for_file(
             )
         } else if let Some(summary) = returned_bindings.get(symbol) {
             (label, summary.clone(), None)
-        } else if contract_callbacks.contains_key(symbol) {
-            (label, Vec::new(), None)
         } else {
             continue;
         };
@@ -6417,28 +5769,9 @@ fn interprocedural_result_reads_for_file(
             symbol_names,
             lookup,
         };
-        // ADR 0274: a local helper that forwards its parameter to a package
-        // value copy performs that copy at this call.
-        let forwarded = if contract_callbacks.contains_key(symbol) {
-            Vec::new()
-        } else {
-            property_gets::forwarded_enumerations(file, call, lookup)
-        };
-        for callback in &forwarded {
-            let (mut reads, obligation, get_dependencies) =
-                property_gets::reads(&get_context, callback);
-            if object_callable {
-                for read in &mut reads {
-                    read.callee_callback_timing = true;
-                }
-            }
-            result.extend(reads);
-            dispatch_obligations.extend(obligation);
-            dependencies.extend(get_dependencies);
-        }
         // ADR 0283: a project function's own member Gets of a parameter run
         // the getters of the exact literal this call passes there.
-        if receives_getters && transported.is_none() && !contract_callbacks.contains_key(symbol) {
+        if receives_getters && transported.is_none() {
             let (mut reads, get_dependencies) =
                 property_gets::parameter_reads(&get_context, |path, span| {
                     result_indexes.contains_key(&(path.to_owned(), span))
@@ -6450,271 +5783,6 @@ fn interprocedural_result_reads_for_file(
             }
             result.extend(reads);
             dependencies.extend(get_dependencies);
-        }
-        if let Some(callbacks) = contract_callbacks.get(symbol) {
-            for callback in callbacks
-                .iter()
-                .filter(|callback| callback.protocol.is_value_enumeration())
-            {
-                let (mut reads, obligation, get_dependencies) =
-                    property_gets::reads(&get_context, callback);
-                if object_callable {
-                    for read in &mut reads {
-                        read.callee_callback_timing = true;
-                    }
-                }
-                result.extend(reads);
-                dispatch_obligations.extend(obligation);
-                dependencies.extend(get_dependencies);
-            }
-            for callback in callbacks.iter().filter(|callback| callback.is_invocation()) {
-                // The value the row invokes: the argument itself for an
-                // empty path, a member of it the call names exactly for a
-                // member-path row (item B), and nothing folded otherwise --
-                // never the whole argument for a member row.
-                let Some((argument, Some(invoked))) =
-                    contract_callback_invoked_value(file, lookup, call, callback)
-                else {
-                    continue;
-                };
-                let captured = lookup
-                    .captured_argument(symbol, callback.parameter)
-                    .is_some();
-                if captured {
-                    match lookup
-                        .resolved_callee_call(file, call.callee)
-                        .map(|resolved| resolved.validity)
-                    {
-                        // TypeScript owns an erroneous/recovery call. Do not
-                        // recast its type diagnostic as a dispatch finding.
-                        Some(ResolvedCallValidity::Recovery) => continue,
-                        Some(ResolvedCallValidity::Valid) if ambiguous_candidates.is_none() => {}
-                        Some(ResolvedCallValidity::Valid | ResolvedCallValidity::Unresolved)
-                        | None => {
-                            dispatch_obligations.push(StaticDefect {
-                                kind: StaticDefectKind::ReactiveDispatchUnresolved {
-                                    callee: label.clone(),
-                                    member: None,
-                                },
-                                location: location(file.path.shared(), call.span),
-                                analysis_context:
-                                    "the captured invocation has no exact valid call fact".into(),
-                                fixes: vec![],
-                                uncertain: true,
-                            });
-                            continue;
-                        }
-                    }
-                }
-                let literal_function = file
-                    .ast
-                    .functions
-                    .iter()
-                    .find(|function| function.span == invoked);
-                let argument_symbol = if captured && literal_function.is_some() {
-                    None
-                } else {
-                    value_symbol(file, invoked, entities)
-                };
-                let argument_function =
-                    literal_function
-                        .map(|function| (file, function))
-                        .or_else(|| {
-                            argument_symbol
-                                .and_then(|symbol| lookup.function_for_symbol(symbol.as_str()))
-                                .filter(|(source, function)| {
-                                    lookup.function_value_is_current(source, function)
-                                })
-                        });
-                let argument_summary = argument_symbol
-                    .and_then(|argument_symbol| {
-                        dependencies.insert(InterproceduralResultDependency::Symbol(
-                            argument_symbol.clone(),
-                        ));
-                        by_symbol
-                            .get(argument_symbol)
-                            .map(|index| &summaries[*index][..])
-                            .or_else(|| returned_bindings.get(argument_symbol).map(Vec::as_slice))
-                    })
-                    .or_else(|| {
-                        nodes
-                            .iter()
-                            .enumerate()
-                            .filter(|(_, node)| {
-                                node.path == file.path.as_str()
-                                    && (if lookup
-                                        .captured_argument(symbol, callback.parameter)
-                                        .is_some()
-                                        || lookup.contract_callback_results(symbol).is_some_and(
-                                            |results| {
-                                                results.iter().any(|result| {
-                                                    result.parameter == callback.parameter
-                                                })
-                                            },
-                                        ) {
-                                        node.span == file.ast.peel_ts_sugar_span(invoked)
-                                    } else {
-                                        invoked.contains(node.span)
-                                    })
-                            })
-                            .min_by_key(|(_, node)| node.span.end - node.span.start)
-                            .map(|(index, node)| {
-                                dependencies.insert(
-                                    InterproceduralResultDependency::InlineFunction(
-                                        node.path.clone(),
-                                        node.span,
-                                    ),
-                                );
-                                &summaries[index][..]
-                            })
-                    });
-                // A signal accessor has no project function summary. An
-                // accepted inline invocation nevertheless may read that exact
-                // accessor during this call, just as a project helper's
-                // parameter invocation does above. A retained callback, a
-                // displaced spread slot, or ambiguous dispatch proves no
-                // such read. Non-call protocol rows were filtered by source
-                // discovery and must never be interpreted as accessor calls.
-                let accessor_read = (argument_summary.is_none()
-                    && valid_call
-                    && ambiguous_candidates.is_none()
-                    && callback.invokes_argument()
-                    && callback.execution == "inline"
-                    && !callback.clears_tracking
-                    && lookup
-                        .contract_inline_accessor_invocation(symbol, callback.parameter)
-                        .is_some()
-                    && !argument.spread)
-                    .then(|| {
-                        let symbol = argument_symbol?;
-                        if source_kinds.get(symbol.as_str()) != Some(&ReactiveSourceKind::Accessor)
-                        {
-                            return None;
-                        }
-                        let (display, declaration) = accessors.get(symbol.as_str())?;
-                        Some(SummaryRead {
-                            transported: false,
-                            contract_read_context: None,
-                            symbol: symbol.clone(),
-                            display: display.clone(),
-                            kind: Some("accessor".into()),
-                            declaration: declaration.clone(),
-                            origin: location(file.path.shared(), call.span),
-                            origin_context: label.clone(),
-                            owner: None,
-                            local: false,
-                            conditional: false,
-                            undecided: false,
-                        })
-                    })
-                    .flatten();
-                let Some(argument_summary) =
-                    argument_summary.or_else(|| accessor_read.as_ref().map(std::slice::from_ref))
-                else {
-                    if captured
-                        && !(callback.execution == "deferred"
-                            && argument_symbol.is_some_and(|symbol| {
-                                source_kinds.get(symbol.as_str())
-                                    == Some(&ReactiveSourceKind::Accessor)
-                                    && accessors.contains_key(symbol.as_str())
-                            }))
-                    {
-                        dispatch_obligations.push(StaticDefect {
-                            kind: StaticDefectKind::ReactiveDispatchUnresolved {
-                                callee: label.clone(),
-                                member: None,
-                            },
-                            location: location(file.path.shared(), call.span),
-                            analysis_context: "the captured callable has no exact read census"
-                                .into(),
-                            fixes: vec![],
-                            uncertain: true,
-                        });
-                    }
-                    continue;
-                };
-                let callback_execution = match callback.execution.as_str() {
-                    "tracked" => ExecutionRole::TrackedJsx,
-                    "deferred" => ExecutionRole::DeferredCallback,
-                    _ => execution,
-                };
-                for read in argument_summary {
-                    // A mandatory inline capture invokes this exact caller
-                    // value on this call's stack. An accessor is the read;
-                    // a function summary still needs the origin in its own
-                    // synchronous body. Nested/deferred summary reads keep
-                    // their obligations instead of inheriting this proof.
-                    let capture_read_proven = captured
-                        && callback.invokes_argument()
-                        && callback.execution == "inline"
-                        && !callback.clears_tracking
-                        && lookup.contract_inline_accessor_invocation(symbol, callback.parameter)
-                            == Some(true)
-                        && (accessor_read.is_some()
-                            || argument_function.is_some_and(|(source, function)| {
-                                captured_body_read_runs_during_call(source, function, read)
-                            }));
-                    let (callback_execution, read_unproven) = read
-                        .contract_read_context
-                        .as_ref()
-                        .map_or((callback_execution, false), |context| {
-                            context.at_call(callback_execution)
-                        });
-                    if seen.insert((
-                        callee.path.clone(),
-                        callee.start_byte,
-                        format!(
-                            "{}#callback-{}-{callback_execution:?}",
-                            read.symbol, callback.parameter
-                        ),
-                    )) {
-                        result.push(ReactiveRead {
-                            package_internal: false,
-                            summary_attributed: !capture_read_proven,
-                            transported: read.transported
-                                || transported.is_some()
-                                || provenance.has_source_origin(&read.symbol),
-                            kind: "accessor".into(),
-                            accessor: read.display.to_string().into(),
-                            location: location(file.path.shared(), call.span),
-                            declaration: read.declaration.clone(),
-                            execution: callback_execution,
-                            context: context
-                                .get_or_insert_with(|| enclosing_function_label(file, call.span))
-                                .clone()
-                                .into(),
-                            via: label.clone().into(),
-                            origin: Some(read.origin.clone()),
-                            origin_context: read.origin_context.clone().into(),
-                            uncertain: read_unproven || read.undecided,
-                            missing_jsx_census: missing_jsx_census(
-                                file,
-                                call.span,
-                                callback_execution,
-                            ),
-                            host_callback_timing: host_callback_timing(
-                                file,
-                                call.span,
-                                callback_execution,
-                                lookup,
-                            ),
-                            callee_callback_timing: object_callable
-                                || callee_callback_timing(
-                                    file,
-                                    call.span,
-                                    callback_execution,
-                                    lookup,
-                                ),
-                            project_consumer_non_strict: false,
-                            callback_invocation_unproven: accessor_read.is_some()
-                                && lookup.contract_inline_accessor_invocation(
-                                    symbol,
-                                    callback.parameter,
-                                ) != Some(true),
-                        });
-                    }
-                }
-            }
         }
         // ADR 0201: which of these reads are proven to run while this call
         // does. The callee is one non-generator project function, and the call
@@ -7170,10 +6238,7 @@ fn interprocedural_result_reads_for_file(
             // the wrapper's call does not make that read the caller's.
             let package_internal = (!array_entry || direct)
                 && crate::contract_declared_state(&read.declaration)
-                && (read.symbol.as_str() == symbol
-                    || lookup
-                        .contract_export_identity(read.symbol.as_str())
-                        .is_some());
+                && read.symbol.as_str() == symbol;
             if seen.insert((
                 callee.path.clone(),
                 callee.start_byte,
@@ -7828,13 +6893,10 @@ fn reactive_source_order(
 fn retained_reactive_sources(
     cache: &mut Option<Arc<Vec<CachedReactiveSource>>>,
     accessors: &HashMap<SymbolId, (SymbolId, Location)>,
-    contracted_accessor_symbols: &HashSet<SymbolId>,
     summary_source_symbols: &HashSet<SymbolId>,
     source_phases: &HashMap<SymbolId, u8>,
 ) -> Arc<Vec<CachedReactiveSource>> {
-    let eligible = |symbol: &str| {
-        !contracted_accessor_symbols.contains(symbol) && summary_source_symbols.contains(symbol)
-    };
+    let eligible = |symbol: &str| summary_source_symbols.contains(symbol);
     let matches = |source: &CachedReactiveSource| {
         eligible(source.symbol.as_str())
             && accessors
@@ -8149,20 +7211,13 @@ pub(super) struct InterproceduralContext<'a, 'facts> {
     pub(super) facts: &'a ProjectFacts,
     pub(super) project_indexes: &'a ProjectIndexes<'facts>,
     pub(super) accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
-    pub(super) contracted_accessor_symbols: &'a HashSet<SymbolId>,
     pub(super) returned_source_symbols: &'a HashSet<SymbolId>,
     pub(super) summary_source_symbols: &'a HashSet<SymbolId>,
     pub(super) source_phases: &'a HashMap<SymbolId, u8>,
     pub(super) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
-    pub(super) contract_reads: &'a HashMap<SymbolId, Vec<crate::ContractReadSite>>,
-    pub(super) contract_parameter_reads:
-        &'a HashMap<SymbolId, Vec<crate::ContractParameterReadSite>>,
-    pub(super) contract_callbacks: &'a HashMap<SymbolId, Vec<CallbackSummary>>,
-    pub(super) contract_returns: &'a HashMap<SymbolId, (ReturnSummary, Location)>,
     pub(super) entities: &'a EntitySymbols,
     pub(super) references_by_source: &'a HashMap<SymbolId, Vec<Location>>,
     pub(super) symbol_names: &'a HashMap<SymbolId, SymbolId>,
-    pub(super) changed_semantic_symbols: Option<&'a HashSet<SymbolId>>,
     pub(super) retained_source_paths: &'a HashSet<String>,
     /// ADR 0294's typed candidates, for [`typed_candidate_contributions`].
     pub(super) typed_sources: &'a HashMap<SymbolId, crate::source_discovery::TypedSource>,
@@ -8200,19 +7255,13 @@ fn interprocedural_reads(
         facts,
         project_indexes,
         accessors,
-        contracted_accessor_symbols,
         returned_source_symbols,
         summary_source_symbols,
         source_phases,
         source_kinds,
-        contract_reads,
-        contract_parameter_reads,
-        contract_callbacks,
-        contract_returns,
         entities,
         references_by_source: _,
         symbol_names,
-        changed_semantic_symbols,
         retained_source_paths,
         typed_sources,
         lookup,
@@ -8403,11 +7452,6 @@ fn interprocedural_reads(
                             entities,
                             names: symbol_names,
                         },
-                        InterproceduralContracts {
-                            reads: contract_reads,
-                            parameter_reads: contract_parameter_reads,
-                            callbacks: contract_callbacks,
-                        },
                         lookup,
                         accessors,
                     )
@@ -8427,11 +7471,6 @@ fn interprocedural_reads(
                             InterproceduralGraphSymbols {
                                 entities,
                                 names: symbol_names,
-                            },
-                            InterproceduralContracts {
-                                reads: contract_reads,
-                                parameter_reads: contract_parameter_reads,
-                                callbacks: contract_callbacks,
                             },
                             lookup,
                             accessors,
@@ -8683,7 +7722,6 @@ fn interprocedural_reads(
         owned_reactive_sources = retained_reactive_sources(
             &mut cache.reactive_sources,
             accessors,
-            contracted_accessor_symbols,
             summary_source_symbols,
             source_phases,
         );
@@ -8692,7 +7730,6 @@ fn interprocedural_reads(
         owned_reactive_sources = {
             let mut sources = accessors
                 .iter()
-                .filter(|(symbol, _)| !contracted_accessor_symbols.contains(*symbol))
                 .filter(|(symbol, _)| summary_source_symbols.contains(*symbol))
                 .map(|(symbol, (display, declaration))| {
                     cached_reactive_source(symbol, display, declaration, source_phases)
@@ -8828,28 +7865,10 @@ fn interprocedural_reads(
                         continue;
                     };
                     let callee_location = location(file.path.shared(), call.callee);
-                    if let Some(symbol) = entities.get(&callee_location) {
-                        if let Some(target) = by_symbol.get(symbol).copied() {
-                            returned_edges.push((index, target));
-                        } else {
-                            let contracted = contract_returns.get(symbol).cloned();
-                            if let Some((returned_contract, declaration)) = contracted {
-                                returned[index].push_unique(SummaryRead {
-                                    transported: false,
-                                    contract_read_context: None,
-                                    symbol: symbol.clone(),
-                                    display: SymbolId::from(returned_contract.label),
-                                    kind: Some(returned_contract.kind),
-                                    declaration,
-                                    origin: location(file.path.shared(), call.span),
-                                    origin_context: node.name.clone().unwrap_or_default(),
-                                    owner: None,
-                                    local: false,
-                                    conditional: false,
-                                    undecided: false,
-                                });
-                            }
-                        }
+                    if let Some(symbol) = entities.get(&callee_location)
+                        && let Some(target) = by_symbol.get(symbol).copied()
+                    {
+                        returned_edges.push((index, target));
                     }
                 }
                 _ => {}
@@ -8945,13 +7964,6 @@ fn interprocedural_reads(
         );
     }
 
-    let contract_generation_obligations = contract_generation_obligations
-        .into_iter()
-        .enumerate()
-        .filter(|(index, _)| nodes[*index].exported)
-        .flat_map(|(_, obligations)| obligations)
-        .collect::<Vec<_>>();
-
     for (index, node) in nodes.iter().enumerate() {
         let Some(&file) = project_indexes.files_by_path.get(node.path.as_str()) else {
             continue;
@@ -9042,7 +8054,6 @@ fn interprocedural_reads(
     };
     let result_read_context = InterproceduralResultReadContext {
         result: result_view,
-        contract_callbacks,
         source_kinds,
         accessors,
         entities,
@@ -9053,7 +8064,7 @@ fn interprocedural_reads(
         array_member_bodies: &array_member_bodies,
         provenance: &provenance,
     };
-    if let Some(cache) = interprocedural_result_cache.as_deref_mut() {
+    if let Some(cache) = interprocedural_result_cache {
         cache.transported_calls.clone_from(&transported_calls);
         cache.unavailable_calls.clone_from(&unavailable_calls);
         cache.array_source_origins.clone_from(&array_source_origins);
@@ -9067,7 +8078,7 @@ fn interprocedural_reads(
             .iter()
             .filter(|file| !retained_source_paths.contains(file.path.as_str()))
             .all(|file| {
-                !(call_role_syntax(file) || property_gets::forwards_enumeration(file, lookup))
+                !call_role_syntax(file)
                     && cache
                         .files
                         .get(file.path.as_str())
@@ -9101,8 +8112,7 @@ fn interprocedural_reads(
                         reads,
                         dispatch_obligations: obligations,
                         compiler: file.compiler.clone(),
-                        call_role_syntax: call_role_syntax(file)
-                            || property_gets::forwards_enumeration(file, lookup),
+                        call_role_syntax: call_role_syntax(file),
                     },
                 );
             }
@@ -9186,8 +8196,7 @@ fn interprocedural_reads(
                         reads,
                         dispatch_obligations: obligations,
                         compiler: file.compiler.clone(),
-                        call_role_syntax: call_role_syntax(file)
-                            || property_gets::forwards_enumeration(file, lookup),
+                        call_role_syntax: call_role_syntax(file),
                     },
                 );
             }
@@ -9314,12 +8323,6 @@ fn interprocedural_reads(
         .count();
     let result_reads = phase_started.elapsed();
     let export_started = Instant::now();
-    let contract_graph = ContractGraph {
-        nodes: &nodes,
-        nodes_by_path: &nodes_by_path,
-        by_symbol: &by_symbol,
-        entities,
-    };
     let mut structured_returns = vec![None; nodes.len()];
     let has_structured_return_seed = facts.files.iter().any(|file| {
         !file.ast.object_properties.is_empty()
@@ -9332,15 +8335,7 @@ fn interprocedural_reads(
                 .any(|returned| {
                     !returned.elements().is_empty() || !returned.properties().is_empty()
                 })
-    }) || contract_returns
-        .values()
-        .map(|(returned, _)| returned)
-        .any(|returned| {
-            matches!(
-                returned.kind.as_str(),
-                "tuple" | "object" | "callback-result" | "callback-result-function"
-            )
-        });
+    });
     if has_structured_return_seed {
         for _ in 0..=nodes.len() {
             let discovered = discover_structured_returns(&StructuredReturnDiscovery {
@@ -9353,7 +8348,6 @@ fn interprocedural_reads(
                 structured_returns: &structured_returns,
                 accessors,
                 source_kinds,
-                contract_returns,
                 entities,
                 symbol_names,
                 lookup,
@@ -9380,7 +8374,6 @@ fn interprocedural_reads(
         structured_returns: &structured_returns,
         accessors,
         source_kinds,
-        contract_returns,
         entities,
         symbol_names,
         lookup,
@@ -9427,53 +8420,11 @@ fn interprocedural_reads(
             });
         }
     }
-    let contract_analysis = ContractAnalysis {
-        summaries: &summaries,
-        returned: &returned,
-        structured_returns: &structured_returns,
-        callbacks: &callback_summaries,
-        direct_callback_parameters: &direct_callback_parameters,
-        guaranteed_callback_parameters: &guaranteed_callback_parameters,
-        direct_protocol_parameters: &direct_protocol_parameters,
-        direct_member_callback_parameters: &direct_member_callback_parameters,
-        escaped_parameters: &escaped_parameters,
-        invoked_parameter_members: &invoked_parameter_members,
-        semantics: ContractSemantics { source_kinds },
-    };
-    let exports = if let Some(cache) = interprocedural_result_cache {
-        // A removed transport edge is absent from the CURRENT reverse graph,
-        // so an edited falsifier cannot dirty its former callers through that
-        // graph. Likewise a new edge can connect otherwise retained files.
-        // Invalidate export fragments too when the transport census changes;
-        // ordinary graph contributions can still be reused.
-        let export_reused_paths = if transport_identity_matches {
-            &graph_node_reused_paths
-        } else {
-            &HashSet::new()
-        };
-        contract_export_summaries_incremental(
-            &mut cache.contract_exports,
-            facts,
-            &contract_graph,
-            &reverse_edges,
-            export_reused_paths,
-            *changed_semantic_symbols,
-            &contract_analysis,
-        )
-    } else {
-        Arc::new(contract_export_summaries(
-            facts,
-            &contract_graph,
-            &contract_analysis,
-        ))
-    };
     let export_summaries = export_started.elapsed();
     let results_and_exports = phase_started.elapsed();
     InterproceduralResult {
         reads: result.into(),
         dispatch_obligations: dispatch_obligations.into(),
-        exports,
-        contract_generation_obligations: contract_generation_obligations.into(),
         factory_instances,
         timings: InterproceduralTimings {
             graph,
@@ -9508,7 +8459,7 @@ mod tests {
         CallbackSchedule, CallbackSummary, CallbackWrapper, ForwardedAmbientExecution, SummaryRead,
         SummaryReads, SymbolId, add_interprocedural_dependency_user, cached_reactive_source,
         compose_callback_chain, composed_tracked_schedule, equivalent_callbacks,
-        equivalent_summary_reads, package_rows_clear, primitive_callback_execution,
+        equivalent_summary_reads, primitive_callback_execution,
         primitive_slot_roots_parameter_invoke, reactive_source_order,
         remove_interprocedural_dependency_user, retained_reactive_sources,
     };
@@ -10042,34 +8993,6 @@ mod tests {
         assert_eq!(compose_callback_chain(&[Detaching, EAGER, UNKNOWN]), None);
     }
 
-    /// G3(i) of ways-to-improve step 7: a package row is a clearing wrapper
-    /// only when every row for the slot states the clearing under the slot's
-    /// word. `clientOnly`-shaped slots, with an inline clearing row beside a
-    /// deferred one, stay unsettled.
-    #[test]
-    fn a_package_slot_clears_only_when_every_row_says_so() {
-        let row = |execution: &str, clears_tracking| CallbackSummary {
-            parameter: 0,
-            execution: execution.to_owned(),
-            schedule: None,
-            clears_tracking,
-            arguments: Vec::new(),
-            owner: None,
-            protocol: crate::summary_semantics::InvokeProtocol::Call,
-            path: Vec::new(),
-        };
-        let clearing = row("inline", true);
-        let bare = row("inline", false);
-        let later = row("deferred", true);
-        assert!(package_rows_clear(&[&clearing], "inline"));
-        assert!(package_rows_clear(&[&clearing, &clearing], "inline"));
-        assert!(!package_rows_clear(&[&bare], "inline"));
-        assert!(!package_rows_clear(&[&clearing, &bare], "inline"));
-        assert!(!package_rows_clear(&[&clearing, &later], "inline"));
-        assert!(package_rows_clear(&[&later], "deferred"));
-        assert!(!package_rows_clear(&[], "inline"));
-    }
-
     /// G3 of ways-to-improve step 7: a local helper's own `inline` row is the
     /// innermost wrapper of a forwarded callback. `runUntracked(fn) { return
     /// untrack(fn) }` under `createMemo(() => runUntracked(cb))` runs `cb`
@@ -10208,19 +9131,12 @@ mod tests {
             (SymbolId::from("b"), (SymbolId::from("name"), location(10))),
             (SymbolId::from("c"), (SymbolId::from("gone"), location(5))),
         ]);
-        let contracted = HashSet::new();
         // `c` never appears in the summaries, so it is ineligible.
         let summary_sources = HashSet::from([SymbolId::from("a"), SymbolId::from("b")]);
         let phases = HashMap::from([(SymbolId::from("a"), 2_u8)]);
 
         let mut cache = None;
-        let first = retained_reactive_sources(
-            &mut cache,
-            &accessors,
-            &contracted,
-            &summary_sources,
-            &phases,
-        );
+        let first = retained_reactive_sources(&mut cache, &accessors, &summary_sources, &phases);
         assert_eq!(
             first
                 .iter()
@@ -10229,13 +9145,7 @@ mod tests {
             [("b", 1), ("a", 2)]
         );
 
-        let second = retained_reactive_sources(
-            &mut cache,
-            &accessors,
-            &contracted,
-            &summary_sources,
-            &phases,
-        );
+        let second = retained_reactive_sources(&mut cache, &accessors, &summary_sources, &phases);
         assert!(Arc::ptr_eq(&first, &second));
     }
 
@@ -10245,30 +9155,17 @@ mod tests {
             (SymbolId::from("a"), (SymbolId::from("count"), location(50))),
             (SymbolId::from("b"), (SymbolId::from("name"), location(10))),
         ]);
-        let contracted = HashSet::new();
         let mut summary_sources = HashSet::from([SymbolId::from("a"), SymbolId::from("b")]);
         let phases = HashMap::new();
 
         let mut cache = None;
-        retained_reactive_sources(
-            &mut cache,
-            &accessors,
-            &contracted,
-            &summary_sources,
-            &phases,
-        );
+        retained_reactive_sources(&mut cache, &accessors, &summary_sources, &phases);
 
         // `b` stops being a summary source; `c` appears between the others.
         summary_sources.remove("b");
         summary_sources.insert(SymbolId::from("c"));
         accessors.insert(SymbolId::from("c"), (SymbolId::from("mid"), location(30)));
-        let retained = retained_reactive_sources(
-            &mut cache,
-            &accessors,
-            &contracted,
-            &summary_sources,
-            &phases,
-        );
+        let retained = retained_reactive_sources(&mut cache, &accessors, &summary_sources, &phases);
         assert_eq!(
             retained
                 .iter()

@@ -462,10 +462,6 @@ struct FunctionCallSite {
 
 type BindingsByReference = HashMap<String, HashMap<(u64, u64), BindingResolution>>;
 
-/// Render sites by rendered function: `(file index, rendered argument span)`
-/// per site ([`SemanticLookup::function_render_call_sites`]).
-type RenderCallSites<'a> = HashMap<(&'a str, Span), Vec<(usize, Span)>>;
-
 /// Rendering-prop flows by value reference: the render sites each reaches
 /// ([`SemanticLookup::prop_render_sites_at`]).
 type PropRenderSites<'a> = HashMap<(&'a str, Span), Vec<Span>>;
@@ -500,7 +496,6 @@ pub(super) struct SemanticLookup<'a> {
     ast_indexes: &'a HashMap<solid_facts::core::SourcePath, CachedAstFileIndex>,
     entities: &'a EntitySymbols,
     symbol_names: &'a HashMap<SymbolId, SymbolName>,
-    resolved_contracts: &'a crate::contracts::ResolvedContracts,
     functions_by_symbol: OnceLock<HashMap<&'a str, SymbolFunction>>,
     /// ADR 0209: the property names some assignment in the project writes
     /// (`x.name = …`), and whether any writes through a `prototype`.
@@ -517,7 +512,6 @@ pub(super) struct SemanticLookup<'a> {
     jsx_call_sites: OnceLock<HashMap<(&'a str, Span), CallSiteLoading>>,
     declaration_symbols: OnceLock<DeclarationSymbols<'a>>,
     function_call_sites: OnceLock<HashMap<(&'a str, Span), Vec<FunctionCallSite>>>,
-    render_call_sites: OnceLock<RenderCallSites<'a>>,
     prop_render_sites: OnceLock<PropRenderSites<'a>>,
     direct_value_aliases: OnceLock<HashSet<SymbolId>>,
     bindings_by_symbol: OnceLock<HashMap<SymbolId, BindingResolution>>,
@@ -642,7 +636,6 @@ impl<'a> SemanticLookup<'a> {
         entities: &'a EntitySymbols,
         symbol_names: &'a HashMap<SymbolId, SymbolName>,
         dialect: &'a dyn solid_dialect::Dialect,
-        resolved_contracts: &'a crate::contracts::ResolvedContracts,
         program_closed: bool,
     ) -> Self {
         debug_assert!(
@@ -662,7 +655,6 @@ impl<'a> SemanticLookup<'a> {
             ast_indexes,
             entities,
             symbol_names,
-            resolved_contracts,
             functions_by_symbol: OnceLock::new(),
             assigned_member_names: OnceLock::new(),
             reflective_property_definition: OnceLock::new(),
@@ -675,7 +667,6 @@ impl<'a> SemanticLookup<'a> {
             jsx_call_sites: OnceLock::new(),
             declaration_symbols: OnceLock::new(),
             function_call_sites: OnceLock::new(),
-            render_call_sites: OnceLock::new(),
             prop_render_sites: OnceLock::new(),
             direct_value_aliases: OnceLock::new(),
             bindings_by_symbol: OnceLock::new(),
@@ -701,301 +692,6 @@ impl<'a> SemanticLookup<'a> {
         }
     }
 
-    /// Whether an exact whole-function graph was actually installed.
-    pub(super) fn returned_callable_is_bound(&self, symbol: &str) -> bool {
-        self.resolved_contracts
-            .returned_callable_bindings
-            .contains(symbol)
-    }
-
-    /// Whether this exact function-object member callee has a binding.
-    pub(super) fn returned_member_is_bound(&self, file: &FileFacts, callee: Span) -> bool {
-        self.resolved_contracts
-            .callee_bindings
-            .contains_key(&crate::location(
-                file.path.shared(),
-                file.ast.peel_ts_sugar_span(callee),
-            ))
-    }
-
-    /// The known callback rows of the contract bound to `symbol` that invoke
-    /// the argument as a callable. A non-call row (a property read or
-    /// coercion of the argument, `CallbackSummary::is_invocation`) is not an
-    /// invocation any caller of this lookup models, and is left out; so is a
-    /// member-path row (item B of ways-to-improve § 3.3), which invokes a
-    /// member of the argument rather than the argument, and whose execution
-    /// or owner is no claim about the function written at the slot. `Some`
-    /// still means the enumeration is known, even when it holds only such
-    /// rows.
-    pub(super) fn contract_callbacks(&self, symbol: &str) -> Option<Vec<&super::CallbackSummary>> {
-        self.resolved_contracts
-            .by_symbol
-            .get(symbol)
-            .and_then(|binding| binding.summary.callbacks.known())
-            .map(|callbacks| {
-                callbacks
-                    .iter()
-                    .filter(|callback| callback.invokes_argument())
-                    .collect()
-            })
-    }
-
-    /// The accepted value-enumeration rows of this export (ADR 0225) whose
-    /// source is a bare argument. Empty when callbacks are not known.
-    pub(super) fn value_enumeration_callbacks(&self, symbol: &str) -> Vec<&super::CallbackSummary> {
-        self.resolved_contracts
-            .by_symbol
-            .get(symbol)
-            .and_then(|binding| binding.summary.callbacks.known())
-            .map(|callbacks| {
-                callbacks
-                    .iter()
-                    .filter(|callback| {
-                        callback.protocol.is_value_enumeration() && callback.path.is_empty()
-                    })
-                    .collect()
-            })
-            .unwrap_or_default()
-    }
-
-    /// Exact admitted factory return; callers do not inspect contract storage.
-    pub(super) fn contract_return_at_call(
-        &self,
-        file: &FileFacts,
-        call: &solid_facts::ast::CallFact,
-    ) -> Option<(&crate::ReturnSummary, &str, &Location)> {
-        let binding = self
-            .resolved_contracts
-            .by_symbol
-            .get(self.callee_symbol(file, call.callee)?)?;
-        Some((
-            self.resolved_contracts
-                .direct_returns
-                .get(&binding.symbol)?,
-            binding.local_name.as_str(),
-            &binding.contract_location,
-        ))
-    }
-
-    pub(super) fn contract_callback_results(
-        &self,
-        symbol: &str,
-    ) -> Option<&[crate::ContractCallbackResult]> {
-        self.resolved_contracts
-            .by_symbol
-            .get(symbol)
-            .map(|binding| binding.summary.callback_results.as_slice())
-    }
-
-    pub(super) fn captured_argument(
-        &self,
-        symbol: &str,
-        slot: usize,
-    ) -> Option<&solid_facts::ast::ArgumentFact> {
-        self.resolved_contracts
-            .by_symbol
-            .get(symbol)?
-            .summary
-            .captured_arguments
-            .get(&slot)
-    }
-
-    pub(super) fn captured_arguments(
-        &self,
-        symbol: &str,
-    ) -> Option<&std::collections::BTreeMap<usize, solid_facts::ast::ArgumentFact>> {
-        Some(
-            &self
-                .resolved_contracts
-                .by_symbol
-                .get(symbol)?
-                .summary
-                .captured_arguments,
-        )
-    }
-
-    pub(super) fn returned_capture_sources(
-        &self,
-        symbol: &str,
-    ) -> Option<&std::collections::BTreeMap<usize, crate::contract_semantics::ValueSource>> {
-        Some(
-            &self
-                .resolved_contracts
-                .by_symbol
-                .get(symbol)?
-                .summary
-                .returned_callable_effects
-                .as_ref()?
-                .capture_sources,
-        )
-    }
-
-    /// Exact literals retained by a successfully bound returned instance,
-    /// with no factory-time callback invocation of that argument. Their reads
-    /// belong to invocation replay, not to the factory argument's lexical site.
-    pub(super) fn bound_capture_literal_bodies(&self, file: &FileFacts) -> Vec<Span> {
-        let mut bodies = Vec::new();
-        for binding in &file.ast.bindings {
-            let Some(root) = binding
-                .names
-                .first()
-                .and_then(|name| self.entities.at(file.path.as_str(), name.span))
-            else {
-                continue;
-            };
-            if !self.returned_callable_is_bound(root.as_str()) {
-                continue;
-            }
-            let Some(captures) = self.captured_arguments(root.as_str()) else {
-                continue;
-            };
-            if captures.is_empty() {
-                continue;
-            }
-            let Some(factory) = binding.initializer.and_then(|initializer| {
-                file.ast.calls.iter().find(|call| call.span == initializer)
-            }) else {
-                continue;
-            };
-            let Some(callbacks) = self
-                .callee_symbol(file, factory.callee)
-                .and_then(|symbol| self.contract_callbacks(symbol))
-            else {
-                continue;
-            };
-            for argument in captures.values() {
-                let Some(index) = factory
-                    .arguments
-                    .iter()
-                    .position(|input| input.span == argument.span)
-                else {
-                    continue;
-                };
-                if callbacks.iter().any(|callback| callback.parameter == index) {
-                    continue;
-                }
-                if let Some(function) = file
-                    .ast
-                    .functions
-                    .iter()
-                    .find(|function| function.span == argument.span)
-                {
-                    bodies.push(function.body);
-                }
-            }
-        }
-        bodies
-    }
-
-    pub(super) fn contract_result_census_is_closed(&self, symbol: &str) -> bool {
-        self.resolved_contracts
-            .by_symbol
-            .get(symbol)
-            .is_some_and(|binding| {
-                !binding
-                    .summary
-                    .open_claims
-                    .contains(&crate::contract_semantics::ClaimDomain::Callbacks)
-                    && !binding
-                        .summary
-                        .open_claims
-                        .contains(&crate::contract_semantics::ClaimDomain::Returns)
-            })
-    }
-
-    /// ADR 0207: the `event-handler-props` items of the accepted contract
-    /// bound to `symbol`.
-    pub(super) fn contract_event_handler_props(
-        &self,
-        symbol: &str,
-    ) -> Option<&[super::EventHandlerPropsClaim]> {
-        self.resolved_contracts
-            .by_symbol
-            .get(symbol)
-            .map(|binding| binding.summary.event_handler_props.as_slice())
-    }
-
-    pub(super) fn contract_inline_accessor_invocation(
-        &self,
-        symbol: &str,
-        parameter: usize,
-    ) -> Option<bool> {
-        self.resolved_contracts
-            .by_symbol
-            .get(symbol)
-            .and_then(|binding| {
-                binding
-                    .summary
-                    .inline_accessor_invocations
-                    .get(&parameter)
-                    .copied()
-            })
-    }
-
-    /// ADR 0152: the argument slots the value the contract export bound to
-    /// `symbol` returns invokes on its own invoker's stack, or `None` when no
-    /// contract is bound to it.
-    pub(super) fn contract_returned_invocations(
-        &self,
-        symbol: &str,
-    ) -> Option<&std::collections::BTreeSet<usize>> {
-        self.resolved_contracts
-            .by_symbol
-            .get(symbol)
-            .map(|binding| &binding.summary.returned_invocations)
-    }
-
-    /// The package and imported export name a symbol's contract binding
-    /// carries, whatever its claim status. Consumer-side obligations name the
-    /// export whose claim could not be applied, which is the same identity the
-    /// unknown-claim path reports.
-    pub(super) fn contract_export_identity(&self, symbol: &str) -> Option<(&str, &str)> {
-        self.resolved_contracts
-            .by_symbol
-            .get(symbol)
-            .map(|binding| {
-                (
-                    binding.package_name.as_str(),
-                    binding.imported_name.as_str(),
-                )
-            })
-    }
-
-    pub(super) fn unknown_contract_callback_export(&self, symbol: &str) -> Option<(&str, &str)> {
-        self.resolved_contracts
-            .by_symbol
-            .get(symbol)
-            .filter(|binding| {
-                binding.summary.callbacks.is_open()
-                    || binding
-                        .summary
-                        .open_claims
-                        .contains(&crate::contract_semantics::ClaimDomain::Callbacks)
-            })
-            .map(|binding| {
-                (
-                    binding.package_name.as_str(),
-                    binding.imported_name.as_str(),
-                )
-            })
-    }
-
-    /// Whether the accepted contract bound to `symbol` closes `creates` with
-    /// no item, or `None` when no contract is bound to it at all.
-    ///
-    /// `Some(false)` is the counterexample the generator's `creates` proposal
-    /// walk refuses on: an open domain and a domain carrying a `create` item
-    /// are both reasons not to propose that the calling export publishes none.
-    /// `None` means this callee is not a contracted dependency export, which is
-    /// not a counterexample this walk can name — see
-    /// [`crate::CreatesProposalWalk`].
-    pub(super) fn contract_creates_closed_empty(&self, symbol: &str) -> Option<bool> {
-        self.resolved_contracts
-            .by_symbol
-            .get(symbol)
-            .map(|binding| binding.summary.creates_closed_empty)
-    }
-
     /// The exact compiler symbol demanded at one span of one file, if any.
     ///
     /// Deliberately narrower than [`Self::callee_symbol`]: no wrapper peeling
@@ -1006,160 +702,6 @@ impl<'a> SemanticLookup<'a> {
         self.entities
             .at(file.path.as_str(), span)
             .map(SymbolId::as_str)
-    }
-
-    /// The module specifier the compiler resolved this callee's declaration to
-    /// originate from, or `None` when the build has no resolved declaration for
-    /// it (or the producer recorded no origin).
-    ///
-    /// An exact resolved fact and nothing weaker: it is the callee's own
-    /// `ResolvedDeclaration::origin_module`, never derived from the callee's
-    /// spelling or from an import statement standing nearby.
-    ///
-    /// **Exact, and frequently absent** — measured 2026-09-17, and worth
-    /// knowing before trusting it. Probed against the audited rc.3 install,
-    /// every `solid-js` primitive callee answered `None` here, so the caller
-    /// that names the package half of a
-    /// [`crate::CreatesDeclineKind::DialectSilent`] record reached its
-    /// import-statement fallback instead. That record's package is therefore
-    /// usually the *written specifier's* package rather than this one, which is
-    /// weaker than it reads: for `solid-js` it cannot tell a re-export of
-    /// `@solidjs/signals`' declaration from `solid-js`' own re-declaration.
-    ///
-    /// Nothing decides an audit on it. The proposal-side denial lookup moved to
-    /// [`Self::callee_declaration_source_file`] for exactly that reason, and the
-    /// census that proves a claim binds an archive. What remains is that the
-    /// decline record — an instrument for ranking *which primitive to audit
-    /// next* — can name a package coarser than the one whose bytes the call
-    /// reached.
-    /// The file the callee's resolved declaration is written in.
-    ///
-    /// Distinct from [`Self::callee_origin_module`], and the distinction is the
-    /// point: `origin_module` is the module the *specifier* resolved to, so it
-    /// cannot tell a re-export from a re-declaration. This resolves through the
-    /// re-export to the file that actually declares the name, which is the only
-    /// thing that identifies the package whose audited bytes a call reaches.
-    ///
-    /// Measured against the audited rc.3 install: a `solid-js` import of
-    /// `untrack` answers `@solidjs/signals/.../core/core.d.ts`, while a
-    /// `solid-js` import of `createSignal` answers
-    /// `solid-js/types/client/hydration.d.ts` -- 2.0 re-exports the first and
-    /// re-declares the second.
-    pub(super) fn callee_declaration_source_file(
-        &self,
-        file: &FileFacts,
-        callee: Span,
-    ) -> Option<&'a str> {
-        let declaration = self
-            .resolved_callee_call(file, callee)?
-            .declaration
-            .as_ref()?;
-        (!declaration.source_file.is_empty()).then_some(declaration.source_file.as_ref())
-    }
-
-    pub(super) fn callee_origin_module(&self, file: &FileFacts, callee: Span) -> Option<&'a str> {
-        let declaration = self
-            .resolved_callee_call(file, callee)?
-            .declaration
-            .as_ref()?;
-        (!declaration.origin_module.is_empty()).then_some(declaration.origin_module.as_ref())
-    }
-
-    pub(super) fn contract_owner_requirements(
-        &self,
-        symbol: &str,
-    ) -> Option<&[super::ContractOwnerRequirement]> {
-        self.resolved_contracts
-            .by_symbol
-            .get(symbol)
-            .and_then(|binding| binding.summary.owner_requirements.known())
-            .map(Vec::as_slice)
-    }
-
-    /// ADR 0179: see [`super::ContractExport::leaf_forbidden_operations`].
-    pub(super) fn contract_leaf_forbidden_operations(
-        &self,
-        symbol: &str,
-    ) -> Option<&[super::ContractOwnerRequirement]> {
-        self.resolved_contracts
-            .by_symbol
-            .get(symbol)
-            .map(|binding| binding.summary.leaf_forbidden_operations.as_slice())
-    }
-
-    /// Every use of this exact callback slot is a tracked invocation under
-    /// a created owner. Closure proves the universal context; no lower bound
-    /// or schedule is inferred. This is a read-only consumer proof.
-    pub(super) fn contract_callback_reads_are_tracked(
-        &self,
-        symbol: &str,
-        parameter: usize,
-    ) -> bool {
-        let Some(binding) = self.resolved_contracts.by_symbol.get(symbol) else {
-            return false;
-        };
-        if binding
-            .summary
-            .open_claims
-            .contains(&crate::contract_semantics::ClaimDomain::Callbacks)
-        {
-            return false;
-        }
-        // A returned argument/opaque member can expose this same function
-        // to another invoker. This slice handles a closed accessor return
-        // only; broader result shapes need their own escape/use proof.
-        if binding
-            .summary
-            .open_claims
-            .contains(&crate::contract_semantics::ClaimDomain::Returns)
-            || !binding.summary.returns.known().is_some_and(|returned| {
-                returned.as_ref().is_some_and(|returned| {
-                    returned.kind == "accessor"
-                        && returned.parameter.is_none()
-                        && returned.elements.is_empty()
-                        && returned.properties.is_empty()
-                })
-            })
-        {
-            return false;
-        }
-        let Some(callbacks) = binding.summary.callbacks.known() else {
-            return false;
-        };
-        let mut rows = callbacks
-            .iter()
-            .filter(|row| row.parameter == parameter)
-            .peekable();
-        rows.peek().is_some()
-            && rows.all(|row| {
-                row.invokes_argument()
-                    && row.execution == "tracked"
-                    && row.owner.as_deref() == Some("created")
-            })
-    }
-
-    /// ADR 0183: the parameters an accepted contract states are invoked, on
-    /// every call and during it, as the tracked compute of an owned
-    /// computation the export creates.
-    pub(super) fn contract_guaranteed_callback_parameters(
-        &self,
-        symbol: &str,
-    ) -> Option<&std::collections::BTreeSet<usize>> {
-        self.resolved_contracts
-            .by_symbol
-            .get(symbol)
-            .map(|binding| &binding.summary.guaranteed_callback_parameters)
-    }
-
-    pub(super) fn has_contract_binding(&self, symbol: &SymbolId) -> bool {
-        self.resolved_contracts.by_symbol.contains_key(symbol)
-    }
-
-    /// Successful receiver-specific binding of this exact, unwrapped callee.
-    pub(super) fn contract_member_call_is_bound(&self, file: &FileFacts, callee: Span) -> bool {
-        self.resolved_contracts
-            .callee_bindings
-            .contains_key(&crate::location(file.path.shared(), callee))
     }
 
     /// Every primitive this build can resolve at a call site.
@@ -1334,20 +876,7 @@ impl<'a> SemanticLookup<'a> {
                             .and_then(|span| self.primitive_at_call(file, span))
                             .is_some_and(|primitive| self.dialect.returns_reactive_tuple(primitive))
                 })
-            }) || self
-                .resolved_contracts
-                .direct_returns
-                .values()
-                .any(|returned| matches!(returned.kind.as_str(), "tuple" | "parameter"))
-                || self.resolved_contracts.by_symbol.values().any(|binding| {
-                    binding
-                        .summary
-                        .returns
-                        .known()
-                        .and_then(Option::as_ref)
-                        .is_some_and(|returned| returned.kind == "tuple")
-                })
-            {
+            }) {
                 hasher.update(b"tuple-iteration-veto\0");
                 hasher.update([u8::from(self.tuple_iteration_may_be_mutated())]);
             }
@@ -1388,53 +917,6 @@ impl<'a> SemanticLookup<'a> {
                 hasher.update(site.end_byte.to_le_bytes());
                 hasher.update(span.start.to_le_bytes());
                 hasher.update(span.end.to_le_bytes());
-            }
-            // Scalar-result admission vetoes writes/escapes in any configured
-            // file. Bind that census when a callback-result contract can use
-            // it: a mutation elsewhere must invalidate a cached clean result.
-            if self
-                .resolved_contracts
-                .by_symbol
-                .values()
-                .any(|binding| !binding.summary.callback_results.is_empty())
-            {
-                let mut scalar_inputs = self.files().iter().collect::<Vec<_>>();
-                scalar_inputs.sort_unstable_by(|left, right| left.path.cmp(&right.path));
-                hasher.update(b"scalar-result-inputs\0");
-                for file in scalar_inputs {
-                    let path = file.path.as_str();
-                    hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
-                    hasher.update(path.as_bytes());
-                    hasher.update(file.source_hash.as_str().as_bytes());
-                }
-            }
-            // Captured lookup admission reads a project-wide runtime-hazard
-            // census. Bind its resolved instances: an import-only setup edit
-            // can withdraw a graph without changing the using file's sources,
-            // compiler facts or TypeScript source-discovery dependencies.
-            if self.resolved_contracts.by_symbol.values().any(|binding| {
-                binding
-                    .summary
-                    .returned_callable_effects
-                    .as_ref()
-                    .is_some_and(|summary| summary.captured_lookup.is_some())
-            }) {
-                hasher.update(b"captured-lookup-instances\0");
-                let mut instances = self
-                    .resolved_contracts
-                    .returned_callable_bindings
-                    .iter()
-                    .collect::<Vec<_>>();
-                instances.sort_unstable();
-                for instance in instances {
-                    let symbol = instance.as_str();
-                    hasher.update(
-                        u64::try_from(symbol.len())
-                            .unwrap_or(u64::MAX)
-                            .to_le_bytes(),
-                    );
-                    hasher.update(symbol.as_bytes());
-                }
             }
             // Returned-source proofs inspect callee syntax and binding facts,
             // even when its public type and read summary do not change. Bind
@@ -2738,145 +2220,6 @@ impl<'a> SemanticLookup<'a> {
         file.ast.own_returns(function).all(proven)
     }
 
-    /// A reviewed ECMAScript primitive return, not a TypeScript return type.
-    /// Positive library identity is required for both member and receiver.
-    /// The deliberately short table uses members declared beside their global
-    /// in the same default-library source; split/augmented declarations refuse.
-    pub(super) fn scalar_builtin_call_result(
-        &self,
-        file: &FileFacts,
-        call: &solid_facts::ast::CallFact,
-    ) -> bool {
-        use solid_facts::ast::IdentifierRole;
-        if call.construct
-            || call.arguments.iter().any(|argument| argument.spread)
-            // This positive fact also excludes optional calls/member chains.
-            || !file.ast.straight_line_calls.contains(&call.span)
-        {
-            return false;
-        }
-        let Some(declaration) =
-            self.standard_library_declaration(file, call, typefacts::CallKind::Call)
-        else {
-            return false;
-        };
-        let (global, property) = match declaration.qualified_name.as_ref() {
-            "DateConstructor.now" if call.arguments.is_empty() => ("Date", "now"),
-            "Math.abs" => ("Math", "abs"),
-            "Math.ceil" => ("Math", "ceil"),
-            "Math.floor" => ("Math", "floor"),
-            "Math.round" => ("Math", "round"),
-            _ => return false,
-        };
-        let callee = file.ast.peel_ts_sugar_span(call.callee);
-        let Some(member) = file.ast.members.iter().find(|member| {
-            member.span == callee
-                && file
-                    .ast
-                    .computed_members
-                    .binary_search(&member.span)
-                    .is_err()
-                && file.source_text(member.property) == Some(property)
-        }) else {
-            return false;
-        };
-        let receiver = file.ast.peel_ts_sugar_span(member.object);
-        if !file.ast.identifiers.iter().any(|identifier| {
-            identifier.span == receiver && identifier.role == IdentifierRole::Reference
-        }) {
-            return false;
-        }
-        let Some(entity) = self.entity_at(file.path.as_str(), receiver) else {
-            return false;
-        };
-        if entity.symbol_unresolved
-            || entity.symbol.is_empty()
-            || declaration.source_file.is_empty()
-        {
-            return false;
-        }
-        let Some(symbol) = self.symbols_by_id().get(entity.symbol.as_ref()).copied() else {
-            return false;
-        };
-        // Date/Math merge their global variable with interfaces. Those type
-        // declarations do not replace the positive runtime binding premise.
-        // A configured-project augmentation is withheld, irrespective of kind.
-        let mut bindings = symbol
-            .declarations()
-            .iter()
-            .filter(|binding| binding.kind.as_ref() == "variable");
-        let Some(binding) = bindings.next() else {
-            return false;
-        };
-        if !symbol.alias_target().is_empty()
-            || bindings.next().is_some()
-            || symbol.declarations().iter().any(|declaration| {
-                self.file_by_path(declaration.location.path.as_ref())
-                    .is_some()
-            })
-            || binding.name.as_ref() != global
-            || binding.location.path != declaration.source_file
-            || declaration.location.path != declaration.source_file
-        {
-            return false;
-        }
-        if self.member_name_may_be_reassigned(property)
-            || self.member_name_may_be_reassigned(global)
-        {
-            return false;
-        }
-        // Veto writes, deletes and escapes throughout the configured project.
-        // Check exact symbols even for escaped identifier spellings. A missing
-        // fact for an unbound runtime reference withholds the proof.
-        self.files().iter().all(|other| {
-            other.ast.identifiers.iter().all(|identifier| {
-                if identifier.role != IdentifierRole::Reference
-                    // A binder-resolved local shadow is unrelated to this global.
-                    || other.ast.reference_declaration(identifier.span).is_some()
-                    || other.ast.type_queries.iter().any(|query| query.contains(identifier.span))
-                {
-                    return true;
-                }
-                let Some(reference) = self.entity_at(other.path.as_str(), identifier.span) else {
-                    return false;
-                };
-                if reference.symbol_unresolved || reference.symbol.is_empty() {
-                    return false;
-                }
-                if reference.symbol != entity.symbol {
-                    return true;
-                }
-                // Calling/constructing the global does not hand its object
-                // out. Member reads (including computed/optional reads) do
-                // not hand the receiver out either; target admission above
-                // still refuses computed or optional scalar calls.
-                if other
-                    .ast
-                    .calls
-                    .iter()
-                    .any(|call| other.ast.peel_ts_sugar_span(call.callee) == identifier.span)
-                {
-                    return true;
-                }
-                let Some(access) =
-                    other.ast.members.iter().find(|access| {
-                        other.ast.peel_ts_sugar_span(access.object) == identifier.span
-                    })
-                else {
-                    return false;
-                };
-                !other
-                    .ast
-                    .assignments
-                    .iter()
-                    .map(|assignment| assignment.target)
-                    .chain(other.ast.iteration_targets.iter().copied())
-                    .chain(other.ast.deleted_targets.iter().copied())
-                    .any(|target| target.contains(access.span))
-            })
-        })
-    }
-
     pub(super) fn standard_library_declaration(
         &self,
         file: &FileFacts,
@@ -3342,35 +2685,7 @@ impl<'a> SemanticLookup<'a> {
     /// inherit the identity of `i` or `wrapper` when the complete callee has no
     /// semantic fact.
     pub(super) fn callee_symbol(&self, file: &FileFacts, callee: Span) -> Option<&'a str> {
-        let written_callee = callee;
-        if let Some(symbol) = self
-            .resolved_contracts
-            .callee_bindings
-            .get(&crate::location(file.path.shared(), callee))
-        {
-            return Some(symbol.as_str());
-        }
         let callee = file.ast.peel_ts_sugar_span(callee);
-        if self
-            .resolved_contracts
-            .callee_bindings
-            .contains_key(&crate::location(file.path.shared(), callee))
-        {
-            return None;
-        }
-        if written_callee != callee
-            && self
-                .entities
-                .at(file.path.as_str(), callee)
-                .is_some_and(|symbol| {
-                    self.resolved_contracts
-                        .by_symbol
-                        .get(symbol)
-                        .is_some_and(|binding| binding.contract_location.path.ends_with(']'))
-                })
-        {
-            return None;
-        }
         let member_property = self
             .ast_indexes
             .get(file.path.as_str())
@@ -3408,35 +2723,7 @@ impl<'a> SemanticLookup<'a> {
     /// property spelling into a project-wide method lookup. Callers must
     /// compare the returned candidates' summaries before using more than one.
     pub(super) fn callee_symbols(&self, file: &FileFacts, callee: Span) -> Vec<SymbolId> {
-        let written_callee = callee;
-        if let Some(symbol) = self
-            .resolved_contracts
-            .callee_bindings
-            .get(&crate::location(file.path.shared(), callee))
-        {
-            return vec![symbol.clone()];
-        }
         let callee = file.ast.peel_ts_sugar_span(callee);
-        if self
-            .resolved_contracts
-            .callee_bindings
-            .contains_key(&crate::location(file.path.shared(), callee))
-        {
-            return vec![];
-        }
-        if written_callee != callee
-            && self
-                .entities
-                .at(file.path.as_str(), callee)
-                .is_some_and(|symbol| {
-                    self.resolved_contracts
-                        .by_symbol
-                        .get(symbol)
-                        .is_some_and(|binding| binding.contract_location.path.ends_with(']'))
-                })
-        {
-            return vec![];
-        }
         let member_property = self
             .ast_indexes
             .get(file.path.as_str())
@@ -3453,12 +2740,6 @@ impl<'a> SemanticLookup<'a> {
             }
             let mut visited = HashSet::new();
             let aliases = self.direct_value_symbols(file, callee, &mut visited);
-            if aliases
-                .iter()
-                .any(|alias| self.returned_callable_is_bound(alias.as_str()))
-            {
-                return vec![symbol.clone()];
-            }
             if !aliases.is_empty() {
                 return aliases;
             }
@@ -3471,13 +2752,10 @@ impl<'a> SemanticLookup<'a> {
         {
             let symbol = SymbolId::from(declaration.symbol.as_ref());
             // A selected declaration is sufficient when it names an
-            // analyzed implementation or an explicitly resolved package
-            // contract. A TypeScript interface/signature declaration without
-            // either is only a structural type, so continue to exact
-            // receiver/call-site dispatch below.
-            if self.function_for_symbol(symbol.as_str()).is_some()
-                || self.resolved_contracts.by_symbol.contains_key(&symbol)
-            {
+            // analyzed implementation. A TypeScript interface/signature
+            // declaration without one is only a structural type, so continue
+            // to exact receiver/call-site dispatch below.
+            if self.function_for_symbol(symbol.as_str()).is_some() {
                 return vec![symbol];
             }
         }
@@ -4453,83 +3731,6 @@ impl<'a> SemanticLookup<'a> {
             .collect()
     }
 
-    /// Call sites that **render** the project function at `(path, function)`
-    /// through a dialect renderer: `createComponent(Panel, props)` invokes
-    /// `Panel` exactly as the tag `<Panel/>` does (ADR 0136). Each site's span
-    /// is the rendered argument, the function's own reference.
-    ///
-    /// Kept apart from [`Self::function_call_sites`] on purpose. That map
-    /// feeds component identity (a function called directly is not a
-    /// component) and execution-role inheritance (the role at the callee
-    /// span), and neither question is the same for an argument of a Solid
-    /// call; the call graph in `attribution` is the one consumer, and it asks
-    /// only who can enter a function.
-    ///
-    /// Exact or nothing, at both ends:
-    ///
-    /// - the callee resolves to a symbol one of whose declarations sits in one
-    ///   of the dialect's primitive-defining packages under a name the dialect
-    ///   says renders an argument
-    ///   ([`solid_dialect::Dialect::renders_component_argument`]); a project
-    ///   function that happens to be called `createComponent` is not one;
-    /// - the argument at that position is a bare identifier, no spread up to
-    ///   it, whose symbol is one project function. A parameter, a computed
-    ///   value, `options.Wrap || Fallback`, or an unresolved import resolves
-    ///   to no function and adds no edge, so the reference stays the value
-    ///   escape it was.
-    pub(super) fn function_render_call_sites(
-        &self,
-        path: &str,
-        function: Span,
-    ) -> Vec<(&'a FileFacts, Span)> {
-        self.render_call_sites()
-            .get(&(path, function))
-            .into_iter()
-            .flatten()
-            .map(|(file, argument)| (&self.facts.files[*file], *argument))
-            .collect()
-    }
-
-    fn render_call_sites(&self) -> &RenderCallSites<'a> {
-        self.render_call_sites.get_or_init(|| {
-            let mut map = RenderCallSites::new();
-            let facts: &'a ProjectFacts = self.facts;
-            for (file_index, file) in facts.files.iter().enumerate() {
-                for call in &file.ast.calls {
-                    let Some(index) = self
-                        .callee_symbol(file, call.callee)
-                        .and_then(|symbol| self.rendered_argument_of(symbol))
-                    else {
-                        continue;
-                    };
-                    if call
-                        .arguments
-                        .iter()
-                        .take(index.saturating_add(1))
-                        .any(|argument| argument.spread)
-                    {
-                        continue;
-                    }
-                    let Some(argument) = call.arguments.get(index) else {
-                        continue;
-                    };
-                    if argument.value != solid_facts::ast::ArgumentValueKind::Identifier {
-                        continue;
-                    }
-                    let Some((target_file, target)) =
-                        self.function_called_at(file.path.as_str(), argument.span)
-                    else {
-                        continue;
-                    };
-                    map.entry((target_file.path.as_str(), target.span))
-                        .or_default()
-                        .push((file_index, argument.span));
-                }
-            }
-            map
-        })
-    }
-
     /// The argument a call of `symbol` renders, when `symbol` is declared by
     /// one of the dialect's own packages under a rendering name.
     fn rendered_argument_of(&self, symbol: &str) -> Option<usize> {
@@ -5012,263 +4213,15 @@ mod tests {
         let ast_indexes = HashMap::new();
         let symbol_names = HashMap::new();
         let dialect = solid_dialect::Solid2;
-        let contracts = crate::contracts::ResolvedContracts {
-            bindings: Vec::new(),
-            by_symbol: HashMap::new(),
-            direct_returns: HashMap::new(),
-            callee_bindings: HashMap::new(),
-            returned_callable_bindings: HashSet::new(),
-            missing_exports: Vec::new(),
-            counts: crate::ContractBindingCounts::default(),
-        };
         let lookup = SemanticLookup::new(
             &facts,
             &ast_indexes,
             &entities,
             &symbol_names,
             &dialect,
-            &contracts,
             false,
         );
         body(&lookup)
-    }
-
-    #[test]
-    fn capture_literal_bodies_require_bound_instances_and_no_factory_invocation() {
-        let source = "const captured = make(() => read()); const other = make(() => 0);";
-        let facts = project(source);
-        let file = &facts.files[0];
-        let captured_name = span_of(source, "captured", 0);
-        let entities = entity_symbols(&[
-            (captured_name, "captured-instance"),
-            (span_of(source, "other", 0), "other-instance"),
-            (span_of(source, "make", 0), "factory"),
-            (span_of(source, "make", 1), "factory"),
-        ]);
-        let factory = file
-            .ast
-            .calls
-            .iter()
-            .find(|call| call.callee == span_of(source, "make", 0))
-            .unwrap();
-        let argument = factory.arguments[0].clone();
-        let body = file
-            .ast
-            .functions
-            .iter()
-            .find(|function| function.span == argument.span)
-            .unwrap()
-            .body;
-        let binding = |symbol: &str, summary| crate::contracts::ResolvedContractBinding {
-            local_name: symbol.into(),
-            imported_name: symbol.into(),
-            package_name: "fixture-package".into(),
-            symbol: SymbolId::from(symbol),
-            runtime_identity: String::new(),
-            contract_location: crate::location(file.path.shared(), factory.callee),
-            summary,
-        };
-        let ast_indexes = HashMap::new();
-        let symbol_names = HashMap::new();
-        let dialect = solid_dialect::Solid2;
-        for (bound, callbacks, expected) in [
-            (true, crate::ContractClaim::Known(vec![]), vec![body]),
-            (false, crate::ContractClaim::Known(vec![]), vec![]),
-            (true, crate::ContractClaim::Open, vec![]),
-            (
-                true,
-                crate::ContractClaim::Known(vec![crate::CallbackSummary {
-                    parameter: 0,
-                    execution: "inline".into(),
-                    schedule: None,
-                    arguments: vec![],
-                    owner: None,
-                    clears_tracking: false,
-                    protocol: crate::summary_semantics::InvokeProtocol::Call,
-                    path: vec![],
-                }]),
-                vec![],
-            ),
-        ] {
-            let factory_summary = crate::ContractExport {
-                callbacks,
-                ..crate::ContractExport::default()
-            };
-            let returned_summary = crate::ContractExport {
-                captured_arguments: std::collections::BTreeMap::from([(
-                    usize::MAX,
-                    argument.clone(),
-                )]),
-                ..crate::ContractExport::default()
-            };
-            let factory_binding = binding("factory", factory_summary);
-            let returned_binding = binding("captured-instance", returned_summary);
-            let contracts = crate::contracts::ResolvedContracts {
-                bindings: vec![],
-                direct_returns: HashMap::new(),
-                by_symbol: HashMap::from([
-                    (factory_binding.symbol.clone(), factory_binding),
-                    (returned_binding.symbol.clone(), returned_binding),
-                ]),
-                callee_bindings: HashMap::new(),
-                returned_callable_bindings: if bound {
-                    HashSet::from([SymbolId::from("captured-instance")])
-                } else {
-                    HashSet::new()
-                },
-                missing_exports: vec![],
-                counts: crate::ContractBindingCounts::default(),
-            };
-            let lookup = SemanticLookup::new(
-                &facts,
-                &ast_indexes,
-                &entities,
-                &symbol_names,
-                &dialect,
-                &contracts,
-                false,
-            );
-            assert_eq!(lookup.bound_capture_literal_bodies(file), expected);
-        }
-    }
-
-    #[test]
-    fn returned_member_callee_bindings_are_exact_and_instance_local() {
-        let source = "const first = make(); const second = make(); first.clear(); second.clear();";
-        let facts = project(source);
-        let entities = entity_symbols(&[]);
-        let ast_indexes = facts
-            .files
-            .iter()
-            .map(|file| (file.path.clone(), CachedAstFileIndex::new(file)))
-            .collect::<HashMap<_, _>>();
-        let symbol_names = HashMap::new();
-        let dialect = solid_dialect::Solid2;
-        let first = span_of(source, "first.clear", 0);
-        let second = span_of(source, "second.clear", 0);
-        let contracts = crate::contracts::ResolvedContracts {
-            bindings: vec![],
-            direct_returns: HashMap::new(),
-            by_symbol: HashMap::new(),
-            callee_bindings: HashMap::from([
-                (
-                    crate::location(facts.files[0].path.shared(), first),
-                    SymbolId::from("first-instance"),
-                ),
-                (
-                    crate::location(facts.files[0].path.shared(), second),
-                    SymbolId::from("second-instance"),
-                ),
-            ]),
-            returned_callable_bindings: HashSet::new(),
-            missing_exports: vec![],
-            counts: crate::ContractBindingCounts::default(),
-        };
-        let lookup = SemanticLookup::new(
-            &facts,
-            &ast_indexes,
-            &entities,
-            &symbol_names,
-            &dialect,
-            &contracts,
-            false,
-        );
-        assert_eq!(
-            lookup.callee_symbol(&facts.files[0], first),
-            Some("first-instance")
-        );
-        assert_eq!(
-            lookup.callee_symbols(&facts.files[0], first),
-            vec![SymbolId::from("first-instance")]
-        );
-        assert_eq!(
-            lookup.callee_symbol(&facts.files[0], second),
-            Some("second-instance")
-        );
-        assert_eq!(
-            lookup.callee_symbols(&facts.files[0], second),
-            vec![SymbolId::from("second-instance")]
-        );
-        assert_eq!(
-            lookup.callee_symbol(&facts.files[0], span_of(source, "make", 0)),
-            None
-        );
-    }
-
-    #[test]
-    fn object_member_stability_uses_every_binder_reference() {
-        let returned = crate::ReturnSummary {
-            kind: "object".into(),
-            properties: std::collections::BTreeMap::from([(
-                "member".into(),
-                crate::ReturnSummary {
-                    kind: crate::contracts::EFFECTFUL_MEMBER.into(),
-                    prototype: None,
-                    ..crate::ReturnSummary::default()
-                },
-            )]),
-            prototype: None,
-            ..crate::ReturnSummary::default()
-        };
-        for (source, stable) in [
-            ("const obj = make(); obj.member();", true),
-            (
-                "const obj = make(); const other = make(); other.member(); obj.member();",
-                true,
-            ),
-            ("const obj = make(); keep([obj]); obj.member();", false),
-            ("const obj = make(); keep({obj}); obj.member();", false),
-            (
-                "const obj = make(); keep(obj as unknown); obj.member();",
-                false,
-            ),
-            (
-                "const obj = make(); const alias = obj; obj.member();",
-                false,
-            ),
-            ("const obj = make(); keep(obj); obj.member();", false),
-            ("function f() { const obj = make(); return obj; }", false),
-            ("export const obj = make(); obj.member();", false),
-            ("const obj = make(); export {obj}; obj.member();", false),
-            (
-                "const obj = make(); const view = <View value={obj}/>; obj.member();",
-                false,
-            ),
-            ("const obj = make(); (obj as any).member();", false),
-            (
-                "const obj = make(); obj.member = replacement; obj.member();",
-                false,
-            ),
-            (
-                "const obj = make(); delete obj.member; obj.member();",
-                false,
-            ),
-            (
-                "const obj = make(); for (obj.member of values) {} obj.member();",
-                false,
-            ),
-        ] {
-            let facts = project(source);
-            let file = &facts.files[0];
-            let root = file
-                .ast
-                .bindings
-                .iter()
-                .find(|binding| {
-                    binding
-                        .names
-                        .iter()
-                        .any(|name| file.source_text(name.span) == Some("obj"))
-                })
-                .unwrap()
-                .names[0]
-                .span;
-            assert_eq!(
-                crate::contracts::returned_object_members_are_stable(file, root, &returned),
-                stable,
-                "{source}"
-            );
-        }
     }
 
     #[test]
@@ -5679,22 +4632,12 @@ mod tests {
         let entities = entity_symbols(spans);
         let symbol_names = HashMap::new();
         let dialect = solid_dialect::Solid2;
-        let contracts = crate::contracts::ResolvedContracts {
-            bindings: Vec::new(),
-            by_symbol: HashMap::new(),
-            direct_returns: HashMap::new(),
-            callee_bindings: HashMap::new(),
-            returned_callable_bindings: HashSet::new(),
-            missing_exports: Vec::new(),
-            counts: crate::ContractBindingCounts::default(),
-        };
         let lookup = SemanticLookup::new(
             &facts,
             &ast_indexes,
             &entities,
             &symbol_names,
             &dialect,
-            &contracts,
             false,
         );
         lookup

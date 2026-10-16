@@ -128,11 +128,11 @@ fn reactive_source_uncaptured(
         {
             continue;
         }
-        let callee_symbol = context.entities.at(file.path.as_str(), call.callee);
-        let Some(callee_symbol) = callee_symbol else {
-            continue;
-        };
-        if context.contracted.contains_key(callee_symbol) {
+        if context
+            .entities
+            .at(file.path.as_str(), call.callee)
+            .is_none()
+        {
             continue;
         }
         let Some(resolved_call) = context.lookup.resolved_callee_call(file, call.callee) else {

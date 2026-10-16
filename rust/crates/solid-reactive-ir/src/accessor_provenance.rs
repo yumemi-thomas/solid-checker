@@ -2783,16 +2783,7 @@ impl Resolver<'_, '_> {
         // The initializer is the call itself, so the array is the call's
         // fresh result: `const [, start] = t` destructures a held tuple.
         let initializer = bound_file.ast.peel_ts_sugar_span(binding.initializer?);
-        let call = bound_file.ast.call_at(initializer)?;
-        if self.member_stability.tuple_iteration
-            && self
-                .lookup
-                .contract_return_at_call(bound_file, call)
-                .is_some_and(|(returned, _, _)| returned.kind == "tuple")
-        {
-            *transported = true;
-            return Some(Value::VetoedTuple);
-        }
+        bound_file.ast.call_at(initializer)?;
         let Value::Tuple {
             path,
             factory,
@@ -4721,25 +4712,9 @@ mod tests {
             };
             let ast_indexes = HashMap::new();
             let names = HashMap::new();
-            let contracts = crate::contracts::ResolvedContracts {
-                bindings: vec![],
-                by_symbol: HashMap::new(),
-                direct_returns: HashMap::new(),
-                callee_bindings: HashMap::new(),
-                returned_callable_bindings: HashSet::new(),
-                missing_exports: vec![],
-                counts: Default::default(),
-            };
             let dialect = solid_dialect::Solid2;
-            let lookup = SemanticLookup::new(
-                &facts,
-                &ast_indexes,
-                &entities,
-                &names,
-                &dialect,
-                &contracts,
-                true,
-            );
+            let lookup =
+                SemanticLookup::new(&facts, &ast_indexes, &entities, &names, &dialect, true);
             assert_eq!(
                 mutation_target_is_distinct(
                     &file,

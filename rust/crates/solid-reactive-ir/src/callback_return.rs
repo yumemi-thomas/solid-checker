@@ -5,7 +5,6 @@ use solid_dialect::{Primitive, ReactiveRole, ResultSlot};
 use solid_facts::FileFacts;
 use solid_facts::ast::{BindingFact, BindingShape, CallFact, FunctionKind, IdentifierRole};
 use solid_facts::core::Span;
-use typefacts::Location;
 
 use crate::ReturnSummary;
 use crate::indexes::{SemanticLookup, binding_written};
@@ -15,7 +14,6 @@ pub(super) struct CallbackReturn<'a> {
     pub(super) bindings: Vec<(Span, ReturnSummary)>,
     pub(super) created: &'a CallFact,
     pub(super) primitive: Option<Primitive>,
-    pub(super) origin: Option<(&'a str, &'a Location)>,
 }
 
 pub(super) fn callback_slot(
@@ -232,40 +230,34 @@ fn resolve_with_iteration_veto<'a>(
     {
         return None;
     }
-    let primitive = lookup.primitive_at_call(file, created.span);
-    // Core primitives use only the dialect's exact slot catalogue. A
-    // generated contract's missing return must not erase that vocabulary.
-    let (mut returned, origin) = if let Some(primitive) = primitive {
-        let shape = |slot| {
-            lookup
-                .dialect
-                .reactive_result_slot(primitive, slot)
-                .map(|role| ReturnSummary {
-                    kind: match role {
-                        ReactiveRole::Accessor => "accessor",
-                        ReactiveRole::Setter => "setter",
-                    }
-                    .into(),
-                    label: "callback returned source".into(),
-                    ..ReturnSummary::default()
-                })
-        };
-        let returned = if lookup.dialect.returns_reactive_tuple(primitive) {
-            ReturnSummary {
-                kind: "tuple".into(),
-                elements: vec![
-                    shape(ResultSlot::TupleItem(0)),
-                    shape(ResultSlot::TupleItem(1)),
-                ],
+    // Core primitives use the dialect's exact slot catalogue; no other
+    // callee states its result.
+    let primitive = lookup.primitive_at_call(file, created.span)?;
+    let shape = |slot| {
+        lookup
+            .dialect
+            .reactive_result_slot(primitive, slot)
+            .map(|role| ReturnSummary {
+                kind: match role {
+                    ReactiveRole::Accessor => "accessor",
+                    ReactiveRole::Setter => "setter",
+                }
+                .into(),
+                label: "callback returned source".into(),
                 ..ReturnSummary::default()
-            }
-        } else {
-            shape(ResultSlot::Whole)?
-        };
-        (returned, None)
+            })
+    };
+    let mut returned = if lookup.dialect.returns_reactive_tuple(primitive) {
+        ReturnSummary {
+            kind: "tuple".into(),
+            elements: vec![
+                shape(ResultSlot::TupleItem(0)),
+                shape(ResultSlot::TupleItem(1)),
+            ],
+            ..ReturnSummary::default()
+        }
     } else {
-        let (returned, export, location) = lookup.contract_return_at_call(file, created)?;
-        (returned.clone(), Some((export, location)))
+        shape(ResultSlot::Whole)?
     };
     if let Some(binding) = local {
         returned = selected(tuple_iteration_veto, binding, &returned)?
@@ -311,7 +303,6 @@ fn resolve_with_iteration_veto<'a>(
     Some(CallbackReturn {
         bindings,
         created,
-        primitive,
-        origin,
+        primitive: Some(primitive),
     })
 }

@@ -480,9 +480,6 @@ pub(crate) fn gate_diagnostics(
     draft
         .directive_creations
         .retain(|row| execution(&row.location) == ApplyExecution::Proven);
-    draft
-        .contract_generation_obligations
-        .retain(|row| execution(&row.location) != ApplyExecution::Absent);
 }
 
 #[cfg(test)]

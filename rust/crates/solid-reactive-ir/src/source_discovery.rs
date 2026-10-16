@@ -6,18 +6,16 @@ use crate::cache::{
     SourceDiscoveryIdentity, SourceDiscoveryTypeScriptDelta,
 };
 use crate::owners::{
-    binding_returns_reactive_source, computation_is_async_with_contracts, containing_ast_function,
+    binding_returns_reactive_source, computation_is_async, containing_ast_function,
 };
 use crate::pipeline::{parallel_file_chunk_results, parallel_file_results, parallel_slice_results};
 use crate::{
-    BuildTimings, CallbackSummary, PrimitiveName, ReactiveSourceKind, ReturnSummary,
-    RuntimeEnvironment, RuntimeRendering, call_primitive_name, jsx_primitive_name, known_primitive,
-    location,
+    BuildTimings, PrimitiveName, ReactiveSourceKind, ReturnSummary, RuntimeEnvironment,
+    RuntimeRendering, call_primitive_name, jsx_primitive_name, known_primitive, location,
 };
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-use crate::contracts::ResolvedContracts;
 use crate::identity::{SymbolId, symbol_id};
 use crate::indexes::{CachedAstFileIndex, EntitySymbols, ProjectIndexes, SemanticLookup};
 use crate::timings::{ReactiveIrStage, StageClock};
@@ -88,39 +86,6 @@ pub(crate) fn source_discovery_identity_matches(
     false
 }
 
-fn push_contracted_return_source(
-    result: &mut SourceDiscoveryContribution,
-    symbol: &SymbolId,
-    display: SymbolId,
-    returned: &ReturnSummary,
-    export_name: &str,
-    contract_location: &Location,
-) {
-    if !matches!(returned.kind.as_str(), "accessor" | "store-path") {
-        return;
-    }
-    result
-        .accessors
-        .push((symbol.clone(), (display, contract_location.clone())));
-    result.contracted_accessor_symbols.push(symbol.clone());
-    result.accessor_origins.push((
-        symbol.clone(),
-        (
-            symbol_id(&returned.label),
-            symbol_id(export_name),
-            contract_location.clone(),
-        ),
-    ));
-    result.source_kinds.push((
-        symbol.clone(),
-        if returned.kind == "store-path" {
-            ReactiveSourceKind::Store
-        } else {
-            ReactiveSourceKind::Accessor
-        },
-    ));
-}
-
 /// Rebind the exact callback value, never the callback's parameter or its
 /// function identity. This produces the same local read evidence as a direct
 /// factory binding and leaves the caller's execution role untouched.
@@ -129,7 +94,6 @@ fn push_callback_return_sources(
     lookup: &SemanticLookup<'_>,
     file: &FileFacts,
     entities: &EntitySymbols,
-    resolved_contracts: &ResolvedContracts,
     returned: crate::callback_return::CallbackReturn<'_>,
 ) {
     for (name, value) in returned.bindings {
@@ -139,16 +103,12 @@ fn push_callback_return_sources(
         let declaration = crate::location(file.path.shared(), name);
         let display = symbol_id(file.source_text(name).unwrap_or_default());
         if value.kind == "accessor" {
-            if let Some((export, origin)) = returned.origin {
-                push_contracted_return_source(result, symbol, display, &value, export, origin);
-            } else {
-                result
-                    .accessors
-                    .push((symbol.clone(), (display, declaration)));
-                result
-                    .source_kinds
-                    .push((symbol.clone(), ReactiveSourceKind::Accessor));
-            }
+            result
+                .accessors
+                .push((symbol.clone(), (display, declaration)));
+            result
+                .source_kinds
+                .push((symbol.clone(), ReactiveSourceKind::Accessor));
         } else if value.kind == "setter" {
             result.setters.push((
                 symbol.clone(),
@@ -178,14 +138,11 @@ fn push_callback_return_sources(
                 result.source_async_options.push((symbol.clone(), options));
             }
             if value.kind == "accessor"
-                && returned.created.arguments.first().is_some_and(|argument| {
-                    computation_is_async_with_contracts(
-                        lookup,
-                        file,
-                        argument.span,
-                        &resolved_contracts.by_symbol,
-                    )
-                })
+                && returned
+                    .created
+                    .arguments
+                    .first()
+                    .is_some_and(|argument| computation_is_async(lookup, file, argument.span))
             {
                 result.async_sources.push(symbol.clone());
             }
@@ -199,111 +156,7 @@ struct EffectiveReturnContext<'a> {
     ast_index: &'a CachedAstFileIndex,
     entities: &'a EntitySymbols,
     symbol_names: &'a HashMap<SymbolId, SymbolId>,
-    resolved_contracts: &'a ResolvedContracts,
     dialect: &'a dyn Dialect,
-}
-
-fn effective_call_return(
-    returned: &ReturnSummary,
-    call: &solid_facts::ast::CallFact,
-    context: &EffectiveReturnContext<'_>,
-    depth: usize,
-) -> Option<ReturnSummary> {
-    if depth == 0 {
-        return None;
-    }
-    if returned.kind == "tuple" {
-        return Some(ReturnSummary {
-            elements: returned
-                .elements
-                .iter()
-                .map(|element| {
-                    element.as_ref().and_then(|element| {
-                        effective_call_return(element, call, context, depth - 1)
-                    })
-                })
-                .collect(),
-            prototype: None,
-            ..returned.clone()
-        });
-    }
-    if returned.kind == "object" {
-        return Some(ReturnSummary {
-            properties: returned
-                .properties
-                .iter()
-                .filter_map(|(name, value)| {
-                    effective_call_return(value, call, context, depth - 1)
-                        .map(|value| (name.clone(), value))
-                })
-                .collect(),
-            prototype: None,
-            ..returned.clone()
-        });
-    }
-    if !matches!(returned.kind.as_str(), "argument" | "callback-result") {
-        return Some(returned.clone());
-    }
-    let argument = call.arguments.get(returned.parameter?)?;
-    if returned.kind == "callback-result" {
-        let function_span = if context
-            .file
-            .ast
-            .functions
-            .iter()
-            .any(|function| function.span == argument.span)
-        {
-            argument.span
-        } else {
-            let symbol = context
-                .entities
-                .at(context.file.path.as_str(), argument.span)?;
-            context.file.ast.bindings.iter().find_map(|binding| {
-                binding
-                    .names
-                    .iter()
-                    .any(|name| {
-                        context.entities.at(context.file.path.as_str(), name.span) == Some(symbol)
-                    })
-                    .then_some(binding.initializer)
-                    .flatten()
-            })?
-        };
-        let function = context
-            .file
-            .ast
-            .functions
-            .iter()
-            .find(|function| function.span == function_span)?;
-        let returns =
-            function
-                .expression_return
-                .iter()
-                .chain(context.file.ast.returns.iter().filter(|candidate| {
-                    containing_ast_function(&context.file.ast, candidate.span)
-                        .is_some_and(|owner| owner.span == function.span)
-                }));
-        let mut resolved = None::<ReturnSummary>;
-        for returned_value in returns {
-            let value = returned_value.argument?;
-            let inner = context.ast_index.call_by_span(value).or_else(|| {
-                context
-                    .file
-                    .ast
-                    .calls
-                    .iter()
-                    .filter(|candidate| value.contains(candidate.span))
-                    .max_by_key(|candidate| candidate.span.end - candidate.span.start)
-            })?;
-            let candidate = effective_inner_call_return(inner, context, depth - 1)?;
-            if resolved.as_ref().is_some_and(|prior| prior != &candidate) {
-                return None;
-            }
-            resolved = Some(candidate);
-        }
-        return resolved;
-    }
-    effective_value_return(argument.span, context, depth - 1)
 }
 
 /// A fresh source returned by one exact project function. This is deliberately
@@ -315,7 +168,6 @@ fn project_returned_source<'a>(
     call: &solid_facts::ast::CallFact,
     entities: &EntitySymbols,
     symbol_names: &HashMap<SymbolId, SymbolId>,
-    resolved_contracts: &ResolvedContracts,
 ) -> Option<(&'a FileFacts, &'a solid_facts::ast::CallFact, Primitive)> {
     returned_source_through(
         lookup,
@@ -323,7 +175,6 @@ fn project_returned_source<'a>(
         call,
         entities,
         symbol_names,
-        resolved_contracts,
         (
             RETURNED_SOURCE_FORWARDS,
             lookup.tuple_iteration_may_be_mutated(),
@@ -374,7 +225,6 @@ fn returned_source_through<'a>(
     call: &solid_facts::ast::CallFact,
     entities: &EntitySymbols,
     symbol_names: &HashMap<SymbolId, SymbolId>,
-    resolved_contracts: &ResolvedContracts,
     proof: (usize, bool),
 ) -> Option<(&'a FileFacts, &'a solid_facts::ast::CallFact, Primitive)> {
     let (forwards, tuple_iteration_veto) = proof;
@@ -444,7 +294,6 @@ fn returned_source_through<'a>(
             inner,
             entities,
             symbol_names,
-            resolved_contracts,
             (next, tuple_iteration_veto),
         )?;
         if found.0.path != file.path
@@ -518,7 +367,6 @@ fn returned_source_through<'a>(
         ast_index: lookup.ast_file_index(file.path.as_str())?,
         entities,
         symbol_names,
-        resolved_contracts,
         dialect: lookup.dialect,
     };
     let returned = effective_value_return(*roots.first()?, &context, 16)?;
@@ -624,7 +472,7 @@ fn effective_value_return(
     }
     let span = context.file.ast.peel_ts_sugar_span(span);
     if let Some(call) = context.ast_index.call_by_span(span) {
-        return effective_inner_call_return(call, context, depth - 1);
+        return effective_inner_call_return(call, context);
     }
     if !context
         .file
@@ -685,64 +533,10 @@ fn effective_value_return(
     }
 }
 
-/// A declared member type cannot restore a container identity invalidated by
-/// runtime writes/escape. Contracted containers use their explicit value flow
-/// instead of the generic typed-accessor fallback, including direct aliases.
-fn is_contracted_container_value(
-    file: &FileFacts,
-    entities: &EntitySymbols,
-    contracts: &ResolvedContracts,
-    span: solid_facts::core::Span,
-    depth: usize,
-) -> bool {
-    if depth == 0 {
-        return true;
-    }
-    let span = file.ast.peel_ts_sugar_span(span);
-    if let Some(call) = file.ast.calls.iter().find(|call| call.span == span) {
-        return entities
-            .at(file.path.as_str(), call.callee)
-            .and_then(|symbol| contracts.by_symbol.get(symbol))
-            .and_then(|contract| contract.summary.returns.known())
-            .and_then(Option::as_ref)
-            .is_some_and(|value| {
-                matches!(
-                    value.kind.as_str(),
-                    "tuple" | "object" | crate::contracts::RETURNED_CALLABLE
-                )
-            });
-    }
-    let Some(symbol) = entities.at(file.path.as_str(), span) else {
-        return false;
-    };
-    file.ast
-        .bindings
-        .iter()
-        .find(|binding| {
-            binding.shape == solid_facts::ast::BindingShape::Identifier
-                && binding.names.len() == 1
-                && entities.at(file.path.as_str(), binding.names[0].span) == Some(symbol)
-        })
-        .and_then(|binding| binding.initializer)
-        .is_some_and(|initializer| {
-            is_contracted_container_value(file, entities, contracts, initializer, depth - 1)
-        })
-}
-
 fn effective_inner_call_return(
     inner: &solid_facts::ast::CallFact,
     context: &EffectiveReturnContext<'_>,
-    depth: usize,
 ) -> Option<ReturnSummary> {
-    if let Some(contracted) = context
-        .entities
-        .at(context.file.path.as_str(), inner.callee)
-        .and_then(|symbol| context.resolved_contracts.by_symbol.get(symbol))
-        .and_then(|contracted| contracted.summary.returns.known())
-        .and_then(Option::as_ref)
-    {
-        return effective_call_return(contracted, inner, context, depth);
-    }
     let primitive = call_primitive_name(
         context.file,
         inner,
@@ -787,58 +581,6 @@ fn effective_inner_call_return(
             prototype: None,
             ..ReturnSummary::default()
         })
-}
-
-/// Resolve a call through one exact local binding whose initializer is a
-/// contracted callback-result function factory. The relation's parameter is
-/// scoped to the outer contracted call, not to the returned function's own
-/// arguments. Aliases, assignments, cross-file values, and unresolved
-/// callbacks deliberately yield no fact.
-fn effective_returned_callable_call(
-    call: &solid_facts::ast::CallFact,
-    context: &EffectiveReturnContext<'_>,
-    depth: usize,
-) -> Option<(ReturnSummary, String, Location)> {
-    if depth == 0 {
-        return None;
-    }
-    let callee = context
-        .entities
-        .at(context.file.path.as_str(), call.callee)?;
-    let initializer = context.file.ast.bindings.iter().find_map(|binding| {
-        binding
-            .names
-            .iter()
-            .any(|name| context.entities.at(context.file.path.as_str(), name.span) == Some(callee))
-            .then_some(binding.call_initializer)
-            .flatten()
-    })?;
-    let factory_call = context.ast_index.call_by_span(initializer)?;
-    let contracted = context
-        .entities
-        .at(context.file.path.as_str(), factory_call.callee)
-        .and_then(|symbol| context.resolved_contracts.by_symbol.get(symbol))?;
-    let returned = contracted
-        .summary
-        .returns
-        .known()
-        .and_then(Option::as_ref)?;
-    if returned.kind != "callback-result-function" {
-        return None;
-    }
-    let relation = ReturnSummary {
-        kind: "callback-result".into(),
-        parameter: returned.parameter,
-        prototype: None,
-        ..ReturnSummary::default()
-    };
-    effective_call_return(&relation, factory_call, context, depth - 1).map(|returned| {
-        (
-            returned,
-            contracted.local_name.clone(),
-            contracted.contract_location.clone(),
-        )
-    })
 }
 
 /// The statically-proven rc.0 async/hydration options declared on one
@@ -1137,7 +879,6 @@ pub(crate) fn discover_file_sources(
     ast_index: &CachedAstFileIndex,
     entities: &EntitySymbols,
     symbol_names: &HashMap<SymbolId, SymbolId>,
-    resolved_contracts: &ResolvedContracts,
 ) -> SourceDiscoveryContribution {
     let mut result = SourceDiscoveryContribution::default();
     for binding in &file.ast.bindings {
@@ -1149,168 +890,8 @@ pub(crate) fn discover_file_sources(
         };
         if crate::callback_return::callback_slot(lookup, file, call).is_some() {
             if let Some(returned) = crate::callback_return::resolve(lookup, file, call) {
-                push_callback_return_sources(
-                    &mut result,
-                    lookup,
-                    file,
-                    entities,
-                    resolved_contracts,
-                    returned,
-                );
+                push_callback_return_sources(&mut result, lookup, file, entities, returned);
             }
-            continue;
-        }
-        let contracted = entities
-            .get(&location(file.path.shared(), call.callee))
-            .and_then(|symbol| resolved_contracts.by_symbol.get(symbol));
-        if let Some(contracted) = contracted
-            && let Some(contracted_return) =
-                contracted.summary.returns.known().and_then(Option::as_ref)
-        {
-            let context = EffectiveReturnContext {
-                tuple_iteration_veto: lookup.tuple_iteration_may_be_mutated(),
-                file,
-                ast_index,
-                entities,
-                symbol_names,
-                resolved_contracts,
-                dialect: lookup.dialect,
-            };
-            let effective_return = effective_call_return(contracted_return, call, &context, 16);
-            let Some(contracted_return) = effective_return.as_ref() else {
-                continue;
-            };
-            match contracted_return.kind.as_str() {
-                "accessor" | "store-path" => {
-                    if let Some(name) = binding.names.first() {
-                        let declaration = location(file.path.shared(), name.span);
-                        if let Some(symbol) = entities.get(&declaration) {
-                            push_contracted_return_source(
-                                &mut result,
-                                symbol,
-                                symbol_id(file.source_text(name.span).unwrap_or_default()),
-                                contracted_return,
-                                &contracted.local_name,
-                                &contracted.contract_location,
-                            );
-                        }
-                    }
-                }
-                "tuple" if binding.shape == solid_facts::ast::BindingShape::Array => {
-                    if lookup.tuple_iteration_may_be_mutated() {
-                        continue;
-                    }
-                    for (name, returned) in binding
-                        .array_slots
-                        .iter()
-                        .zip(&contracted_return.elements)
-                        .filter_map(|(name, returned)| name.as_ref().zip(returned.as_ref()))
-                    {
-                        let declaration = location(file.path.shared(), name.span);
-                        if let Some(symbol) = entities.get(&declaration) {
-                            push_contracted_return_source(
-                                &mut result,
-                                symbol,
-                                symbol_id(file.source_text(name.span).unwrap_or_default()),
-                                returned,
-                                &contracted.local_name,
-                                &contracted.contract_location,
-                            );
-                        }
-                    }
-                }
-                "object" if binding.shape == solid_facts::ast::BindingShape::Object => {
-                    for slot in &binding.object_slots {
-                        let Some(returned) =
-                            contracted_return.properties.get(slot.property.as_str())
-                        else {
-                            continue;
-                        };
-                        let declaration = location(file.path.shared(), slot.local.span);
-                        if let Some(symbol) = entities.get(&declaration) {
-                            push_contracted_return_source(
-                                &mut result,
-                                symbol,
-                                symbol_id(file.source_text(slot.local.span).unwrap_or_default()),
-                                returned,
-                                &contracted.local_name,
-                                &contracted.contract_location,
-                            );
-                        }
-                    }
-                }
-                "object" => {
-                    let root = binding
-                        .names
-                        .first()
-                        .and_then(|name| entities.at(file.path.as_str(), name.span));
-                    if let Some(root_symbol) = root {
-                        if !crate::value_identity::structural_binding_is_stable(
-                            file,
-                            entities,
-                            root_symbol,
-                            contracted_return,
-                            lookup.tuple_iteration_may_be_mutated(),
-                        ) {
-                            continue;
-                        }
-                        for member in &file.ast.members {
-                            // Exact receiver identity only. A same-spelled
-                            // member elsewhere in the file -- a shadowing
-                            // local, an unrelated object -- is not this
-                            // contracted root, and registering its property
-                            // as a reactive source would invent a source the
-                            // contract never described.
-                            let same_root = entities
-                                .at(file.path.as_str(), member.object)
-                                .is_some_and(|symbol| symbol == root_symbol);
-                            if !same_root {
-                                continue;
-                            }
-                            let property = file.source_text(member.property).unwrap_or_default();
-                            let Some(returned) = contracted_return.properties.get(property) else {
-                                continue;
-                            };
-                            if let Some(symbol) = entities.at(file.path.as_str(), member.property) {
-                                push_contracted_return_source(
-                                    &mut result,
-                                    symbol,
-                                    symbol_id(property),
-                                    returned,
-                                    &contracted.local_name,
-                                    &contracted.contract_location,
-                                );
-                            }
-                        }
-                    }
-                }
-                _ => {}
-            }
-            continue;
-        }
-        let context = EffectiveReturnContext {
-            tuple_iteration_veto: lookup.tuple_iteration_may_be_mutated(),
-            file,
-            ast_index,
-            entities,
-            symbol_names,
-            resolved_contracts,
-            dialect: lookup.dialect,
-        };
-        if let Some((returned, export_name, contract_location)) =
-            effective_returned_callable_call(call, &context, 16)
-            && matches!(returned.kind.as_str(), "accessor" | "store-path")
-            && let Some(name) = binding.names.first()
-            && let Some(symbol) = entities.at(file.path.as_str(), name.span)
-        {
-            push_contracted_return_source(
-                &mut result,
-                symbol,
-                symbol_id(file.source_text(name.span).unwrap_or_default()),
-                &returned,
-                &export_name,
-                &contract_location,
-            );
             continue;
         }
         let primitive = call_primitive_name(file, call, entities, symbol_names, lookup.dialect);
@@ -1325,14 +906,8 @@ pub(crate) fn discover_file_sources(
             && let Some(name) = binding.names.first()
             && !crate::indexes::binding_written(file, name.span)
             && let Some(symbol) = entities.at(file.path.as_str(), name.span)
-            && let Some((origin_file, created, primitive)) = project_returned_source(
-                lookup,
-                file,
-                call,
-                entities,
-                symbol_names,
-                resolved_contracts,
-            )
+            && let Some((origin_file, created, primitive)) =
+                project_returned_source(lookup, file, call, entities, symbol_names)
         {
             // The caller binding is this call's source, never the callee's
             // declaration symbol. Separate calls keep separate identities.
@@ -1369,14 +944,11 @@ pub(crate) fn discover_file_sources(
             if options != AsyncSourceOptions::default() {
                 result.source_async_options.push((symbol.clone(), options));
             }
-            if created.arguments.first().is_some_and(|argument| {
-                computation_is_async_with_contracts(
-                    lookup,
-                    origin_file,
-                    argument.span,
-                    &resolved_contracts.by_symbol,
-                )
-            }) {
+            if created
+                .arguments
+                .first()
+                .is_some_and(|argument| computation_is_async(lookup, origin_file, argument.span))
+            {
                 result.async_sources.push(symbol.clone());
             }
             continue;
@@ -1403,14 +975,11 @@ pub(crate) fn discover_file_sources(
                     result
                         .source_primitives
                         .push((symbol.clone(), "dynamic".into()));
-                    if call.arguments.first().is_some_and(|argument| {
-                        computation_is_async_with_contracts(
-                            lookup,
-                            file,
-                            argument.span,
-                            &resolved_contracts.by_symbol,
-                        )
-                    }) {
+                    if call
+                        .arguments
+                        .first()
+                        .is_some_and(|argument| computation_is_async(lookup, file, argument.span))
+                    {
                         result.async_sources.push(symbol.clone());
                     }
                 }
@@ -1488,14 +1057,11 @@ pub(crate) fn discover_file_sources(
                 if options != AsyncSourceOptions::default() {
                     result.source_async_options.push((symbol.clone(), options));
                 }
-                if call.arguments.first().is_some_and(|argument| {
-                    computation_is_async_with_contracts(
-                        lookup,
-                        file,
-                        argument.span,
-                        &resolved_contracts.by_symbol,
-                    )
-                }) {
+                if call
+                    .arguments
+                    .first()
+                    .is_some_and(|argument| computation_is_async(lookup, file, argument.span))
+                {
                     result.async_sources.push(symbol.clone());
                 }
             }
@@ -1526,10 +1092,6 @@ pub(crate) fn discover_file_sources(
             }
         }
     }
-    result.accessors.retain(|(symbol, _)| {
-        !result.contracted_accessor_symbols.contains(symbol)
-            || !crate::value_identity::binding_has_write(file, entities, symbol)
-    });
     for assignment in &file.ast.assignments {
         let (Some(initializer), Some(name)) = (
             assignment.call_initializer,
@@ -1541,27 +1103,6 @@ pub(crate) fn discover_file_sources(
             continue;
         };
         let symbol = entities.at(file.path.as_str(), name);
-        let contracted = entities
-            .at(file.path.as_str(), call.callee)
-            .and_then(|callee| resolved_contracts.by_symbol.get(callee));
-        if let Some((symbol, (contracted_return, contracted))) = symbol.zip(
-            contracted
-                .and_then(|contracted| contracted.summary.returns.known())
-                .and_then(Option::as_ref)
-                .and_then(|returned| returned.elements.first())
-                .and_then(Option::as_ref)
-                .zip(contracted),
-        ) {
-            push_contracted_return_source(
-                &mut result,
-                symbol,
-                symbol_id(file.source_text(name).unwrap_or_default()),
-                contracted_return,
-                &contracted.local_name,
-                &contracted.contract_location,
-            );
-            continue;
-        }
         let primitive = call_primitive_name(file, call, entities, symbol_names, lookup.dialect);
         let resolved = known_primitive(&primitive);
         // Same seam as above, and the same reason.
@@ -1626,40 +1167,6 @@ pub(crate) fn discover_file_sources(
             }
         }
     }
-    for member in &file.ast.members {
-        let Some(call) = ast_index.call_by_span(member.object) else {
-            continue;
-        };
-        let Some(contracted) = entities
-            .at(file.path.as_str(), call.callee)
-            .and_then(|symbol| resolved_contracts.by_symbol.get(symbol))
-        else {
-            continue;
-        };
-        let Some(contracted_return) = contracted.summary.returns.known().and_then(Option::as_ref)
-        else {
-            continue;
-        };
-        let property = file.source_text(member.property).unwrap_or_default();
-        let returned = match contracted_return.kind.as_str() {
-            "object" => contracted_return.properties.get(property),
-            "store-path" => Some(contracted_return),
-            _ => None,
-        };
-        let Some((returned, symbol)) =
-            returned.zip(entities.at(file.path.as_str(), member.property))
-        else {
-            continue;
-        };
-        push_contracted_return_source(
-            &mut result,
-            symbol,
-            symbol_id(property),
-            returned,
-            &contracted.local_name,
-            &contracted.contract_location,
-        );
-    }
     result
 }
 
@@ -1677,7 +1184,6 @@ pub(crate) struct SourceDiscoveryMergeTarget<'a> {
     pub(crate) async_sources: &'a mut HashSet<SymbolId>,
     pub(crate) source_async_options: &'a mut HashMap<SymbolId, AsyncSourceOptions>,
     pub(crate) value_form_stores: &'a mut HashSet<SymbolId>,
-    pub(crate) contracted_accessor_symbols: &'a mut HashSet<SymbolId>,
 }
 
 #[derive(Default)]
@@ -1695,7 +1201,6 @@ pub(crate) struct SourceDiscoveryAggregate {
     pub(crate) async_sources: HashSet<SymbolId>,
     pub(crate) source_async_options: HashMap<SymbolId, AsyncSourceOptions>,
     pub(crate) value_form_stores: HashSet<SymbolId>,
-    pub(crate) contracted_accessor_symbols: HashSet<SymbolId>,
 }
 
 impl SourceDiscoveryAggregate {
@@ -1716,7 +1221,6 @@ impl SourceDiscoveryAggregate {
                 async_sources: &mut self.async_sources,
                 source_async_options: &mut self.source_async_options,
                 value_form_stores: &mut self.value_form_stores,
-                contracted_accessor_symbols: &mut self.contracted_accessor_symbols,
             },
         );
     }
@@ -1741,9 +1245,6 @@ impl SourceDiscoveryAggregate {
             .source_async_options
             .extend(self.source_async_options);
         target.value_form_stores.extend(self.value_form_stores);
-        target
-            .contracted_accessor_symbols
-            .extend(self.contracted_accessor_symbols);
     }
 }
 
@@ -1786,9 +1287,6 @@ pub(crate) fn merge_source_discovery(
     target
         .value_form_stores
         .extend(contribution.value_form_stores.iter().cloned());
-    target
-        .contracted_accessor_symbols
-        .extend(contribution.contracted_accessor_symbols.iter().cloned());
 }
 
 pub(crate) fn extend_source_discovery_symbols(
@@ -1867,11 +1365,6 @@ pub(crate) struct SourceDiscovery {
     /// `INVALID_REFRESH_TARGET` in dev (probed, rc.0). A store whose
     /// construction form is unknown is absent, keeping refresh acceptance.
     pub(crate) value_form_stores: HashSet<SymbolId>,
-    pub(crate) contract_reads: HashMap<SymbolId, Vec<crate::ContractReadSite>>,
-    pub(crate) contract_parameter_reads: HashMap<SymbolId, Vec<crate::ContractParameterReadSite>>,
-    pub(crate) contract_callbacks: HashMap<SymbolId, Vec<CallbackSummary>>,
-    pub(crate) contract_returns: HashMap<SymbolId, (ReturnSummary, Location)>,
-    pub(crate) contracted_accessor_symbols: HashSet<SymbolId>,
     /// ADR 0294: bindings and members whose only evidence of being a
     /// reactive source is a dialect type alias. Never in `accessors`.
     pub(crate) typed_sources: HashMap<SymbolId, TypedSource>,
@@ -1900,7 +1393,6 @@ pub(crate) struct StageContext<'a> {
     pub(crate) source_declarations: &'a HashMap<SymbolId, Declaration>,
     pub(crate) symbol_names: &'a HashMap<SymbolId, SymbolId>,
     pub(crate) semantic_lookup: &'a SemanticLookup<'a>,
-    pub(crate) resolved_contracts: &'a ResolvedContracts,
     pub(crate) runtime: &'a crate::RuntimeEnvironment,
 }
 
@@ -2023,7 +1515,6 @@ pub(crate) fn discover_sources(
         source_declarations,
         symbol_names,
         semantic_lookup,
-        resolved_contracts,
         runtime,
     } = *ctx;
     let mut clock = StageClock::new(emit_timings);
@@ -2040,91 +1531,6 @@ pub(crate) fn discover_sources(
     let mut async_sources = HashSet::<SymbolId>::new();
     let mut source_async_options = HashMap::<SymbolId, AsyncSourceOptions>::new();
     let mut value_form_stores = HashSet::<SymbolId>::new();
-    let mut contract_reads = HashMap::<SymbolId, Vec<crate::ContractReadSite>>::new();
-    let mut contract_parameter_reads =
-        HashMap::<SymbolId, Vec<crate::ContractParameterReadSite>>::new();
-    let mut contract_callbacks = HashMap::<SymbolId, Vec<CallbackSummary>>::new();
-    let mut contract_returns = HashMap::<SymbolId, (ReturnSummary, Location)>::new();
-    let mut contracted_accessor_symbols = HashSet::<SymbolId>::new();
-
-    for contracted in &resolved_contracts.bindings {
-        let direct_reads = contracted
-            .summary
-            .reactive_reads
-            .known()
-            .into_iter()
-            .flatten()
-            .filter(|read| matches!(read.kind.as_str(), "accessor" | "store-path"))
-            .map(|read| {
-                (
-                    format!("{}.{}", contracted.package_name, contracted.imported_name),
-                    contracted.local_name.clone(),
-                    contracted.contract_location.clone(),
-                    read.kind.clone(),
-                    read.execution.clone(),
-                )
-            })
-            .collect::<Vec<_>>();
-        if !direct_reads.is_empty() {
-            contract_reads.insert(contracted.symbol.clone(), direct_reads);
-        }
-        let parameter_reads = contracted
-            .summary
-            .reactive_reads
-            .known()
-            .into_iter()
-            .flatten()
-            .filter_map(|read| {
-                read.parameter.map(|parameter| {
-                    (
-                        parameter,
-                        format!("{}.{}", contracted.package_name, contracted.imported_name),
-                        contracted.local_name.clone(),
-                        contracted.contract_location.clone(),
-                        read.execution.clone(),
-                    )
-                })
-            })
-            .collect::<Vec<_>>();
-        if !parameter_reads.is_empty() {
-            contract_parameter_reads.insert(contracted.symbol.clone(), parameter_reads);
-        }
-        // Callable rows and explicit value enumerations only. An enumeration
-        // is retained for the occurrence Get consumer, never as a callable:
-        // a non-call row (`CallbackSummary::is_invocation`) is no
-        // graph edge, no invoked parameter, no wrapper and no re-pushed row. A
-        // member-path row is kept and every reader resolves the member it
-        // calls before folding anything (`contract_callback_invoked_value`,
-        // item B of ways-to-improve § 3.3). The key is still
-        // inserted for a known enumeration holding none, because its presence
-        // is the "callbacks known" fact the interprocedural pass reads.
-        if let Some(callbacks) = contracted.summary.callbacks.known() {
-            contract_callbacks.insert(
-                contracted.symbol.clone(),
-                callbacks
-                    .iter()
-                    .filter(|callback| {
-                        callback.is_invocation() || callback.protocol.is_value_enumeration()
-                    })
-                    .cloned()
-                    .collect(),
-            );
-        }
-        if let Some(returned) = contracted.summary.returns.known().and_then(Option::as_ref) {
-            contract_returns.insert(
-                contracted.symbol.clone(),
-                (returned.clone(), contracted.contract_location.clone()),
-            );
-            source_kinds.insert(
-                contracted.symbol.clone(),
-                if returned.kind == "store-path" {
-                    ReactiveSourceKind::Store
-                } else {
-                    ReactiveSourceKind::Accessor
-                },
-            );
-        }
-    }
 
     let mut retained_source_paths = HashSet::<String>::new();
     let mut changed_source_symbols = HashSet::<SymbolId>::new();
@@ -2140,7 +1546,6 @@ pub(crate) fn discover_sources(
                         .expect("project index contains every source file"),
                     entities,
                     symbol_names,
-                    resolved_contracts,
                 )
             });
             let mut aggregate = SourceDiscoveryAggregate::default();
@@ -2161,7 +1566,6 @@ pub(crate) fn discover_sources(
                 async_sources: &mut async_sources,
                 source_async_options: &mut source_async_options,
                 value_form_stores: &mut value_form_stores,
-                contracted_accessor_symbols: &mut contracted_accessor_symbols,
             });
         }
         Some(cache) => {
@@ -2210,7 +1614,6 @@ pub(crate) fn discover_sources(
                             .expect("project index contains every source file"),
                         entities,
                         symbol_names,
-                        resolved_contracts,
                     ),
                 )
             });
@@ -2266,7 +1669,6 @@ pub(crate) fn discover_sources(
                     async_sources: &mut async_sources,
                     source_async_options: &mut source_async_options,
                     value_form_stores: &mut value_form_stores,
-                    contracted_accessor_symbols: &mut contracted_accessor_symbols,
                 });
             }
         }
@@ -2338,7 +1740,6 @@ pub(crate) fn discover_sources(
                     call,
                     entities,
                     symbol_names,
-                    resolved_contracts,
                     (RETURNED_SOURCE_FORWARDS, false),
                 ) else {
                     continue;
@@ -2358,147 +1759,6 @@ pub(crate) fn discover_sources(
                     },
                 );
             }
-            let context = EffectiveReturnContext {
-                // This context records former candidates only, never authority.
-                tuple_iteration_veto: false,
-                file,
-                ast_index,
-                entities,
-                symbol_names,
-                resolved_contracts,
-                dialect: semantic_lookup.dialect,
-            };
-            for binding in file.ast.bindings.iter().filter(|binding| {
-                binding.immutable
-                    && binding.shape == solid_facts::ast::BindingShape::Identifier
-                    && binding.names.len() == 1
-            }) {
-                let root = binding.names[0].span;
-                let Some(call) = binding
-                    .call_initializer
-                    .and_then(|span| ast_index.call_by_span(span))
-                else {
-                    continue;
-                };
-                let Some(contract) = entities
-                    .at(file.path.as_str(), call.callee)
-                    .and_then(|symbol| resolved_contracts.by_symbol.get(symbol))
-                else {
-                    continue;
-                };
-                let Some(returned) = contract
-                    .summary
-                    .returns
-                    .known()
-                    .and_then(Option::as_ref)
-                    .and_then(|returned| effective_call_return(returned, call, &context, 16))
-                    .filter(|returned| returned.kind == "object")
-                else {
-                    continue;
-                };
-                let Some(root_symbol) = entities.at(file.path.as_str(), root) else {
-                    continue;
-                };
-                if !crate::value_identity::structural_binding_is_stable(
-                    file,
-                    entities,
-                    root_symbol,
-                    &returned,
-                    false,
-                ) {
-                    continue;
-                }
-                for member in &file.ast.members {
-                    if file.ast.reference_declaration(member.object) != Some(root)
-                        || file.ast.computed_members.contains(&member.span)
-                    {
-                        continue;
-                    }
-                    let Some(value) = file
-                        .source_text(member.property)
-                        .and_then(|key| returned.properties.get(key))
-                    else {
-                        continue;
-                    };
-                    let kind = match value.kind.as_str() {
-                        "accessor" => ReactiveSourceKind::Accessor,
-                        "store-path" => ReactiveSourceKind::Store,
-                        _ => continue,
-                    };
-                    if let Some(symbol) = entities
-                        .at(file.path.as_str(), member.property)
-                        .or_else(|| entities.at(file.path.as_str(), member.span))
-                        && !runtime_sources.contains(symbol)
-                    {
-                        typed_sources.insert(
-                            symbol.clone(),
-                            TypedSource {
-                                name: symbol_id(file.source_text(member.span).unwrap_or_default()),
-                                declaration: location(file.path.shared(), member.span),
-                                kind,
-                                implementation_visible: false,
-                                held_body_unfollowed: false,
-                            },
-                        );
-                    }
-                }
-            }
-            for binding in file
-                .ast
-                .bindings
-                .iter()
-                .filter(|binding| binding.shape == solid_facts::ast::BindingShape::Array)
-            {
-                let Some(call) = binding
-                    .call_initializer
-                    .and_then(|span| ast_index.call_by_span(span))
-                else {
-                    continue;
-                };
-                let Some(contract) = entities
-                    .at(file.path.as_str(), call.callee)
-                    .and_then(|symbol| resolved_contracts.by_symbol.get(symbol))
-                else {
-                    continue;
-                };
-                let Some(returned) = contract
-                    .summary
-                    .returns
-                    .known()
-                    .and_then(Option::as_ref)
-                    .and_then(|returned| effective_call_return(returned, call, &context, 16))
-                    .filter(|returned| returned.kind == "tuple")
-                else {
-                    continue;
-                };
-                for (name, value) in binding
-                    .array_slots
-                    .iter()
-                    .zip(&returned.elements)
-                    .filter_map(|(name, value)| name.as_ref().zip(value.as_ref()))
-                {
-                    if crate::indexes::binding_written(file, name.span) {
-                        continue;
-                    }
-                    let kind = match value.kind.as_str() {
-                        "accessor" => ReactiveSourceKind::Accessor,
-                        "store-path" => ReactiveSourceKind::Store,
-                        _ => continue,
-                    };
-                    if let Some(symbol) = entities.at(file.path.as_str(), name.span) {
-                        typed_sources.insert(
-                            symbol.clone(),
-                            TypedSource {
-                                name: symbol_id(file.source_text(name.span).unwrap_or_default()),
-                                declaration: location(file.path.shared(), name.span),
-                                kind,
-                                implementation_visible: false,
-                                held_body_unfollowed: false,
-                            },
-                        );
-                    }
-                }
-            }
         }
     }
     for entity in facts.typescript.entities() {
@@ -2514,9 +1774,6 @@ pub(crate) fn discover_sources(
         let Some(symbol) = entities.get(&entity.location) else {
             continue;
         };
-        if resolved_contracts.by_symbol.contains_key(symbol) {
-            continue;
-        }
         let Some((role, type_declaration)) =
             descriptor
                 .alias_declarations
@@ -2582,13 +1839,6 @@ pub(crate) fn discover_sources(
                             && !file.ast.computed_members.contains(&member.span)
                             && entities.at(file.path.as_str(), member.property) == Some(symbol)
                             && entities.at(file.path.as_str(), member.object) != Some(symbol)
-                            && !is_contracted_container_value(
-                                file,
-                                entities,
-                                resolved_contracts,
-                                member.object,
-                                16,
-                            )
                     })
                 }))
         {
@@ -2750,105 +2000,6 @@ pub(crate) fn discover_sources(
                     let Some(parameter) = function
                         .parameters
                         .get(*index)
-                        .and_then(|parameter| parameter.names.first())
-                    else {
-                        continue;
-                    };
-                    let declaration = location(file.path.shared(), parameter.span);
-                    if let Some(symbol) = entities.get(&declaration) {
-                        runtime_sources.insert(symbol.clone());
-                        accessors.entry(symbol.clone()).or_insert((
-                            symbol_id(file.source_text(parameter.span).unwrap_or_default()),
-                            declaration,
-                        ));
-                    }
-                }
-            }
-        }
-
-        // Callback parameters can themselves be runtime-created accessors.
-        // This is not derivable from the callback's TypeScript declaration:
-        // mapArray/indexArray create the index/item signals internally and
-        // hand them to the mapper. Keep that contract in the dialect beside
-        // the JSX-children equivalent above.
-        for call in &file.ast.calls {
-            if let Some(symbol) = semantic_lookup.callee_symbol(file, call.callee)
-                && let Some(callbacks) = contract_callbacks.get(symbol)
-            {
-                for callback in callbacks {
-                    // The function the row invokes: the argument itself, or
-                    // for a member-path row (item B) the member the call's own
-                    // literal names -- never the argument when it is only the
-                    // container of the invoked member.
-                    let Some((_, Some(invoked))) =
-                        crate::interproc::contract_callback_invoked_value(
-                            file,
-                            semantic_lookup,
-                            call,
-                            callback,
-                        )
-                    else {
-                        continue;
-                    };
-                    let Some(function) = file
-                        .ast
-                        .functions
-                        .iter()
-                        .find(|function| function.span == file.ast.peel_ts_sugar_span(invoked))
-                    else {
-                        continue;
-                    };
-                    for (parameter_index, descriptor) in callback.arguments.iter().enumerate() {
-                        let Some(descriptor) = descriptor else {
-                            continue;
-                        };
-                        if descriptor.kind != "accessor" {
-                            continue;
-                        }
-                        let Some(parameter) = function
-                            .parameters
-                            .get(parameter_index)
-                            .and_then(|parameter| parameter.names.first())
-                        else {
-                            continue;
-                        };
-                        let declaration = location(file.path.shared(), parameter.span);
-                        if let Some(parameter_symbol) = entities.get(&declaration) {
-                            runtime_sources.insert(parameter_symbol.clone());
-                            accessors.entry(parameter_symbol.clone()).or_insert((
-                                symbol_id(file.source_text(parameter.span).unwrap_or_default()),
-                                declaration,
-                            ));
-                        }
-                    }
-                }
-            }
-            let Some(primitive) =
-                call_primitive_name(file, call, entities, symbol_names, semantic_lookup.dialect)
-                    .as_ref()
-                    .and_then(PrimitiveName::primitive)
-            else {
-                continue;
-            };
-            for (argument_index, argument) in call.arguments.iter().enumerate() {
-                let parameter_indices = semantic_lookup
-                    .dialect
-                    .callback_semantics_at(primitive, argument_index, call.arguments.len())
-                    .accessor_parameters;
-                if parameter_indices.is_empty() {
-                    continue;
-                }
-                let Some(function) =
-                    file.ast.functions.iter().find(|function| {
-                        function.span == file.ast.peel_ts_sugar_span(argument.span)
-                    })
-                else {
-                    continue;
-                };
-                for parameter_index in parameter_indices {
-                    let Some(parameter) = function
-                        .parameters
-                        .get(*parameter_index)
                         .and_then(|parameter| parameter.names.first())
                     else {
                         continue;
@@ -3162,11 +2313,6 @@ pub(crate) fn discover_sources(
         async_sources,
         source_async_options,
         value_form_stores,
-        contract_reads,
-        contract_parameter_reads,
-        contract_callbacks,
-        contract_returns,
-        contracted_accessor_symbols,
         typed_sources,
         prop_sources,
         uncertain_prop_sources,

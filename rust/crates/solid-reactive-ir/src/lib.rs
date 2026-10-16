@@ -3,9 +3,8 @@ mod attribution;
 mod cache;
 mod callback_return;
 mod cleanup;
-pub mod contract_semantics;
+pub(crate) mod contract_semantics;
 mod contracts;
-mod creates_walk;
 mod development_feedback;
 mod directives;
 pub use development_feedback::{
@@ -43,13 +42,8 @@ mod upstream_compat;
 mod value_flow;
 mod value_identity;
 
-pub use attribution::ObligationReach;
-pub use creates_walk::{CreatesDecline, CreatesDeclineKind, CreatesProposalWalk};
 pub use owners::function_binding_name;
-pub use pipeline::{
-    AnalysisInputs, HostPairingError, build, build_with_accepted_contracts_measured,
-    build_with_analysis_inputs_measured,
-};
+pub use pipeline::{AnalysisInputs, build, build_with_analysis_inputs_measured};
 pub use returns_walk::{
     ArgumentContainer, ReturnsDecline, described_callable_returns, literal_structural_returns,
     reading_callable_returns, value_completion, valueless_completion,
@@ -81,14 +75,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use contracts::{
-    ContractAnalysis, ContractGraph, ContractSemantics, contract_export_summaries,
-    contract_export_summaries_incremental,
-};
-pub use contracts::{
-    ExportKindProof, export_kind_proof, export_kind_proof_from_entity, project_accepted_export,
-    project_export_semantics, raised_function_export,
-};
 use execution_role::{
     NamedCallbackRoles, allowed_callback_spans, assigned_member_function_contains, execution_role,
     named_callback_roles, semantic_execution_role,
@@ -96,6 +82,7 @@ use execution_role::{
 use identity::{SymbolId, SymbolInterner, SymbolName, symbol_id, symbol_name};
 use indexes::{EntitySymbols, ProjectIndexes, SemanticLookup};
 use interproc::{SummaryNode, SummaryRead, SummaryReads};
+pub use package_boundary::UncertifiableImportReason;
 use serde::{Deserialize, Serialize};
 use solid_dialect::{Dialect, Primitive};
 use solid_facts::ProjectFacts;
@@ -665,28 +652,6 @@ pub enum StaticDefectKind {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         admission_refusal: Option<String>,
     },
-    /// A package export has different certified summaries for different
-    /// conditional runtime targets. The current project analysis has no
-    /// selected package condition, so applying any one variant would be a
-    /// guess; keep the import uncertifiable until a human selects the target.
-    PackageContractEnvironmentDependent {
-        module: String,
-        export: String,
-        reexported: bool,
-    },
-    /// An exported callback reached an external call whose execution timing
-    /// is not certified. The fields are deliberately data, not a guessed
-    /// contract: the diagnostic identifies the exact open semantic leaf while
-    /// analysis remains blocked until that leaf is proved and receipted.
-    UnknownCallbackExecution {
-        package: String,
-        entrypoint: String,
-        function: String,
-        parameter: usize,
-        parameter_type: String,
-        required_execution: String,
-        claim_context: String,
-    },
     MissingEffectFunction,
     ReactiveSourceUncaptured {
         source: String,
@@ -818,13 +783,6 @@ pub enum StaticDefectFamily {
     /// The contract-incomplete family: an import whose package contract does
     /// not describe the surface the project uses.
     PackageContractIncomplete,
-    /// Projects to the same dialect rule as
-    /// [`Self::PackageContractIncomplete`] but keeps its own dedup identity.
-    /// A contract-generation obligation and a contract-incomplete consumer
-    /// obligation are two separate claims about the same import, and a call
-    /// site can produce both at one start byte; sharing an identity would let
-    /// whichever the walk pushed first swallow the other.
-    UnknownCallbackExecution,
     MissingEffectFunction,
     ReactiveSourceUncaptured,
     ReactiveDispatchUnresolved,
@@ -850,7 +808,6 @@ impl StaticDefectFamily {
             Self::ReactiveReadAfterAwait => "reactive-read-after-await",
             Self::ComponentReturnsConditionally => "components-return-once",
             Self::PackageContractIncomplete => "package-contract-incomplete",
-            Self::UnknownCallbackExecution => "unknown-callback-execution",
             Self::MissingEffectFunction => "missing-effect-function",
             Self::ReactiveSourceUncaptured => "reactive-source-uncaptured",
             Self::ReactiveDispatchUnresolved => "reactive-dispatch-unresolved",
@@ -876,11 +833,9 @@ impl StaticDefectKind {
             Self::ComponentReturnsConditionally => {
                 StaticDefectFamily::ComponentReturnsConditionally
             }
-            Self::PackageContractExportMissing { .. }
-            | Self::PackageContractEnvironmentDependent { .. } => {
+            Self::PackageContractExportMissing { .. } => {
                 StaticDefectFamily::PackageContractIncomplete
             }
-            Self::UnknownCallbackExecution { .. } => StaticDefectFamily::UnknownCallbackExecution,
             Self::MissingEffectFunction => StaticDefectFamily::MissingEffectFunction,
             Self::ReactiveSourceUncaptured { .. } => StaticDefectFamily::ReactiveSourceUncaptured,
             Self::ReactiveDispatchUnresolved { .. }
@@ -912,10 +867,6 @@ impl StaticDefectKind {
             Self::ReactiveReadAfterAwait { .. } => "ReactiveReadAfterAwait",
             Self::ComponentReturnsConditionally => "ComponentReturnsConditionally",
             Self::PackageContractExportMissing { .. } => "PackageContractExportMissing",
-            Self::PackageContractEnvironmentDependent { .. } => {
-                "PackageContractEnvironmentDependent"
-            }
-            Self::UnknownCallbackExecution { .. } => "UnknownCallbackExecution",
             Self::MissingEffectFunction => "MissingEffectFunction",
             Self::ReactiveSourceUncaptured { .. } => "ReactiveSourceUncaptured",
             Self::ReactiveDispatchUnresolved { .. } => "ReactiveDispatchUnresolved",
@@ -948,29 +899,12 @@ impl StaticDefectKind {
         matches!(
             self,
             Self::PackageContractExportMissing { .. }
-                | Self::PackageContractEnvironmentDependent { .. }
-                | Self::UnknownCallbackExecution { .. }
                 | Self::ReactiveSourceUncaptured { .. }
                 | Self::ReactiveDispatchUnresolved { .. }
                 | Self::ReactiveCallbackUnresolved { .. }
                 | Self::ResultAccessCallbackUnplaced { .. }
                 | Self::StructuredReturnUnresolved { .. }
         )
-    }
-
-    /// Whether contract emission refuses this obligation through
-    /// [`Program::contract_generation_obligations`] rather than through the
-    /// project-wide defect list.
-    ///
-    /// Those obligations carry the exported surface identity and the callee
-    /// whose timing a contract author has to describe, so emission consults
-    /// them only after resolving the requested entrypoint's exports.
-    /// Refusing from the defect list first would ignore that filter and block
-    /// every entrypoint over an obligation in an unrelated file. The metrics
-    /// still count this class through [`Self::is_unresolved_obligation`].
-    #[must_use]
-    pub fn refused_through_generation_obligations(&self) -> bool {
-        matches!(self, Self::UnknownCallbackExecution { .. })
     }
 }
 
@@ -1426,23 +1360,6 @@ pub struct ContractExport {
     /// with any other item keeps: a partly restated enumeration would be a
     /// stronger claim than the dependency's.
     pub returns_restated: Vec<contract_semantics::Operation>,
-    /// Whether the generator's own [`crate::CreatesProposalWalk`] found no call
-    /// inside this export's implementation that a `creates: []` proposal would
-    /// contradict.
-    ///
-    /// `false` is the default and the fail-closed answer: a summary no walk
-    /// reached proposes nothing. This is a *proposal* input — the claim itself
-    /// is proved, or refused, by the certifier's implementation census.
-    pub creates_walk_clean: bool,
-    /// Why that walk declined, when it did: every blocker reachable from this
-    /// export's implementation span, lexically and through the resolved local
-    /// call edges ([`crate::CreatesProposalWalk::declines_for`]).
-    ///
-    /// **Measurement, never evidence.** No claim is decided from it, it is
-    /// never encoded into a package-contract document, and an empty list means
-    /// only "no blocker was named" — for a summary no walk reached that is
-    /// silence, not a clean walk, which is what `creates_walk_clean` says.
-    pub creates_walk_declines: Vec<crate::CreatesDecline>,
     /// Whether the generator's valueless-completion walk cleared this export's
     /// implementation (ADR 0035): a block-bodied, non-`async`, non-generator
     /// function whose own body carries no `return` with an expression. A
@@ -1790,16 +1707,6 @@ pub struct ContractReadContext {
     pub guarded: bool,
 }
 
-pub(crate) type ContractReadSite = (
-    String,
-    String,
-    Location,
-    String,
-    Option<ContractReadContext>,
-);
-pub(crate) type ContractParameterReadSite =
-    (usize, String, String, Location, Option<ContractReadContext>);
-
 impl ContractReadContext {
     /// The read runs in the caller's execution role; the contract's count and
     /// timing decide whether it is a proven read there.
@@ -2080,39 +1987,7 @@ pub struct Program {
     pub directive_creations: Vec<PrimitiveCreation>,
     pub missing_owners: Vec<OwnerRequirement>,
     pub async_reads: Vec<AsyncRead>,
-    #[serde(skip)]
-    pub contract_exports: Arc<BTreeMap<String, ContractExport>>,
-    pub contract_generation_obligations: Vec<ContractGenerationObligation>,
-    /// Which project functions can reach each unresolved proof obligation.
-    ///
-    /// Contract emission attributes an open claim to exactly the exports
-    /// that can reach the obligation; see [`ObligationReach`]. Empty when the
-    /// build produced no unresolved obligation, and empty for an obligation
-    /// whose location is outside every function body.
-    pub obligation_reach: Vec<ObligationReach>,
     pub obligation_counts: ObligationCounts,
-    /// How many import and `export … from` declarations a contract named and
-    /// the attested resolution then bound or refused.
-    #[serde(default)]
-    pub contract_binding: ContractBindingCounts,
-    /// Which call sites forbid *proposing* a closed `creates` domain.
-    ///
-    /// Deliberately not on the wire: it is generation-time input, and its
-    /// [`Default`] refuses every span, so a deserialized `Program` proposes
-    /// nothing rather than proposing everything.
-    #[serde(skip)]
-    pub creates_proposal_walk: CreatesProposalWalk,
-    /// ADR 0109's proposal input: which parameter's reactivity a props merge
-    /// returned by each function carries.
-    ///
-    /// Off the wire for the same reason as the walk above, and with the same
-    /// fail-closed [`Default`]: an absent entry is "do not propose", so a
-    /// deserialized `Program` proposes none of these rather than all of them.
-    #[serde(skip)]
-    pub merged_props_returns: returns_walk::MergedPropsReturns,
-    /// ADR 0115's proposal input, off the wire and fail-closed the same way.
-    #[serde(skip)]
-    pub argument_container_returns: returns_walk::ArgumentContainerReturns,
 }
 
 /// How contract binding answered across the program's declarations.
@@ -2262,13 +2137,8 @@ impl IncrementalBuilder {
         facts: &ProjectFacts,
         dialect: &dyn Dialect,
     ) -> Result<(Program, BuildTimings), BuildError> {
-        self.build_with_accepted_contracts_shared(
-            facts,
-            dialect,
-            &contract_semantics::AcceptedContractIndex::default(),
-            &RuleOptions::default(),
-        )
-        .map(|(program, timings)| ((*program).clone(), timings))
+        self.build_shared(facts, dialect)
+            .map(|(program, timings)| ((*program).clone(), timings))
     }
 
     /// Build a program behind shared ownership. This is the preferred service
@@ -2279,34 +2149,16 @@ impl IncrementalBuilder {
         facts: &ProjectFacts,
         dialect: &dyn Dialect,
     ) -> Result<(Arc<Program>, BuildTimings), BuildError> {
-        self.build_with_accepted_contracts_shared(
+        self.build_with_analysis_inputs_shared(
             facts,
             dialect,
-            &contract_semantics::AcceptedContractIndex::default(),
+            AnalysisInputs::empty(),
             &RuleOptions::default(),
         )
     }
 
-    /// Build from receipt-validated normalized semantics. The accepted index
-    /// supplies the complete cache identity, including exact import/artifact
-    /// bindings and the proof policy that authorized every closed claim.
-    pub fn build_with_accepted_contracts_shared(
-        &mut self,
-        facts: &ProjectFacts,
-        dialect: &dyn Dialect,
-        contracts: &contract_semantics::AcceptedContractIndex,
-        rule_options: &RuleOptions,
-    ) -> Result<(Arc<Program>, BuildTimings), BuildError> {
-        self.build_with_analysis_inputs_shared(
-            facts,
-            dialect,
-            AnalysisInputs::contracts_only(contracts),
-            rule_options,
-        )
-    }
-
-    /// [`Self::build_with_accepted_contracts_shared`] given a package
-    /// boundary too. Both inputs are part of the cache identity.
+    /// A build given the package boundary and host, both part of the cache
+    /// identity.
     pub fn build_with_analysis_inputs_shared(
         &mut self,
         facts: &ProjectFacts,
@@ -2314,12 +2166,6 @@ impl IncrementalBuilder {
         inputs: AnalysisInputs<'_>,
         rule_options: &RuleOptions,
     ) -> Result<(Arc<Program>, BuildTimings), BuildError> {
-        let external_contracts = inputs.contracts.external_packages();
-        let inputs = AnalysisInputs {
-            boundary: inputs.boundary,
-            contracts: external_contracts.as_ref(),
-            hosts: inputs.hosts,
-        };
         let total_started = Instant::now();
         let lookup_started = Instant::now();
         let premise_key = (

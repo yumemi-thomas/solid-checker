@@ -82,16 +82,6 @@
       "fixes": 0
     },
     {
-      "rule": "package-contract-incomplete",
-      "code": "SC9005",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/rc9-omit-predicate/App.tsx",
-      "start": 4067,
-      "end": 4073,
-      "fixes": 0
-    },
-    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",

@@ -2,16 +2,6 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "package-contract-incomplete",
-      "code": "SC9005",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/write-in-deferred-callback/App.tsx",
-      "start": 210,
-      "end": 218,
-      "fixes": 0
-    },
-    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",

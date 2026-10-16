@@ -1060,18 +1060,14 @@ fn rc9_call_forms_follow_the_runtime_they_select() {
                 .all(|finding| finding["kind"] == "uncertifiable"),
             "{findings:#?}"
         );
-        // The exported wrapper's own open callback (its callers may be outside
-        // the project), the control and the eight predicates, and the SC9014
-        // notice: rc.9 is older than the audited rc.13 (ADR 0194).
-        assert_eq!(
-            findings_for_rule(&findings, "package-contract-incomplete")
-                .iter()
-                .map(|finding| line(finding))
-                .collect::<Vec<_>>(),
-            [Some(100)],
+        // The control and the eight predicates, and the SC9014 notice: rc.9
+        // is older than the audited rc.13 (ADR 0194). The exported wrapper
+        // owes no contract-generation obligation: no contract is generated.
+        assert!(
+            findings_for_rule(&findings, "package-contract-incomplete").is_empty(),
             "{findings:#?}"
         );
-        assert_eq!(findings.len(), 11, "{findings:#?}");
+        assert_eq!(findings.len(), 10, "{findings:#?}");
         assert_eq!(
             findings_for_rule(&findings, "unaudited-solid-release").len(),
             1,
@@ -1195,25 +1191,6 @@ fn interprocedural_diagnostics_point_to_the_calling_component() {
 }
 
 #[test]
-fn unknown_callback_diagnostic_contains_actionable_open_claim_context() {
-    let Some(findings) = diagnostic_fixture("package-unknown-callback-producer") else {
-        return;
-    };
-    let callback_findings = findings_for_rule(&findings, "package-contract-incomplete");
-    assert_eq!(callback_findings.len(), 1, "{findings:#?}");
-    let finding = &callback_findings[0];
-    let message = finding["message"].as_str().unwrap_or_default();
-    let hint = finding["hint"].as_str().unwrap_or_default();
-    assert!(message.contains("current project.:schedule"), "{message}");
-    assert!(message.contains("parameter 0 (() => void)"), "{message}");
-    assert!(hint.contains("solid-checker-open-contract-claim"), "{hint}");
-    assert!(hint.contains("semanticModelVersion\":1"), "{hint}");
-    assert!(!hint.contains("schemaVersion\":1"), "{hint}");
-    assert!(hint.contains("choose exactly one audited mode"), "{hint}");
-    assert!(hint.contains("solid-checker contract generate"), "{hint}");
-}
-
-#[test]
 fn control_flow_and_effect_phases_classify_strict_reads() {
     // control-flow: the two frozen Show-callback reads, plus the two frozen
     // reads under <For keyed={byId}> — a named key function proven callable
@@ -1264,7 +1241,7 @@ fn default_output_groups_coverage_gaps_after_findings_to_review() {
     let open = run("feedback-tiers-open", "default");
     let review = open.find("Needs review (1)").expect("review heading");
     let coverage = open
-        .find("Analysis coverage: 2 sites in 2 groups")
+        .find("Analysis coverage: 1 site in 1 group")
         .expect("coverage heading");
     assert!(review < coverage, "{open}");
     // A coverage gap is grouped by family and subject, with its first site,
@@ -1277,15 +1254,13 @@ fn default_output_groups_coverage_gaps_after_findings_to_review() {
     );
     assert!(open.contains("      ageOf (1)\n"), "{open}");
     assert!(open.contains("first at App.tsx:18:21"), "{open}");
-    assert!(
-        open.contains("[SC9005] Callbacks this project's exports hand to code with unknown timing: 1 site in 1 export"),
-        "{open}"
-    );
+    // No package contract is generated, so an export owes none (D2).
+    assert!(!open.contains("SC9005"), "{open}");
     assert!(!open[coverage..].contains(",-["), "{open}");
     // `--format full` keeps every finding in place.
     let full = run("feedback-tiers-open", "full");
     assert!(!full.contains("Analysis coverage"), "{full}");
-    assert!(full.contains("[SC9005] callback parameter 0"), "{full}");
+    assert!(!full.contains("SC9005"), "{full}");
 
     // The same source in a closed program: no contract-generation obligation.
     let closed = run("feedback-tiers", "default");

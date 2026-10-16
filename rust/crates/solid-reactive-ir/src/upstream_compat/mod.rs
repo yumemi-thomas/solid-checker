@@ -672,7 +672,6 @@ pub(super) struct UpstreamCompatContext<'a> {
     /// Read as the negative: a callee absent from here, absent from the
     /// dialect's primitives, and with no body in the project is one whose
     /// reactive behaviour nothing in the analysis knows.
-    pub(super) contracted: &'a HashMap<SymbolId, crate::contracts::ResolvedContractBinding>,
     pub(super) prefer_for_enabled: bool,
     pub(super) prefer_show_enabled: bool,
 }
@@ -753,7 +752,6 @@ pub(crate) fn check_project(
                 ctx.accessors.keys(),
             )
         }),
-        contracted: ctx.contracted,
         prefer_for_enabled,
         prefer_show_enabled,
     };

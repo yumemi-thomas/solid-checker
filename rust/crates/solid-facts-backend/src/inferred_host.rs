@@ -11,7 +11,6 @@ use solid_facts::ast::{
 use solid_facts::core::Span;
 use solid_facts::resolution::{ImportResolution, SpecifierAttestation};
 use solid_facts::{FileFacts, ProjectFacts};
-use solid_reactive_ir::contract_semantics::AcceptedContractIndex;
 use solid_reactive_ir::hosts::{
     BrowserRootManifest, HostExecutionRegion, HostModule, HostScope, ProjectHostIndex,
 };
@@ -2496,12 +2495,12 @@ fn discovered_index(
     directory: &Path,
     facts: &ProjectFacts,
     dialect: &dyn solid_dialect::Dialect,
-    packages: Option<&AcceptedContractIndex>,
+    admitted: bool,
 ) -> Result<ProjectHostIndex, DiscoveryRefusal> {
     let inputs = discovery_inputs(directory, facts, dialect)?;
-    let mut index = discovered_index_with_inputs(&inputs, facts, dialect, packages)?;
+    let mut index = discovered_index_with_inputs(&inputs, facts, dialect, admitted)?;
     if !index.is_empty() {
-        attach_discovery_inputs(&mut index, &inputs, facts, dialect, packages)?;
+        attach_discovery_inputs(&mut index, &inputs, facts, dialect, admitted)?;
     }
     Ok(index)
 }
@@ -2511,7 +2510,7 @@ fn attach_discovery_inputs(
     prepared: &DiscoveryInputs,
     facts: &ProjectFacts,
     dialect: &dyn solid_dialect::Dialect,
-    packages: Option<&AcceptedContractIndex>,
+    admitted: bool,
 ) -> Result<(), DiscoveryRefusal> {
     let _stage = HostStage::new("host-discovery-replay");
     let directory = &prepared.directory;
@@ -2561,7 +2560,7 @@ fn attach_discovery_inputs(
     // precedence must also be made *after* the full input generation was
     // captured. Rebuild scopes now; the preliminary graph only selected
     // whether this work was necessary, and supplies no final authority.
-    let mut current = discovered_index_with_inputs(prepared, facts, dialect, packages)?;
+    let mut current = discovered_index_with_inputs(prepared, facts, dialect, admitted)?;
     for (path, identity) in &index.manifest.inputs {
         if current
             .manifest
@@ -2587,11 +2586,11 @@ fn discovered_index_with_inputs(
     prepared: &DiscoveryInputs,
     facts: &ProjectFacts,
     dialect: &dyn solid_dialect::Dialect,
-    // None is provisional only. The final pass enforces static package loads
-    // independently of whether the behavior index has a contract for them.
-    packages: Option<&AcceptedContractIndex>,
+    // `false` is provisional only. The final pass enforces static package
+    // loads itself.
+    admitted: bool,
 ) -> Result<ProjectHostIndex, DiscoveryRefusal> {
-    let _stage = HostStage::new(if packages.is_some() {
+    let _stage = HostStage::new(if admitted {
         "host-discovery-admitted"
     } else {
         "host-discovery-provisional"
@@ -3141,7 +3140,7 @@ fn discovered_index_with_inputs(
             } else if row.resolution == ImportResolution::NodeModules {
                 let mut package_inputs = Vec::new();
                 let resolver_active = config.tsconfig_paths || browser_map;
-                if packages.is_none() {
+                if !admitted {
                     // The provisional graph schedules package analysis; its
                     // optimistic edges are not final linking authority. Even
                     // here a selected file must be handled by reviewed Vite.
@@ -3411,47 +3410,35 @@ fn discovered_index_with_inputs(
     Ok(index)
 }
 
-/// What host inference returns: the contracts both views are answered from,
-/// the host that selected the browser view (`None` whenever no browser view
-/// exists: every refusal and every declared target), and the run note.
+/// What host inference returns: the host that selected the browser execution
+/// (`None` on every refusal and every declared target), and the run note.
 ///
-/// `hosts` is the analysis's own input. Hand it to
-/// [`solid_reactive_ir::AnalysisInputs::with_hosts`] together with `contracts`;
-/// `contracts` carries only the derived view selection, from which no host can
-/// be recovered.
+/// `hosts` is the analysis's own input; hand it to
+/// [`solid_reactive_ir::AnalysisInputs::with_hosts`].
 #[derive(Debug)]
-pub struct InferredAcceptedContracts {
-    pub contracts: AcceptedContractIndex,
+pub struct InferredHost {
     pub hosts: Option<ProjectHostIndex>,
     pub note: Option<String>,
 }
 
-impl InferredAcceptedContracts {
-    fn without_host(contracts: AcceptedContractIndex, note: Option<String>) -> Self {
-        Self {
-            contracts,
-            hosts: None,
-            note,
-        }
+impl InferredHost {
+    fn without_host(note: Option<String>) -> Self {
+        Self { hosts: None, note }
     }
 }
 
 /// Native run note. The caller must replay it through the existing note channel
 /// on fresh analyses and cached daemon answers alike. Explicit runtime
 /// selections bypass discovery.
-pub fn inferred_project_accepted_contracts_with_note(
+pub fn inferred_project_host_with_note(
     directory: &Path,
     runtime: &RuntimeEnvironment,
     dialect: &dyn solid_dialect::Dialect,
     facts: &ProjectFacts,
-    requirements: AcceptedContractIndex,
-) -> Result<InferredAcceptedContracts, BackendError> {
+) -> Result<InferredHost, BackendError> {
     let conditions = runtime.selected_conditions();
-    // No package contract is consumed: the baseline and the browser view are
-    // both the requirement-only index.
-    let baseline = requirements.clone();
     if runtime.target.is_some() {
-        return Ok(InferredAcceptedContracts::without_host(baseline, None));
+        return Ok(InferredHost::without_host(None));
     }
     let refused = |reason: String| {
         Some(format!(
@@ -3459,97 +3446,42 @@ pub fn inferred_project_accepted_contracts_with_note(
         ))
     };
     if !conditions.is_empty() {
-        return Ok(InferredAcceptedContracts::without_host(
-            baseline,
-            refused(format!(
-                "{}: explicit runtime conditions select {conditions:?}",
-                facts.project_id
-            )),
-        ));
+        return Ok(InferredHost::without_host(refused(format!(
+            "{}: explicit runtime conditions select {conditions:?}",
+            facts.project_id
+        ))));
     }
     if runtime.program_boundary == Some(ProgramBoundary::Open) {
-        return Ok(InferredAcceptedContracts::without_host(
-            baseline,
-            refused(format!(
-                "{}: explicit open program boundary",
-                facts.project_id
-            )),
-        ));
+        return Ok(InferredHost::without_host(refused(format!(
+            "{}: explicit open program boundary",
+            facts.project_id
+        ))));
     }
     let inputs = match discovery_inputs(directory, facts, dialect) {
         Ok(inputs) => inputs,
-        Err(reason) => {
-            return Ok(InferredAcceptedContracts::without_host(
-                baseline,
-                refused(reason.message()),
-            ));
-        }
+        Err(reason) => return Ok(InferredHost::without_host(refused(reason.message()))),
     };
-    let mut index = match discovered_index_with_inputs(&inputs, facts, dialect, None) {
+    let mut index = match discovered_index_with_inputs(&inputs, facts, dialect, false) {
         Ok(index) if index.is_empty() => {
-            return Ok(InferredAcceptedContracts::without_host(
-                baseline,
-                refused(index.manifest.reason),
-            ));
+            return Ok(InferredHost::without_host(refused(index.manifest.reason)));
         }
         Ok(index) => index,
-        Err(reason) => {
-            return Ok(InferredAcceptedContracts::without_host(
-                baseline,
-                refused(reason.message()),
-            ));
-        }
+        Err(reason) => return Ok(InferredHost::without_host(refused(reason.message()))),
     };
-    let browser = requirements;
     // The provisional graph schedules manifest capture; it supplies no final
     // authority. Build the admitted graph only after that capture, inside the
     // replay below, and compare every observation with the complete generation.
-    // Both complete contract indexes remain independent (ADR 0140).
-    if let Err(reason) =
-        attach_discovery_inputs(&mut index, &inputs, facts, dialect, Some(&browser))
-    {
-        return Ok(InferredAcceptedContracts::without_host(
-            baseline,
-            refused(reason.message()),
-        ));
+    if let Err(reason) = attach_discovery_inputs(&mut index, &inputs, facts, dialect, true) {
+        return Ok(InferredHost::without_host(refused(reason.message())));
     }
     if index.is_empty() {
-        return Ok(InferredAcceptedContracts::without_host(
-            baseline,
-            refused(index.manifest.reason),
-        ));
+        return Ok(InferredHost::without_host(refused(index.manifest.reason)));
     }
-    // Invocation rows are read only after exact browser artifact admission.
     // No argument/child/prop edge is installed by native syntax discovery.
     let selection = HostStage::new("callback-host-selection");
     index = index.with_callback_invocations(
-        solid_reactive_ir::callback_host::browser_callback_invocations(facts, dialect, &browser),
+        solid_reactive_ir::callback_host::browser_callback_invocations(facts, dialect),
     );
-    // Complete browser admission replaces host-free observations for browser
-    // execution. No equality/join with other callers is a host premise.
-    // Context-provider discovery remains global, so withhold just those
-    // package imports until context proof itself can be partitioned.
-    let blocked = facts
-        .files
-        .iter()
-        .filter(|file| index.browser_at(file.path.as_str()))
-        .flat_map(|file| {
-            file.ast.imports.iter().filter_map(|import| {
-                browser
-                    .contract(file.path.as_str(), &import.module)
-                    .ok()
-                    .filter(|contract| {
-                        contract
-                            .artifact_case()
-                            .exports
-                            .values()
-                            .any(|export| !export.call.context_premises().is_empty())
-                    })
-                    .map(|_| (file.path.to_string(), import.module.to_string()))
-            })
-        })
-        .collect::<Vec<_>>();
-    index.blocked_imports.extend(blocked);
     drop(selection);
     validate_inputs(&index)?;
     let note = format!(
@@ -3563,10 +3495,7 @@ pub fn inferred_project_accepted_contracts_with_note(
             .collect::<Vec<_>>()
             .join(", ")
     );
-    // Select after the host's last mutation (the blocked imports above): the
-    // view is a snapshot of it.
-    Ok(InferredAcceptedContracts {
-        contracts: baseline.with_browser_view(index.browser_view_selection(), browser),
+    Ok(InferredHost {
         hosts: Some(index),
         note: Some(note),
     })
@@ -4046,13 +3975,9 @@ mod tests {
                 );
                 let expected = case["browser"].as_bool().unwrap();
                 assert_eq!(!constants.is_empty(), expected, "{config_source}: {case}");
-                let index = discovered_index_with_inputs(
-                    &prepared,
-                    &observed,
-                    dialect.vocabulary,
-                    Some(&AcceptedContractIndex::default()),
-                )
-                .unwrap();
+                let index =
+                    discovered_index_with_inputs(&prepared, &observed, dialect.vocabulary, true)
+                        .unwrap();
                 let start = u64::try_from(source.find("selected()").unwrap()).unwrap();
                 assert_eq!(
                     index.browser_proof_site(main.to_str().unwrap(), start, start + 10),
@@ -4107,15 +4032,10 @@ mod tests {
                 );
             }
             let provisional =
-                discovered_index(&directory, &facts, dialect.vocabulary, None).unwrap();
+                discovered_index(&directory, &facts, dialect.vocabulary, false).unwrap();
             let prepared = discovery_inputs(&directory, &facts, dialect.vocabulary).unwrap();
-            let package_checked = discovered_index_with_inputs(
-                &prepared,
-                &facts,
-                dialect.vocabulary,
-                Some(&AcceptedContractIndex::default()),
-            )
-            .unwrap();
+            let package_checked =
+                discovered_index_with_inputs(&prepared, &facts, dialect.vocabulary, true).unwrap();
             assert!(
                 package_checked.browser_scope_count() <= provisional.browser_scope_count(),
                 "package checks only withhold scopes: {name}"
@@ -4130,7 +4050,6 @@ mod tests {
                 solid_reactive_ir::callback_host::browser_callback_invocations(
                     &facts,
                     dialect.vocabulary,
-                    &AcceptedContractIndex::default(),
                 ),
             );
             let cases: serde_json::Value =
@@ -4244,7 +4163,7 @@ mod tests {
                     );
                     observed.runtime_resolutions = Some(runtime);
                     let index =
-                        discovered_index(&directory, &observed, dialect.vocabulary, None).unwrap();
+                        discovered_index(&directory, &observed, dialect.vocabulary, false).unwrap();
                     assert_eq!(
                         index.browser_site(target.to_str().unwrap(), 0, 1),
                         expected && name != "reachability",

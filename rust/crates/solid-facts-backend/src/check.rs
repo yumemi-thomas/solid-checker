@@ -246,40 +246,20 @@ pub fn run(
     let import_identity_elapsed = started.elapsed().saturating_sub(facts_complete);
 
     let directory = project_directory(&facts.project_id);
-    let (mut boundary, inferred) = package_inputs(
+    let (boundary, inferred) = package_inputs(
         &directory,
         &facts,
         &source_refusals,
         &options.runtime,
         options.dialect,
     )?;
-    let crate::InferredAcceptedContracts {
-        contracts,
+    let crate::InferredHost {
         hosts,
         note: inference_note,
     } = inferred;
     if let Some(inference_note) = inference_note {
         note(&inference_note);
     }
-    let mut contracts = contracts;
-    // ADR 0284: a package analyzed as source binds through no contract.
-    let contracts = match &dependency_sources {
-        Some(program) => {
-            let (selected, notes) = dependency_program::retain_exported_contracts(
-                &mut facts,
-                program,
-                &mut contracts,
-                &mut boundary,
-                &source_refusals,
-                options.dialect,
-            );
-            for line in notes.lines {
-                note(&line);
-            }
-            contracts.without_packages(&selected)
-        }
-        None => contracts,
-    };
     let (analysis, diagnostic_timings) = crate::analyze_project_inputs_measured_with_enablement(
         options.dialect,
         Path::new(&facts.project_id),
@@ -287,7 +267,6 @@ pub fn run(
         &facts,
         solid_reactive_ir::AnalysisInputs {
             boundary: &boundary,
-            contracts: &contracts,
             hosts: hosts.as_ref(),
         },
         requested_enablement(),
@@ -320,19 +299,13 @@ pub fn package_inputs(
 ) -> Result<
     (
         solid_reactive_ir::package_boundary::PackageBoundary,
-        crate::InferredAcceptedContracts,
+        crate::InferredHost,
     ),
     Box<dyn Error>,
 > {
     let boundary = crate::external_package_boundary(facts, source_refusals);
-    let requirements = crate::requirement_index(&boundary);
-    let inferred = crate::inferred_project_accepted_contracts_with_note(
-        directory,
-        runtime,
-        dialect.vocabulary,
-        facts,
-        requirements,
-    )?;
+    let inferred =
+        crate::inferred_project_host_with_note(directory, runtime, dialect.vocabulary, facts)?;
     Ok((boundary, inferred))
 }
 

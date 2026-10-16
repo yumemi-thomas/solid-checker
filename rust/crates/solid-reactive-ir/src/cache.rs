@@ -7,13 +7,13 @@ use crate::owners::{
 };
 use crate::pipeline::available_analysis_workers;
 use crate::{
-    ActionInvocation, AsyncRead, CacheRetention, CallbackSummary, ContractExport,
-    ContractGenerationObligation, FunctionNode, OwnerRequirement, Program, ReactiveRead,
-    ReactiveSourceKind, ReactiveWrite, RuleOptions, StaticDefect,
+    ActionInvocation, AsyncRead, CacheRetention, CallbackSummary, ContractGenerationObligation,
+    FunctionNode, OwnerRequirement, Program, ReactiveRead, ReactiveSourceKind, ReactiveWrite,
+    RuleOptions, StaticDefect,
 };
 
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{HashMap, HashSet},
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -174,7 +174,6 @@ pub(crate) struct SourceDiscoveryContribution {
     /// (`createStore(value)` / `createOptimisticStore(value)`): no compute
     /// node exists, so the store is not a valid `refresh()` target.
     pub(crate) value_form_stores: Vec<SymbolId>,
-    pub(crate) contracted_accessor_symbols: Vec<SymbolId>,
 }
 
 pub(crate) struct CachedSourceDiscovery {
@@ -313,38 +312,6 @@ pub(crate) struct CachedInterproceduralResults {
     pub(crate) dependency_users: HashMap<InterproceduralResultDependency, usize>,
     pub(crate) files: HashMap<SourcePath, CachedInterproceduralResultFile>,
     pub(crate) reactive_sources: Option<Arc<Vec<CachedReactiveSource>>>,
-    pub(crate) contract_exports: CachedContractExports,
-}
-
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub(crate) struct ContractNodeKey {
-    pub(crate) path: String,
-    pub(crate) ordinal: usize,
-}
-
-#[derive(Clone, Default, Eq, PartialEq)]
-pub(crate) struct ContractExportFragment {
-    pub(crate) direct: Vec<(String, ContractExport)>,
-    pub(crate) syntax: Vec<(String, ContractExport, bool)>,
-    pub(crate) dependencies: HashSet<ContractNodeKey>,
-    /// The export name to summary-node symbol bindings this file publishes.
-    ///
-    /// It answers the one question a per-node projection cannot: under which
-    /// exported name is the node that discovered a composed read published?
-    /// Aggregation inverts these, and a node exported under more than one
-    /// name — or under none — publishes no provenance at all. This is a
-    /// nomination for aggregation to resolve, never authority: the certifier
-    /// re-derives the same binding from the compiler's own authenticated
-    /// export table before it discharges anything.
-    pub(crate) owners: Vec<(String, SymbolId)>,
-}
-
-#[derive(Default)]
-pub(crate) struct CachedContractExports {
-    pub(crate) nodes: HashMap<ContractNodeKey, ContractExport>,
-    pub(crate) structured_returns: HashMap<ContractNodeKey, crate::ReturnSummary>,
-    pub(crate) files: HashMap<String, ContractExportFragment>,
-    pub(crate) aggregate: Option<Arc<BTreeMap<String, ContractExport>>>,
 }
 
 pub(crate) type SourceDiscoverySymbolFingerprint = [u8; 32];
@@ -537,8 +504,6 @@ pub(crate) struct LateStageFileInput {
 
 #[derive(Clone, Default)]
 pub(crate) struct LocalAccessResult {
-    pub(crate) prototype_recipes_observed: bool,
-    pub(crate) prototype_leaf_operations: Vec<crate::LeafOwnerOperation>,
     pub(crate) reads: Vec<Arc<ReactiveRead>>,
     pub(crate) writes: Vec<Arc<ReactiveWrite>>,
     pub(crate) action_invocations: Vec<Arc<ActionInvocation>>,
@@ -568,8 +533,6 @@ pub(crate) struct LocalAccessSymbolState {
     /// proof folded into `ssr_client_bare` / `server_rendering_unresolved`, so
     /// a fixed import elsewhere invalidates every file reading this source.
     pub(crate) async_options: crate::source_discovery::AsyncSourceOptions,
-    pub(crate) contract_reads: Option<Vec<crate::ContractReadSite>>,
-    pub(crate) contract_parameter_reads: Option<Vec<crate::ContractParameterReadSite>>,
     pub(crate) source_kind: Option<ReactiveSourceKind>,
     pub(crate) prop_source: Option<(
         SymbolId,

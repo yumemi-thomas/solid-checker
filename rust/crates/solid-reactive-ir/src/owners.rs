@@ -874,66 +874,12 @@ pub(crate) fn find_missing_owners(
                         .and_then(|primitive| lookup.dialect.owner_requirement_role(primitive)),
                     Some(OwnerRequirementRole::SettledCleanup)
                 );
-            let entry_context = context;
             let context = if after_await {
                 await_continuation_context(context)
             } else {
                 context
             };
             let root_owned = root_owned_span(call.span);
-            if !root_owned
-                && let Some(symbol) = lookup.callee_symbol(file, call.callee)
-                && let Some(requirements_for_call) = lookup.contract_owner_requirements(symbol)
-            {
-                for requirement in requirements_for_call {
-                    let Some(guaranteed) = owner_requirement_at_call(requirement, call) else {
-                        continue;
-                    };
-                    let after_await = after_await
-                        && requirement.operation
-                            != crate::OwnerRequirementOperation::SettledCleanup;
-                    let context = if after_await { context } else { entry_context };
-                    let proven_unowned = context & OWNER_CONTEXT_PROVEN_UNOWNED != 0;
-                    let later_run_unowned =
-                        !proven_unowned && context & OWNER_CONTEXT_LATER_RUN_UNOWNED != 0;
-                    let conditional_owner = !proven_unowned
-                        && !later_run_unowned
-                        && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED)
-                            == (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED);
-                    let component_uncertain = context & OWNER_CONTEXT_COMPONENT_UNCERTAIN != 0;
-                    // ADR 0161: an export that may register without doing so
-                    // on every call leaves the unowned call a proof obligation.
-                    let registration_uncertain = !guaranteed;
-                    let operation = match requirement.operation {
-                        crate::OwnerRequirementOperation::Effect => "effect",
-                        crate::OwnerRequirementOperation::Cleanup => "cleanup",
-                        crate::OwnerRequirementOperation::Boundary => "boundary",
-                        crate::OwnerRequirementOperation::SettledCleanup => "settled-cleanup",
-                    };
-                    push_owner_requirement(
-                        &mut requirements,
-                        &mut seen,
-                        operation,
-                        file,
-                        call.span,
-                        OwnerRequirementStatus {
-                            through_contract: true,
-                            uncertain: conditional_owner
-                                || later_run_unowned
-                                || component_uncertain
-                                || registration_uncertain,
-                            runtime_uncertain: false,
-                            caller_uncertain: false,
-                            conditional_owner,
-                            later_run_unowned,
-                            component_uncertain,
-                            after_await,
-                            report: context & OWNER_CONTEXT_UNOWNED != 0,
-                        },
-                        lookup,
-                    );
-                }
-            }
             if !root_owned
                 && primitive.is_some_and(|primitive| {
                     lookup
@@ -1697,34 +1643,6 @@ pub(crate) fn discover_owner_file(
         // Not skipped here: whether the region answers the operation needs the
         // propagated context, so the emission pass decides (`root_owned_at`).
         let providing_region_chain = region_chain(call.span);
-        if let Some(symbol) = lookup.callee_symbol(file, call.callee)
-            && let Some(contract_requirements) = lookup.contract_owner_requirements(symbol)
-        {
-            for requirement in contract_requirements {
-                let Some(guaranteed) = owner_requirement_at_call(requirement, call) else {
-                    continue;
-                };
-                let operation = match requirement.operation {
-                    crate::OwnerRequirementOperation::Effect => "effect",
-                    crate::OwnerRequirementOperation::Cleanup => "cleanup",
-                    crate::OwnerRequirementOperation::Boundary => "boundary",
-                    crate::OwnerRequirementOperation::SettledCleanup => "settled-cleanup",
-                };
-                requirements.push(OwnerRequirementCandidate {
-                    operation,
-                    operation_span: call.span,
-                    owner,
-                    report_mask: OWNER_CONTEXT_UNOWNED,
-                    allow_uncertain: true,
-                    runtime_uncertain: false,
-                    through_contract: true,
-                    registration_uncertain: !guaranteed,
-                    settled_target: None,
-                    settled_gate: None,
-                    providing_region_chain: providing_region_chain.clone(),
-                });
-            }
-        }
         // Same seam as the batch owner pass, for the same reason: these two
         // matched the effect set independently and disagreed about
         // `createRenderEffect`.
@@ -2467,30 +2385,6 @@ pub(crate) fn owner_callback_edges(
     primitive: &Option<PrimitiveName>,
     lookup: &SemanticLookup<'_>,
 ) -> Vec<OwnerCallbackEdge> {
-    // Package contracts can describe callback owner behavior that is not
-    // available from the consumer's declarations. A present owner row is an
-    // exact runtime claim; an omitted row remains the legacy timing-only
-    // contract and must not be treated as inherited-owner proof.
-    if let Some(symbol) = lookup.callee_symbol(file, call.callee)
-        && let Some(callbacks) = lookup.contract_callbacks(symbol)
-    {
-        let contracted = callbacks
-            .iter()
-            .filter_map(|callback| {
-                call.arguments.get(callback.parameter)?;
-                let owner = callback.owner.as_deref()?;
-                Some(OwnerCallbackEdge {
-                    argument: callback.parameter,
-                    kind: contract_callback_owner_edge_kind(owner)?,
-                    source_path: file.path.to_string(),
-                    source: call.span,
-                })
-            })
-            .collect::<Vec<_>>();
-        if !contracted.is_empty() {
-            return contracted;
-        }
-    }
     let Some(primitive) = known_primitive(primitive) else {
         let scheduled = fresh_stack_scheduler_edges(file, call, lookup);
         if !scheduled.is_empty() {
@@ -2626,17 +2520,6 @@ pub(crate) const fn callback_owner_edge_kind(owner: solid_dialect::CallbackOwner
         solid_dialect::CallbackOwner::InheritsFirstRun => OwnerEdgeKind::InheritsFirstRun,
         solid_dialect::CallbackOwner::Leaf => OwnerEdgeKind::Leaf,
     }
-}
-
-fn contract_callback_owner_edge_kind(owner: &str) -> Option<OwnerEdgeKind> {
-    Some(match owner {
-        "created" => OwnerEdgeKind::Owned,
-        "conditional" => OwnerEdgeKind::Conditional,
-        "inherited" => OwnerEdgeKind::Preserve,
-        "unowned" => OwnerEdgeKind::Unowned,
-        "leaf" => OwnerEdgeKind::Leaf,
-        _ => return None,
-    })
 }
 
 /// Compose the owner supplied by a returned function's invocation with the
@@ -2945,49 +2828,6 @@ pub(crate) fn computation_is_async(
         .iter()
         .find(|function| function.span == argument)
         .is_some_and(|function| function.r#async)
-}
-
-/// Whether local Type Facts or an imported package contract proves that a
-/// computation may return a Promise or AsyncIterable.
-pub(crate) fn computation_is_async_with_contracts(
-    lookup: &SemanticLookup<'_>,
-    file: &solid_facts::FileFacts,
-    argument: Span,
-    contracted: &HashMap<SymbolId, crate::contracts::ResolvedContractBinding>,
-) -> bool {
-    if computation_is_async(lookup, file, argument) {
-        return true;
-    }
-    let contracted_async_at = |span| {
-        lookup
-            .entities()
-            .at(file.path.as_str(), span)
-            .and_then(|symbol| contracted.get(symbol))
-            .and_then(|binding| binding.summary.async_behavior.known())
-            .is_some_and(|behavior| !behavior.is_empty())
-    };
-    if contracted_async_at(argument) {
-        return true;
-    }
-    let argument = file.ast.peel_ts_sugar_span(argument);
-    let Some(function) = file
-        .ast
-        .functions
-        .iter()
-        .find(|function| function.span == argument)
-    else {
-        return false;
-    };
-    function
-        .expression_return
-        .as_ref()
-        .and_then(|returned| returned.callee)
-        .is_some_and(contracted_async_at)
-        || file.ast.returns_within(function.body).any(|returned| {
-            containing_ast_function(&file.ast, returned.span)
-                .is_some_and(|owner| owner.span == function.span)
-                && returned.callee.is_some_and(contracted_async_at)
-        })
 }
 
 pub(crate) fn inside_non_component_function(
@@ -4166,24 +4006,6 @@ pub(crate) fn analysis_context(
     enclosing
 }
 
-/// Whether an accepted registration is required at this exact call. False
-/// guards remove the branch; unknown guards retain a possible requirement
-/// (ADR 0231). Only a true guard preserves an operation's certified min >= 1.
-pub(crate) fn owner_requirement_at_call(
-    requirement: &crate::ContractOwnerRequirement,
-    call: &solid_facts::ast::CallFact,
-) -> Option<bool> {
-    use crate::contract_semantics::{GuardTruth, owner_guard_at_call};
-    let Some(guard) = &requirement.guard else {
-        return Some(requirement.guaranteed);
-    };
-    match owner_guard_at_call(guard, call) {
-        GuardTruth::True => Some(requirement.guaranteed),
-        GuardTruth::False => None,
-        GuardTruth::Unknown => Some(false),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
@@ -4199,288 +4021,6 @@ mod tests {
     };
     use solid_facts::core::SourceHash;
     use solid_facts::core::Span;
-
-    fn guarded_registration(
-        source: &str,
-        atoms: Vec<crate::contract_semantics::GuardAtom>,
-        guaranteed: bool,
-    ) -> Option<bool> {
-        let facts = ast::extract("guards.ts", source).unwrap();
-        let requirement = crate::ContractOwnerRequirement {
-            operation: crate::OwnerRequirementOperation::Cleanup,
-            guaranteed,
-            guard: Some(crate::contract_semantics::Guard(atoms)),
-        };
-        super::owner_requirement_at_call(&requirement, &facts.calls[0])
-    }
-
-    #[test]
-    fn owner_closed_key_guard_refuses_aliases_and_open_runtime_maps() {
-        use crate::contract_semantics::GuardAtom;
-        let atoms = vec![
-            GuardAtom::OwnDataKeys {
-                argument: 0,
-                path: vec![],
-                names: vec!["onDown".into(), "target".into()],
-            },
-            GuardAtom::Property {
-                argument: 0,
-                path: vec![],
-                name: "onDown".into(),
-                callable: Some(true),
-            },
-        ];
-        for source in [
-            "register({ target: node, onDown: () => {} });",
-            "register(({ onDown() {}, target: node }) satisfies Config);",
-        ] {
-            assert_eq!(
-                guarded_registration(source, atoms.clone(), true),
-                Some(true)
-            );
-            assert_eq!(
-                guarded_registration(source, atoms.clone(), false),
-                Some(false)
-            );
-        }
-        for source in [
-            "register({ target: node, onDown: () => {}, ondown: undefined });",
-            "register({ onDown: () => {} });",
-            "register({ target: node });",
-        ] {
-            assert_eq!(guarded_registration(source, atoms.clone(), true), None);
-        }
-        for source in [
-            "register({ target: node, onDown: fn });",
-            "register(config);",
-            "register({ target: node, onDown: () => {}, ...rest });",
-            "register({ target: node, get onDown() { return fn; } });",
-            "register({ target: node, [key]: () => {} });",
-            "register({ target: node, onDown: () => {}, __proto__: proto });",
-            "register(new Proxy({ target: node, onDown: () => {} }, traps));",
-            "register(...args);",
-        ] {
-            assert_eq!(
-                guarded_registration(source, atoms.clone(), true),
-                Some(false)
-            );
-        }
-    }
-
-    #[test]
-    fn owner_literal_guards_require_exact_runtime_arguments() {
-        use crate::contract_semantics::{GuardAtom, Literal};
-        let atom = GuardAtom::Literal {
-            argument: 0,
-            path: vec![],
-            value: Literal::Bool(true),
-        };
-        for source in [
-            "register(true);",
-            "register((true as boolean) satisfies boolean);",
-        ] {
-            assert_eq!(
-                guarded_registration(source, vec![atom.clone()], true),
-                Some(true)
-            );
-            assert_eq!(
-                guarded_registration(source, vec![atom.clone()], false),
-                Some(false)
-            );
-        }
-        assert_eq!(
-            guarded_registration("register(false);", vec![atom.clone()], true),
-            None
-        );
-        for source in [
-            "register(enabled);",
-            "register(...args);",
-            "register(...[], true);",
-            "register();",
-            "const enabled = true; register(enabled);",
-        ] {
-            assert_eq!(
-                guarded_registration(source, vec![atom.clone()], true),
-                Some(false)
-            );
-        }
-    }
-
-    #[test]
-    fn owner_literal_guards_compare_values_instead_of_source_spelling() {
-        use crate::contract_semantics::{GuardAtom, Literal};
-        for number in ["2", "2.0", "2e0"] {
-            let atom = GuardAtom::Literal {
-                argument: 0,
-                path: vec!["length".into()],
-                value: Literal::Number(number.into()),
-            };
-            assert_eq!(
-                guarded_registration("register(['A', 'B']);", vec![atom.clone()], true),
-                Some(true)
-            );
-            assert_eq!(
-                guarded_registration("register([]);", vec![atom], true),
-                None
-            );
-        }
-        let atom = GuardAtom::Literal {
-            argument: 0,
-            path: vec![],
-            value: Literal::String("resize".into()),
-        };
-        assert_eq!(
-            guarded_registration(r#"register('re\u0073ize');"#, vec![atom], true),
-            Some(true)
-        );
-        let atom = GuardAtom::Literal {
-            argument: 0,
-            path: vec![],
-            value: Literal::Null,
-        };
-        assert_eq!(
-            guarded_registration("register(null);", vec![atom.clone()], true),
-            Some(true)
-        );
-        assert_eq!(
-            guarded_registration("register(undefined);", vec![atom], true),
-            Some(false)
-        );
-    }
-
-    #[test]
-    fn owner_property_guards_use_final_exact_data_properties() {
-        use crate::contract_semantics::GuardAtom;
-        let atom = GuardAtom::Property {
-            argument: 1,
-            path: vec![],
-            name: "resize".into(),
-            callable: Some(true),
-        };
-        for source in [
-            "register(window, { resize: () => {} });",
-            "register(window, ({ 'resize'() {} }) satisfies Map);",
-        ] {
-            assert_eq!(
-                guarded_registration(source, vec![atom.clone()], true),
-                Some(true)
-            );
-        }
-        for source in [
-            "register(window, {});",
-            "register(window, { resize: false });",
-            "register(window, { resize: () => {}, resize: null });",
-        ] {
-            assert_eq!(guarded_registration(source, vec![atom.clone()], true), None);
-        }
-        for source in [
-            "register(window, handlers);",
-            "register(window, { resize: handler });",
-            "register(window, { resize: () => {}, ...other });",
-            "register(window, { get resize() { return handler; } });",
-            "register(window, { [key]: () => {} });",
-            "register(...targets, { resize: () => {} });",
-            "register(window, { __proto__: proto, resize: () => {} });",
-        ] {
-            assert_eq!(
-                guarded_registration(source, vec![atom.clone()], true),
-                Some(false)
-            );
-        }
-    }
-
-    #[test]
-    fn owner_length_guards_use_exact_array_lengths_and_nested_paths() {
-        use crate::contract_semantics::{GuardAtom, Literal};
-        let atom = GuardAtom::Literal {
-            argument: 0,
-            path: vec!["length".into()],
-            value: Literal::Number("2".into()),
-        };
-        for source in [
-            "register(['Control', 'K']);",
-            "register([, ,]);",
-            "register((['Control', 'K'] as const));",
-        ] {
-            assert_eq!(
-                guarded_registration(source, vec![atom.clone()], true),
-                Some(true)
-            );
-        }
-        for source in [
-            "register([]);",
-            "register(['K']);",
-            "register(['A', 'B', 'C']);",
-        ] {
-            assert_eq!(guarded_registration(source, vec![atom.clone()], true), None);
-        }
-        for source in [
-            "register(keys);",
-            "register(['A', ...keys]);",
-            "register(...args);",
-        ] {
-            assert_eq!(
-                guarded_registration(source, vec![atom.clone()], true),
-                Some(false)
-            );
-        }
-        let nested = GuardAtom::Literal {
-            argument: 0,
-            path: vec!["keys".into(), "length".into()],
-            value: Literal::Number("2".into()),
-        };
-        assert_eq!(
-            guarded_registration("register({ keys: ['A', 'B'] });", vec![nested], true),
-            Some(true)
-        );
-    }
-
-    #[test]
-    fn owner_guards_do_not_guess_unavailable_axes_or_strengthen_zero_minimums() {
-        use crate::contract_semantics::{GuardAtom, Literal, ValueKind};
-        let unknown = GuardAtom::Signature("selected".into());
-        let false_atom = GuardAtom::Literal {
-            argument: 0,
-            path: vec![],
-            value: Literal::Bool(true),
-        };
-        assert_eq!(
-            guarded_registration("register(false);", vec![unknown.clone(), false_atom], true),
-            None
-        );
-        for atom in [
-            unknown,
-            GuardAtom::ArtifactCase("".into()),
-            GuardAtom::ArgumentCount { min: 1, max: None },
-            GuardAtom::TupleAlternative {
-                argument: 0,
-                alternative: 0,
-            },
-            GuardAtom::ResultProtocol(ValueKind::Plain),
-        ] {
-            assert_eq!(
-                guarded_registration("register(true);", vec![atom], true),
-                Some(false)
-            );
-        }
-        let callable = GuardAtom::ValueKind {
-            argument: 0,
-            path: vec![],
-            kind: ValueKind::Callable,
-        };
-        assert_eq!(
-            guarded_registration("register(() => {});", vec![callable.clone()], true),
-            Some(true)
-        );
-        assert_eq!(
-            guarded_registration("register({});", vec![callable], true),
-            None
-        );
-        assert_eq!(
-            guarded_registration("register();", vec![], false),
-            Some(false)
-        );
-    }
 
     fn returned_arrow(source: &str) -> bool {
         let source = format!("function outer() {{ return {source}; }}");

@@ -724,8 +724,7 @@ fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
         StaticDefectFamily::ReactiveObjectDestructure => Rule::ComponentPropsDestructure,
         StaticDefectFamily::ReactiveReadAfterAwait => Rule::ReactiveReadAfterAwait,
         StaticDefectFamily::ComponentReturnsConditionally => Rule::ComponentReturnsConditionally,
-        StaticDefectFamily::PackageContractIncomplete
-        | StaticDefectFamily::UnknownCallbackExecution => Rule::PackageContractIncomplete,
+        StaticDefectFamily::PackageContractIncomplete => Rule::PackageContractIncomplete,
         StaticDefectFamily::MissingEffectFunction => Rule::MissingEffectFunction,
         StaticDefectFamily::ReactiveSourceUncaptured => Rule::ReactiveSourceUncaptured,
         StaticDefectFamily::ReactiveDispatchUnresolved => Rule::ReactiveDispatchUnresolved,

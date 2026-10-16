@@ -105,20 +105,16 @@ pub use cache::{CacheStats, FactsCache};
 pub use diagnostics::{
     DiagnosticAnalysis, DiagnosticSession, DiagnosticTimings, Metrics, RequestedRuleEnablement,
     Snapshot, SnapshotEvidence, SnapshotFinding, SnapshotFix, SnapshotTextEdit, SourceLocation,
-    analysis_metrics, analyze_project_accepted_measured_with_enablement,
-    analyze_project_inputs_measured_with_enablement, discovered_contract_paths,
+    analysis_metrics, analyze_project_inputs_measured_with_enablement, discovered_contract_paths,
     discovered_rule_options_path, imported_package_roots, semantic_demand_options_for_enablement,
     source_location, unsupported_runtime_snapshot,
 };
 pub use inferred_host::{
-    InferredAcceptedContracts, inferred_host_directory_digest, inferred_host_input_digest,
+    InferredHost, inferred_host_directory_digest, inferred_host_input_digest,
     inferred_host_input_paths, inferred_host_input_paths_for_project,
-    inferred_host_input_paths_for_sources, inferred_project_accepted_contracts_with_note,
+    inferred_host_input_paths_for_sources, inferred_project_host_with_note,
 };
-pub use package_requirements::{
-    external_package_boundary, external_package_contract_requirements, requirement_index,
-    unsupplied_package_boundary,
-};
+pub use package_requirements::{external_package_boundary, unsupplied_package_boundary};
 /// The shared analysis input an in-memory adapter builds without the
 /// filesystem (phase P3 of the contract-removal plan).
 pub use solid_reactive_ir::{
@@ -2816,12 +2812,12 @@ onSettled(() => { entry(() => {}); });
             STUB_COMPILER_RUNS.load(std::sync::atomic::Ordering::SeqCst) > 0,
             "the stub dialect's compiler must produce the execution maps"
         );
-        let analysis = analyze_project_accepted_measured_with_enablement(
+        let analysis = analyze_project_inputs_measured_with_enablement(
             &STUB_DIALECT,
             std::path::Path::new("project/tsconfig.json"),
             &sources,
             &facts,
-            &solid_reactive_ir::contract_semantics::AcceptedContractIndex::default(),
+            solid_reactive_ir::AnalysisInputs::empty(),
             RequestedRuleEnablement::default(),
         )
         .unwrap()

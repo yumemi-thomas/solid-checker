@@ -235,62 +235,6 @@ fn package_roots(facts: &ProjectFacts) -> Vec<(String, String)> {
     roots
 }
 
-/// Positive visible refusals for the lookup recipe. No additional assumption,
-/// Unknown state or Type Facts reference demand is added to ADR 0266.
-pub(crate) fn captured_lookup_has_visible_runtime_hazard(
-    facts: &ProjectFacts,
-    dialect: &dyn Dialect,
-) -> bool {
-    let roots = package_roots(facts);
-    for file in facts
-        .files
-        .iter()
-        .filter(|file| !is_dependency_source(facts, file))
-    {
-        let mut symbols = HashMap::new();
-        for entity in facts.typescript.entities_for_path(file.path.as_str()) {
-            let key = (entity.location.start_byte, entity.location.end_byte);
-            let symbol = (!entity.symbol_unresolved && !entity.symbol.is_empty())
-                .then_some(entity.symbol.as_ref());
-            symbols
-                .entry(key)
-                .and_modify(|value| *value = None)
-                .or_insert(symbol);
-        }
-        let hazard_at = |span: Span| {
-            symbols
-                .get(&(u64::from(span.start), u64::from(span.end)))
-                .copied()
-                .flatten()
-                .and_then(|symbol| canonical_symbol_declaration(&facts.typescript, symbol, &roots))
-                .is_some_and(|(path, start, end)| {
-                    dialect.captured_lookup_runtime_hazard(&path, start, end)
-                })
-        };
-        if file
-            .ast
-            .imports
-            .iter()
-            .filter(|import| !import.type_only)
-            .flat_map(|import| &import.bindings)
-            .any(|binding| {
-                !binding.type_only
-                    && binding.runtime_referenced
-                    && !matches!(binding.kind, ImportKind::Namespace | ImportKind::SideEffect)
-                    && hazard_at(binding.local.span)
-            })
-            || file
-                .ast
-                .members
-                .iter()
-                .any(|member| runtime_span(&file.ast, member.span) && hazard_at(member.property))
-        {
-            return true;
-        }
-    }
-    false
-}
-
 /// ADR 0284: a file of a package analyzed as source. Its own use of `DEV`,
 /// `OBSERVE` or a hydration host is the package's development tooling, not
 /// the project's runtime configuration, so it vetoes nothing.
@@ -689,47 +633,6 @@ mod tests {
         );
         unresolved.typescript = table("/p/src/local.d.ts", 7472, 7484);
         assert!(scan(&unresolved, &solid_dialect::Solid2).permits_proof());
-    }
-
-    #[test]
-    fn lookup_refusals_are_exact_runtime_uses_separate_from_the_premise() {
-        let path = "/p/node_modules/@solidjs/signals/dist/types/core/dev.d.ts";
-        for source in [
-            "import { anything as renamed } from 'arbitrary'; renamed(() => undefined);",
-            "import * as S from 'arbitrary'; S.renamed(() => undefined);",
-        ] {
-            let facts = lookup_project(source, path, 22414, 22430);
-            assert!(captured_lookup_has_visible_runtime_hazard(
-                &facts,
-                &solid_dialect::Solid2
-            ));
-            assert!(
-                scan(&facts, &solid_dialect::Solid2).permits_proof(),
-                "not an ADR 0266 veto"
-            );
-            let wrong = lookup_project(source, path, 22415, 22430);
-            assert!(!captured_lookup_has_visible_runtime_hazard(
-                &wrong,
-                &solid_dialect::Solid2
-            ));
-            let unrelated =
-                lookup_project(source, "/p/node_modules/other/core/dev.d.ts", 22414, 22430);
-            assert!(!captured_lookup_has_visible_runtime_hazard(
-                &unrelated,
-                &solid_dialect::Solid2
-            ));
-        }
-        for source in [
-            "import type { anything } from 'arbitrary'; type T = typeof anything;",
-            "import { anything } from 'arbitrary'; type T = typeof anything;",
-            "import * as S from 'arbitrary'; type T = typeof S.renamed;",
-        ] {
-            let facts = lookup_project(source, path, 22414, 22430);
-            assert!(!captured_lookup_has_visible_runtime_hazard(
-                &facts,
-                &solid_dialect::Solid2
-            ));
-        }
     }
 
     #[test]

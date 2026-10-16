@@ -1,5 +1,32 @@
 # Precision backlog
 
+D2 (2026-10-16): contract consumption and emission are deleted from the IR.
+`SemanticLookup` binds no contract, `AnalysisInputs` is `{boundary, hosts}`,
+and the accepted-contract index, certification, proof, canonical identity,
+validation and the rc.3 conformance model are gone; the IR keeps only the
+semantic vocabulary its own summaries are written in. Removed with them: the
+contract-only local proofs (package prototype instances, getter objects,
+lazy-getter, opaque/effectful returned members, contract callback results,
+contract-captured arguments, contract event-handler props, contract
+returned-invoker slots, contract-tracked accessor reads), the inferred-host
+fork that re-ran analysis over an identical browser view (its evidence line
+and its "never certified" status are kept), and the `PackageContractEnvironmentDependent` and `UnknownCallbackExecution` defect kinds.
+
+- **Findings moved:** no violation moved. 19 `SC9005` sites in 11 fixtures
+  are gone, every one the open-program "generate a contract for this export"
+  obligation on a parameter of an exported project function
+  (`schedule(callback)` forwarding to an undeclared scheduler, `omit(props,
+  hidden)` in an exported wrapper, ...). No contract is generated any more,
+  so an export owes none. A package call keeps its own `SC9005` from the
+  boundary; none of those moved. `package-unknown-callback-producer`,
+  `package-cyclic-unknown-callback-producer`, `package-return-producer` and
+  `static-api-unresolved` are now `certified`.
+- **Deliberately uncertifiable, not inferred:** where a proof needed a
+  package's contract view (callback timing, returned-member behaviour, prop
+  deferral of a package component), the package call stays an open
+  requirement or the site stays of unproven timing. No host-free inference
+  replaces it.
+
 D3, D4 and D7 together (2026-10-16): the contract emission, certification,
 probe and evidence pipeline is deleted, with the measurement history built on
 it. Removed: every non-ordinary CLI mode (emission and its batch, module

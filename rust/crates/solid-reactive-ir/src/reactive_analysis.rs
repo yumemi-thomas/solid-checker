@@ -81,9 +81,6 @@ pub(crate) fn collect_project<'facts>(
             ctx.dialect,
         ),
         source_declarations,
-        contract_reads: &source.contract_reads,
-        contract_parameter_reads: &source.contract_parameter_reads,
-        contract_returns: &source.contract_returns,
         source_kinds: ctx.source_kinds,
         prop_sources: ctx.prop_sources,
         uncertain_prop_sources: ctx.uncertain_prop_sources,
@@ -123,19 +120,13 @@ pub(crate) fn collect_project<'facts>(
         facts: ctx.facts,
         project_indexes,
         accessors: ctx.accessors,
-        contracted_accessor_symbols: &source.contracted_accessor_symbols,
         returned_source_symbols: &source.returned_source_symbols,
         summary_source_symbols: &source.summary_source_symbols,
         source_phases: &source.source_phases,
         source_kinds: ctx.source_kinds,
-        contract_reads: &source.contract_reads,
-        contract_parameter_reads: &source.contract_parameter_reads,
-        contract_callbacks: &source.contract_callbacks,
-        contract_returns: &source.contract_returns,
         entities: ctx.entities,
         references_by_source: &references_by_source,
         symbol_names: ctx.symbol_names,
-        changed_semantic_symbols: typescript_delta.map(|delta| &delta.semantic_symbol_ids),
         retained_source_paths: &source.retained_source_paths,
         typed_sources: ctx.typed_sources,
         lookup: ctx.semantic_lookup,
@@ -228,8 +219,6 @@ pub(crate) fn collect_project<'facts>(
     timings.local_access_reused_files = local_access.reused_files;
     timings.local_access_recomputed_files = local_access.recomputed_files;
     let LocalAccessResult {
-        prototype_recipes_observed: _,
-        prototype_leaf_operations,
         reads,
         writes,
         action_invocations,
@@ -238,7 +227,6 @@ pub(crate) fn collect_project<'facts>(
         write_action_obligations,
         dispatch_obligations,
     } = local_access.result;
-    draft.leaf_operations.extend(prototype_leaf_operations);
     draft.reads = reads
         .into_iter()
         .map(|read| (*read).clone())
@@ -310,35 +298,6 @@ pub(crate) fn collect_project<'facts>(
     // After every read, write and action table is merged: the rule's
     // negative proof is that none of them lies inside the predicate.
     static_rules::result_access_callbacks(ctx, draft);
-    draft.contract_exports = interprocedural.exports.clone();
-    draft.contract_generation_obligations =
-        interprocedural.contract_generation_obligations.to_vec();
-    // ADR 0202: these obligations say a project export's contract could not
-    // state when it runs a callback parameter. They matter to a consumer of
-    // that contract. A closed program (an application, ADR 0193) has none, so
-    // there they stay available to contract generation and are not reported.
-    let report_generation_obligations = !ctx.rule_options.runtime.program_is_closed();
-    for obligation in interprocedural
-        .contract_generation_obligations
-        .iter()
-        .filter(|_| report_generation_obligations)
-    {
-        draft.push_defect(crate::StaticDefect {
-            kind: crate::StaticDefectKind::UnknownCallbackExecution {
-                package: obligation.package.clone(),
-                entrypoint: obligation.entrypoint.clone(),
-                function: obligation.function.clone(),
-                parameter: obligation.parameter,
-                parameter_type: obligation.parameter_type.clone(),
-                required_execution: obligation.required_execution.clone(),
-                claim_context: obligation.claim_context.clone(),
-            },
-            location: obligation.location.clone(),
-            analysis_context: obligation.message.clone(),
-            fixes: vec![],
-            uncertain: false,
-        });
-    }
     upstream_compat::check_project(
         ctx,
         caches
@@ -406,39 +365,6 @@ mod tests {
         assert_eq!(draft.static_defects.len(), 2);
     }
 
-    /// A contract-generation obligation projects to the same dialect rule as
-    /// a contract-incomplete consumer obligation (`SC9005`) but keeps its own
-    /// dedup identity: one call site can produce both at one start byte, and
-    /// a shared identity would drop whichever was pushed second.
-    #[test]
-    fn generation_obligations_keep_their_own_identity_within_the_contract_rule() {
-        let generation = StaticDefectKind::UnknownCallbackExecution {
-            package: "partial-package".into(),
-            entrypoint: ".".into(),
-            function: "withValue".into(),
-            parameter: 0,
-            parameter_type: "() => void".into(),
-            required_execution: "synchronous".into(),
-            claim_context: "{}".into(),
-        };
-        let consumer = StaticDefectKind::PackageContractExportMissing {
-            module: "partial-package".into(),
-            export: "withValue".into(),
-            reexported: false,
-            site: crate::ContractDefectSite::Argument,
-            admission_refusal: None,
-        };
-        assert_eq!(
-            generation.family(),
-            StaticDefectFamily::UnknownCallbackExecution
-        );
-        assert_eq!(
-            consumer.family(),
-            StaticDefectFamily::PackageContractIncomplete
-        );
-        assert_ne!(generation.dedup_identity(), consumer.dedup_identity());
-    }
-
     /// The identity strings are load-bearing: they are the keys of one
     /// identity space shared by every stage that files a static defect, so a
     /// rename silently merges or splits dedup groups. Pin the mapping of every
@@ -454,10 +380,6 @@ mod tests {
             "reactive-dispatch-unresolved"
         );
         assert_eq!(
-            StaticDefectFamily::UnknownCallbackExecution.dedup_identity(),
-            "unknown-callback-execution"
-        );
-        assert_eq!(
             StaticDefectFamily::ReactiveObjectDestructure.dedup_identity(),
             "no-destructure"
         );
@@ -470,8 +392,7 @@ mod tests {
             "components-return-once"
         );
 
-        // Kinds that share a dialect rule share the identity; the two
-        // contract families deliberately do not.
+        // Kinds that share a dialect rule share the identity.
         assert_eq!(
             StaticDefectKind::ReactiveCallbackUnresolved {
                 callee: "map".into()
@@ -491,15 +412,6 @@ mod tests {
             }
             .dedup_identity(),
             StaticDefectFamily::ReactiveDispatchUnresolved.dedup_identity()
-        );
-        assert_eq!(
-            StaticDefectKind::PackageContractEnvironmentDependent {
-                module: "pkg".into(),
-                export: "value".into(),
-                reexported: false,
-            }
-            .dedup_identity(),
-            StaticDefectFamily::PackageContractIncomplete.dedup_identity()
         );
     }
 }

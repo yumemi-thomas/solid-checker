@@ -8,7 +8,7 @@ use std::{
 };
 
 use solid_reactive_ir::{
-    contract_semantics::{AcceptedContractIndex, UncertifiableImportReason},
+    UncertifiableImportReason,
     package_boundary::{
         BindingForm, BoundaryReason, ImportKey, PackageBoundary, UnanalyzableReason,
     },
@@ -30,24 +30,6 @@ fn namespace_import(facts: &solid_facts::ProjectFacts, importer: &str, specifier
                     })
             })
         })
-}
-
-/// Preserve the existing external-package obligation discovery independently
-/// of the historical first-party bundle generator. This index carries only
-/// missing-evidence markers; a catalog may fill them with accepted semantics.
-pub fn external_package_contract_requirements(
-    facts: &solid_facts::ProjectFacts,
-) -> AcceptedContractIndex {
-    requirement_index(&external_package_boundary(facts, &[]))
-}
-
-/// The contract-era requirement index a boundary's legacy keys produce.
-#[must_use]
-pub fn requirement_index(boundary: &PackageBoundary) -> AcceptedContractIndex {
-    boundary
-        .legacy_requirement_index()
-        .external_packages()
-        .into_owned()
 }
 
 /// The package boundary of `facts` (phase P3 of the contract-removal plan):
@@ -793,15 +775,14 @@ mod tests {
     }
 
     #[test]
-    fn the_requirement_index_carries_exactly_the_boundary_markers() {
+    fn the_boundary_markers_are_exactly_the_kept_requirements() {
         let (f, rows) = manifest_fields(true);
-        let facts = f.facts();
-        let index = external_package_contract_requirements(&facts);
         let boundary = f.boundary();
-        assert_eq!(index, requirement_index(&boundary));
         for (row, expect_kept) in rows {
             assert_eq!(
-                index.is_uncertifiable(f.importer(row), f.text(row)),
+                boundary
+                    .legacy_reason(f.importer(row), f.text(row))
+                    .is_some(),
                 expect_kept
             );
         }

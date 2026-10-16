@@ -1313,7 +1313,7 @@ fn answer(
         state.session.set_semantic_demand_options(options);
         Ok(())
     };
-    let mut facts = if changes.is_empty() {
+    let facts = if changes.is_empty() {
         demand(state)?;
         state.session.analyze()?
     } else {
@@ -1350,9 +1350,8 @@ fn answer(
     // needs only its witness; success retains the complete graph-input closure.
     let mut inference_inputs = inference_inputs_for_check(state, check);
     let (
-        mut boundary,
-        solid_facts_backend::InferredAcceptedContracts {
-            mut contracts,
+        boundary,
+        solid_facts_backend::InferredHost {
             hosts,
             note: inference_note,
         },
@@ -1381,30 +1380,11 @@ fn answer(
     }
     // ADR 0296: preparation's notes come first, where a one-shot check
     // prints them.
-    let mut dependency_notes = state
+    let dependency_notes = state
         .dependency
         .as_ref()
         .map(|dependency| dependency.prepared.notes.lines.clone())
         .unwrap_or_default();
-    let contracts = match state
-        .dependency
-        .as_ref()
-        .and_then(|dependency| dependency.prepared.program.as_ref())
-    {
-        Some(program) => {
-            let (selected, notes) = dependency_program::retain_exported_contracts(
-                Arc::make_mut(&mut facts),
-                program,
-                &mut contracts,
-                &mut boundary,
-                &source_refusals,
-                state.dialect,
-            );
-            dependency_notes.extend(notes.lines);
-            contracts.without_packages(&selected)
-        }
-        None => contracts,
-    };
     let notice: Arc<str> = dependency_notes
         .into_iter()
         .chain(inference_note)
@@ -1419,7 +1399,6 @@ fn answer(
             &facts,
             solid_reactive_ir::AnalysisInputs {
                 boundary: &boundary,
-                contracts: &contracts,
                 hosts: hosts.as_ref(),
             },
             RequestedRuleEnablement {

@@ -12,7 +12,7 @@ use crate::effect_api::{ProofStatus, classify_effect_call};
 use crate::execution_role::{RootBodyGuard, allowed_callback_spans, semantic_write_execution_role};
 use crate::identity::SymbolId;
 use crate::indexes::{EntitySymbols, SemanticLookup};
-use crate::owners::{analysis_context, computation_is_async_with_contracts};
+use crate::owners::{analysis_context, computation_is_async};
 use crate::pipeline::{AnalysisContext, ProgramDraft, parallel_file_results};
 use crate::{
     ReactiveSourceKind, ReactiveWrite, StaticDefect, StaticDefectKind, StaticViolation,
@@ -38,7 +38,6 @@ pub(crate) fn check_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft)
         value_form_stores: ctx.value_form_stores,
         accessors: ctx.accessors,
         reachable_calls: ctx.reachable_calls,
-        contracted: ctx.contracted,
     };
     for result in parallel_file_results(&ctx.facts.files, |file| checker.check_file(file)) {
         draft.static_defects.extend(result.defects);
@@ -59,7 +58,6 @@ pub(super) struct StaticApiContext<'a> {
     pub(super) value_form_stores: &'a HashSet<SymbolId>,
     pub(super) accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
     pub(super) reachable_calls: &'a HashMap<Location, usize>,
-    pub(super) contracted: &'a HashMap<SymbolId, crate::contracts::ResolvedContractBinding>,
 }
 
 impl StaticApiContext<'_> {
@@ -111,14 +109,10 @@ impl StaticApiContext<'_> {
                         file.source_text(property.name) == Some("sync") && property.value
                     })
                 })
-                && call.arguments.first().is_some_and(|argument| {
-                    computation_is_async_with_contracts(
-                        self.lookup,
-                        file,
-                        argument.span,
-                        self.contracted,
-                    )
-                })
+                && call
+                    .arguments
+                    .first()
+                    .is_some_and(|argument| computation_is_async(self.lookup, file, argument.span))
             {
                 result.violations.push(StaticViolation {
                     id: "SC7002".into(),

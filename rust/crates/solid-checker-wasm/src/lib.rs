@@ -215,7 +215,6 @@ pub fn check(request_json: &str) -> Result<String, Box<dyn std::error::Error>> {
     // package import keeps an open requirement (SC9005) rather than reading as
     // plain code.
     let boundary = solid_facts_backend::unsupplied_package_boundary(&facts);
-    let contracts = solid_facts_backend::requirement_index(&boundary);
     let (analysis, _) = analyze_project_inputs_measured_with_enablement(
         dialect,
         Path::new(&request.project_id),
@@ -223,7 +222,6 @@ pub fn check(request_json: &str) -> Result<String, Box<dyn std::error::Error>> {
         &facts,
         AnalysisInputs {
             boundary: &boundary,
-            contracts: &contracts,
             hosts: None,
         },
         Default::default(),
@@ -255,12 +253,12 @@ mod tests {
             solid_facts_backend::SemanticDemandOptions::PREFERENCES,
         )
         .unwrap();
-        let (legacy, _) = solid_facts_backend::analyze_project_accepted_measured_with_enablement(
+        let (legacy, _) = solid_facts_backend::analyze_project_inputs_measured_with_enablement(
             dialect,
             std::path::Path::new(&decoded.project_id),
             &decoded.sources,
             &facts,
-            &Default::default(),
+            solid_facts_backend::AnalysisInputs::empty(),
             Default::default(),
         )
         .unwrap();

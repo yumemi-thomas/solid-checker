@@ -10,10 +10,6 @@ use solid_facts::ast::{BindingShape, CallFact, FunctionFact, FunctionKind, JsxEl
 use solid_facts::core::Span;
 use solid_facts::{FileFacts, ProjectFacts};
 
-use crate::contract_semantics::{
-    AcceptedContractIndex, CardinalityScope, Event, InvokeProtocol, OperationKind, Schedule,
-    Trigger, UpperBound, ValueSource,
-};
 use crate::indexes::{CachedAstFileIndex, SemanticLookup};
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -481,108 +477,6 @@ fn dead_control_flow(
     )
 }
 
-fn host_event(event: Event) -> bool {
-    matches!(
-        event,
-        Event::Call
-            | Event::Render
-            | Event::Flush
-            | Event::Settle
-            | Event::Cleanup
-            | Event::External
-            | Event::Transition
-            | Event::AsyncEmission
-    )
-}
-
-/// Exact binding selection stays in the existing contract resolver. This narrow
-/// reader accepts unguarded rows only; it does not convert unknown guards to true.
-fn package_rows(
-    file: &FileFacts,
-    symbol: &crate::SymbolId,
-    contracts: &AcceptedContractIndex,
-    lookup: &SemanticLookup<'_>,
-) -> Vec<(usize, Vec<String>, CallbackDelivery, String)> {
-    if !lookup.has_contract_binding(symbol) {
-        return Vec::new();
-    }
-    let mut result = Vec::new();
-    for import in file.ast.imports.iter().filter(|import| !import.type_only) {
-        for binding in import.bindings.iter().filter(|binding| !binding.type_only) {
-            if lookup.entities().at(file.path.as_str(), binding.local.span) != Some(symbol) {
-                continue;
-            }
-            let Some(name) = binding.imported.as_deref().or_else(|| {
-                (binding.kind == solid_facts::ast::ImportKind::Default).then_some("default")
-            }) else {
-                continue;
-            };
-            let Ok(accepted) = contracts.resolve_name(file.path.as_str(), &import.module, name)
-            else {
-                continue;
-            };
-            let export = accepted.export();
-            if !export.call.context_premises().is_empty()
-                || !export.call.guards.cases.items().is_empty()
-            {
-                continue;
-            }
-            for callback in export.callbacks().items() {
-                let ValueSource::Parameter { index, path } = &callback.from else {
-                    continue;
-                };
-                let Some(operation) = export.operation(&callback.operation.0) else {
-                    continue;
-                };
-                if operation.kind != OperationKind::Invoke
-                    || operation.invoke_protocol() != InvokeProtocol::Call
-                    || operation.guard.is_some()
-                    || operation.cardinality.max == Some(UpperBound::Finite(0))
-                {
-                    continue;
-                }
-                let guaranteed_inline = operation.trigger == Some(Trigger::Event(Event::Call))
-                    && operation.at == Some(Event::Call)
-                    && operation.schedule == Some(Schedule::SameStack)
-                    && operation.cardinality.scope == Some(CardinalityScope::Call)
-                    && operation.cardinality.min.is_some_and(|min| min > 0);
-                result.push((
-                    usize::from(*index),
-                    path.clone(),
-                    if guaranteed_inline {
-                        CallbackDelivery::SameStack
-                    } else {
-                        let trigger_event = match &operation.trigger {
-                            Some(Trigger::Event(event) | Trigger::Resource { event, .. }) => {
-                                Some(*event)
-                            }
-                            _ => None,
-                        };
-                        if trigger_event.is_some_and(host_event)
-                            && operation.at.is_some_and(host_event)
-                            && operation.schedule.is_some()
-                        {
-                            CallbackDelivery::FeasibleHostTrigger(
-                                BrowserCallbackTrigger::ContractTrigger,
-                            )
-                        } else {
-                            CallbackDelivery::Pending(BrowserCallbackTrigger::ContractTrigger)
-                        }
-                    },
-                    format!(
-                        "{}:{}:{}:{}",
-                        import.module,
-                        name,
-                        accepted.contract().receipt().semantic_digest.as_str(),
-                        callback.operation.0
-                    ),
-                ));
-            }
-        }
-    }
-    result
-}
-
 fn standard_name<'a>(
     file: &FileFacts,
     call: &CallFact,
@@ -771,7 +665,6 @@ fn synchronous_cancel(
 pub fn browser_callback_invocations(
     facts: &ProjectFacts,
     dialect: &dyn Dialect,
-    contracts: &AcceptedContractIndex,
 ) -> Vec<BrowserCallbackInvocation> {
     let (indexes, _, _) = crate::cache::build_typescript_indexes(
         &facts.typescript,
@@ -790,23 +683,7 @@ pub fn browser_callback_invocations(
     if !runtime.permits_proof() {
         return Vec::new();
     }
-    let resolved = crate::contracts::resolve_accepted_contract_imports(
-        facts,
-        contracts,
-        &indexes.entities,
-        &names,
-        dialect,
-        &runtime,
-    );
-    let lookup = SemanticLookup::new(
-        facts,
-        &ast,
-        &indexes.entities,
-        &names,
-        dialect,
-        &resolved,
-        false,
-    );
+    let lookup = SemanticLookup::new(facts, &ast, &indexes.entities, &names, dialect, false);
     let mut result = Vec::new();
     for file in &facts.files {
         let dead_children = file
@@ -890,36 +767,6 @@ pub fn browser_callback_invocations(
                                 );
                             }
                         }
-                    }
-                }
-            }
-            if let Some(symbol) = lookup.callee_symbol(file, call.callee) {
-                for (index, path, delivery, premise) in
-                    package_rows(file, &crate::SymbolId::from(symbol), contracts, &lookup)
-                {
-                    let Some(argument) = call.arguments.get(index) else {
-                        continue;
-                    };
-                    let value = match path.as_slice() {
-                        [] => Some(argument.span),
-                        [key] => argument
-                            .literal_members
-                            .iter()
-                            .find(|member| member.key.as_str() == key)
-                            .map(|member| member.value),
-                        _ => None,
-                    };
-                    if let Some(value) = value {
-                        emit(
-                            &mut result,
-                            file,
-                            call.span,
-                            value,
-                            site(file, call.span),
-                            delivery,
-                            premise,
-                            &lookup,
-                        );
                     }
                 }
             }
@@ -1086,29 +933,6 @@ pub fn browser_callback_invocations(
             if element.member_object.is_some() || !element.spreads.is_empty() {
                 continue;
             }
-            let Some(symbol) = lookup.entities().at(file.path.as_str(), element.name.span) else {
-                continue;
-            };
-            for (index, path, delivery, premise) in package_rows(file, symbol, contracts, &lookup) {
-                if index != 0 {
-                    continue;
-                }
-                let [prop] = path.as_slice() else {
-                    continue;
-                };
-                if let Some(value) = jsx_prop_value(file, element, prop) {
-                    emit(
-                        &mut result,
-                        file,
-                        element.span,
-                        value,
-                        site(file, element.span),
-                        delivery,
-                        premise,
-                        &lookup,
-                    );
-                }
-            }
             if let Some((definition, component)) =
                 lookup.function_called_at(file.path.as_str(), element.name.span)
                 && definition.path == file.path
@@ -1161,7 +985,7 @@ mod tests {
 
     fn local_invocations(source: &str, path: &[String]) -> usize {
         use solid_facts::core::Generation;
-        use std::collections::HashSet;
+
         let ast = solid_facts::ast::extract("case.tsx", source).unwrap();
         let compiler = solid_facts::compiler::ExecutionMap {
             compiler_facts_protocol: solid_facts::compiler::COMPILER_FACTS_PROTOCOL,
@@ -1217,15 +1041,6 @@ mod tests {
             runtime_symbol_redirects: HashMap::new(),
             dependency_source_roots: Vec::new(),
         };
-        let contracts = crate::contracts::ResolvedContracts {
-            bindings: vec![],
-            by_symbol: HashMap::new(),
-            direct_returns: HashMap::new(),
-            callee_bindings: HashMap::new(),
-            returned_callable_bindings: HashSet::new(),
-            missing_exports: vec![],
-            counts: crate::ContractBindingCounts::default(),
-        };
         let ast = HashMap::new();
         let names = HashMap::new();
         let lookup = SemanticLookup::new(
@@ -1234,7 +1049,6 @@ mod tests {
             &entities,
             &names,
             &solid_dialect::Solid2,
-            &contracts,
             false,
         );
         parameter_calls(

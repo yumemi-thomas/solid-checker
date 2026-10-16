@@ -1,5 +1,4 @@
 use std::{
-    collections::HashMap,
     fs, io,
     path::{Path, PathBuf},
     sync::Arc,
@@ -10,9 +9,7 @@ use serde::{Deserialize, Serialize};
 use solid_facts::ProjectFacts;
 use solid_reactive_ir::{
     AnalysisInputs, CacheRetention, Finding, IncrementalBuilder, Program, RuleOptions,
-    RuntimeEnvironment,
-    contract_semantics::{AcceptedContractIndex, ClaimDomain, ValueShape},
-    suppress_findings_owned_by_enabled_rules,
+    RuntimeEnvironment, suppress_findings_owned_by_enabled_rules,
 };
 
 use crate::dialect::{self, Dialect};
@@ -220,40 +217,19 @@ impl DiagnosticSession {
         project: &Path,
         sources: &[SourceFile],
         facts: &ProjectFacts,
-        contracts: &AcceptedContractIndex,
     ) -> Result<Arc<DiagnosticAnalysis>, BackendError> {
-        self.analyze_accepted_measured_with_enablement(
+        self.analyze_inputs_measured_with_enablement(
             project,
             sources,
             facts,
-            contracts,
+            AnalysisInputs::empty(),
             RequestedRuleEnablement::default(),
         )
         .map(|(analysis, _)| analysis)
     }
 
-    /// Runs ordinary analysis from receipt-validated normalized semantics.
-    /// Wire decoding, artifact selection, and receipt validation must finish
-    /// before this entry point is called.
-    pub fn analyze_accepted_measured_with_enablement(
-        &mut self,
-        project: &Path,
-        sources: &[SourceFile],
-        facts: &ProjectFacts,
-        contracts: &AcceptedContractIndex,
-        enablement: RequestedRuleEnablement<'_>,
-    ) -> Result<(Arc<DiagnosticAnalysis>, DiagnosticTimings), BackendError> {
-        self.analyze_inputs_measured_with_enablement(
-            project,
-            sources,
-            facts,
-            AnalysisInputs::contracts_only(contracts),
-            enablement,
-        )
-    }
-
-    /// [`Self::analyze_accepted_measured_with_enablement`] given the
-    /// project's package boundary too. Both inputs are part of the retained
+    /// Runs ordinary analysis from receipt-validated normalized semantics
+    /// against the project's package boundary, which is part of the retained
     /// diagnostic's identity.
     pub fn analyze_inputs_measured_with_enablement(
         &mut self,
@@ -263,7 +239,7 @@ impl DiagnosticSession {
         inputs: AnalysisInputs<'_>,
         enablement: RequestedRuleEnablement<'_>,
     ) -> Result<(Arc<DiagnosticAnalysis>, DiagnosticTimings), BackendError> {
-        self.analyze_accepted_inner(project, sources, facts, inputs, enablement, true)
+        self.analyze_accepted_inner(project, sources, facts, inputs, enablement)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -274,53 +250,22 @@ impl DiagnosticSession {
         facts: &ProjectFacts,
         inputs: AnalysisInputs<'_>,
         enablement: RequestedRuleEnablement<'_>,
-        validate_host_inputs: bool,
     ) -> Result<(Arc<DiagnosticAnalysis>, DiagnosticTimings), BackendError> {
-        let contracts = inputs.contracts;
-        // A host belongs with the view selected from it. Refuse a pair that
-        // disagrees, rather than answer from the baseline or the browser view
-        // in place of the other.
-        inputs
-            .check_host_pairing()
-            .map_err(|error| BackendError::Contract(error.to_string()))?;
-        if let Some((baseline, browser)) = contracts.execution_views() {
-            // The pairing check settled that a fork carries its host.
-            let hosts = inputs.hosts.ok_or_else(|| {
-                BackendError::Contract(
-                    solid_reactive_ir::HostPairingError::ForkWithoutHost.to_string(),
-                )
-            })?;
+        if let Some(hosts) = inputs.hosts {
             crate::inferred_host::validate_inputs(hosts)?;
-            // The outer transaction validates the complete input generation
-            // before and after both views; nested checks add no new boundary.
+            // No package behaviour differs by host, so the browser execution
+            // is answered by the ordinary analysis itself; the host only marks
+            // the findings it covers and keeps the result from certifying.
             let (ordinary, mut timings) = self.analyze_accepted_inner(
                 project,
                 sources,
                 facts,
                 AnalysisInputs {
                     boundary: inputs.boundary,
-                    contracts: &baseline,
                     hosts: None,
                 },
-                enablement.clone(),
-                false,
+                enablement,
             )?;
-            // A separate builder/solver owns the browser view. No summary or
-            // admission from this run can replace the ordinary program handed
-            // to certification or the findings of a no-target function body.
-            let (selected, selected_timings) = DiagnosticSession::new(self.dialect)
-                .analyze_accepted_inner(
-                    project,
-                    sources,
-                    facts,
-                    AnalysisInputs {
-                        boundary: inputs.boundary,
-                        contracts: &browser,
-                        hosts: None,
-                    },
-                    enablement,
-                    false,
-                )?;
             let browser_site = |location: &SourceLocation| {
                 hosts.browser_proof_site(&location.path, location.start_byte, location.end_byte)
             };
@@ -353,7 +298,7 @@ impl DiagnosticSession {
             let mut snapshot = ordinary.snapshot.clone();
             snapshot.findings = merge_host_findings(
                 &ordinary.snapshot.findings,
-                &selected.snapshot.findings,
+                &ordinary.snapshot.findings,
                 &browser_proof,
                 &hosts.manifest.reason,
             );
@@ -371,8 +316,6 @@ impl DiagnosticSession {
             .into();
             drop(projection);
             crate::inferred_host::validate_inputs(hosts)?;
-            timings.reactive_ir += selected_timings.reactive_ir;
-            timings.solve_and_snapshot += selected_timings.solve_and_snapshot;
             timings.reused = false;
             return Ok((
                 Arc::new(DiagnosticAnalysis {
@@ -381,16 +324,6 @@ impl DiagnosticSession {
                 }),
                 timings,
             ));
-        }
-        let external_contracts = contracts.external_packages();
-        let contracts = external_contracts.as_ref();
-        let inputs = AnalysisInputs {
-            boundary: inputs.boundary,
-            contracts,
-            hosts: inputs.hosts,
-        };
-        if validate_host_inputs && let Some(hosts) = inputs.hosts {
-            crate::inferred_host::validate_inputs(hosts)?;
         }
         let ir_started = Instant::now();
         let mut rule_options = discover_rule_options(project)?;
@@ -427,9 +360,6 @@ impl DiagnosticSession {
             rule_options: rule_options.clone(),
             release_notice: release_notice.clone(),
         };
-        if validate_host_inputs && let Some(hosts) = inputs.hosts {
-            crate::inferred_host::validate_inputs(hosts)?;
-        }
         if let Some(retained) = &self.retained
             && retained.identity == identity
         {
@@ -463,10 +393,7 @@ impl DiagnosticSession {
         if let Some(notice) = &release_notice {
             findings.push(unaudited_release_finding(notice));
         }
-        let metrics = analysis_metrics(facts, &program, contracts);
-        if validate_host_inputs && let Some(hosts) = inputs.hosts {
-            crate::inferred_host::validate_inputs(hosts)?;
-        }
+        let metrics = analysis_metrics(facts, &program);
         let mut snapshot = snapshot_of(sources, metrics, findings);
         snapshot.feedback_facts = program.development_feedback.clone();
         if program.runtime_configuration.permits_proof() {
@@ -504,26 +431,7 @@ impl DiagnosticSession {
     }
 }
 
-pub fn analyze_project_accepted_measured_with_enablement(
-    dialect: &'static Dialect,
-    project: &Path,
-    sources: &[SourceFile],
-    facts: &ProjectFacts,
-    contracts: &AcceptedContractIndex,
-    enablement: RequestedRuleEnablement<'_>,
-) -> Result<(Arc<DiagnosticAnalysis>, DiagnosticTimings), BackendError> {
-    analyze_project_inputs_measured_with_enablement(
-        dialect,
-        project,
-        sources,
-        facts,
-        AnalysisInputs::contracts_only(contracts),
-        enablement,
-    )
-}
-
-/// [`analyze_project_accepted_measured_with_enablement`] given the project's
-/// package boundary too.
+/// Runs ordinary analysis of one project against its package boundary.
 pub fn analyze_project_inputs_measured_with_enablement(
     dialect: &'static Dialect,
     project: &Path,
@@ -920,122 +828,12 @@ fn snapshot_of(sources: &[SourceFile], metrics: Metrics, findings: Vec<Finding>)
     }
 }
 
-pub fn analysis_metrics(
-    facts: &ProjectFacts,
-    program: &Program,
-    contracts: &AcceptedContractIndex,
-) -> Metrics {
-    let mut aliases = facts
-        .typescript
-        .symbols()
-        .filter(|symbol| !symbol.alias_target().is_empty())
-        .map(|symbol| (symbol.id().into(), symbol.alias_target().into()))
-        .collect::<HashMap<String, String>>();
-    for _ in 0..aliases.len() {
-        let previous = aliases.clone();
-        let mut changed = false;
-        for target in aliases.values_mut() {
-            if let Some(next) = previous.get(target)
-                && next != target
-            {
-                *target = next.clone();
-                changed = true;
-            }
-        }
-        if !changed {
-            break;
-        }
-    }
-    let canonical = |symbol: &str| {
-        aliases
-            .get(symbol)
-            .map_or_else(|| symbol.to_owned(), Clone::clone)
-    };
-    let entities = facts
-        .typescript
-        .entities()
-        .filter(|entity| !entity.symbol.is_empty())
-        .map(|entity| {
-            (
-                (
-                    entity.location.path.as_ref(),
-                    entity.location.start_byte,
-                    entity.location.end_byte,
-                ),
-                canonical(&entity.symbol),
-            )
-        })
-        .collect::<HashMap<_, _>>();
-    let mut contracted_functions = HashMap::<String, Option<String>>::new();
-    for file in &facts.files {
-        for import in &file.ast.imports {
-            // The same identity gate contract resolution applies: a metric that
-            // counted a contract this analysis refused to bind would report
-            // certified summaries the analysis never used.
-            let Ok(contract) = contracts.contract(file.path.as_str(), &import.module) else {
-                continue;
-            };
-            for binding in &import.bindings {
-                if binding.kind == solid_facts::ast::ImportKind::Namespace {
-                    continue;
-                }
-                let exported = binding.imported.as_deref().unwrap_or("default");
-                let Some(summary) = contract.export(exported) else {
-                    continue;
-                };
-                let reads = summary
-                    .operation_claim(ClaimDomain::Reads)
-                    .into_iter()
-                    .flat_map(|claim| claim.items());
-                let returns = summary
-                    .operation_claim(ClaimDomain::Returns)
-                    .into_iter()
-                    .flat_map(|claim| claim.items())
-                    .collect::<Vec<_>>();
-                if summary.callbacks().items().is_empty()
-                    && reads.count() == 0
-                    && returns.is_empty()
-                {
-                    continue;
-                }
-                let Some(symbol) = entities.get(&(
-                    file.path.as_str(),
-                    u64::from(binding.local.span.start),
-                    u64::from(binding.local.span.end),
-                )) else {
-                    continue;
-                };
-                contracted_functions.insert(
-                    symbol.to_string(),
-                    returns
-                        .iter()
-                        .filter_map(|operation| summary.operation(&operation.0))
-                        .filter_map(|operation| operation.output.as_ref())
-                        .any(|shape| matches!(shape, ValueShape::Reactive { .. }))
-                        .then(|| "accessor".to_string()),
-                );
-            }
-        }
-    }
-    let factory_instances = facts
-        .typescript
-        .files()
-        .flat_map(|file| file.bindings.iter())
-        .filter(|binding| {
-            !binding.array
-                && !binding.names.is_empty()
-                && contracted_functions
-                    .get(&canonical(&binding.initializer.target))
-                    .is_some_and(|returned| returned.as_deref() == Some("accessor"))
-        })
-        .count();
+pub fn analysis_metrics(facts: &ProjectFacts, program: &Program) -> Metrics {
     let functions_analyzed = facts
         .typescript
         .files()
         .map(|file| file.functions.len())
         .sum::<usize>()
-        + contracted_functions.len()
-        + factory_instances
         + program.obligation_counts.factory_instances;
     let unresolved_obligations = program
         .static_violations
@@ -1344,7 +1142,7 @@ mod tests {
 
     use solid_facts::core::Generation;
     use solid_facts::{ProjectFacts, TypeScriptTable};
-    use solid_reactive_ir::{RuntimeEnvironment, contract_semantics::AcceptedContractIndex};
+    use solid_reactive_ir::RuntimeEnvironment;
 
     use super::{DiagnosticSession, retain_enabled};
 
@@ -1402,23 +1200,22 @@ mod tests {
             dependency_source_roots: Vec::new(),
         };
         let mut session = DiagnosticSession::default();
-        let contracts = AcceptedContractIndex::default();
 
         let (initial, initial_timings) = session
-            .analyze_accepted_measured_with_enablement(
+            .analyze_inputs_measured_with_enablement(
                 Path::new(&facts.project_id),
                 &[],
                 &facts,
-                &contracts,
+                solid_reactive_ir::AnalysisInputs::empty(),
                 super::RequestedRuleEnablement::default(),
             )
             .unwrap();
         let (reused, reused_timings) = session
-            .analyze_accepted_measured_with_enablement(
+            .analyze_inputs_measured_with_enablement(
                 Path::new(&facts.project_id),
                 &[],
                 &facts,
-                &contracts,
+                solid_reactive_ir::AnalysisInputs::empty(),
                 super::RequestedRuleEnablement::default(),
             )
             .unwrap();
@@ -1426,99 +1223,6 @@ mod tests {
         assert!(Arc::ptr_eq(&initial, &reused));
         assert!(!initial_timings.reused);
         assert!(reused_timings.reused);
-    }
-
-    /// A host and the browser view selected from it travel as a pair, and an
-    /// outer fork analyzes only with its host. Needs no producer.
-    #[test]
-    fn a_fork_needs_its_host_and_a_host_needs_its_view() {
-        use solid_reactive_ir::AnalysisInputs;
-        use solid_reactive_ir::hosts::{
-            BrowserRootManifest, HostExecutionRegion, HostScope, ProjectHostIndex,
-        };
-
-        let facts = ProjectFacts {
-            generation: Generation::new(1).unwrap(),
-            project_id: "/virtual/tsconfig.json".into(),
-            files: Vec::new(),
-            typescript: TypeScriptTable::from_parts(
-                3,
-                1,
-                "/virtual/tsconfig.json",
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-            ),
-            typescript_changes: None,
-            resolved_imports: None,
-            runtime_resolutions: None,
-            runtime_symbol_redirects: Default::default(),
-            dependency_source_roots: Vec::new(),
-        };
-        let top = HostScope {
-            id: "top".into(),
-            path: "/virtual/main.ts".into(),
-            execution: vec![HostExecutionRegion {
-                span: solid_facts::core::Span::new(0, u32::MAX),
-                client: Some(true),
-                server: Some(true),
-            }],
-            ..HostScope::default()
-        };
-        let host = ProjectHostIndex::build(
-            BrowserRootManifest {
-                roots: ["top".to_owned()].into(),
-                reason: "inferred browser: root".into(),
-                ..BrowserRootManifest::default()
-            },
-            &[],
-            &[top],
-        );
-        assert!(host.browser_at("/virtual/main.ts"));
-        let contracts = AcceptedContractIndex::default().with_browser_view(
-            host.browser_view_selection(),
-            AcceptedContractIndex::default(),
-        );
-        let analyze = |inputs: AnalysisInputs<'_>| {
-            DiagnosticSession::default().analyze_inputs_measured_with_enablement(
-                Path::new(&facts.project_id),
-                &[],
-                &facts,
-                inputs,
-                super::RequestedRuleEnablement::default(),
-            )
-        };
-        let refusal = |inputs: AnalysisInputs<'_>| match analyze(inputs) {
-            Err(crate::BackendError::Contract(message)) => message,
-            Err(other) => panic!("{other}"),
-            Ok(_) => panic!("an inconsistent pair was analyzed"),
-        };
-        // The pair, forked: a real fork with nothing to find.
-        let (paired, _) =
-            analyze(AnalysisInputs::contracts_only(&contracts).with_hosts(&host)).unwrap();
-        assert_eq!(paired.snapshot.status, "uncertifiable");
-        // The three refusals.
-        assert!(refusal(AnalysisInputs::contracts_only(&contracts)).contains("no host input"));
-        let plain = AcceptedContractIndex::default();
-        assert!(
-            refusal(AnalysisInputs::contracts_only(&plain).with_hosts(&host))
-                .contains("no browser view")
-        );
-        let mut later = host.clone();
-        later
-            .blocked_imports
-            .insert(("/virtual/main.ts".into(), "x".into()));
-        assert!(
-            refusal(AnalysisInputs::contracts_only(&contracts).with_hosts(&later))
-                .contains("does not match")
-        );
-        // Valid calls stay valid: no view, and the browser half of a fork
-        // (a view that projects nothing, with no host).
-        analyze(AnalysisInputs::contracts_only(&plain)).unwrap();
-        let (baseline, browser) = contracts.execution_views().unwrap();
-        analyze(AnalysisInputs::contracts_only(&baseline)).unwrap();
-        analyze(AnalysisInputs::contracts_only(&browser)).unwrap();
     }
 
     #[test]
@@ -1543,23 +1247,22 @@ mod tests {
             dependency_source_roots: Vec::new(),
         };
         let mut session = DiagnosticSession::default();
-        let contracts = AcceptedContractIndex::default();
 
         let (_, baseline) = session
-            .analyze_accepted_measured_with_enablement(
+            .analyze_inputs_measured_with_enablement(
                 Path::new(&facts.project_id),
                 &[],
                 &facts,
-                &contracts,
+                solid_reactive_ir::AnalysisInputs::empty(),
                 super::RequestedRuleEnablement::default(),
             )
             .unwrap();
         let (preset_analysis, preset_miss) = session
-            .analyze_accepted_measured_with_enablement(
+            .analyze_inputs_measured_with_enablement(
                 Path::new(&facts.project_id),
                 &[],
                 &facts,
-                &contracts,
+                solid_reactive_ir::AnalysisInputs::empty(),
                 super::RequestedRuleEnablement {
                     presets: &["preferences".into()],
                     rules: &[],
@@ -1569,11 +1272,11 @@ mod tests {
             )
             .unwrap();
         let (preset_reused, preset_hit) = session
-            .analyze_accepted_measured_with_enablement(
+            .analyze_inputs_measured_with_enablement(
                 Path::new(&facts.project_id),
                 &[],
                 &facts,
-                &contracts,
+                solid_reactive_ir::AnalysisInputs::empty(),
                 super::RequestedRuleEnablement {
                     presets: &["preferences".into(), "preferences".into()],
                     rules: &[],
@@ -1583,11 +1286,11 @@ mod tests {
             )
             .unwrap();
         let (_, rule_miss) = session
-            .analyze_accepted_measured_with_enablement(
+            .analyze_inputs_measured_with_enablement(
                 Path::new(&facts.project_id),
                 &[],
                 &facts,
-                &contracts,
+                solid_reactive_ir::AnalysisInputs::empty(),
                 super::RequestedRuleEnablement {
                     presets: &[],
                     rules: &["prefer-show".into()],

@@ -17,10 +17,10 @@ fn closed_cold(
     facts: &solid_facts::ProjectFacts,
     dialect: &dyn solid_dialect::Dialect,
 ) -> solid_reactive_ir::Program {
-    solid_reactive_ir::build_with_accepted_contracts_measured(
+    solid_reactive_ir::build_with_analysis_inputs_measured(
         facts,
         dialect,
-        &solid_reactive_ir::contract_semantics::AcceptedContractIndex::default(),
+        solid_reactive_ir::AnalysisInputs::empty(),
         &closed_options(),
     )
     .unwrap()
@@ -33,10 +33,10 @@ fn closed_warm(
     dialect: &dyn solid_dialect::Dialect,
 ) -> (solid_reactive_ir::Program, solid_reactive_ir::BuildTimings) {
     let (program, timings) = incremental
-        .build_with_accepted_contracts_shared(
+        .build_with_analysis_inputs_shared(
             facts,
             dialect,
-            &solid_reactive_ir::contract_semantics::AcceptedContractIndex::default(),
+            solid_reactive_ir::AnalysisInputs::empty(),
             &closed_options(),
         )
         .unwrap();
@@ -742,10 +742,14 @@ fn context_receiver_census_edits_match_cold_in_both_directions() {
     // the application's.
     let mut options = solid_reactive_ir::RuleOptions::default();
     options.runtime.program_boundary = Some(solid_reactive_ir::ProgramBoundary::Closed);
-    let contracts = solid_reactive_ir::contract_semantics::AcceptedContractIndex::default();
     let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
     let program = incremental
-        .build_with_accepted_contracts_shared(&first, vocabulary, &contracts, &options)
+        .build_with_analysis_inputs_shared(
+            &first,
+            vocabulary,
+            solid_reactive_ir::AnalysisInputs::empty(),
+            &options,
+        )
         .unwrap()
         .0;
     let consumer_read = |program: &solid_reactive_ir::Program| {
@@ -794,13 +798,21 @@ fn context_receiver_census_edits_match_cold_in_both_directions() {
                 None,
             )
             .unwrap();
-        let cold = solid_reactive_ir::build_with_accepted_contracts_measured(
-            &facts, vocabulary, &contracts, &options,
+        let cold = solid_reactive_ir::build_with_analysis_inputs_measured(
+            &facts,
+            vocabulary,
+            solid_reactive_ir::AnalysisInputs::empty(),
+            &options,
         )
         .unwrap()
         .0;
         let warm = (*incremental
-            .build_with_accepted_contracts_shared(&facts, vocabulary, &contracts, &options)
+            .build_with_analysis_inputs_shared(
+                &facts,
+                vocabulary,
+                solid_reactive_ir::AnalysisInputs::empty(),
+                &options,
+            )
             .unwrap()
             .0)
             .clone();

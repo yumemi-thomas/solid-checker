@@ -315,6 +315,3 @@ pub(crate) fn recorded_occurrences(
 
 #[cfg(test)]
 pub(crate) mod tests;
-
-#[cfg(test)]
-mod denial_tests;

@@ -14,54 +14,6 @@ pub(crate) fn project_at(generation: u64, files: &[(&str, &str)]) -> ProjectFact
     project_with(generation, files, Vec::new())
 }
 
-/// [`project`] whose TypeScript table also holds one entity, with a symbol of
-/// its own, at the exact span of each import binding named in `locals`:
-/// `(path, statement, local name)`. This is the binding-level grounding the
-/// contract projection reads. It records no declaration, no reference space
-/// and no diagnostic, so it states nothing TypeScript would contradict.
-pub(crate) fn project_grounded(
-    files: &[(&str, &str)],
-    locals: &[(&str, &str, &str)],
-) -> ProjectFacts {
-    let entities = locals
-        .iter()
-        .map(|(path, statement, local)| {
-            let source = files
-                .iter()
-                .find(|(candidate, _)| candidate == path)
-                .expect("the file is part of the project")
-                .1;
-            let (statement_start, _) = range(source, statement);
-            let start = statement_start + statement.find(local).expect("local in statement") as u64;
-            typefacts::EntityFact {
-                location: typefacts::Location {
-                    path: (*path).into(),
-                    start_byte: start,
-                    end_byte: start + local.len() as u64,
-                },
-                symbol: format!("{path}#{local}").into(),
-                symbol_unresolved: false,
-                type_descriptor: None,
-                resolved_call: None,
-                callability: None,
-                constructability: None,
-                runtime_binding_kind: None,
-                runtime_value_domain: None,
-                primitive_value_domain: typefacts::PrimitiveValueDomain::default(),
-                primitive_literal_candidates: None,
-                call_result_domain: None,
-                constant_value: None,
-                array_shape: None,
-                tuple_shape: None,
-                library_types: None,
-                reference_space: None,
-                runtime_identity: "".into(),
-            }
-        })
-        .collect();
-    project_with(1, files, entities)
-}
-
 fn project_with(
     generation: u64,
     files: &[(&str, &str)],
@@ -631,9 +583,6 @@ fn duplicate_literals_are_two_occurrences_and_a_literal_only_record_denies_nothi
     // One of two equal literals recorded: fine, it is a record of one.
     let one = boundary(A, "m", [first]);
     assert_eq!(check(&one, &project(&[(A, source)])), Ok(()));
-    // J4: it denies nothing, so the unrecorded static import and even the
-    // namespace import of the same key keep their own, separate binding.
-    assert!(one.denied_import_edges().is_empty());
     // The same site recorded twice is one site.
     let mut twice = one.clone();
     twice.record_source_edge_refusal(ImportKey::new(A, "m"), first);
@@ -651,7 +600,6 @@ fn an_import_equals_record_denies_nothing_and_an_exported_one_is_the_inner_decla
         [site(ImportEquals, source, r#"import S = require("m");"#)],
     );
     assert_eq!(check(&recorded, &project(&[(A, source)])), Ok(()));
-    assert!(recorded.denied_import_edges().is_empty());
 }
 
 #[test]
