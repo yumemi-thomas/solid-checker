@@ -905,8 +905,6 @@ const SOLID_V2_LANGUAGE: Dialect = Dialect {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
-
     use solid_reactive_ir::{
         AsyncRead, DirectMutationTarget, ExecutionRole, OwnerRequirement,
         OwnerRequirementOperation, ReactiveRead, ReactiveWrite, ReactiveWriteOperation,
@@ -915,102 +913,6 @@ mod tests {
     use typefacts::Location;
 
     use super::*;
-
-    /// The package root of a module specifier, matching contract discovery:
-    /// `solid-js/store` and `@solidjs/web/frames` are subpaths of one installed
-    /// package, not packages of their own.
-    fn package_root(module: &str) -> &str {
-        if module.starts_with('@') {
-            module
-                .match_indices('/')
-                .nth(1)
-                .map_or(module, |(index, _)| &module[..index])
-        } else {
-            module.split('/').next().unwrap_or(module)
-        }
-    }
-
-    /// Every package a dialect models is declared in its assembly manifest, and
-    /// every declaration models something.
-    ///
-    /// The manifest drives contract generation, the drift check, runtime
-    /// conformance, and the composed-artifact check -- all of which enumerate
-    /// what it *declares*. A package the vocabulary owns or the backend bundles
-    /// but no entry names is therefore covered by no gate at all: it silently
-    /// has no contract, and every project importing it reports SC9005 forever.
-    /// This check closes that hole, so it derives the expected set from the
-    /// dialect itself rather than from the manifest it is checking.
-    #[test]
-    fn every_modeled_package_is_declared_in_the_assembly_manifest() {
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-        for dialect in ALL {
-            let source = root
-                .join("rust/dialects")
-                .join(dialect.id)
-                .join("dialect.json");
-            let read = std::fs::read(&source)
-                .unwrap_or_else(|error| panic!("{}: {error}", source.display()));
-            let manifest: serde_json::Value = serde_json::from_slice(&read)
-                .unwrap_or_else(|error| panic!("{}: {error}", source.display()));
-            let declared = manifest["contracts"]
-                .as_array()
-                .unwrap_or_else(|| panic!("{} has no contracts array", source.display()))
-                .iter()
-                .map(|contract| {
-                    contract["package"]
-                        .as_str()
-                        .unwrap_or_else(|| {
-                            panic!("{} has a contract without a package", source.display())
-                        })
-                        .to_owned()
-                })
-                .collect::<HashSet<_>>();
-            let bundle_index = root.join(
-                manifest["bundleIndex"]
-                    .as_str()
-                    .unwrap_or_else(|| panic!("{} has no bundleIndex", source.display())),
-            );
-            let bundle: serde_json::Value = serde_json::from_slice(
-                &std::fs::read(&bundle_index)
-                    .unwrap_or_else(|error| panic!("{}: {error}", bundle_index.display())),
-            )
-            .unwrap_or_else(|error| panic!("{}: {error}", bundle_index.display()));
-            let bundled = bundle["contracts"]
-                .as_array()
-                .unwrap_or_else(|| panic!("{} has no contracts array", bundle_index.display()))
-                .iter()
-                .map(|case| {
-                    case["package"]
-                        .as_str()
-                        .unwrap_or_else(|| {
-                            panic!("{} has a case without a package", bundle_index.display())
-                        })
-                        .to_owned()
-                })
-                .collect::<HashSet<_>>();
-            assert!(
-                bundled.is_subset(&declared),
-                "{} receipt-issued bundle index names an undeclared package",
-                dialect.id
-            );
-            let modeled = dialect
-                .vocabulary
-                .modules()
-                .iter()
-                .copied()
-                .map(|module| package_root(module).to_owned())
-                .collect::<HashSet<_>>();
-            let mut undeclared = modeled.difference(&declared).collect::<Vec<_>>();
-            undeclared.sort();
-            assert!(
-                undeclared.is_empty(),
-                "{} models {undeclared:?} but declares no contract for them; add an entry to {} \
-                 (a hand-authored bundled overlay sets \"generated\": false)",
-                dialect.id,
-                source.display()
-            );
-        }
-    }
 
     fn location(index: u64) -> Location {
         Location {

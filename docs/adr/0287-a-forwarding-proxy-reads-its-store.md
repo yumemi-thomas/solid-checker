@@ -1,5 +1,7 @@
 # ADR 0287: A forwarding proxy reads its store
 
+> Status: contract-related decisions superseded by [ADR 0312](0312-package-contracts-are-removed.md). Source analysis and runtime premises remain subject to that ADR.
+
 - Status: accepted and implemented (2026-10-13).
 - Owners:
   - the handler proof: `solid_facts::ast::proxy_get_forward_target`

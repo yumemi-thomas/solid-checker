@@ -1,5 +1,7 @@
 # ADR 0271: standard router integration premise
 
+> Status: contract-related decisions superseded by [ADR 0312](0312-package-contracts-are-removed.md). Source analysis and runtime premises remain subject to that ADR.
+
 - Status: accepted owner decision; implemented (2026-10-11).
 - Owners: the next.26 authored spec, authored index/tooling, and backend
   authored-tier selection. No Solid dialect or shared IR vocabulary changes.

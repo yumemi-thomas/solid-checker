@@ -1,5 +1,7 @@
 # ADR 0290: A package's owner requirement is reported at the project's call
 
+> Status: contract-related decisions superseded by [ADR 0312](0312-package-contracts-are-removed.md). Source analysis and runtime premises remain subject to that ADR.
+
 - Status: accepted and implemented (2026-10-13).
 - Owner: `owners::attribute_dependency_requirements`, run at the end of both
   owner passes; `OwnerRequirement::through_dependency`; the wording in

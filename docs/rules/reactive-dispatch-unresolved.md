@@ -102,9 +102,8 @@ that observer. Resolved standard-library methods are likewise excluded.
 
 Narrow the runtime value to one exact implementation, or introduce an adapter
 with an analyzed body and one explicit reactive behavior. For a public helper,
-avoid invoking structurally supplied methods in a contract that is meant to be
-certifiable, or keep the dispatch behind a package boundary with an audited
-reactivity contract.
+make the implementation and exact call targets available to source analysis.
+An unresolved package boundary remains uncertifiable.
 
 ## Related
 

@@ -1,5 +1,7 @@
 # ADR 0149: A built-in is named by identity, not by a binding's type
 
+> Status: contract-related decisions superseded by [ADR 0312](0312-package-contracts-are-removed.md). Source analysis and runtime premises remain subject to that ADR.
+
 - Status: accepted and implemented (2026-09-28); written with the implementation;
   amended 2026-09-28 (§ Amendment: a coercion operand is proved, not typed)
 - Date: 2026-09-28

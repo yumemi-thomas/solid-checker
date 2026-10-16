@@ -61,11 +61,11 @@ proof obligation:
 - `any` or unknown values used as reactive sources, writes, calls, or callbacks;
 - `eval`, `Function`, or code generated at runtime;
 - unresolved dynamic call targets or property dispatch;
-- dependencies with neither analyzable source nor a valid trusted contract;
+- dependencies whose required behavior has no analyzable source or dialect premise;
 - compiler options not represented by the compiler-facts protocol;
 - mismatched source hashes, paths, spans, or UTF-8/UTF-16 mappings;
 - unsupported JavaScript syntax or TypeScript project configurations;
-- analyzer failures, missing backends, or stale package contracts.
+- analyzer failures or missing fact suppliers.
 
 ## Result policy
 
@@ -74,7 +74,7 @@ fields when a broader runtime diagnostic has a statically proven sub-context,
 such as a `createEffect` apply callback or a proven component-props read.
 Adapters may use them to provide exact
 compatibility rule names without changing certification status.
-`subjectKind` `package` or `package-export` marks a package-contract finding
+`subjectKind` `package` or `package-export` marks a package-boundary finding
 collapsed over the project: its `relatedLocations` are further sites of the
 same finding, so a per-file adapter reports it in every file holding one.
 

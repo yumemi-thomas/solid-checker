@@ -12,10 +12,9 @@ mod rules;
 
 use solid_reactive_ir::{
     CatalogCapabilities, CatalogWording, ExecutionRole, FindingSeed, FindingWording,
-    LeafOwnerOperationKind, OwnerRequirementOperation, PackageContractIssue,
-    PackageContractIssueKind, Program, ReactiveSourceKind, ReactiveWriteOperation, StaticDefect,
-    StaticDefectFamily, StaticDefectKind, project_finding, project_findings, strict_read_evidence,
-    strict_read_message_with_compute,
+    LeafOwnerOperationKind, OwnerRequirementOperation, Program, ReactiveSourceKind,
+    ReactiveWriteOperation, StaticDefect, StaticDefectFamily, StaticDefectKind, project_findings,
+    strict_read_evidence, strict_read_message_with_compute,
 };
 
 pub use rules::{Rule, docs_url, manifest_json};
@@ -33,11 +32,6 @@ pub fn solve(program: &Program) -> Vec<Finding> {
 #[must_use]
 pub fn solve_measured(program: &Program) -> (Vec<Finding>, SolveTimings) {
     project_findings(program, &Catalog)
-}
-
-#[must_use]
-pub fn package_contract_finding(issue: &PackageContractIssue) -> Finding {
-    project_finding(FindingSeed::PackageContractIssue(issue), &Catalog)
 }
 
 // The trailing sentence is the only clause that differs between a proven
@@ -162,73 +156,6 @@ impl CatalogWording for Catalog {
                 FindingWording::new(metadata, message, hint)
             }
             FindingSeed::AsyncRead(read) => async_read_wording(read),
-            FindingSeed::PackageContractIssue(issue) => {
-                let (condition, hint) = match &issue.status {
-                    PackageContractIssueKind::Stale {
-                        contract_version,
-                        installed_version,
-                    } => (
-                        format!(
-                            "has a reactivity contract for version {contract_version}, but version {installed_version} is installed"
-                        ),
-                        format!(
-                            "The accepted document is evidence about a release this project no longer installs. Generate a stable-v1 proposal for node_modules/{package} with its exact registry integrity, prove the open claims, issue a new receipt, and update .solid-checker/accepted-contracts.json.",
-                            package = issue.package
-                        ),
-                    ),
-                    PackageContractIssueKind::StaleBundled {
-                        audited_version,
-                        installed_version,
-                    } => (
-                        format!(
-                            "is audited by this checker at version {audited_version}, but version {installed_version} is installed"
-                        ),
-                        format!(
-                            "Bundled contracts describe one exact release. Install {} {audited_version}, or upgrade solid-checker to a release that audits {installed_version}.",
-                            issue.package
-                        ),
-                    ),
-                    PackageContractIssueKind::IntegrityMismatch {
-                        contract_integrity,
-                        installed_integrity,
-                        bundled,
-                    } => (
-                        format!(
-                            "has a reactivity contract audited against npm integrity {contract_integrity}, but the project's lockfile installs {installed_integrity}"
-                        ),
-                        if *bundled {
-                            format!(
-                                "A version string is not a pin: the installed bytes were republished, patched, or overridden. Install the artifact this checker audited for {}, or upgrade solid-checker to a release that audits the installed one.",
-                                issue.package
-                            )
-                        } else {
-                            format!(
-                                "A version string is not a pin: the installed bytes were republished, patched, or overridden, so the accepted document is evidence about a tarball this project does not have. Generate a stable-v1 proposal for node_modules/{package} with its exact registry integrity, prove it, issue a receipt, and update .solid-checker/accepted-contracts.json.",
-                                package = issue.package
-                            )
-                        },
-                    ),
-                    PackageContractIssueKind::Unverified => (
-                        "has only an unaccepted stable-v1 reactivity proposal".to_owned(),
-                        "Replay the proposal's required proof plan against the exact artifact. Only the Rust verifier may finalize closed claims and issue the receipt referenced by .solid-checker/accepted-contracts.json; probes may falsify but cannot accept closure.".into(),
-                    ),
-                    PackageContractIssueKind::Missing => (
-                        "has no reactivity contract".to_owned(),
-                        format!(
-                            "Generate a stable-v1 proposal for {} at {}, verify its required proofs, and add the proof-issued receipt plus exact import identity to .solid-checker/accepted-contracts.json. Missing evidence remains uncertifiable. See docs/package-contracts.md for the workflow.",
-                            issue.package, issue.contract_path
-                        ),
-                    ),
-                };
-                FindingWording::new(
-                    Rule::PackageContractIncomplete.metadata(),
-                    format!(
-                        "imported Solid package {:?} {condition}; solid-checker cannot rely on its export summaries, so every use of them is uncertifiable",
-                        issue.package
-                    ),
-                    hint,
-                )
-            }
         }
     }
 }

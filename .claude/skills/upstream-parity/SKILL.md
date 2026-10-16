@@ -35,8 +35,8 @@ behavior. Before changing one:
    ~~~
 
 2. Establish which semantic owner decides the product behavior. TypeScript
-   owns type errors, the pinned Solid compiler owns lowering, runtime probes
-   own execution behavior, and package contracts own external callbacks.
+   owns type errors, the pinned Solid compiler owns lowering, the selected dialect owns runtime premises, and exact dependency source
+   supplies external callback behavior. Unavailable behavior stays open.
 3. If no stronger evidence distinguishes the behavior, retain the audited
    upstream heuristic.
 4. If the checker deliberately differs for evidence-backed precision, encode

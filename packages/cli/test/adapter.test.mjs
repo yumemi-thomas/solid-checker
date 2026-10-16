@@ -139,6 +139,7 @@ test("exports an Oxlint-compatible certification plugin", () => {
     exported.configs.recommended.rules["solid-checker/certification"],
     "error"
   );
+  assert.equal(exported.rules["package-note"], exported.rules["contract-note"]);
   assert.ok(exported.rules["contract-note"]);
   assert.equal(exported.rules["contract-note"].meta.fixable, undefined);
   // Every shipped config carries the note rule, at warn, so a note never

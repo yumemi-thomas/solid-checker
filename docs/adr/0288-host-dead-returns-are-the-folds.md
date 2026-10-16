@@ -1,5 +1,7 @@
 # ADR 0288: Host-dead return sites are the fold's; the tuple veto is narrowed to prototype writes
 
+> Status: contract-related decisions superseded by [ADR 0312](0312-package-contracts-are-removed.md). Source analysis and runtime premises remain subject to that ADR.
+
 - Status: accepted (2026-10-13). No engine change.
 - Owner: fixtures `reactive-ir/host-dead-return`, `host-dead-return-server`
   and `host-dead-return-wildcard`. The behavior they pin is owned by

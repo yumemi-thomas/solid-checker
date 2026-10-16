@@ -9,7 +9,7 @@ tracking scope, which unwraps each property once and severs reactivity.
 
 Flags object destructuring of a component's props — both in the parameter list
 (`function Card({ title })`) and in later bindings (`const { title } = props`) —
-and of objects proven reactive by native APIs or reviewed package contracts.
+and of objects proven reactive by native APIs or analyzed dependency source.
 It does not guess from hook names such as `useParams`.
 
 Only setup-time destructures are reported. Destructuring inside a scope that runs
@@ -57,7 +57,7 @@ function Avatar(props) {
   return <img src={src} />;
 }
 
-const { id } = useParams(); // Flagged when the package contract says this is a store.
+const { id } = useParams(); // Flagged when analyzed source proves this is a store.
 ```
 
 Examples of **correct** code for this rule:

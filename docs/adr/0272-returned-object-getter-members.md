@@ -1,5 +1,7 @@
 # ADR 0272: Returned plain objects may describe scalar getter members
 
+> Status: contract-related decisions superseded by [ADR 0312](0312-package-contracts-are-removed.md). Source analysis and runtime premises remain subject to that ADR.
+
 - Status: accepted owner decision; implemented (2026-10-11).
 - Owners: normalized value semantics, document decoder/encoder and schema,
   authored validation/probe identity, return projection and local Get analysis.

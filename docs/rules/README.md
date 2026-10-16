@@ -108,6 +108,10 @@ whose disables deliberately do not transfer are listed in the
 uncertifiable results. Their pages name
 the missing evidence and remediation.
 
+SC9005 retains the compatibility name `package-contract-incomplete`; it now
+means required package behavior is unavailable from source. Package contracts
+and receipts are no longer consumed; see [ADR 0312](../adr/0312-package-contracts-are-removed.md).
+
 `unsupported-solid-runtime` and `unaudited-solid-release` are the two
 identities here the rules engine never produces. Dialect detection decides
 both. The refusal replaces the analysis and appears **alone** when it appears

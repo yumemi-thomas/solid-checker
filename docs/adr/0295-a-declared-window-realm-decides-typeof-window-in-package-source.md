@@ -1,5 +1,7 @@
 # ADR 0295: A declared Window realm decides `typeof window` in package source
 
+> Status: contract-related decisions superseded by [ADR 0312](0312-package-contracts-are-removed.md). Source analysis and runtime premises remain subject to that ADR.
+
 - Status: accepted and implemented; opt-in as `--runtime-realm window`
   (2026-10-14).
 - Owners:

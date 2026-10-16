@@ -529,53 +529,6 @@ impl CatalogCapabilities {
     };
 }
 
-/// Why an imported Solid-aware package cannot provide usable summaries.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum PackageContractIssueKind {
-    Missing,
-    Unverified,
-    /// A contract exists and is well-formed, but describes a different release
-    /// of the package than the one installed. It is evidence about an artifact
-    /// this project no longer has, so it is dropped rather than applied.
-    ///
-    /// `Bundled` is the same fact about this checker's own audited contract,
-    /// which the consumer cannot regenerate; the two carry different remedies
-    /// and so cannot share one kind.
-    Stale {
-        contract_version: String,
-        installed_version: String,
-    },
-    StaleBundled {
-        audited_version: String,
-        installed_version: String,
-    },
-    /// A contract records the npm integrity of the tarball it was audited
-    /// against, and the project's lockfile records a different integrity for
-    /// the installed copy of the same version.
-    ///
-    /// A version string is not a pin — a republished, patched, or
-    /// locally-overridden install keeps its version — so this is the same
-    /// epistemic state as [`Self::Stale`] reached through a different fact,
-    /// and it is refused the same way. `bundled` splits the remedy, exactly as
-    /// [`Self::Stale`] and [`Self::StaleBundled`] do: a consumer can
-    /// regenerate a project-owned contract but not this checker's own audited
-    /// artifact.
-    IntegrityMismatch {
-        contract_integrity: String,
-        installed_integrity: String,
-        bundled: bool,
-    },
-}
-
-/// The backend-owned package discovery facts a catalog words as SC9005.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PackageContractIssue {
-    pub package: String,
-    pub contract_path: String,
-    pub status: PackageContractIssueKind,
-    pub location: Location,
-}
-
 /// Every analysis result that can become a finding.
 #[derive(Clone, Copy, Debug)]
 pub enum FindingSeed<'a> {
@@ -591,7 +544,6 @@ pub enum FindingSeed<'a> {
     DirectiveCreation(&'a PrimitiveCreation),
     OwnerRequirement(&'a OwnerRequirement),
     AsyncRead(&'a AsyncRead),
-    PackageContractIssue(&'a PackageContractIssue),
 }
 
 /// The catalog-owned sentences and identity for one typed seed.
@@ -1377,10 +1329,6 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
                 );
             }
         }
-        FindingSeed::PackageContractIssue(_) => {
-            finding.analysis_context = "package contract completeness".into();
-            finding.subject_kind = "package".into();
-        }
         FindingSeed::Action(_)
         | FindingSeed::DirectiveCreation(_)
         | FindingSeed::OwnerRequirement(_) => {}
@@ -1462,7 +1410,6 @@ fn primary_location(seed: FindingSeed<'_>) -> Location {
         FindingSeed::DirectiveCreation(value) => value.location.clone(),
         FindingSeed::OwnerRequirement(value) => value.location.clone(),
         FindingSeed::AsyncRead(value) => value.location.clone(),
-        FindingSeed::PackageContractIssue(value) => value.location.clone(),
     }
 }
 
@@ -1530,7 +1477,6 @@ mod tests {
                 FindingSeed::DirectiveCreation(_) => "directive",
                 FindingSeed::OwnerRequirement(_) => "owner",
                 FindingSeed::AsyncRead(_) => "async",
-                FindingSeed::PackageContractIssue(_) => "package",
             };
             FindingWording::new(
                 RuleMetadata {

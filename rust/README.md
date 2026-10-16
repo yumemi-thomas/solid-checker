@@ -16,7 +16,7 @@ Fact ownership is deliberately split:
 - `crates/typefacts`: checker-derived facts and the retained producer session;
   the paired Go producer lives at `../apps/solid-typefacts`;
 - `crates/solid-facts-backend`: orchestration, retained caches, certification
-  snapshots, contracts, and the CLI;
+  snapshots, dependency source, and the CLI;
 - `crates/solid-dialect`: the Solid vocabulary seam — the version-specific
   answers (primitives, callback positions, boundary tags) the engine asks for
   instead of knowing;
@@ -67,14 +67,11 @@ include/exclude and project resolution are authoritative rather than
 reimplemented by a directory walk.
 
 The CLI defaults to text output. `--format json` emits the stable certification
-snapshot (`status`, findings, package summaries, and metrics), and `--certify`
-returns exit code 1 unless the status is `certified`. Package behavior is loaded
-only from receipt-issued stable-v1 documents registered with exact import
-resolutions in `.solid-checker/accepted-contracts.json`; the old `--contract`
-override and schema-1 validation path do not exist. Proposal generation,
-review, probes, and proof verification are exposed through the Node
-`solid-checker contract` workflow, while Rust remains the only semantic
-normalizer and receipt authority.
+snapshot (`status`, findings, and metrics), and `--certify` returns exit code 1
+unless the status is `certified`. Package behavior requires selected dependency
+source or reviewed dialect runtime premises. Unknown package behavior remains
+explicitly uncertifiable. Contract generation, certification and consumption
+have been removed; see ADR 0312.
 
 Implemented rule slices are:
 

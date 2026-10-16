@@ -1,18 +1,7 @@
-//! Summary vocabulary shared by source analysis and accepted-contract
-//! projection.
+//! Source-analysis summary vocabulary for callbacks, returns and scheduling.
 //!
-//! These are the rows that describe one export's callbacks and returned shape:
-//! the local and dependency-source summarizers build them, accepted-contract
-//! projection builds them too, and ordinary analysis reads them. The module
-//! owns the meaning of a row, not a wire spelling: [`InvokeProtocol::wire_name`]
-//! and [`InvokeProtocol::enumeration_cardinality`] stay in
-//! [`crate::contract_semantics`] beside the document they spell.
-//!
-//! The vocabulary is shared, not contract-free. One field,
-//! [`ReturnSummary::prototype`], still names a receipt-projected
-//! [`crate::contract_semantics::PrototypeInstanceRecipe`], so this module keeps
-//! one deliberate edge to the contract model; it goes only when that recipe's
-//! own consumers do (`docs/contract-removal-plan.md`).
+//! Local and dependency-source analysis produce these shared rows. They carry
+//! no accepted-contract view, receipt or wire-document representation.
 
 use std::collections::BTreeMap;
 

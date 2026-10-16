@@ -1,5 +1,7 @@
 # ADR 0268: standard hydration host
 
+> Status: contract-related decisions superseded by [ADR 0312](0312-package-contracts-are-removed.md). Source analysis and runtime premises remain subject to that ADR.
+
 - Status: accepted owner decision; implemented (2026-10-09).
 - Amends: ADR 0266, standard runtime configuration premise.
 - Owners: shared Dialect question, Solid 2 declaration/read catalog, Reactive

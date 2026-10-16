@@ -1,4 +1,6 @@
 ---
+
+> Status: contract-related decisions superseded by [ADR 0312](0312-package-contracts-are-removed.md). Source analysis and runtime premises remain subject to that ADR.
 status: accepted
 ---
 

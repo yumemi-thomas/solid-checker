@@ -1,5 +1,7 @@
 # ADR 0284: Dependency source mode
 
+> Status: contract-related decisions superseded by [ADR 0312](0312-package-contracts-are-removed.md). Source analysis and runtime premises remain subject to that ADR.
+
 - Status: accepted, experimental and opt-in (2026-10-13). Decision 3's
   sibling is no longer written: ADR 0303.
 - Owner: `solid-facts-backend::dependency_sources` (selection, closure,

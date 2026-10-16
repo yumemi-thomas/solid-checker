@@ -9,10 +9,7 @@ it is ever read in a tracking scope cannot be certified.
 
 Flags reactive sources — signal accessors, stores, derived functions — that
 are passed to a *package-imported* function whose reactive behavior the
-analysis does not know: no source in the project, no package contract entry,
-no primitive semantics. Shared with the 1.x catalog as
-[v1/reactive-source-uncaptured](v1/reactive-source-uncaptured.md) under the
-same code, so a suppression comment survives a migration.
+analysis does not know: no analyzed source or primitive semantics establish the behavior.
 
 **The warning severity does not soften certification.** Certification status is
 computed from a finding's *kind*, not its severity: like every `uncertifiable`
@@ -20,11 +17,9 @@ finding, an SC9011 warning fails `--certify` until the boundary is described (or
 the rule is disabled in `rule-options.json`). "Advisory" describes the tone —
 nothing has been proven wrong — not an exemption from the certification gate.
 
-Only callees imported from a package are reported, because those are the
-callees the fix applies to. An ambient global (`setTimeout`, `console.log`,
-an array method) comes from no package, so no contract could ever describe
-it; reads flowing through one stay uncertified without a finding demanding a
-fix nobody can write.
+Only callees imported from a package are reported, at this boundary. Ambient globals (`setTimeout`, `console.log`, an array
+method) are outside this package-import rule; absence of this finding does
+not prove their reactive behavior.
 
 ## Why is this analysis-limiting?
 
@@ -52,13 +47,12 @@ Give the analysis a way to see the call:
 
 - If the receiving function is yours, keep it in the project so its body is
   analyzed directly.
-- If it comes from a package, describe the export in the package's
-  `solid-reactivity.json` contract — which arguments it tracks and what it
-  returns.
+- If it comes from a package, provide analyzable runtime source under the
+  correct declared host. Unavailable behavior remains uncertifiable.
 
-See [package-contracts.md](../package-contracts.md) for the contract format.
+Package contracts and receipts are no longer consumed (ADR 0312).
 
 ## Related
 
-- [package-contract-incomplete](package-contract-incomplete.md) — a contract exists but misses an export
+- [package-contract-incomplete](package-contract-incomplete.md) — required package behavior is unavailable from source
 - [strict-read-untracked](strict-read-untracked.md) — reads proven untracked

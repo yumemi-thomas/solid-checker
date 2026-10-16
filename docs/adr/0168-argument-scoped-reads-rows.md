@@ -1,5 +1,7 @@
 # ADR 0168: Argument-scoped `reads` rows for the dialect primitives
 
+> Status: contract-related decisions superseded by [ADR 0312](0312-package-contracts-are-removed.md). Source analysis and runtime premises remain subject to that ADR.
+
 - Status: accepted and implemented (2026-09-30); written with the implementation
 - Date: 2026-09-30
 - Owners: the dialect (`RowScope::Arguments`, `ArgumentScope`,

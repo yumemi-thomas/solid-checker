@@ -1,5 +1,29 @@
 # Precision backlog
 
+## 2026-10-16 — Package contracts removed (P7, D1–D8)
+
+Ordinary native, retained and WASM analysis consume no catalog, authored tier
+or bundled contract. The boundary is `package_requirements`; unavailable
+package behavior stays SC9005 uncertifiable. Emission, certification, probes,
+negative authority, Type Facts certification reads, schemas and measurement
+infrastructure have been removed. Historical entries below describe the system
+at their date and confer no current authority. See ADR 0312.
+
+P7 default-mode sweep: 49 projects, violations 537 → 537 (0 added, 0 removed),
+uncertifiable 3,705 → 3,711. This does not establish complete source recall.
+The earlier contract-only rows remain open source-recovery work: kui
+`TopicsRoute.tsx:425:75`, spotify-desk-thing `PlayerControlIcon.tsx:26:5` and
+`PlayerControls.tsx:133:5`; the kui context getter remains open as well. They
+were not recovered by this deletion. No new host-free inference was built.
+
+Without a declared target/build or analyzable selected package files, package
+calls remain uncertifiable. `checkSync` has no package filesystem and explicitly
+keeps bare runtime package imports open (core/built-in exceptions follow the
+dialect boundary). Unknown callback targets, generic/member dispatch, namespace
+imports that source selection cannot redirect, and visible context or object
+mutations retain the existing conservative behavior. No removed contract claim
+may be treated as negative evidence.
+
 D5 (2026-10-16): the dialect's negative authority is deleted with every
 artifact that fed it: `NEGATIVE_ROWS` and its scoped rows, the audited-archive
 table and slices, `scripts/audited-archives.mjs` and its provisioning step,

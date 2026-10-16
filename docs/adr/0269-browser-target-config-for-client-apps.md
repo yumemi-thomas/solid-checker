@@ -1,5 +1,7 @@
 # ADR 0269: a browser-target config for client applications
 
+> Status: contract-related decisions superseded by [ADR 0312](0312-package-contracts-are-removed.md). Source analysis and runtime premises remain subject to that ADR.
+
 - Status: accepted and implemented (2026-10-09).
 - Owners: `packages/cli/eslint.cjs` (the `browser-<dialect>` configs), its
   types and the CLI README.

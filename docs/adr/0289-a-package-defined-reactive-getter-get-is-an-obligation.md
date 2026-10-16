@@ -1,5 +1,7 @@
 # ADR 0289: A Get of a package-defined reactive getter is an obligation
 
+> Status: contract-related decisions superseded by [ADR 0312](0312-package-contracts-are-removed.md). Source analysis and runtime premises remain subject to that ADR.
+
 - Status: accepted and implemented (2026-10-13).
 - Owners:
   - `accessor_provenance::Resolver::dependency_getters` (derivation);

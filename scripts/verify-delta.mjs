@@ -127,7 +127,7 @@ export const CHECKS = {
     command: ["cargo", TOOLCHAIN, "fmt", "--manifest-path", MANIFEST, "--all", "--", "--check"],
   },
   "whitespace-check": { command: ["git", "diff", "--check"] },
-  "schema-json": { command: ["jq", "empty", "schema/solid-reactivity.schema.json"] },
+  "schema-json": { command: ["jq", "empty", "schema/typefacts-v1.schema.json", "schema/typefacts-codec-limits.json"] },
   "dialect-manifests": { command: ["bun", "scripts/dialect-manifests.mjs", "validate"] },
   clippy: {
     command: [
@@ -158,7 +158,7 @@ export const ROWS = [
   { prefix: "rust/crates/solid-facts/", owner: "solid-facts (AST, normalized facts)", checks: ["facts-lib"] },
   {
     prefix: "rust/crates/solid-reactive-ir/",
-    owner: "solid-reactive-ir (IR, indexes, contracts, interprocedural, rules engine)",
+    owner: "solid-reactive-ir (IR, indexes, source summaries, interprocedural, rules engine)",
     checks: ["ir-lib", "coverage"],
   },
   {

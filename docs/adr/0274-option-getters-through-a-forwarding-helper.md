@@ -1,5 +1,7 @@
 # ADR 0274: Option getters through a forwarding helper
 
+> Status: contract-related decisions superseded by [ADR 0312](0312-package-contracts-are-removed.md). Source analysis and runtime premises remain subject to that ADR.
+
 - Status: accepted and implemented (2026-10-13).
 - Owners:
   - `solid-reactive-ir/src/property_gets.rs`: the helper forwarding census and

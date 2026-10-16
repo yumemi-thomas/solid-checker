@@ -1,9 +1,4 @@
-//! Package-contract resolution and export-summary construction.
-//!
-//! Resolves imported contract bindings to local symbols (`resolve_contract_imports`)
-//! and turns the interprocedural summaries into the per-export contract artifacts
-//! that a downstream package sees. Owns both the full and incremental summary
-//! builds; the public contract data types stay in the crate root.
+//! Explicit package-source boundary obligations. No package contracts are read.
 
 use solid_dialect::Dialect;
 use solid_facts::ProjectFacts;

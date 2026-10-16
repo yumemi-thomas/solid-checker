@@ -8,11 +8,8 @@
 - [Compiler facts](compiler-facts.md) — Solid execution semantics
 - [Semantic inventory](semantic-inventory.md) — diagnostics and proof boundaries
 - [Glossary](glossary.md) — canonical domain language
-- [Package contracts](package-contracts.md) — published reactivity summaries,
-  contract freshness, and the per-package generate/check gate
-- [Next package-contract design](package-contract-v2/README.md) — approved
-  machine-first replacement design, implementation roadmap, proof model,
-  migration gates, and adversarial review reports
+- [Package contracts removed](adr/0312-package-contracts-are-removed.md) —
+  dependency-source boundaries, runtime premises and remaining uncertifiable cases
 - [Adding a dialect](adding-a-dialect.md) — forward checklist and assembly manifest
 - [Monorepo policy](monorepo.md) — upstream and dependency policy
 - [Design-review remediation](design-review-remediation.md) — historical:

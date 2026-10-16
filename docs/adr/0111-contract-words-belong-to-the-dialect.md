@@ -1,5 +1,7 @@
 # ADR 0111: The package-contract word belongs to the dialect
 
+> Status: contract-related decisions superseded by [ADR 0312](0312-package-contracts-are-removed.md). Source analysis and runtime premises remain subject to that ADR.
+
 - Status: accepted (2026-09-17)
 - Date: 2026-09-17
 - Owners: the `Dialect` vocabulary seam, contract emission in

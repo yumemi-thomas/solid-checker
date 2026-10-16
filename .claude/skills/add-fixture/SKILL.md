@@ -92,62 +92,12 @@ per fixture project, holding rule, code, kind, severity, path, and span
 5. Commit the snapshot update in the same commit as the code that moved the
    findings, not a thematically nearby one.
 
-## A fixture that consumes an *accepted* contract
+## A fixture that analyzes package source
 
-A contract-consumer fixture that ships `.solid-checker/accepted-contracts.json`
-pins the **rejection** path: every catalog in the tree is `obsolete-policy1`,
-which is refused before a claim is read, so every component in the fixture
-reports the same `SC9005` no matter what the contract says. That is legitimate
-for a fixture whose claim *is* the refusal, and useless for one whose claim is
-downstream of an accepted contract.
-
-For the second kind, ship `.solid-checker/authorize-contract.json` and **no**
-catalog:
-
-~~~json
-{ "document": "node_modules/<pkg>/solid-reactivity.json", "import": { … } }
-~~~
-
-The `import` block is an ordinary resolved-import record with project-relative
-paths — copy a neighbouring fixture's and change the export names. Coverage then
-copies the tree to `rust/target/fixture-authorization/`, runs
-`solid-contract-authorize` over it, and analyzes the copy with the trust
-configuration supplied out of band; the snapshot still names paths inside the
-fixture directory.
-
-Three things to get right:
-
-- **Ship `node_modules/solid-js/package.json`.** An authorized fixture is
-  analyzed from a copy at a different depth, so it cannot inherit a dialect from
-  its ancestors. Coverage refuses one that does not, by name.
-- **Keep the package manifest byte-identical to the fixture you copied the
-  import block from**, or recompute the closure digest, integrity and file
-  hashes. The names in `exports` are not digested; the bytes of `package.json`
-  are.
-- **Check what the fixture reports un-authorized** (`solid-checker-rust
-  --project …` with no trust flag). If that is the same as the snapshot, the
-  authorization is buying nothing and the fixture is not testing what you think.
-
-`fixtures/reactive-ir/package-merged-props-consumer` is the worked example, and
-`rust/crates/solid-facts-backend/src/fixture_authorization.rs` explains why a
-checked-in signing seed is not a forgery.
-
-Package-contract fixtures (`fixtures/package-contracts/`) additionally pin the
-exact package artifact; keep unknown external behavior fail-closed rather than
-adding blanket trust to make a case green. They are registered by name in
-`scripts/contract-corpus.mjs`, which compares `expected.json` (the contract) and,
-where the fixture carries one, `expected-generation.json` (the review plan's
-attested closure record — per entrypoint: `targets`, package-relative module
-paths, `notes`, `runtimeNotes`; hashes deliberately unpinned). Add the second
-file only for a claim about which modules the *analyzing program* reported it
-opened: that is invisible in the contract document and cannot be tested from
-`scripts/contract-generation.test.mjs`, whose stub native checker resolves
-nothing. See `fixtures/package-contracts/torture-corpus.md`.
-
-Two closure shapes cannot be a committed fixture at all: a symlink escaping the
-package root (it would be this repository's first committed symlink, and arrives
-as a plain file on a Windows checkout) and one file reached by two case
-spellings. Those are generated into a temporary directory against the real
-producer in `scripts/contract-closure-record.test.mjs` — the right home for any
-closure property that depends on the filesystem underneath the package rather
-than on its contents.
+Ship the exact published runtime JavaScript and declaration bytes in the
+fixture’s `node_modules`, with package name, exact version and integrity in its
+README. Keep the package manifest and source-selection conditions faithful.
+Declare the runtime target and build the fixture actually exercises. Preserve
+per-fixture `.gitignore` exceptions and run coverage after touching ignored
+inputs. Unknown behavior must stay explicitly uncertifiable; no catalog,
+authorization marker, receipt or contract can discharge it.

@@ -44,18 +44,8 @@ Full verification keeps its Rust artifacts in `rust/target/verify` with debug
 symbols and incremental object caches disabled. This bounds the disk cost of
 the feature matrix without changing ordinary development and test profiles.
 
-The `verify` profile optimizes the `sha2` dependency: certification repeatedly
-hashes the Node, verifier and Type Facts executable images, and unoptimized
-compression dominated the tracer runtime. All hash checks still run, and the
-checker retains development-profile assertions. On the development host the
-unchanged generated-census test fell from 173.96s to 38.71s with this setting;
-these are test execution times, excluding compilation. The test still covers
-every generated candidate and its intentional timeout cases.
-
-Verification computes certification pins before Clippy and feature checks, and
-passes its profile to both bundle-conformance drivers. It therefore avoids
-switching from unpinned to pinned compilation within a run and avoids starting
-a separate debug build for conformance.
+Verification pins the Type Facts producer and source manifest before every
+Cargo build. Producer/client protocol changes must land atomically.
 
 For a scheduling comparison, run
 `SOLID_CHECKER_RUST_TEST_RUNNER=nextest make verify`. The checked-in
@@ -85,37 +75,15 @@ comparison explicitly used `go test -race -count=1` to avoid cached timings.
 
 ```sh
 make verify-fast
-make test-focused TEST=census_parameter_premise_refusal_is_diagnostic_only
-make test-focused TEST=contract_certification::type_facts::tests::census_parameter_premise_refusal_is_diagnostic_only TEST_EXACT=1
-make ecosystem-package PACKAGE=@solid-primitives/utils
+make test-focused TEST=<existing-test-name> TEST_PACKAGE=solid-reactive-ir
 ```
 
-`verify-fast` checks formatting and compiles/lints every Rust target, including
-test-only code, before running any tests. It supplies the certification pins;
-it is a preflight, not a handoff gate. `verify-delta` now runs its universal
-checks before its selected tests too, and supplies current certification pins
-to every Cargo invocation. Full `verify` also checks Rust targets before the
-Go race tests.
-
-`test-focused` runs library tests in `solid-facts-backend` by default; use
-`TEST_PACKAGE=solid-reactive-ir` (or another exact crate) to change the owner.
-It checks the producer stamp, compiles and lists matching tests, refuses an
-empty selection, and runs with the certification pins and test environment.
-It does not install packages. For tests that read the audited runtime archives,
-provision them once with `make audited-archives-provision`; missing external artifacts
-remain failures. Run the related positive and negative filters during editing,
-then coverage and the full handoff checks required for the change.
-
-`ecosystem-package` builds the release checker and measures every manifest
-probe of the exact package, with certification recipes, full dependency graph
-rows, and retained audit sidecars. Reports go to a new directory under
-`rust/target/ecosystem-investigations`; each result's `retainedArtifacts` names
-its temporary project and output directory. `ECOSYSTEM_PROFILE=debug` selects
-a debug build for investigation, whose timings are not release measurements.
-Per-package refusals remain report data, as in the full runner; a zero command
-exit means the investigation ran, not that the package certified. A filtered
-report cannot establish corpus-wide regression status. Keep `make verify` and
-`make ecosystem-regression` as the required handoff checks.
+Use an exact existing positive or negative test for the owning crate. The
+focused driver refuses an empty selection and supplies the current Type Facts
+pins. Coverage uses a fresh checker; `make verify` is the final authority.
+Package-source fixtures preserve published runtime and declaration bytes and
+record exact versions and integrity. Unavailable external behavior stays
+uncertifiable.
 
 ## Performance regressions
 

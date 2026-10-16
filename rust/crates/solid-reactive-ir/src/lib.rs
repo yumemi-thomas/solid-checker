@@ -61,9 +61,9 @@ pub use findings::{
     strict_read_related_locations,
 };
 pub use projection::{
-    CatalogCapabilities, CatalogWording, FindingSeed, FindingWording, PackageContractIssue,
-    PackageContractIssueKind, StaticDefectTerms, StaticDefectText, project_finding,
-    project_findings, static_defect_text, suppress_findings_owned_by_enabled_rules,
+    CatalogCapabilities, CatalogWording, FindingSeed, FindingWording, StaticDefectTerms,
+    StaticDefectText, project_finding, project_findings, static_defect_text,
+    suppress_findings_owned_by_enabled_rules,
 };
 
 use cache::{BuildIdentity, IncrementalCacheState, RetainedBuild};

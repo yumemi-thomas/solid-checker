@@ -1,5 +1,7 @@
 # ADR 0270: Browser host from feasible execution reachability
 
+> Status: contract-related decisions superseded by [ADR 0312](0312-package-contracts-are-removed.md). Source analysis and runtime premises remain subject to that ADR.
+
 - Owner decisions accepted, 2026-10-10; implementation and measured review below.
 - Owners: native discovery, normalized syntax facts, dialect vocabulary, IR host
   graph, independent contract/solver views, diagnostics and ESLint/Oxlint.

@@ -1,5 +1,7 @@
 # ADR 0110: The checker analyzes Solid 2 only
 
+> Status: contract-related decisions superseded by [ADR 0312](0312-package-contracts-are-removed.md). Source analysis and runtime premises remain subject to that ADR.
+
 - Status: accepted (2026-09-16); written after step 1's measurement and before
   steps 2-4 are implemented
 - Date: 2026-09-16

@@ -42,15 +42,12 @@ AGENTS.md). At handoff, add per change class:
   comparison, and CLI tests if adapter-visible.
 - **Fixture/finding changes**: coverage and ownership-gate comparisons; `--update`
   only after the non-updating diff showed the exact intentional change.
-- **Contract changes**: `node scripts/check-bundled-contracts.mjs` and
-  `node scripts/dialect-manifests.mjs check-composed-contracts`, plus the
-  exact package contract generation checks.
 - **Everything**, once, at the end (the universal set):
 
   ~~~sh
   cargo +1.97 fmt --manifest-path rust/Cargo.toml --all -- --check
   git diff --check
-  jq empty schema/solid-reactivity.schema.json
+  jq empty schema/typefacts-v1.schema.json schema/typefacts-codec-limits.json
   node scripts/dialect-manifests.mjs validate
   cargo +1.97 clippy --manifest-path rust/Cargo.toml --workspace --all-targets -- -D warnings
   ~~~

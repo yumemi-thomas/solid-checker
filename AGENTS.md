@@ -25,7 +25,7 @@ analysis pipeline deliberately separates these semantic owners:
 - rust/crates/solid-facts-backend owns orchestration, diagnostics, and the
   process/session boundary.
 - rust/crates/solid-reactive-ir owns project indexes, interprocedural analysis,
-  contracts, reachability, and proof obligations.
+  dependency-source boundaries, reachability, and proof obligations.
 - rust/crates/solid-dialect owns the shared dialect interface.
 - rust/dialects/solid-v2 owns Solid 2.0 vocabulary, compiler integration, and
   rules. It is the only dialect this build carries: Solid 1.x was retired in
@@ -34,10 +34,10 @@ analysis pipeline deliberately separates these semantic owners:
   refused with `SC9013` rather than analyzed under the wrong language.
 - packages/cli owns the Node CLI, ESLint adapter, package metadata, and tests.
 - packages/wasm owns the WASM adapter.
-- scripts/ owns fixture coverage, product-ownership gates, contract generation, and
+- scripts/ owns fixture coverage, product-ownership gates, source selection, and
   packaging workflows.
 - fixtures/ contains focused semantic fixtures and expected findings.
-- schema/ and pkg/contracts/bundled/ contain versioned public contract artifacts.
+- schema/ contains the versioned Type Facts protocol and codec limits.
 
 Keep these seams explicit. Do not move TypeScript-Go or Oxc nodes across fact
 interfaces, do not put dialect-specific behavior in shared code when the
@@ -107,7 +107,7 @@ This project certifies behavior; it is not a syntax-pattern collection.
 - Never duplicate a TypeScript diagnostic — see the absolute rule above.
 
 - Report a violation only when semantic facts and the execution model prove it.
-- When a required fact, symbol, call target, package contract, or compiler
+- When a required fact, symbol, call target, dependency source, or compiler
   behavior is missing, fail closed or produce an explicit uncertifiable result.
 - Never treat “unresolved” or “not found” as proof of undefined, unsafe, or
   non-reactive behavior.
@@ -116,16 +116,9 @@ This project certifies behavior; it is not a syntax-pattern collection.
   dispatch as a substitute for semantic resolution.
 - Preserve legitimate transparent TypeScript wrappers when classifying spans or
   callees, while rejecting ambiguous computed/member targets conservatively.
-- External behavior is contract-driven. Unknown packages and callback helpers
-  remain uncertifiable unless semantic, type, or exact package-contract facts
-  establish the behavior.
-- The replacement package-contract format uses `schemaVersion: 2` only while
-  every producer, consumer, bundled contract, fixture, proof sidecar, receipt,
-  and gate migrates together. It is then re-emitted atomically as the first
-  stable public `schemaVersion: 1`; never ship both meanings of version 1, add
-  `schemaStatus`, or treat the temporary number as compatibility. After that
-  stable cut, keep version 1 backward-compatible and update validation/tests
-  for every additive field.
+- External behavior requires exact dependency source or dialect runtime premises.
+  Unknown packages and callbacks remain uncertifiable when source facts cannot
+  establish their behavior. Never infer package behavior from its name.
 - Preserve exact Solid 2.0 behavior. Do not infer an API from its name alone,
   and do not put version-specific behavior in shared code when the dialect seam
   can express it — the seam is what a future dialect re-enters through, and it
@@ -175,9 +168,9 @@ that same check; do not fan out into unrelated full-suite commands.
 | You changed | Narrow check while iterating | Also before handoff |
 | --- | --- | --- |
 | solid-facts (AST, normalized facts) | `facts-lib` | universal set |
-| solid-reactive-ir (IR, indexes, contracts, interprocedural, rules engine) | `ir-lib` | coverage compare, universal set |
+| solid-reactive-ir (IR, indexes, source summaries, interprocedural, rules engine) | `ir-lib` | coverage compare, universal set |
 | solid-facts-backend process/diagnostics | `backend-process` | coverage compare, universal set |
-| dialects, contracts at the process boundary | `contract-process` | contract conformance, universal set |
+| dialects at the process boundary | `dialects-process` | universal set |
 | fixtures or expected findings | coverage compare (fresh debug binary) | ownership gate, universal set |
 | packages/cli or packages/wasm | `bun run --cwd packages/cli test` (or `packages/wasm`) | `make wasm-parity` for packages/wasm, universal set |
 | release or broad architectural work | — | `make verify` |
@@ -198,8 +191,8 @@ loop, and it is only ever as good as its mapping.
 
 **Fails closed for paths git reports — and git does not report everything.**
 The selection basis is a merge-base diff plus the working tree, so anything
-`.gitignore` hides is invisible to it. Three ignored classes are real inputs,
-and the plan prints all three as caveats on every run:
+`.gitignore` hides is invisible to it. Ignored classes are real inputs,
+and the plan prints the surviving caveats on every run:
 
 - **The build products under `/bin/` and `rust/target/`.** Above all
   `bin/solid-typefacts`, the producer of every fact here: rebuilding it changes
@@ -209,17 +202,6 @@ and the plan prints all three as caveats on every run:
   identity differs from the producer, Rust client, shims, schemas, dependency
   pins, toolchain identity, or build id (or is absent) escalates the whole plan.
   A hand-replaced binary with a matching stamp is still not detected.
-- **`/packages/cli/probe-harness.buildinfo`**, the same idea for the
-  runtime-probe harness image — and deliberately weaker, because it is not a
-  root of trust. The probe adapter recomputes the harness source manifest from
-  the bytes on disk every gate schedule and compares this stamp *to* the digest
-  compiled into the verifier, so a stamp written by another build refuses at
-  gate time instead of escalating a plan. A harness-script edit is itself
-  mapped: `packages/cli/scripts/contract-probe-*`, `probe-contract.mjs`, and the
-  CLI manifest/lockfiles select `probe-harness`, which rebuilds through the
-  Makefile so the pins are recomputed. A bare `cargo test` there compiles a
-  binary with no pins and every probe assertion returns early — which is why
-  that row's check is a `make` target rather than a `cargo` command.
 - **Ignored fixture inputs.** A `node_modules/solid-js` stub added to an
   *already-tracked* fixture without its `.gitignore` exception lines is invisible
   to `git status`, so no row selects coverage — and `checkDialectStubs`, which
@@ -228,15 +210,13 @@ and the plan prints all three as caveats on every run:
   `make verify`) rather than trusting a `verify-delta` plan.
 
 A row can also be narrower than its blast radius, which is a mapping bug rather
-than a basis one; `pkg/contracts/` is the case that already bit — it now carries
-`coverage` and `ownership-gate` because those contracts are compiled into the
-binary (see "Known traps").
+than a basis one; review any mapping that understates the changed path’s effects.
 
 `make verify` prints each step's wall time as it completes and a summary table
 at the end, so a slowdown can be attributed rather than guessed at. Two
 environment variables tune the gates it runs: `SOLID_CHECKER_GATE_CONCURRENCY`
 overrides the default fan-out of min(cores, 8) for coverage, the oracle gate,
-and the contract corpus, and `SOLID_CHECKER_GATE_CACHE=0` disables the
+and the source gates, and `SOLID_CHECKER_GATE_CACHE=0` disables the
 content-addressed result caches (see "Known traps" below) for both reading and
 writing.
 
@@ -258,7 +238,7 @@ cargo +1.97 test --manifest-path rust/Cargo.toml -p solid-reactive-ir --lib
 # backend-process
 SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" cargo +1.97 test --manifest-path rust/Cargo.toml -p solid-facts-backend --test diagnostics_process
 
-# contract-process
+# dialects-process
 SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" cargo +1.97 test --manifest-path rust/Cargo.toml -p solid-facts-backend --test dialects_process
 
 # coverage compare (after Rust source changes, point at the fresh debug binary)
@@ -268,13 +248,13 @@ SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" bun scripts/coverage.mjs
 # universal handoff set
 cargo +1.97 fmt --manifest-path rust/Cargo.toml --all -- --check
 git diff --check
-jq empty schema/solid-reactivity.schema.json
+jq empty schema/typefacts-v1.schema.json schema/typefacts-codec-limits.json
 bun scripts/dialect-manifests.mjs validate
 cargo +1.97 clippy --manifest-path rust/Cargo.toml --workspace --all-targets -- -D warnings
 ~~~
 
 Rust library tests need no native binary; process tests, coverage, ownership, and
-contract generation do. During iteration prefer targeted Clippy
+source-selection checks do. During iteration prefer targeted Clippy
 (`-p <crate> --lib`); run the workspace-wide universal set once at handoff, not
 after every patch. See `.claude/skills/verify-handoff/SKILL.md` for the full
 proportionality rules and the report format.
@@ -292,29 +272,9 @@ proportionality rules and the report format.
   conclude “no finding moved” from a run that may have used a stale binary.
   Do not rebuild or overwrite bin/solid-checker-rust merely to test a source
   change. The Node CLI launcher override is `SOLID_CHECKER_NATIVE_BIN`, not
-  `SOLID_CHECKER_BIN`. The checked-in bin/solid-checker-rust currently speaks
-  compiler-facts protocol 1 and *refuses the pinned producer outright*, so a
-  manual `bun scripts/contract-corpus.mjs` (whose default is that binary)
-  fails on the handshake instead of testing anything. Point it at the fresh
-  build with `SOLID_CHECKER_NATIVE_BIN="$PWD/rust/target/debug/solid-checker-rust"`;
-  `make contract-corpus` is unaffected because it depends on `build-rust`,
-  which rebuilds bin/ first.
-
-  **A build without the certification pins is a different, weaker binary, and
-  it looks identical.** `SOLID_TYPEFACTS_*` and `SOLID_CHECKER_PROBE_*` are read
-  by `option_env!`, so they are compile-time inputs and part of the crate
-  fingerprint: a `cargo build`/`cargo run`/`cargo test` without them silently
-  replaces `rust/target/debug/solid-checker-rust` with one that refuses Type
-  Facts certification and probe authority, and every probe-gate assertion in the
-  test suite quietly returns early. Always build through `make
-  build-checker-debug` / `make test-rust`, which carry `CERTIFICATION_ENV`. Two
-  scripts reach cargo themselves and therefore had this footgun:
-  `scripts/check-bundled-contracts.mjs` (its `cargo run` builds the same debug
-  tree — it now supplies the environment itself) and `scripts/verify.sh` (it now
-  computes the pins after `build-typefacts` and sets
-  `SOLID_CHECKER_EXPECT_PROBE_PINS=1`, which makes their absence a loud test
-  failure rather than a green run that proved nothing). A new script that shells
-  out to cargo has to do the same.
+  `SOLID_CHECKER_BIN`. Type Facts producer pins are compile-time inputs: build through
+  `make build-checker-debug` or `make test-rust`, which carry the producer
+  digest and source-manifest identity.
 - **Dialect selection follows the installed solid-js.** The nearest
   node_modules/solid-js/package.json above the project decides
   (rust/crates/solid-facts-backend/src/dialect.rs). A version naming a major
@@ -353,16 +313,8 @@ proportionality rules and the report format.
   answers 2.0's behaviour for a dialect nobody has written is the same class of
   defect the 1.x fallback was. Prefer a `Dialect` question; where a match is
   right, keep it exhaustive so a new variant is a compile error there.
-- **Bundled contracts are compiled into the binary.** pkg/contracts/bundled/**
-  reaches the analyzer through `include_bytes!` in
-  rust/crates/solid-facts-backend/src/diagnostics.rs, so editing one changes
-  nothing until the binary is rebuilt. The stale-binary trap above applies to
-  a contract-only change exactly as it does to a Rust one: build
-  rust/target/debug first, then run coverage/ownership with
-  `SOLID_CHECKER_BIN="$PWD/rust/target/debug/solid-checker-rust"`. “No finding
-  moved” from a run that used the previous binary is meaningless there too.
 - **The gate result caches key on inputs, not on verdicts.** coverage, the
-  contract corpus, the ownership gate, and the TypeScript/checker halves of the
+  ownership gate, and the TypeScript/checker halves of the
   tsc oracle store each unit’s *computed result* under
   rust/target/gate-cache/, keyed by a digest over the fixture tree as it sits on
   disk (untracked files included), the dialect-selection chain *above* that tree
@@ -371,7 +323,7 @@ proportionality rules and the report format.
   on there being no stub above them), the checker and TypeFacts binaries plus
   the producer’s `.buildinfo`, the gate script and every local module it can
   reach plus all of scripts/lib/**, any tree the gate *executes* but does not own
-  (`packages/cli`, for the contract corpus’s generator), every `SOLID_*`
+  (for example a gate’s adapter package), every `SOLID_*`
   variable, the Bun/Node runtime identity, and a format constant — see
   scripts/lib/gate-cache.mjs, whose header is the authoritative list. Snapshots
   and `expected.json` are deliberately *not* in the key: comparison always runs
@@ -390,21 +342,6 @@ proportionality rules and the report format.
   that depend only on the same snippet and published typings. Entries are never
   evicted — one file per (shared digest × unit), and checker rebuilds write a
   fresh checker-side set — so a full clean remains the complete reclamation path.
-- **The registry memo stores the falsifier, so it is bound to its inputs.**
-  scripts/check-contract-pins.mjs memoizes registry integrity by `name@version`
-  under the same `SOLID_CHECKER_GATE_CACHE` switch, in
-  rust/target/registry-integrity.json. Entries carry a format version and a
-  digest of everything that determines the answer — the effective npm registry
-  (resolved the way npm resolves it, so a mirror’s answers never serve an npmjs
-  run), this script’s own closure, and the Node version — and anything that is
-  not exactly that envelope discards the file whole. A memoized answer that
-  *disagrees* with the pin it is compared against is never the verdict: it
-  misses, the registry is asked live, and the verdict follows the registry. It is
-  still a file in a user-writable build root, so an entry hand-edited to *agree*
-  with a pin is indistinguishable from a live answer that agrees — the memo is
-  not tamper-proof and does not claim to be. CI’s contracts job has no
-  rust/target, so every push still performs the live lookup for every pin.
-
 ## Fixtures, diagnostics, and snapshots
 
 Fixtures should isolate one semantic claim. For a new semantic path, include
@@ -424,22 +361,22 @@ those paths differ. The mechanics — directory anatomy, tsconfig and package
 stubs, dialect selection, snapshot review and update — are in
 `.claude/skills/add-fixture/SKILL.md`.
 
-## Contracts and dependency pins
+## Dependency source and pins
 
-Contracts describe exact package/version behavior at a trust boundary. Keep
-generated contracts tied to the package artifact and the audited dialect
-version. Test unknown external behavior as fail-closed; do not add blanket
-trust to make a fixture green.
+Ordinary checks consume no package contracts. Package obligations derive from
+`package_requirements`; unavailable behavior stays explicitly uncertifiable
+(SC9005), never a guessed violation or silent success.
 
-When testing a real external package, use an isolated temporary directory and
-record the exact version. Do not modify checked-in node_modules or bundled
-contracts accidentally. The repository audits a specific Solid 2.0 prerelease;
-a newer prerelease must be reviewed rather than silently substituted. It also
-retains audit records for published Solid 1.x artifacts
-(pkg/contracts/bundled/solid-v1/, benchmarks/.../solid-v1-authority/) — those
-describe bytes that still behave as audited and outlive the dialect
-deliberately (ADR 0110 § 4); they are not evidence that 1.x projects are
-analyzed.
+Source selection assumes Vite with the Solid plugin, the declared browser/node
+target and development/production build, standard Solid runtime configuration,
+and the package integrity premise (ADR 0300). Browser source models assume the
+Window realm. Visible providers, mutations, unresolved dispatch and unavailable
+source withhold the corresponding proof. Do not invent host-free inference.
+
+Package-source fixtures must copy the published JavaScript and declarations
+byte-faithfully, record the exact package/version and integrity, and preserve
+signatures relevant to a proof. Use isolated temporary directories to inspect
+real packages. Never silently substitute a newer Solid prerelease.
 
 Current builds consume the Solid 2 compiler at an exact semantic-only fork
 revision and own Type Facts locally. Reuse the checked-in bin/solid-typefacts

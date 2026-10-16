@@ -1,5 +1,10 @@
 # Plan: giving up package contracts
 
+> Status (2026-10-16): implemented through D8. P7 is commit 210396ee1;
+> D3/D4/D7 were combined and D2 followed that compile-driven deletion.
+> The owner explicitly removed the release wait. Parked branches were not
+> integrated. See ADR 0312 for the final model and remaining open boundaries.
+
 Status: approved direction (owner, 2026-10-14). P0 measured; the bounded
 tuple correction and independently reapplied P3 refactor are integrated.
 P1 and the combined ADR 0309 production corrections remain held.

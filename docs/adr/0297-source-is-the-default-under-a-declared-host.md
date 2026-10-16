@@ -1,5 +1,7 @@
 # ADR 0297: Source is the default under a declared host
 
+> Status: contract-related decisions superseded by [ADR 0312](0312-package-contracts-are-removed.md). Source analysis and runtime premises remain subject to that ADR.
+
 - Status: accepted and implemented (2026-10-14). Read-only projects get
   source analysis since ADR 0303.
 - Owner: `defaults_to_dependency_sources` and its call at the top of `run` in

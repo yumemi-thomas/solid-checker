@@ -1,5 +1,7 @@
 # ADR 0291: Every Solid package is analyzed from source
 
+> Status: contract-related decisions superseded by [ADR 0312](0312-package-contracts-are-removed.md). Source analysis and runtime premises remain subject to that ADR.
+
 - Status: accepted and implemented; opt-in as `--dependency-source '*'`
   (2026-10-13). The default of an ordinary analysis under a declared target
   and build since ADR 0297 (2026-10-14).

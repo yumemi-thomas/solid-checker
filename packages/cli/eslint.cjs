@@ -692,7 +692,7 @@ const contractNote = {
     type: "suggestion",
     docs: {
       description:
-        "Report solid-checker run notes, including browser-host inference decisions and withheld project contract catalogs",
+        "Report solid-checker run notes, including runtime-host decisions and unavailable dependency source",
       recommended: true
     },
     schema: adapterSchema,
@@ -808,7 +808,7 @@ const manifestEntriesByRule = new Map(
 
 const plugin = {
   meta: { name: "solid-checker", version: packageVersion },
-  rules: { certification, "contract-note": contractNote },
+  rules: { certification, "package-note": contractNote, "contract-note": contractNote },
   configs: {}
 };
 

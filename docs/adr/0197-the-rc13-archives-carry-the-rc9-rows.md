@@ -1,5 +1,7 @@
 # ADR 0197: The rc.13 archives carry the rc.9 rows
 
+> Status: contract-related decisions superseded by [ADR 0312](0312-package-contracts-are-removed.md). Source analysis and runtime premises remain subject to that ADR.
+
 - Status: accepted and implemented (2026-10-05). Owner request of 2026-10-05
   to re-read the negative rows on rc.13. Supersedes ADR 0194's § 5 ("no
   negative row is carried to rc.13").

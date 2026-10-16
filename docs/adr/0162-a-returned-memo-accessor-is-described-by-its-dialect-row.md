@@ -1,5 +1,7 @@
 # ADR 0162: A returned accessor is described by the dialect row of the call that created it
 
+> Status: contract-related decisions superseded by [ADR 0312](0312-package-contracts-are-removed.md). Source analysis and runtime premises remain subject to that ADR.
+
 - Status: accepted and implemented (2026-09-30); written with the implementation.
   The owner decided on 2026-09-30 to design and implement the returned-accessor
   shape for the largest class of the `recursive-value-shape` wall.
