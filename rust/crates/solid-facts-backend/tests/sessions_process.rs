@@ -9,6 +9,118 @@ use solid_facts_backend::{
 };
 
 #[test]
+fn routed_callback_consumer_edits_refresh_retained_dispatch_contexts() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let fixture = root.join("fixtures/reactive-ir/forwarded-tracked-compute");
+    let directory = temporary_directory("routed-member-consumer-edit");
+    for name in [
+        "tsconfig.json",
+        "solid-js.d.ts",
+        "member-consumers.ts",
+        "member-helpers.ts",
+        "RoutedMembers.tsx",
+    ] {
+        fs::copy(fixture.join(name), directory.join(name)).unwrap();
+    }
+    let stub = directory.join("node_modules/solid-js");
+    fs::create_dir_all(&stub).unwrap();
+    fs::copy(
+        fixture.join("node_modules/solid-js/package.json"),
+        stub.join("package.json"),
+    )
+    .unwrap();
+    let project = directory
+        .join("tsconfig.json")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let consumer = directory
+        .join("member-consumers.ts")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let caller = directory
+        .join("RoutedMembers.tsx")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let source = fs::read_to_string(&consumer).unwrap();
+    let caller_source = fs::read_to_string(&caller).unwrap();
+    let argument = caller_source.find("routedMember({").unwrap() + "routedMember(".len();
+    let read_site = argument + "{ read: () => ".len();
+    let typescript = TypeFactsSession::open(&typefacts, &project, &[]).unwrap();
+    let (mut warm, _) =
+        NativeIncrementalSession::open_pipelined(dialect::default_dialect(), project, typescript)
+            .unwrap();
+    let first = warm.analyze().unwrap();
+    let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
+    let (initial, _) = incremental
+        .build(&first, dialect::default_dialect().vocabulary)
+        .unwrap();
+    let dispatch = |program: &solid_reactive_ir::Program| {
+        program.static_defects.iter().any(|defect| {
+            defect.location.path.as_ref() == caller
+                && defect.location.start_byte == argument as u64
+                && defect.analysis_context == "parameter-member-targets-diverge"
+        })
+    };
+    let non_strict = |program: &solid_reactive_ir::Program| {
+        program.reads.iter().any(|read| {
+            read.location.path.as_ref() == caller
+                && read.location.start_byte == read_site as u64
+                && read.project_consumer_non_strict
+        })
+    };
+    assert!(!dispatch(&initial));
+    assert!(non_strict(&initial));
+    for (version, edited_source, excluded) in [
+        (
+            1,
+            source.replacen(
+                "return createMemo(() => options.compute());",
+                "options.compute();\n  return createMemo(() => options.compute());",
+                1,
+            ),
+            false,
+        ),
+        (2, source, true),
+    ] {
+        let edited = warm
+            .edit(
+                vec![SourceChange {
+                    path: consumer.clone(),
+                    version,
+                    source: Some(edited_source),
+                    compiler_options: CompilerOptions::default(),
+                }],
+                None,
+            )
+            .unwrap();
+        assert!(warm.last_build_timings().source_files_reused > 0);
+        let cold =
+            solid_reactive_ir::build(&edited, dialect::default_dialect().vocabulary).unwrap();
+        let (retained, timings) = incremental
+            .build(&edited, dialect::default_dialect().vocabulary)
+            .unwrap();
+        assert!(timings.interprocedural_graph_reused_files > 0);
+        assert_eq!(dispatch(&retained), !excluded, "version {version}");
+        assert_eq!(non_strict(&retained), excluded, "version {version}");
+        assert_eq!(
+            retained, cold,
+            "consumer-only edit {version} must refresh callback and dispatch proofs"
+        );
+    }
+    drop(warm);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn returned_anonymous_member_caller_edit_matches_cold_analysis() {
     let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
         Ok(value) => value,

@@ -82,6 +82,15 @@ callback default leaves the corresponding obligation open. These exclusions
 affect read-dispatch obligations only; leaf-scope cleanup/flush/primitive
 obligations still need their separate proofs.
 
+Options fields can forward through another exact source helper. The existing
+closed callback-use proof supplies a tracked/fresh subset for this purpose;
+explicit untrack alone is deliberately insufficient for dispatch exclusion.
+Every field consumer, sibling and outer callback carrier must close. Source
+invocation contexts are refreshed after cached graph contributions merge each
+generation, so a downstream consumer edit can restore the obligation without
+changing the forwarding helper. No runtime method is selected from a property
+name or type.
+
 ### `omit` predicates (Solid 2.0.0-rc.9)
 
 `@solidjs/signals@2.0.0-rc.9` accepts `omit(props, hidden)` with a single

@@ -1,4 +1,4 @@
-//! Closed, read-only project callback-use summaries. Draft against e36502481.
+//! Closed, read-only project callback-use summaries.
 //! Never install a synthetic ExecutionRole: mixed safe roles prove only the
 //! absence of a strict-read invocation, not write legality or ownership.
 
@@ -98,9 +98,24 @@ impl<'a, 'facts> ReadConsumerSummaries<'a, 'facts> {
     /// Called after cached read tables have been merged, once per generation.
     /// This proof is consumed only by strict-read projection.
     pub(crate) fn proves_non_strict(&mut self, file: &solid_facts::FileFacts, read: Span) -> bool {
-        let Some(literal) = containing_ast_function(&file.ast, read) else {
-            return false;
-        };
+        self.proven_modes(file, read)
+            .is_some_and(|modes| modes != 0 && modes & !SAFE == 0)
+    }
+
+    /// The subset shared by read-dispatch exclusions. Explicit untrack is
+    /// intentionally not included: this query establishes tracked or fresh
+    /// execution only, never a method identity or a synthetic execution role.
+    pub(crate) fn proves_tracked_or_fresh(
+        &mut self,
+        file: &solid_facts::FileFacts,
+        read: Span,
+    ) -> bool {
+        self.proven_modes(file, read)
+            .is_some_and(|modes| modes != 0 && modes & !(TRACKED | FRESH) == 0)
+    }
+
+    fn proven_modes(&mut self, file: &solid_facts::FileFacts, read: Span) -> Option<u8> {
+        let literal = containing_ast_function(&file.ast, read)?;
         // An arrow has no `this` of its own. Any other function is called as a
         // member of the object it is stored in, and can hand that receiver to
         // code that later calls it again (`replay = () => this.read()`).
@@ -116,19 +131,15 @@ impl<'a, 'facts> ReadConsumerSummaries<'a, 'facts> {
                     && matches!(file.source_text(id.span), Some("arguments" | "eval"))
             })
         {
-            return false;
+            return None;
         }
-        let Some((slot, site)) = self.literal_slot(file, literal.span) else {
-            return false;
-        };
-        let Some(root) = self.intern(slot) else {
-            return false;
-        };
+        let (slot, site) = self.literal_slot(file, literal.span)?;
+        let root = self.intern(slot)?;
         if !self.siblings_are_arrows(file, root, site) {
-            return false;
+            return None;
         }
         let closed = self.solve();
-        closed[root].is_some_and(|modes| modes != 0 && modes & !SAFE == 0)
+        closed[root]
     }
 
     fn slot(
@@ -670,16 +681,43 @@ impl<'a, 'facts> ReadConsumerSummaries<'a, 'facts> {
             {
                 return None;
             }
-            let (call, index) = file
+            let direct = file
                 .ast
                 .arguments_containing(owner.span)
                 .find(|(c, index)| {
                     !c.construct
                         && !c.arguments.iter().any(|a| a.spread)
                         && file.ast.peel_ts_sugar_span(c.arguments[*index].span) == owner.span
+                });
+            if let Some((call, index)) = direct {
+                let parent = self.context(file, function, call.span, depth + 1)?;
+                self.argument_use(file, call, index, parent)?
+            } else {
+                // An options-field callback has the same carrier question as
+                // a direct callback argument. Close its exact field consumer
+                // and siblings, then compose its modes with the outer carrier.
+                // A function expression has the field receiver as `this` and
+                // can leak that receiver for invocation in another context.
+                if owner.kind != FunctionKind::Arrow {
+                    return None;
+                }
+                let (slot, Some(site @ Site::Literal(argument))) =
+                    self.literal_slot(file, owner.span)?
+                else {
+                    return None;
+                };
+                let call = file.ast.calls.iter().find(|call| {
+                    call.arguments
+                        .iter()
+                        .any(|candidate| candidate.span == argument.span)
                 })?;
-            let parent = self.context(file, function, call.span, depth + 1)?;
-            self.argument_use(file, call, index, parent)?
+                let parent = self.context(file, function, call.span, depth + 1)?;
+                let target = self.intern(slot)?;
+                if !self.siblings_are_arrows(file, target, Some(site)) {
+                    return None;
+                }
+                Uses::Forward(target, Box::new(parent))
+            }
         };
         // A callback-valued attribute merely constructs a function. The
         // written-directly check above prevents transferring this region

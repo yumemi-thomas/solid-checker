@@ -89,6 +89,14 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   handlers remain clean; a retained callback, a spread slot, or a non-call protocol item does
   not establish a read during the package call
   (`fixtures/reactive-ir/package-protocol-callbacks-consumer`).
+- **Closed options callbacks can compose across source helpers.** An arrow
+  forwarded in an exact options field is non-strict only when every consumer
+  use, sibling field and enclosing callback carrier is accounted for. The
+  bounded source proof follows fields into tracked computes, explicit untrack
+  and audited fresh-stack scheduling. Mixed eager execution, object escape,
+  receiver-capturing sibling methods, callback defaults, cycles and missing
+  source keep the read uncertifiable. The proof runs again after cached read
+  tables are merged; a consumer-only edit cannot retain an old exemption.
 - **`flush(fn)` keeps the caller's read role.** It runs `fn` inline without
   touching the listener, so a read inside it subscribes a memo or effect compute
   that calls it, and in a component body it is reported exactly as a bare read

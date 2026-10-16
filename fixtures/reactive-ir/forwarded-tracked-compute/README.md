@@ -60,3 +60,20 @@ override an eager, unresolved or default-initializer use. The mixed exported
 helper also retains its open-boundary dispatch obligation. The armed process
 test checks exact caller spans across files. Both files pass `tsc --noEmit`
 against published RC.13 typings without this fixture's stub.
+
+`RoutedMembers.tsx` and `member-consumers.ts` compose that proof through another
+exact options-object callback field. Tracked, fresh-stack and safe sibling-arrow
+routes are clean. A mixed eager consumer or escaped carrier keeps both read and
+dispatch obligations. An explicit untrack route clears the strict-read question
+but retains dispatch: that consumer query deliberately admits only tracked or
+fresh execution. A sibling method that can invoke `this.compute()` blocks the
+proof. An intermediate function-expression field that can expose its own
+receiver is refused as well; only arrow carriers use the new composition.
+All files type-check against published RC.13 declarations.
+
+The retained-session process twin changes only `trackedSink` in the downstream
+file to add an eager invocation, then reverses the edit. Both strict-read and
+dispatch exclusions must change in both directions while helper graph entries
+are reused, and retained IR must equal cold IR. Source invocation sites are
+retained as dependencies; source positions do not distinguish otherwise
+equivalent dispatch implementations.

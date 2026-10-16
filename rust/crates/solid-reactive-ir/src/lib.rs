@@ -4020,6 +4020,7 @@ mod tests {
             parameter: 0,
             path: vec!["of".into(), "values".into()],
             in_owner_body: true,
+            site: Span { start: 3, end: 5 },
             primitive_builtin: false,
             dispatch_read_excluded: false,
         }]];

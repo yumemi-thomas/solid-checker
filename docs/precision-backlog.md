@@ -1,5 +1,44 @@
 # Precision backlog
 
+## 2026-10-16 — Options-field carriers compose closed source contexts
+
+Extended `ReadConsumerSummaries::context` to compose a callback written as an
+exact options-object field with its source consumer and outer carrier. This
+reuses the existing field/reference census, sibling-arrow and escape checks,
+strict-window resets, least closure fixpoint, 128-node and 32-context limits.
+The new read-dispatch query accepts only tracked/fresh modes. The strict-read
+query also accepts the already-supported explicit untrack mode; neither query
+installs an execution role or establishes ownership, write permission or an
+unknown package's runtime behavior.
+
+`ParameterMemberInvocation` now records its exact source site. Context flags
+are recomputed from current source after cached graph contributions merge,
+rather than stored as conclusions in a reusable file contribution. Consumer
+changes in another file therefore change the helper's dependency state even
+when the helper's AST/compiler/graph are reused. Composite-dispatch equivalence
+ignores source positions and duplicate equal uses while retaining distinctions
+in path, owner-body provenance, primitive identity and invocation context.
+
+New cross-file routed cases in `forwarded-tracked-compute` pin tracked/fresh,
+mixed, untrack, escape and sibling-receiver behavior. The process test checks
+an intermediate function-expression subject that leaks `this` as well; only
+arrow carriers are admitted by the new composition. It asserts
+exact callback-read and dispatch spans. A retained-session twin edits only the
+downstream consumer to add an eager call, then reverses it; both exclusions
+must flip and retained/cold IR must agree while graph reuse remains positive.
+Published RC.13 `tsc --noEmit` passes without the fixture stub. Only this
+fixture's snapshot changes.
+
+The final fresh default-mode corpus comparison removes one SC9012 row at
+`derp-media-server/src/features/viewer/ImageViewerPane.tsx:85`:
+`createResponsiveImage`'s `.path` callback has a closed source carrier. This
+is a smaller reduction than expected; other options callbacks remain blocked
+by real source, escape, sibling or lifetime gaps. No guard was weakened to
+increase the count. The broader reduction goal remains open.
+The same 49 configured project entries now have 3,433 uncertifiable rows
+(from 3,434), all 537 violation rows unchanged, no added findings and no
+project errors. The final comparison includes the intermediate receiver guard.
+
 ## 2026-10-16 — Returned callable expressions have structural body facts
 
 Found a concrete source-fact omission in backend `structural_functions`:

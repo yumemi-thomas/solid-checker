@@ -255,6 +255,9 @@ pub(crate) struct ParameterMemberInvocation {
     pub(crate) parameter: usize,
     pub(crate) path: Vec<String>,
     pub(crate) in_owner_body: bool,
+    /// Exact member callee in the declaring file. Context proofs are refreshed
+    /// each generation because a downstream callback consumer may change.
+    pub(crate) site: Span,
     /// Type Facts resolved this member call, validly and to one declaration,
     /// to a method of a primitive wrapper in the standard library
     /// (`String.replace`, `Number.toFixed`). Whatever the caller passes, the
@@ -265,6 +268,24 @@ pub(crate) struct ParameterMemberInvocation {
     /// Retain the invocation for identity/dependency comparisons, but do not
     /// project an untracked dispatch question to the helper's caller.
     pub(crate) dispatch_read_excluded: bool,
+}
+
+fn equivalent_member_invocations(
+    left: &[ParameterMemberInvocation],
+    right: &[ParameterMemberInvocation],
+) -> bool {
+    // Source positions refresh cache dependencies, but are not behavioral
+    // differences between two implementations. Repeated equal uses were
+    // already coalesced before the source-site field was introduced.
+    let same = |a: &ParameterMemberInvocation, b: &ParameterMemberInvocation| {
+        a.parameter == b.parameter
+            && a.path == b.path
+            && a.in_owner_body == b.in_owner_body
+            && a.primitive_builtin == b.primitive_builtin
+            && a.dispatch_read_excluded == b.dispatch_read_excluded
+    };
+    left.iter().all(|a| right.iter().any(|b| same(a, b)))
+        && right.iter().all(|b| left.iter().any(|a| same(a, b)))
 }
 
 /// Whether Type Facts resolved `callee`, validly and to exactly one
@@ -1433,30 +1454,15 @@ fn discover_interprocedural_graph(
                 .position(|candidate| *candidate == receiver)
         {
             let primitive_builtin = primitive_builtin_member_call(file, call.callee, lookup);
-            let dispatch_read_excluded = !file.ast.functions.iter().any(|function| {
-                function.span.contains(call.span) && !function.body.contains(call.span)
-            }) && matches!(
-                semantic_execution_role(
-                    file,
-                    call.callee,
-                    &allowed,
-                    symbols.entities,
-                    symbols.names,
-                    lookup,
-                ),
-                ExecutionRole::TrackedJsx
-                    | ExecutionRole::EventCallback
-                    | ExecutionRole::DeferredCallback
-                    | ExecutionRole::DiscardedRendering
-            );
             let entry = (
                 owner_span,
                 ParameterMemberInvocation {
                     parameter,
                     path,
                     in_owner_body,
+                    site: call.callee,
                     primitive_builtin,
-                    dispatch_read_excluded,
+                    dispatch_read_excluded: false,
                 },
             );
             if !contribution.invoked_parameter_members.contains(&entry) {
@@ -7683,6 +7689,32 @@ fn interprocedural_reads(
             }
         }
     }
+    // A callback consumer can change in another file while its forwarding
+    // helper's cached graph contribution remains reusable. Refresh invocation
+    // context from the current source census before dependency states are read.
+    let mut member_consumers = crate::execution_role::ReadConsumerSummaries::new(lookup);
+    for file in &facts.files {
+        let allowed = allowed_callback_spans(file, lookup);
+        for owner in nodes_by_path.get(file.path.as_str()).into_iter().flatten() {
+            for invocation in &mut invoked_parameter_members[*owner] {
+                let site = invocation.site;
+                let default =
+                    file.ast.functions.iter().any(|function| {
+                        function.span.contains(site) && !function.body.contains(site)
+                    });
+                let role =
+                    semantic_execution_role(file, site, &allowed, entities, symbol_names, lookup);
+                invocation.dispatch_read_excluded = !default
+                    && (matches!(
+                        role,
+                        ExecutionRole::TrackedJsx
+                            | ExecutionRole::EventCallback
+                            | ExecutionRole::DeferredCallback
+                            | ExecutionRole::DiscardedRendering
+                    ) || member_consumers.proves_tracked_or_fresh(file, site));
+            }
+        }
+    }
     // These edges depend on other files' returned literals and the entire
     // provider census. Recompute them after merging file-local cached graph
     // contributions, so a provider/factory edit cannot retain a stale edge.
@@ -8112,7 +8144,10 @@ fn interprocedural_reads(
                 && direct_protocol_parameters[*candidate] == direct_protocol_parameters[first]
                 && direct_member_callback_parameters[*candidate]
                     == direct_member_callback_parameters[first]
-                && invoked_parameter_members[*candidate] == invoked_parameter_members[first]
+                && equivalent_member_invocations(
+                    &invoked_parameter_members[*candidate],
+                    &invoked_parameter_members[first],
+                )
                 && nodes[*candidate].r#async == nodes[first].r#async
         });
         if !equivalent {
@@ -8640,7 +8675,47 @@ mod tests {
         primitive_slot_roots_parameter_invoke, reactive_source_order,
         remove_interprocedural_dependency_user, retained_reactive_sources,
     };
+    use super::{ParameterMemberInvocation, equivalent_member_invocations};
     use crate::cache::InterproceduralResultDependency;
+    use solid_facts::core::Span;
+
+    #[test]
+    fn source_sites_do_not_change_dispatch_equivalence_but_contexts_do() {
+        let first = ParameterMemberInvocation {
+            parameter: 0,
+            path: vec!["read".into()],
+            in_owner_body: false,
+            site: Span::new(10, 14),
+            primitive_builtin: false,
+            dispatch_read_excluded: true,
+        };
+        let second = ParameterMemberInvocation {
+            site: Span::new(30, 34),
+            ..first.clone()
+        };
+        assert!(equivalent_member_invocations(
+            std::slice::from_ref(&first),
+            &[
+                second.clone(),
+                ParameterMemberInvocation {
+                    site: Span::new(50, 54),
+                    ..second.clone()
+                }
+            ]
+        ));
+        let eager = ParameterMemberInvocation {
+            dispatch_read_excluded: false,
+            ..second
+        };
+        assert!(!equivalent_member_invocations(
+            std::slice::from_ref(&first),
+            std::slice::from_ref(&eager)
+        ));
+        assert!(!equivalent_member_invocations(
+            std::slice::from_ref(&first),
+            &[first.clone(), eager]
+        ));
+    }
 
     fn location(start: u64) -> Location {
         Location {

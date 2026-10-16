@@ -16,6 +16,64 @@ mod no_package_contracts_process;
 use support::{assert_rule_findings, diagnostic_fixture, findings_for_rule};
 
 #[test]
+fn routed_options_callbacks_compose_source_contexts() {
+    let Some(findings) = diagnostic_fixture("forwarded-tracked-compute") else {
+        return;
+    };
+    let source = include_str!(
+        "../../../../fixtures/reactive-ir/forwarded-tracked-compute/RoutedMembers.tsx"
+    );
+    let rows = findings
+        .iter()
+        .filter(|row| {
+            row["primaryLocation"]["path"]
+                .as_str()
+                .is_some_and(|path| path.ends_with("/RoutedMembers.tsx"))
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(rows.len(), 9, "{rows:#?}");
+    for (name, helper, dispatch, strict) in [
+        ("RoutedTracked", "routedMember", false, false),
+        ("RoutedMixed", "mixedRoutedMember", true, true),
+        ("RoutedFresh", "freshRoutedMember", false, false),
+        ("RoutedSampled", "sampledRoutedMember", true, false),
+        ("RoutedEscaped", "escapedRoutedMember", true, true),
+        ("RoutedSiblingArrow", "siblingRoutedMember", false, false),
+        ("RoutedSiblingReceiver", "receiverRoutedMember", true, true),
+        (
+            "RoutedSubjectReceiver",
+            "subjectReceiverRoutedMember",
+            true,
+            true,
+        ),
+    ] {
+        let owner = source.find(&format!("export function {name}(")).unwrap();
+        let argument =
+            owner + source[owner..].find(&format!("{helper}(")).unwrap() + helper.len() + 1;
+        let read = argument + "{ read: () => ".len();
+        for (code, expected, start, width) in [
+            (
+                "SC9012",
+                dispatch,
+                argument,
+                "{ read: () => count() }".len(),
+            ),
+            ("SC1001", strict, read, "count()".len()),
+        ] {
+            let row = rows.iter().find(|row| {
+                row["id"] == code
+                    && row["primaryLocation"]["startByte"].as_u64() == Some(start as u64)
+                    && row["primaryLocation"]["endByte"].as_u64() == Some((start + width) as u64)
+            });
+            assert_eq!(row.is_some(), expected, "{name}/{code}: {rows:#?}");
+            if let Some(row) = row {
+                assert_eq!(row["kind"], "uncertifiable");
+            }
+        }
+    }
+}
+
+#[test]
 fn returned_literal_body_facts_project_reads_only_at_invocation() {
     let Some(findings) = diagnostic_fixture("fp-summary-returned-closure") else {
         return;

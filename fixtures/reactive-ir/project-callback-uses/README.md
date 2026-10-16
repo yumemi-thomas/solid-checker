@@ -29,8 +29,12 @@ stack. The closed uses are:
 | DirectLabelledUntrack | nothing reported; a known missed detection (docs/precision-backlog.md) |
 | StoredCallback, ReturnedCallback, ReturnedUntrackCapture, UnknownPackage, SynchronousDomDispatch, StoredCallbackProp, WholePropsEscape, NamespaceTarget, ComputedTarget, Cycle, AsyncConsumer, DefaultedConsumer, SpreadOverride | uncertifiable |
 
-The summary never clears another rule's obligation: the `SC9005`, `SC9012`
-and `SC4001` findings in `wrappers.tsx` and `forwarding.ts` stay.
+The strict-read proof also composes exact options-field callback carriers,
+closing each field's consumer, siblings and outer carrier. Its tracked/fresh
+subset is shared with source member read-dispatch projection. This installs no
+execution role and clears no package or ownership obligation: `SC9005`, leaf
+dispatch and `SC4001` still need their independent proofs. An explicit untrack
+mode can be non-strict without satisfying the narrower dispatch query.
 
 `unknown-package` is a synthetic external boundary whose declaration admits a
 callback. It has no runtime implementation and no contract, so its invocation
