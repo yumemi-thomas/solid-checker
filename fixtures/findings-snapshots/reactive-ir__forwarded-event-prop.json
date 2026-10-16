@@ -120,6 +120,86 @@
       "start": 2378,
       "end": 2391,
       "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-event-prop/EvalHandler.tsx",
+      "start": 311,
+      "end": 318,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-event-prop/NamedHandlers.tsx",
+      "start": 2660,
+      "end": 2667,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-event-prop/NamedHandlers.tsx",
+      "start": 2790,
+      "end": 2797,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-event-prop/NamedHandlers.tsx",
+      "start": 2920,
+      "end": 2927,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-event-prop/NamedHandlers.tsx",
+      "start": 3050,
+      "end": 3057,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-event-prop/NamedHandlers.tsx",
+      "start": 3324,
+      "end": 3331,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-event-prop/NamedHandlers.tsx",
+      "start": 3460,
+      "end": 3467,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-event-prop/NamedHandlers.tsx",
+      "start": 4134,
+      "end": 4141,
+      "fixes": 0
     }
   ]
 }

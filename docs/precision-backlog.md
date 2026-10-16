@@ -1,5 +1,46 @@
 # Precision backlog
 
+## 2026-10-16 — Callback props invoked by exclusive named DOM handlers
+
+Followed `ai-memory-ui`'s `ScopePageScreen` callback prop reads at
+`src/screens/scope-page.tsx:197-198`. The exact imported `PageReader` component
+uses `props.onNavigate` in its local `handleWikilinkClick` arrow, which is passed
+to source-visible `Markdown` and then a DOM `onClick`, and forwards the same
+prop twice to source-visible `RelatedList` event callbacks. The inline
+forwarding proof already covers `RelatedList`;
+the missing branch was the named local handler in `PageReader`, not a missing
+Type Facts/compiler field or package implementation.
+
+`execution_role::member_in_exclusive_named_event_handler` extends only the
+callback-prop event proof. It requires a synchronous immutable local arrow,
+an exact binding, and a nonempty reference census combining AST declaration
+identities with the Type Facts symbol index. Every reference must be an exact
+intrinsic event attribute value backed by the compiler callback census, or
+an exact project component prop satisfying the same event-forwarding proof.
+Conflicting/cross-file references, JSX tag uses, direct eval, aliases,
+escapes, mutation, eager calls, async handlers and other invocation shapes
+withhold the proof. The component-prop recursion guard now tracks the active
+path: a second use of a completed component/prop proof is not a cycle, while
+recursive forwarding still refuses proof. A successful proof gives the callback
+the existing event execution role. It does not reuse a role admitted by just
+one event use or select a runtime method implementation.
+
+`forwarded-event-prop` now covers direct, wrapped, shadowed and cross-file
+positives with genuinely reactive caller values, plus eager, escaped, aliased,
+mutable, shadowed-eager, callback-default, cycle and eval controls. Repeated
+named/inline forwarding and forwarding through another component are pinned.
+An armed process test asserts the exact caller read spans and uncertifiable
+kinds. The three
+new source files pass `tsc --noEmit` against published Solid 2.0.0-rc.13
+typings without the fixture stub. Only this fixture's snapshot changes.
+
+The fresh release application check with explicit browser/development flags
+removes exactly the two sampled SC1001 uncertifiable rows at
+`scope-page.tsx:197-198`: 65 to 63 uncertifiable rows, with all 17 violation
+sites unchanged and no added findings. This is one application's comparison,
+not a corpus sweep. Unknown callback consumers, escaped or mutable handlers,
+helper-call chains and the separate DOM focus/owner obligations remain open.
+
 ## 2026-10-16 — DOM focus in a settled callback remains uncertifiable
 
 Reproduced `ai-memory-ui/src/components/confirm-dialog.tsx:22` with the current

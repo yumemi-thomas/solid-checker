@@ -61,3 +61,24 @@ move.
   type-check.
 
 No proof here depends on the stub's element typings.
+
+`NamedHandlers.tsx` extends the same proof to a synchronous immutable local
+arrow whose complete references are intrinsic event attribute values or exact
+component props that themselves reach only events, such as
+`const handleClick = () => props.onPress(); return <button onClick={handleClick} />`.
+AST declaration identities and the Type Facts reference index must agree;
+transparent TypeScript wrappers preserve the exact attribute value. The
+cross-file `named-button.tsx` control proves the imported component case.
+Named and inline repeated forwarding can reuse a completed proof; the recursion
+guard tracks the active path, so a true forwarding cycle remains uncertifiable.
+Shadowed identifiers do not borrow each other's event uses. Eager calls,
+aliases, escapes, mutable bindings and callback-default construction keep the
+caller read uncertifiable. `EvalHandler.tsx` pins the direct-eval refusal;
+any reference to `eval` in the handler's file withholds this new proof.
+Only exact attribute values are followed; helper-call chains, async
+handlers and type-only references that do not map to an event value remain open.
+
+Each caller has its own signal, so the clean cases require execution evidence
+rather than an assumption that the supplied value is non-reactive. These three
+new source files pass `tsc --noEmit` against published RC.13 typings without
+the fixture stub. The armed process test checks exact read spans and kinds.

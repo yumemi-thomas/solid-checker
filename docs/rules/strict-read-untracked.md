@@ -63,6 +63,16 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   synchronous dispatch in the body reaches the listener, so even that case stays
   uncertifiable. A JSX event handler (`onClick={...}`) is the compiler's event
   callback and is not reported.
+- **A named local handler can forward a callback prop.** A project component
+  may invoke a callback prop from a synchronous immutable local arrow bound
+  only to intrinsic event attributes or exact component props that themselves
+  reach only events. Exact local declaration identities and
+  the complete reference census must establish those uses, including when the
+  component is imported. Transparent TypeScript wrappers are preserved;
+  eager calls, aliases, escapes, reassignment, direct eval, or missing reference
+  evidence withhold the proof. This extends the existing inline JSX event
+  forwarding rule and gives the callback the existing event execution role.
+  It does not classify arbitrary functions by an `on…` name.
 - **An accessor passed by reference is read where the callee calls it.**
   `run(count)` reads `count` during the call when `run` is a project function
   whose own synchronous body calls that parameter, so in a component body it is

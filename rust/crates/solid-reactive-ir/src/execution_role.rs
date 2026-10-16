@@ -996,6 +996,9 @@ fn prop_reaches_only_events(
     let Some(symbol) = lookup.entities().at(file.path.as_str(), name.span) else {
         return false;
     };
+    // Track the active path, not completed sibling proofs. The same component
+    // prop can be forwarded twice without being a recursive cycle.
+    let mut visiting = visiting.clone();
     if !visiting.insert((file.path.to_string(), function.span, prop.to_owned())) {
         return false;
     }
@@ -1029,11 +1032,11 @@ fn prop_reaches_only_events(
                 .find(|member| member.object == reference)
             {
                 file.source_text(member.property) != Some(prop)
-                    || member_reaches_only_events(file, member.span, lookup, visiting)
+                    || member_reaches_only_events(file, member.span, lookup, &mut visiting)
             } else if let Some(view) = props_view_call(file, reference, lookup) {
                 match spread_onto(file, view) {
                     Some(element) => {
-                        spread_reaches_only_events(file, element, prop, lookup, visiting)
+                        spread_reaches_only_events(file, element, prop, lookup, &mut visiting)
                     }
                     None => match const_binding_of(file, view, lookup) {
                         Some(binding) => {
@@ -1044,7 +1047,7 @@ fn prop_reaches_only_events(
                     },
                 }
             } else if let Some(element) = spread_onto(file, reference) {
-                spread_reaches_only_events(file, element, prop, lookup, visiting)
+                spread_reaches_only_events(file, element, prop, lookup, &mut visiting)
             } else if let Some(binding) = const_binding_of(file, reference, lookup) {
                 // `const rest = props`, `const root = view as Props`: the same
                 // object under another name.
@@ -1107,6 +1110,9 @@ fn member_reaches_only_events(
             }) {
                 return true;
             }
+            if member_in_exclusive_named_event_handler(file, member, lookup, visiting) {
+                return true;
+            }
             // Inside a literal written as another project component's prop
             // that itself reaches only event dispatch.
             let literals = file
@@ -1125,6 +1131,86 @@ fn member_reaches_only_events(
             false
         }
     }
+}
+
+/// A local arrow whose complete reference census consists only of event
+/// attributes or exact component props that reach events. One use is insufficient:
+/// an eager call or an escaped alias could invoke the prop during rendering.
+fn member_in_exclusive_named_event_handler(
+    file: &solid_facts::FileFacts,
+    member: Span,
+    lookup: &SemanticLookup<'_>,
+    visiting: &mut HashSet<(String, Span, String)>,
+) -> bool {
+    use solid_facts::ast::{FunctionKind, IdentifierRole};
+    let Some(handler) = containing_ast_function(&file.ast, member) else {
+        return false;
+    };
+    if handler.kind != FunctionKind::Arrow
+        || handler.r#async
+        || handler.generator
+        || containing_ast_function(&file.ast, handler.span).is_none()
+        || lookup.function_component_status(file, handler) != ComponentStatus::No
+        || !lookup.function_value_is_current(file, handler)
+        || file.ast.identifiers.iter().any(|id| {
+            id.role == IdentifierRole::Reference && file.source_text(id.span) == Some("eval")
+        })
+    {
+        return false;
+    }
+    let Some(binding) = function_binding_name(file, handler) else {
+        return false;
+    };
+    let Some(symbol) = lookup.entities().at(file.path.as_str(), binding.span) else {
+        return false;
+    };
+    if file.ast.jsx_elements.iter().any(|element| {
+        lookup.entities().at(file.path.as_str(), element.name.span) == Some(symbol)
+            || file.ast.reference_declaration(element.name.span) == Some(binding.span)
+    }) {
+        return false;
+    }
+    // Include undemanded AST references as well as the Type Facts index, and
+    // require both sources to agree on the exact local declaration.
+    let mut references = file
+        .ast
+        .identifiers
+        .iter()
+        .filter(|id| {
+            id.role == IdentifierRole::Reference
+                && file.ast.reference_declaration(id.span) == Some(binding.span)
+        })
+        .map(|id| id.span)
+        .collect::<HashSet<_>>();
+    for reference in lookup.symbol_references(symbol.as_str()) {
+        if reference.path.as_ref() != file.path.as_str() {
+            return false;
+        }
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(reference.start_byte),
+            u32::try_from(reference.end_byte),
+        ) else {
+            return false;
+        };
+        let reference = Span::new(start, end);
+        if reference == binding.span {
+            continue;
+        }
+        if file.ast.reference_declaration(reference) != Some(binding.span) {
+            return false;
+        }
+        references.insert(reference);
+    }
+    !references.is_empty()
+        && references.iter().all(|reference| {
+            file.compiler.callback_roles.iter().any(|callback| {
+                callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
+                    && intrinsic_attribute_value(file, callback.span)
+                    && file.ast.peel_ts_sugar_span(callback.span) == *reference
+            }) || component_prop_literal(file, *reference).is_some_and(|(element, prop)| {
+                component_prop_reaches_only_events(file, element, prop, lookup, visiting)
+            })
+        })
 }
 
 /// The element `value` is spread onto, when `value` is exactly the argument of

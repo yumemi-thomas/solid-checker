@@ -16,6 +16,63 @@ mod no_package_contracts_process;
 use support::{assert_rule_findings, diagnostic_fixture, findings_for_rule};
 
 #[test]
+fn named_event_prop_forwarding_requires_an_exclusive_reference_census() {
+    let Some(findings) = diagnostic_fixture("forwarded-event-prop") else {
+        return;
+    };
+    let source =
+        include_str!("../../../../fixtures/reactive-ir/forwarded-event-prop/NamedHandlers.tsx");
+    let rows = findings
+        .iter()
+        .filter(|row| {
+            row["primaryLocation"]["path"]
+                .as_str()
+                .is_some_and(|path| path.ends_with("/NamedHandlers.tsx"))
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(rows.len(), 7, "{rows:#?}");
+    for (name, unresolved) in [
+        ("UsesNamed", false),
+        ("UsesWrappedNamed", false),
+        ("UsesEagerNamed", true),
+        ("UsesEscapedNamed", true),
+        ("UsesAliasedNamed", true),
+        ("UsesMutableNamed", true),
+        ("UsesShadowedNamed", false),
+        ("UsesShadowedEagerNamed", true),
+        ("UsesCallbackDefault", true),
+        ("UsesImportedNamed", false),
+        ("UsesNamedThroughComponent", false),
+        ("UsesRepeatedNamed", false),
+        ("UsesRepeatedInline", false),
+        ("UsesNamedCycle", true),
+    ] {
+        let function = source.find(&format!("export function {name}(")).unwrap();
+        let start = function + source[function..].find("count();").unwrap();
+        let row = rows.iter().find(|row| {
+            row["primaryLocation"]["startByte"].as_u64() == Some(start as u64)
+                && row["primaryLocation"]["endByte"].as_u64() == Some((start + 7) as u64)
+        });
+        assert_eq!(row.is_some(), unresolved, "{name}: {rows:#?}");
+        if let Some(row) = row {
+            assert_eq!(row["id"], "SC1001", "{name}: {row:#?}");
+            assert_eq!(row["kind"], "uncertifiable", "{name}: {row:#?}");
+        }
+    }
+    let eval_rows = findings
+        .iter()
+        .filter(|row| {
+            row["primaryLocation"]["path"]
+                .as_str()
+                .is_some_and(|path| path.ends_with("/EvalHandler.tsx"))
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(eval_rows.len(), 1, "{eval_rows:#?}");
+    assert_eq!(eval_rows[0]["id"], "SC1001");
+    assert_eq!(eval_rows[0]["kind"], "uncertifiable");
+}
+
+#[test]
 fn leaf_focus_requires_runtime_body_and_event_dispatch_evidence() {
     let Some(findings) = diagnostic_fixture("leaf-scope-host-callbacks") else {
         return;
