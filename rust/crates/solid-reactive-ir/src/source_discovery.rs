@@ -2168,6 +2168,56 @@ pub(crate) fn discover_sources(
         setters.extend(setter_aliases);
         actions.extend(action_aliases);
     }
+    // ADR 0323 (review round 10): an `omit` or `merge` view over a store reads
+    // through to it (`viewSource(e)[key]`, `@solidjs/signals@2.0.0-rc.13`
+    // `dist/prod/store/utils.js`), so a binding of one is a store alias, like
+    // an effect apply's store parameter above.
+    loop {
+        let mut aliases = Vec::new();
+        for file in &facts.files {
+            for binding in &file.ast.bindings {
+                let Some(initializer) = binding.call_initializer else {
+                    continue;
+                };
+                let Some(root) = view_root(
+                    file,
+                    initializer,
+                    entities,
+                    semantic_lookup,
+                    &|symbol| {
+                        source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store)
+                            && accessors.contains_key(symbol)
+                    },
+                    0,
+                ) else {
+                    continue;
+                };
+                let Some((_, declaration)) = accessors.get(&root).cloned() else {
+                    continue;
+                };
+                for name in &binding.names {
+                    if let Some(symbol) = entities.get(&location(file.path.shared(), name.span))
+                        && !accessors.contains_key(symbol)
+                    {
+                        aliases.push((
+                            symbol.clone(),
+                            (
+                                symbol_id(file.source_text(name.span).unwrap_or_default()),
+                                declaration.clone(),
+                            ),
+                        ));
+                    }
+                }
+            }
+        }
+        if aliases.is_empty() {
+            break;
+        }
+        for (symbol, entry) in aliases {
+            accessors.insert(symbol.clone(), entry);
+            source_kinds.insert(symbol, ReactiveSourceKind::Store);
+        }
+    }
     let mut prop_sources = HashMap::<SymbolId, (SymbolId, Location)>::new();
     let mut uncertain_prop_sources = HashSet::<SymbolId>::new();
     for file in &facts.files {
@@ -2218,34 +2268,18 @@ pub(crate) fn discover_sources(
                     })
                     .or_else(|| {
                         let initializer = binding.call_initializer?;
-                        let call = file.ast.call_at(initializer)?;
-                        let primitive = call_primitive_name(
+                        let root = view_root(
                             file,
-                            call,
+                            initializer,
                             entities,
-                            symbol_names,
-                            semantic_lookup.dialect,
-                        );
-                        // The dialect names its own merge. This was a
-                        // literal `"merge"` before the dialect seam existed,
-                        // and the extraction translated the string to
-                        // `Primitive::Merge` rather than to a row -- so the
-                        // propagation answered for 2.0's spelling and was
-                        // silent for 1.x's `mergeProps`, which is the same
-                        // primitive under the other dialect's vocabulary.
-                        if !known_primitive(&primitive).is_some_and(|primitive| {
-                            semantic_lookup.dialect.merges_props_reactivity(primitive)
-                        }) {
-                            return None;
-                        }
-                        call.arguments.iter().find_map(|argument| {
-                            let symbol =
-                                entities.get(&location(file.path.shared(), argument.span))?;
-                            prop_sources
-                                .get(symbol)
-                                .cloned()
-                                .map(|source| (source, uncertain_prop_sources.contains(symbol)))
-                        })
+                            semantic_lookup,
+                            &|symbol| prop_sources.contains_key(symbol),
+                            0,
+                        )?;
+                        prop_sources
+                            .get(&root)
+                            .cloned()
+                            .map(|source| (source, uncertain_prop_sources.contains(&root)))
                     });
                 let Some(((_, declaration), source_uncertain)) = source else {
                     continue;
@@ -2320,6 +2354,76 @@ pub(crate) fn discover_sources(
         retained_source_paths,
         changed_source_symbols,
     }
+}
+
+/// The symbol an identifier reference names. Type Facts keeps no entity at an
+/// identifier under a TypeScript wrapper (`(props as P)`, `props!`), so the
+/// binder and the declaration the reference resolves to answer in its place.
+pub(crate) fn reference_symbol(
+    file: &FileFacts,
+    span: solid_facts::core::Span,
+    entities: &EntitySymbols,
+    lookup: &SemanticLookup<'_>,
+) -> Option<SymbolId> {
+    let span = file.ast.peel_ts_sugar_span(span);
+    entities
+        .get(&location(file.path.shared(), span))
+        .cloned()
+        .or_else(|| {
+            lookup
+                .binding_at_reference(file.path.as_str(), span)
+                .map(|(_, _, symbol)| symbol)
+        })
+        .or_else(|| {
+            file.ast
+                .reference_declaration(span)
+                .and_then(|declaration| {
+                    entities
+                        .get(&location(file.path.shared(), declaration))
+                        .cloned()
+                })
+        })
+}
+
+/// ADR 0323 (review round 10): the source symbol an `omit` or `merge` view
+/// expression reads through to: the expression itself when it names a source,
+/// else the view call's first argument (`omit`) or first resolvable argument
+/// (`merge`), however deeply the views nest. Inline views and bound ones are
+/// the same expression. A spread argument leaves the source unknown.
+pub(crate) fn view_root(
+    file: &FileFacts,
+    expression: solid_facts::core::Span,
+    entities: &EntitySymbols,
+    lookup: &SemanticLookup<'_>,
+    is_source: &dyn Fn(&SymbolId) -> bool,
+    depth: usize,
+) -> Option<SymbolId> {
+    if depth > 8 {
+        return None;
+    }
+    let expression = file.ast.peel_ts_sugar_span(expression);
+    if let Some(symbol) = reference_symbol(file, expression, entities, lookup)
+        && is_source(&symbol)
+    {
+        return Some(symbol);
+    }
+    let call = file.ast.call_at(expression)?;
+    let primitive = lookup.primitive_at_call(file, call.span)?;
+    if lookup.dialect.splits_props(primitive) {
+        // A spread among the hidden keys hides nothing nameable; the source is
+        // still the first argument, which a spread cannot be.
+        let first = call.arguments.first().filter(|first| !first.spread)?;
+        return view_root(file, first.span, entities, lookup, is_source, depth + 1);
+    }
+    if !lookup.dialect.merges_props_reactivity(primitive) {
+        return None;
+    }
+    call.arguments.iter().find_map(|argument| {
+        if argument.spread {
+            return None;
+        }
+        view_root(file, argument.span, entities, lookup, is_source, depth + 1)
+    })
 }
 
 /// ADR 0294: a binding or member typed with a dialect source alias

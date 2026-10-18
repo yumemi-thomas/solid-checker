@@ -45,8 +45,8 @@ use crate::execution_role::{
 use crate::indexes::ComponentStatus;
 use crate::owners::{
     containing_ast_function, enclosing_function_label, enclosing_render_function,
-    function_binding_name, inside_non_component_function, read_escapes_synchronous_extent,
-    source_function_exported,
+    function_binding_name, inside_non_component_function, read_escapes_runtime_stack,
+    read_escapes_synchronous_extent, source_function_exported,
 };
 use crate::pipeline::{parallel_file_results, parallel_slice_results};
 
@@ -268,6 +268,635 @@ pub(crate) struct ParameterMemberInvocation {
     /// Retain the invocation for identity/dependency comparisons, but do not
     /// project an untracked dispatch question to the helper's caller.
     pub(crate) dispatch_read_excluded: bool,
+    /// ADR 0320: the function uses the parameter in a way no member
+    /// invocation describes -- an alias, a spread, a wrapper, an unknown
+    /// callee, a closure, `arguments`. Whatever member it may invoke, no call
+    /// site can resolve it; `path` is empty.
+    pub(crate) unmodeled: bool,
+}
+
+/// ADR 0320: record every use of a non-rendering function's parameter that
+/// no member invocation describes. A member read whose value may be called
+/// (an extracted method, a destructured member, a member handed to another
+/// call) is a possible invocation of that member, resolved at each call
+/// site like a call of it. Any other use that may hand the object to code
+/// the analysis does not follow -- an alias, a spread, a wrapper, an unknown
+/// callee, a closure's forwarding call, `arguments` -- is `unmodeled`: no
+/// call site can resolve what it runs. A whole-parameter argument of an exact
+/// project callee is the forwarding rule's; tests (`typeof`, comparisons,
+/// truthiness) hand nothing on.
+fn unmodeled_parameter_uses(
+    facts: &ProjectFacts,
+    nodes: &[SummaryNode],
+    nodes_by_path: &HashMap<String, Vec<usize>>,
+    lookup: &SemanticLookup<'_>,
+    invoked_parameter_members: &mut [Vec<ParameterMemberInvocation>],
+    excluded: &mut impl FnMut(&solid_facts::FileFacts, Span) -> bool,
+) {
+    for file in &facts.files {
+        for owner in nodes_by_path
+            .get(file.path.as_str())
+            .into_iter()
+            .flatten()
+            .copied()
+        {
+            let Some(function) = file
+                .ast
+                .functions
+                .iter()
+                .find(|function| function.span == nodes[owner].span)
+            else {
+                continue;
+            };
+            if crate::owners::enclosing_render_function(file, function.body, lookup)
+                || lookup.function_component_status(file, function)
+                    != crate::indexes::ComponentStatus::No
+            {
+                continue;
+            }
+            let arguments_object = file.ast.identifiers.iter().any(|identifier| {
+                function.body.contains(identifier.span)
+                    && file.source_text(identifier.span) == Some("arguments")
+                    && !file.ast.functions.iter().any(|inner| {
+                        inner.span != function.span
+                            && function.span.contains(inner.span)
+                            && inner.kind != solid_facts::ast::FunctionKind::Arrow
+                            && inner.span.contains(identifier.span)
+                    })
+            });
+            for (index, parameter) in function.parameters.iter().enumerate() {
+                let mut found: Vec<(Vec<String>, bool, Span)> = Vec::new();
+                if arguments_object {
+                    found.push((Vec::new(), true, function.body));
+                }
+                if parameter.shape == solid_facts::ast::BindingShape::Identifier {
+                    let [name] = parameter.names.as_slice() else {
+                        continue;
+                    };
+                    for (reference, _) in
+                        file.ast
+                            .reference_declarations
+                            .iter()
+                            .filter(|(reference, declaration)| {
+                                *declaration == name.span && *reference != name.span
+                            })
+                    {
+                        if let Some(entry) = classify_parameter_use(
+                            file,
+                            nodes,
+                            nodes_by_path,
+                            owner,
+                            *reference,
+                            lookup,
+                        ) {
+                            found.push(entry);
+                        }
+                    }
+                } else {
+                    // A destructured parameter: a local that is called, has
+                    // a member called or is handed on came out of the
+                    // caller's object. A plain `key: local` slot names the
+                    // member path; a default, nested pattern or rest does
+                    // not, and is unmodeled.
+                    found.extend(destructured_parameter_uses(file, parameter));
+                }
+                for (path, unmodeled, site) in found {
+                    if invoked_parameter_members[owner].iter().any(|existing| {
+                        existing.parameter == index
+                            && existing.path == path
+                            && existing.unmodeled == unmodeled
+                    }) {
+                        continue;
+                    }
+                    // The use's own context decides, as for a member call
+                    // the graph records: a use inside a function proven to run
+                    // as an event, a deferred callback or a tracked
+                    // computation is not reported through the callers.
+                    let nested = containing_ast_function(&file.ast, site)
+                        .is_some_and(|inner| inner.span != function.span);
+                    let entry = ParameterMemberInvocation {
+                        parameter: index,
+                        path,
+                        in_owner_body: function.body.contains(site) && !nested,
+                        site,
+                        primitive_builtin: false,
+                        dispatch_read_excluded: excluded(file, site),
+                        unmodeled,
+                    };
+                    invoked_parameter_members[owner].push(entry);
+                }
+            }
+        }
+    }
+}
+
+/// ADR 0320: the member paths a destructured parameter's locals dispatch
+/// on, relative to the parameter (`{ o }` with `o.run()` is `["o", "run"]`),
+/// or one `unmodeled` entry when a local the pattern binds without a plain
+/// `key: local` slot (a default, a nested pattern, a rest, a computed key)
+/// is used in any way that may run its members.
+fn destructured_parameter_uses(
+    file: &solid_facts::FileFacts,
+    parameter: &solid_facts::ast::BindingFact,
+) -> Vec<(Vec<String>, bool, Span)> {
+    let mut found = Vec::new();
+    for name in &parameter.names {
+        let slot = (parameter.shape == solid_facts::ast::BindingShape::Object)
+            .then(|| {
+                parameter
+                    .object_slots
+                    .iter()
+                    .find(|slot| slot.local.span == name.span)
+            })
+            .flatten();
+        match (slot, local_dispatch_suffixes(file, name.span)) {
+            (_, Some(suffixes)) if suffixes.is_empty() => {}
+            (Some(slot), Some(suffixes)) => {
+                for suffix in suffixes {
+                    let mut path = vec![slot.property.to_string()];
+                    path.extend(suffix);
+                    found.push((path, false, name.span));
+                }
+            }
+            _ => found.push((Vec::new(), true, name.span)),
+        }
+    }
+    found
+}
+
+/// How the local declared at `local` may run members of its value: the
+/// member paths it dispatches on (empty for the local itself being called or
+/// handed to a call; `["run"]` for `local.run()`), or `None` when a use
+/// hands it on in a form no path describes (a member read that is itself
+/// handed on, a computed member, a chain, a wrapper inside an argument).
+fn local_dispatch_suffixes(file: &solid_facts::FileFacts, local: Span) -> Option<Vec<Vec<String>>> {
+    let peel = |span: Span| file.ast.peel_ts_sugar_span(span);
+    let mut suffixes: Vec<Vec<String>> = Vec::new();
+    for (reference, _) in file
+        .ast
+        .reference_declarations
+        .iter()
+        .filter(|(reference, declaration)| *declaration == local && *reference != local)
+    {
+        let reference = *reference;
+        if let Some(member) = file
+            .ast
+            .members
+            .iter()
+            .find(|member| peel(member.object) == reference)
+        {
+            let called = file
+                .ast
+                .calls
+                .iter()
+                .any(|call| peel(call.callee) == member.span);
+            let computed = file
+                .ast
+                .computed_members
+                .binary_search(&member.span)
+                .is_ok();
+            let chained = file
+                .ast
+                .members
+                .iter()
+                .any(|outer| peel(outer.object) == member.span);
+            if called && !computed {
+                let property = file.source_text(member.property)?.to_owned();
+                if !suffixes
+                    .iter()
+                    .any(|suffix| suffix.len() == 1 && suffix[0] == property)
+                {
+                    suffixes.push(vec![property]);
+                }
+            } else if chained || computed || value_may_be_invoked(file, member.span) {
+                return None;
+            }
+            continue;
+        }
+        // Called itself: the slot's member is invoked. Handed to a call or
+        // aliased into one: whatever runs on it is out of sight.
+        if file
+            .ast
+            .calls
+            .iter()
+            .any(|call| peel(call.callee) == reference)
+        {
+            if !suffixes.iter().any(Vec::is_empty) {
+                suffixes.push(Vec::new());
+            }
+            continue;
+        }
+        if value_may_be_invoked(file, reference) {
+            return None;
+        }
+        // Wrapped into a literal, spread or operand inside a call argument.
+        if file.ast.arguments_containing(reference).next().is_some() {
+            return None;
+        }
+    }
+    Some(suffixes)
+}
+
+/// Whether the value at `span` (a local or a member read) may be called: it
+/// is a callee, an argument of a call, or a binding initializer whose name is
+/// one of those.
+fn value_may_be_invoked(file: &solid_facts::FileFacts, span: Span) -> bool {
+    let callee_or_argument = |span: Span| {
+        file.ast
+            .calls
+            .iter()
+            .any(|call| file.ast.peel_ts_sugar_span(call.callee) == span)
+            || file.ast.arguments_containing(span).any(|(call, index)| {
+                file.ast.peel_ts_sugar_span(call.arguments[index].span) == span
+            })
+    };
+    if callee_or_argument(span) {
+        return true;
+    }
+    file.ast
+        .bindings
+        .iter()
+        .find(|binding| {
+            binding
+                .initializer
+                .is_some_and(|initializer| file.ast.peel_ts_sugar_span(initializer) == span)
+        })
+        .is_some_and(|binding| {
+            binding.names.iter().any(|name| {
+                file.ast
+                    .reference_declarations
+                    .iter()
+                    .filter(|(reference, declaration)| {
+                        *declaration == name.span && *reference != name.span
+                    })
+                    .any(|(reference, _)| callee_or_argument(*reference))
+            })
+        })
+}
+
+/// One reference to a parameter: `None` when it is a member call the graph
+/// records, a forwarding the forwarding rule follows, a test, a data read or
+/// a write of a member; otherwise the member path it may invoke (or empty,
+/// with `unmodeled`), and the site.
+fn classify_parameter_use(
+    file: &solid_facts::FileFacts,
+    nodes: &[SummaryNode],
+    nodes_by_path: &HashMap<String, Vec<usize>>,
+    owner: usize,
+    reference: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<(Vec<String>, bool, Span)> {
+    let peel = |span: Span| file.ast.peel_ts_sugar_span(span);
+    let direct_owner =
+        containing_summary_function_indexed(nodes, nodes_by_path, file.path.as_str(), reference)
+            == Some(owner);
+    // The object of a member access.
+    if let Some(member) = file
+        .ast
+        .members
+        .iter()
+        .find(|member| peel(member.object) == reference)
+    {
+        if file
+            .ast
+            .computed_members
+            .binary_search(&member.span)
+            .is_ok()
+            && file
+                .ast
+                .literal_computed_members
+                .iter()
+                .all(|literal| literal.span != member.span)
+        {
+            // A member nothing names: unmodeled only when what it reads may
+            // be called; a write, or a data read, runs nothing on it.
+            return value_may_be_invoked(file, member.span).then(|| (Vec::new(), true, reference));
+        }
+        let key = file
+            .ast
+            .literal_computed_members
+            .iter()
+            .find(|literal| literal.span == member.span)
+            .map(|literal| literal.key.to_string())
+            .or_else(|| file.source_text(member.property).map(str::to_owned))?;
+        if file
+            .ast
+            .assignments
+            .iter()
+            .any(|assignment| peel(assignment.target) == member.span)
+        {
+            return None;
+        }
+        let called = file
+            .ast
+            .calls
+            .iter()
+            .any(|call| peel(call.callee) == member.span);
+        if called {
+            // Recorded by the graph when the call is this function's own.
+            return (!direct_owner).then(|| (vec![key], false, member.span));
+        }
+        // A chain `p.a.b()` is the graph's; a value read that may be called
+        // is a possible invocation of the member.
+        if file
+            .ast
+            .members
+            .iter()
+            .any(|outer| peel(outer.object) == member.span)
+        {
+            return (!direct_owner).then(|| (Vec::new(), true, reference));
+        }
+        return (value_may_be_invoked(file, member.span)
+            && !lookup.proven_primitive(file, member.span, 6))
+        .then(|| (vec![key], false, member.span));
+    }
+    // A whole argument.
+    if let Some((call, index)) = file
+        .ast
+        .arguments_containing(reference)
+        .find(|(call, index)| peel(call.arguments[*index].span) == reference)
+    {
+        // The forwarding rule follows exactly the calls whose summary owner
+        // is this function.
+        let forwarding_owner = containing_summary_function_indexed(
+            nodes,
+            nodes_by_path,
+            file.path.as_str(),
+            call.span,
+        ) == Some(owner);
+        let forwarded = forwarding_owner
+            && !crate::owners::enclosing_render_function(file, call.span, lookup)
+            && !call
+                .arguments
+                .iter()
+                .take(index + 1)
+                .any(|argument| argument.spread)
+            && crate::execution_role::project_callee_at_parameter(file, call, index, lookup)
+                .is_some_and(|(callee_file, callee, exact)| {
+                    exact
+                        && callee.parameters.get(index).is_some_and(|parameter| {
+                            parameter.shape == solid_facts::ast::BindingShape::Identifier
+                        })
+                        && !callee_file.path.as_str().is_empty()
+                });
+        // An audited standard-library call that only reads or copies the
+        // value invokes nothing on it. (For any other callee `ValueOnly`
+        // says only that the argument itself is not called; its members
+        // may be.)
+        let value_only = lookup
+            .resolved_callee_call(file, call.callee)
+            .filter(|resolved| {
+                resolved
+                    .declaration
+                    .as_ref()
+                    .is_some_and(|declaration| declaration.standard_library)
+            })
+            .is_some_and(|resolved| {
+                let callability = lookup
+                    .entity_at(file.path.as_str(), call.arguments[index].span)
+                    .and_then(|entity| entity.callability);
+                crate::runtime_semantics::argument_behavior(resolved, callability, index)
+                    == Some(crate::runtime_semantics::RuntimeArgumentBehavior::ValueOnly)
+            });
+        // A dialect primitive's handling of its arguments is the dialect's
+        // (its callback semantics, its reads of a props object).
+        let primitive = lookup.primitive_at_call(file, call.span).is_some();
+        return (!forwarded
+            && !value_only
+            && !primitive
+            && !lookup.proven_primitive(file, call.arguments[index].span, 6))
+        .then(|| (Vec::new(), true, reference));
+    }
+    let binding = file.ast.bindings.iter().find(|binding| {
+        binding
+            .initializer
+            .is_some_and(|initializer| peel(initializer) == reference)
+    });
+    // An alias: unmodeled when it reaches a call (as callee, argument or a
+    // member call's receiver) or is handed on as below; a test or an
+    // arithmetic use of it runs nothing.
+    if let Some(binding) = binding
+        && binding.shape != solid_facts::ast::BindingShape::Object
+    {
+        let reaches_call = binding.names.iter().any(|name| {
+            file.ast
+                .reference_declarations
+                .iter()
+                .filter(|(use_span, declaration)| {
+                    *declaration == name.span && *use_span != name.span
+                })
+                .any(|(use_span, _)| {
+                    value_may_be_invoked(file, *use_span)
+                        || file
+                            .ast
+                            .members
+                            .iter()
+                            .any(|member| peel(member.object) == *use_span)
+                        || file.ast.arguments_containing(*use_span).next().is_some()
+                })
+        });
+        return reaches_call.then(|| (Vec::new(), true, reference));
+    }
+    // A destructuring of it: each member taken that may be called.
+    if let Some(binding) = binding
+        && binding.shape == solid_facts::ast::BindingShape::Object
+    {
+        // A local without a plain `key: local` slot (a default, a nested
+        // pattern, a rest element, a computed key) may hold any member: any
+        // use of it that may run members is unmodeled.
+        if binding.names.iter().any(|name| {
+            !binding
+                .object_slots
+                .iter()
+                .any(|slot| slot.local.span == name.span)
+                && local_dispatch_suffixes(file, name.span)
+                    .is_none_or(|suffixes| !suffixes.is_empty())
+        }) {
+            return Some((Vec::new(), true, reference));
+        }
+        let mut paths = Vec::new();
+        for slot in &binding.object_slots {
+            let Some(suffixes) = local_dispatch_suffixes(file, slot.local.span) else {
+                return Some((Vec::new(), true, reference));
+            };
+            for suffix in suffixes {
+                let mut path = vec![slot.property.to_string()];
+                path.extend(suffix);
+                paths.push(path);
+            }
+        }
+        return match paths.as_slice() {
+            [] => None,
+            [path] => Some((path.clone(), false, reference)),
+            _ => Some((Vec::new(), true, reference)),
+        };
+    }
+    // Positions that hand the object to something else -- a conditional's or
+    // a non-test logical operand's value, a spread, a property value or
+    // array element of a literal -- matter when the alias or wrapper they
+    // make is an argument of a call: whatever that callee invokes on it is
+    // out of every call site's sight. A wrapper returned or stored is the
+    // caller's value or the store's, outside this rule (ADR 0320's open
+    // list).
+    let handed_on = file.ast.conditional_expressions.iter().any(|conditional| {
+        peel(conditional.consequent) == reference || peel(conditional.alternate) == reference
+    }) || file.ast.logical_expressions.iter().any(|logical| {
+        peel(logical.right) == reference
+            || (peel(logical.left) == reference
+                && logical.operator != solid_facts::ast::LogicalOperatorKind::And)
+    }) || file
+        .ast
+        .spreads
+        .iter()
+        .any(|spread| peel(spread.argument) == reference)
+        || file
+            .ast
+            .object_properties
+            .iter()
+            .any(|property| peel(property.value) == reference)
+        || file.ast.array_literals.iter().any(|array| {
+            array.contains(reference)
+                && *array != reference
+                && !file
+                    .ast
+                    .array_literals
+                    .iter()
+                    .chain(file.ast.object_get_shapes.iter().map(|shape| &shape.span))
+                    .chain(file.ast.calls.iter().map(|call| &call.span))
+                    .chain(file.ast.functions.iter().map(|function| &function.span))
+                    .any(|inner| {
+                        array.contains(*inner) && *inner != *array && inner.contains(reference)
+                    })
+        });
+    let in_argument = file
+        .ast
+        .arguments_containing(reference)
+        .any(|(call, index)| {
+            let argument = call.arguments[index].span;
+            // The wrapper reaches the argument without passing through a
+            // function that is not itself the argument.
+            !file.ast.functions.iter().any(|function| {
+                argument.contains(function.span)
+                    && function.span != peel(argument)
+                    && function.span.contains(reference)
+            })
+        });
+    (handed_on && in_argument).then(|| (Vec::new(), true, reference))
+}
+
+/// ADR 0320: see the call in the interprocedural build. A forwarded
+/// invocation's site is the forwarding call's callee, so the refreshed
+/// context of that call decides whether its dispatch can be reported.
+fn forward_parameter_member_invocations(
+    facts: &ProjectFacts,
+    nodes: &[SummaryNode],
+    nodes_by_path: &HashMap<String, Vec<usize>>,
+    lookup: &SemanticLookup<'_>,
+    invoked_parameter_members: &mut [Vec<ParameterMemberInvocation>],
+    mut excluded: impl FnMut(&solid_facts::FileFacts, Span) -> bool,
+) {
+    // Bounded: each round can only lengthen forwarding chains by one.
+    for _ in 0..8 {
+        let mut added = Vec::new();
+        for file in &facts.files {
+            for call in &file.ast.calls {
+                let Some(owner) = containing_summary_function_indexed(
+                    nodes,
+                    nodes_by_path,
+                    file.path.as_str(),
+                    call.span,
+                ) else {
+                    continue;
+                };
+                // A call inside a rendering function raises its own
+                // obligation at the inner site (ADR 0202); only a helper's
+                // call, which raises none, forwards it to its callers.
+                if crate::owners::enclosing_render_function(file, call.span, lookup) {
+                    continue;
+                }
+                let Some(owner_function) = file
+                    .ast
+                    .functions
+                    .iter()
+                    .find(|function| function.span == nodes[owner].span)
+                else {
+                    continue;
+                };
+                for (index, argument) in call.arguments.iter().enumerate() {
+                    if call
+                        .arguments
+                        .iter()
+                        .take(index + 1)
+                        .any(|argument| argument.spread)
+                    {
+                        break;
+                    }
+                    let value = file.ast.peel_ts_sugar_span(argument.span);
+                    let Some(declaration) = file.ast.reference_declaration(value) else {
+                        continue;
+                    };
+                    let Some(parameter) = owner_function.parameters.iter().position(|parameter| {
+                        parameter.shape == solid_facts::ast::BindingShape::Identifier
+                            && parameter.names.iter().any(|name| name.span == declaration)
+                    }) else {
+                        continue;
+                    };
+                    let Some((callee_file, callee, exact)) =
+                        crate::execution_role::project_callee_at_parameter(
+                            file, call, index, lookup,
+                        )
+                    else {
+                        continue;
+                    };
+                    if !exact {
+                        continue;
+                    }
+                    let Some(target) = nodes_by_path
+                        .get(callee_file.path.as_str())
+                        .into_iter()
+                        .flatten()
+                        .copied()
+                        .find(|candidate| nodes[*candidate].span == callee.span)
+                    else {
+                        continue;
+                    };
+                    let in_owner_body = containing_ast_function(&file.ast, call.span)
+                        .is_some_and(|function| function.body == nodes[owner].body);
+                    let forwarding_excluded = excluded(file, call.callee);
+                    for invocation in &invoked_parameter_members[target] {
+                        // An invocation whose dispatch is not reported where
+                        // it runs is not reported through its callers either.
+                        if invocation.parameter != index
+                            || (invocation.path.is_empty() && !invocation.unmodeled)
+                            || invocation.dispatch_read_excluded
+                        {
+                            continue;
+                        }
+                        let entry = ParameterMemberInvocation {
+                            parameter,
+                            path: invocation.path.clone(),
+                            in_owner_body: in_owner_body && invocation.in_owner_body,
+                            site: call.callee,
+                            primitive_builtin: invocation.primitive_builtin,
+                            dispatch_read_excluded: forwarding_excluded,
+                            unmodeled: invocation.unmodeled,
+                        };
+                        if !invoked_parameter_members[owner].contains(&entry)
+                            && !added.contains(&(owner, entry.clone()))
+                        {
+                            added.push((owner, entry));
+                        }
+                    }
+                }
+            }
+        }
+        if added.is_empty() {
+            return;
+        }
+        for (owner, entry) in added {
+            invoked_parameter_members[owner].push(entry);
+        }
+    }
 }
 
 fn equivalent_member_invocations(
@@ -286,6 +915,43 @@ fn equivalent_member_invocations(
     };
     left.iter().all(|a| right.iter().any(|b| same(a, b)))
         && right.iter().all(|b| left.iter().any(|a| same(a, b)))
+}
+
+/// ADR 0320: whether an argument evaluates to a primitive other than
+/// `undefined`, so every member reached through it is a built-in
+/// prototype's and no project implementation can run. Proven from the
+/// argument's own expression (`SemanticLookup::proven_primitive`), never
+/// from its declared type: an assertion, a type predicate or `any` changes
+/// the type and not the value.
+fn argument_is_proven_primitive(
+    file: &solid_facts::FileFacts,
+    argument: &solid_facts::ast::ArgumentFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    !argument.spread
+        && !argument.runtime_type_escape
+        && lookup.proven_primitive(file, argument.span, 6)
+}
+
+/// Whether the summarized function's `index`th parameter has a default
+/// initializer. An unreadable declaration answers yes: the caller then keeps
+/// its obligation.
+fn parameter_has_default(node: &SummaryNode, index: usize, lookup: &SemanticLookup<'_>) -> bool {
+    let Some(file) = lookup.file_by_path(node.path.as_str()) else {
+        return true;
+    };
+    let Some(function) = file
+        .ast
+        .functions
+        .iter()
+        .find(|function| function.span == node.span)
+    else {
+        return true;
+    };
+    function
+        .parameters
+        .get(index)
+        .is_none_or(|parameter| parameter.initializer.is_some())
 }
 
 /// Whether Type Facts resolved `callee`, validly and to exactly one
@@ -539,6 +1205,65 @@ fn is_retained_value_position(
     })
 }
 
+/// ADR 0321: the summary identity of a function literal that is exactly the
+/// value of an object-literal property with a static key (`{ run: () => … }`,
+/// `{ onX: function () { … } }`). It has no binding and no method name, so
+/// TypeScript gives it no symbol of its own; the identity is its file and
+/// span, which no other function shares. A method (`run() {}`) keeps its
+/// method symbol.
+pub(crate) fn literal_property_function_symbol(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> Option<SymbolId> {
+    literal_property_function_key(file, function)?;
+    Some(SymbolId::from(format!(
+        "\0literal-property:{}:{}:{}",
+        file.path.as_str(),
+        function.span.start,
+        function.span.end
+    )))
+}
+
+/// Whether `symbol` is a [`literal_property_function_symbol`].
+fn is_literal_property_function_symbol(symbol: &SymbolId) -> bool {
+    symbol.as_str().starts_with("\0literal-property:")
+}
+
+/// The static key of the object-literal property whose value is exactly the
+/// function literal `function` (see [`literal_property_function_symbol`]).
+fn literal_property_function_key(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> Option<String> {
+    if function.method_name.is_some() || function_binding_name(file, function).is_some() {
+        return None;
+    }
+    let property = file.ast.object_properties.iter().find(|property| {
+        !property.computed
+            && property.shorthand_binding.is_none()
+            && file.ast.peel_ts_sugar_span(property.value) == function.span
+    })?;
+    // Only a literal written as a call's argument: its members are reached
+    // through that call's parameter, where the dispatch is resolved. A literal
+    // returned, bound or stored is reached by member calls on its holder,
+    // which name the property's own symbol, and keeps its reads where they
+    // were (in the function that writes it).
+    let literal = file
+        .ast
+        .object_get_shapes
+        .iter()
+        .filter(|shape| shape.span.contains(property.span))
+        .min_by_key(|shape| shape.span.end - shape.span.start)?;
+    if !file.ast.calls.iter().any(|call| {
+        call.arguments.iter().any(|argument| {
+            !argument.spread && file.ast.peel_ts_sugar_span(argument.span) == literal.span
+        })
+    }) {
+        return None;
+    }
+    crate::execution_role::property_static_key(file, property)
+}
+
 fn discover_summary_nodes(
     file: &solid_facts::FileFacts,
     project_indexes: &ProjectIndexes<'_>,
@@ -584,7 +1309,7 @@ fn discover_summary_nodes(
                         .cloned()
                 })
                 .or_else(|| {
-                    function.method_name.as_ref().and_then(|name| {
+                    crate::owners::own_method_name(file, function).and_then(|name| {
                         project_indexes.method_symbol(file.path.as_str(), name.span)
                     })
                 });
@@ -1442,17 +2167,46 @@ fn discover_interprocedural_graph(
         let call_completes = site_on_every_completion(lookup, file, owner_span, call.span);
         let in_owner_body = containing_ast_function(&file.ast, call.span)
             .is_some_and(|function| function.body == nodes[owner].body);
+        // Read propagation is relative to this owner's call. Keep unknown
+        // callback timing, but exclude proven tracked/deferred callbacks,
+        // retained result closures and compiler-owned getter regions. The
+        // dialect proof preserves apply callbacks that inherit the first run.
+        let reads_for_owner =
+            !read_escapes_synchronous_extent(
+                file,
+                call.span,
+                symbols.entities,
+                symbols.names,
+                lookup.dialect,
+            ) && !read_escapes_runtime_stack(file, call.span, nodes[owner].body, lookup)
+                && !runs_in_retained_value_literal(file, call.span, &nodes[owner])
+                && !runs_outside_owner_call(file, call.span, nodes[owner].body, lookup);
         // `reader.read(value)` where `reader` is this function's parameter.
         // Which implementation runs is a property of the *call site*, not of
         // this function, so record the obligation and let each site resolve
         // its own argument. Pooling every site into one summary here is what
         // makes an unambiguous site uncertifiable because a sibling site is
         // not.
+        // ADR 0320: the index is the parameter's position in the
+        // declaration, which is the argument's at a call. The summary's
+        // parameter list skips destructured parameters, so its position
+        // would select another argument.
         if let Some((receiver, path)) = lookup.member_callee_receiver(file, call.callee)
-            && let Some(parameter) = nodes[owner]
-                .parameters
+            && nodes[owner].parameters.contains(&receiver)
+            && let Some(parameter) = file
+                .ast
+                .functions
                 .iter()
-                .position(|candidate| *candidate == receiver)
+                .find(|function| function.span == owner_span)
+                .and_then(|function| {
+                    function.parameters.iter().position(|parameter| {
+                        parameter.shape == solid_facts::ast::BindingShape::Identifier
+                            && parameter.names.first().is_some_and(|name| {
+                                symbols.entities.at(file.path.as_str(), name.span)
+                                    == Some(&receiver)
+                            })
+                    })
+                })
         {
             let primitive_builtin = primitive_builtin_member_call(file, call.callee, lookup);
             let entry = (
@@ -1464,6 +2218,7 @@ fn discover_interprocedural_graph(
                     site: call.callee,
                     primitive_builtin,
                     dispatch_read_excluded: false,
+                    unmodeled: false,
                 },
             );
             if !contribution.invoked_parameter_members.contains(&entry) {
@@ -1548,7 +2303,7 @@ fn discover_interprocedural_graph(
                 .push((owner_span, candidate_symbols.clone()));
         }
         let project_function = lookup.function_for_symbol(symbol).is_some();
-        if call.direct_callee && !ambiguous_dispatch {
+        if call.direct_callee && !ambiguous_dispatch && reads_for_owner {
             contribution
                 .factory_calls
                 .push((owner_span, SymbolId::from(symbol)));
@@ -1625,15 +2380,7 @@ fn discover_interprocedural_graph(
                 }
             }
         }
-        // A call written in a closure the owner only builds into its result
-        // is not made when the owner is called, so its target's reads do not
-        // propagate to the owner (`runs_in_retained_value_literal`). A call in
-        // the owner's own tracked JSX region or component property getter runs
-        // outside the owner's call (`runs_outside_owner_call`).
-        if !ambiguous_dispatch
-            && !runs_in_retained_value_literal(file, call.span, &nodes[owner])
-            && !runs_outside_owner_call(file, call.span, nodes[owner].body, lookup)
-        {
+        if !ambiguous_dispatch && reads_for_owner {
             let returned_target = call
                 .direct_callee
                 .then(|| returned_function_targets.get(symbol).copied());
@@ -5258,13 +6005,7 @@ fn local_dispatch_exclusion_depth(
         lookup.symbol_names(),
         lookup,
     );
-    if matches!(
-        role,
-        ExecutionRole::TrackedJsx
-            | ExecutionRole::EventCallback
-            | ExecutionRole::DeferredCallback
-            | ExecutionRole::DiscardedRendering
-    ) {
+    if crate::execution_role::excluded_role_holds(file, span, role, lookup) {
         return Some(0);
     }
     if !matches!(
@@ -5406,6 +6147,40 @@ fn interprocedural_result_reads_for_file(
             continue;
         }
         if crate::object_members::call_withheld(file, call.callee, lookup) {
+            // ADR 0320: a member call on an exact literal binding whose
+            // receiver census does not hold (a member written, the object
+            // handed on) runs an implementation nothing selects. It is a
+            // dispatch obligation wherever its reads could be reported, not
+            // a call that reads nothing.
+            let execution = semantic_execution_role(
+                file,
+                call.callee,
+                &allowed,
+                entities,
+                symbol_names,
+                lookup,
+            );
+            if !crate::execution_role::excluded_role_holds(file, call.callee, execution, lookup)
+                && !crate::execution_role::await_continuation_decides_nothing(
+                    file,
+                    call.callee,
+                    lookup,
+                )
+            {
+                dispatch_obligations.push(StaticDefect {
+                    kind: StaticDefectKind::ReactiveDispatchUnresolved {
+                        callee: call
+                            .static_callee(&file.source)
+                            .map(str::to_owned)
+                            .unwrap_or_else(|| "dynamic call".into()),
+                        member: None,
+                    },
+                    location: location(file.path.shared(), call.callee),
+                    analysis_context: "withheld-object-member".into(),
+                    fixes: vec![],
+                    uncertain: true,
+                });
+            }
             continue;
         }
         let obligations_before = dispatch_obligations.len();
@@ -5721,15 +6496,106 @@ fn interprocedural_result_reads_for_file(
                 path,
                 primitive_builtin,
                 dispatch_read_excluded,
+                unmodeled,
                 ..
             } in &invoked_parameter_members[target]
             {
                 if *primitive_builtin || *dispatch_read_excluded {
                     continue;
                 }
+                // `undefined`, written or omitted, selects the parameter's
+                // default initializer, whose value is the callee's: nothing
+                // at this call settles which member runs.
+                let defaulted = parameter_has_default(&nodes[target], *parameter, lookup);
                 let Some(argument) = call.arguments.get(*parameter) else {
+                    // An omission a default covers is no type error; Type
+                    // Facts resolves no signature for a call with no
+                    // arguments, which is not evidence of one either.
+                    if defaulted
+                        && (!path.is_empty() || *unmodeled)
+                        && (valid_call || lookup.resolved_callee_call(file, call.callee).is_none())
+                        && !call.arguments.iter().any(|argument| argument.spread)
+                    {
+                        let defect = StaticDefect {
+                            kind: StaticDefectKind::ReactiveDispatchUnresolved {
+                                callee: label.clone(),
+                                member: (!path.is_empty()).then(|| path.join(".")),
+                            },
+                            location: location(file.path.shared(), call.span),
+                            analysis_context: "parameter-default-unresolved".into(),
+                            fixes: vec![],
+                            uncertain: true,
+                        };
+                        if !dispatch_obligations.contains(&defect) {
+                            dispatch_obligations.push(defect);
+                        }
+                    }
                     continue;
                 };
+                let undefined_selects_default = defaulted
+                    && (argument.runtime_value_kind == solid_facts::ast::RuntimeValueKind::Nullish
+                        && file.source_text(file.ast.peel_ts_sugar_span(argument.span))
+                            != Some("null"));
+                if undefined_selects_default && !argument.spread && (!path.is_empty() || *unmodeled)
+                {
+                    if valid_call {
+                        let defect = StaticDefect {
+                            kind: StaticDefectKind::ReactiveDispatchUnresolved {
+                                callee: label.clone(),
+                                member: (!path.is_empty()).then(|| path.join(".")),
+                            },
+                            location: location(file.path.shared(), argument.span),
+                            analysis_context: "parameter-default-unresolved".into(),
+                            fixes: vec![],
+                            uncertain: true,
+                        };
+                        if !dispatch_obligations.contains(&defect) {
+                            dispatch_obligations.push(defect);
+                        }
+                    }
+                    continue;
+                }
+                // ADR 0320: the callee uses the parameter in a way no member
+                // invocation describes; only a primitive or nullish argument,
+                // which carries no project member, settles it.
+                if *unmodeled {
+                    // A function argument's invocation is the callback
+                    // rules' question, answered at this call already.
+                    let function_argument = file.ast.functions.iter().any(|function| {
+                        function.span == file.ast.peel_ts_sugar_span(argument.span)
+                    }) || lookup
+                        .entity_at(file.path.as_str(), argument.span)
+                        .and_then(|entity| entity.callability)
+                        == Some(typefacts::Callability::Callable);
+                    if !argument.spread
+                        && !undefined_selects_default
+                        && (function_argument
+                            || matches!(
+                                argument.runtime_value_kind,
+                                solid_facts::ast::RuntimeValueKind::Primitive
+                                    | solid_facts::ast::RuntimeValueKind::Nullish
+                            )
+                            || argument_is_proven_primitive(file, argument, lookup))
+                    {
+                        continue;
+                    }
+                    if valid_call {
+                        let defect = StaticDefect {
+                            kind: StaticDefectKind::ReactiveDispatchUnresolved {
+                                callee: label.clone(),
+                                member: None,
+                            },
+                            location: location(file.path.shared(), argument.span),
+                            analysis_context: "parameter-use-unmodeled".into(),
+                            fixes: vec![],
+                            uncertain: true,
+                        };
+                        if !dispatch_obligations.contains(&defect) {
+                            dispatch_obligations.push(defect);
+                        }
+                    }
+                    continue;
+                }
                 // A literal argument is a fresh primitive (or RegExp) value,
                 // so every member reached through it is its built-in
                 // prototype's, and no built-in reads reactive state. A
@@ -5738,7 +6604,9 @@ fn interprocedural_result_reads_for_file(
                 // the audited standard-library rows of `runtime_semantics`.
                 if !path.is_empty()
                     && !argument.spread
-                    && argument.runtime_value_kind == solid_facts::ast::RuntimeValueKind::Primitive
+                    && (argument.runtime_value_kind
+                        == solid_facts::ast::RuntimeValueKind::Primitive
+                        || argument_is_proven_primitive(file, argument, lookup))
                 {
                     continue;
                 }
@@ -5793,51 +6661,89 @@ fn interprocedural_result_reads_for_file(
                     }
                     continue;
                 }
-                // Resolution below answers for exactly one property of the
-                // argument. A longer path (`reader.source.read()`) needs the
-                // value at `argument.source` first, and resolving its last
-                // segment against the argument would answer for
-                // `argument.read` -- a different property of a different
-                // value. Record the obligation instead of guessing.
-                let [property] = path.as_slice() else {
-                    if valid_call {
-                        dispatch_obligations.push(StaticDefect {
-                            kind: StaticDefectKind::ReactiveDispatchUnresolved {
-                                callee: label.clone(),
-                                member: Some(path.join(".")),
-                            },
-                            location: location(file.path.shared(), argument.span),
-                            analysis_context: "parameter-member-path-unresolved".into(),
-                            fixes: vec![],
-                            uncertain: true,
-                        });
-                    }
-                    continue;
+                // A nested path requires an exact, stable value at every
+                // intermediate Get, not a lookup of its last name on the root.
+                let property = &path[0];
+                let nested = path.len() > 1;
+                if nested {
+                    // Receiver closure inspects every use of the callee's
+                    // parameter, including escapes that leave reads unchanged.
+                    // Keep this dependency even when the current proof refuses.
+                    dependencies.insert(InterproceduralResultDependency::FunctionSource(
+                        nodes[target].path.clone(),
+                        nodes[target].span,
+                    ));
+                }
+                // ADR 0320: the callee hands the object to nothing that could
+                // replace the member before it runs.
+                let mut consulted = Vec::new();
+                let closed_callee = lookup.parameter_only_member_accessed_consulting(
+                    file,
+                    call,
+                    *parameter,
+                    &mut consulted,
+                );
+                let mut implementations = if nested {
+                    lookup.nested_member_value_symbols_at(file, call, *parameter, path)
+                } else if closed_callee {
+                    lookup.member_value_symbols_at_tracked(
+                        file,
+                        argument.span,
+                        property,
+                        &mut consulted,
+                    )
+                } else {
+                    Vec::new()
                 };
-                let mut implementations =
-                    lookup.member_value_symbols_at(file, argument.span, property);
+                // The answer read these functions' source: a cached result
+                // here is reused only while they are unchanged.
+                for (path, span) in consulted {
+                    dependencies
+                        .insert(InterproceduralResultDependency::FunctionSource(path, span));
+                }
                 // ADR 0211: an argument whose origin fixes its class fixes the
                 // member that runs -- a fresh built-in value's is its
                 // prototype's, which reads nothing reactive, and an exact
                 // project class's is the method that class declares. Unless
                 // the program rewrites that member or a prototype.
+                // ADR 0314: a write through a prototype vetoes only the
+                // objects whose chain holds that prototype.
                 if implementations.is_empty()
+                    && !nested
                     && !argument.spread
-                    && !lookup.member_name_may_be_reassigned(property)
-                    && !lookup.member_name_may_be_reassigned("__proto__")
+                    && closed_callee
+                    && !undefined_selects_default
                 {
                     match lookup.value_origin(file, argument.span, argument.runtime_value_kind, 6) {
-                        Some(crate::indexes::ValueOrigin::Builtin) => continue,
-                        Some(crate::indexes::ValueOrigin::ProjectClass(class_file, class)) => {
+                        Some(crate::indexes::ValueOrigin::Builtin)
+                            if !lookup.member_may_be_reassigned_on_builtin(property)
+                                && !lookup.member_may_be_reassigned_on_builtin("__proto__") =>
+                        {
+                            continue;
+                        }
+                        Some(crate::indexes::ValueOrigin::ProjectClass(class_file, class))
+                            if !lookup
+                                .member_may_be_reassigned_on_class(property, class_file, class)
+                                && !lookup.member_may_be_reassigned_on_class(
+                                    "__proto__",
+                                    class_file,
+                                    class,
+                                ) =>
+                        {
                             implementations.extend(
                                 lookup
                                     .class_method_symbol(class_file, class, property)
                                     .cloned(),
                             );
                         }
-                        None => {}
+                        _ => {}
                     }
                 }
+                // ADR 0321: a function literal that is exactly an argument
+                // literal's property value is its own implementation. Its
+                // reads stay attributed where it is written (they are claimed
+                // there, as a callback's), so it adds none at this dispatch.
+                let literal_property_summary = SummaryReads::default();
                 let mut member_summaries = Vec::with_capacity(implementations.len());
                 for implementation in &implementations {
                     dependencies.insert(InterproceduralResultDependency::Symbol(
@@ -5845,6 +6751,8 @@ fn interprocedural_result_reads_for_file(
                     ));
                     if let Some(index) = by_symbol.get(implementation) {
                         member_summaries.push(&summaries[*index]);
+                    } else if is_literal_property_function_symbol(implementation) {
+                        member_summaries.push(&literal_property_summary);
                     }
                 }
                 let equivalent = member_summaries.len() == implementations.len()
@@ -5857,10 +6765,12 @@ fn interprocedural_result_reads_for_file(
                         dispatch_obligations.push(StaticDefect {
                             kind: StaticDefectKind::ReactiveDispatchUnresolved {
                                 callee: label.clone(),
-                                member: Some(property.clone()),
+                                member: Some(path.join(".")),
                             },
                             location: location(file.path.shared(), argument.span),
-                            analysis_context: if implementations.is_empty() {
+                            analysis_context: if nested {
+                                "parameter-member-path-unresolved".into()
+                            } else if implementations.is_empty() {
                                 "parameter-member-target-unresolved".into()
                             } else {
                                 "parameter-member-targets-diverge".into()
@@ -5897,32 +6807,32 @@ fn interprocedural_result_reads_for_file(
         // predicate), so this call's obligations decide nothing. Asked ahead
         // of the nested-helper skip below, which keeps obligations a nested
         // helper's call raises: an event handler is such a helper.
-        if matches!(
-            execution,
-            ExecutionRole::EventCallback
-                | ExecutionRole::DeferredCallback
-                | ExecutionRole::TrackedJsx
-                | ExecutionRole::DiscardedRendering
-        ) || (dispatch_obligations.len() > obligations_before
-            && dispatch_obligations[obligations_before..]
-                .iter()
-                .all(|defect| {
-                    matches!(
-                        defect.analysis_context.as_str(),
-                        "parameter-member-target-unresolved"
-                            | "parameter-member-targets-diverge"
-                            | "parameter-member-path-unresolved"
-                    )
-                })
-            && local_dispatch_exclusion_depth(
-                file,
-                call.callee,
-                &allowed,
-                lookup,
-                &mut HashSet::new(),
-                &mut excluded_dispatch_helpers,
-            )
-            .is_some())
+        // ADR 0320: so is a call after an await its async function reaches
+        // on every path, an ownerless continuation on a later task.
+        if crate::execution_role::excluded_role_holds(file, call.callee, execution, lookup)
+            || crate::execution_role::await_continuation_decides_nothing(file, call.callee, lookup)
+            || (dispatch_obligations.len() > obligations_before
+                && dispatch_obligations[obligations_before..]
+                    .iter()
+                    .all(|defect| {
+                        matches!(
+                            defect.analysis_context.as_str(),
+                            "parameter-member-target-unresolved"
+                                | "parameter-member-targets-diverge"
+                                | "parameter-member-path-unresolved"
+                                | "parameter-default-unresolved"
+                                | "parameter-use-unmodeled"
+                        )
+                    })
+                && local_dispatch_exclusion_depth(
+                    file,
+                    call.callee,
+                    &allowed,
+                    lookup,
+                    &mut HashSet::new(),
+                    &mut excluded_dispatch_helpers,
+                )
+                .is_some())
         {
             dispatch_obligations.truncate(obligations_before);
         }
@@ -6873,6 +7783,11 @@ fn getter_line(lookup: &SemanticLookup<'_>, site: &Location) -> usize {
 
 fn call_role_syntax(file: &solid_facts::FileFacts) -> bool {
     crate::indexes::returns_source_root(file)
+        // Nested literal receivers require a project-wide eval veto. Adding
+        // or removing it must refresh unchanged callers in both directions.
+        || file.ast.module_hazards.iter().any(|hazard| {
+            hazard.kind == solid_facts::ast::ModuleHazardKind::Eval
+        })
         || !file.ast.object_get_shapes.is_empty()
         // Provider multiplicity and returned literal identities are project
         // syntax inputs, even when their read summaries stay byte-identical.
@@ -7185,7 +8100,8 @@ fn direct_reference_contributions(
             entities,
             symbol_names,
             lookup.dialect,
-        ) || runs_in_retained_value_literal(file, reference_span, &nodes[owner])
+        ) || read_escapes_runtime_stack(file, reference_span, nodes[owner].body, lookup)
+            || runs_in_retained_value_literal(file, reference_span, &nodes[owner])
             || runs_outside_owner_call(file, reference_span, nodes[owner].body, lookup)
         {
             continue;
@@ -7359,7 +8275,8 @@ fn typed_candidate_contributions(
             entities,
             symbol_names,
             lookup.dialect,
-        ) || runs_in_retained_value_literal(file, call.callee, &nodes[owner])
+        ) || read_escapes_runtime_stack(file, call.callee, nodes[owner].body, lookup)
+            || runs_in_retained_value_literal(file, call.callee, &nodes[owner])
             || runs_outside_owner_call(file, call.callee, nodes[owner].body, lookup)
             || enclosing_render_function(file, call.callee, lookup)
         {
@@ -7470,8 +8387,9 @@ fn interprocedural_reads(
             .filter_map(|file| {
                 (retained_source_paths.contains(file.path.as_str())
                     && cache.get(file.path.as_str()).is_some_and(|cached| {
-                        Arc::ptr_eq(&cached.compiler, &file.compiler)
-                            || same_compiler_semantics(&cached.compiler, &file.compiler)
+                        cached.member_resolution == lookup.member_resolution_digest()
+                            && (Arc::ptr_eq(&cached.compiler, &file.compiler)
+                                || same_compiler_semantics(&cached.compiler, &file.compiler))
                     }))
                 .then_some(file.path.as_str())
             })
@@ -7489,6 +8407,7 @@ fn interprocedural_reads(
                         nodes: file_nodes,
                         contribution: InterproceduralGraphContribution::default(),
                         compiler: file.compiler.clone(),
+                        member_resolution: lookup.member_resolution_digest(),
                     },
                 );
             } else {
@@ -7684,6 +8603,7 @@ fn interprocedural_reads(
                                 .collect(),
                             contribution,
                             compiler: file.compiler.clone(),
+                            member_resolution: lookup.member_resolution_digest(),
                         },
                     );
                 }
@@ -7706,16 +8626,64 @@ fn interprocedural_reads(
                 let role =
                     semantic_execution_role(file, site, &allowed, entities, symbol_names, lookup);
                 invocation.dispatch_read_excluded = !default
-                    && (matches!(
-                        role,
-                        ExecutionRole::TrackedJsx
-                            | ExecutionRole::EventCallback
-                            | ExecutionRole::DeferredCallback
-                            | ExecutionRole::DiscardedRendering
-                    ) || member_consumers.proves_tracked_or_fresh(file, site));
+                    && (crate::execution_role::excluded_role_holds(file, site, role, lookup)
+                        || member_consumers.proves_tracked_or_fresh(file, site)
+                        || crate::execution_role::await_continuation_decides_nothing(
+                            file, site, lookup,
+                        ));
             }
         }
     }
+    // ADR 0320: a function that hands its own parameter, as the whole
+    // argument, to an exact project callee invoking a member of it invokes
+    // that member too: the dispatch is decided by this function's callers.
+    // Without this, a call written in a non-rendering helper raises its
+    // obligation nowhere. Recomputed from the merged graph every build; a
+    // forwarded invocation's context is the forwarding call's.
+    let mut site_excluded = |file: &solid_facts::FileFacts, site: Span| {
+        let allowed = allowed_callback_spans(file, lookup);
+        let default = file
+            .ast
+            .functions
+            .iter()
+            .any(|function| function.span.contains(site) && !function.body.contains(site));
+        let role = semantic_execution_role(file, site, &allowed, entities, symbol_names, lookup);
+        !default
+            && (crate::execution_role::excluded_role_holds(file, site, role, lookup)
+                || member_consumers.proves_tracked_or_fresh(file, site)
+                || crate::execution_role::await_continuation_decides_nothing(file, site, lookup))
+    };
+    unmodeled_parameter_uses(
+        facts,
+        &nodes,
+        &nodes_by_path,
+        lookup,
+        &mut invoked_parameter_members,
+        &mut site_excluded,
+    );
+    forward_parameter_member_invocations(
+        facts,
+        &nodes,
+        &nodes_by_path,
+        lookup,
+        &mut invoked_parameter_members,
+        |file, site| {
+            let allowed = allowed_callback_spans(file, lookup);
+            let default = file
+                .ast
+                .functions
+                .iter()
+                .any(|function| function.span.contains(site) && !function.body.contains(site));
+            let role =
+                semantic_execution_role(file, site, &allowed, entities, symbol_names, lookup);
+            !default
+                && (crate::execution_role::excluded_role_holds(file, site, role, lookup)
+                    || member_consumers.proves_tracked_or_fresh(file, site)
+                    || crate::execution_role::await_continuation_decides_nothing(
+                        file, site, lookup,
+                    ))
+        },
+    );
     // These edges depend on other files' returned literals and the entire
     // provider census. Recompute them after merging file-local cached graph
     // contributions, so a provider/factory edit cannot retain a stale edge.
@@ -7742,7 +8710,16 @@ fn interprocedural_reads(
             else {
                 continue;
             };
-            if runs_in_retained_value_literal(file, call.span, &nodes[owner])
+            // Transported targets obey the same callback listener boundary
+            // as direct source references and ordinary helper edges.
+            if read_escapes_synchronous_extent(
+                file,
+                call.span,
+                entities,
+                symbol_names,
+                lookup.dialect,
+            ) || read_escapes_runtime_stack(file, call.span, nodes[owner].body, lookup)
+                || runs_in_retained_value_literal(file, call.span, &nodes[owner])
                 || runs_outside_owner_call(file, call.span, nodes[owner].body, lookup)
             {
                 continue;
@@ -8690,6 +9667,7 @@ mod tests {
             site: Span::new(10, 14),
             primitive_builtin: false,
             dispatch_read_excluded: true,
+            unmodeled: false,
         };
         let second = ParameterMemberInvocation {
             site: Span::new(30, 34),
@@ -8707,6 +9685,7 @@ mod tests {
         ));
         let eager = ParameterMemberInvocation {
             dispatch_read_excluded: false,
+            unmodeled: false,
             ..second
         };
         assert!(!equivalent_member_invocations(

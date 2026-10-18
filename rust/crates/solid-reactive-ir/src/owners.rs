@@ -2863,8 +2863,111 @@ pub(crate) fn inside_non_component_function(
     }
     file.ast.functions_body_containing(span).any(|function| {
         function_binding_name(file, function).is_some()
+            && !object_method_escapes(file, function, lookup)
             && !lookup.function_may_be_component(file, function)
     })
+}
+
+/// ADR 0320: whether `function` is an object-literal method whose literal
+/// goes anywhere other than a member dispatch the analysis resolves: handed
+/// to unknown code, enumerated, returned, stored. Such a method is a stored
+/// callback like a function-expression property, not a named helper whose
+/// reads are claimed where it is called: it may be called where nothing
+/// claims them.
+pub(crate) fn object_method_escapes(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let Some(name) = own_method_name(file, function) else {
+        return false;
+    };
+    // An object literal's own method; a class's is selected by its instance.
+    if !file
+        .ast
+        .object_properties
+        .iter()
+        .any(|property| property.key == name.span && property.method)
+    {
+        return false;
+    }
+    let Some(literal) = file
+        .ast
+        .object_get_shapes
+        .iter()
+        .filter(|shape| shape.span.contains(name.span))
+        .min_by_key(|shape| shape.span.end - shape.span.start)
+    else {
+        return true;
+    };
+    !object_literal_only_dispatched(file, literal.span, lookup)
+}
+
+/// Whether every way the object literal at `literal` is used is a member
+/// call on it: it is the receiver of one, or a `const` in this module whose
+/// every reference is, or an argument of an exact callee in this file that
+/// only reads members of its parameter.
+fn object_literal_only_dispatched(
+    file: &solid_facts::FileFacts,
+    literal: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let called_member_of = |value: Span| {
+        file.ast.members.iter().any(|member| {
+            file.ast.peel_ts_sugar_span(member.object) == value
+                && file
+                    .ast
+                    .computed_members
+                    .binary_search(&member.span)
+                    .is_err()
+                && file
+                    .ast
+                    .calls
+                    .iter()
+                    .any(|call| file.ast.peel_ts_sugar_span(call.callee) == member.span)
+        })
+    };
+    let closed_argument = |value: Span| {
+        file.ast
+            .arguments_containing(value)
+            .find(|(call, index)| file.ast.peel_ts_sugar_span(call.arguments[*index].span) == value)
+            .is_some_and(|(call, index)| {
+                let mut consulted = Vec::new();
+                !call.arguments[index].spread
+                    && lookup.parameter_only_member_accessed_consulting(
+                        file,
+                        call,
+                        index,
+                        &mut consulted,
+                    )
+                    && consulted
+                        .iter()
+                        .all(|(path, _)| path.as_str() == file.path.as_str())
+            })
+    };
+    if called_member_of(literal) || closed_argument(literal) {
+        return true;
+    }
+    let Some(binding) = file.ast.bindings.iter().find(|binding| {
+        binding
+            .initializer
+            .is_some_and(|initializer| file.ast.peel_ts_sugar_span(initializer) == literal)
+    }) else {
+        return false;
+    };
+    let [name] = binding.names.as_slice() else {
+        return false;
+    };
+    binding.immutable
+        && binding.shape == solid_facts::ast::BindingShape::Identifier
+        && crate::execution_role::file_is_module(file)
+        && !crate::execution_role::flow_binding_exported(file, name.span)
+        && file
+            .ast
+            .reference_declarations
+            .iter()
+            .filter(|(reference, declaration)| *declaration == name.span && *reference != name.span)
+            .all(|(reference, _)| called_member_of(*reference) || closed_argument(*reference))
 }
 
 pub(crate) fn inside_unclassified_callback(file: &solid_facts::FileFacts, span: Span) -> bool {
@@ -3650,7 +3753,7 @@ pub fn function_binding_name<'a>(
     function
         .name
         .as_ref()
-        .or(function.method_name.as_ref())
+        .or(own_method_name(file, function))
         .or_else(|| {
             file.ast
                 .bindings_initializer_containing(function.span)
@@ -3665,6 +3768,26 @@ pub fn function_binding_name<'a>(
                 })
                 .and_then(|binding| binding.names.first())
         })
+}
+
+/// The method name of a function that *is* an object or class method. The
+/// facts walker gives every non-arrow function nested anywhere in a method's
+/// body that method's name too (`{ m() { register(function () {}) } }`); the
+/// method itself is the outermost function carrying that name.
+pub(crate) fn own_method_name<'a>(
+    file: &'a solid_facts::FileFacts,
+    function: &'a solid_facts::ast::FunctionFact,
+) -> Option<&'a solid_facts::ast::NamedSpan> {
+    let name = function.method_name.as_ref()?;
+    (!file.ast.functions.iter().any(|outer| {
+        outer.span != function.span
+            && outer.span.contains(function.span)
+            && outer
+                .method_name
+                .as_ref()
+                .is_some_and(|outer_name| outer_name.span == name.span)
+    }))
+    .then_some(name)
 }
 
 /// Like [`function_binding_name`], but also sees through a call initializer:
@@ -3782,6 +3905,25 @@ pub(crate) fn read_escapes_synchronous_extent(
                 )
             })
     })
+}
+
+/// An exact global scheduler's queued callback cannot read during the
+/// enclosing function's invocation. Keep the callback implementation's own
+/// summary: the scheduler must be inside `owner_body`, rather than outside
+/// the function being read.
+pub(crate) fn read_escapes_runtime_stack(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    owner_body: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    crate::execution_role::fresh_stack_callback_call(file, span, lookup).is_some_and(
+        |(call, resolved)| {
+            owner_body.contains(call.span)
+                && crate::runtime_semantics::augmented_global_runtime_call(resolved)
+                && !crate::runtime_semantics::dispatches_through_receiver_then(resolved)
+        },
+    )
 }
 
 /// The typed descriptor at a callee, kept only when it names a callable Solid

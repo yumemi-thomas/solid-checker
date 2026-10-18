@@ -187,6 +187,16 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/helper-prop-read/App.tsx",
+      "start": 4017,
+      "end": 4025,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/helper-prop-read/App.tsx",
       "start": 4422,
       "end": 4430,
       "fixes": 0

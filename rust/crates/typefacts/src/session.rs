@@ -2101,7 +2101,7 @@ fn prepare_analyze_response(
         let candidate = retained.as_ref().ok_or_else(|| {
             SessionError::InvalidResponse("reuse response has no retained table".into())
         })?;
-        if candidate.schema() != v3::TYPE_FACTS_TABLE_SCHEMA_V19
+        if candidate.schema() != v3::TYPE_FACTS_TABLE_SCHEMA_V20
             || candidate.project_id() != expected_project
             || candidate.generation() != response.generation
         {
@@ -2123,7 +2123,7 @@ fn prepare_analyze_response(
         .map_err(SessionError::InvalidResponse)?;
     if transition.project_id.as_ref() != response.project_id.as_str()
         || transition.target_generation != response.generation
-        || transition.table_schema != v3::TYPE_FACTS_TABLE_SCHEMA_V19
+        || transition.table_schema != v3::TYPE_FACTS_TABLE_SCHEMA_V20
     {
         return Err(SessionError::InvalidResponse(
             "table transition identity does not match response".into(),
@@ -2396,7 +2396,7 @@ mod tests {
         files: Vec<crate::FileFact>,
     ) -> FactTable {
         FactTable::from_parts(
-            v3::TYPE_FACTS_TABLE_SCHEMA_V19,
+            v3::TYPE_FACTS_TABLE_SCHEMA_V20,
             1,
             "/p/tsconfig.json",
             sources,
@@ -2414,7 +2414,7 @@ mod tests {
     ) -> WireTableTransition {
         WireTableTransition {
             mode: TransitionMode::Delta,
-            table_schema: v3::TYPE_FACTS_TABLE_SCHEMA_V19,
+            table_schema: v3::TYPE_FACTS_TABLE_SCHEMA_V20,
             base_generation,
             target_generation,
             project_id: "/p/tsconfig.json".into(),

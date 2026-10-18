@@ -127,6 +127,135 @@ pub(super) fn binding_written(file: &FileFacts, declaration: Span) -> bool {
         })
 }
 
+/// ADR 0209, 0314: the members assignments write, by name, and the
+/// prototypes they write through under a key no proof names.
+#[derive(Default)]
+pub(super) struct AssignedMembers {
+    names: HashSet<String>,
+    /// A write through a prototype whose owner is not proven: every object's
+    /// members may be anything.
+    global: bool,
+    /// Project constructors, by file and declaration, whose prototype is
+    /// written: their instances' members may be anything.
+    constructors: HashSet<(String, Span)>,
+    /// Host constructors whose prototype is written, each with whether every
+    /// declaration of it is in `lib.dom.d.ts`.
+    hosts: Vec<(String, bool)>,
+}
+
+/// Whose instances a write through one `prototype` reaches (ADR 0314).
+enum PrototypeOwner {
+    /// The project constructor declared at this span of the writing file.
+    Constructor(Span),
+    /// These host constructors, through this static method's parameter.
+    Hosts(String, Vec<(String, bool)>),
+}
+
+/// Whether some assignment writes the global binding `name` directly
+/// (`HTMLCanvasElement = …`): an identifier target no local declaration
+/// binds.
+fn global_identifier_written(facts: &ProjectFacts, name: &str) -> bool {
+    facts.files.iter().any(|file| {
+        file.ast
+            .assignments
+            .iter()
+            .map(|assignment| assignment.target)
+            .chain(file.ast.iteration_targets.iter().copied())
+            .any(|target| {
+                // The whole target, or a leaf of a destructuring pattern; an
+                // identifier inside a member target or a type assertion
+                // (`(x as HTMLCanvasElement).width = …`) writes no binding.
+                let target = file.ast.peel_ts_sugar_span(target);
+                let pattern = file
+                    .source_text(target)
+                    .is_some_and(|text| text.starts_with(['[', '{']));
+                file.ast.identifiers.iter().any(|identifier| {
+                    (identifier.span == target || (pattern && target.contains(identifier.span)))
+                        && file.source_text(identifier.span) == Some(name)
+                        && file.ast.reference_declaration(identifier.span).is_none()
+                })
+            })
+    })
+}
+
+/// Whether `text` is exactly one string, template (without nested
+/// templates), numeric or boolean literal.
+fn primitive_literal_text(text: &str) -> bool {
+    if text == "true" || text == "false" {
+        return true;
+    }
+    let bytes = text.as_bytes();
+    let Some(&first) = bytes.first() else {
+        return false;
+    };
+    if first.is_ascii_digit() {
+        return bytes
+            .iter()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_'));
+    }
+    if !matches!(first, b'"' | b'\'' | b'`') || bytes.len() < 2 || bytes[bytes.len() - 1] != first {
+        return false;
+    }
+    let mut escaped = false;
+    for &byte in &bytes[1..bytes.len() - 1] {
+        if escaped {
+            escaped = false;
+        } else if byte == b'\\' {
+            escaped = true;
+        } else if byte == first {
+            return false;
+        }
+    }
+    !escaped
+}
+
+/// ADR 0320: standard-library functions whose result is a primitive other
+/// than `undefined` for every argument (`ToString`, `ToNumber` and the like
+/// run user code but return a primitive).
+const PRIMITIVE_RESULT_FUNCTIONS: &[&str] = &[
+    "StringConstructor.call",
+    "NumberConstructor.call",
+    "BooleanConstructor.call",
+    "BigIntConstructor.call",
+    "parseInt",
+    "parseFloat",
+    "isNaN",
+    "isFinite",
+    "NumberConstructor.parseInt",
+    "NumberConstructor.parseFloat",
+    "NumberConstructor.isFinite",
+    "NumberConstructor.isInteger",
+    "NumberConstructor.isNaN",
+    "NumberConstructor.isSafeInteger",
+    "encodeURIComponent",
+    "decodeURIComponent",
+    "encodeURI",
+    "decodeURI",
+    "DateConstructor.now",
+    "ArrayConstructor.isArray",
+    "Math.abs",
+    "Math.ceil",
+    "Math.floor",
+    "Math.round",
+    "Math.trunc",
+    "Math.sign",
+    "Math.max",
+    "Math.min",
+    "Math.pow",
+    "Math.sqrt",
+    "Math.cbrt",
+    "Math.random",
+    "Math.log",
+    "Math.log2",
+    "Math.log10",
+    "Math.exp",
+    "Math.hypot",
+    "Math.sin",
+    "Math.cos",
+    "Math.tan",
+    "Math.atan2",
+];
+
 /// ADR 0211: what a value's origin proves about the object it evaluates to.
 #[derive(Clone, Copy, Debug)]
 pub(super) enum ValueOrigin<'a> {
@@ -493,13 +622,21 @@ pub(super) struct SemanticLookup<'a> {
     /// program. Build-wide like the dialect, and false unless selected: a
     /// build that was never told stays fail-closed.
     pub(super) program_closed: bool,
+    /// What the backend read of the installed router (ADR 0324). Set by the
+    /// pipeline from the runtime environment; empty otherwise.
+    router_install: crate::router_params::RouterInstallEvidence,
     ast_indexes: &'a HashMap<solid_facts::core::SourcePath, CachedAstFileIndex>,
     entities: &'a EntitySymbols,
     symbol_names: &'a HashMap<SymbolId, SymbolName>,
     functions_by_symbol: OnceLock<HashMap<&'a str, SymbolFunction>>,
+    /// ADR 0319: every literal's invocation-flow answer.
+    invocation_flow_answers: OnceLock<HashMap<(String, Span), crate::ExecutionRole>>,
+    /// ADR 0320: whether some call may copy keys into an existing object.
+    objects_assigned_into: OnceLock<bool>,
+    router_params: OnceLock<crate::router_params::RouterParamsStatus>,
     /// ADR 0209: the property names some assignment in the project writes
-    /// (`x.name = …`), and whether any writes through a `prototype`.
-    assigned_member_names: OnceLock<(HashSet<String>, bool)>,
+    /// (`x.name = …`), and which prototypes it writes through (ADR 0314).
+    assigned_member_names: OnceLock<AssignedMembers>,
     /// Review round 1 of ADR 0293: whether some file may define a property
     /// reflectively ([`Self::property_may_be_defined_reflectively`]).
     reflective_property_definition: OnceLock<bool>,
@@ -630,6 +767,16 @@ impl<'a> SemanticLookup<'a> {
         self.effect_apply_regions
             .get_or_init(|| crate::effect_execution::regions(self))
     }
+    /// The installed router's evidence; see [`Self::router_install`].
+    #[must_use]
+    pub(super) fn with_router_install(
+        mut self,
+        install: crate::router_params::RouterInstallEvidence,
+    ) -> Self {
+        self.router_install = install;
+        self
+    }
+
     pub(super) fn new(
         facts: &'a ProjectFacts,
         ast_indexes: &'a HashMap<solid_facts::core::SourcePath, CachedAstFileIndex>,
@@ -652,10 +799,14 @@ impl<'a> SemanticLookup<'a> {
             facts,
             dialect,
             program_closed,
+            router_install: crate::router_params::RouterInstallEvidence::default(),
             ast_indexes,
             entities,
             symbol_names,
             functions_by_symbol: OnceLock::new(),
+            invocation_flow_answers: OnceLock::new(),
+            objects_assigned_into: OnceLock::new(),
+            router_params: OnceLock::new(),
             assigned_member_names: OnceLock::new(),
             reflective_property_definition: OnceLock::new(),
             entities_by_location: OnceLock::new(),
@@ -846,6 +997,32 @@ impl<'a> SemanticLookup<'a> {
     /// file can make a function in another file an owned component. Returned
     /// callback reachability has the same shape. One digest gives every
     /// dependent cache family the same coherent generation marker.
+    /// ADR 0320: [`Self::cross_file_proof_digest`] plus the program-wide
+    /// member-replacement census member resolution reads (an assignment of a
+    /// name or through an unknown key, a reflective definition, code copying
+    /// keys into objects). Only the stages that resolve members -- the
+    /// interprocedural graph and results, local accesses -- are keyed on it,
+    /// so a write elsewhere does not discard source discovery.
+    pub(super) fn member_resolution_digest(&self) -> Option<CrossFileProofDigest> {
+        let base = self.cross_file_proof_digest()?;
+        let assigned = self.assigned_members();
+        let mut names = assigned.names.iter().collect::<Vec<_>>();
+        names.sort_unstable();
+        let mut hasher = Sha256::new();
+        hasher.update(base);
+        hasher.update(b"member-replacement\0");
+        hasher.update([
+            u8::from(assigned.global),
+            u8::from(self.property_may_be_defined_reflectively()),
+            u8::from(self.objects_may_be_assigned_into()),
+        ]);
+        for name in names {
+            hasher.update(u64::try_from(name.len()).unwrap_or(u64::MAX).to_le_bytes());
+            hasher.update(name.as_bytes());
+        }
+        Some(hasher.finalize().into())
+    }
+
     pub(super) fn cross_file_proof_digest(&self) -> Option<CrossFileProofDigest> {
         *self.cross_file_proof_digest.get_or_init(|| {
             let components = self.component_functions();
@@ -880,6 +1057,19 @@ impl<'a> SemanticLookup<'a> {
                 hasher.update(b"tuple-iteration-veto\0");
                 hasher.update([u8::from(self.tuple_iteration_may_be_mutated())]);
             }
+            // ADR 0324: whether the router premise applies is a property of
+            // every file (a history in one decides what another reads).
+            hasher.update(b"router-params\0");
+            hasher.update([u8::from(self.router_params().applies())]);
+            // ADR 0325: an imported constant's primitive-ness is another
+            // file's fact.
+            hasher.update(b"imported-primitive-consts\0");
+            for (path, span) in self.exported_primitive_consts() {
+                hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
+                hasher.update(path.as_bytes());
+                hasher.update(span.start.to_le_bytes());
+                hasher.update(span.end.to_le_bytes());
+            }
             // ADR 0302: a compute helper or source in another file decides an
             // apply's owner/execution edge. Bind each call's answer, including
             // named callbacks that also have independent invocations.
@@ -898,6 +1088,28 @@ impl<'a> SemanticLookup<'a> {
                     crate::effect_execution::ApplyExecution::Unknown => 2,
                 };
                 hasher.update([tag]);
+            }
+            // ADR 0314: which prototypes another file writes decides which
+            // receivers keep an exact member here.
+            {
+                let assigned = self.assigned_members();
+                hasher.update(b"prototype-writes\0");
+                hasher.update([u8::from(assigned.global)]);
+                let mut constructors = assigned.constructors.iter().collect::<Vec<_>>();
+                constructors.sort_unstable();
+                for (path, span) in constructors {
+                    hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
+                    hasher.update(path.as_bytes());
+                    hasher.update(span.start.to_le_bytes());
+                    hasher.update(span.end.to_le_bytes());
+                }
+                let mut hosts = assigned.hosts.clone();
+                hosts.sort_unstable();
+                for (name, dom) in hosts {
+                    hasher.update(u64::try_from(name.len()).unwrap_or(u64::MAX).to_le_bytes());
+                    hasher.update(name.as_bytes());
+                    hasher.update([u8::from(dom)]);
+                }
             }
             let mut member_targets = self.object_member_targets().iter().collect::<Vec<_>>();
             member_targets.sort_unstable_by(|a, b| {
@@ -935,6 +1147,28 @@ impl<'a> SemanticLookup<'a> {
                 hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
                 hasher.update(path.as_bytes());
                 hasher.update(file.source_hash.as_str().as_bytes());
+            }
+            // ADR 0319: an invocation-flow proof follows a function value
+            // through any file of a closed program -- bindings, returns,
+            // object members, callee parameters, component props -- so a
+            // literal's role here can move with another file's contents.
+            // Every consumer reads the role from one per-build table of
+            // answers (`invocation_flow_answers`); bind that table, as ADR
+            // 0302 binds each apply's answer. A closed program with no proven
+            // answer still writes the marker, so closing or opening the
+            // boundary always moves the digest.
+            if self.program_closed {
+                let mut answers = self.invocation_flow_answers().iter().collect::<Vec<_>>();
+                answers.sort_unstable_by(|left, right| left.0.cmp(right.0));
+                hasher.update(b"invocation-flow-answers\0");
+                for ((path, span), role) in answers {
+                    hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
+                    hasher.update(path.as_bytes());
+                    hasher.update(span.start.to_le_bytes());
+                    hasher.update(span.end.to_le_bytes());
+                    hasher.update(format!("{role:?}").as_bytes());
+                    hasher.update([0]);
+                }
             }
             for (path, span) in component_keys {
                 hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
@@ -1519,6 +1753,12 @@ impl<'a> SemanticLookup<'a> {
         &self.facts.files
     }
 
+    /// ADR 0319: the invocation-flow answer of every literal, computed once.
+    pub(crate) fn invocation_flow_answers(&self) -> &HashMap<(String, Span), crate::ExecutionRole> {
+        self.invocation_flow_answers
+            .get_or_init(|| crate::execution_role::invocation_flow_answers(self))
+    }
+
     pub(super) fn tuple_iteration_may_be_mutated(&self) -> bool {
         *self
             .tuple_iteration_veto
@@ -1575,6 +1815,18 @@ impl<'a> SemanticLookup<'a> {
         self.symbols_by_id()
             .get(symbol)
             .map(|candidate| candidate.references().cloned().collect())
+    }
+
+    /// ADR 0324: whether the router-parameters premise applies to this
+    /// project.
+    pub(super) fn router_params(&self) -> &crate::router_params::RouterParamsStatus {
+        self.router_params.get_or_init(|| {
+            crate::router_params::router_params_status(
+                self.facts,
+                self.dialect,
+                &self.router_install,
+            )
+        })
     }
 
     /// The compiler's attested resolution of the project's import specifiers,
@@ -1658,10 +1910,124 @@ impl<'a> SemanticLookup<'a> {
     /// ADR 0209: whether some assignment in the project writes a property
     /// named `name` on any object, or writes through any `prototype`.
     pub(super) fn member_name_may_be_reassigned(&self, name: &str) -> bool {
-        let (names, prototype) = self.assigned_member_names.get_or_init(|| {
+        let assigned = self.assigned_members();
+        assigned.global
+            || !assigned.constructors.is_empty()
+            || !assigned.hosts.is_empty()
+            || assigned.names.contains(name)
+    }
+
+    /// ADR 0314: [`Self::member_name_may_be_reassigned`] for a value whose
+    /// prototype chain holds only built-in ECMAScript prototypes -- a fresh
+    /// literal, a primitive, a built-in collection (the ADR 0211 `Builtin`
+    /// origin). A write through a project constructor's prototype cannot
+    /// reach it, and neither can one through a host prototype every
+    /// declaration of which is in `lib.dom.d.ts`: no ECMAScript value inherits
+    /// from a DOM interface.
+    pub(super) fn member_may_be_reassigned_on_builtin(&self, name: &str) -> bool {
+        let assigned = self.assigned_members();
+        assigned.global
+            || assigned.hosts.iter().any(|(_, dom)| !dom)
+            || assigned.names.contains(name)
+    }
+
+    /// ADR 0314: [`Self::member_name_may_be_reassigned`] for an instance of
+    /// the project class `class`: a write through a prototype reaches it only
+    /// when its chain holds that prototype. Every ancestor must be a project
+    /// class this resolves; an unresolved `extends` may be anything.
+    pub(super) fn member_may_be_reassigned_on_class(
+        &self,
+        name: &str,
+        file: &'a FileFacts,
+        class: &'a solid_facts::ast::ClassFact,
+    ) -> bool {
+        let assigned = self.assigned_members();
+        assigned.global
+            || assigned.hosts.iter().any(|(_, dom)| !dom)
+            || assigned.names.contains(name)
+            || self.class_chain_prototype_written(file, class, 8)
+    }
+
+    fn class_chain_prototype_written(
+        &self,
+        file: &'a FileFacts,
+        class: &'a solid_facts::ast::ClassFact,
+        depth: usize,
+    ) -> bool {
+        let assigned = self.assigned_members();
+        if depth == 0 {
+            return true;
+        }
+        if !assigned.constructors.is_empty() {
+            // The class's own name, or the `const` a class expression is bound to.
+            let declared = class.name.as_ref().map(|name| name.span).into_iter().chain(
+                file.ast
+                    .bindings
+                    .iter()
+                    .filter(|binding| {
+                        binding.initializer.is_some_and(|initializer| {
+                            file.ast.peel_ts_sugar_span(initializer) == class.span
+                        })
+                    })
+                    .flat_map(|binding| binding.names.iter().map(|name| name.span)),
+            );
+            for declaration in declared {
+                if assigned
+                    .constructors
+                    .contains(&(file.path.to_string(), declaration))
+                {
+                    return true;
+                }
+            }
+        }
+        let Some(heritage) = class.heritage else {
+            return false;
+        };
+        let heritage = file.ast.peel_ts_sugar_span(heritage);
+        let base = file
+            .ast
+            .reference_declaration(heritage)
+            .and_then(|declaration| {
+                file.ast
+                    .classes
+                    .iter()
+                    .find(|candidate| {
+                        candidate
+                            .name
+                            .as_ref()
+                            .is_some_and(|name| name.span == declaration)
+                    })
+                    .map(|base| (file, base))
+            })
+            .or_else(|| {
+                self.entities
+                    .at(file.path.as_str(), heritage)
+                    .and_then(|symbol| self.class_for_symbol(symbol))
+            });
+        base.is_none_or(|(base_file, base)| {
+            self.class_chain_prototype_written(base_file, base, depth - 1)
+        })
+    }
+
+    fn assigned_members(&self) -> &AssignedMembers {
+        self.assigned_member_names.get_or_init(|| {
             let facts: &'a ProjectFacts = self.facts;
             let mut names = HashSet::new();
             let mut prototype = false;
+            let mut constructors = HashSet::new();
+            let mut pending_hosts = Vec::new();
+            let mut record =
+                |file: &'a FileFacts, owner: Option<PrototypeOwner>, prototype: &mut bool| {
+                    match owner {
+                        Some(PrototypeOwner::Constructor(declaration)) => {
+                            constructors.insert((file.path.to_string(), declaration));
+                        }
+                        Some(PrototypeOwner::Hosts(method, hosts)) => {
+                            pending_hosts.push((method, hosts));
+                        }
+                        None => *prototype = true,
+                    }
+                };
             for file in &facts.files {
                 let targets = file
                     .ast
@@ -1726,12 +2092,36 @@ impl<'a> SemanticLookup<'a> {
                                 .unwrap_or_default()
                                 .contains("prototype")
                             {
-                                prototype = true;
+                                // `R.prototype[key] = …`: narrowed to `R`'s
+                                // instances when `R` is proven (ADR 0314).
+                                let object = file.ast.peel_ts_sugar_span(member.object);
+                                match file.ast.members.iter().find(|prototype_member| {
+                                    prototype_member.span == object
+                                        && file
+                                            .ast
+                                            .computed_members
+                                            .binary_search(&prototype_member.span)
+                                            .is_err()
+                                        && file.source_text(prototype_member.property)
+                                            == Some("prototype")
+                                }) {
+                                    Some(prototype_member) => record(
+                                        file,
+                                        self.prototype_owner(file, prototype_member.object),
+                                        &mut prototype,
+                                    ),
+                                    None => prototype = true,
+                                }
                             }
                         } else if let Some(property) = file.source_text(member.property) {
                             names.insert(property.to_string());
                             if property == "prototype" {
-                                prototype = true;
+                                // `R.prototype = …` (ADR 0314).
+                                record(
+                                    file,
+                                    self.prototype_owner(file, member.object),
+                                    &mut prototype,
+                                );
                             }
                         }
                     }
@@ -1742,9 +2132,255 @@ impl<'a> SemanticLookup<'a> {
                     // every dynamic write would refuse every `xs[i] = v`.
                 }
             }
-            (names, prototype)
+            // A host proof holds only while neither the method nor the
+            // global constructors it names are rewritten.
+            let mut hosts = Vec::new();
+            for (method, found) in pending_hosts {
+                if names.contains(&method)
+                    || found.iter().any(|(host, _)| {
+                        names.contains(host) || global_identifier_written(facts, host)
+                    })
+                {
+                    prototype = true;
+                }
+                hosts.extend(found);
+            }
+            AssignedMembers {
+                names,
+                global: prototype,
+                constructors,
+                hosts,
+            }
+        })
+    }
+
+    /// ADR 0314: whose instances a write through `receiver.prototype` can
+    /// reach, when that is provable; `None` for any other receiver.
+    ///
+    /// - A class, a function declaration, or a `const` bound to a function or
+    ///   class expression, declared in this file and never rebound: that
+    ///   constructor's instances.
+    /// - A parameter of a static class method nothing rebinds, when every
+    ///   access to that method anywhere is a direct call through the class's
+    ///   own name and passes, at that parameter, a global constructor declared
+    ///   only in TypeScript's default libraries: those host prototypes.
+    fn prototype_owner(&self, file: &'a FileFacts, receiver: Span) -> Option<PrototypeOwner> {
+        use solid_facts::ast::BindingShape;
+        let receiver = file.ast.peel_ts_sugar_span(receiver);
+        if file
+            .ast
+            .identifiers
+            .binary_search_by_key(&receiver, |identifier| identifier.span)
+            .is_err()
+        {
+            return None;
+        }
+        let declaration = file.ast.reference_declaration(receiver)?;
+        if let Some((function, index)) = file.ast.functions.iter().find_map(|function| {
+            function
+                .parameters
+                .iter()
+                .position(|parameter| parameter.names.iter().any(|name| name.span == declaration))
+                .map(|index| (function, index))
+        }) {
+            return self.host_prototype_owner(file, function, index);
+        }
+        let declared_constructor = file.ast.classes.iter().any(|class| {
+            class
+                .name
+                .as_ref()
+                .is_some_and(|name| name.span == declaration)
+        }) || file.ast.functions.iter().any(|function| {
+            function.kind == solid_facts::ast::FunctionKind::Declaration
+                && function
+                    .name
+                    .as_ref()
+                    .is_some_and(|name| name.span == declaration)
         });
-        *prototype || names.contains(name)
+        if declared_constructor {
+            return (!binding_written(file, declaration))
+                .then_some(PrototypeOwner::Constructor(declaration));
+        }
+        let binding = file
+            .ast
+            .bindings
+            .iter()
+            .find(|binding| binding.names.iter().any(|name| name.span == declaration))?;
+        let initializer = file.ast.peel_ts_sugar_span(binding.initializer?);
+        (binding.immutable
+            && binding.shape == BindingShape::Identifier
+            && (file.ast.functions.iter().any(|function| {
+                function.span == initializer
+                    && function.kind != solid_facts::ast::FunctionKind::Arrow
+            }) || file
+                .ast
+                .classes
+                .iter()
+                .any(|class| class.span == initializer)))
+        .then_some(PrototypeOwner::Constructor(declaration))
+    }
+
+    fn host_prototype_owner(
+        &self,
+        file: &'a FileFacts,
+        function: &'a solid_facts::ast::FunctionFact,
+        index: usize,
+    ) -> Option<PrototypeOwner> {
+        use solid_facts::ast::{BindingShape, ClassElementKind};
+        let parameter = function.parameters.get(index)?;
+        let [name] = parameter.names.as_slice() else {
+            return None;
+        };
+        if parameter.shape != BindingShape::Identifier
+            || parameter.initializer.is_some()
+            || (function.rest_parameter && index + 1 == function.parameters.len())
+            || binding_written(file, name.span)
+            || file.ast.identifiers.iter().any(|identifier| {
+                function.span.contains(identifier.span)
+                    && file.source_text(identifier.span) == Some("arguments")
+            })
+        {
+            return None;
+        }
+        let (class, element) = file.ast.classes.iter().find_map(|class| {
+            class
+                .elements
+                .iter()
+                .find(|element| {
+                    element.value == Some(function.span)
+                        && element.r#static
+                        && element.kind == ClassElementKind::Method
+                        && !element.computed
+                })
+                .map(|element| (class, element))
+        })?;
+        let method = file.source_text(element.key?)?;
+        let class_name = class.name.as_ref()?;
+        let class_symbol = self.entities.at(file.path.as_str(), class_name.span)?;
+        let is_this_class = |reference_file: &FileFacts, span: Span| {
+            self.entities
+                .at(reference_file.path.as_str(), span)
+                .and_then(|symbol| self.class_for_symbol(symbol))
+                .is_some_and(|(found_file, found)| {
+                    found_file.path == file.path && found.span == class.span
+                })
+        };
+        // The class never escapes: past its declaration and imports, every
+        // reference is the object of a member access naming its key.
+        for reference in self.symbol_references_if_present(class_symbol.as_str())? {
+            let reference_file = self.file_by_path(reference.path.as_ref())?;
+            let (Ok(start), Ok(end)) = (
+                u32::try_from(reference.start_byte),
+                u32::try_from(reference.end_byte),
+            ) else {
+                return None;
+            };
+            let span = Span::new(start, end);
+            if (reference_file.path == file.path && span == class_name.span)
+                || reference_file
+                    .ast
+                    .imports
+                    .iter()
+                    .any(|import| import.span.contains(span))
+            {
+                continue;
+            }
+            if !reference_file.ast.members.iter().any(|member| {
+                reference_file.ast.peel_ts_sugar_span(member.object) == span
+                    && reference_file
+                        .ast
+                        .computed_members
+                        .binary_search(&member.span)
+                        .is_err()
+            }) {
+                return None;
+            }
+        }
+        let mut hosts = Vec::new();
+        for other in self.files() {
+            if other
+                .ast
+                .literal_computed_members
+                .iter()
+                .any(|literal| literal.key.as_str() == method)
+                || other.ast.bindings.iter().any(|binding| {
+                    binding
+                        .object_slots
+                        .iter()
+                        .any(|slot| slot.property.as_str() == method)
+                })
+            {
+                return None;
+            }
+            for member in other.ast.members.iter().filter(|member| {
+                other
+                    .ast
+                    .computed_members
+                    .binary_search(&member.span)
+                    .is_err()
+                    && other.source_text(member.property) == Some(method)
+            }) {
+                if !is_this_class(other, other.ast.peel_ts_sugar_span(member.object)) {
+                    return None;
+                }
+                let call = other.ast.calls.iter().find(|call| {
+                    !call.construct && other.ast.peel_ts_sugar_span(call.callee) == member.span
+                })?;
+                if call
+                    .arguments
+                    .iter()
+                    .take(index + 1)
+                    .any(|argument| argument.spread)
+                {
+                    return None;
+                }
+                hosts.push(self.global_constructor(other, call.arguments.get(index)?.span)?);
+            }
+        }
+        Some(PrototypeOwner::Hosts(method.to_owned(), hosts))
+    }
+
+    /// The name of the global constructor `value` names, and whether every
+    /// `var` declaration of it is in `lib.dom.d.ts`, when it is an identifier
+    /// no project binding declares, every declaration of it is ambient, and
+    /// its value is declared only by TypeScript's default libraries.
+    fn global_constructor(&self, file: &'a FileFacts, value: Span) -> Option<(String, bool)> {
+        let value = file.ast.peel_ts_sugar_span(value);
+        if file
+            .ast
+            .identifiers
+            .binary_search_by_key(&value, |identifier| identifier.span)
+            .is_err()
+            || file.ast.reference_declaration(value).is_some()
+        {
+            return None;
+        }
+        let symbol = self.symbol_at(file.path.as_str(), value)?;
+        if !symbol.alias_target().is_empty() || symbol.declarations().is_empty() {
+            return None;
+        }
+        // Every declaration is ambient, in a declaration file no analyzed
+        // source is: none creates a runtime binding (`@webgpu/types` merges an
+        // interface into `HTMLCanvasElement`; `babylonjs` re-declares
+        // `var OffscreenCanvas`). The value is the host's, which a default
+        // library declares, under the standard host premise (ADR 0295, 0300).
+        let mut dom = true;
+        let mut library = false;
+        for declaration in symbol.declarations() {
+            let path = declaration.location.path.as_ref();
+            let name = std::path::Path::new(path).file_name()?.to_str()?;
+            if self.file_by_path(path).is_some() || !name.ends_with(".d.ts") {
+                return None;
+            }
+            if declaration.kind.as_ref() == "variable" && name.starts_with("lib.") {
+                library = true;
+                dom &= name == "lib.dom.d.ts";
+            }
+        }
+        let variable = library;
+        variable
+            .then(|| (file.source_text(value).map(str::to_owned), dom))
+            .and_then(|(name, dom)| Some((name?, dom)))
     }
 
     /// Review round 1 of ADR 0293: whether any analyzed file may define a
@@ -1770,6 +2406,50 @@ impl<'a> SemanticLookup<'a> {
                     file.source_text(call.callee)
                         .is_some_and(|callee| NAMES.iter().any(|name| callee.ends_with(name)))
                 })
+            })
+        })
+    }
+
+    /// ADR 0314: [`Self::property_may_be_defined_reflectively`] for one
+    /// property name. Every spelling of a reflective definer must be the
+    /// callee of a call whose key argument (the second) is a string literal
+    /// other than `name`; any other use -- an alias, a destructuring, a
+    /// computed or missing key, `defineProperties`, `__defineGetter__` with
+    /// this name -- may define `name`.
+    pub(super) fn property_may_be_defined_reflectively_as(&self, name: &str) -> bool {
+        use solid_facts::ast::ArgumentLiteralFact;
+        const NAMES: [&str; 3] = ["defineProperty", "defineProperties", "__defineGetter__"];
+        if !self.property_may_be_defined_reflectively() {
+            return false;
+        }
+        self.files().iter().any(|file| {
+            let spelled = |text: &str| NAMES.contains(&text.trim_matches(['\'', '"', '`']));
+            file.ast.bindings.iter().any(|binding| {
+                binding
+                    .object_slots
+                    .iter()
+                    .any(|slot| NAMES.contains(&slot.property.as_str()))
+            }) || file.ast.members.iter().any(|member| {
+                file.source_text(member.property).is_some_and(spelled)
+                    && !file.ast.calls.iter().any(|call| {
+                        file.ast.peel_ts_sugar_span(call.callee) == member.span
+                            && file.source_text(member.property).is_some_and(|text| {
+                                text.trim_matches(['\'', '"', '`']) != "defineProperties"
+                            })
+                            && matches!(
+                                call.arguments.get(1).map(|key| (&key.literal_value, key.spread)),
+                                Some((ArgumentLiteralFact::String(key), false)) if key.as_str() != name
+                            )
+                            && !call.arguments.first().is_some_and(|target| target.spread)
+                    })
+            }) || file.ast.calls.iter().any(|call| {
+                file.source_text(call.callee).is_some_and(|callee| {
+                    NAMES.iter().any(|definer| callee.ends_with(definer))
+                }) && !file
+                    .ast
+                    .members
+                    .iter()
+                    .any(|member| file.ast.peel_ts_sugar_span(call.callee) == member.span)
             })
         })
     }
@@ -1822,6 +2502,287 @@ impl<'a> SemanticLookup<'a> {
         Some(census)
     }
 
+    /// The expression inside any parentheses around `value`; `None` when a
+    /// type assertion (`as`, `<T>`, `!`, `satisfies`) wraps it on the way,
+    /// which changes the declared type and never the value.
+    pub(super) fn peel_parentheses(file: &FileFacts, value: Span) -> Option<Span> {
+        let mut value = value;
+        while let Ok(index) = file
+            .ast
+            .transparent_wrappers
+            .binary_search_by_key(&value, |wrapper| wrapper.span)
+        {
+            let wrapper = &file.ast.transparent_wrappers[index];
+            if wrapper.inner == value {
+                break;
+            }
+            let parenthesized = wrapper.inner.start > value.start
+                && file.source.as_bytes().get(value.start as usize) == Some(&b'(');
+            if !parenthesized {
+                return None;
+            }
+            value = wrapper.inner;
+        }
+        Some(value)
+    }
+
+    /// ADR 0320: whether the expression at `value` evaluates to a primitive
+    /// other than `undefined`, proven from what it is rather than from its
+    /// declared type: a literal or template, an operator whose result is
+    /// always primitive, a `.length` of a proven built-in value, a primitive
+    /// result of an audited standard-library function, a conditional or
+    /// logical expression all of whose results are, or an unexported `const`
+    /// of this file initialized with one. A type assertion (`as`, `<T>`, `!`)
+    /// anywhere on the way refuses: it changes the declared type, never the
+    /// value. Only this file is read, so a cached answer follows its source.
+    pub(super) fn proven_primitive(&self, file: &FileFacts, value: Span, depth: usize) -> bool {
+        if depth == 0 {
+            return false;
+        }
+        let Some(value) = Self::peel_parentheses(file, value) else {
+            return false;
+        };
+        if file.ast.primitive_results.binary_search(&value).is_ok() {
+            return true;
+        }
+        let Some(text) = file.source_text(value) else {
+            return false;
+        };
+        if primitive_literal_text(text) {
+            return true;
+        }
+        if let Some(conditional) = file
+            .ast
+            .conditional_expressions
+            .iter()
+            .find(|conditional| conditional.span == value)
+        {
+            return self.proven_primitive(file, conditional.consequent, depth - 1)
+                && self.proven_primitive(file, conditional.alternate, depth - 1);
+        }
+        if let Some(logical) = file
+            .ast
+            .logical_expressions
+            .iter()
+            .find(|logical| logical.span == value)
+        {
+            return self.proven_primitive(file, logical.left, depth - 1)
+                && self.proven_primitive(file, logical.right, depth - 1);
+        }
+        if let Some(member) = file.ast.members.iter().find(|member| member.span == value) {
+            return file.source_text(member.property) == Some("length")
+                && file
+                    .ast
+                    .computed_members
+                    .binary_search(&member.span)
+                    .is_err()
+                && !self.member_may_be_reassigned_on_builtin("length")
+                && matches!(
+                    self.value_origin(
+                        file,
+                        member.object,
+                        solid_facts::ast::RuntimeValueKind::Unknown,
+                        depth - 1
+                    ),
+                    Some(ValueOrigin::Builtin)
+                );
+        }
+        if let Some(call) = file.ast.call_at(value) {
+            if call.construct || call.arguments.iter().any(|argument| argument.spread) {
+                return false;
+            }
+            return self
+                .standard_library_declaration(file, call, typefacts::CallKind::Call)
+                .is_some_and(|declaration| {
+                    PRIMITIVE_RESULT_FUNCTIONS.contains(&declaration.qualified_name.as_ref())
+                });
+        }
+        let Some((binding_file, binding, _)) = self.binding_at_reference(file.path.as_str(), value)
+        else {
+            return false;
+        };
+        // ADR 0325: a named import of another module's exported constant.
+        if binding_file.path != file.path {
+            return self.imported_const_is_primitive(file, value, binding_file, binding, depth);
+        }
+        if !binding.immutable
+            || binding.shape != solid_facts::ast::BindingShape::Identifier
+            || crate::execution_role::flow_binding_exported(
+                binding_file,
+                binding
+                    .names
+                    .first()
+                    .map_or(binding.declaration, |name| name.span),
+            )
+            || binding_file.ast.functions.iter().any(|function| {
+                function.parameters.iter().any(|parameter| {
+                    parameter
+                        .names
+                        .iter()
+                        .any(|name| binding.names.iter().any(|bound| bound.span == name.span))
+                })
+            })
+        {
+            return false;
+        }
+        binding
+            .initializer
+            .is_some_and(|initializer| self.proven_primitive(file, initializer, depth - 1))
+    }
+
+    /// ADR 0325: whether the identifier at `value`, a named import of
+    /// `binding` (declared in `binding_file`), holds a primitive other than
+    /// `undefined`. Only the exact shape:
+    ///
+    /// - the identifier's declaration is the local of a named, value import
+    ///   (not a namespace, a default or a type-only one) of a module that the
+    ///   compiler's attested resolution lands on `binding_file` itself, with
+    ///   no re-export hop;
+    /// - `binding_file` is a module, and `binding` is a module-level `const`
+    ///   of one plain identifier that the module exports under exactly the
+    ///   imported name (`export const X`, or `export { N as X }`), not through
+    ///   an `export … from`;
+    /// - the initializer is proven primitive by [`Self::proven_primitive`],
+    ///   in `binding_file`.
+    ///
+    /// A `const` cannot be reassigned and an ES module namespace is frozen, so
+    /// nothing can change the value after initialization; anything that is
+    /// not exactly this refuses (a barrel, an `export *`, a default import, an
+    /// object, a call the audited table does not name, an assertion).
+    fn imported_const_is_primitive(
+        &self,
+        file: &FileFacts,
+        value: Span,
+        binding_file: &'a FileFacts,
+        binding: &solid_facts::ast::BindingFact,
+        depth: usize,
+    ) -> bool {
+        use solid_facts::ast::{BindingShape, ExportKind, ImportKind};
+        let value = file.ast.peel_ts_sugar_span(value);
+        let Some(declaration) = file.ast.reference_declaration(value) else {
+            return false;
+        };
+        let Some((import, imported)) = file.ast.imports.iter().find_map(|import| {
+            import.bindings.iter().find_map(|candidate| {
+                (candidate.local.span == declaration
+                    && candidate.kind == ImportKind::Named
+                    && !candidate.type_only
+                    && !import.type_only)
+                    .then_some((import, candidate.imported.as_deref()))
+            })
+        }) else {
+            return false;
+        };
+        let (Some(imported), Some(imports)) = (imported, self.resolved_imports()) else {
+            return false;
+        };
+        let solid_facts::SpecifierAttestation::Attested(row) =
+            imports.specifier(file.path.as_str(), import.span, import.module.as_str())
+        else {
+            return false;
+        };
+        let landing = if row.included_path.is_empty() {
+            row.resolved_path.as_ref()
+        } else {
+            row.included_path.as_ref()
+        };
+        let [name] = binding.names.as_slice() else {
+            return false;
+        };
+        if landing != binding_file.path.as_str()
+            || row.resolution == solid_facts::ImportResolution::Unresolved
+            || !crate::execution_role::file_is_module(binding_file)
+            || file_names_commonjs_exports(binding_file)
+            || !binding.immutable
+            || binding.shape != BindingShape::Identifier
+            || binding_file
+                .ast
+                .functions
+                .iter()
+                .any(|function| function.span.contains(binding.declaration))
+        {
+            return false;
+        }
+        let exported = binding_file.ast.exports.iter().any(|export| {
+            export.module.is_none()
+                && export.kind == ExportKind::Named
+                && !export.type_only
+                && (export.declarations.iter().any(|specifier| {
+                    specifier.local.span == name.span
+                        && specifier.exported.as_str() == imported
+                        && !specifier.type_only
+                }) || export.specifiers.iter().any(|specifier| {
+                    specifier.exported.as_str() == imported
+                        && !specifier.type_only
+                        && binding_file.ast.reference_declaration(specifier.local.span)
+                            == Some(name.span)
+                }))
+        });
+        exported
+            && binding.initializer.is_some_and(|initializer| {
+                self.proven_primitive(binding_file, initializer, depth.saturating_sub(1))
+            })
+    }
+
+    /// ADR 0325: the imported-constant answers the cross-file proofs read,
+    /// as `(path, declaration span)` of every exported module-level `const`
+    /// of one identifier whose initializer is proven primitive: the set
+    /// [`Self::imported_const_is_primitive`] can accept. Empty when no file
+    /// imports a binding by name.
+    fn exported_primitive_consts(&self) -> Vec<(String, Span)> {
+        use solid_facts::ast::{BindingShape, ImportKind};
+        if !self.files().iter().any(|file| {
+            file.ast.imports.iter().any(|import| {
+                import
+                    .bindings
+                    .iter()
+                    .any(|binding| binding.kind == ImportKind::Named)
+            })
+        }) {
+            return Vec::new();
+        }
+        let mut found = Vec::new();
+        for file in self.files() {
+            if !crate::execution_role::file_is_module(file) || file_names_commonjs_exports(file) {
+                continue;
+            }
+            for binding in &file.ast.bindings {
+                let [name] = binding.names.as_slice() else {
+                    continue;
+                };
+                if !binding.immutable
+                    || binding.shape != BindingShape::Identifier
+                    || file
+                        .ast
+                        .functions
+                        .iter()
+                        .any(|function| function.span.contains(binding.declaration))
+                    || !file.ast.exports.iter().any(|export| {
+                        export.module.is_none()
+                            && (export
+                                .declarations
+                                .iter()
+                                .any(|specifier| specifier.local.span == name.span)
+                                || export.specifiers.iter().any(|specifier| {
+                                    file.ast.reference_declaration(specifier.local.span)
+                                        == Some(name.span)
+                                }))
+                    })
+                {
+                    continue;
+                }
+                if binding
+                    .initializer
+                    .is_some_and(|initializer| self.proven_primitive(file, initializer, 6))
+                {
+                    found.push((file.path.to_string(), name.span));
+                }
+            }
+        }
+        found.sort_unstable();
+        found
+    }
+
     /// ADR 0211: what the origin of the value at `value` proves about the
     /// object it evaluates to, followed through `const` bindings.
     ///
@@ -1834,7 +2795,14 @@ impl<'a> SemanticLookup<'a> {
         kind: solid_facts::ast::RuntimeValueKind,
         depth: usize,
     ) -> Option<ValueOrigin<'a>> {
-        self.value_origin_assuming(file, value, kind, depth, None)
+        let origin = self.value_origin_assuming(file, value, kind, depth, None)?;
+        // ADR 0320: a project instance's constructor may hand `this` to code
+        // that copies keys into it; a built-in constructor hands its result
+        // to nothing, and an unshared binding holds it.
+        match origin {
+            ValueOrigin::ProjectClass(..) if self.objects_may_be_assigned_into() => None,
+            origin => Some(origin),
+        }
     }
 
     /// [`Self::value_origin`], with one parameter -- a setter updater's
@@ -1926,8 +2894,40 @@ impl<'a> SemanticLookup<'a> {
         {
             return Some(ValueOrigin::Builtin);
         }
-        let (binding_file, binding, _) = self.binding_at_reference(file.path.as_str(), value)?;
+        let (binding_file, binding, symbol) =
+            self.binding_at_reference(file.path.as_str(), value)?;
         if !binding.immutable || binding.shape != solid_facts::ast::BindingShape::Identifier {
+            return None;
+        }
+        // ADR 0320: a parameter's default holds only when no argument is
+        // passed; an object a binding holds must stay unshared.
+        let [name] = binding.names.as_slice() else {
+            return None;
+        };
+        if binding_file.ast.functions.iter().any(|function| {
+            function
+                .parameters
+                .iter()
+                .any(|parameter| parameter.names.iter().any(|n| n.span == name.span))
+        }) || (!matches!(
+            binding.initializer_value_kind,
+            solid_facts::ast::RuntimeValueKind::Primitive
+                | solid_facts::ast::RuntimeValueKind::Nullish
+        ) && !{
+            // Untracked consumers: only callees in the binding's own file,
+            // whose source this file's cached answers already depend on.
+            let mut consulted = Vec::new();
+            self.binding_stays_closed(
+                binding_file,
+                name.span,
+                &symbol,
+                file,
+                value,
+                &mut consulted,
+            ) && consulted
+                .iter()
+                .all(|(path, _)| path.as_str() == binding_file.path.as_str())
+        }) {
             return None;
         }
         self.value_origin_assuming(
@@ -1997,10 +2997,11 @@ impl<'a> SemanticLookup<'a> {
             && let Some(method) = file.source_text(member.property)
             && (RECEIVER_RETURNING_METHODS.contains(&method) || FRESH_VALUE_METHODS.contains(&method))
             && (method != "split" || separator_is_primitive)
-            && !self.member_name_may_be_reassigned(method)
+            // ADR 0314: the receiver below is a proven built-in value.
+            && !self.member_may_be_reassigned_on_builtin(method)
             // A species-built result follows the receiver's `constructor`.
             && (RECEIVER_RETURNING_METHODS.contains(&method)
-                || !self.member_name_may_be_reassigned("constructor"))
+                || !self.member_may_be_reassigned_on_builtin("constructor"))
             && matches!(
                 self.value_origin_assuming(
                     file,
@@ -2590,8 +3591,15 @@ impl<'a> SemanticLookup<'a> {
             .call_by_callee(file, original_callee)
             .or_else(|| self.call_by_callee(file, callee))
             .map_or(original_callee, |call| call.span);
-        self.entity_at(file.path.as_str(), callee)
+        // A wrapped callee has its own exact call demand. Prefer that fact:
+        // the peeled expression may also be another invocation's location
+        // (a factory result, for example), or may have only a symbol demand.
+        self.entity_at(file.path.as_str(), original_callee)
             .and_then(|entity| entity.resolved_call.as_deref())
+            .or_else(|| {
+                self.entity_at(file.path.as_str(), callee)
+                    .and_then(|entity| entity.resolved_call.as_deref())
+            })
             .or_else(|| {
                 self.entity_at(file.path.as_str(), call_span)
                     .and_then(|entity| entity.resolved_call.as_deref())
@@ -2691,6 +3699,23 @@ impl<'a> SemanticLookup<'a> {
             .get(file.path.as_str())
             .and_then(|index| index.member_property(callee));
         let computed_member = file.ast.computed_members.contains(&callee);
+        // ADR 0322: a member of a namespace import that a runtime redirect
+        // binds to selected source is the redirected export: the entity at
+        // the property carries it, the resolved declaration names the
+        // declaration file the compiler bound instead.
+        if let Some(property) = member_property
+            && !computed_member
+            && !self.facts.runtime_symbol_redirects.is_empty()
+            && self.namespace_member_function(file, callee).is_some()
+            && let Some(symbol) = self.entities.at(file.path.as_str(), property)
+            && self
+                .facts
+                .runtime_symbol_redirects
+                .values()
+                .any(|target| target.as_str() == symbol.as_str())
+        {
+            return Some(symbol.as_str());
+        }
         member_property
             .and_then(|property| {
                 self.resolved_declaration_symbol(file, callee).or_else(|| {
@@ -2910,18 +3935,202 @@ impl<'a> SemanticLookup<'a> {
     /// candidate. Consumers may certify it only after proving every candidate
     /// has equivalent behavior; an empty result is missing evidence, not
     /// safety.
-    pub(super) fn member_value_symbols_at(
+    ///
+    /// Records in `consulted` every function whose source the answer read
+    /// (factories, callees an object is handed to), so a cached consumer can
+    /// depend on them.
+    pub(super) fn member_value_symbols_at_tracked(
         &self,
         file: &FileFacts,
         value: Span,
         property_name: &str,
+        consulted: &mut Vec<(String, Span)>,
     ) -> Vec<SymbolId> {
-        let mut symbols = Vec::new();
+        // ADR 0321: an object literal written as the argument itself is held
+        // only by the callee's parameter, which the caller proved is only
+        // member-read: no other code can reach it to replace a member.
+        let fresh_argument = file
+            .ast
+            .object_get_shapes
+            .iter()
+            .any(|shape| shape.span == file.ast.peel_ts_sugar_span(value));
+        if !fresh_argument && self.own_member_may_be_replaced(property_name) {
+            return Vec::new();
+        }
         let mut visited = HashSet::new();
-        self.member_value_symbols(file, value, property_name, &mut visited, &mut symbols);
+        let mut symbols = self
+            .member_value_candidates(file, value, property_name, &mut visited, true, consulted)
+            .unwrap_or_default();
         symbols.sort_unstable();
         symbols.dedup();
         symbols
+    }
+
+    /// Follow a nested member path through fresh, closed data literals. The
+    /// argument and every held intermediate have a single consumption channel;
+    /// the receiving parameter may only call this exact path. In particular,
+    /// neither a const declaration nor a structural signature proves stability.
+    pub(super) fn nested_member_value_symbols_at(
+        &self,
+        file: &FileFacts,
+        call: &solid_facts::ast::CallFact,
+        parameter: usize,
+        path: &[String],
+    ) -> Vec<SymbolId> {
+        let resolve = || {
+            if path.len() < 2
+                || path.len() > 8
+                || call.construct
+                || call.arguments.iter().any(|argument| argument.spread)
+                || self.files().iter().any(|file| {
+                    file.ast
+                        .module_hazards
+                        .iter()
+                        .any(|hazard| hazard.kind == solid_facts::ast::ModuleHazardKind::Eval)
+                })
+            {
+                return None;
+            }
+            let (callee_file, callee, exact) =
+                crate::execution_role::project_callee_at_parameter(file, call, parameter, self)?;
+            let input = callee.parameters.get(parameter)?;
+            if !exact
+                || input.shape != solid_facts::ast::BindingShape::Identifier
+                || input.names.len() != 1
+                || callee.rest_parameter
+                || binding_written(callee_file, input.names[0].span)
+                || callee_file.ast.identifiers.iter().any(|id| {
+                    callee.span.contains(id.span)
+                        && callee_file.source_text(id.span) == Some("arguments")
+                })
+            {
+                return None;
+            }
+            let symbol = self
+                .entities
+                .at(callee_file.path.as_str(), input.names[0].span)?;
+            let mut seen = false;
+            for (reference, declaration) in &callee_file.ast.reference_declarations {
+                if *declaration != input.names[0].span {
+                    continue;
+                }
+                seen = true;
+                // Extracting, returning, assigning, or forwarding any prefix
+                // exposes the receiver. Only an immediate call of the full
+                // selected path keeps the fresh object's channel closed.
+                if !callee_file.ast.calls.iter().any(|inner| {
+                    !inner.construct
+                        // Read summaries do not instantiate the selected
+                        // method's callback parameters at this indirect edge.
+                        && inner.arguments.is_empty()
+                        && inner.callee.contains(*reference)
+                        // member_callee_receiver intentionally returns an
+                        // exact prefix at computed segments. A prefix cannot
+                        // stand for this whole runtime dispatch.
+                        && !callee_file.ast.computed_members.iter()
+                            .any(|member| inner.callee.contains(*member))
+                        && self
+                            .member_callee_receiver(callee_file, inner.callee)
+                            .is_some_and(|(root, selected)| &root == symbol && selected == path)
+                }) {
+                    return None;
+                }
+            }
+            if !seen {
+                return None;
+            }
+            let argument = call.arguments.get(parameter)?;
+            // Resolving a nonempty path proves the supplied argument is a
+            // fresh object (possibly through closed aliases), never undefined.
+            // An identifier parameter's default therefore cannot replace it.
+            let (owner, value) = self.nested_member_value(file, argument.span, path, 16)?;
+            let function = owner
+                .ast
+                .functions
+                .iter()
+                .find(|function| function.span == value);
+            let symbol = if let Some(function) = function {
+                let name = function_binding_name(owner, function)?;
+                self.entities.at(owner.path.as_str(), name.span)?
+            } else {
+                if !owner.ast.identifiers.iter().any(|id| id.span == value) {
+                    return None;
+                }
+                self.entities.at(owner.path.as_str(), value).or_else(|| {
+                    let declaration = owner.ast.reference_declaration(value)?;
+                    self.entities.at(owner.path.as_str(), declaration)
+                })?
+            };
+            let (function_file, function) = self.function_for_symbol(symbol)?;
+            (self.function_value_is_current(function_file, function)
+                && crate::object_members::receiver_inert(function_file, function))
+            .then(|| vec![symbol.clone()])
+        };
+        resolve().unwrap_or_default()
+    }
+
+    fn nested_member_value(
+        &self,
+        file: &FileFacts,
+        value: Span,
+        path: &[String],
+        depth: usize,
+    ) -> Option<(&'a FileFacts, Span)> {
+        if depth == 0 {
+            return None;
+        }
+        let file = self.file_by_path(file.path.as_str())?;
+        let value = file.ast.peel_ts_sugar_span(value);
+        // Resolve bindings before literals, but never chase a compound span's
+        // root entity. A binding must be a const or runtime lexical let with
+        // no writes, initialized before its sole reference, and consumed in
+        // its own frame (no captured alias). Ambient/namespace lets supply
+        // no runtime initialization proof.
+        if !path.is_empty() && file.ast.identifiers.iter().any(|id| id.span == value) {
+            let declaration = file.ast.reference_declaration(value)?;
+            let owner = file;
+            let binding = owner
+                .ast
+                .bindings
+                .iter()
+                .find(|binding| binding.names.iter().any(|name| name.span == declaration))?;
+            let declaration = binding.names.first()?.span;
+            let initializer = binding.initializer?;
+            let frame = |file: &FileFacts, span| {
+                file.ast
+                    .functions
+                    .iter()
+                    .filter(|function| function.body.contains(span))
+                    .min_by_key(|function| function.span.end - function.span.start)
+                    .map(|function| function.span)
+            };
+            if !(binding.immutable || binding.runtime_let)
+                || binding.shape != solid_facts::ast::BindingShape::Identifier
+                || binding.names.len() != 1
+                || binding_written(owner, declaration)
+                || initializer.end > value.start
+                || frame(owner, declaration).is_none()
+                || frame(owner, declaration) != frame(file, value)
+                || owner
+                    .ast
+                    .reference_declarations
+                    .iter()
+                    .filter(|(_, bound)| *bound == declaration)
+                    .any(|(reference, _)| *reference != value)
+            {
+                return None;
+            }
+            return self.nested_member_value(owner, initializer, path, depth - 1);
+        }
+        let Some((property, rest)) = path.split_first() else {
+            return Some((file, value));
+        };
+        let properties = crate::interproc::accessor_provenance::closed_properties(file, value)?;
+        let selected = properties.into_iter().find(|candidate| {
+            file.source_text(candidate.key)
+                .is_some_and(|key| key.trim_matches(['\'', '"']) == property)
+        })?;
+        self.nested_member_value(file, selected.value, rest, depth - 1)
     }
 
     /// Resolve `parameter.member()` through the exact project call sites of
@@ -3011,9 +4220,178 @@ impl<'a> SemanticLookup<'a> {
         visited_spans: &mut HashSet<Span>,
         symbols: &mut Vec<SymbolId>,
     ) {
-        let object = file.ast.peel_ts_sugar_span(object);
-        if !visited_spans.insert(object) {
+        self.member_value_symbols_in(file, object, property_name, visited_spans, symbols, false);
+    }
+
+    /// [`Self::member_value_symbols`]; `factories` also follows the result of
+    /// a project factory call ([`Self::factory_member_value_candidates`]).
+    /// Only the per-call-site parameter member resolution asks for that (ADR
+    /// 0314).
+    ///
+    /// ADR 0320: the candidates are trusted only when every part of the value
+    /// resolved. An alternative that does not resolve -- one arm of a
+    /// conditional, a binding without an inspectable initializer, a spread
+    /// that may supply or override the member, a value the program may
+    /// rewrite -- withholds the whole value, and nothing is added. A resolved
+    /// union keeps every alternative's candidates.
+    fn member_value_symbols_in(
+        &self,
+        file: &FileFacts,
+        object: Span,
+        property_name: &str,
+        _visited_spans: &mut HashSet<Span>,
+        symbols: &mut Vec<SymbolId>,
+        factories: bool,
+    ) {
+        if self.own_member_may_be_replaced(property_name) {
             return;
+        }
+        let mut visited = HashSet::new();
+        let mut consulted = Vec::new();
+        if let Some(found) = self.member_value_candidates(
+            file,
+            object,
+            property_name,
+            &mut visited,
+            factories,
+            &mut consulted,
+        ) && consulted
+            .iter()
+            .all(|(path, _)| path.as_str() == file.path.as_str())
+        {
+            // An untracked consumer's cached answer depends on this file's
+            // source only, so only an answer read from it is kept.
+            symbols.extend(found);
+        }
+    }
+
+    /// Whether some code may replace an own member `name` of an object it did
+    /// not create: an assignment of that name or through an unknown computed
+    /// key, or a reflective definition of it. Code copying unknown keys into
+    /// an object (`Object.assign`) cannot reach one the resolution proves
+    /// unshared ([`Self::binding_stays_closed`], a fresh literal or factory
+    /// result whose methods never use their receiver).
+    fn own_member_may_be_replaced(&self, name: &str) -> bool {
+        let assigned = self.assigned_members();
+        assigned.global
+            || assigned.names.contains(name)
+            || self.property_may_be_defined_reflectively_as(name)
+    }
+
+    /// ADR 0320: whether any code may copy keys into an existing object: a
+    /// member named `assign`, `setPrototypeOf`, `defineProperty` or
+    /// `defineProperties` that is not the callee of a call whose first
+    /// argument is a fresh literal (read, aliased, or called on anything
+    /// else); any `Reflect` other than the object of a member it does not
+    /// name `set`, `defineProperty` or `setPrototypeOf` directly on a fresh
+    /// literal; or a destructuring that takes one of those names.
+    fn objects_may_be_assigned_into(&self) -> bool {
+        const COPIERS: [&str; 4] = [
+            "assign",
+            "setPrototypeOf",
+            "defineProperty",
+            "defineProperties",
+        ];
+        *self.objects_assigned_into.get_or_init(|| {
+            // An assignment through a key nothing names (`t[key] = v`) may
+            // write any member of whatever `t` is, unless `t` is proven a
+            // built-in value (`xs[i] = v` on an array), which no project
+            // instance is.
+            let unknown_key_write = self.files().iter().any(|file| {
+                file.ast.assignments.iter().any(|assignment| {
+                    let target = file.ast.peel_ts_sugar_span(assignment.target);
+                    file.ast.computed_members.binary_search(&target).is_ok()
+                        && file
+                            .ast
+                            .literal_computed_members
+                            .iter()
+                            .all(|literal| literal.span != target)
+                        && file
+                            .ast
+                            .members
+                            .iter()
+                            .find(|member| member.span == target)
+                            .is_some_and(|member| {
+                                constant_string_key(file, member.property).is_none()
+                                    && !matches!(
+                                        self.value_origin_assuming(
+                                            file,
+                                            member.object,
+                                            solid_facts::ast::RuntimeValueKind::Unknown,
+                                            6,
+                                            None,
+                                        ),
+                                        Some(ValueOrigin::Builtin)
+                                    )
+                            })
+                })
+            });
+            unknown_key_write
+                || self.files().iter().any(|file| {
+                    let fresh_first = |member: Span| {
+                        file.ast.calls.iter().any(|call| {
+                            file.ast.peel_ts_sugar_span(call.callee) == member
+                                && call.arguments.first().is_some_and(|argument| {
+                                    let target = file.ast.peel_ts_sugar_span(argument.span);
+                                    !argument.spread
+                                        && (file
+                                            .ast
+                                            .object_get_shapes
+                                            .iter()
+                                            .any(|shape| shape.span == target)
+                                            || file
+                                                .ast
+                                                .array_literals
+                                                .binary_search(&target)
+                                                .is_ok()
+                                            || file
+                                                .ast
+                                                .functions
+                                                .iter()
+                                                .any(|function| function.span == target))
+                                })
+                        })
+                    };
+                    let unquoted = |span: Span| {
+                        file.source_text(span)
+                            .map(|text| text.trim_matches(['\'', '"', '`']).to_owned())
+                    };
+                    file.ast.members.iter().any(|member| {
+                        let Some(name) = unquoted(member.property) else {
+                            return false;
+                        };
+                        let reflect = file.source_text(file.ast.peel_ts_sugar_span(member.object))
+                            == Some("Reflect");
+                        (COPIERS.contains(&name.as_str()) || (reflect && name == "set"))
+                            && !fresh_first(member.span)
+                    }) || file.ast.identifiers.iter().any(|identifier| {
+                        file.source_text(identifier.span) == Some("Reflect")
+                            && !file.ast.members.iter().any(|member| {
+                                file.ast.peel_ts_sugar_span(member.object) == identifier.span
+                            })
+                    }) || file.ast.bindings.iter().any(|binding| {
+                        binding.object_slots.iter().any(|slot| {
+                            COPIERS.contains(&slot.property.as_str()) || slot.property == "set"
+                        })
+                    })
+                })
+        })
+    }
+
+    /// The exact implementations `object.property` resolves to, or `None`
+    /// when some part of the value does not resolve.
+    fn member_value_candidates(
+        &self,
+        file: &FileFacts,
+        object: Span,
+        property_name: &str,
+        visited: &mut HashSet<(String, Span)>,
+        factories: bool,
+        consulted: &mut Vec<(String, Span)>,
+    ) -> Option<Vec<SymbolId>> {
+        let object = file.ast.peel_ts_sugar_span(object);
+        if !visited.insert((file.path.to_string(), object)) {
+            return None;
         }
         if let Some(conditional) = file
             .ast
@@ -3021,21 +4399,23 @@ impl<'a> SemanticLookup<'a> {
             .iter()
             .find(|conditional| conditional.span == object)
         {
-            self.member_value_symbols(
+            let mut both = self.member_value_candidates(
                 file,
                 conditional.consequent,
                 property_name,
-                visited_spans,
-                symbols,
-            );
-            self.member_value_symbols(
+                visited,
+                factories,
+                consulted,
+            )?;
+            both.extend(self.member_value_candidates(
                 file,
                 conditional.alternate,
                 property_name,
-                visited_spans,
-                symbols,
-            );
-            return;
+                visited,
+                factories,
+                consulted,
+            )?);
+            return Some(both);
         }
 
         let direct_symbol = self.entities.at(file.path.as_str(), object);
@@ -3045,63 +4425,160 @@ impl<'a> SemanticLookup<'a> {
                     && identifier.role == solid_facts::ast::IdentifierRole::Reference
             });
         let binding = direct_symbol
-            .and_then(|symbol| self.binding_for_symbol(symbol))
+            .and_then(|symbol| {
+                self.binding_for_symbol(symbol)
+                    .map(|(binding_file, binding)| (binding_file, binding, symbol.clone()))
+            })
             .or_else(|| {
-                identifier_reference.then(|| {
-                    self.binding_at_reference(file.path.as_str(), object)
-                        .map(|(binding_file, binding, _)| (binding_file, binding))
-                })?
+                identifier_reference
+                    .then(|| self.binding_at_reference(file.path.as_str(), object))?
             });
-        if let Some((binding_file, binding)) = binding {
-            if let Some(initializer) = binding.initializer {
-                self.member_value_symbols(
+        if let Some((binding_file, binding, symbol)) = binding {
+            // ADR 0314: only a `const` naming its whole initializer holds that
+            // value. A `let` may hold another by now, and a destructured name
+            // holds a member of the initializer, not the initializer. A
+            // parameter's default holds only when no argument is passed.
+            let [name] = binding.names.as_slice() else {
+                return None;
+            };
+            if !binding.immutable
+                || binding.shape != solid_facts::ast::BindingShape::Identifier
+                || binding_file.ast.functions.iter().any(|function| {
+                    function
+                        .parameters
+                        .iter()
+                        .any(|parameter| parameter.names.iter().any(|n| n.span == name.span))
+                })
+                || !self.binding_stays_closed(
                     binding_file,
-                    initializer,
-                    property_name,
-                    visited_spans,
-                    symbols,
-                );
-                if !symbols.is_empty() {
-                    return;
-                }
+                    name.span,
+                    &symbol,
+                    file,
+                    object,
+                    consulted,
+                )
+            {
+                return None;
             }
-            // A binding without an inspectable initializer is not evidence
-            // for any implementation. Retaining its variable symbol would
-            // turn receiver identity into a method-name guess.
-            return;
+            let initializer = binding.initializer?;
+            return self.member_value_candidates(
+                binding_file,
+                initializer,
+                property_name,
+                visited,
+                factories,
+                consulted,
+            );
         }
 
+        // ADR 0314: the object is exactly an object literal, and only its own
+        // properties and spreads count: not a property of a literal nested in
+        // it, nor of a literal anywhere inside a call or function that is not
+        // one (`createFoo({ run })` holds no `run` of its result).
+        let Some(literal) = file
+            .ast
+            .object_get_shapes
+            .iter()
+            .find(|shape| shape.span == object)
+        else {
+            return if factories {
+                self.factory_member_value_candidates(
+                    file,
+                    object,
+                    property_name,
+                    visited,
+                    consulted,
+                )
+            } else {
+                None
+            };
+        };
+        let direct = |span: Span| {
+            literal.span.contains(span)
+                && !file.ast.object_get_shapes.iter().any(|inner| {
+                    inner.span != literal.span
+                        && literal.span.contains(inner.span)
+                        && inner.span.contains(span)
+                })
+        };
+        // A function in the literal that uses its receiver may hand the
+        // object to code that replaces the member (ADR 0320).
+        if file.ast.functions.iter().any(|function| {
+            direct(function.span)
+                && function.kind != solid_facts::ast::FunctionKind::Arrow
+                && file
+                    .source_text(function.span)
+                    .is_none_or(crate::execution_role::mentions_receiver)
+        }) {
+            return None;
+        }
+        // A getter's value is whatever it returns when read, not itself; a
+        // key without a static name (computed, or a `__proto__:` prototype
+        // setter) may name this property or supply it.
+        if literal
+            .properties
+            .iter()
+            .any(|property| property.key.as_str() == property_name && property.getter.is_some())
+            || file.ast.object_properties.iter().any(|property| {
+                direct(property.span)
+                    && (property.computed
+                        || crate::execution_role::property_static_key(file, property).is_none())
+            })
+        {
+            return None;
+        }
+        let spreads = file
+            .ast
+            .spreads
+            .iter()
+            .filter(|spread| direct(spread.span))
+            .collect::<Vec<_>>();
         let Some(properties) = file
             .ast
             .object_properties
             .iter()
             .filter(|property| {
-                object.contains(property.span)
-                    && !property.computed
-                    && file.source_text(property.key) == Some(property_name)
+                direct(property.span)
+                    && crate::execution_role::property_static_key(file, property).as_deref()
+                        == Some(property_name)
             })
             .max_by_key(|property| property.span.start)
         else {
-            for spread in file
-                .ast
-                .spreads
-                .iter()
-                .filter(|spread| object.contains(spread.span))
-            {
-                self.member_value_symbols(
-                    file,
-                    spread.argument,
-                    property_name,
-                    visited_spans,
-                    symbols,
-                );
-            }
-            return;
+            // No own property: the member is whatever the one spread copies.
+            let [spread] = spreads.as_slice() else {
+                return None;
+            };
+            return self.member_value_candidates(
+                file,
+                spread.argument,
+                property_name,
+                visited,
+                factories,
+                consulted,
+            );
         };
+        // A spread after the property may replace it.
+        if spreads
+            .iter()
+            .any(|spread| spread.span.start > properties.span.start)
+        {
+            return None;
+        }
 
+        // ADR 0321: a function literal that is exactly the property's value
+        // is its own summary node, identified by its span.
+        if let Some(function) = file.ast.functions.iter().find(|function| {
+            function.span == file.ast.peel_ts_sugar_span(properties.value)
+                && function.method_name.is_none()
+        }) && let Some(symbol) =
+            crate::interproc::literal_property_function_symbol(file, function)
+        {
+            return Some(vec![symbol]);
+        }
         // The property key itself is a semantic identity once demanded by
         // the backend. This works for class/object methods and for function
         // properties copied through an exact object spread.
+        let mut symbols = Vec::new();
         if let Some(symbol) = self.entities.at(file.path.as_str(), properties.key) {
             symbols.push(symbol.clone());
         }
@@ -3119,19 +4596,268 @@ impl<'a> SemanticLookup<'a> {
             }
         }
         if symbols.is_empty() {
-            self.member_value_symbols(
+            return self.member_value_candidates(
                 file,
                 properties.value,
                 property_name,
-                visited_spans,
-                symbols,
+                visited,
+                factories,
+                consulted,
             );
         }
-        for spread in file.ast.spreads.iter().filter(|spread| {
-            object.contains(spread.span) && spread.span.start > properties.span.start
-        }) {
-            self.member_value_symbols(file, spread.argument, property_name, visited_spans, symbols);
+        Some(symbols)
+    }
+
+    /// ADR 0320: whether the object a `const` binding holds stays the one its
+    /// initializer created, as far as `object` (the reference being resolved,
+    /// in `file`) can tell: every other reference anywhere is the object of a
+    /// non-computed member access, or an argument of an exact project callee
+    /// that only reads members of it, so nothing hands it to code that could
+    /// replace a member. An exported binding of an open program, or a
+    /// script's global, may be referenced where this build cannot see.
+    fn binding_stays_closed(
+        &self,
+        binding_file: &FileFacts,
+        name: Span,
+        symbol: &SymbolId,
+        file: &FileFacts,
+        object: Span,
+        consulted: &mut Vec<(String, Span)>,
+    ) -> bool {
+        let module_level = binding_file
+            .ast
+            .functions
+            .iter()
+            .all(|function| !function.body.contains(name));
+        // An exported binding is referenced from other files, whose edits a
+        // cached answer here would not see; a script's binding is global.
+        if module_level
+            && (!crate::execution_role::file_is_module(binding_file)
+                || crate::execution_role::flow_binding_exported(binding_file, name))
+        {
+            return false;
         }
+        let Some(references) = self.symbol_references_if_present(symbol.as_str()) else {
+            return false;
+        };
+        references.iter().all(|reference| {
+            let path = reference.path.as_ref();
+            let span = Span::new(
+                u32::try_from(reference.start_byte).unwrap_or(u32::MAX),
+                u32::try_from(reference.end_byte).unwrap_or(u32::MAX),
+            );
+            if (path == binding_file.path.as_str() && span == name)
+                || (path == file.path.as_str() && span == object)
+            {
+                return true;
+            }
+            let Some(reference_file) = self.file_by_path(path) else {
+                return false;
+            };
+            // Handed as an argument to an exact project callee that only
+            // reads members of it.
+            if let Some((call, index)) =
+                reference_file
+                    .ast
+                    .arguments_containing(span)
+                    .find(|(call, index)| {
+                        reference_file
+                            .ast
+                            .peel_ts_sugar_span(call.arguments[*index].span)
+                            == span
+                    })
+                && !call.arguments[index].spread
+                && self.parameter_only_member_accessed_consulting(
+                    reference_file,
+                    call,
+                    index,
+                    consulted,
+                )
+            {
+                return true;
+            }
+            reference_file.ast.members.iter().any(|member| {
+                reference_file.ast.peel_ts_sugar_span(member.object) == span
+                    && reference_file
+                        .ast
+                        .computed_members
+                        .binary_search(&member.span)
+                        .is_err()
+                    && !reference_file
+                        .ast
+                        .assignments
+                        .iter()
+                        .any(|assignment| assignment.target.contains(member.span))
+            })
+        })
+    }
+
+    /// ADR 0320: whether the callee of `call` uses its parameter `index` only
+    /// as the object of non-computed member accesses it does not assign: it
+    /// hands the caller's object to nothing that could replace a member
+    /// before the member runs.
+    ///
+    /// Records every callee whose source the answer read.
+    pub(super) fn parameter_only_member_accessed_consulting(
+        &self,
+        file: &FileFacts,
+        call: &solid_facts::ast::CallFact,
+        index: usize,
+        consulted: &mut Vec<(String, Span)>,
+    ) -> bool {
+        self.parameter_only_member_accessed_within(file, call, index, 4, consulted)
+    }
+
+    /// [`Self::parameter_only_member_accessed_consulting`], where the callee may also
+    /// hand the parameter, whole, to another exact callee of which the same
+    /// holds, `depth` calls deep.
+    fn parameter_only_member_accessed_within(
+        &self,
+        file: &FileFacts,
+        call: &solid_facts::ast::CallFact,
+        index: usize,
+        depth: usize,
+        consulted: &mut Vec<(String, Span)>,
+    ) -> bool {
+        if depth == 0 {
+            return false;
+        }
+        let Some((callee_file, callee, exact)) =
+            crate::execution_role::project_callee_at_parameter(file, call, index, self)
+        else {
+            return false;
+        };
+        consulted.push((callee_file.path.to_string(), callee.span));
+        let Some(parameter) = callee.parameters.get(index) else {
+            return false;
+        };
+        let [name] = parameter.names.as_slice() else {
+            return false;
+        };
+        exact
+            && parameter.shape == solid_facts::ast::BindingShape::Identifier
+            && !(callee.rest_parameter && index + 1 == callee.parameters.len())
+            && !binding_written(callee_file, name.span)
+            && !callee_file.ast.identifiers.iter().any(|identifier| {
+                callee.span.contains(identifier.span)
+                    && matches!(
+                        callee_file.source_text(identifier.span),
+                        Some("arguments" | "eval")
+                    )
+            })
+            && callee_file
+                .ast
+                .reference_declarations
+                .iter()
+                .filter(|(reference, declaration)| {
+                    *declaration == name.span && *reference != name.span
+                })
+                .all(|(reference, _)| {
+                    let forwarded = callee_file
+                        .ast
+                        .arguments_containing(*reference)
+                        .find(|(inner, position)| {
+                            callee_file
+                                .ast
+                                .peel_ts_sugar_span(inner.arguments[*position].span)
+                                == *reference
+                        })
+                        .is_some_and(|(inner, position)| {
+                            !inner.arguments[position].spread
+                                && self.parameter_only_member_accessed_within(
+                                    callee_file,
+                                    inner,
+                                    position,
+                                    depth - 1,
+                                    consulted,
+                                )
+                        });
+                    forwarded
+                        || callee_file.ast.members.iter().any(|member| {
+                            callee_file.ast.peel_ts_sugar_span(member.object) == *reference
+                                && callee_file
+                                    .ast
+                                    .computed_members
+                                    .binary_search(&member.span)
+                                    .is_err()
+                                && !callee_file
+                                    .ast
+                                    .assignments
+                                    .iter()
+                                    .any(|assignment| assignment.target.contains(member.span))
+                        })
+                })
+    }
+
+    /// ADR 0314: the implementations `factory(…).property` may resolve to.
+    ///
+    /// The callee is one exact, current, synchronous project function called
+    /// plainly (a method call is selected by its receiver), and every value it
+    /// returns is an object literal written in the return itself -- a fresh
+    /// object nothing else holds when the call returns. Each such literal must
+    /// resolve the property; one that does not leaves the union incomplete,
+    /// so nothing is resolved.
+    fn factory_member_value_candidates(
+        &self,
+        file: &FileFacts,
+        object: Span,
+        property_name: &str,
+        visited: &mut HashSet<(String, Span)>,
+        consulted: &mut Vec<(String, Span)>,
+    ) -> Option<Vec<SymbolId>> {
+        let call = file.ast.call_at(object)?;
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        if call.construct
+            || self.is_member_span(file, callee)
+            || file.ast.computed_members.binary_search(&callee).is_ok()
+        {
+            return None;
+        }
+        let (function_file, function) = self
+            .callee_symbol(file, call.callee)
+            .and_then(|symbol| self.function_for_symbol(symbol))
+            .filter(|(function_file, function)| {
+                self.function_value_is_current(function_file, function)
+            })?;
+        if function.r#async || function.generator {
+            return None;
+        }
+        consulted.push((function_file.path.to_string(), function.span));
+        let literal = |span: Span| {
+            function_file
+                .ast
+                .object_get_shapes
+                .iter()
+                .any(|shape| shape.span == span)
+        };
+        let body = function_file.ast.peel_ts_sugar_span(function.body);
+        let returned = if literal(body) {
+            vec![body]
+        } else {
+            let mut returned = Vec::new();
+            for value in function_file.ast.own_returns(function) {
+                returned.push(function_file.ast.peel_ts_sugar_span(value.argument?));
+            }
+            returned
+        };
+        if returned.is_empty() {
+            return None;
+        }
+        let mut found = Vec::new();
+        for value in returned {
+            if !literal(value) {
+                return None;
+            }
+            found.extend(self.member_value_candidates(
+                function_file,
+                value,
+                property_name,
+                visited,
+                true,
+                consulted,
+            )?);
+        }
+        Some(found)
     }
 
     fn binding_for_symbol(
@@ -3859,6 +5585,29 @@ impl<'a> SemanticLookup<'a> {
             })
     }
 
+    /// ADR 0313: the prop whose string value makes the component named at
+    /// `name` render an intrinsic element
+    /// ([`solid_dialect::Dialect::intrinsic_tag_renderers`]). The tag's
+    /// symbol must have declarations, every one of them in one of the
+    /// dialect's primitive-defining packages under that export's name.
+    pub(crate) fn intrinsic_tag_prop(&self, file: &FileFacts, name: Span) -> Option<&'static str> {
+        let component = self.entities.at(file.path.as_str(), name)?;
+        let declarations = self.symbols_by_id().get(component.as_str())?.declarations();
+        let packages = self.dialect.primitive_defining_packages();
+        let (_, prop) = self
+            .dialect
+            .intrinsic_tag_renderers()
+            .iter()
+            .find(|(export, _)| {
+                !declarations.is_empty()
+                    && declarations.iter().all(|declaration| {
+                        declared_in_package(declaration.location.path.as_ref(), packages)
+                            && declaration.name.as_ref() == *export
+                    })
+            })?;
+        Some(prop)
+    }
+
     fn symbols_by_id(&self) -> &HashMap<&'a str, solid_facts::TypeScriptSymbol<'a>> {
         self.symbols_by_id.get_or_init(|| {
             self.facts
@@ -3916,8 +5665,8 @@ impl<'a> SemanticLookup<'a> {
             let mut map = HashMap::new();
             for (file_index, file) in self.facts.files.iter().enumerate() {
                 for (function_index, function) in file.ast.functions.iter().enumerate() {
-                    let Some(name) = function.name.as_ref().or(function.method_name.as_ref())
-                    else {
+                    let own_method = crate::owners::own_method_name(file, function);
+                    let Some(name) = function.name.as_ref().or(own_method) else {
                         continue;
                     };
                     let Some(symbol) = self
@@ -3925,7 +5674,7 @@ impl<'a> SemanticLookup<'a> {
                         .at(file.path.as_str(), name.span)
                         .map(SymbolId::as_str)
                         .or_else(|| {
-                            function.method_name.as_ref().and_then(|method| {
+                            own_method.and_then(|method| {
                                 self.method_symbol_ref(file.path.as_str(), method.span)
                             })
                         })
@@ -4122,6 +5871,22 @@ impl<'a> SemanticLookup<'a> {
             map
         })
     }
+}
+
+/// Whether a file refers to the CommonJS exports object (`module`, `exports`)
+/// as a name no declaration binds. A module that does can have its exports
+/// replaced under a CommonJS transform, so its `export const` is not a frozen
+/// ES namespace entry (ADR 0325). Any reference counts, read or written: the
+/// proof wants the file to be ES module syntax alone.
+fn file_names_commonjs_exports(file: &FileFacts) -> bool {
+    file.ast.identifiers.iter().any(|identifier| {
+        identifier.role == solid_facts::ast::IdentifierRole::Reference
+            && file
+                .source
+                .get(identifier.span.start as usize..identifier.span.end as usize)
+                .is_some_and(|name| name == "module" || name == "exports")
+            && file.ast.reference_declaration(identifier.span).is_none()
+    })
 }
 
 #[cfg(test)]
@@ -4611,6 +6376,26 @@ mod tests {
             vec![SymbolId::from("symbol:href")],
             "a destructured local is its own binding, never the object it came from"
         );
+    }
+
+    #[test]
+    fn nested_literal_paths_follow_only_single_use_local_bindings() {
+        let source = "function App() { const inner = { read: inert }; const holder = { source: inner }; const alias = holder; use(alias); }";
+        let argument = span_of(source, "alias", 1);
+        with_lookup(source, &[], |lookup| {
+            let file = lookup.file_by_path(PATH).unwrap();
+            let resolved =
+                lookup.nested_member_value(file, argument, &["source".into(), "read".into()], 16);
+            assert_eq!(
+                resolved.map(|(file, value)| file.source_text(value)),
+                Some(Some("inert"))
+            );
+            assert!(
+                lookup
+                    .nested_member_value(file, argument, &["source".into(), "read".into()], 2)
+                    .is_none()
+            );
+        });
     }
 
     /// The receiver symbol and access path `member_callee_receiver` answers

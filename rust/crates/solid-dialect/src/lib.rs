@@ -1233,6 +1233,32 @@ pub trait Dialect: Sync {
         &[]
     }
 
+    /// ADR 0324: whether the router release installed as `@solidjs/router`
+    /// at exactly `version` was audited to hand out route parameters as URL
+    /// path-segment strings (or `undefined` for an absent optional one). A
+    /// release nobody read answers `false`: the premise is not applied to it.
+    /// The default is `false`, a dialect with no router audit.
+    fn router_params_are_url_strings(&self, version: &str) -> bool {
+        let _ = version;
+        false
+    }
+
+    /// ADR 0324: the digest of the installed bytes of the audited
+    /// `@solidjs/router` release `version`, as `scripts/router-digest.mjs`
+    /// computes it, or `None` for a release nobody read. The premise applies
+    /// only to an install whose bytes hash to exactly this.
+    fn audited_router_digest(&self, version: &str) -> Option<&'static str> {
+        let _ = version;
+        None
+    }
+
+    /// The `@solidjs/router` releases audited for route parameters
+    /// ([`Dialect::router_params_are_url_strings`]), for the notice that names
+    /// them.
+    fn audited_router_releases(&self) -> &'static [&'static str] {
+        &[]
+    }
+
     /// The installation this vocabulary was audited on, as `(package,
     /// version)` in [`Dialect::release_owners`] order: what a user pins to
     /// certify. Empty for a dialect audited on none.
@@ -1601,6 +1627,21 @@ pub trait Dialect: Sync {
     /// default claims nothing, which leaves such a write to the ordinary
     /// callback classification.
     fn callback_runs_in_created_root(&self, primitive: Primitive, argument: usize) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
+    /// Whether the callback at `argument` runs synchronously at the call, in the
+    /// strict-read window the call itself is in, while clearing the listener.
+    ///
+    /// Two independent facts about a callback that an execution role conflates.
+    /// [`Dialect::runs_callback_deferred`] says reads in it subscribe nothing of
+    /// the caller's. This says whether a read in it still warns: a strict-read
+    /// window belongs to the *call position* (the component body's dev
+    /// `untrack(fn, label)`), and a primitive that swaps only the owner and the
+    /// listener leaves it open, so the callback reports exactly where the call
+    /// does and nowhere else. The default claims nothing.
+    fn callback_inherits_calling_window(&self, primitive: Primitive, argument: usize) -> bool {
         let _ = (primitive, argument);
         false
     }
@@ -2004,6 +2045,22 @@ pub trait Dialect: Sync {
     /// Solid 2.0's deprecated `<Dynamic component={…}/>` is the case. The
     /// default is empty.
     fn component_prop_renderers(&self) -> &'static [(&'static str, &'static str)] {
+        &[]
+    }
+
+    /// The components that render an **intrinsic element** when a prop is a
+    /// string: each `(export, prop)` pair names an export whose render, given
+    /// a string in `prop`, creates the element that string names and assigns
+    /// it every *other* prop exactly as a JSX spread onto an intrinsic element
+    /// does, so an un-namespaced `on…` prop becomes an event listener and is
+    /// never called by the render.
+    ///
+    /// One fact about the string form only. A non-string value (a component,
+    /// a promise, `undefined`) is not described here, and the engine asks only
+    /// of a component whose exact declaration sits in one of this dialect's
+    /// packages, after proving the prop's value is a string literal (ADR
+    /// 0313). The default is empty.
+    fn intrinsic_tag_renderers(&self) -> &'static [(&'static str, &'static str)] {
         &[]
     }
 

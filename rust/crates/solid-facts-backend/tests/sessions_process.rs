@@ -9,6 +9,297 @@ use solid_facts_backend::{
 };
 
 #[test]
+fn nested_member_callee_edits_refresh_unchanged_callers() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../fixtures/reactive-ir/literal-argument-member-dispatch");
+    let directory = temporary_directory("nested-member-callee-edit");
+    for name in [
+        "tsconfig.json",
+        "solid-js.d.ts",
+        "Nested.tsx",
+        "nested-source.ts",
+    ] {
+        fs::copy(fixture.join(name), directory.join(name)).unwrap();
+    }
+    let stub = directory.join("node_modules/solid-js");
+    fs::create_dir_all(&stub).unwrap();
+    fs::write(
+        stub.join("package.json"),
+        r#"{"name":"solid-js","version":"2.0.0-rc.13"}"#,
+    )
+    .unwrap();
+    let veto = directory.join("veto.ts");
+    fs::write(&veto, "export {};\n").unwrap();
+    let veto = veto.canonicalize().unwrap().to_string_lossy().into_owned();
+    let project = directory
+        .join("tsconfig.json")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let caller = directory
+        .join("Nested.tsx")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let helper = directory
+        .join("nested-source.ts")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let source = fs::read_to_string(&helper).unwrap();
+    let escaped = source.replacen(
+        "return input.source.read();",
+        "retain(input.source);\n  return input.source.read();",
+        1,
+    );
+    let caller_source = fs::read_to_string(&caller).unwrap();
+    let site =
+        caller_source.find("readNested({ source:").unwrap() as u64 + "readNested(".len() as u64;
+    let typescript = TypeFactsSession::open(&typefacts, &project, &[]).unwrap();
+    let (mut warm, _) =
+        NativeIncrementalSession::open_pipelined(dialect::default_dialect(), project, typescript)
+            .unwrap();
+    let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
+    let selected = dialect::default_dialect();
+    let has_obligation = |program: &solid_reactive_ir::Program| {
+        selected.solve(program).iter().any(|finding| {
+            finding.id == "SC9012"
+                && finding.kind == "uncertifiable"
+                && finding.primary_location.path.as_ref() == caller
+                && finding.primary_location.start_byte == site
+        })
+    };
+    let first = warm.analyze().unwrap();
+    let (initial, _) = incremental.build(&first, selected.vocabulary).unwrap();
+    assert!(!has_obligation(&initial));
+    for (version, path, text, expected) in [
+        (1, &helper, escaped.as_str(), true),
+        (2, &helper, source.as_str(), false),
+        (3, &veto, "export function veto() { eval(''); }\n", true),
+        (4, &veto, "export {};\n", false),
+    ] {
+        let facts = warm
+            .edit(
+                vec![SourceChange {
+                    path: path.clone(),
+                    version,
+                    source: Some(text.into()),
+                    compiler_options: CompilerOptions::default(),
+                }],
+                None,
+            )
+            .unwrap();
+        let cold = solid_reactive_ir::build(&facts, selected.vocabulary).unwrap();
+        let (retained, _) = incremental.build(&facts, selected.vocabulary).unwrap();
+        assert_eq!(retained, cold, "generation {version}");
+        assert_eq!(has_obligation(&retained), expected, "generation {version}");
+        assert!(warm.last_build_timings().source_files_reused > 0);
+    }
+    drop(warm);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn native_scheduler_writes_refresh_retained_eager_read_summaries() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let fixture = root.join("fixtures/reactive-ir/accessor-provenance");
+    let directory = temporary_directory("native-scheduler-read-edit");
+    for name in [
+        "tsconfig.json",
+        "package.json",
+        "solid-js.d.ts",
+        "factory.ts",
+        "RuntimeStack.tsx",
+    ] {
+        fs::copy(fixture.join(name), directory.join(name)).unwrap();
+    }
+    let stub = directory.join("node_modules/solid-js");
+    fs::create_dir_all(&stub).unwrap();
+    fs::write(
+        stub.join("package.json"),
+        r#"{"name":"solid-js","version":"2.0.0-rc.13"}"#,
+    )
+    .unwrap();
+    let writes = directory.join("writes.ts");
+    fs::write(&writes, "export {};\n").unwrap();
+    let project = directory
+        .join("tsconfig.json")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let caller = directory
+        .join("RuntimeStack.tsx")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let writes = writes
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let source = fs::read_to_string(&caller).unwrap();
+    let site = source.find("helper();").unwrap() as u64;
+    let typescript = TypeFactsSession::open(&typefacts, &project, &[]).unwrap();
+    let (mut warm, _) =
+        NativeIncrementalSession::open_pipelined(dialect::default_dialect(), project, typescript)
+            .unwrap();
+    let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
+    let first = warm.analyze().unwrap();
+    let (initial, _) = incremental
+        .build(&first, dialect::default_dialect().vocabulary)
+        .unwrap();
+    let has_read = |program: &solid_reactive_ir::Program| {
+        program
+            .reads
+            .iter()
+            .any(|read| read.location.path.as_ref() == caller && read.location.start_byte == site)
+    };
+    assert!(!has_read(&initial));
+    for (version, source, expected) in [
+        (1, "queueMicrotask = callback => callback();\n", true),
+        (2, "export {};\n", false),
+        (
+            3,
+            "globalThis.queueMicrotask = callback => callback();\n",
+            true,
+        ),
+        (4, "export {};\n", false),
+    ] {
+        let facts = warm
+            .edit(
+                vec![SourceChange {
+                    path: writes.clone(),
+                    version,
+                    source: Some(source.into()),
+                    compiler_options: CompilerOptions::default(),
+                }],
+                None,
+            )
+            .unwrap();
+        let cold = solid_reactive_ir::build(&facts, dialect::default_dialect().vocabulary).unwrap();
+        let (retained, _) = incremental
+            .build(&facts, dialect::default_dialect().vocabulary)
+            .unwrap();
+        assert_eq!(has_read(&retained), expected, "generation {version}");
+        assert_eq!(retained, cold, "generation {version}");
+        assert!(warm.last_build_timings().source_files_reused > 0);
+    }
+    drop(warm);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn augmented_timer_writes_in_another_file_refresh_retained_facts() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let fixture = root.join("fixtures/reactive-ir/leaf-scope-host-callbacks");
+    let directory = temporary_directory("augmented-timer-edit");
+    for name in [
+        "tsconfig.json",
+        "solid-js.d.ts",
+        "timers.d.ts",
+        "AugmentedTimers.tsx",
+    ] {
+        fs::copy(fixture.join(name), directory.join(name)).unwrap();
+    }
+    let stub = directory.join("node_modules/solid-js");
+    fs::create_dir_all(&stub).unwrap();
+    fs::write(
+        stub.join("package.json"),
+        r#"{"name":"solid-js","version":"2.0.0-rc.13"}"#,
+    )
+    .unwrap();
+    let writes = directory.join("writes.ts");
+    fs::write(&writes, "export {};\n").unwrap();
+    let project = directory
+        .join("tsconfig.json")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let caller = directory
+        .join("AugmentedTimers.tsx")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let writes = writes
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let source = fs::read_to_string(&caller).unwrap();
+    let site = source.find("    setInterval(").unwrap() as u64 + 4;
+    let typescript = TypeFactsSession::open(&typefacts, &project, &[]).unwrap();
+    let (mut warm, _) =
+        NativeIncrementalSession::open_pipelined(dialect::default_dialect(), project, typescript)
+            .unwrap();
+    let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
+    let first = warm.analyze().unwrap();
+    let (initial, _) = incremental
+        .build(&first, dialect::default_dialect().vocabulary)
+        .unwrap();
+    let unresolved = |program: &solid_reactive_ir::Program| {
+        program.leaf_operations.iter().any(|operation| {
+            operation.location.path.as_ref() == caller
+                && operation.location.start_byte == site
+                && operation.uncertain
+        })
+    };
+    assert!(!unresolved(&initial));
+    for (version, source, expected) in [
+        (1, "setInterval = (() => 0) as typeof setInterval;\n", true),
+        (2, "export {};\n", false),
+        (
+            3,
+            "window.setInterval = (() => 0) as typeof window.setInterval;\n",
+            true,
+        ),
+        (4, "export {};\n", false),
+        (
+            5,
+            "window[\"setInterval\"] = (() => 0) as typeof window.setInterval;\n",
+            true,
+        ),
+        (6, "export {};\n", false),
+    ] {
+        let facts = warm
+            .edit(
+                vec![SourceChange {
+                    path: writes.clone(),
+                    version,
+                    source: Some(source.into()),
+                    compiler_options: CompilerOptions::default(),
+                }],
+                None,
+            )
+            .unwrap();
+        let cold = solid_reactive_ir::build(&facts, dialect::default_dialect().vocabulary).unwrap();
+        let (retained, _) = incremental
+            .build(&facts, dialect::default_dialect().vocabulary)
+            .unwrap();
+        assert_eq!(unresolved(&retained), expected, "generation {version}");
+        assert_eq!(retained, cold, "generation {version}");
+        assert!(warm.last_build_timings().source_files_reused > 0);
+    }
+    drop(warm);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn leaf_source_target_edits_match_cold_analysis() {
     let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
         return;
@@ -210,7 +501,9 @@ fn routed_callback_consumer_edits_refresh_retained_dispatch_contexts() {
             .build(&edited, dialect::default_dialect().vocabulary)
             .unwrap();
         assert!(timings.interprocedural_graph_reused_files > 0);
-        assert_eq!(dispatch(&retained), !excluded, "version {version}");
+        // ADR 0321: the dispatch resolves to the argument literal's arrow in
+        // every version; the arrow's read carries the consumer context.
+        assert!(!dispatch(&retained), "version {version}");
         assert_eq!(non_strict(&retained), excluded, "version {version}");
         assert_eq!(
             retained, cold,

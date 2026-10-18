@@ -34,7 +34,7 @@ dispatch, async and structural findings can also exist.
 | `MergedRoot` | uncertifiable | a merge view can supply different keys |
 | `DynamicKey` | uncertifiable | no dynamic key is resolved by its spelling |
 | `LiteralKey` | violation | the cooked literal names the exact property |
-| `WrappedRoot` | none | existing transparent-wrapper resolution is queried, never bypassed. Not proven yet: a recall gap. |
+| `WrappedRoot` | violation | `(props as P).value`: Type Facts keeps no entity at an identifier under a wrapper, so the binder and the reference's declaration resolve it (ADR 0323, review round 10); it was a recall gap |
 | `WrappedCall` | none | the current raw `direct_callee` fact rejects this cast call; no new wrapper-specific call proof. An unproven use adds nothing, as at HEAD (ADR 0222). |
 | `PassedHelper` | violation | a value argument escapes without invalidating the immutable direct target |
 | `ReturnedHelper` | violation | returning the helper opens a separate timing obligation |

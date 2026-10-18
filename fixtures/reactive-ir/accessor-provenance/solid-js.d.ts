@@ -35,6 +35,8 @@ declare module "solid-js" {
   export type EffectBundle<Prev, Next extends Prev = Prev> = { effect: EffectFunction<Prev, Next>; error: (err: unknown, cleanup: () => void) => void; };
   export interface EffectOptions { name?: string; }
   export function createEffect<T>(compute: ComputeFunction<undefined | NoInfer<T>, T>, effectFn: EffectFunction<NoInfer<T>, T> | EffectBundle<NoInfer<T>, T>, options?: EffectOptions): void;
+  export function createRenderEffect<T>(compute: ComputeFunction<undefined | NoInfer<T>, T>, effectFn: EffectFunction<NoInfer<T>, T>, options?: EffectOptions): void;
+  export function onSettled(callback: () => void | (() => void)): void;
   export type ContextProviderComponent<T> = (props: { value: T; children: JSX.Element }) => JSX.Element;
   export interface Context<T> extends ContextProviderComponent<T> { id: symbol; defaultValue: T | undefined; }
   export function createContext<T>(defaultValue?: T, options?: EffectOptions): Context<T>;

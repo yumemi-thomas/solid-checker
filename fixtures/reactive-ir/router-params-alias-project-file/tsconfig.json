@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "jsx": "preserve",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "target": "ES2022",
+    "baseUrl": ".",
+    "paths": { "@solidjs/router": ["./router-shim.ts"] }
+  },
+  "include": ["*.ts", "*.tsx"]
+}

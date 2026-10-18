@@ -11,7 +11,7 @@ untracked read, even though the callback's execution is not guaranteed.
 | `Misuse`, `NamespaceCorrect`, `OptionalWrite` | `lazyTracked` (closed, tracked, created owner) | clean |
 | `Correct` | the same, behind `satisfies` | uncertifiable: the slot identity check does not see through `(…) satisfies T`, as in ADR 0183's helper |
 | `MustRemainUncertifiable` | untracked, mixed and open slots | uncertifiable |
-| `NestedEscape`, `UnsupportedFrames` | nested, async, generator and named frames | uncertifiable |
+| `NestedEscape`, `UnsupportedFrames` | nested, async, generator and named frames | uncertifiable, except the async frame's read after `await Promise.resolve()`: a later-task continuation outside every reporting role (ADR 0323), no finding |
 | `Shadowed` | no accepted export | uncertifiable |
 | `ReturnedCallbackEscape` | returns argument 0 itself | uncertifiable |
 

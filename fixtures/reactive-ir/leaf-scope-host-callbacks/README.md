@@ -19,8 +19,29 @@
 
 `solid-js.d.ts` is copied from `leaf-scope-exact-method`, except that the setter takes an updater, as `@solidjs/signals`' `Setter<T>` does.
 
-`Focus.tsx` pins the unresolved DOM focus boundary. An optional DOM reference
-and a caller-supplied `focus` implementation remain SC9012 uncertifiable,
+`AugmentedTimers.tsx` and the project-owned `timers.d.ts` exercise an ambient
+overload selected outside the default library for the same global binding.
+The checker retains the selected signature and independently joins the exact
+global symbol to its default-library declaration. Only already-audited global
+schedulers consume that identity. Native timer callbacks run on fresh stacks;
+a declared lookalike remains uncertifiable, and the source-visible shadow
+registers cleanup in the leaf scope. These declarations are not a package stub
+or a package behavior model. The source passes strict and loose checks against
+published Solid RC.13 typings without this fixture's declaration stubs.
+
+The retained-session twin adds and removes a timer assignment in another file,
+then repeats through `window`. The original caller is unchanged; its leaf
+obligation must appear and disappear, with retained and cold IR equal. Direct
+aliases, imports and structural members do not acquire the new binding fact.
+
+`Focus.tsx` pins the unresolved DOM focus boundary. Since ADR 0318 the
+optional form is decided per member: an optional call of an audited
+script-free `lib.dom` member (`el?.querySelector(…)`, see
+`leaf-scope-optional-dom`) is certified like its non-optional form, while a
+re-entrant member such as `focus` stays open in the optional form. The
+non-optional `el.focus()` is still certified by the standard-library trust,
+which does not model dispatch; ADR 0318 records that inconsistency. An optional
+DOM `focus` and a caller-supplied `focus` implementation remain SC9012 uncertifiable,
 including when a focus listener visibly registers cleanup. The listener's
 registration does not prove whether it will run at this focus call. Exact local
 instances are controls: an inert `focus` method is clean and a method that calls
@@ -33,3 +54,14 @@ fire blur/focus events during focusing. Discharging a leaf obligation therefore
 requires exact runtime dispatch and evidence about synchronously invoked
 listeners, including listeners on the previously focused element and ancestors.
 The existing `Listener` case covers registration alone, not event dispatch.
+
+`Fetch.tsx` consumes the same exact merged-global binding for native `fetch`.
+The overload in `timers.d.ts` preserves the default library's signature
+byte-faithfully. Selected parameter mappings remain authoritative; this adds
+no callback timing claim. Native and transparently wrapped fetch calls are
+clean, including the fetch step of an async helper whose remaining calls run
+after an unconditional await. A declared lookalike and literal getter options
+remain SC9012; a source-visible shadow registering cleanup produces SC3001
+alongside its existing helper ownership obligation (SC4001).
+The cases pass strict and loose TypeScript checks against published Solid
+2.0.0-rc.13 typings without the fixture's Solid stub.

@@ -2,16 +2,114 @@
 //! parameters, for [`solid_facts::ast::argument_site_standings`].
 //!
 //! Only an exact mapping proves anything: every argument lands in the
-//! parameter of its index (no spread, no `f.call`, a current function value;
-//! [`crate::execution_role::project_callee_at_parameter`]). A value is read
-//! off the argument's syntax (a literal, a function or object literal), or
-//! off its type when the compiler proves every constituent callable. Anything
-//! else proves nothing about that parameter.
+//! parameter of its index (no spread or `f.call`) and the call site has one
+//! exact implementation, from [`crate::execution_role::project_callee_at_parameter`]
+//! or a call-specific literal/transport witness. A value is read off the
+//! argument's syntax (a literal, a function or object literal), or off its
+//! type when the compiler proves every constituent callable. Anything else
+//! proves nothing about that parameter.
 
 use solid_facts::FileFacts;
 use solid_facts::ast::{BindingShape, CallFact, FunctionFact, ParameterValue, RuntimeValueKind};
 
 use crate::SemanticLookup;
+
+/// Exact positional correspondence between one call and one function body.
+/// It is constructed either from `project_callee_at_parameter` or from an
+/// independently proven literal/transported target. Keeping the call site and
+/// target identity together prevents a signature or a function name from
+/// standing in for exact dispatch.
+#[derive(Clone, Copy)]
+struct ExactArgumentMapping<'a> {
+    call_path: &'a str,
+    call_callee: solid_facts::core::Span,
+    target_path: &'a str,
+    target_span: solid_facts::core::Span,
+}
+
+impl<'a> ExactArgumentMapping<'a> {
+    fn projected(
+        file: &'a FileFacts,
+        call: &CallFact,
+        callee_file: &'a FileFacts,
+        callee: &FunctionFact,
+    ) -> Self {
+        Self {
+            call_path: file.path.as_str(),
+            call_callee: call.callee,
+            target_path: callee_file.path.as_str(),
+            target_span: callee.span,
+        }
+    }
+
+    fn literal(
+        file: &'a FileFacts,
+        call: &CallFact,
+        callee_file: &'a FileFacts,
+        callee: &FunctionFact,
+    ) -> Option<Self> {
+        if file.path != callee_file.path
+            || call.construct
+            || call.arguments.iter().any(|argument| argument.spread)
+        {
+            return None;
+        }
+        let literal = crate::cleanup::callback_argument_literal(
+            file,
+            file.ast.peel_ts_sugar_span(call.callee),
+        )?;
+        (literal.span == callee.span).then(|| Self::projected(file, call, callee_file, callee))
+    }
+
+    fn transported(
+        file: &'a FileFacts,
+        call: &CallFact,
+        callee_file: &'a FileFacts,
+        callee: &FunctionFact,
+        exact_target: &crate::interproc::accessor_provenance::Callable,
+        lookup: &SemanticLookup<'_>,
+    ) -> Option<Self> {
+        let crate::interproc::accessor_provenance::Callable::Function { path, span } = exact_target
+        else {
+            return None;
+        };
+        if path != callee_file.path.as_str()
+            || *span != callee.span
+            || call.construct
+            || call.arguments.iter().any(|argument| argument.spread)
+        {
+            return None;
+        }
+        // A transported member can have receiver-sensitive behavior, and
+        // `.call`/`.apply` shift the positional arguments. This witness is
+        // limited to receiver-free calls; the existing member path remains
+        // responsible for method execution.
+        let callee_span = file.ast.peel_ts_sugar_span(call.callee);
+        if lookup.is_member_span(file, callee_span)
+            || file
+                .ast
+                .computed_members
+                .binary_search(&callee_span)
+                .is_ok()
+        {
+            return None;
+        }
+        Some(Self::projected(file, call, callee_file, callee))
+    }
+
+    fn matches(
+        self,
+        file: &FileFacts,
+        call: &CallFact,
+        callee_file: &FileFacts,
+        callee: &FunctionFact,
+    ) -> bool {
+        self.call_path == file.path.as_str()
+            && self.call_callee == call.callee
+            && self.target_path == callee_file.path.as_str()
+            && self.target_span == callee.span
+    }
+}
 
 /// The values `call` proves for `callee`'s parameters, or `None` when the
 /// argument mapping is not exact.
@@ -23,9 +121,7 @@ pub(crate) fn parameter_values(
     lookup: &SemanticLookup<'_>,
 ) -> Option<Vec<ParameterValue>> {
     // A function that tests none of its parameters has nothing to decide.
-    if !lookup.tests_its_parameters(callee_file, callee)
-        || call.arguments.iter().any(|argument| argument.spread)
-    {
+    if !lookup.tests_its_parameters(callee_file, callee) {
         return None;
     }
     let (resolved_file, resolved, exact) = crate::execution_role::project_callee_at_parameter(
@@ -35,6 +131,59 @@ pub(crate) fn parameter_values(
         lookup,
     )?;
     if !exact || resolved_file.path != callee_file.path || resolved.span != callee.span {
+        return None;
+    }
+    let mapping = ExactArgumentMapping::projected(file, call, resolved_file, resolved);
+    mapped_parameter_values(file, call, callee_file, callee, mapping)
+}
+
+/// Values proved by a call whose exact target is an immediate function
+/// literal. The literal callee itself supplies target identity, while this
+/// mapping witness still requires ordinary positional arguments without
+/// construction or spreads.
+pub(crate) fn parameter_values_for_literal_call(
+    file: &FileFacts,
+    call: &CallFact,
+    callee_file: &FileFacts,
+    callee: &FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Vec<ParameterValue>> {
+    if !lookup.tests_its_parameters(callee_file, callee) {
+        return None;
+    }
+    let mapping = ExactArgumentMapping::literal(file, call, callee_file, callee)?;
+    mapped_parameter_values(file, call, callee_file, callee, mapping)
+}
+
+/// Values proved by a stable transported callable target. `exact_target`
+/// must be the target already selected for this exact call site by the source
+/// callable transport map.
+pub(crate) fn parameter_values_for_transported_call(
+    file: &FileFacts,
+    call: &CallFact,
+    callee_file: &FileFacts,
+    callee: &FunctionFact,
+    exact_target: &crate::interproc::accessor_provenance::Callable,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Vec<ParameterValue>> {
+    if !lookup.tests_its_parameters(callee_file, callee) {
+        return None;
+    }
+    let mapping =
+        ExactArgumentMapping::transported(file, call, callee_file, callee, exact_target, lookup)?;
+    mapped_parameter_values(file, call, callee_file, callee, mapping)
+}
+
+fn mapped_parameter_values(
+    file: &FileFacts,
+    call: &CallFact,
+    callee_file: &FileFacts,
+    callee: &FunctionFact,
+    mapping: ExactArgumentMapping<'_>,
+) -> Option<Vec<ParameterValue>> {
+    if !mapping.matches(file, call, callee_file, callee)
+        || call.arguments.iter().any(|argument| argument.spread)
+    {
         return None;
     }
     let mut values = Vec::new();

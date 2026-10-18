@@ -609,7 +609,7 @@ type ExactThis = Option<(String, Span)>;
 /// is declared in `C` itself, or, through `this` in `C`'s own method, when `C`
 /// inherits it. Not when
 /// some assignment writes a member of that name, or anything writes through a
-/// `prototype` (`member_name_may_be_reassigned`). The method itself is
+/// prototype in `C`'s chain (`member_may_be_reassigned_on_class`, ADR 0314). The method itself is
 /// returned with the class its `this` is exact for, when it is declared in
 /// that class.
 fn exact_instance_method<'a>(
@@ -628,9 +628,6 @@ fn exact_instance_method<'a>(
         .iter()
         .find(|member| member.span == callee)?;
     let name = file.source_text(member.property)?;
-    if lookup.member_name_may_be_reassigned(name) {
-        return None;
-    }
     let receiver = file.ast.peel_ts_sugar_span(member.object);
     let through_this = file.source_text(receiver) == Some("this");
     let class = if through_this {
@@ -643,7 +640,10 @@ fn exact_instance_method<'a>(
             .classes
             .iter()
             .find(|class| class.span == span)?;
-        if !lookup.class_instance_is_exact(class_file, class, name, 4) {
+        // ADR 0314: no write reaches this class's chain under `name`.
+        if !lookup.class_instance_is_exact(class_file, class, name, 4)
+            || lookup.member_may_be_reassigned_on_class(name, class_file, class)
+        {
             return None;
         }
         (path, span)
@@ -661,7 +661,9 @@ fn exact_instance_method<'a>(
         let (class_file, class) = lookup.class_for_symbol(class_symbol)?;
         // The constructor chain must hand back this instance, and no own
         // field may shadow the method (ADR 0209 as amended).
-        if !lookup.class_instance_is_exact(class_file, class, name, 4) {
+        if !lookup.class_instance_is_exact(class_file, class, name, 4)
+            || lookup.member_may_be_reassigned_on_class(name, class_file, class)
+        {
             return None;
         }
         (class_file.path.to_string(), class.span)
@@ -703,6 +705,26 @@ fn helper_forbidden_operations(
     if depth == 0 {
         return false;
     }
+    // An immediate literal call selects its implementation without a symbol
+    // or a transported binding. Use the ordinary helper walk so parameter
+    // defaults, conditional completion and the async synchronous prefix keep
+    // exactly the same proof requirements as named functions. Construction
+    // does not enter an arrow/function through this call path.
+    if !call.construct
+        && let Some(helper) =
+            callback_argument_literal(call_file, call_file.ast.peel_ts_sugar_span(call.callee))
+    {
+        let values = crate::argument_values::parameter_values_for_literal_call(
+            call_file, call, call_file, helper, lookup,
+        );
+        let entry = match values.as_deref() {
+            Some(values) if !values.is_empty() => Entry::CalledWith { guaranteed, values },
+            _ => Entry::Called { guaranteed },
+        };
+        return function_forbidden_operations(
+            resolution, call_file, helper, kinds, visited, depth, None, entry,
+        );
+    }
     // This map is the source analyzer's exact, stability-checked transport
     // result, including the shared literal-receiver escape census. Reuse
     // identity, never a signature's possible target or a read-only summary.
@@ -710,7 +732,7 @@ fn helper_forbidden_operations(
         .source_call_targets
         .get(&location(call_file.path.shared(), call.callee))
     {
-        Some(crate::interproc::accessor_provenance::Callable::Function { path, span }) => {
+        Some(target @ crate::interproc::accessor_provenance::Callable::Function { path, span }) => {
             let Some((helper_file, helper)) = lookup.file_by_path(path).and_then(|file| {
                 file.ast
                     .functions
@@ -720,11 +742,12 @@ fn helper_forbidden_operations(
             }) else {
                 return false;
             };
-            let values = crate::argument_values::parameter_values(
+            let values = crate::argument_values::parameter_values_for_transported_call(
                 call_file,
                 call,
                 helper_file,
                 helper,
+                target,
                 lookup,
             );
             let entry = match values.as_deref() {
@@ -775,7 +798,22 @@ fn helper_forbidden_operations(
             resolution, call_file, call, callee, kinds, visited, depth, guaranteed,
         );
     }
-    let Some(symbol) = lookup.entities().at(call_file.path.as_str(), call.callee) else {
+    // The independent binding fact already identifies this exact global.
+    // A transparent wrapper need not also carry an identifier entity at its
+    // peeled span in the demand table.
+    if let Some(resolved) = lookup
+        .resolved_callee_call(call_file, call.callee)
+        .filter(|call| crate::runtime_semantics::augmented_global_runtime_call(call))
+    {
+        return standard_library_argument_operations(
+            resolution, call_file, call, resolved, kinds, visited, depth, guaranteed,
+        );
+    }
+    let Some(symbol) = lookup
+        .entities()
+        .at(call_file.path.as_str(), callee)
+        .or_else(|| lookup.entities().at(call_file.path.as_str(), call.callee))
+    else {
         return false;
     };
     if resolution.setter_symbols.contains(symbol) {
@@ -872,6 +910,26 @@ fn member_call_operations(
     else {
         return false;
     };
+    // Optional-call signature recovery supplies declaration identity, not
+    // whole-call host behavior. An optional DOM call stays open unless its
+    // exact declaration is in the audited script-free table (ADR 0318):
+    // focus/blur, dispatch and custom-element reactions can invoke registered
+    // user code without a callback argument at this site.
+    if std::path::Path::new(declaration.source_file.as_ref())
+        .file_name()
+        .is_some_and(|name| name == "lib.dom.d.ts" || name == "lib.dom.iterable.d.ts")
+        && !script_free_dom_member(declaration.qualified_name.as_ref())
+        && (file
+            .ast
+            .optional_members
+            .iter()
+            .any(|member| callee.contains(*member))
+            || file
+                .source_text(Span::new(call.callee.end, call.span.end))
+                .is_some_and(|suffix| suffix.trim_start().starts_with("?.")))
+    {
+        return false;
+    }
     let mut complete = standard_library_argument_operations(
         resolution, file, call, resolved, kinds, visited, depth, guaranteed,
     );
@@ -903,6 +961,51 @@ fn member_call_operations(
             });
     }
     complete
+}
+
+/// ADR 0318: `lib.dom` members audited to run no author script while they
+/// execute: no event is dispatched, no custom-element reaction runs and no
+/// node's connectedness changes. Registration only (`addEventListener` and
+/// `removeEventListener` on every `EventTarget` interface; the listener is a
+/// deferred argument), selector and tree queries, layout reads, attribute
+/// reads, `DOMTokenList`/`DOMStringList.contains` and canvas serialization.
+/// `HTMLCanvasElement.getContext` is excluded: WebGL context creation can fire
+/// `webglcontextcreationerror` at the canvas synchronously.
+const SCRIPT_FREE_DOM_MEMBERS: &[&str] = &[
+    "ParentNode.querySelector",
+    "ParentNode.querySelectorAll",
+    "Document.getElementsByTagName",
+    "Document.getElementsByClassName",
+    "Element.getElementsByTagName",
+    "Element.getElementsByClassName",
+    "Element.getBoundingClientRect",
+    "Element.getClientRects",
+    "Range.getBoundingClientRect",
+    "Range.getClientRects",
+    "Node.contains",
+    "DOMTokenList.contains",
+    "DOMStringList.contains",
+    "Element.closest",
+    "Element.matches",
+    "Element.getAttribute",
+    "Element.getAttributeNames",
+    "Element.hasAttribute",
+    "Element.hasAttributes",
+    "HTMLCanvasElement.toDataURL",
+];
+
+/// Whether the exact `lib.dom` declaration `qualified_name` names a member of
+/// [`SCRIPT_FREE_DOM_MEMBERS`], or an `EventTarget` registration method, which
+/// every interface that is an event target redeclares with its own overloads.
+fn script_free_dom_member(qualified_name: &str) -> bool {
+    SCRIPT_FREE_DOM_MEMBERS.contains(&qualified_name)
+        || qualified_name
+            .rsplit_once('.')
+            .is_some_and(|(owner, member)| {
+                !owner.is_empty()
+                    && !owner.contains('.')
+                    && matches!(member, "addEventListener" | "removeEventListener")
+            })
 }
 
 /// Whether the function arguments a standard-library call may run in the
@@ -1612,4 +1715,69 @@ fn returned_call_domain<'a>(
     lookup
         .entity_at(file.path.as_str(), call.span)
         .and_then(|entity| entity.call_result_domain.as_ref())
+}
+
+#[cfg(test)]
+mod script_free_dom_tests {
+    use super::script_free_dom_member;
+
+    /// ADR 0318: the audited table, and the re-entrant members it must not
+    /// admit.
+    #[test]
+    fn only_audited_dom_members_are_script_free() {
+        for allowed in [
+            "HTMLElement.addEventListener",
+            "Window.removeEventListener",
+            "EventTarget.addEventListener",
+            "ParentNode.querySelector",
+            "ParentNode.querySelectorAll",
+            "Element.getElementsByTagName",
+            "Document.getElementsByClassName",
+            "Element.getBoundingClientRect",
+            "Element.getClientRects",
+            "Node.contains",
+            "DOMTokenList.contains",
+            "Element.closest",
+            "Element.matches",
+            "Element.getAttribute",
+            "Element.getAttributeNames",
+            "Element.hasAttribute",
+            "Element.hasAttributes",
+            "HTMLCanvasElement.toDataURL",
+        ] {
+            assert!(script_free_dom_member(allowed), "{allowed}");
+        }
+        for refused in [
+            "HTMLOrSVGElement.focus",
+            "HTMLOrSVGElement.blur",
+            "HTMLElement.click",
+            "EventTarget.dispatchEvent",
+            "HTMLInputElement.select",
+            "HTMLFormElement.submit",
+            "HTMLFormElement.requestSubmit",
+            "HTMLFormElement.reset",
+            "HTMLDialogElement.show",
+            "HTMLDialogElement.showModal",
+            "HTMLDialogElement.close",
+            "Element.scrollIntoView",
+            "Element.scrollTo",
+            "ChildNode.remove",
+            "ParentNode.append",
+            "ParentNode.prepend",
+            "Node.appendChild",
+            "Node.insertBefore",
+            "ParentNode.replaceChildren",
+            "ChildNode.replaceWith",
+            "Element.setAttribute",
+            "Element.removeAttribute",
+            "Element.toggleAttribute",
+            "Element.setAttributeNode",
+            "Animatable.animate",
+            "HTMLCanvasElement.getContext",
+            "addEventListener",
+            "a.b.addEventListener",
+        ] {
+            assert!(!script_free_dom_member(refused), "{refused}");
+        }
+    }
 }

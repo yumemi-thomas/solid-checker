@@ -37,8 +37,9 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 /// v19 appends a flag word to every resolved call: bit 0 is
 /// `ResolvedCall::assertion_signature`, bit 1 `ResolvedCall::never_returns`.
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V19: u64 = 19;
+pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V20: u64 = 20;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:3fc93f94e6d3f071f7ac4914d2ba7e74753cecc70a7ab126e55266d0bffd4f68";
+    "sha256:5f14d7cc2644b9096b2a4affdefc0e0dd41e88c1a75f19efc3302f11006389fe";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -443,7 +444,8 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // Protocol 77 (ADR 0172) adds exhaustive fresh literal return structures.
 // Protocol 78 removes the certification reads `invocations` and
 // `export-values` with their request and response fields.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 78;
+// Protocol 79 carries the independent default-library binding in Wire v20.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 79;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",
@@ -1116,6 +1118,13 @@ impl<'a> PackedCursor<'a> {
         } else {
             (false, false)
         };
+        let default_library_binding = if table_schema >= TYPE_FACTS_TABLE_SCHEMA_V20
+            && self.boolean("default-library binding presence")?
+        {
+            Some(Arc::new(self.resolved_declaration(strings)?))
+        } else {
+            None
+        };
         Ok(ResolvedCall {
             target,
             return_type_text,
@@ -1124,6 +1133,7 @@ impl<'a> PackedCursor<'a> {
             validity,
             kind,
             declaration,
+            default_library_binding,
             targets,
             arguments: arguments.into(),
         })
@@ -1225,7 +1235,9 @@ fn decode_entity_run(
         let flags = cursor.u64()?;
         let known_flags = match table_schema {
             TYPE_FACTS_TABLE_SCHEMA_V16 | TYPE_FACTS_TABLE_SCHEMA_V17 => 32767,
-            TYPE_FACTS_TABLE_SCHEMA_V18 | TYPE_FACTS_TABLE_SCHEMA_V19 => 65535,
+            TYPE_FACTS_TABLE_SCHEMA_V18
+            | TYPE_FACTS_TABLE_SCHEMA_V19
+            | TYPE_FACTS_TABLE_SCHEMA_V20 => 65535,
             TYPE_FACTS_TABLE_SCHEMA_V15 | TYPE_FACTS_TABLE_SCHEMA_V14 => 16383,
             TYPE_FACTS_TABLE_SCHEMA_V13 => 8191,
             TYPE_FACTS_TABLE_SCHEMA_V12 => 4095,
@@ -1704,6 +1716,7 @@ pub(crate) fn decode_table_transition(input: &[u8]) -> Result<WireTableTransitio
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V17
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V18
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V19
+        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V20
     {
         return Err(format!("unsupported Wire table schema {table_schema}"));
     }
@@ -2684,6 +2697,10 @@ mod tests {
         assert_eq!(entity.callability, Some(Callability::Callable));
         assert_eq!(entity.reference_space, Some(ReferenceSpace::Both));
         let call = entity.resolved_call.as_ref().expect("golden resolved call");
+        assert!(
+            call.default_library_binding.is_none(),
+            "frozen tables cannot supply new binding evidence"
+        );
         assert_eq!(call.validity, ResolvedCallValidity::Valid);
         assert_eq!(call.kind, CallKind::Call);
         assert_eq!(call.arguments[0].status, ArgumentMappingStatus::Resolved);

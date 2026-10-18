@@ -26,6 +26,7 @@ mod projection;
 mod reachability;
 mod reactive_analysis;
 pub mod returns_walk;
+pub mod router_params;
 mod runtime_configuration;
 mod runtime_semantics;
 pub use runtime_configuration::RuntimeConfigurationPremise;
@@ -157,6 +158,10 @@ pub struct RuntimeEnvironment {
     /// an *additional*, unseen caller exists.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub program_boundary: Option<ProgramBoundary>,
+    /// What the backend read of the installed `@solidjs/router` (ADR 0324).
+    /// No request or options document sets it, so it is skipped on the wire.
+    #[serde(skip)]
+    pub router_install: router_params::RouterInstallEvidence,
 }
 
 /// Whether callers outside the analyzed project may exist.
@@ -2896,6 +2901,7 @@ mod tests {
             conditions: BTreeSet::from(["import".into()]),
             framework_transforms: BTreeSet::from(["use-server".into()]),
             program_boundary: None,
+            router_install: router_params::RouterInstallEvidence::default(),
         };
         assert!(environment.validate().is_ok());
         assert_eq!(
@@ -4023,6 +4029,7 @@ mod tests {
             site: Span { start: 3, end: 5 },
             primitive_builtin: false,
             dispatch_read_excluded: false,
+            unmodeled: false,
         }]];
         let direct_view = InterproceduralResultView {
             invoked_parameter_members: &direct_members,

@@ -30,6 +30,26 @@
       "start": 867,
       "end": 879,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-window-realm/Review.tsx",
+      "start": 870,
+      "end": 885,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-window-realm/Review.tsx",
+      "start": 1087,
+      "end": 1102,
+      "fixes": 0
     }
   ]
 }

@@ -19,3 +19,15 @@
 | `Clean` | none | no forbidden operation on any path |
 
 `solid-js.d.ts` and `tsconfig.json` are copied from `leaf-scope-host-callbacks`.
+
+`Immediate.tsx` exercises the same body walk for immediately invoked literal
+arrows and function expressions. Clean bodies and generator bodies that never
+start carry no leaf obligation. Async calls inspect their synchronous prefix,
+including the operand of the first `await`, but not its continuation. Cleanup
+in that prefix is a violation; cleanup after a conditional suspension remains
+uncertifiable. Exact immediate literals and stable transported function targets
+can use non-spread argument literals to decide their parameter branches: false
+stays clean and true proves the cleanup violation. Spread arguments, unknown
+calls, conditional callee selection and receiver-bearing member calls remain
+uncertifiable. Parameter mutation and default rules are unchanged. The cases
+are checked against published Solid RC.13 typings, without the fixture stub.

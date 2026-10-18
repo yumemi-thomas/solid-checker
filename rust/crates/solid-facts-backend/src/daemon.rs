@@ -46,6 +46,7 @@ use solid_reactive_ir::RuntimeEnvironment;
 
 use super::{Request, snapshot_emission};
 use crate::daemon_cache::{CachedAnswer, CachedSnapshot, InputFile};
+use crate::daemon_resolution::ResolutionWitness;
 use crate::idle_memory;
 use solid_facts_backend::dependency_program::{self, PreparedDependencies};
 
@@ -461,6 +462,10 @@ struct State {
     /// `session`'s source set is fixed when it opens, so an edit that
     /// changes this reopens the program (review round 1 of ADR 0296).
     modules: Option<Vec<String>>,
+    /// What the open program's module resolution read
+    /// ([`ResolutionWitness`]); a difference rebuilds the program from a new
+    /// Type Facts session. `None` until the first analysis observes it.
+    resolution: Option<ResolutionWitness>,
 }
 
 /// What a retained dependency-source program (ADR 0296) holds beside the
@@ -759,6 +764,7 @@ impl State {
             cache_retention,
             dependency,
             modules: None,
+            resolution: None,
         })
     }
 
@@ -852,6 +858,16 @@ impl State {
     /// in dependency-source mode, the project's own program and the fold
     /// answer as they did too.
     fn resync(&mut self, request: &Request) -> Result<Sync, Box<dyn Error>> {
+        // The retained session resolved its imports when it opened; if the
+        // filesystem would now resolve them differently, only a new session
+        // answers as a one-shot check does.
+        if self
+            .resolution
+            .as_ref()
+            .is_some_and(|witness| !witness.current())
+        {
+            return Ok(Sync::Rebuild);
+        }
         let changes = match resync_tracked(
             &mut self.tracking,
             &mut self.sources,
@@ -1336,6 +1352,8 @@ fn answer(
             state.session.analyze()?
         }
     };
+    // Observe what this program's resolution read, for the next request.
+    state.resolution = Some(ResolutionWitness::of(&state.session.resolution_graph()?));
     let directory = state
         .project
         .parent()
@@ -1421,18 +1439,20 @@ fn answer(
     .into();
     let status: Arc<str> = analysis.snapshot.status.as_str().into();
     let modules = imported_package_roots(&facts);
+    let router_roots = solid_facts_backend::installed_bytes::router_install_roots(&facts);
     // An unreadable witness, or a change while discovery/analysis ran, prevents
     // caching. The ordinary answer still follows the existing refusal path.
     state.last = match inference_inputs.filter(|inputs| inference_inputs_current(inputs)) {
         Some(inference_inputs) => Some(CachedAnswer {
             generation: state.session.generation(),
-            input_files: input_files(state, &modules)?,
+            input_files: input_files(state, &modules, &router_roots)?,
             inference_inputs,
             notice: Arc::clone(&notice),
             presets: check.presets.clone(),
             enable_rules: check.enable_rules.clone(),
             runtime: check.runtime.clone(),
             modules,
+            router_roots,
             status: Arc::clone(&status),
             body: Arc::clone(&body),
         }),
@@ -1466,7 +1486,7 @@ fn cached_answer(
     {
         return Ok(None);
     }
-    let current = input_files(state, &cached.modules)?;
+    let current = input_files(state, &cached.modules, &cached.router_roots)?;
     Ok(cached.snapshot_if_current(
         state.session.generation(),
         &current,
@@ -1526,7 +1546,11 @@ fn inference_inputs_current(inputs: &[InputFile]) -> bool {
 /// the imported packages' manifests (the package boundary reads them), the
 /// rule options, and the release manifests, each with its content hash,
 /// sorted.
-fn input_files(state: &State, modules: &[String]) -> Result<Vec<InputFile>, Box<dyn Error>> {
+fn input_files(
+    state: &State,
+    modules: &[String],
+    router_roots: &[PathBuf],
+) -> Result<Vec<InputFile>, Box<dyn Error>> {
     let directory = state
         .project
         .parent()
@@ -1549,6 +1573,20 @@ fn input_files(state: &State, modules: &[String]) -> Result<Vec<InputFile>, Box<
     paths.extend(solid_facts_backend::dialect::release_manifests(
         &state.project,
     ));
+    // ADR 0193: an undeclared program boundary is read from the nearest
+    // `package.json` above the project (`default_program_boundary`), which
+    // `DiagnosticSession::analyze` re-reads on every run and which decides,
+    // among others, whether ADR 0319's invocation flow runs at all. Every
+    // candidate on that walk is an input -- an absent one too, since creating
+    // a nearer manifest moves the answer -- or a manifest flipping the
+    // program between closed and open keeps serving the old snapshot.
+    // ADR 0324: a patch recorded by any of these decides whether the router
+    // premise applies, so each lockfile on the walk is an input too.
+    paths.extend(directory.ancestors().flat_map(|ancestor| {
+        solid_facts_backend::installed_bytes::PATCH_RECORD_FILES
+            .iter()
+            .map(move |name| ancestor.join(name))
+    }));
     match solid_facts_backend::dialect::detect_detailed(&state.project) {
         solid_facts_backend::dialect::Detection::Installed { manifest, .. }
         | solid_facts_backend::dialect::Detection::Unsupported { manifest, .. }
@@ -1574,6 +1612,14 @@ fn input_files(state: &State, modules: &[String]) -> Result<Vec<InputFile>, Box<
             Err(error) => return Err(error),
         };
         files.push((path.clone(), hash));
+    }
+    // ADR 0324: the premise reads the installed router's bytes, which no
+    // tracked source holds (`dist/index.js` is no program file), so each
+    // resolved install is an input by the digest the premise compares.
+    for root in router_roots {
+        let digest = solid_facts_backend::installed_bytes::package_digest(root)
+            .map_or([0_u8; 32], |digest| content_hash(digest.as_bytes()));
+        files.push((root.join("dist"), digest));
     }
     Ok(files)
 }

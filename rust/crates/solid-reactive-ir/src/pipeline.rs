@@ -407,12 +407,13 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         &symbol_names,
         dialect,
         rule_options.runtime.program_is_closed(),
-    );
+    )
+    .with_router_install(rule_options.runtime.router_install.clone());
     let semantic_lookup = &semantic_lookup;
     let reuse = ReusePlan::prepare(
         facts,
         late_stage_cache.as_deref_mut(),
-        semantic_lookup.cross_file_proof_digest(),
+        semantic_lookup.member_resolution_digest(),
     );
     // Source discovery does not inspect missing exports, and the static prepass
     // owns them after the two independent index passes complete.

@@ -929,26 +929,18 @@ impl UnsupportedBindings {
     }
 }
 
+/// The packages a module reaches through a binding no redirect binds, each of
+/// which stays off source whole.
+///
+/// A runtime namespace *import* is not one of them any more (ADR 0313). It
+/// retained its package so the namespace kept the contract ADR 0297 promised
+/// it; ADR 0312 removed contracts, so retention bought that import nothing and
+/// took source away from every named import of the same package. The import
+/// itself stays explicitly uncertifiable: the package boundary records a
+/// `NamespaceValue` obligation for a namespace import of selected source
+/// (`package_requirements`, review round 1 of ADR 0290).
 fn unredirected_packages(facts: &solid_facts::ast::AstFacts) -> UnsupportedBindings {
     let mut bindings = UnsupportedBindings::default();
-    for import in &facts.imports {
-        if !import.type_only
-            && import.bindings.iter().any(|binding| {
-                !binding.type_only
-                    && binding.runtime_referenced
-                    && binding.kind == solid_facts::ast::ImportKind::Namespace
-            })
-            && let Some(name) = package_name(&import.module)
-        {
-            bindings.packages.insert(
-                name,
-                (
-                    UnanalyzableReason::UnsupportedBinding(BindingForm::NamespaceValue),
-                    binding_reason(facts, import.span, "imported through a namespace binding"),
-                ),
-            );
-        }
-    }
     for export in &facts.exports {
         if runtime_reexport(export)
             && export.namespace.is_some()
@@ -1510,7 +1502,6 @@ mod tests {
     fn unsupported_runtime_bindings_keep_contracts_but_type_only_edges_do_not() {
         for source in [
             "export * as ns from 'pkg';",
-            "import * as ns from 'pkg'; ns.x();",
             "import x = require('pkg'); export = x;",
             "const ns = await import('pkg'); ns.x();",
             "const ns = require('pkg'); ns.x();",
@@ -1520,7 +1511,10 @@ mod tests {
             assert!(bindings.contains("pkg"), "{source}");
             assert!(!bindings.contains("other"), "{source}");
         }
+        // ADR 0313: a runtime namespace import keeps its own boundary
+        // obligation and no longer takes the package off source.
         for source in [
+            "import * as ns from 'pkg'; ns.x();",
             "export { x } from 'pkg';",
             "export { default as y } from 'pkg';",
             "export * from 'pkg';",

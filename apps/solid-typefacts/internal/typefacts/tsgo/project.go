@@ -83,6 +83,9 @@ type project struct {
 	// rather than once per returned-callable resolution. Checker-owned symbol
 	// pointers make it generation-scoped, like runtimePaths.
 	assignedSymbols map[*ast.SourceFile]map[*ast.Symbol]struct{}
+	// Dot and literal-keyed writes veto a global library-binding fallback regardless
+	// of receiver spelling (window aliases included). Rebuilt each generation.
+	libraryPropertyWrites map[string]bool
 	// ownLiteralSymbols memoizes ADR 0044's answer per symbol: the variable
 	// declaration a name is bound to when this program initialized it from an
 	// object or array literal, or nil. Keyed by symbol rather than by file
@@ -289,6 +292,7 @@ func (p *project) ReleaseAnalysisState() {
 	p.currentSourceFiles = nil
 	p.runtimePaths = nil
 	p.assignedSymbols = nil
+	p.libraryPropertyWrites = nil
 	p.resolvedDeclarations = nil
 	p.resolvedParameters = nil
 	p.callDiagnostics = nil
@@ -564,6 +568,7 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 	p.generation++
 	p.runtimePaths = nil
 	p.assignedSymbols = nil
+	p.libraryPropertyWrites = nil
 	if incremental && incrementalPath != "" && currentExportsKnown {
 		if p.exportedIdentities == nil {
 			p.exportedIdentities = make(map[*ast.Symbol]preservedExportIdentity)

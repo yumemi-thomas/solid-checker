@@ -615,7 +615,17 @@ fn semantic_write_execution_role_within(
             }
         }
     }
-    let direct = semantic_execution_role(file, span, allowed, entities, symbol_names, lookup);
+    // ADR 0315: write legality keeps the role it had before the use-site arm;
+    // that arm places only reads.
+    let direct = semantic_execution_role_within(
+        file,
+        span,
+        allowed,
+        entities,
+        symbol_names,
+        lookup,
+        &mut HashSet::from([write_classification_marker()]),
+    );
     // Directly in a component body the dev owner is the component's root, so
     // a guard that exempts roots exempts the body too. Only the body itself:
     // tracked JSX in it runs in a render effect, and a callback nested in it
@@ -792,7 +802,14 @@ fn forwarded_event_prop_role(
         .functions_body_containing(span)
         .any(|literal| {
             component_prop_literal(file, literal.span).is_some_and(|(element, prop)| {
-                component_prop_reaches_only_events(file, element, prop, lookup, &mut HashSet::new())
+                component_prop_reaches_only_events(
+                    file,
+                    element,
+                    prop,
+                    &[],
+                    lookup,
+                    &mut HashSet::new(),
+                )
             })
         })
         .then_some(ExecutionRole::EventCallback)
@@ -965,7 +982,12 @@ fn intrinsic_element(
 ///   name: the runtime's spread assigns such a property as an event listener
 ///   (`@solidjs/web` `assignProp`), the one other property it runs, `ref`, is
 ///   not an `on…` name;
-/// - a spread onto a project component that satisfies this proof; or
+/// - a spread onto a project component that satisfies this proof, or onto a
+///   dialect component that renders the intrinsic element a string prop
+///   names, when that prop is proven a string literal for this rendering
+///   chain (ADR 0313: Kobalte's `Polymorphic` renders
+///   `<Dynamic {...others} component={props.as}/>`, and `as` is the
+///   `"button"` its `Button` writes unless a caller passes one); or
 /// - the props argument of such a merge or split, whose result is spread or
 ///   bound to a `const` as above.
 ///
@@ -976,6 +998,7 @@ fn prop_reaches_only_events(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
     prop: &str,
+    shape: &PropsShape,
     lookup: &SemanticLookup<'_>,
     visiting: &mut HashSet<(String, Span, String)>,
 ) -> bool {
@@ -1002,10 +1025,10 @@ fn prop_reaches_only_events(
     if !visiting.insert((file.path.to_string(), function.span, prop.to_owned())) {
         return false;
     }
-    let mut aliases = vec![(symbol.clone(), name.span)];
+    let mut aliases: Vec<PropsView> = vec![(symbol.clone(), name.span, shape.clone())];
     let mut followed = 0;
     let mut references = 0usize;
-    while let Some((alias, declaration)) = aliases.get(followed).cloned() {
+    while let Some((alias, declaration, alias_shape)) = aliases.get(followed).cloned() {
         followed += 1;
         for reference in lookup.symbol_references(alias.as_str()) {
             if reference.path.as_ref() != file.path.as_str() {
@@ -1032,26 +1055,40 @@ fn prop_reaches_only_events(
                 .find(|member| member.object == reference)
             {
                 file.source_text(member.property) != Some(prop)
-                    || member_reaches_only_events(file, member.span, lookup, &mut visiting)
+                    || member_reaches_only_events(
+                        file,
+                        member.span,
+                        &aliases,
+                        lookup,
+                        &mut visiting,
+                    )
             } else if let Some(view) = props_view_call(file, reference, lookup) {
                 match spread_onto(file, view) {
-                    Some(element) => {
-                        spread_reaches_only_events(file, element, prop, lookup, &mut visiting)
-                    }
+                    Some(element) => spread_reaches_only_events(
+                        file,
+                        element,
+                        prop,
+                        &aliases,
+                        lookup,
+                        &mut visiting,
+                    ),
                     None => match const_binding_of(file, view, lookup) {
-                        Some(binding) => {
-                            aliases.push(binding);
+                        Some((binding, binding_declaration)) => {
+                            let view_shape = view_call_shape(file, view, &aliases, lookup);
+                            aliases.push((binding, binding_declaration, view_shape));
                             true
                         }
                         None => false,
                     },
                 }
             } else if let Some(element) = spread_onto(file, reference) {
-                spread_reaches_only_events(file, element, prop, lookup, &mut visiting)
-            } else if let Some(binding) = const_binding_of(file, reference, lookup) {
+                spread_reaches_only_events(file, element, prop, &aliases, lookup, &mut visiting)
+            } else if let Some((binding, binding_declaration)) =
+                const_binding_of(file, reference, lookup)
+            {
                 // `const rest = props`, `const root = view as Props`: the same
                 // object under another name.
-                aliases.push(binding);
+                aliases.push((binding, binding_declaration, alias_shape.clone()));
                 true
             } else {
                 false
@@ -1069,6 +1106,7 @@ fn prop_reaches_only_events(
 fn member_reaches_only_events(
     file: &solid_facts::FileFacts,
     member: Span,
+    views: &[PropsView],
     lookup: &SemanticLookup<'_>,
     visiting: &mut HashSet<(String, Span, String)>,
 ) -> bool {
@@ -1097,7 +1135,7 @@ fn member_reaches_only_events(
             event_handlers().any(|callback| callback.span.contains(member))
         }
         Some((element, attribute)) => file.source_text(attribute.name).is_some_and(|next| {
-            component_prop_reaches_only_events(file, element, next, lookup, visiting)
+            component_prop_reaches_only_events(file, element, next, views, lookup, visiting)
         }),
         None => {
             if event_handlers().any(|callback| {
@@ -1110,7 +1148,7 @@ fn member_reaches_only_events(
             }) {
                 return true;
             }
-            if member_in_exclusive_named_event_handler(file, member, lookup, visiting) {
+            if member_in_exclusive_named_event_handler(file, member, views, lookup, visiting) {
                 return true;
             }
             // Inside a literal written as another project component's prop
@@ -1124,7 +1162,8 @@ fn member_reaches_only_events(
                 let Some((element, prop)) = component_prop_literal(file, literal) else {
                     continue;
                 };
-                if component_prop_reaches_only_events(file, element, prop, lookup, visiting) {
+                if component_prop_reaches_only_events(file, element, prop, views, lookup, visiting)
+                {
                     return true;
                 }
             }
@@ -1139,6 +1178,7 @@ fn member_reaches_only_events(
 fn member_in_exclusive_named_event_handler(
     file: &solid_facts::FileFacts,
     member: Span,
+    views: &[PropsView],
     lookup: &SemanticLookup<'_>,
     visiting: &mut HashSet<(String, Span, String)>,
 ) -> bool {
@@ -1208,7 +1248,7 @@ fn member_in_exclusive_named_event_handler(
                     && intrinsic_attribute_value(file, callback.span)
                     && file.ast.peel_ts_sugar_span(callback.span) == *reference
             }) || component_prop_literal(file, *reference).is_some_and(|(element, prop)| {
-                component_prop_reaches_only_events(file, element, prop, lookup, visiting)
+                component_prop_reaches_only_events(file, element, prop, views, lookup, visiting)
             })
         })
 }
@@ -1233,13 +1273,14 @@ fn spread_reaches_only_events(
     file: &solid_facts::FileFacts,
     element: &solid_facts::ast::JsxElementFact,
     prop: &str,
+    views: &[PropsView],
     lookup: &SemanticLookup<'_>,
     visiting: &mut HashSet<(String, Span, String)>,
 ) -> bool {
     if intrinsic_element(file, element) {
         return prop.starts_with("on") && !prop.contains(':');
     }
-    component_prop_reaches_only_events(file, element, prop, lookup, visiting)
+    component_prop_reaches_only_events(file, element, prop, views, lookup, visiting)
 }
 
 /// Whether the component `element` renders runs its prop `prop` only after
@@ -1249,15 +1290,231 @@ fn component_prop_reaches_only_events(
     file: &solid_facts::FileFacts,
     element: &solid_facts::ast::JsxElementFact,
     prop: &str,
+    views: &[PropsView],
     lookup: &SemanticLookup<'_>,
     visiting: &mut HashSet<(String, Span, String)>,
 ) -> bool {
+    // ADR 0313: a dialect component that renders the intrinsic element a
+    // string prop names (`<Dynamic component="button" {...rest}/>`) assigns
+    // every other prop as a spread onto that element does. Only when the
+    // prop's value on this element is proven a string literal.
+    if let Some(tag) = lookup.intrinsic_tag_prop(file, element.name.span) {
+        return prop != tag
+            && prop.starts_with("on")
+            && !prop.contains(':')
+            && element_prop_is_string(file, element, tag, views);
+    }
     if let Some((next_file, next_function)) =
         lookup.function_called_at(file.path.as_str(), element.name.span)
     {
-        return prop_reaches_only_events(next_file, next_function, prop, lookup, visiting);
+        let shape = element_props_shape(file, element, views);
+        return prop_reaches_only_events(next_file, next_function, prop, &shape, lookup, visiting);
     }
     false
+}
+
+/// ADR 0313: what one proof of [`prop_reaches_only_events`] knows about the
+/// keys of one props object, or one view of it, along the rendering chain it
+/// follows. Every key the object can hold, each with whether its value is
+/// exactly a string literal; `None` when a key the proof cannot name may be
+/// present.
+///
+/// The chain starts at the element whose prop literal is being placed: a
+/// project element's props are exactly its attributes, its spreads and its
+/// children, so with no spread of an unknown object they are closed. Each
+/// hop keeps that knowledge only through the dialect's props views
+/// ([`view_call_shape`]) and `const` aliases, and loses it at anything else.
+/// Adding a key, or marking a value not a string, only ever withholds a
+/// proof.
+type PropsShape = Option<std::collections::BTreeMap<String, bool>>;
+
+/// A props object or a view of it in the component a proof walks: its
+/// symbol, its declaration and its [`PropsShape`].
+type PropsView = (SymbolId, Span, PropsShape);
+
+/// The [`PropsShape`] of the view whose binding `reference` (after
+/// transparent TypeScript wrappers) names, when it is one of `views`.
+fn view_shape_at<'v>(
+    file: &solid_facts::FileFacts,
+    views: &'v [PropsView],
+    reference: Span,
+) -> Option<&'v PropsShape> {
+    let declaration = file
+        .ast
+        .reference_declaration(file.ast.peel_ts_sugar_span(reference))?;
+    views
+        .iter()
+        .find(|(_, view, _)| *view == declaration)
+        .map(|(_, _, shape)| shape)
+}
+
+/// The [`PropsShape`] of the props `element` renders with, in attribute
+/// order: an attribute sets its key, a spread of one of `views` sets that
+/// view's keys over what came before, and any other spread opens the shape.
+/// Children add `children`. A value is a string literal only when written as
+/// one (`as="button"`) or read as a static member of a view whose shape
+/// proves it one (`component={props.as}`).
+fn element_props_shape(
+    file: &solid_facts::FileFacts,
+    element: &solid_facts::ast::JsxElementFact,
+    views: &[PropsView],
+) -> PropsShape {
+    let mut keys = std::collections::BTreeMap::new();
+    for item in element_props_in_order(element) {
+        match item {
+            Ok(attribute) => {
+                // A namespaced attribute's key is not its spelling here.
+                if attribute.namespace.is_some() {
+                    return None;
+                }
+                let name = file.source_text(attribute.name)?;
+                keys.insert(
+                    name.to_owned(),
+                    attribute_value_is_string(file, attribute, views),
+                );
+            }
+            Err(argument) => {
+                let view = view_shape_at(file, views, argument)?.as_ref()?;
+                keys.extend(view.iter().map(|(key, string)| (key.clone(), *string)));
+            }
+        }
+    }
+    if !element.self_closing || !element.children.is_empty() {
+        keys.insert("children".to_owned(), false);
+    }
+    Some(keys)
+}
+
+/// An element's attributes (`Ok`) and spread arguments (`Err`) in source
+/// order, which is the order the compiled props object takes them in.
+fn element_props_in_order(
+    element: &solid_facts::ast::JsxElementFact,
+) -> Vec<Result<&solid_facts::ast::JsxAttributeFact, Span>> {
+    let mut items = element
+        .attributes
+        .iter()
+        .map(|attribute| (attribute.span.start, Ok(attribute)))
+        .chain(
+            element
+                .spreads
+                .iter()
+                .map(|spread| (spread.span.start, Err(spread.argument))),
+        )
+        .collect::<Vec<_>>();
+    items.sort_by_key(|(start, _)| *start);
+    items.into_iter().map(|(_, item)| item).collect()
+}
+
+/// Whether the prop `key` of the props `element` renders with is exactly a
+/// string literal: the last attribute or spread that can set it does so with
+/// one. A later attribute settles the key over an unknown spread before it
+/// (`<Dynamic {...rest} component="a"/>`); an unknown spread after one opens
+/// it again.
+fn element_prop_is_string(
+    file: &solid_facts::FileFacts,
+    element: &solid_facts::ast::JsxElementFact,
+    key: &str,
+    views: &[PropsView],
+) -> bool {
+    let mut string = false;
+    for item in element_props_in_order(element) {
+        match item {
+            Ok(attribute) => {
+                if attribute.namespace.is_some() {
+                    string = false;
+                } else if file.source_text(attribute.name) == Some(key) {
+                    string = attribute_value_is_string(file, attribute, views);
+                }
+            }
+            Err(argument) => match view_shape_at(file, views, argument).and_then(Option::as_ref) {
+                Some(view) => {
+                    if let Some(value) = view.get(key) {
+                        string = *value;
+                    }
+                }
+                None => string = false,
+            },
+        }
+    }
+    string
+}
+
+/// Whether an attribute's value is exactly a string literal: written as one,
+/// or a static member of a view whose shape proves that key one.
+fn attribute_value_is_string(
+    file: &solid_facts::FileFacts,
+    attribute: &solid_facts::ast::JsxAttributeFact,
+    views: &[PropsView],
+) -> bool {
+    use solid_facts::ast::JsxAttributeValueKind;
+    match attribute.value_kind {
+        JsxAttributeValueKind::String => true,
+        JsxAttributeValueKind::Expression => attribute.expression.is_some_and(|expression| {
+            let expression = file.ast.peel_ts_sugar_span(expression);
+            file.ast
+                .members
+                .iter()
+                .find(|member| member.span == expression)
+                .is_some_and(|member| {
+                    file.source_text(member.property).is_some_and(|key| {
+                        view_shape_at(file, views, member.object)
+                            .and_then(Option::as_ref)
+                            .is_some_and(|shape| shape.get(key) == Some(&true))
+                    })
+                })
+        }),
+        _ => false,
+    }
+}
+
+/// The [`PropsShape`] of the props view `call` makes
+/// ([`props_view_call`]): an `omit` of one view by string-literal keys drops
+/// them; a `merge` of views and complete object literals takes each source's
+/// keys over the earlier ones'. Any other argument opens the shape.
+fn view_call_shape(
+    file: &solid_facts::FileFacts,
+    call: Span,
+    views: &[PropsView],
+    lookup: &SemanticLookup<'_>,
+) -> PropsShape {
+    use solid_facts::ast::ArgumentLiteralFact;
+    let call = file.ast.call_at(call)?;
+    let primitive = lookup.primitive_at_call(file, call.span)?;
+    if call.arguments.iter().any(|argument| argument.spread) {
+        return None;
+    }
+    if lookup.dialect.splits_props(primitive) {
+        let (source, hidden) = call.arguments.split_first()?;
+        let mut keys = view_shape_at(file, views, source.span)?.clone()?;
+        for key in hidden {
+            let ArgumentLiteralFact::String(key) = &key.literal_value else {
+                return None;
+            };
+            keys.remove(key.as_str());
+        }
+        return Some(keys);
+    }
+    if !lookup.dialect.merges_props_reactivity(primitive) {
+        return None;
+    }
+    let mut keys = std::collections::BTreeMap::new();
+    for argument in &call.arguments {
+        if let Some(view) = view_shape_at(file, views, argument.span) {
+            keys.extend(view.clone()?);
+        } else if let ArgumentLiteralFact::Object(properties) = &argument.literal_value {
+            // Every property a data property with a static key; a getter, a
+            // spread or a computed key makes the fact `Unknown`.
+            for property in properties {
+                keys.insert(
+                    property.name.to_string(),
+                    matches!(property.value, ArgumentLiteralFact::String(_)),
+                );
+            }
+        } else {
+            return None;
+        }
+    }
+    Some(keys)
 }
 
 /// The span of the call `reference` is the props argument of, when that call
@@ -1412,6 +1669,201 @@ fn enclosed_by_stored_function(
 /// Whether `span` is written in an async function after an `await` of that
 /// same function, by position. Only the function's own awaits count: one in a
 /// nested closure suspends that closure.
+/// ADR 0320: whether the code at `span` runs after an await its async
+/// function reaches on every path (an unconditional await before it in the
+/// same function): an ownerless continuation on a later task, never in a
+/// render window or a tracking scope.
+pub(crate) fn follows_unconditional_await(file: &solid_facts::FileFacts, span: Span) -> bool {
+    containing_ast_function(&file.ast, span).is_some_and(|function| {
+        function.r#async
+            && file.ast.unconditional_awaits.iter().any(|awaited| {
+                awaited.end <= span.start
+                    && function.body.contains(*awaited)
+                    && containing_ast_function(&file.ast, *awaited)
+                        .is_some_and(|owner| owner.span == function.span)
+            })
+    })
+}
+
+/// The functions whose body holds `span`, innermost first and short of the
+/// first component, that take their role from a named callback position
+/// (`onClick={press}`, `untrack(read)`): the role [`named_callback_roles`]
+/// admits for them describes that position, not a direct call of the same
+/// function, so it holds for `span` only when every invocation does.
+fn named_callbacks_within_component<'f>(
+    file: &'f solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<&'f solid_facts::ast::FunctionFact> {
+    let roles = lookup.named_callback_roles(file);
+    let mut enclosing = file.ast.functions_body_containing(span).collect::<Vec<_>>();
+    // Innermost first: a function nested in another starts later.
+    enclosing.sort_by_key(|function| std::cmp::Reverse(function.span.start));
+    enclosing
+        .into_iter()
+        .take_while(|function| {
+            lookup.function_component_status(file, function) == ComponentStatus::No
+        })
+        .filter(|function| roles.get(function.span).admitted)
+        .collect()
+}
+
+/// ADR 0320: whether every reference to the named function `function` is a
+/// position that admits it as a named callback -- an event-handler
+/// attribute value, or an argument of a known primitive call -- so the role
+/// those positions give it is the role of every invocation. A direct call,
+/// any other use, an export, a reference in another file or a direct `eval`
+/// in the file refuses. Answers for open programs too, where ADR 0319 asks
+/// nothing: the census is of one file-local binding.
+fn named_callback_census_holds(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    use solid_facts::ast::IdentifierRole;
+    let Some(binding) = crate::owners::function_binding_name(file, function) else {
+        return false;
+    };
+    if crate::owners::own_method_name(file, function).is_some()
+        || flow_binding_exported(file, binding.span)
+        || file.ast.identifiers.iter().any(|id| {
+            id.role == IdentifierRole::Reference && file.source_text(id.span) == Some("eval")
+        })
+    {
+        return false;
+    }
+    let Some(symbol) = lookup.entities().at(file.path.as_str(), binding.span) else {
+        return false;
+    };
+    let mut references = file
+        .ast
+        .identifiers
+        .iter()
+        .filter(|id| {
+            id.role == IdentifierRole::Reference
+                && file.ast.reference_declaration(id.span) == Some(binding.span)
+        })
+        .map(|id| id.span)
+        .collect::<HashSet<_>>();
+    for reference in lookup.symbol_references(symbol.as_str()) {
+        if reference.path.as_ref() != file.path.as_str() {
+            return false;
+        }
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(reference.start_byte),
+            u32::try_from(reference.end_byte),
+        ) else {
+            return false;
+        };
+        let reference = Span::new(start, end);
+        if reference != binding.span {
+            if file.ast.reference_declaration(reference) != Some(binding.span) {
+                return false;
+            }
+            references.insert(reference);
+        }
+    }
+    if references.is_empty() {
+        return false;
+    }
+    let primitives = lookup.primitives(file);
+    references.into_iter().all(|reference| {
+        file.compiler.callback_roles.iter().any(|callback| {
+            callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
+                && callback.span == reference
+        }) || file.ast.calls.iter().enumerate().any(|(index, call)| {
+            known_primitive(&primitives.calls[index]).is_some_and(|primitive| {
+                call.arguments
+                    .iter()
+                    .enumerate()
+                    .any(|(argument_index, argument)| {
+                        !argument.spread
+                            && file.ast.peel_ts_sugar_span(argument.span) == reference
+                            && crate::owners::callback_execution_at_call(
+                                file,
+                                call,
+                                primitive,
+                                argument_index,
+                                lookup,
+                            )
+                            .is_some()
+                    })
+            })
+        })
+    })
+}
+
+/// ADR 0320: whether a function a named callback position admits is invoked
+/// only in the role it is admitted with: its ADR 0319 invocation-flow answer
+/// is an excluded role, or its file-local reference census holds.
+fn named_callback_invocations_hold(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+    flow_answers: bool,
+) -> bool {
+    (flow_answers
+        && lookup.program_closed
+        && lookup
+            .invocation_flow_answers()
+            .get(&(file.path.to_string(), function.span))
+            .is_some_and(|answer| flow_safe_role(*answer)))
+        || named_callback_census_holds(file, function, lookup)
+}
+
+/// ADR 0320: whether an excluded execution role at `span` (an event, a
+/// deferred callback, a tracked position, deleted code) also holds for every
+/// invocation of the functions around it. A role read off a named
+/// function's callback references says nothing about a direct call of the
+/// same function -- `press()` in a component body beside `onClick={press}`
+/// -- and a dispatch obligation, unlike a read, is not re-raised at that
+/// call. So each function between `span` and its component that a named
+/// callback position admits must have an ADR 0319 invocation-flow answer
+/// that is itself an excluded role; any other role is read off the position
+/// the code is written in, which every invocation shares.
+pub(crate) fn excluded_role_holds(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    role: ExecutionRole,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    match role {
+        ExecutionRole::DiscardedRendering => true,
+        ExecutionRole::TrackedJsx
+        | ExecutionRole::EventCallback
+        | ExecutionRole::DeferredCallback => named_callbacks_within_component(file, span, lookup)
+            .into_iter()
+            .all(|function| named_callback_invocations_hold(file, function, lookup, true)),
+        _ => false,
+    }
+}
+
+/// ADR 0320: whether the code at `span` cannot run in a render window or a
+/// tracking scope because of an await: it follows an await its async function
+/// reaches on every path, or it may follow one and every invocation of that
+/// function runs as an event, a deferred callback or a tracked computation
+/// (ADR 0319) -- so it runs either in that role, before the await, or on a
+/// later task after it.
+pub(crate) fn await_continuation_decides_nothing(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    if follows_unconditional_await(file, span) {
+        return true;
+    }
+    let Some(function) = containing_ast_function(&file.ast, span) else {
+        return false;
+    };
+    function.r#async
+        && follows_await_in_async_function(file, span)
+        && lookup.program_closed
+        && lookup
+            .invocation_flow_answers()
+            .get(&(file.path.to_string(), function.span))
+            .is_some_and(|role| flow_safe_role(*role))
+}
+
 fn follows_await_in_async_function(file: &solid_facts::FileFacts, span: Span) -> bool {
     // A call's arguments are evaluated before the call runs, so an await in
     // the written call's own argument list (`setX(await load())`) also
@@ -1646,6 +2098,39 @@ fn semantic_execution_role_within(
     lookup: &SemanticLookup<'_>,
     classifying: &mut HashSet<(String, Span)>,
 ) -> ExecutionRole {
+    let role = semantic_role_before_awaits(
+        file,
+        span,
+        allowed,
+        entities,
+        symbol_names,
+        lookup,
+        classifying,
+    );
+    // ADR 0323: code after an await its async function reaches on every path
+    // runs from a promise continuation, on a later task. The strict-read
+    // window is the synchronous extent of `untrack(fn, label)` (`strictRead`
+    // is restored in its `finally`, `@solidjs/signals@2.0.0-rc.13`
+    // `dist/dev-shared.js:5801-5885`), so a read there has no window and no
+    // tracking scope: none of the reporting roles describes it. Only
+    // statement-level awaits count (`unconditional_awaits`); a skippable one
+    // (`x ??= await p`, an optional-call argument, a labelled break) keeps
+    // the role its position earned.
+    if role.reports_untracked_read() && follows_unconditional_await(file, span) {
+        return ExecutionRole::Unknown;
+    }
+    role
+}
+
+fn semantic_role_before_awaits(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    allowed: &[Span],
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+    classifying: &mut HashSet<(String, Span)>,
+) -> ExecutionRole {
     // Before every semantic path, because the semantic paths answer a question
     // that no longer applies. They classify *how* code executes — the callback
     // that will invoke it, the primitive whose argument it is, the owner it
@@ -1712,6 +2197,47 @@ fn semantic_execution_role_within(
             && direct_callback_contains(file, call.arguments[index].span, span)
     }) {
         return ExecutionRole::EffectApply;
+    }
+    // ADR 0323 (review round 10): a callback that runs synchronously at its
+    // call with the listener cleared but the strict-read window untouched
+    // (`createRoot`, `runWithOwner`) reports where the call does. Reads only:
+    // a write directly in a created root is `CreatedRoot`'s question, decided
+    // before this function is asked.
+    if !classifying.contains(&write_classification_marker())
+        && let Some(call) = file
+            .ast
+            .arguments_containing(span)
+            .find_map(|(call, index)| {
+                call_primitive_name(file, call, entities, symbol_names, dialect)
+                    .as_ref()
+                    .and_then(PrimitiveName::primitive)
+                    .filter(|primitive| {
+                        dialect.callback_inherits_calling_window(*primitive, index)
+                            && callback_execution_at_call(file, call, *primitive, index, lookup)
+                                .is_some()
+                            && direct_callback_contains(file, call.arguments[index].span, span)
+                    })
+                    .map(|_| call)
+            })
+    {
+        let at_call = semantic_execution_role_within(
+            file,
+            call.callee,
+            allowed,
+            entities,
+            symbol_names,
+            lookup,
+            classifying,
+        );
+        return match at_call {
+            // The listener is cleared: the read subscribes nothing of the
+            // computation the call sits in, and no window is open there.
+            ExecutionRole::TrackedJsx => ExecutionRole::DeferredCallback,
+            // One-shot module evaluation is no component window, and the
+            // role before this ADR was the silent deferred one.
+            ExecutionRole::ModuleInitialization => ExecutionRole::Unknown,
+            other => other,
+        };
     }
     if file.ast.arguments_containing(span).any(|(call, index)| {
         call_primitive_name(file, call, entities, symbol_names, dialect)
@@ -1788,6 +2314,12 @@ fn semantic_execution_role_within(
     if let Some(role) = forwarded_event_prop_role(file, span, lookup) {
         return role;
     }
+    if let Some(role) = callee_use_site_role(file, span, lookup, classifying) {
+        return role;
+    }
+    if let Some(role) = invocation_flow_role(file, span, lookup, classifying) {
+        return role;
+    }
     let compiler_role = source_execution_role(file, span, allowed);
     if compiler_role != ExecutionRole::Unknown {
         return compiler_role;
@@ -1814,6 +2346,522 @@ fn semantic_execution_role_within(
         return ExecutionRole::ModuleInitialization;
     }
     ExecutionRole::Unknown
+}
+
+/// The `classifying` entry that marks a write-legality classification, which
+/// the ADR 0315 arm does not answer.
+fn write_classification_marker() -> (String, Span) {
+    ("\0write-legality".to_owned(), Span::new(0, 0))
+}
+
+/// ADR 0315: code directly in a function literal that a project callee runs
+/// only through one parameter, every call of which is in one proven role,
+/// takes that role.
+///
+/// The literal is exactly one of: the argument at a slot of an exact project
+/// callee; the value of a data or method property of a closed object literal
+/// (no getter, spread, computed or duplicate key) that is exactly such an
+/// argument; or the value of a project component's prop. The callee
+/// ([`callee_parameter_use_role`]) uses the parameter only to read other
+/// properties and to call the literal's: then the literal runs only where
+/// those calls run. Each call's own role is classified in the callee's file,
+/// not by where the literal is written, and must be an event, a deferred
+/// callback or a tracked computation, the same for every call; that role is
+/// the literal's. Anything else answers nothing here. Write legality never
+/// asks this arm.
+fn callee_use_site_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+    classifying: &mut HashSet<(String, Span)>,
+) -> Option<ExecutionRole> {
+    if classifying.contains(&write_classification_marker()) {
+        return None;
+    }
+    let literal = containing_ast_function(&file.ast, span)?;
+    if !literal.body.contains(span)
+        || literal.r#async
+        || literal.generator
+        || lookup.function_component_status(file, literal) != ComponentStatus::No
+    {
+        return None;
+    }
+    let (callee_file, callee, index, field, siblings) = literal_use_site(file, literal, lookup)?;
+    let key = (file.path.to_string(), literal.span);
+    if !classifying.insert(key.clone()) {
+        return None;
+    }
+    let receiver_safe = |name: &str| sibling_ignores_receiver(file, siblings, name, lookup);
+    let role = callee_parameter_use_role(
+        callee_file,
+        callee,
+        index,
+        field.as_deref(),
+        &receiver_safe,
+        lookup,
+        classifying,
+    );
+    classifying.remove(&key);
+    role
+}
+
+/// Where a function literal is handed to a project callee, for
+/// [`callee_use_site_role`]: the callee, the parameter slot, and the property
+/// of that parameter the literal is (`None` for the parameter itself).
+fn literal_use_site<'a>(
+    file: &solid_facts::FileFacts,
+    literal: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'a>,
+) -> Option<(
+    &'a solid_facts::FileFacts,
+    &'a solid_facts::ast::FunctionFact,
+    usize,
+    Option<String>,
+    Siblings,
+)> {
+    let exact_argument = |value: Span| {
+        file.ast.arguments_containing(value).find(|(call, index)| {
+            let argument = &call.arguments[*index];
+            !argument.spread
+                && !call.construct
+                && file.ast.peel_ts_sugar_span(argument.span) == value
+                && lookup.primitive_at_call(file, call.span).is_none()
+        })
+    };
+    let at_argument = |value: Span| {
+        let (call, index) = exact_argument(value)?;
+        let (callee_file, callee, exact) = project_callee_at_parameter(file, call, index, lookup)?;
+        exact.then_some((callee_file, callee, index))
+    };
+    // The literal itself is the argument.
+    if let Some((callee_file, callee, index)) = at_argument(literal.span) {
+        return Some((callee_file, callee, index, None, Siblings::None));
+    }
+    // A property of an options object that is the argument.
+    let property = file.ast.object_properties.iter().find(|property| {
+        !property.computed && file.ast.peel_ts_sugar_span(property.value) == literal.span
+    });
+    let key = match (property, crate::owners::own_method_name(file, literal)) {
+        (Some(property), _) => property.key,
+        // An object literal's own method, not a class's.
+        (None, Some(name))
+            if file
+                .ast
+                .object_properties
+                .iter()
+                .any(|property| property.key == name.span) =>
+        {
+            name.span
+        }
+        (None, Some(_)) => return None,
+        (None, None) => {
+            // A project component's prop. A spread may carry anything, and a
+            // non-arrow function value receives the props object as `this`
+            // and could run another prop out of the callee's sight.
+            let (element, prop) = component_prop_literal(file, literal.span)?;
+            if !element.spreads.is_empty()
+                || element.attributes.iter().any(|attribute| {
+                    attribute
+                        .expression
+                        .is_some_and(|value| receiver_function_at(file, value))
+                })
+            {
+                return None;
+            }
+            let (callee_file, callee) =
+                lookup.function_called_at(file.path.as_str(), element.name.span)?;
+            return Some((
+                callee_file,
+                callee,
+                0,
+                Some(prop.to_owned()),
+                Siblings::Element(element.span),
+            ));
+        }
+    };
+    let object = file
+        .ast
+        .object_get_shapes
+        .iter()
+        .filter(|shape| shape.span.contains(key))
+        .min_by_key(|shape| shape.span.end - shape.span.start)?;
+    let name = static_key_text(file.source_text(key)?, false)?;
+    let name = name.as_str();
+    if !object.closed
+        || object
+            .properties
+            .iter()
+            .any(|property| property.getter.is_some())
+        || !object
+            .properties
+            .iter()
+            .any(|property| property.key.as_str() == name)
+    {
+        return None;
+    }
+    // A method or function expression in the literal receives the object as
+    // `this` and could run a property out of the callee's sight.
+    if file.ast.object_properties.iter().any(|property| {
+        object.span.contains(property.span)
+            && (property.method || receiver_function_at(file, property.value))
+    }) {
+        return None;
+    }
+    let (callee_file, callee, index) = at_argument(object.span)?;
+    Some((
+        callee_file,
+        callee,
+        index,
+        Some(name.to_owned()),
+        Siblings::Object(object.span),
+    ))
+}
+
+/// The caller-side object a callee's parameter holds, for the receiver
+/// question of [`callee_parameter_use_role`]: an options literal, a JSX
+/// element's props, or nothing (the literal itself is the parameter).
+#[derive(Clone, Copy)]
+enum Siblings {
+    None,
+    Object(Span),
+    Element(Span),
+}
+
+/// Whether the caller's value for the property `name` of `siblings` cannot use
+/// a `this` it is called with: an arrow (or a `const` bound to one) or a
+/// non-function literal. An absent property proves nothing: code outside the
+/// analyzed program may have installed one on `Object.prototype`
+/// (`project-callback-uses`' `SiblingAbsent`).
+fn sibling_ignores_receiver(
+    file: &solid_facts::FileFacts,
+    siblings: Siblings,
+    name: &str,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let arrow = |span: Span| {
+        file.ast.functions.iter().any(|function| {
+            function.span == span && function.kind == solid_facts::ast::FunctionKind::Arrow
+        })
+    };
+    let arrow_value = |value: Span| {
+        let value = file.ast.peel_ts_sugar_span(value);
+        arrow(value)
+            || lookup
+                .binding_at_reference(file.path.as_str(), value)
+                .is_some_and(|(binding_file, binding, _)| {
+                    binding_file.path == file.path
+                        && binding.immutable
+                        && binding.shape == solid_facts::ast::BindingShape::Identifier
+                        && binding.initializer.is_some_and(|initializer| {
+                            arrow(file.ast.peel_ts_sugar_span(initializer))
+                        })
+                })
+    };
+    match siblings {
+        Siblings::None => false,
+        Siblings::Object(object) => {
+            let direct = file
+                .ast
+                .object_properties
+                .iter()
+                .filter(|property| {
+                    object.contains(property.span)
+                        && !property.computed
+                        && property_static_key(file, property).as_deref() == Some(name)
+                        && !file.ast.object_get_shapes.iter().any(|inner| {
+                            inner.span != object
+                                && object.contains(inner.span)
+                                && inner.span.contains(property.span)
+                        })
+                })
+                .max_by_key(|property| property.span.start);
+            match direct {
+                None => false,
+                Some(property) => {
+                    !property.method
+                        && (arrow_value(property.value)
+                            || property.value_kind == solid_facts::ast::RuntimeValueKind::Primitive)
+                }
+            }
+        }
+        Siblings::Element(element) => {
+            let Some(element) = file
+                .ast
+                .jsx_elements
+                .iter()
+                .find(|candidate| candidate.span == element)
+            else {
+                return false;
+            };
+            match element
+                .attributes
+                .iter()
+                .rev()
+                .find(|attribute| file.source_text(attribute.name) == Some(name))
+            {
+                None => false,
+                Some(attribute) => match attribute.value_kind {
+                    solid_facts::ast::JsxAttributeValueKind::String
+                    | solid_facts::ast::JsxAttributeValueKind::Boolean => true,
+                    solid_facts::ast::JsxAttributeValueKind::Expression => {
+                        attribute.expression.is_some_and(arrow_value)
+                    }
+                    _ => false,
+                },
+            }
+        }
+    }
+}
+
+/// Whether `value` is exactly a function that binds its own `this`: not an
+/// arrow.
+fn receiver_function_at(file: &solid_facts::FileFacts, value: Span) -> bool {
+    let value = file.ast.peel_ts_sugar_span(value);
+    file.ast.functions.iter().any(|function| {
+        function.span == value && function.kind != solid_facts::ast::FunctionKind::Arrow
+    })
+}
+
+/// The one role every call of `function`'s parameter `index` (or of its
+/// property `field`) runs in, when the parameter is used for nothing else;
+/// see [`callee_use_site_role`].
+fn callee_parameter_use_role(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    index: usize,
+    field: Option<&str>,
+    receiver_safe: &dyn Fn(&str) -> bool,
+    lookup: &SemanticLookup<'_>,
+    classifying: &mut HashSet<(String, Span)>,
+) -> Option<ExecutionRole> {
+    if function.r#async || function.generator {
+        return None;
+    }
+    let parameter = function.parameters.get(index)?;
+    let [name] = parameter.names.as_slice() else {
+        return None;
+    };
+    if parameter.shape != solid_facts::ast::BindingShape::Identifier
+        || parameter.initializer.is_some()
+        || (function.rest_parameter && index + 1 == function.parameters.len())
+        || crate::indexes::binding_written(file, name.span)
+        || file.ast.identifiers.iter().any(|identifier| {
+            function.span.contains(identifier.span)
+                && matches!(
+                    file.source_text(identifier.span),
+                    Some("eval" | "arguments")
+                )
+        })
+    {
+        return None;
+    }
+    let targets = file
+        .ast
+        .assignments
+        .iter()
+        .map(|assignment| assignment.target)
+        .chain(file.ast.iteration_targets.iter().copied())
+        .collect::<Vec<_>>();
+    let mut role = None::<ExecutionRole>;
+    let mut calls = 0usize;
+    for (reference, declaration) in &file.ast.reference_declarations {
+        if *declaration != name.span || *reference == name.span {
+            continue;
+        }
+        if !function.body.contains(*reference) {
+            return None;
+        }
+        let invoked =
+            match field {
+                None => *reference,
+                Some(field) => {
+                    let member =
+                        file.ast.members.iter().find(|member| {
+                            file.ast.peel_ts_sugar_span(member.object) == *reference
+                        })?;
+                    if file
+                        .ast
+                        .computed_members
+                        .binary_search(&member.span)
+                        .is_ok()
+                        || targets.iter().any(|target| target.contains(member.span))
+                    {
+                        return None;
+                    }
+                    if member_static_key(file, member)? != field {
+                        // Reading another property runs nothing of the caller's
+                        // literal. Calling it, tagging a template with it or
+                        // reaching through it (`p.g.call(p)`) hands the object
+                        // over as `this`, and that function -- an inherited one,
+                        // for an absent property -- could run this property out
+                        // of the callee's sight.
+                        let next = file
+                            .source
+                            .get(member.span.end as usize..)
+                            .map(str::trim_start)
+                            .unwrap_or_default();
+                        let hands_receiver = next.starts_with(['(', '`', '.', '['])
+                            || next.starts_with("?.")
+                            || file.ast.calls.iter().any(|call| {
+                                file.ast.peel_ts_sugar_span(call.callee) == member.span
+                            })
+                            || file.ast.members.iter().any(|outer| {
+                                file.ast.peel_ts_sugar_span(outer.object) == member.span
+                            });
+                        if hands_receiver && !receiver_safe(&member_static_key(file, member)?) {
+                            return None;
+                        }
+                        continue;
+                    }
+                    member.span
+                }
+            };
+        let peeled = |span: Span| file.ast.peel_ts_sugar_span(span);
+        // Testing the property runs nothing (`props.f ? … : …`,
+        // `props.f && …`): a falsy value is not the literal, and a truthy one
+        // is not the `&&`'s value.
+        if field.is_some()
+            && (file
+                .ast
+                .conditional_expressions
+                .iter()
+                .any(|conditional| peeled(conditional.test) == invoked)
+                || file.ast.logical_expressions.iter().any(|logical| {
+                    logical.operator == solid_facts::ast::LogicalOperatorKind::And
+                        && peeled(logical.left) == invoked
+                }))
+        {
+            continue;
+        }
+        // Forwarded as exactly another project component's prop, which this
+        // proof places in turn.
+        if field.is_some()
+            && let Some((element, prop)) = forwarded_component_prop(file, invoked)
+        {
+            if !element.spreads.is_empty()
+                || element.attributes.iter().any(|attribute| {
+                    attribute
+                        .expression
+                        .is_some_and(|value| receiver_function_at(file, value))
+                })
+            {
+                return None;
+            }
+            let (next_file, next) =
+                lookup.function_called_at(file.path.as_str(), element.name.span)?;
+            let key = (file.path.to_string(), element.span);
+            if !classifying.insert(key.clone()) {
+                return None;
+            }
+            let element_span = element.span;
+            let next_safe = |name: &str| {
+                sibling_ignores_receiver(file, Siblings::Element(element_span), name, lookup)
+            };
+            let forwarded = callee_parameter_use_role(
+                next_file,
+                next,
+                0,
+                Some(prop),
+                &next_safe,
+                lookup,
+                classifying,
+            );
+            classifying.remove(&key);
+            let forwarded = forwarded?;
+            if role.is_some_and(|role| role != forwarded) {
+                return None;
+            }
+            role = Some(forwarded);
+            calls += 1;
+            continue;
+        }
+        let call =
+            file.ast.calls.iter().find(|call| {
+                !call.construct && file.ast.peel_ts_sugar_span(call.callee) == invoked
+            })?;
+        // Every function between the callee and the call is handed, as itself,
+        // to a call or a JSX attribute: no helper, returned or stored closure
+        // runs it, and no async function runs it after an `await`.
+        for nested in file.ast.functions.iter().filter(|nested| {
+            nested.span != function.span
+                && function.span.contains(nested.span)
+                && nested.span.contains(call.span)
+        }) {
+            // Handed to a primitive, a standard-library call or an intrinsic
+            // element's attribute, whose timing the role below reads; and the
+            // call is in its body, not a default initializer that runs only
+            // when an argument is left out.
+            let handed = file
+                .ast
+                .arguments_containing(nested.span)
+                .any(|(outer, slot)| {
+                    !outer.arguments[slot].spread
+                        && file.ast.peel_ts_sugar_span(outer.arguments[slot].span) == nested.span
+                        && (lookup.primitive_at_call(file, outer.span).is_some()
+                            || lookup
+                                .resolved_callee_call(file, outer.callee)
+                                .and_then(|resolved| resolved.declaration.as_ref())
+                                .is_some_and(|declaration| declaration.standard_library))
+                })
+                || file.ast.jsx_elements.iter().any(|element| {
+                    intrinsic_element(file, element)
+                        && element.attributes.iter().any(|attribute| {
+                            attribute.expression.is_some_and(|value| {
+                                file.ast.peel_ts_sugar_span(value) == nested.span
+                            })
+                        })
+                });
+            if nested.r#async || nested.generator || !handed || !nested.body.contains(call.span) {
+                return None;
+            }
+        }
+        let here = semantic_execution_role_within(
+            file,
+            call.callee,
+            &[],
+            lookup.entities(),
+            lookup.symbol_names(),
+            lookup,
+            classifying,
+        );
+        if !matches!(
+            here,
+            ExecutionRole::EventCallback
+                | ExecutionRole::DeferredCallback
+                | ExecutionRole::TrackedJsx
+        ) || role.is_some_and(|role| role != here)
+        {
+            return None;
+        }
+        role = Some(here);
+        calls += 1;
+    }
+    (calls > 0).then_some(role).flatten()
+}
+
+/// The project component element and prop name `value` is exactly the
+/// value of, when it is one ([`component_prop_literal`] for any value).
+fn forwarded_component_prop(
+    file: &solid_facts::FileFacts,
+    value: Span,
+) -> Option<(&solid_facts::ast::JsxElementFact, &str)> {
+    let (element, attribute) = file.ast.jsx_containing(value).find_map(|element| {
+        element
+            .attributes
+            .iter()
+            .find(|attribute| {
+                attribute.namespace.is_none()
+                    && attribute.value_kind == solid_facts::ast::JsxAttributeValueKind::Expression
+                    && attribute
+                        .expression
+                        .is_some_and(|expression| file.ast.peel_ts_sugar_span(expression) == value)
+            })
+            .map(|attribute| (element, attribute))
+    })?;
+    if intrinsic_element(file, element) {
+        return None;
+    }
+    Some((element, file.source_text(attribute.name)?))
 }
 
 /// ADR 0200: code directly in a function literal handed, as the whole
@@ -1966,6 +3014,20 @@ fn fresh_stack_callback_role(
     span: Span,
     lookup: &SemanticLookup<'_>,
 ) -> Option<ExecutionRole> {
+    fresh_stack_callback_call(file, span, lookup).map(|_| ExecutionRole::DeferredCallback)
+}
+
+/// The selected scheduler declaration enclosing a literal callback, following
+/// only audited inline callback carriers. Consumers that rely on receiver
+/// independence must additionally refuse `catch`/`finally`'s receiver `then`.
+pub(crate) fn fresh_stack_callback_call<'file, 'lookup>(
+    file: &'file solid_facts::FileFacts,
+    span: Span,
+    lookup: &'lookup SemanticLookup<'_>,
+) -> Option<(
+    &'file solid_facts::ast::CallFact,
+    &'lookup typefacts::ResolvedCall,
+)> {
     use crate::runtime_semantics::RuntimeArgumentBehavior;
     let mut span = span;
     loop {
@@ -1982,7 +3044,7 @@ fn fresh_stack_callback_role(
             .and_then(|entity| entity.callability);
         match crate::runtime_semantics::argument_behavior(resolved, callability, index)? {
             RuntimeArgumentBehavior::FreshStackCallback => {
-                return Some(ExecutionRole::DeferredCallback);
+                return Some((call, resolved));
             }
             // The call contains `span` strictly, so the walk terminates.
             RuntimeArgumentBehavior::InlineCallback => span = call.span,
@@ -2252,6 +3314,127 @@ fn callee_callback_timing_within(
             }
         }
         return true;
+    }
+}
+
+/// ADR 0323: whether an anonymous callback around `span`, which no compiler
+/// role places, reaches only consumers whose invocation question the read
+/// rules already answer with [`callee_callback_timing`]: every function
+/// layer between `span` and its component is
+///
+/// - an IIFE (the literal is the callee of a call), or
+/// - an argument (directly, or inside an array or object literal argument) of
+///   a call that a project function resolves for, or of a standard-library
+///   call the audited rows model as running that argument inline.
+///
+/// Anything else answers `false`: a component attribute, an unknown or
+/// package callee, a primitive, a standard-library call that may keep or
+/// schedule the function, and a literal that is merely stored. Those
+/// callbacks keep the silence a props or store read had before this ADR.
+///
+/// The walk mirrors [`callee_callback_timing_within`] on purpose (the same
+/// outermost-literal and innermost-call choice), so a read admitted here is
+/// the read that function then proves or withholds; it never makes a claim.
+pub(crate) fn unclassified_callback_reaches_modelled_consumer(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    use crate::runtime_semantics::RuntimeArgumentBehavior;
+    let mut span = span;
+    let mut innermost = true;
+    loop {
+        // A default-parameter initializer runs when its function is called.
+        if parameter_default_owner(file, span).is_some() {
+            return false;
+        }
+        let Some(literal) = containing_ast_function(&file.ast, span) else {
+            return true;
+        };
+        // The component the callbacks are written in. An anonymous function
+        // that is itself the innermost layer and may be a component is a
+        // renderer (`render: (row) => <tr/>`), whose parameter is not a props
+        // object: it keeps the silence it had. A layer that is only an
+        // uncertain component proves nothing about where its body runs.
+        match lookup.function_component_status(file, literal) {
+            ComponentStatus::Proven if !innermost => return true,
+            ComponentStatus::No => {}
+            ComponentStatus::Proven | ComponentStatus::Uncertain => return false,
+        }
+        innermost = false;
+        // A function bound to a name is the interprocedural summary's
+        // business, not an anonymous callback.
+        if literal.method_name.is_some() || function_binding_name(file, literal).is_some() {
+            return false;
+        }
+        let Some((call, index)) = file
+            .ast
+            .arguments_containing(literal.span)
+            .filter(|(call, index)| {
+                file.ast
+                    .functions_within(call.arguments[*index].span)
+                    .filter(|function| function.span.contains(literal.span))
+                    .max_by_key(|function| function.span.end - function.span.start)
+                    .is_some_and(|outer| outer.span == literal.span)
+            })
+            .min_by_key(|(call, _)| call.span.end - call.span.start)
+        else {
+            // An IIFE runs where it is written.
+            let Some(call) = file
+                .ast
+                .calls
+                .iter()
+                .filter(|call| file.ast.peel_ts_sugar_span(call.callee) == literal.span)
+                .min_by_key(|call| call.span.end - call.span.start)
+            else {
+                return false;
+            };
+            span = call.span;
+            continue;
+        };
+        if let Some(primitive) = lookup.primitive_at_call(file, call.span) {
+            // A callback that runs synchronously in its call's own window
+            // (`createRoot`, `runWithOwner`) is a layer like an IIFE: it runs
+            // where the call does.
+            if lookup
+                .dialect
+                .callback_inherits_calling_window(primitive, index)
+                && callback_execution_at_call(file, call, primitive, index, lookup).is_some()
+                && direct_callback_contains(file, call.arguments[index].span, span)
+            {
+                span = call.span;
+                continue;
+            }
+            return false;
+        }
+        if project_callee_at_parameter(file, call, index, lookup).is_some() {
+            span = call.span;
+            continue;
+        }
+        let argument = &call.arguments[index];
+        let Some(resolved) = lookup
+            .resolved_callee_call(file, call.callee)
+            .filter(|resolved| {
+                resolved
+                    .declaration
+                    .as_ref()
+                    .is_some_and(|declaration| declaration.standard_library)
+            })
+        else {
+            return false;
+        };
+        let callability = lookup
+            .entity_at(file.path.as_str(), argument.span)
+            .and_then(|entity| entity.callability);
+        if matches!(
+            crate::runtime_semantics::argument_behavior(resolved, callability, index),
+            Some(RuntimeArgumentBehavior::InlineCallback)
+        ) && direct_callback_contains(file, argument.span, span)
+        {
+            span = call.span;
+            continue;
+        }
+        return false;
     }
 }
 
@@ -2527,7 +3710,9 @@ fn member_runs_declared_method(
     let Some(name) = file.source_text(member.property) else {
         return false;
     };
-    if lookup.member_name_may_be_reassigned(name) {
+    // ADR 0314: a fresh object literal's chain holds only `Object.prototype`.
+    // A class instance's is checked with its class below.
+    if lookup.member_may_be_reassigned_on_builtin(name) {
         return false;
     }
     let receiver = file.ast.peel_ts_sugar_span(member.object);
@@ -2612,6 +3797,7 @@ fn member_runs_declared_method(
         && class.span.contains(method.span)
         && !class_exposed
         && lookup.class_instance_is_exact(class_file, class, name, 4)
+        && !lookup.member_may_be_reassigned_on_class(name, class_file, class)
 }
 
 /// ADR 0280: how the calls of `function`'s parameter `index` stand on
@@ -2781,15 +3967,21 @@ fn result_access_callback_contains(
         return true;
     }
     file.ast.arguments_containing(span).any(|(call, index)| {
-        lookup
-            .primitive_at_call(file, call.span)
-            .is_some_and(|primitive| {
-                lookup.dialect.callback_runs_on_result_access(
-                    primitive,
-                    index,
-                    call.arguments.len(),
-                )
-            })
+        // ADR 0323 (review round 10): the slot's *callback* runs on result
+        // access; an expression written at the slot (`omit(props, props.k)`)
+        // is evaluated by the call, where it is written.
+        file.ast
+            .functions_within(call.arguments[index].span)
+            .any(|function| function.span.contains(span))
+            && lookup
+                .primitive_at_call(file, call.span)
+                .is_some_and(|primitive| {
+                    lookup.dialect.callback_runs_on_result_access(
+                        primitive,
+                        index,
+                        call.arguments.len(),
+                    )
+                })
     })
 }
 
@@ -3477,7 +4669,11 @@ pub(super) fn named_callback_roles(
                 || dialect
                     .effect_apply_defer_options(primitive, argument_index)
                     .is_some();
-            let untracked = dialect.reports_untracked_reads_at(primitive, argument_index, count);
+            // ADR 0323: a callback that runs in its call's own window has no
+            // role of its own: it follows the call (the flow walk's `Call`).
+            let inherits = dialect.callback_inherits_calling_window(primitive, argument_index);
+            let untracked =
+                !inherits && dialect.reports_untracked_reads_at(primitive, argument_index, count);
             // The role describes the phase if invoked. ADR 0302 gates every
             // diagnostic on the separate call-site invocation premise.
             let effect_apply =
@@ -3486,8 +4682,8 @@ pub(super) fn named_callback_roles(
                 && dialect
                     .callback_semantics_at(primitive, argument_index, count)
                     .tracks_reads;
-            let deferred =
-                callback_runs_outside_tracking(dialect, primitive, argument_index, count);
+            let deferred = !inherits
+                && callback_runs_outside_tracking(dialect, primitive, argument_index, count);
             for candidate in &named {
                 let entry = roles.entry(index.functions[*candidate]);
                 entry.admitted |= proven && (untracked || effect_apply || tracked || deferred);
@@ -4258,4 +5454,1470 @@ mod tests {
             "while evaluating a condition"
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// ADR 0319: invocation flow.
+//
+// Where a function value written in the program can be invoked, followed
+// forward through the positions a closed program gives it: bindings,
+// object-literal members, spreads, returns to their call sites, arguments to
+// exact project callees, component props, and the host's own event
+// dispatch. Every invocation site found must be one proven role; anything the
+// walk does not understand answers nothing.
+// ---------------------------------------------------------------------------
+
+/// How many holder positions one query may visit before it gives up.
+const FLOW_BUDGET: usize = 800;
+
+/// What object a holder of the tracked value is, when the walk knows: the
+/// object literal it was created as, or the props a JSX element renders a
+/// component with (inside the component that element is written in, whose
+/// own props came from `parent`). It answers whether calling another member
+/// with that object as `this` can reach the tracked value.
+#[derive(Clone)]
+enum FlowOrigin<'a> {
+    Unknown,
+    Object(&'a solid_facts::FileFacts, Span),
+    Element(&'a solid_facts::FileFacts, Span, Box<FlowOrigin<'a>>),
+}
+
+/// A holder the walk followed: its path and span, the member path it held
+/// the value at, the context (calls and rendering elements) it was in, and
+/// the identity of its origin, on which receiver proofs depend.
+type FlowVisit = (
+    String,
+    Span,
+    Vec<String>,
+    Vec<(String, Span)>,
+    Vec<(String, Span)>,
+);
+
+/// A call of an exact project callee the walk entered through a parameter:
+/// the callee's path and span, and the call's file and span.
+type FlowFrame<'a> = (String, Span, &'a solid_facts::FileFacts, Span);
+
+/// A component the walk entered through its props parameter: the
+/// component's path and span, the element that rendered it, and the origin
+/// that element gives its props.
+struct PropsFrame<'a> {
+    path: String,
+    component: Span,
+    element_file: &'a solid_facts::FileFacts,
+    element: Span,
+    /// The member path of the props the walk entered with.
+    followed: Vec<String>,
+    origin: FlowOrigin<'a>,
+}
+
+/// One way the tracked value is invoked: at a call expression (with the
+/// callee activations the walk was inside when it found it), or by the host
+/// in a role (an intrinsic element's event dispatch).
+#[derive(Clone)]
+enum Invocation<'a> {
+    Call(&'a solid_facts::FileFacts, Span, Vec<FlowFrame<'a>>),
+    Role(ExecutionRole),
+}
+
+struct InvocationFlow<'a, 'l, 'c> {
+    lookup: &'l SemanticLookup<'a>,
+    classifying: &'c mut HashSet<(String, Span)>,
+    budget: usize,
+    /// Holders already followed in the current invocation census, with the
+    /// call context they were reached in.
+    seen: HashSet<FlowVisit>,
+    /// Calls of exact project callees the walk entered through a parameter:
+    /// a return from that callee goes to that call, not to every call.
+    frames: Vec<FlowFrame<'a>>,
+    /// Components the walk is inside through their props parameter, with
+    /// the element that rendered each: what `props.x` reads there.
+    props_stack: Vec<PropsFrame<'a>>,
+}
+
+/// ADR 0319: the one role every invocation of the function literal directly
+/// around `span` runs in, followed forward through the program. Reads only:
+/// write legality never asks.
+fn invocation_flow_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+    classifying: &mut HashSet<(String, Span)>,
+) -> Option<ExecutionRole> {
+    if classifying.contains(&write_classification_marker()) || !lookup.program_closed {
+        return None;
+    }
+    let file = lookup.file_by_path(file.path.as_str())?;
+    let literal = containing_ast_function(&file.ast, span)?;
+    // An async function runs in its invocation's role only up to its first
+    // await; what may follow one is a continuation no invocation places.
+    if !literal.body.contains(span)
+        || (literal.r#async && follows_await_in_async_function(file, span))
+    {
+        return None;
+    }
+    // Every answer is computed once per build, context-free, and the set of
+    // answers is what the cross-file proof digest binds: a cached fragment
+    // that consumed one is reused only while every answer is unchanged.
+    if COMPUTING_FLOW_ANSWERS.with(std::cell::Cell::get) {
+        return literal_flow_role(file, literal, lookup, classifying);
+    }
+    lookup
+        .invocation_flow_answers()
+        .get(&(file.path.to_string(), literal.span))
+        .copied()
+}
+
+thread_local! {
+    /// Set while [`invocation_flow_answers`] computes the answers: a nested
+    /// role query then computes directly instead of re-entering the memo.
+    static COMPUTING_FLOW_ANSWERS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// ADR 0319: the invocation-flow answer of every function literal of a
+/// closed program, keyed by path and literal span; only proven roles are
+/// kept. Computed once per build, each answer from an empty context.
+pub(crate) fn invocation_flow_answers(
+    lookup: &SemanticLookup<'_>,
+) -> HashMap<(String, Span), ExecutionRole> {
+    let mut answers = HashMap::new();
+    if !lookup.program_closed {
+        return answers;
+    }
+    let outer = COMPUTING_FLOW_ANSWERS.with(|computing| computing.replace(true));
+    for file in lookup.files() {
+        for literal in &file.ast.functions {
+            let mut classifying = HashSet::new();
+            if let Some(role) = literal_flow_role(file, literal, lookup, &mut classifying) {
+                answers.insert((file.path.to_string(), literal.span), role);
+            }
+        }
+    }
+    COMPUTING_FLOW_ANSWERS.with(|computing| computing.set(outer));
+    answers
+}
+
+/// The flow answer for one literal, computed in the context `classifying`.
+fn literal_flow_role(
+    file: &solid_facts::FileFacts,
+    literal: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+    classifying: &mut HashSet<(String, Span)>,
+) -> Option<ExecutionRole> {
+    let file = lookup.file_by_path(file.path.as_str())?;
+    let literal = file
+        .ast
+        .functions
+        .iter()
+        .find(|function| function.span == literal.span)?;
+    if literal.generator || lookup.function_component_status(file, literal) != ComponentStatus::No {
+        return None;
+    }
+    if lookup.files().iter().any(|file| {
+        file.ast
+            .module_hazards
+            .iter()
+            .any(|hazard| hazard.kind == solid_facts::ast::ModuleHazardKind::Eval)
+    }) {
+        return None;
+    }
+    let key = (format!("\0flow:{}", file.path.as_str()), literal.span);
+    if !classifying.insert(key.clone()) {
+        return None;
+    }
+    let mut flow = InvocationFlow {
+        lookup,
+        classifying,
+        budget: FLOW_BUDGET,
+        seen: HashSet::new(),
+        frames: Vec::new(),
+        props_stack: Vec::new(),
+    };
+    let role = flow.function_role(file, literal).flatten();
+    flow.classifying.remove(&key);
+    role
+}
+
+impl<'a> InvocationFlow<'a, '_, '_> {
+    /// The one safe role of every invocation of `function`; `Some(None)`
+    /// when the (complete) census finds no invocation at all.
+    fn function_role(
+        &mut self,
+        file: &'a solid_facts::FileFacts,
+        function: &'a solid_facts::ast::FunctionFact,
+    ) -> Option<Option<ExecutionRole>> {
+        let invocations = self.function_invocations(file, function)?;
+        let mut role = None::<ExecutionRole>;
+        for invocation in invocations {
+            let here = match invocation {
+                Invocation::Role(role) => role,
+                // A call written in a function nothing invokes never runs.
+                Invocation::Call(call_file, call, frames) => {
+                    match self.site_role(call_file, call, frames)? {
+                        Some(here) => here,
+                        None => continue,
+                    }
+                }
+            };
+            role = Some(match role {
+                None => here,
+                Some(role) if role == here => role,
+                // ADR 0323: invocations in different roles that all keep a
+                // read out of the render window (an event, a deferred
+                // callback, a tracked computation, an explicit `untrack`) say
+                // one thing for read classification: no invocation reports
+                // the read. No single role describes the mix without
+                // overclaiming for some other consumer (a tracked role claims
+                // a subscription the `untrack` run does not make), so the
+                // answer is the no-claim role, which every read rule
+                // suppresses and which a caller merging it treats as the mix
+                // it is. A reporting role among them refuses, as before.
+                Some(role) if non_reporting_mix(role) && non_reporting_mix(here) => {
+                    ExecutionRole::Unknown
+                }
+                Some(_) => return None,
+            });
+        }
+        Some(role)
+    }
+
+    /// The role of the call at `call`: a proven role at its position, or the
+    /// one role of every invocation of the plain function it is written in;
+    /// `Some(None)` when nothing invokes that function, so the call never
+    /// runs.
+    fn site_role(
+        &mut self,
+        file: &'a solid_facts::FileFacts,
+        call: Span,
+        frames: Vec<FlowFrame<'a>>,
+    ) -> Option<Option<ExecutionRole>> {
+        let callee = file.ast.call_at(call)?.callee;
+        let here = semantic_execution_role_within(
+            file,
+            callee,
+            &[],
+            self.lookup.entities(),
+            self.lookup.symbol_names(),
+            self.lookup,
+            self.classifying,
+        );
+        // ADR 0320: a role read off a named function's callback references
+        // ignores its direct calls (`press()` beside `onClick={press}`); the
+        // walk below asks for every invocation of that function instead.
+        if flow_safe_role(here)
+            && named_callbacks_within_component(file, call, self.lookup)
+                .into_iter()
+                .all(|function| named_callback_invocations_hold(file, function, self.lookup, false))
+        {
+            return Some(Some(here));
+        }
+        let owner = containing_ast_function(&file.ast, call)?;
+        if !owner.body.contains(call)
+            || (owner.r#async && follows_await_in_async_function(file, call))
+            || owner.generator
+            || self.lookup.function_component_status(file, owner) != ComponentStatus::No
+        {
+            return None;
+        }
+        let key = (format!("\0flow:{}", file.path.as_str()), owner.span);
+        if !self.classifying.insert(key.clone()) {
+            return None;
+        }
+        // The function runs in the callee activations the call was found in:
+        // a value it returns goes back to those calls.
+        let outer = std::mem::replace(&mut self.frames, frames);
+        let role = self.function_role(file, owner);
+        self.frames = outer;
+        self.classifying.remove(&key);
+        role
+    }
+
+    /// The context the walk is in, as a `seen` key component: the callee
+    /// calls it entered through a parameter and the elements whose props it
+    /// is inside. Receiver proofs depend on the elements.
+    fn context(&self) -> Vec<(String, Span)> {
+        self.frames
+            .iter()
+            .map(|(_, _, file, call)| (file.path.to_string(), *call))
+            .chain(
+                self.props_stack
+                    .iter()
+                    .map(|frame| (frame.element_file.path.to_string(), frame.element)),
+            )
+            .collect()
+    }
+
+    /// Every invocation of the function value `function` denotes.
+    fn function_invocations(
+        &mut self,
+        file: &'a solid_facts::FileFacts,
+        function: &'a solid_facts::ast::FunctionFact,
+    ) -> Option<Vec<Invocation<'a>>> {
+        // A script's top-level declarations are globals any file can reach
+        // by name; no census of this file's references is complete.
+        if !file_is_module(file) {
+            return None;
+        }
+        // Each census is complete on its own: a holder another census already
+        // followed still contributes its invocations here.
+        let outer = std::mem::take(&mut self.seen);
+        let result = self.function_invocations_inner(file, function);
+        self.seen = outer;
+        result
+    }
+
+    fn function_invocations_inner(
+        &mut self,
+        file: &'a solid_facts::FileFacts,
+        function: &'a solid_facts::ast::FunctionFact,
+    ) -> Option<Vec<Invocation<'a>>> {
+        let mut out = Vec::new();
+        if let Some(method) = crate::owners::own_method_name(file, function) {
+            // An object literal's own method: the object holds it. (A function
+            // nested in a method's body carries the method's name in the facts
+            // but is not the method.)
+            let property = file
+                .ast
+                .object_properties
+                .iter()
+                .find(|property| property.key == method.span && !property.computed)?;
+            let object = innermost_object_literal(file, property.key)?;
+            if receiver_used_within(file, object.span) {
+                return None;
+            }
+            let name = static_key_text(file.source_text(method.span)?, false)?;
+            self.uses(
+                file,
+                object.span,
+                vec![name],
+                FlowOrigin::Object(file, object.span),
+                &mut out,
+            )?;
+            return Some(out);
+        }
+        if function.kind == solid_facts::ast::FunctionKind::Declaration {
+            let name = function.name.as_ref()?;
+            if flow_binding_exported(file, name.span)
+                || crate::indexes::binding_written(file, name.span)
+            {
+                return None;
+            }
+            for (reference, _) in
+                file.ast
+                    .reference_declarations
+                    .iter()
+                    .filter(|(reference, declaration)| {
+                        *declaration == name.span && *reference != name.span
+                    })
+            {
+                self.uses(file, *reference, Vec::new(), FlowOrigin::Unknown, &mut out)?;
+            }
+            return Some(out);
+        }
+        // A named function expression can also hand itself on by its own
+        // name (`function me() { slot.fn = me; }`).
+        if let Some(name) = function.name.as_ref()
+            && file
+                .ast
+                .reference_declarations
+                .iter()
+                .any(|(reference, declaration)| {
+                    *declaration == name.span && *reference != name.span
+                })
+        {
+            return None;
+        }
+        self.uses(
+            file,
+            function.span,
+            Vec::new(),
+            FlowOrigin::Unknown,
+            &mut out,
+        )?;
+        Some(out)
+    }
+
+    /// Follow the value the expression at `expr` evaluates to, holding the
+    /// tracked function at member `path` (empty: the function itself).
+    /// `origin` is the object literal that value is, when known.
+    #[allow(clippy::too_many_lines)]
+    fn uses(
+        &mut self,
+        file: &'a solid_facts::FileFacts,
+        expr: Span,
+        path: Vec<String>,
+        origin: FlowOrigin<'a>,
+        out: &mut Vec<Invocation<'a>>,
+    ) -> Option<()> {
+        if self.budget == 0 || !file_is_module(file) {
+            return None;
+        }
+        self.budget -= 1;
+        let expr = file.ast.peel_ts_sugar_span(expr);
+        if !self.seen.insert((
+            file.path.to_string(),
+            expr,
+            path.clone(),
+            self.context(),
+            origin_identity(&origin),
+        )) {
+            return Some(());
+        }
+        let peel = |span: Span| file.ast.peel_ts_sugar_span(span);
+        // Called.
+        if let Some(call) = file.ast.calls.iter().find(|call| peel(call.callee) == expr) {
+            if call.construct || !path.is_empty() {
+                return None;
+            }
+            out.push(Invocation::Call(file, call.span, self.frames.clone()));
+            return Some(());
+        }
+        // The object of a member access.
+        if let Some(member) = file
+            .ast
+            .members
+            .iter()
+            .find(|member| peel(member.object) == expr)
+        {
+            if file
+                .ast
+                .assignments
+                .iter()
+                .any(|assignment| assignment.target.contains(member.span))
+            {
+                return None;
+            }
+            // A computed member counts only with a literal key.
+            let key = member_static_key(file, member)?;
+            let key = key.as_str();
+            let called = file
+                .ast
+                .calls
+                .iter()
+                .any(|call| peel(call.callee) == member.span)
+                || flow_tagged_or_chained(file, member.span);
+            return match path.split_first() {
+                // A property of the function itself: `length`, `name`. A
+                // call through one (`bind`, `call`) runs it.
+                None => (!called).then_some(()),
+                Some((first, rest)) if first == key => {
+                    self.uses(file, member.span, rest.to_vec(), FlowOrigin::Unknown, out)
+                }
+                // Another property: read, or called with this object as
+                // `this`, which must be a function that cannot use it.
+                Some(_) => {
+                    if called {
+                        origin_member_ignores_receiver(&origin, key, self.lookup, 6).then_some(())
+                    } else {
+                        Some(())
+                    }
+                }
+            };
+        }
+        // An argument.
+        if let Some((call, index)) = file
+            .ast
+            .arguments_containing(expr)
+            .find(|(call, index)| peel(call.arguments[*index].span) == expr)
+        {
+            if call.construct
+                || call
+                    .arguments
+                    .iter()
+                    .take(index + 1)
+                    .any(|argument| argument.spread)
+            {
+                return None;
+            }
+            // ADR 0323: the function itself handed to a primitive's callback
+            // slot runs in that slot's role, when the dialect states one that
+            // keeps a read out of the render window (`untrack(options.key)`,
+            // `createMemo(options.key)`). A container holding it, an apply
+            // slot, a slot that stores the function or runs it on result
+            // access, and every unmodelled slot refuse.
+            if let Some(primitive) = self.lookup.primitive_at_call(file, call.span) {
+                if !path.is_empty() {
+                    return None;
+                }
+                // A callback that runs synchronously in the call's own window
+                // (`createRoot`, `runWithOwner`) runs wherever the call does:
+                // its invocation is the call.
+                if self
+                    .lookup
+                    .dialect
+                    .callback_inherits_calling_window(primitive, index)
+                    && callback_execution_at_call(file, call, primitive, index, self.lookup)
+                        .is_some()
+                {
+                    out.push(Invocation::Call(file, call.span, self.frames.clone()));
+                    return Some(());
+                }
+                let role = primitive_callback_slot_role(file, call, index, self.lookup)?;
+                out.push(Invocation::Role(role));
+                return Some(());
+            }
+            let (callee_file, callee, exact) =
+                project_callee_at_parameter(file, call, index, self.lookup)?;
+            if !exact
+                || self.lookup.function_component_status(callee_file, callee) != ComponentStatus::No
+            {
+                return None;
+            }
+            let callee_file = self.lookup.file_by_path(callee_file.path.as_str())?;
+            self.frames
+                .push((callee_file.path.to_string(), callee.span, file, call.span));
+            let result = self.parameter_uses(callee_file, callee, index, path, origin, out);
+            self.frames.pop();
+            return result;
+        }
+        // A JSX attribute value or spread.
+        for element in file.ast.jsx_containing(expr) {
+            if let Some(attribute) = element.attributes.iter().find(|attribute| {
+                attribute
+                    .expression
+                    .is_some_and(|value| peel(value) == expr)
+            }) {
+                if attribute.namespace.is_some() {
+                    return None;
+                }
+                let name = file.source_text(attribute.name)?;
+                if intrinsic_element(file, element) {
+                    return (path.is_empty() && flow_event_key(name)).then(|| {
+                        out.push(Invocation::Role(ExecutionRole::EventCallback));
+                    });
+                }
+                let mut prop_path = vec![name.to_owned()];
+                prop_path.extend(path);
+                return self.component_props_uses(
+                    file,
+                    element,
+                    prop_path,
+                    self.enclosing_props(file, element.span),
+                    out,
+                );
+            }
+            if element
+                .spreads
+                .iter()
+                .any(|spread| peel(spread.argument) == expr)
+            {
+                if intrinsic_element(file, element) {
+                    return match path.as_slice() {
+                        [] => Some(()),
+                        [key] if flow_event_key(key) => {
+                            out.push(Invocation::Role(ExecutionRole::EventCallback));
+                            Some(())
+                        }
+                        _ => None,
+                    };
+                }
+                return self.component_props_uses(
+                    file,
+                    element,
+                    path,
+                    self.enclosing_props(file, element.span),
+                    out,
+                );
+            }
+        }
+        // A property value of an object literal.
+        if let Some(property) = file
+            .ast
+            .object_properties
+            .iter()
+            .find(|property| !property.computed && peel(property.value) == expr)
+        {
+            let object = innermost_object_literal(file, property.key)?;
+            let key = property_static_key(file, property)?;
+            if object
+                .properties
+                .iter()
+                .any(|candidate| candidate.key.as_str() == key && candidate.getter.is_some())
+                || receiver_used_within(file, object.span)
+            {
+                return None;
+            }
+            let mut member_path = vec![key];
+            member_path.extend(path);
+            return self.uses(
+                file,
+                object.span,
+                member_path,
+                FlowOrigin::Object(file, object.span),
+                out,
+            );
+        }
+        // Spread into an object literal.
+        if let Some(spread) = file
+            .ast
+            .spreads
+            .iter()
+            .find(|spread| peel(spread.argument) == expr)
+        {
+            let object = file
+                .ast
+                .object_get_shapes
+                .iter()
+                .filter(|shape| shape.span.contains(spread.span) && shape.span != spread.span)
+                .min_by_key(|shape| shape.span.end - shape.span.start)?;
+            if path.is_empty() {
+                return Some(());
+            }
+            // A later own property of the same key replaces it.
+            if file.ast.object_properties.iter().any(|property| {
+                object.span.contains(property.span)
+                    && property.span.start > spread.span.start
+                    && property_static_key(file, property).as_deref() == Some(path[0].as_str())
+                    && innermost_object_literal(file, property.key)
+                        .is_some_and(|inner| inner.span == object.span)
+            }) {
+                return Some(());
+            }
+            // The spread must be directly in that literal.
+            if file.ast.object_get_shapes.iter().any(|inner| {
+                inner.span != object.span
+                    && object.span.contains(inner.span)
+                    && inner.span.contains(spread.span)
+            }) {
+                return None;
+            }
+            // As for an own property: no getter of that key, and no function
+            // in the literal that may reach the copied member through `this`.
+            if object
+                .properties
+                .iter()
+                .any(|candidate| candidate.key.as_str() == path[0] && candidate.getter.is_some())
+                || receiver_used_within(file, object.span)
+            {
+                return None;
+            }
+            return self.uses(
+                file,
+                object.span,
+                path,
+                FlowOrigin::Object(file, object.span),
+                out,
+            );
+        }
+        // Returned.
+        let returned_from = file
+            .ast
+            .returns
+            .iter()
+            .find(|returned| {
+                returned
+                    .argument
+                    .is_some_and(|argument| peel(argument) == expr)
+            })
+            .and_then(|returned| containing_ast_function(&file.ast, returned.span))
+            .or_else(|| {
+                file.ast.functions.iter().find(|function| {
+                    function.kind == solid_facts::ast::FunctionKind::Arrow
+                        && peel(function.body) == expr
+                })
+            });
+        if let Some(function) = returned_from {
+            if function.r#async || function.generator {
+                return None;
+            }
+            if let Some(index) = self.frames.iter().rposition(|(path, span, _, _)| {
+                path == file.path.as_str() && *span == function.span
+            }) {
+                let (_, _, call_file, call) = self.frames[index];
+                let saved = self.frames.split_off(index);
+                let result = self.uses(call_file, call, path, origin.clone(), out);
+                self.frames.extend(saved);
+                return result;
+            }
+            for invocation in self.function_invocations(file, function)? {
+                if let Invocation::Call(call_file, call, frames) = invocation {
+                    let outer = std::mem::replace(&mut self.frames, frames);
+                    let result = self.uses(call_file, call, path.clone(), origin.clone(), out);
+                    self.frames = outer;
+                    result?;
+                }
+            }
+            return Some(());
+        }
+        // Bound to a `const`.
+        if let Some(binding) = file.ast.bindings.iter().find(|binding| {
+            binding
+                .initializer
+                .is_some_and(|initializer| peel(initializer) == expr)
+        }) {
+            let [name] = binding.names.as_slice() else {
+                return None;
+            };
+            if binding.shape != solid_facts::ast::BindingShape::Identifier
+                || !(binding.immutable || !crate::indexes::binding_written(file, name.span))
+                || flow_binding_exported(file, name.span)
+            {
+                return None;
+            }
+            for (reference, _) in
+                file.ast
+                    .reference_declarations
+                    .iter()
+                    .filter(|(reference, declaration)| {
+                        *declaration == name.span && *reference != name.span
+                    })
+            {
+                self.uses(file, *reference, path.clone(), origin.clone(), out)?;
+            }
+            return Some(());
+        }
+        // A conditional's arm, or its test.
+        if let Some(conditional) = file.ast.conditional_expressions.iter().find(|conditional| {
+            peel(conditional.consequent) == expr || peel(conditional.alternate) == expr
+        }) {
+            return self.uses(file, conditional.span, path, FlowOrigin::Unknown, out);
+        }
+        if file
+            .ast
+            .conditional_expressions
+            .iter()
+            .any(|conditional| peel(conditional.test) == expr)
+        {
+            return Some(());
+        }
+        if let Some(logical) = file
+            .ast
+            .logical_expressions
+            .iter()
+            .find(|logical| peel(logical.left) == expr || peel(logical.right) == expr)
+        {
+            if peel(logical.left) == expr
+                && logical.operator == solid_facts::ast::LogicalOperatorKind::And
+            {
+                // Its value is the left operand only when that is falsy.
+                return Some(());
+            }
+            return self.uses(file, logical.span, path, FlowOrigin::Unknown, out);
+        }
+        None
+    }
+
+    /// The uses of `function`'s parameter `index`, holding the value at
+    /// `path`.
+    fn parameter_uses(
+        &mut self,
+        file: &'a solid_facts::FileFacts,
+        function: &'a solid_facts::ast::FunctionFact,
+        index: usize,
+        path: Vec<String>,
+        origin: FlowOrigin<'a>,
+        out: &mut Vec<Invocation<'a>>,
+    ) -> Option<()> {
+        if !file_is_module(file) {
+            return None;
+        }
+        let parameter = function.parameters.get(index)?;
+        let [name] = parameter.names.as_slice() else {
+            return None;
+        };
+        if parameter.shape != solid_facts::ast::BindingShape::Identifier
+            || parameter.initializer.is_some()
+            || (function.rest_parameter && index + 1 == function.parameters.len())
+            || crate::indexes::binding_written(file, name.span)
+            || file.ast.identifiers.iter().any(|identifier| {
+                function.span.contains(identifier.span)
+                    && matches!(
+                        file.source_text(identifier.span),
+                        Some("arguments" | "eval")
+                    )
+            })
+        {
+            return None;
+        }
+        for (reference, _) in file
+            .ast
+            .reference_declarations
+            .iter()
+            .filter(|(reference, declaration)| *declaration == name.span && *reference != name.span)
+        {
+            if !function.body.contains(*reference) {
+                return None;
+            }
+            self.uses(file, *reference, path.clone(), origin.clone(), out)?;
+        }
+        Some(())
+    }
+
+    /// The uses of the props a project component element renders with,
+    /// holding the value at `path`.
+    fn component_props_uses(
+        &mut self,
+        file: &'a solid_facts::FileFacts,
+        element: &solid_facts::ast::JsxElementFact,
+        path: Vec<String>,
+        enclosing: FlowOrigin<'a>,
+        out: &mut Vec<Invocation<'a>>,
+    ) -> Option<()> {
+        let (component_file, component) = self
+            .lookup
+            .function_called_at(file.path.as_str(), element.name.span)?;
+        if component.r#async || component.generator {
+            return None;
+        }
+        // The tag must run that declaration: its binding is current, and a
+        // member tag (`Menu.Item`) reaches exactly the declared member.
+        let tag = file.ast.peel_ts_sugar_span(element.name.span);
+        let member_tag = file.ast.members.iter().any(|member| member.span == tag)
+            || file.ast.computed_members.binary_search(&tag).is_ok();
+        if !self
+            .lookup
+            .function_value_is_current(component_file, component)
+            || (member_tag
+                && !member_runs_declared_method(file, tag, component_file, component, self.lookup))
+        {
+            return None;
+        }
+        let component_file = self.lookup.file_by_path(component_file.path.as_str())?;
+        // A component rendering itself through this element again, holding
+        // the value under the same member path (a tree of branches): the
+        // recursive activation holds it at the same positions with the same
+        // call context, so its invocations are the ones this activation
+        // finds. Only its receiver proofs could differ, and they resolve
+        // through the elements of the cycle back to the ones already proven,
+        // provided every element in the cycle forwards each prop unchanged or
+        // gives it a value that ignores `this`. A cycle that moves the value
+        // to another prop (`b={props.a}`) is a different path and is followed
+        // again, until it repeats or the budget runs out.
+        if let Some(index) = self.props_stack.iter().position(|frame| {
+            frame.element_file.path == file.path
+                && frame.element == element.span
+                && frame.followed == path
+        }) {
+            return self.props_stack[index..]
+                .iter()
+                .all(|frame| self.cycle_element_forwards(frame))
+                .then_some(());
+        }
+        let origin = FlowOrigin::Element(file, element.span, Box::new(enclosing));
+        self.props_stack.push(PropsFrame {
+            path: component_file.path.to_string(),
+            component: component.span,
+            element_file: file,
+            element: element.span,
+            followed: path.clone(),
+            origin: origin.clone(),
+        });
+        let result = self.parameter_uses(component_file, component, 0, path, origin, out);
+        self.props_stack.pop();
+        result
+    }
+
+    /// For an element on a rendering cycle: it has no spread, and each
+    /// member the rendered component calls on its props is the same-named
+    /// prop of the component the element is written in, forwarded unchanged,
+    /// a value that ignores `this`, or undefined.
+    fn cycle_element_forwards(&self, frame: &PropsFrame<'a>) -> bool {
+        let file = frame.element_file;
+        let Some(element) = file
+            .ast
+            .jsx_elements
+            .iter()
+            .find(|candidate| candidate.span == frame.element)
+        else {
+            return false;
+        };
+        let children = jsx_children(file, element);
+        if !element.spreads.is_empty() || children.len() > 1 {
+            return false;
+        }
+        // The props parameter of the component the element is written in.
+        let Some(writer) = self.props_stack.iter().rev().find(|outer| {
+            outer.path == file.path.as_str() && outer.component.contains(element.span)
+        }) else {
+            return false;
+        };
+        let Some(writer) = file
+            .ast
+            .functions
+            .iter()
+            .find(|function| function.span == writer.component)
+        else {
+            return false;
+        };
+        let Some(writer_props) = props_parameter(file, writer) else {
+            return false;
+        };
+        let forwards = |value: Span, key: &str| {
+            let value = jsx_value_expression(file, value);
+            file.ast.members.iter().any(|member| {
+                member.span == value
+                    && member_static_key(file, member).as_deref() == Some(key)
+                    && file
+                        .ast
+                        .reference_declaration(file.ast.peel_ts_sugar_span(member.object))
+                        == Some(writer_props)
+            }) || value_ignores_receiver(file, value, &FlowOrigin::Unknown, self.lookup, 6)
+        };
+        // Members the rendered component calls on its props: each must be
+        // forwarded, given a value that ignores `this`, or undefined.
+        let Some((component_file, component)) = self
+            .lookup
+            .function_called_at(file.path.as_str(), element.name.span)
+        else {
+            return false;
+        };
+        let Some(component_props) = props_parameter(component_file, component) else {
+            return false;
+        };
+        component_file.ast.calls.iter().all(|call| {
+            let callee = component_file.ast.peel_ts_sugar_span(call.callee);
+            let Some(member) = component_file.ast.members.iter().find(|member| {
+                member.span == callee
+                    && component.span.contains(member.span)
+                    && component_file
+                        .ast
+                        .reference_declaration(component_file.ast.peel_ts_sugar_span(member.object))
+                        == Some(component_props)
+            }) else {
+                return true;
+            };
+            let Some(key) = member_static_key(component_file, member) else {
+                return false;
+            };
+            let key = key.as_str();
+            if key == "children" && !children.is_empty() {
+                return children
+                    .first()
+                    .is_some_and(|child| forwards(*child, "children"));
+            }
+            match element
+                .attributes
+                .iter()
+                .rev()
+                .find(|attribute| file.source_text(attribute.name) == Some(key))
+            {
+                Some(attribute) => match attribute.value_kind {
+                    solid_facts::ast::JsxAttributeValueKind::String
+                    | solid_facts::ast::JsxAttributeValueKind::Boolean => true,
+                    solid_facts::ast::JsxAttributeValueKind::Expression => {
+                        attribute.namespace.is_none()
+                            && attribute
+                                .expression
+                                .is_some_and(|value| forwards(value, key))
+                    }
+                    _ => false,
+                },
+                None => {
+                    !self.lookup.member_may_be_reassigned_on_builtin(key)
+                        && !self.lookup.member_may_be_reassigned_on_builtin("__proto__")
+                        && !self.lookup.property_may_be_defined_reflectively_as(key)
+                }
+            }
+        })
+    }
+
+    /// The props of the component activation an element at `element` is
+    /// written in, when the walk entered that component through its props.
+    fn enclosing_props(&self, file: &solid_facts::FileFacts, element: Span) -> FlowOrigin<'a> {
+        self.props_stack
+            .iter()
+            .rev()
+            .find(|frame| frame.path == file.path.as_str() && frame.component.contains(element))
+            .map_or(FlowOrigin::Unknown, |frame| frame.origin.clone())
+    }
+}
+
+/// ADR 0323: the role a function value handed to argument `index` of the
+/// primitive call `call` runs in, when it is one that keeps a read out of the
+/// render window: a tracked computation or a deferred (explicitly untracked,
+/// registered, scheduled) callback. The reporting slots (an effect's apply, a
+/// hydrate/render entry, an invalidation callback), a slot that stores the
+/// function, runs it only on result access or needs a returned invoker, and
+/// any slot the dialect does not model answer `None`.
+fn primitive_callback_slot_role(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    index: usize,
+    lookup: &SemanticLookup<'_>,
+) -> Option<ExecutionRole> {
+    let argument = &call.arguments[index];
+    if argument.spread
+        || !lookup
+            .resolved_callee_call(file, call.callee)
+            .is_some_and(|resolved| resolved.validity == typefacts::ResolvedCallValidity::Valid)
+    {
+        return None;
+    }
+    let primitive = lookup.primitive_at_call(file, call.span)?;
+    let dialect = lookup.dialect;
+    let semantics = dialect.callback_semantics_at(primitive, index, call.arguments.len());
+    let execution = semantics.execution?;
+    if semantics.requires_return_invocation
+        || semantics.stores_as_value
+        || dialect.callback_runs_on_result_access(primitive, index, call.arguments.len())
+        || dialect.reports_untracked_reads_at(primitive, index, call.arguments.len())
+        || dialect.apply_callback_argument(primitive) == Some(index)
+    {
+        return None;
+    }
+    if semantics.tracks_reads {
+        return Some(ExecutionRole::TrackedJsx);
+    }
+    (execution == Execution::Deferred || dialect.runs_callback_deferred(primitive))
+        .then_some(ExecutionRole::DeferredCallback)
+}
+
+/// Whether a role, or the mix of them [`InvocationFlow::function_role`]
+/// answers as [`ExecutionRole::Unknown`] (which only that merge produces), keeps
+/// a read out of every reporting role.
+fn non_reporting_mix(role: ExecutionRole) -> bool {
+    flow_safe_role(role) || role == ExecutionRole::Unknown
+}
+
+/// Whether a role keeps a read out of the render window and untracked
+/// reporting: an event, a deferred callback, or a tracked computation.
+fn flow_safe_role(role: ExecutionRole) -> bool {
+    matches!(
+        role,
+        ExecutionRole::EventCallback | ExecutionRole::DeferredCallback | ExecutionRole::TrackedJsx
+    )
+}
+
+/// An un-namespaced `on…` key: the runtime attaches it as an event listener.
+fn flow_event_key(key: &str) -> bool {
+    key.len() > 2 && key.starts_with("on") && !key.contains(':')
+}
+
+/// The innermost object literal whose own property key is at `key`.
+fn innermost_object_literal(
+    file: &solid_facts::FileFacts,
+    key: Span,
+) -> Option<&solid_facts::ast::ObjectGetShapeFact> {
+    file.ast
+        .object_get_shapes
+        .iter()
+        .filter(|shape| shape.span.contains(key))
+        .min_by_key(|shape| shape.span.end - shape.span.start)
+}
+
+/// Whether any non-arrow function written in `span` may use `this`: a method
+/// of an object literal there receives the object.
+fn receiver_used_within(file: &solid_facts::FileFacts, span: Span) -> bool {
+    file.ast.functions.iter().any(|function| {
+        span.contains(function.span)
+            && function.kind != solid_facts::ast::FunctionKind::Arrow
+            && function_uses_receiver(file, function)
+    })
+}
+
+/// Whether source text mentions `this` or `super` as a word.
+pub(crate) fn mentions_receiver(text: &str) -> bool {
+    mentions_this(text)
+}
+
+fn mentions_this(text: &str) -> bool {
+    ["this", "super"].iter().any(|word| {
+        text.match_indices(word).any(|(at, _)| {
+            let before = text[..at].chars().next_back();
+            let after = text[at + word.len()..].chars().next();
+            !before.is_some_and(|c| c.is_alphanumeric() || c == '_' || c == '$' || c == '.')
+                && !after.is_some_and(|c| c.is_alphanumeric() || c == '_' || c == '$')
+        })
+    })
+}
+
+/// Whether a non-arrow function may use the object it is called on: its
+/// text (parameter defaults included) mentions `this` or `super` (a method's
+/// `super.m()` runs the prototype's `m` with the same `this`).
+fn function_uses_receiver(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> bool {
+    file.source_text(function.span).is_none_or(mentions_this)
+}
+
+/// Whether a source file is an ECMAScript module: it has an import or an
+/// export. Anything else is a script, whose top-level declarations are
+/// globals shared with every other script and reachable from any module.
+pub(crate) fn file_is_module(file: &solid_facts::FileFacts) -> bool {
+    !file.ast.imports.is_empty() || file.ast.module_level_exports().next().is_some()
+}
+
+/// Whether the member at `member` is a template tag, or reached through
+/// (`p.g.call(…)`), which can hand its object over as `this`.
+fn flow_tagged_or_chained(file: &solid_facts::FileFacts, member: Span) -> bool {
+    let next = file
+        .source
+        .get(member.end as usize..)
+        .map(str::trim_start)
+        .unwrap_or_default();
+    next.starts_with(['`', '(']) || next.starts_with("?.(")
+}
+
+/// An element's children as the JSX transform keeps them: whitespace-only
+/// text that spans a line break is dropped.
+fn jsx_children(
+    file: &solid_facts::FileFacts,
+    element: &solid_facts::ast::JsxElementFact,
+) -> Vec<Span> {
+    element
+        .children
+        .iter()
+        .copied()
+        .filter(|child| {
+            !file
+                .source_text(*child)
+                .is_some_and(|text| text.trim().is_empty() && text.contains('\n'))
+        })
+        .collect()
+}
+
+/// The runtime property key a literal key token spells: an identifier name,
+/// a quoted string, a no-substitution template (computed only) or a canonical
+/// array index. Anything else, or any escape sequence, has no static name
+/// here. A non-computed numeric key is normalized as JavaScript does only for
+/// plain decimal integers; `1.0`, `0x1`, `1e3` refuse.
+fn static_key_text(text: &str, computed: bool) -> Option<String> {
+    let text = text.trim();
+    if text.contains('\\') {
+        return None;
+    }
+    let quoted = |open: char| {
+        text.strip_prefix(open)
+            .and_then(|inner| inner.strip_suffix(open))
+            .filter(|inner| !inner.contains(open))
+            .map(str::to_owned)
+    };
+    if let Some(inner) = quoted('"').or_else(|| quoted('\'')) {
+        return Some(inner);
+    }
+    if computed && let Some(inner) = quoted('`').filter(|inner| !inner.contains("${")) {
+        return Some(inner);
+    }
+    if !text.is_empty() && text.bytes().all(|byte| byte.is_ascii_digit()) {
+        let canonical = text == "0" || !text.starts_with('0');
+        return (canonical && text.parse::<i32>().is_ok()).then(|| text.to_owned());
+    }
+    let identifier = !computed
+        && text
+            .chars()
+            .next()
+            .is_some_and(|first| !first.is_ascii_digit())
+        && text
+            .chars()
+            .all(|character| character == '_' || character == '$' || character.is_alphanumeric());
+    identifier.then(|| text.to_owned())
+}
+
+/// The static key of an object-literal property, or `None`. A non-computed,
+/// non-shorthand `__proto__: v` (quoted or not) is no own property at all: it
+/// sets the literal's prototype (ECMA-262 `PropertyDefinitionEvaluation`), so
+/// it has no key here. The computed `["__proto__"]: v` and the shorthand
+/// `{ __proto__ }` do define an own property.
+pub(crate) fn property_static_key(
+    file: &solid_facts::FileFacts,
+    property: &solid_facts::ast::ObjectPropertyFact,
+) -> Option<String> {
+    let key = static_key_text(file.source_text(property.key)?, property.computed)?;
+    let shorthand = property.key == property.value;
+    (property.computed || shorthand || key != "__proto__").then_some(key)
+}
+
+/// The static key a member access reads: its identifier, or the literal key
+/// of a computed member (`o["run"]`, `o[1]`); `None` for any other computed
+/// member.
+fn member_static_key(
+    file: &solid_facts::FileFacts,
+    member: &solid_facts::ast::MemberFact,
+) -> Option<String> {
+    if file
+        .ast
+        .computed_members
+        .binary_search(&member.span)
+        .is_ok()
+    {
+        return file
+            .ast
+            .literal_computed_members
+            .binary_search_by_key(&member.span, |fact| fact.span)
+            .ok()
+            .map(|index| file.ast.literal_computed_members[index].key.to_string());
+    }
+    static_key_text(file.source_text(member.property)?, false)
+}
+
+/// The objects an origin names, innermost first: a `seen` key component, so
+/// a holder reached with a different origin is followed (and its receiver
+/// proofs run) again.
+fn origin_identity(origin: &FlowOrigin<'_>) -> Vec<(String, Span)> {
+    let mut identity = Vec::new();
+    let mut origin = origin;
+    loop {
+        match origin {
+            FlowOrigin::Unknown => return identity,
+            FlowOrigin::Object(file, span) => {
+                identity.push((file.path.to_string(), *span));
+                return identity;
+            }
+            FlowOrigin::Element(file, span, enclosing) => {
+                identity.push((file.path.to_string(), *span));
+                origin = enclosing;
+            }
+        }
+    }
+}
+
+/// The declaration span of a component's props parameter: its first
+/// parameter, a plain identifier that is never reassigned.
+fn props_parameter(
+    file: &solid_facts::FileFacts,
+    component: &solid_facts::ast::FunctionFact,
+) -> Option<Span> {
+    let parameter = component.parameters.first()?;
+    let [name] = parameter.names.as_slice() else {
+        return None;
+    };
+    (parameter.shape == solid_facts::ast::BindingShape::Identifier
+        && parameter.initializer.is_none()
+        && !crate::indexes::binding_written(file, name.span))
+    .then_some(name.span)
+}
+
+/// The expression a JSX attribute value or child at `value` holds: a
+/// container's braces peeled to the member or function that is the whole of
+/// what they enclose (anything else stays the container, which no proof
+/// recognizes).
+fn jsx_value_expression(file: &solid_facts::FileFacts, value: Span) -> Span {
+    let value = file.ast.peel_ts_sugar_span(value);
+    let Some(inner) = file
+        .source_text(value)
+        .and_then(|text| text.strip_prefix('{'))
+        .and_then(|text| text.strip_suffix('}'))
+        .map(str::trim)
+    else {
+        return value;
+    };
+    file.ast
+        .members
+        .iter()
+        .map(|member| member.span)
+        .chain(file.ast.functions.iter().map(|function| function.span))
+        .find(|candidate| value.contains(*candidate) && file.source_text(*candidate) == Some(inner))
+        .map_or(value, |candidate| file.ast.peel_ts_sugar_span(candidate))
+}
+
+/// Whether member `key` of the object `origin` describes is a value that
+/// cannot use that object as `this` when called: an arrow (or a `const`
+/// bound to one), a non-arrow function that never mentions `this`, a
+/// non-function literal, or, for a component's props, an attribute
+/// forwarding such a value from the enclosing component's props. An absent
+/// member proves nothing: `Object.prototype` may carry one.
+fn origin_member_ignores_receiver(
+    origin: &FlowOrigin<'_>,
+    key: &str,
+    lookup: &SemanticLookup<'_>,
+    depth: usize,
+) -> bool {
+    if depth == 0 {
+        return false;
+    }
+    match origin {
+        FlowOrigin::Unknown => false,
+        FlowOrigin::Object(file, object) => {
+            let Some(property) = file
+                .ast
+                .object_properties
+                .iter()
+                .filter(|property| {
+                    object.contains(property.span)
+                        && property_static_key(file, property).as_deref() == Some(key)
+                        && innermost_object_literal(file, property.key)
+                            .is_some_and(|inner| inner.span == *object)
+                })
+                .max_by_key(|property| property.span.start)
+            else {
+                return false;
+            };
+            // The property must be the member's final value: no spread and no
+            // key without a static name after it may replace it, and a getter
+            // or setter is no plain value.
+            let own = |span: Span| {
+                innermost_object_literal(file, span).is_some_and(|inner| inner.span == *object)
+            };
+            if (!property.data && !property.method)
+                || file.ast.spreads.iter().any(|spread| {
+                    object.contains(spread.span)
+                        && spread.span.start > property.span.start
+                        && file
+                            .ast
+                            .object_get_shapes
+                            .iter()
+                            .filter(|shape| {
+                                shape.span.contains(spread.span) && shape.span != spread.span
+                            })
+                            .min_by_key(|shape| shape.span.end - shape.span.start)
+                            .is_some_and(|shape| shape.span == *object)
+                })
+                || file.ast.object_properties.iter().any(|other| {
+                    object.contains(other.span)
+                        && other.span.start > property.span.start
+                        && own(other.key)
+                        && property_static_key(file, other).is_none()
+                })
+            {
+                return false;
+            }
+            if property.method {
+                return file
+                    .ast
+                    .functions
+                    .iter()
+                    .find(|function| {
+                        function
+                            .method_name
+                            .as_ref()
+                            .is_some_and(|name| name.span == property.key)
+                    })
+                    .is_some_and(|function| !function_uses_receiver(file, function));
+            }
+            value_ignores_receiver(file, property.value, &FlowOrigin::Unknown, lookup, depth)
+        }
+        FlowOrigin::Element(file, element, enclosing) => {
+            let Some(element) = file
+                .ast
+                .jsx_elements
+                .iter()
+                .find(|candidate| candidate.span == *element)
+            else {
+                return false;
+            };
+            if !element.spreads.is_empty() {
+                return false;
+            }
+            let children = jsx_children(file, element);
+            if key == "children" && !children.is_empty() {
+                let [child] = children.as_slice() else {
+                    return false;
+                };
+                return value_ignores_receiver(file, *child, enclosing, lookup, depth);
+            }
+            match element
+                .attributes
+                .iter()
+                .rev()
+                .find(|attribute| file.source_text(attribute.name) == Some(key))
+            {
+                // No attribute gives the props object that key, and no
+                // assignment or reflective definition anywhere can give it
+                // one or reach the built-in prototype it would otherwise be
+                // read from: the read is `undefined`, or an
+                // `Object.prototype` built-in that invokes nothing it holds.
+                None => {
+                    !lookup.member_may_be_reassigned_on_builtin(key)
+                        && !lookup.member_may_be_reassigned_on_builtin("__proto__")
+                        && !lookup.property_may_be_defined_reflectively_as(key)
+                }
+                Some(attribute) => match attribute.value_kind {
+                    solid_facts::ast::JsxAttributeValueKind::String
+                    | solid_facts::ast::JsxAttributeValueKind::Boolean => true,
+                    solid_facts::ast::JsxAttributeValueKind::Expression => {
+                        attribute.expression.is_some_and(|value| {
+                            value_ignores_receiver(file, value, enclosing, lookup, depth)
+                        })
+                    }
+                    _ => false,
+                },
+            }
+        }
+    }
+}
+
+/// Whether the value at `value` (in an element written in a component whose
+/// props `enclosing` describes) is one that cannot use a `this` it is called
+/// with; see [`origin_member_ignores_receiver`].
+fn value_ignores_receiver(
+    file: &solid_facts::FileFacts,
+    value: Span,
+    enclosing: &FlowOrigin<'_>,
+    lookup: &SemanticLookup<'_>,
+    depth: usize,
+) -> bool {
+    let value = jsx_value_expression(file, value);
+    if let Some(function) = file
+        .ast
+        .functions
+        .iter()
+        .find(|function| function.span == value)
+    {
+        return function.kind == solid_facts::ast::FunctionKind::Arrow
+            || !function_uses_receiver(file, function);
+    }
+    if let Some(declaration) = file.ast.reference_declaration(value) {
+        if let Some(function) = file.ast.functions.iter().find(|function| {
+            function
+                .name
+                .as_ref()
+                .is_some_and(|name| name.span == declaration)
+        }) {
+            return !function_uses_receiver(file, function);
+        }
+        if let Some(binding) = file.ast.bindings.iter().find(|binding| {
+            binding.immutable && binding.names.iter().any(|name| name.span == declaration)
+        }) {
+            return binding.initializer.is_some_and(|initializer| {
+                let initializer = file.ast.peel_ts_sugar_span(initializer);
+                file.ast.functions.iter().any(|function| {
+                    function.span == initializer
+                        && (function.kind == solid_facts::ast::FunctionKind::Arrow
+                            || !function_uses_receiver(file, function))
+                })
+            });
+        }
+        // A component's props parameter read as `props.x`: the enclosing
+        // element's attribute `x`.
+    }
+    // `props.x` of the component the enclosing element renders, read in
+    // that component: the enclosing element's member `x`.
+    if let Some(member) = file.ast.members.iter().find(|member| member.span == value)
+        && file
+            .ast
+            .computed_members
+            .binary_search(&member.span)
+            .is_err()
+        && let FlowOrigin::Element(element_file, element, _) = enclosing
+        && let Some(element) = element_file
+            .ast
+            .jsx_elements
+            .iter()
+            .find(|candidate| candidate.span == *element)
+        && let Some((component_file, component)) =
+            lookup.function_called_at(element_file.path.as_str(), element.name.span)
+        && component_file.path == file.path
+        && component.span.contains(member.span)
+        && let Some(key) = member_static_key(file, member)
+        && let key = key.as_str()
+        && let Some(parameter) = component.parameters.first()
+        && let [name] = parameter.names.as_slice()
+        && parameter.shape == solid_facts::ast::BindingShape::Identifier
+        && !crate::indexes::binding_written(file, name.span)
+        && file
+            .ast
+            .reference_declaration(file.ast.peel_ts_sugar_span(member.object))
+            == Some(name.span)
+    {
+        return origin_member_ignores_receiver(enclosing, key, lookup, depth - 1);
+    }
+    file.ast.array_literals.binary_search(&value).is_ok()
+        || file
+            .source_text(value)
+            .is_some_and(|text| text.starts_with(['"', '\'']) || text.parse::<f64>().is_ok())
+}
+
+/// Whether the binding declared at `declaration` is exported.
+pub(crate) fn flow_binding_exported(file: &solid_facts::FileFacts, declaration: Span) -> bool {
+    let module_level = containing_ast_function(&file.ast, declaration).is_none();
+    // In a script every top-level binding is global.
+    if module_level && !file_is_module(file) {
+        return true;
+    }
+    file.ast.exports.iter().any(|export| {
+        (module_level && export.span.contains(declaration))
+            || export.specifiers.iter().any(|specifier| {
+                file.ast.reference_declaration(specifier.local.span) == Some(declaration)
+            })
+    })
 }

@@ -872,6 +872,10 @@ pub struct ResolvedCall {
     pub kind: CallKind,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub declaration: Option<ResolvedDeclaration>,
+    /// A default-library declaration of this same direct global callee
+    /// binding. Independent of overload selection; not a mutation proof.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_library_binding: Option<Arc<ResolvedDeclaration>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub targets: Option<CallTargetSet>,
     #[serde(default, skip_serializing_if = "is_empty_slice")]

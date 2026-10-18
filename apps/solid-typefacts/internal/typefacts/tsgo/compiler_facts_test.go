@@ -1827,6 +1827,79 @@ export const broken = dispatch("value", "extra");
 	}
 }
 
+func TestResolvedOptionalCallPreservesSingleSignature(t *testing.T) {
+	dir := t.TempDir()
+	source := `declare const text: string | undefined;
+text?.trim();
+declare const callback: ((value: number) => string) | null | undefined;
+callback?.(1);
+interface Shape { run(value: number): string }
+declare const object: Shape | undefined;
+object?.run(1);
+declare function left(value: number): "left";
+declare function right(value: number): "right";
+declare const union: typeof left | typeof right | undefined;
+union?.(1);
+callback?.("invalid");
+callback(1);
+function generic<T extends ((value: number) => string) | undefined>(value: T) {
+  value?.(1);
+}
+`
+	path := filepath.Join(dir, "optional.ts")
+	for name, content := range map[string]string{
+		"tsconfig.json": `{"compilerOptions":{"strict":true,"module":"esnext","target":"esnext"},"include":["*.ts"]}`,
+		"optional.ts":   source,
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	calls := []string{`text?.trim()`, `callback?.(1)`, `object?.run(1)`, `union?.(1)`, `callback?.("invalid")`, `callback(1)`, `value?.(1)`}
+	demands := make([]typefacts.EntityDemand, len(calls))
+	for i, call := range calls {
+		start := strings.Index(source, call)
+		demands[i] = typefacts.EntityDemand{Location: typefacts.Location{Path: path, StartByte: start, EndByte: start + len(call)}, ResolvedCall: true}
+	}
+	entities, err := opened.(typefacts.SemanticEntityLookup).SemanticEntities(context.Background(), demands)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, name := range []string{"String.trim", "callback.call", "Shape.run"} {
+		call := entities[i].ResolvedCall
+		if call == nil || call.Validity != typefacts.ResolvedCallValid || call.Declaration == nil || call.Targets != nil {
+			t.Fatalf("%s lost its signature: %+v", calls[i], call)
+		}
+		if call.Declaration.QualifiedName != name {
+			t.Errorf("%s declaration = %q, want %q", calls[i], call.Declaration.QualifiedName, name)
+		}
+		if call.Declaration.StandardLibrary != (i == 0) {
+			t.Errorf("%s library identity = %t", calls[i], call.Declaration.StandardLibrary)
+		}
+		for _, mapping := range call.Arguments {
+			if mapping.Status != typefacts.ArgumentMappingResolved || mapping.Parameter == nil {
+				t.Errorf("%s mapping = %+v", calls[i], mapping)
+			}
+		}
+	}
+	if call := entities[3].ResolvedCall; call == nil || call.Declaration != nil || call.Targets != nil {
+		t.Errorf("%s guessed a target: %+v", calls[3], call)
+	}
+	if call := entities[6].ResolvedCall; call == nil || call.Declaration == nil || call.Declaration.Kind != "FunctionType" || call.Targets != nil {
+		t.Errorf("generic signature must stay structural: %+v", call)
+	}
+	for _, i := range []int{4, 5} {
+		if call := entities[i].ResolvedCall; call == nil || call.Validity != typefacts.ResolvedCallRecovery {
+			t.Errorf("%s validity = %+v", calls[i], call)
+		}
+	}
+}
+
 func TestResolvedUnionCallDoesNotGuessOneConstituentDeclaration(t *testing.T) {
 	dir := t.TempDir()
 	source := `interface Left {

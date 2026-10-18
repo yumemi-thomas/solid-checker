@@ -1,5 +1,1022 @@
 # Precision backlog
 
+## 2026-10-18 — Route parameters and imported constants (ADRs 0324, 0325)
+
+Against `/tmp/sweep-final17.json` (4,210 uncertifiable, 554 violations):
+
+- **ADR 0324, route parameters are URL segments in the audited router**
+  (`@solidjs/router@2.0.0-next.26`): `<Show when={params.k}>`'s callback value
+  (accessor `id()` or keyed value) and `params.k` of the direct
+  `const params = useParams()` are strings. **-110 `SC9012`** (all kui, 46
+  distinct locations in its two tsconfig projects), **+4 `SC9014`** notices
+  for unaudited router releases that reach `useParams` (beacon-web,
+  error-menu-web, solid-groove next.18; en-passant, no resolution), violations
+  unchanged: 4,210 to 4,104. Every removal depends on the premise (rule off:
+  0). Refused: unaudited releases (next.16 to next.18, 0.15.3), any program
+  mention of `paramsWrapper`/`queryWrapper`/`wrapParams`/`RouterIntegration`,
+  a wrapped, aliased, re-exported or namespace `useParams`, `let`, computed or
+  `Object.prototype` keys, keys the program writes or defines reflectively,
+  `useSearchParams`, a non-literal `keyed`, a spread on the `<Show>`. The
+  output's `premises` lists it for a project that applies it. Fixtures
+  `router-params` (+ `-replaced-wrapper`, `-replaced-integration`,
+  `-unaudited-release`); twin
+  `a_router_release_moved_between_audited_and_unaudited_is_resolved_again`
+  (retained daemon, both retention levels).
+- **ADR 0325, an imported const holds its initializer's primitive**: a named
+  import landing on the declaring module's `export const`/`export { N as X }`
+  with a proven-primitive initializer. **-3 `SC9012`** (kui 2, openbot 1), 0
+  added: 4,104 to 4,101. Much smaller than the ~20 estimated; kui's remaining
+  rows are blocked by a spread on `KsqlScreen`'s test tag, helper parameters in
+  the `BrokersScreen` tests, a forwarded prop, and the name census in the
+  second kui project. Fixture `imported-const-primitives`; twins
+  `constant_file_edits_match_cold`, `import_through_a_barrel_matches_cold`.
+
+Open: `Match`'s accessor, `useSearchParams`/`useLocation` values,
+`createMemo(() => params.k)` accessors, barrels and `export *` for constants.
+
+Round 12 (independent review) hardening, A/B against the build before it:
+**0 added, 0 removed** over the 49-project corpus.
+
+- **ADR 0324** now decides from the history each router creation actually
+  passes (absent, or a stock `browserHistory`/`hashHistory`/`memoryHistory`
+  called directly and only `get`/`set` afterwards), because
+  `createRouter({ history })` hands `history.utils` to the router and
+  `utils.paramsWrapper` replaces the params object. A computed key
+  (`["params", "Wrapper"].join("")`) and a dependency-built history bypassed the
+  spelling layer, which stays as an additional layer (now with `RouterContext`).
+  kui qualifies: its production router passes no `history`, its test harnesses
+  pass `memoryHistory(...)` directly or through a `get`/`set`-only `const`.
+  Also refused, silently: a router specifier resolved outside `node_modules` (a
+  `paths` alias to a project file), a bundler resolution that loads another
+  package (when the host asked), a pnpm `patch_hash` install, and a patch
+  record (`patchedDependencies`, yarn `patch:`, lockfiles) naming the router.
+  Two router copies at different versions: each import's own manifest decides;
+  one unaudited copy refuses the project. Fixtures `router-params-stock-history`,
+  `-history-obfuscated`, `-history-package`, `-history-escaped`,
+  `-history-reexport`, `-alias-project-file`, `-patched`, `-two-releases`; twins
+  `a_history_edited_in_another_file_moves_the_premise`,
+  `a_recorded_patch_of_the_router_moves_the_premise`. Residual: a patch recorded
+  outside the ancestor manifests and lockfiles, and a `vite.config`-only alias
+  when the host supplied no bundler resolution, are the integrity premise's.
+- **ADR 0324, round 13: the installed bytes.** The release string is kept by a
+  `patch-package` patch (no record), a fork under the same version, an npm
+  `overrides` tarball, a `link:`/workspace package. The premise now compares
+  the sha256 of the installed router (manifest fields `name`, `version`,
+  `main`, `module`, `exports`, `type` plus every file under `dist/`,
+  `scripts/router-digest.mjs`, `installed_bytes.rs`) with the digest the
+  dialect records for the audited release (`e67af539...04d6`, the same for all
+  13 corpus installs of `2.0.0-next.26`); a mismatch is `Unaudited` with the
+  notice `installed bytes differ from the audited release`. The daemon hashes
+  the resolved router roots as a cached-answer input; the byte twin fails
+  without it (mutation-checked). The record layer stays (patch lines,
+  `patches/` entries, non-registry overrides and dependencies). A/B against
+  the build before it: 0 added, 0 removed; the reviewer's repros
+  (PatchPackage, ForkSameVersion, OverrideFork, OverrideTarball, PatchDirOnly,
+  YarnPatchProtocol, ObfuscatedWrapper, PackageHistory) all keep their
+  `SC9012`; a symlinked workspace copy with changed bytes is refused and an
+  unchanged symlinked copy still settles. Fixtures `router-params-modified-bytes`,
+  `-patch-package`, `-patch-directory`, `-override-fork`, `-override-tarball`,
+  `-linked-dependency`, `-pnp`; every router fixture now carries the published
+  bytes. Residual: bundle-time patches by a plugin and a `vite.config`-only
+  alias without the host's resolution.
+- **ADR 0325**: an ES module that also names the CommonJS exports object
+  (`module`, `exports`, unbound) is not a frozen namespace: its `export const`
+  is no longer taken as primitive (`mixed.ts`, `mixed-exports.ts`). A CommonJS
+  script (`module.exports = ...`) and `export =` were already refused
+  (script, and no named export). Fixture `imported-const-commonjs`; twin step
+  added to `constant_file_edits_match_cold`.
+
+## 2026-10-18 — Host-origin premise measured and shelved (not built)
+
+Built as a prototype and measured on the 49-project corpus against
+`/tmp/sweep-final17.json` (4,210 uncertifiable, 554 violations): **29 `SC9012`
+uncertifiable removed, 0 added, 0 violations moved**; 24 are real (app-game 23,
+every-deck-of-cards 1) and 5 are en-passant artifacts (no installed
+`solid-js`). Shelved by the owner as too little for a trust premise. The
+prototype is saved in `/tmp/sc-opt/host-phase1/` (`indexes.rs`, `interproc.rs`,
+`cleanup.rs`, `lib.rs`, and its binary); the tree is the pre-prototype state.
+
+The "~80 DOM-ref receivers" estimate was wrong. The real candidates are
+`AbortSignal`-typed members (`makeEventListener(gpu.signal, …)`),
+`createSignal<HTMLDivElement>()` with `ref={setHost}` handed to an
+accessor-taking helper (`createElementSize(host)`), `canvas as unknown as
+HTMLElement` taken from three.js objects, and an intrinsic `ref` callback's
+parameter that the callee also uses in non-script-free ways (`ref.value`). The
+leaf-scope walk's `onSettled`/`createTrackedEffect` obligations (hundreds in
+app-game) are not host-origin findings: a script-free host receiver arm there
+changed nothing.
+
+What it would have been, so nobody redoes it. *Premise:* project code does not
+install its own members on host DOM objects (`window`, `document`, elements)
+through unknown-key writes or key copiers. *Census (`HostCensus`):* a member
+write by name anywhere (host prototypes included), a write through a non-DOM or
+unproven prototype, a `__proto__` write, and a literal-key
+`defineProperty`/`defineProperties`/`Object.assign`/`Reflect.set` by key name
+still veto; an unknown-key write, a copier or a definer aimed at a proven host
+object, a default-library global constructor's `.prototype` or `globalThis`
+vetoes everything; the same on an unproven target is trusted. *Origin:*
+`window`/`self`/`document` declared only in `lib.dom.d.ts`, unshadowed and never
+assigned; dashless intrinsic JSX and `createElement("<dashless literal>")` only
+while no file mentions `customElements`; `document.body/head/documentElement`;
+unwritten `const`s of those; a `let` written only by `ref={el}` or
+`el = refParameter` on an intrinsic element. *Consumers:* a call-site member
+dispatch settled by ADR 0318's script-free table, and the parameter handed as
+the receiver of its own member (`p.m.bind(p, …)`) recorded as that member's
+invocation, which cleared the 31 replacement findings of an earlier attempt.
+
+## 2026-10-18 — `children` is a tracked lazy memo; props and store reads in callbacks follow their consumer (ADR 0323)
+
+Two slices, each measured alone against `/tmp/sweep-final14.json` (4,043
+uncertifiable, 553 violations).
+
+1. **`children(fn)` row.** `children` is `createMemo(fn, { lazy: true })` in
+   every release read (`solid-js` `dist/solid.js:21-34`, rc.0, rc.6, rc.8, rc.9,
+   rc.13). The dialect had no row, so `children(() => n())` was a **proven
+   `SC1001` violation the runtime does not raise** (a baseline false positive
+   for signals; removed). Now Tracked, owner `Creates`, no timing (lazy).
+   Corpus alone: 0 removed, 0 added. Fixture `children-tracked-memo`.
+2. **Props and store reads in anonymous callbacks.** Dropped before
+   classification while the signal twin was reported. Now classified like the
+   signal twin where the callback reaches a project callee (including selected
+   package source), an inline standard-library callback or an IIFE, at every
+   layer up to a proven component. Combined corpus: **0 removed, +284
+   uncertifiable `SC1001`** (4,327; 9 are en-passant artifacts), 0 violations
+   added (553): project hooks taking accessors (kui 161, app-game 28, openbot
+   31, probus-hk 16, solid-groove 13, inferay 10, finds-team 5, others 11).
+   Fixture `callback-props-reads`; twins in `callback_props_reads_process.rs`.
+
+**Round 9 (same date).** Named helper in an admitted callback (0 corpus
+effect); `omit` views modelled like `merge` views, a view's spread never a
+violation (+1 SC2003 violation, a verified true dropped write; +2
+uncertifiable); invocations in different non-reporting roles merged into the
+no-claim role and function values handed to primitive slots followed
+(-121: 88 `SC1001`, 33 `SC9012`, none added; kui `useQuery` keys,
+`createMutation`, probus `useEta`, app-game `createEventListener`); reads
+after an unconditional await are no claim (0 corpus effect, two fixtures
+move). Against `/tmp/sweep-final15.json`: 4,327 to 4,208 uncertifiable, 553 to
+554 violations.
+
+**Round 10 (same date).** `createRoot`, `runWithOwner` and `createRevealOrder`
+callbacks inherit the strict-read window of their call (an older false
+negative for `createRoot`, a false positive for `runWithOwner` in events and
+timers; no corpus violation, +1/-1 `SC9012`); a helper kept inside an admitted
+layer is an obligation; inline views are bound views, views over stores read
+the store, a view's key argument is evaluated, and reads through TypeScript
+wrappers on a receiver are classified (`(props as P).x`, `props!.x`: an older
+recall gap; `helper-prop-read`'s `WrappedRoot` is now a violation). Against
+`/tmp/sweep-final16.json`: 4,208 to 4,210 uncertifiable (+2 inferay inline-view
+reads), 554 violations.
+
+**Remaining inconsistency (owner decision).** Props and store reads in
+callbacks on component attributes, unknown callees, schedulers
+(`setTimeout`, `then`) and stored literals stay silent, as before; the signal
+twin of each is an uncertifiable `SC1001`. Closing it measured **+811
+uncertifiable** (kui 265, openbot 161, app-game 52, derp 42; 643 of them
+"passed to a consumer not proven to invoke it") and was not shipped. A
+`useThing({ onClose })`-style options callback stays uncertifiable even for a
+callee that calls `o.onClose()` in its body: the timing proof is for a call of
+the parameter itself.
+
+## 2026-10-18 — A static namespace member binds like a named import (ADR 0322)
+
+`import * as X from "<selected source>"` whose every runtime reference is a
+static member or JSX member tag (type queries and the new erased `type_names`
+excluded) now redirects each `X.m` to the selected export `m` and drops the
+import's `NamespaceValue` obligation once every member is bound. Corpus vs
+ADR 0321's sweep: **-8 `SC9005`, +0**, 0 violations changed (4,051 to 4,043);
+all eight were `@kobalte/core/*`, and the opened Kobalte sources raised no new
+finding. Fixture `dependency-source-namespace-import`; one-shot twin
+`an_escaping_namespace_import_is_the_one_shot_answer`;
+`a_static_namespace_import_in_package_source_proves_its_call` now proves the
+in-package namespace call (verified: same violation as the named import).
+Open: a namespace used as a value, computed members, `export * as`, dynamic
+imports, `import =`; the `this` a namespace call passes is not modelled.
+
+## 2026-10-18 — An argument literal's function property is its implementation (ADR 0321)
+
+`useThing({ onClose: () => … })` now dispatches `options.onClose()` to the
+arrow: a function literal that is exactly a static-keyed property value of an
+object literal written as the argument has its own identity (file and span),
+contributes no reads at the dispatch (they stay claimed where written), and a
+literal written as the argument skips the member-name census when the callee
+only reads its members. Corpus vs `/tmp/sweep-final13.json`: **-76 / +17
+uncertifiable**, 0 violations changed (4,110 to 4,051). Fixture
+`literal-property-dispatch`; twin `literal_property_dispatch_edits_match_cold`.
+Open: literals behind conditionals or bound to names, callees that hand the
+object on, receiver-using `function` expressions.
+
+## 2026-10-18 — Package-source slices measured and parked
+
+Baseline `/tmp/sweep-final13.json`: 4,110 uncertifiable, 553 violations. Most
+of the remaining noise rests on values or callbacks that package or host code
+produces. Measured, not built:
+
+- **Host-origin proof** (DOM objects handed to Solid-package helpers such as
+  `makeEventListener(window, …)`, `createElementSize(el)`). It worked on
+  repros but settled nothing on the corpus: every candidate (~90) is in
+  app-game, where the census that keeps a host member the host's own fails.
+  The failing clauses are 1,232 unknown-key writes, 50 `Object.assign` calls
+  on unproven targets, 17 non-literal `Object.defineProperty` calls, and
+  prototype writes to `HTMLCanvasElement`/`OffscreenCanvas`. Test files also
+  patch `document` (`defineProperty(document, 'elementFromPoint')`). Under a
+  host premise it removes 34; 31 return as forwarded uses of `target` through
+  `removeEventListener.bind(target, …)`, which would also need the consumer
+  recorded. Shelved; the patch is kept outside the repository.
+- **Kobalte** (9 of 17 SC9005 and any work on Kobalte's own callbacks, ~30).
+  Subpaths are already selected under `*`; the blocker is
+  `import * as X from "@kobalte/core/…"`: a runtime namespace import of
+  selected source is not redirected. Parked; the namespace part is lifted by
+  ADR 0322 (8 `SC9005`), the event-role proof is not built.
+- **Router values** (~100 props in kui fed by
+  `<Show when={params.x}>{(id) => …}`): `useParams()` returns a Proxy
+  (`createMemoObject`) over route matches via a context-resolved route and a
+  configurable `paramsWrapper`; a source proof needs Proxy and context
+  modeling. Parked.
+- **Package callback timing**: ~81 findings inside callbacks handed to
+  packages; about 25-35 decidable (`createRAF`, `makeEventListener` handlers,
+  `useBeforeLeave`, `excalibur.on`, `sortablejs`). TanStack Query, `effect` and
+  RxJS stay undecidable (class-based schedulers, fiber runtime, synchronous
+  emission). Parked.
+
+Recommendation: measure progress as the decided share of findings in real
+application code. Each unlock needs an owner decision first: a stated host
+premise (unknown-key and copier writes do not target host DOM objects);
+namespace-import redirection for selected source; an audited, version-pinned
+router premise.
+
+## 2026-10-18 — ADR 0320 primitive-value proofs
+
+In a closed program, a forwarded parameter use or a handed-on literal member
+is discharged when its value is proven primitive (not `undefined`) from the
+producer: signal (every setter write) and bare memo accessors, effect apply
+parameters, local-helper parameters (every call), props (every tag), exact
+project functions (every return, one straight-line), same-file `const`s and
+fresh literal members. Fixture `primitive-value-proofs`; twin
+`signal_writer_edits_match_cold`; new facts field `ReturnFact::straight_line`.
+Corpus vs `/tmp/sweep-final12.json`: added **616 → 592**, 0 violations
+changed (4,110 uncertifiable). The rest is rooted in package-supplied values
+(router params through `<Show>` accessors and route components, library
+callback parameters, unaudited calls) -- a package-source or contract
+question, not one this proof can answer.
+
+## 2026-10-18 — ADR 0320 independent review round 7: skippable awaits, typed primitives, destructured locals
+
+Three unproven clean claims fixed: an await behind `??=`/`||=`/`&&=`, an
+optional chain's argument or key, a destructuring default or a labelled block
+a `break` may leave counted as unconditional (fixed in the AST fact, schema
+64, and in the Type Facts producer's `calls_after_await`, so the leaf walk,
+`reactive-read-after-await` and `missing-owner` all benefit); a declared
+primitive type settled an argument (now proven from the expression:
+`proven_primitive`, new AST table `primitive_results`); members called on
+locals destructured from a parameter raised nothing. Corpus against
+`/tmp/sweep-final12.json`: **+616 / -39 uncertifiable**, 0 violations changed
+(3,558 to 4,135). Fixtures `obligation-exclusion-boundary` (extended),
+`leaf-scope-skippable-await`; twins `await_continuation_edits_match_cold`
+(extended), `destructured_parameter_edits_match_cold`.
+
+Open: about 580 of the added rest on values only a type says are primitive --
+accessor results (`count()`), apply-callback parameters, parameter members
+typed `string` -- which ADR 0212/0213 prove built-in but not primitive (a
+built-in array may hold a project object); a primitive-only variant of those
+proofs would recover most. Destructured parameters do not resolve nested
+member paths at callers (identifier parameters only).
+
+## 2026-10-18 — ADR 0320 review round 7: where an obligation decides nothing
+
+Round 6's obligations are excluded where no rule could report the reads they
+hide: after an await the async function reaches on every path, after any
+await in a function every invocation of which is an event, deferred or
+tracked (ADR 0319, now answered for async literals before their first
+await), and at arguments the compiler types as primitive (no object, no
+`undefined`). Two older holes closed on the way: a function named at a
+callback position (`onClick={press}`) lent that role to code a direct
+`press()` in the render body also runs (in the ADR 0202 truncation and in ADR
+0319's `site_role` alike; now its flow answer or a same-module reference
+census must agree), and `undefined`, written or omitted, settled a parameter
+whose default initializer then runs (`parameter-default-unresolved`).
+Corpus against `/tmp/sweep-final11.json`: **+982 uncertifiable, -69**, 0
+violations changed: 2,645 to 3,558 (round 6 alone: 4,377). Fixture
+`obligation-exclusion-boundary`.
+
+Open, by family (sample of 50 read): about a third are render-body calls into
+project hooks that hand their argument to an unanalyzed package (decidable
+only with package source); about half are nested handlers whose invocations
+pass through a library component's props, a spread/merged props object or a
+host registration (`addEventListener(h as any)`) -- mostly events in
+practice, but no fact follows those props or registrations, so it is the
+noise family; the rest are callbacks handed to packages (`queryFn`) and
+effect-apply / directive sites, which read rules do report. Post-await reads
+are still reported as uncertifiable `SC1001` through a helper's summary at its
+call site, which rule 1 does not change.
+
+## 2026-10-18 — ADR 0320 review round 6: five more refusals
+
+Unproven clean claims found by review, all now uncertifiable: an object
+literal's method escaping to unknown code (its reads were claimed only at
+visible calls), a member call withheld by the ADR 0299 receiver census (was
+skipped as reading nothing), a non-rendering helper handing its parameter on
+through an alias, wrapper, spread, array, conditional, unknown callee,
+returned closure or `arguments`, a constructor-registered instance written
+through an unknown key, and a member extracted off a parameter and called.
+49-project corpus: **+1,752 uncertifiable** (unmodeled parameter uses 1,076,
+extracted members 443, withheld calls 133, escaping methods 18), 0 violations
+changed: 2,645 to 4,377. Fixtures `escaping-object-methods`,
+`withheld-object-member`, `parameter-use-forms`, `instance-key-writes`;
+retained twins `withheld_member_edits_match_cold`,
+`parameter_use_edits_match_cold`.
+
+Open: a parameter stored on an object or returned inside a wrapper (the
+caller or the store holds it; not followed); implicit conversions
+(`valueOf`/`toString`) remain an analysis-wide premise; arrow-valued literal
+properties have no summary symbol, so dispatches resolved to them diverge
+(most of the new member-dispatch findings); calls on ambient values are
+trusted (package-boundary premise).
+
+## 2026-10-17 — An unresolved alternative withholds the whole value (ADR 0320)
+
+A soundness repair. Member resolution merged alternatives without checking
+each resolved (`cond ? { run() {} } : opaque` resolved to the literal alone;
+so did a `const` or cast of it and `{ run() {}, ...partial }`), trusted a
+literal shared with code that may replace the member, raised no obligation
+for a dispatch forwarded through a non-rendering helper, and read the wrong
+argument after a destructured parameter. All reproduced clean in
+`/tmp/sc-final4` and `/tmp/sc-final10`; all now `SC9012` uncertifiable
+(fixtures `member-value-alternatives`, `member-value-copiers`). 49-project
+corpus: **112 uncertifiable added** (22 shared/handed-on receivers, 90
+forwarded dispatches), 8 moved to another member name at the same location,
+0 violations changed: 2,541 to 2,645.
+
+Open: a function passed as a value to a standard-library call
+(`[opaque].forEach(helper)`) still raises no dispatch obligation (needs the
+escaped function's invocation role; a blunt version added 77 findings, mostly
+event-time registrations); exported `const` objects are no longer resolved
+through their initializer (needs a cross-file cache dependency); arrow-valued
+literal properties have no summary symbol.
+
+## 2026-10-17 — A callback takes the role of every invocation it reaches (ADR 0319)
+
+In a closed program, a synchronous non-component literal takes the one role
+every invocation of it runs in, found by following it forward through `const`
+bindings, object members and spreads, returns (to the exact call a callee was
+entered through), exact project callee parameters, component props
+(context-sensitive, recursion accepted only through forwarding cycles) and
+intrinsic `on…` spreads/attributes. Calls of other holder members need a value
+that ignores `this`; an absent JSX prop counts as `undefined` only under the
+ADR 0314 write census. Supersedes ADR 0309's forward-flow hold for this
+question. 49-project corpus: **93 uncertifiable removed** (51 SC1001, 42
+SC9012), **0 added**, 553 violations unchanged. Coverage: new
+`invocation-flow` snapshot; `accessor-provenance`'s `RetainedOptionCallback`
+moves to clean (its pinned hold is superseded).
+
+Not claimed: containers (arrays, `push`, `Map`, `For each`), JSX-child
+callbacks, exported factories not entered through a call, class-instance
+holders; an absent object-literal sibling still refuses. The cross-file digest
+now binds every file's bytes in closed programs (coarse cache invalidation).
+
+Review round 1 fixed four unsound clean claims (path-blind recursion cut,
+functions nested in a method followed as the method, origin-blind visited
+set, spread without getter/`this` checks), pinned in
+`invocation-flow/counterexamples.tsx`; all 93 removals survive. The same
+nested-method confusion was fixed in `function_binding_name`, interproc
+summary symbols, `functions_by_symbol` and ADR 0315's key lookup
+(`own_method_name`).
+
+Review round 2 fixed a quoted-key mismatch (`{ "run": cb }` read as `o.run`
+was taken for another property): all key comparisons now use one static-key
+helper, literal computed members count through their key fact, receiver
+proofs require that no spread or non-static key follows the property, and a
+function with no invocation contributes no role (so a later quoted key that
+replaces a spread member is a proof). Corpus unchanged: 93 removed, 0 added.
+The engine inherits the dialect's `DeferredCallback` for `untrack`,
+`createRoot` and `runWithOwner` callbacks, which run synchronously; that
+matches how the inline form is already classified.
+
+Review round 3 fixed three more: a non-computed `__proto__:` key was taken
+for an own property, `super` in a method escaped the receiver test, and a
+script file's census (no `import`/`export`, so top-level declarations are
+globals) was taken as complete, which round 2's empty-census rule turned into
+a clean claim. The walk now refuses scripts entirely. Fixtures:
+`invocation-flow/counterexamples.tsx`, `invocation-flow-scripts`. Corpus
+unchanged (93 removed at 78 locations, 0 added).
+
+Retained sessions: twins in `solid-facts-backend/tests/invocation_flow_process.rs`
+check retained == cold after edits to callees, consumers, forwarded props,
+module/script status, `globalThis` attachments and key quoting, under both
+boundaries and alternating runtime environments. They found one stale answer:
+the daemon's cached snapshot did not bind the program-boundary `package.json`
+(with a declared host), so flipping it kept the flow on; every manifest on the
+walk up from the project is now a snapshot input. The cross-file digest now
+binds the per-build table of flow answers instead of every file's bytes.
+
+Review round 5: the retained daemon did not notice module resolution
+changes (a relinked workspace package, a `package.json` `types` redirect
+re-analyzed on the old Type Facts session); with the flow on it served no
+finding where a cold run reports violations. The daemon now keeps a
+resolution witness (module files, `node_modules` candidates with links and
+realpaths, their manifests) and rebuilds the program on any difference.
+Twins: symlink relink, `types`/`exports`/`main` redirects, reinstall at
+another version, pnpm store relink, under `performance` and `compact`
+retention. Not observed: an `extends`ed tsconfig.
+
+ESLint adapter (confirmed, not fixed): `packages/cli/eslint.cjs` keeps one
+in-process `snapshotCache` keyed on settings alone (command, args, project,
+dialect, presets, rules, runtime, and the inferred-host fingerprint when a
+host is inferred) and never clears it. When no host is inferred and the run
+reads no package source (`passOnly` false), a long-running ESLint process
+(editor server, `eslint --cache` daemon) reuses the first snapshot through
+every later source, manifest or install edit. The adapter's own test pins it:
+`a run with --no-package-contracts is reused within one pass only`, control
+half ("a value is not the flag: the cross-pass cache stands", an input edit
+not seen), run and passing. The fix is not small: the adapter does not know
+the analyzed file set; it needs native to report its input fingerprint in the
+snapshot (or to answer through the native daemon on every pass, which carries
+the freshness machinery above), and per-pass re-analysis would cost a full
+analysis per linted file in a one-shot `eslint` run.
+
+Open (outside ADR 0319): `module_level_exports`/`source_function_exported`
+and the per-file `binding_written` census used by other arms (exact callee
+currency, closed-world callers) do not model script globals: a script's
+top-level function can be called or reassigned from another file. Not
+measured; a script reaching those arms needs its own review.
+
+Known gaps, present before ADR 0319 and unchanged by it: a function created
+inside an event handler or a JSX-called method and kept for a later
+component-body call keeps the handler's or method's lexical role, so a read
+in it is not reported (review cases c2, c2c, c2d: stored into a module
+variable or a registry array; c3d: a named function expression storing
+itself by its own name). The lexical role reaches stored closures for every
+role except tracked JSX (`enclosed_by_stored_function` applies only there);
+extending it is a shared change to role classification and was not made
+here. Also: `onCleanup`/owner creation in a flowed handler is silent where the
+inline twin is an SC4001 violation (owner rules do not consume the role).
+
+## 2026-10-17 — Script-free DOM members are trusted in the optional form (ADR 0318)
+
+An optional DOM call (`el?.querySelector(…)`) whose exact `lib.dom`
+declaration is in an audited script-free table (event registration,
+selector/tree queries, layout and attribute reads, `contains`, `toDataURL`) is
+read like its non-optional form. Every other optional DOM member stays open.
+49-project corpus: **24 SC9012 uncertifiable removed**, **0 added**, violations
+unchanged. Coverage: only the new `leaf-scope-optional-dom` snapshot.
+
+Not claimed: dispatch, custom-element reactions, getters/`toString`/Proxy on
+handed objects and thenables stay unmodeled, as for the whole standard-library
+trust. The non-optional form of re-entrant members (`el.focus()`) is still
+certified; refusing it would add 44 uncertifiable findings (measured).
+
+## 2026-10-17 — An imported base class is resolved (ADR 0317)
+
+The demand plan now requests the compiler symbol at every `extends`
+expression, so an exact instance's chain resolves through a base class
+imported from another module. 49-project corpus: **5 SC9012 uncertifiable
+removed** (app-game `ogl`/paint meshes), **0 added**, violations unchanged.
+Coverage: only the new `leaf-scope-imported-base` snapshot.
+
+Not claimed: inherited methods, own-field receivers and `Array`-extending
+classes stay refused.
+
+## 2026-10-17 — A callback literal takes the one role its callee runs it in (ADR 0315)
+
+A literal handed to an exact project callee (as the argument, a closed
+options-literal field, or a component prop) takes the role every call of it
+runs in inside the callee (event, deferred or tracked; one role for all),
+classified in the callee's file. The callee may read and test other
+properties and forward the prop to a component this proof places; calling
+another property hands the object over as `this`, so the caller's value for it
+must be an arrow or a non-function literal. Write legality never consults it.
+
+49-project corpus (en-passant excluded): **4 uncertifiable removed** (3 SC9012,
+1 SC1001), **0 added**, 553 violations unchanged. Coverage: only the new
+`use-site-role` snapshot.
+
+Not claimed: an absent sibling the callee calls (`options.ignore?.(e)`) keeps
+the case open, since an inherited `Object.prototype` member could run any
+property; returned/stored/helper closures, effect apply, mixed roles, spreads,
+getters and methods in the literal refuse. A first, looser version would have
+removed 20 corpus findings and cleared five pinned fixture cases; it is not
+what landed.
+
+## 2026-10-17 — A prototype write vetoes only its chain; factory results resolve members (ADR 0314)
+
+A write through a prototype under a key no proof names used to veto every
+exact-class and built-in-value member proof in the program. The census now
+records whose prototype it reaches: a constructor declared in the writing file
+and never rebound, or the host constructors a closed static helper is handed
+(spector's `storePrototypeOriginFunction(HTMLCanvasElement | OffscreenCanvas)`).
+A DOM host reaches no ECMAScript value and no project class; a constructor
+reaches its chain. Member resolution through literals became exact (own
+properties of an exact literal, `const` whole-initializer bindings only, no
+getter or computed key), and the per-call-site parameter member resolution
+follows a project factory whose every return is an object literal.
+
+49-project corpus (en-passant excluded): **2,655 → 2,609 uncertifiable**
+(46 SC9012: app-game 39, derp-media-server 5, kui 2), **553 violations
+unchanged, 0 findings added**. Coverage: only the four new snapshots
+(`prototype-write-narrowed`, `prototype-write-object-host`,
+`prototype-write-escaped-helper`, `factory-member-dispatch`).
+
+Not claimed: a non-DOM host write (`Object`), an aliased or `this`-called
+helper, an unresolved `extends`, and any other prototype write keep the
+project-wide veto; `Object.setPrototypeOf`/`Object.assign` remain outside the
+census. Factory results are not followed for direct `x.method()` callees. The
+app-game leaf-scope `member` roots (`renderer.setSize`, `camera.perspective`)
+did not move: they fail other exactness conditions. Not built: the DOM-ref
+host-method rule (needs an audited table of non-reentrant DOM members; about
+10 sites) and name-veto narrowing for fresh built-ins (about 5 sites; the
+value is passed into a helper by construction, so no non-escape census holds).
+
+## 2026-10-17 — A string `Dynamic` tag keeps a callback prop event-only (ADR 0313)
+
+`Polymorphic`-style wrappers (`<Dynamic {...others} component={props.as}/>`)
+broke the ADR 0218 event-only proof at one hop. The proof now follows a props
+object's keys through `omit`, `merge`, const aliases and project elements, and
+treats `Dynamic` as an intrinsic element when its `component` is proven a
+string literal for the chain. A runtime namespace import no longer takes its
+package off source (contracts are gone; the import keeps its own obligation).
+
+49-project corpus: **2,763 → 2,713 uncertifiable** (SC1001 42, SC9005 5, SC9012
+3; openbot 48, jibe-run 2), **553 violations unchanged, 0 findings added**.
+Coverage 298 projects (only the new `dynamic-string-tag-events` snapshot),
+`solid-reactive-ir`/`solid-dialect`/`solid-facts-backend` tests, diagnostics
+process tests and workspace clippy pass.
+
+Not claimed: Kobalte's own callbacks (`onSelect`, `onChange`), namespace-
+imported components, destructuring `...others`, aliased roots, non-literal
+`as`. A namespace import inside selected package source still produces no
+finding at a project call that reaches it (unchanged).
+
+## 2026-10-17 — Workspace code and Vite configs raise no package requirement
+
+Two imports raised the contract-era requirement marker (SC9005, "not analyzed
+from source here") although no package behaviour is in question:
+
+- A bare specifier that a workspace link resolves, by realpath, to a file
+  outside every `node_modules` directory **that the program holds facts for**
+  is project code. The dependency selection already read such a root as "project
+  code, not a dependency"; the boundary now agrees. A target the program does
+  not hold (declaration-only, unselected) and an installed copy keep the marker.
+- The imports of a file Vite itself resolves as its configuration
+  (`vite.config.*`, `vitest.config.*`) raise nothing when no file in the
+  program imports it. It runs in Node at build time and is no part of the
+  program the browser executes; an importer would make its exports part of that
+  program and keeps the marker.
+
+Measured on the 49-project RC.13 corpus (browser, development, csr): **2,954 →
+2,763 uncertifiable**, all 191 of them SC9005 (openbot 132, app-game 23, kui 9,
+one per Vite config elsewhere); 22 SC9005 remain (Kobalte namespace/`Root`
+imports, `@solidjs/start`, solidbase, solid-relay, typed-routes, solid-markdown).
+**553 violations unchanged, 0 findings added**, and every other finding is
+byte-identical by location. Coverage over 297 fixture projects is unchanged;
+`diagnostics_process` and the package-requirements unit tests pass.
+
+Not claimed: no analysis of a workspace file changes, and a project-reference
+sibling whose files the program does not hold stays a package boundary.
+
+## 2026-10-17 — Unwritten local runtime lets retain nested receiver identity
+
+Nested literal-path resolution now admits a runtime lexical let as well as
+a const when the existing exact binder census proves no writes, one use in
+its own function frame and initialization before that use. The producer's
+runtime-let fact excludes ambient declarations and namespace lowering.
+The project eval veto, escape/capture checks and complete literal-path proof
+are unchanged; a mutable type is not itself evidence of a runtime mutation.
+
+This closes the existing `NestedMutable` SC9012 case. The new
+`NestedReassignedLet` control remains uncertifiable. Only that fixture's
+snapshot changes. Verification is scoped to the armed regression, IR tests,
+targeted Clippy, published RC.13 strict/loose typing checks, formatting,
+whitespace and fixture coverage; no application reduction is claimed and no
+broad/corpus/ownership/WASM/performance run is performed, conserving usage.
+
+## 2026-10-17 — Supplied fresh objects bypass nested-helper defaults
+
+An exact identifier parameter's default no longer blocks nested-member
+resolution when the existing complete-path proof establishes that the caller
+supplied a fresh object, possibly through closed immutable aliases. Such an
+argument cannot be undefined, so the default cannot replace its identity.
+No default initializer is interpreted, and omitted, explicit undefined,
+unknown and spread arguments receive no new proof.
+
+This closes the existing `NestedDefault` SC9012 obligation. New explicit
+undefined and unknown controls remain uncertifiable; all prior stability,
+receiver, escape, eval and depth gates remain in force. Only the nested-member
+fixture's snapshot changes. Focused process regression, IR library tests,
+targeted Clippy, strict/loose published RC.13 typing checks, formatting,
+whitespace and fixture coverage are the verification scope. No application
+closure count is claimed; broad verification and corpus sweeps are deferred
+to conserve the user's remaining usage.
+
+## 2026-10-17 — Package object provenance survives plain destructuring
+
+An immutable single-slot object binding, including a renamed slot, can now
+carry an exact selected package's stable data-member object to a later Get.
+The receiver must itself come from selected dependency source and the
+descriptor must pass the existing mutation/integrity proof. Getters are not
+treated as data members; project receiver closure is not waived. Defaults,
+computed/rest/multi-binding patterns remain outside this exact proof.
+
+This preserves reactive-read diagnostics, rather than blessing destructuring:
+two added cases report SC1001 violations at `location.search` after extracting
+the stable location object, one mutable binding stays SC9012 uncertifiable,
+and a tracked read stays clean. The existing direct getter-destructuring
+violation remains unchanged. These three added findings were previously
+absent; no application-corpus reduction is claimed.
+
+The expanded armed process regression, 279 IR tests, strict/loose published
+RC.13 type checks, targeted IR Clippy, formatting, whitespace and 297-project
+fixture coverage pass. Only the getter fixture's snapshot changes. Broad
+verification, ownership, WASM, performance and application sweeps are deferred
+under the user's continuing request to conserve usage.
+
+## 2026-10-17 — Conditional alternatives preserve package getter provenance
+
+The exact package-getter object walk now joins both conditional alternatives;
+either missing proof withholds certification. The separate may-provenance
+walk keeps every known alternative, so an unknown or inert sibling cannot
+hide a possible reactive getter. Existing dependency integrity, member
+stability, closed-receiver/provider checks and depth limits still apply.
+
+The focused `dependency-source-integrity-getter/Conditional.tsx` regression
+proves one untracked getter read, keeps two mixed alternatives explicitly
+uncertifiable and leaves the tracked read clean. These three findings were
+previously absent: this fixes a provenance gap, not a measured reduction in
+existing application findings. Only this fixture's snapshot changes.
+
+The armed focused process regression, strict/loose published RC.13 type
+checks, targeted IR Clippy and 297-project fixture coverage pass. To honor
+the requested quick verification and remaining usage budget, no application
+corpus sweep, ownership gate, full verification, WASM or performance run was
+performed for this slice. Broader getter/context transport remains open.
+
+## 2026-10-17 — Bounded nested parameter-member dispatch through closed literals
+
+Nested parameter-member obligations can now resolve the complete path through
+fresh closed data literals, rather than looking up the final member on the
+outer receiver or refusing every multi-segment path. The receiving project
+callee and positional parameter mapping must be exact. Its parameter may only
+appear in zero-argument calls of that same full static path. Getters, computed
+segments, spreads, defaults, forwarding, escapes and replacement withhold this
+proof. The selected source function must be current, receiver-inert and have
+an available read summary. No structural type supplies runtime identity.
+
+Single-use immutable local aliases are followed only after initialization in
+their own function frame. Every held intermediate faces the same census;
+module-owned objects, captured aliases, classes, conditional values and
+factory-produced objects/callables remain open. The walk is bounded to eight
+path segments and sixteen value-resolution steps. Any project eval vetoes
+it. The result cache now tracks the helper's source even when the proof
+refuses, and adding/removing an eval veto invalidates unchanged callers in
+both directions. An armed retained-session regression requires cold/retained
+IR equality for helper escape/restoration and cross-file eval/restoration.
+
+`Nested.tsx` and `nested-source.ts` in `literal-argument-member-dispatch`
+cover clean literals, aliases, methods, namespace calls, retained reactive
+reads, wrong-level names and the refused shapes above. The computed-prefix
+control ensures the existing longest-static-prefix lookup cannot stand for
+the complete call. The method-argument control keeps callback instantiation
+open. Selecting an exact method does not upgrade the existing uncertain
+execution proof of its reactive reads. Exported helpers retain independent
+unknown-caller obligations. Strict and loose checks against published Solid
+2.0.0-rc.13 typings pass without the fixture declaration stub.
+
+On identical final fixture bytes, the old checker reports 21 SC9012 rows in
+`Nested.tsx`; the new checker reports 14. Two discharged dispatch obligations
+are replaced by SC1001 uncertifiable read obligations, while five cases become
+clean: a net reduction of five uncertifiable findings in the focused file.
+Its two independent unknown-prop SC1001 rows are unchanged.
+
+A fresh paired 49-project default-mode sweep found no application-corpus
+movement: 2,954 uncertifiable findings and 553 violations on each side, no
+added/removed finding rows and zero project errors. The 113 nested-path rows
+span 15 configured projects and remain open; the earlier 25–60 closure
+estimate was not achieved by this bounded proof. Both sweeps use manifest
+`9e0185fd2eaf887ed6c5f95c529bf7a58e74d1c6ed4c17e02ef86ddaafd7c2d3`,
+the same producer and browser/development/CSR configuration, with daemon mode
+disabled. This is fixture-proven additional precision, not evidence that the
+whole nested-dispatch family is closed.
+After the final computed-prefix guard, the checked binary was separately
+rerun over all 15 candidate projects: all 113 nested-path obligations remain,
+with no added/removed finding rows or project errors.
+
+Validation passes: 279 IR library tests, all 51 backend process tests, all
+69 diagnostics process tests (daemon tests require unsandboxed sockets),
+coverage comparison across all 297 fixture projects, workspace/all-targets
+Clippy, formatting, diff whitespace, schema JSON and dialect manifests.
+
+Only this fixture's findings snapshot is updated. The ownership gate cannot
+run because its audited `rust/target/tsc-oracle/v2` installation and integrity
+lock are absent; no package installation or substitution was used to bypass
+that gate. Full `make verify`, WASM parity and performance certification are
+deferred for this focused IR change.
+
+## 2026-10-17 — Exact callable targets supply argument proofs to leaf scopes
+
+Argument-sensitive leaf walks now reuse an exact target already established
+for the same call site. Immediate function literals prove their own target;
+stable source-call transport proves its selected function target. In either
+case the argument witness is positional, receiver-free, non-construction and
+contains no spread. Existing parameter mutation checks, default replacement
+rules, syntax-only value evidence and `tests_its_parameters` gating still
+apply. Ordinary project callees keep their existing exact-resolution path.
+
+`KnownArgument` now stays clean when an immediately invoked literal receives
+`false`; `KnownTrueArgument` proves the cleanup violation for `true`. A stable
+factory-returned function has the same false/true outcomes. Immediate and
+transported spread controls remain uncertifiable, as do an unknown argument,
+conditional callee selection and conditional suspension. The leaf-scope
+snapshot changes only for this fixture. The source passes strict
+`tsc --noEmit` against the installed published Solid 2.0.0-rc.13 packages,
+without loading its fixture declaration stub.
+
+This is argument mapping for selected function bodies, not new dispatch
+inference. Member receivers, `.call`/`.apply`, constructors, ambiguous targets,
+and unstable or unavailable transported callables receive no new proof.
+
+A paired default-mode sweep of the same 49-project application corpus found no
+aggregate movement for this slice: the isolated baseline and current checker
+both report 553 violations and 2,954 uncertifiable findings (3,507 total),
+with zero project errors and no added or removed findings. The paired run used
+manifest SHA-256 `9e0185fd2eaf887ed6c5f95c529bf7a58e74d1c6ed4c17e02ef86ddaafd7c2d3`,
+Type Facts producer SHA-256
+`1efee3abac3ac80213e3b5ec991ef57371ea7f29155027f779ad7814f6bf1073`, and
+browser/development/CSR with daemon mode disabled. The before checker
+(`90810057a69a4bf9e8cb688ed824a9ad7f04aa453981e435904ddb82e1b8e48d`) was
+built from an isolated copy of the same dirty source snapshot with only this
+argument-mapping slice excluded; the after checker was
+`2f450082c26814331014cd25833a329445504c5a607bfbdbfa64e1d78fb05b84`. Thus
+the fixture-level precision improvement is real, but this paired corpus does
+not show a reduction on application projects. Focused validation passed: 278
+IR library tests and coverage comparison across 297 fixture projects; the
+only expected findings movement is in `leaf-scope-helper-completion`.
+
+## 2026-10-17 — Exact global schedulers detach eager callback reads
+
+The producer now records `defaultLibraryBinding` for unwritten direct globals
+even when their selected signature is already in the default library. Native
+signature identity alone is insufficient: `declare const schedule: typeof
+queueMicrotask` can select the native signature while naming unknown code.
+That lookalike receives no global-binding fact. The selected signature and
+argument mapping remain unchanged; no protocol or wire-shape change is needed.
+
+Eager read summaries reuse the runtime's audited fresh-stack callback walk,
+but require the independent direct-global binding proof. The scheduling call
+must be inside the enclosing summary owner's body, preserving a callback's
+own implementation summary for other invocations. The walk crosses audited
+inline carriers only. Unknown consumers, listeners, synchronous thenables,
+aliases, global members, constructors and Promise receiver dispatch acquire
+no new exclusion. Existing reflective/dynamic global mutation premises are
+unchanged; visible named writes withhold the binding fact.
+
+The optimized default-mode corpus removes three SC1001 uncertifiable rows:
+3,353 → 3,350 across 49 projects. Every one of the 538 violation rows is
+identical, with no added findings or project errors. The removed sites are
+browser-atlas App.tsx:1119, openbot ServerGeneralSection.tsx:319 and
+queue-management-ui routes/index.tsx:15.
+
+Producer controls cover standard-selected direct/wrapped globals, declared
+lookalikes and cross-file replacement/restoration. The retained IR test also
+replaces/restores queueMicrotask through its direct binding and globalThis;
+the unchanged caller's obligation returns and disappears, and warm/cold
+programs remain equal. `RuntimeStack.tsx` protects unknown timing and ordinary
+caller-stack cases alongside the native scheduling controls.
+
+Verification: the producer binding tests, all 278 IR library tests, the armed
+diagnostic and retained-session regressions, and strict/loose published-type
+checks pass. Full `make verify` passes (205.48s), including Go race tests,
+all 297 fixture projects, the 42-case ownership gate, WASM parity, performance
+certification, CLI tests and the TypeScript oracle. Only the expanded
+accessor-provenance snapshot changes in this slice. The ignored producer is
+rebuilt; no protocol, dependency pin, contract, manifest or checked-in binary
+changes accompany this proof.
+
+## 2026-10-17 — Eager read summaries respect dialect callback boundaries
+
+Ordinary helper edges, returned-getter invocations and transported callable
+edges now use the same `read_escapes_synchronous_extent` proof as direct
+reactive-source references. A memo/effect compute's reads belong to that
+computation's listener; a queued callback reads later. Neither is an eager
+read of the factory that builds it. Previously those indirect paths could
+propagate SC1001 obligations into the factory's callers despite the proven
+boundary. Callback behavior and parameter invocation metadata are still
+recorded; only the eager read propagation is excluded.
+
+The existing dialect proof preserves render-effect apply callbacks that
+inherit the first run. Unknown consumer timing, shadowed primitive names,
+captured-parameter dispatch and unresolved source identities retain their
+existing obligations. No function-universe expansion or new runtime premise
+is used; the anonymous-summary counterexamples remain protected.
+
+The optimized default-mode corpus removes 19 uncertifiable SC1001 findings:
+3,372 → 3,353 across 49 projects, with all 538 violations identical, no added
+findings and no project errors. `Scope.tsx` covers the accessor, closure,
+helper, returned-getter, array and namespace paths, plus eager/unknown/shadow
+and inherited-first-run controls. These are not claims that all callbacks
+or runtime dispatches are now certified.
+
+Verification: all 278 IR library tests, the armed focused process regression,
+and strict/loose checks against published RC.13 typings pass. Full
+`make verify` passes (164.73s), including all 297 fixture projects, the
+42-case ownership gate, WASM parity, performance certification, CLI tests
+and the TypeScript oracle. Only the expanded accessor-provenance snapshot
+changes in this slice; no contract, manifest, protocol, producer or checked-in
+binary changes. Standard-library scheduling keeps its existing separate
+runtime timing model; this slice reuses the dialect proof only.
+
+## 2026-10-17 — Anonymous summary expansion remains open
+
+Rejected an expansion of the function universe to anonymous expression-bodied
+arrows. Giving an arrow its own summary owner detached captured parameter
+member calls from the enclosing function's parameter behavior. The control
+`execute(input) { return invoke(() => input.callback()); }` must retain
+SC9012 at an opaque caller; the broad experiment silently removed it.
+
+A syntax-only capture veto was insufficient. An anonymous function passed to
+an unknown consumer can execute synchronously. Separating its summary from
+its enclosing factory removed that factory's possible-read obligation even
+though the consumer's timing remained unknown. `Anonymous.tsx` now pins both
+failures, plus the clean retained-closure and proven inline/returned-invocation
+controls. The optimization was reverted; no apparent corpus reduction from
+it is retained. The verified corpus remains 3,372 uncertifiable / 538 violations.
+
+Private callable contexts were also investigated, then reverted. A callable's
+body identity is immutable, but anonymous provider lambdas can capture
+component props whose reads are not carried through these summaries. In
+particular Relay's `() => props.environment` needs instance/capture evidence,
+not merely a private context's provider census. The 28 Relay environment
+dispatch obligations remain open. Progress here requires composing captured
+parameter behavior and unknown callback timing with separate source summaries.
+
+The new regression source passes strict and loose TypeScript checks against
+published Solid 2.0.0-rc.13 typings. Full `make verify` passes (231.71s),
+including the armed process regression, all 297 fixture projects, the
+ownership gate, WASM parity, performance certification and TypeScript oracle.
+Only the expanded accessor-provenance snapshot changes in this follow-up;
+analyzer source, package contracts, manifests and checked-in binaries do not.
+
+## 2026-10-17 — Merged native fetch bindings close leaf obligations
+
+The leaf walk now consumes the existing independent default-library binding
+for `fetch`, as it does for reviewed global schedulers. The producer still
+requires exact direct-global symbol identity and withholds that fact for
+source implementations and visible binding or named property replacements.
+No producer, protocol or runtime-source-selection change is needed. The
+selected overload retains its parameter mappings; no fetch callback timing
+row is invented. Existing standard-library implicit-conversion premises are
+unchanged, and literal getter options remain uncertifiable.
+
+The 49-project default-mode release corpus removes five SC9012 obligations:
+3,377 → 3,372 uncertifiable, all 538 violations byte-for-byte unchanged, no
+added findings and zero project errors. The sites are the two async loader
+calls in each of app-game's spector and webgl-state-diagram examples, and
+jandibat-web's App.tsx:153. Other unresolved operations in those projects
+remain open; this does not certify every fetch-based helper.
+
+Focused controls cover native and wrapped fetch, an async helper's synchronous
+prefix, an opaque declaration, a source-visible shadow and getter-bearing
+options. Only the expanded leaf-scope-host-callbacks snapshot changes.
+Aliases, structural members, replaced bindings and unreviewed merged globals
+retain their existing boundaries. Implicit conversions and reflective/global
+replacement gaps remain those of the existing standard-library premise.
+
+Verification: the focused armed fetch process regression and strict/loose
+published-type checks pass. Full `make verify` passes (187.99s), including
+Rust workspace tests, Go race tests, Clippy, all 297 fixture projects,
+the 42-case ownership gate, WASM parity, performance certification, CLI tests
+and the TypeScript oracle. No checked-in binary, manifest or contract changed.
+
+## 2026-10-17 — Ambient overloads retain the same global scheduler binding
+
+Wire table v20 / handshake protocol 79 adds `defaultLibraryBinding` beside the
+selected call declaration. The producer records the independent default-library
+declaration only for the same exact, direct global callee symbol. The selected
+overload still owns return types and parameter mappings. This handles ambient
+timer overloads, such as the installed Node typings' globally merged declarations,
+without inferring package behavior from an import or package name.
+
+Only the already-audited global schedulers consume this fact: setTimeout,
+setInterval, queueMicrotask, requestAnimationFrame and requestIdleCallback.
+Imports, aliases, structural members, source implementations, recovery calls
+and missing mappings retain their existing boundaries. Transparent TypeScript
+callee wrappers preserve the exact identifier identity. Frozen wire schemas
+omit the new field and old client tables supply no evidence for this route.
+The optional Rust field shares its declaration so ordinary calls do not carry
+an inline copy of absent metadata.
+
+The producer withholds the fact after exact binding writes or dot/literal-keyed
+property writes and deletions to the same name, including through window aliases. Its
+cross-file negative census is reacquired in every generation, including when
+the mutation is removed. It uses the existing intrinsic-runtime premise; this
+does not prove absence of every reflective or dynamically evaluated global
+replacement. No new source-selection or package-integrity premise is added.
+
+Focused producer tests cover direct/wrapped globals, declared aliases,
+structural properties, imports and local shadows, plus assignment/restoration
+through the direct binding, globalThis and window in another file. The process
+fixture checks fresh-stack timer reads, opaque timing and a source-visible
+cleanup-registering shadow. A retained-session twin requires the caller's leaf
+obligation to flip in both directions while unchanged source is reused and
+retained/cold IR agree. The source passes strict and loose TypeScript checks
+against published Solid RC.13 typings without the fixture stubs.
+
+The fresh optimized 49-project default-mode corpus removes **33 uncertifiable
+rows: 3,410 → 3,377**, adds none, and preserves all **538 violations** exactly,
+with no project errors. Most removals are leaf obligations at global timer
+calls; exact fresh-stack timing also closes a small number of callback/read
+contexts. Only `leaf-scope-host-callbacks` changes its findings snapshot in
+this slice, adding the new opaque/shadow controls. Imported Node APIs, aliases,
+lookalikes, missing/invalid mappings, named binding/property replacements and unaudited
+global operations remain outside this new scheduler proof.
+
+Validation: focused producer, codec, native process and retained-session
+regressions passed, as did full `make verify` (148.35 s): Go race tests,
+workspace tests, coverage of 297 fixture projects, ownership/oracle gates,
+WASM parity and performance certification. The WASM bad-handshake witness now
+pins protocol 79 and its schema digest while retaining the deliberately forged
+byte and exact failure/cleanup expectations. This slice changes one findings
+snapshot and that handshake witness; earlier snapshots remain in the worktree.
+
+## 2026-10-17 — Optional nullish alternatives preserve selected call facts
+
+The Type Facts producer previously treated every union-typed callee as a
+composite dispatch, including `value?.method()` whose callable type has only
+one non-nullish constituent. The compiler had already selected a valid
+signature, but the producer discarded its declaration and argument mapping.
+It now retains those facts when the compiler marks the call as an optional
+chain and null/undefined are the only other alternatives. The original
+optional return type and execution uncertainty are preserved. Genuine callable
+unions, open union constituents and recovery calls stay on their existing
+paths; a generic constraint or interface signature remains structural rather
+than becoming an exact runtime implementation. No protocol fields changed.
+
+The new producer regression covers primitives, nullable function values,
+structural methods, ambiguous callable unions, invalid arguments, a missing
+optional operator and generic constraints. `Optional.tsx` in
+`literal-argument-member-dispatch` checks a clean cross-file optional string
+chain, an uncertifiable optional Date member and an uncertifiable callback
+read. The source passes strict and loose TypeScript checks against published
+RC.13 typings. Only this fixture's snapshot changes in this slice.
+
+The additional declaration fact does not establish native DOM behavior or
+close synchronous event/custom-element callbacks. The leaf consumer explicitly
+keeps optional DOM-library calls open, including the existing optional focus
+regressions. Optional signatures select possible behavior when the call runs;
+they do not prove that the receiver still holds a particular implementation,
+that the call executes, or that it has a live owner.
+
+The fresh 49-project default-mode corpus moves **3,424 → 3,410 uncertifiable**:
+24 rows are discharged, mainly optional primitive operations and the callback
+contexts whose signature mapping is now available. The optional DOM guard
+adds ten leaf obligations, rather than treating a newly available declaration
+as a whole-call reentrancy proof. All **538 violations are unchanged**, no
+project errors occur, and no other finding changes. This remains partial:
+opaque callees, genuinely ambiguous callable unions, optional object-member
+dispatch and host reentrancy still withhold their corresponding proofs.
+
+Validation: the focused producer and armed process regressions, published-type
+checks and full `make verify` passed (201.99 s), including Go race tests,
+workspace tests, coverage, ownership/oracle gates, WASM parity and performance
+certification. The producer was rebuilt from its updated local source stamp;
+the Rust checker under `bin/` was not overwritten. This slice generates only
+the primitive-dispatch fixture snapshot; the two earlier IIFE snapshots remain
+part of the same worktree.
+
+## 2026-10-17 — Immediate literal calls enter leaf body analysis
+
+Leaf-scope analysis now resolves an immediately invoked arrow or function
+expression directly from its exact callee span, including transparent
+TypeScript wrappers. It reuses the named-helper body walk: parameter-default
+checks, completion standing, recursion limits and async synchronous-prefix
+checks all remain in force. The operand of the first unconditional `await`
+runs in the leaf scope; its continuation does not. Generator bodies do not
+start merely because the generator function is called. No host, package or
+signature-only behavior is inferred.
+
+`leaf-scope-helper-completion/Immediate.tsx` pins clean sync/async bodies,
+generator non-entry, synchronous cleanup, conditional cleanup/suspension,
+opaque calls, defaults, conditional callee selection and TypeScript wrappers.
+The literal-argument branch remains uncertifiable because the argument mapper
+still requires a resolved project callee. Default calls retain both the
+callee obligation and the existing lexical default-expression obligation.
+The file passes strict and loose `tsc --noEmit` against published RC.13
+typings without the fixture stub. The existing
+`fp-owner-nested-async-read` fixture loses only its immediate-call leaf
+obligation; its existing asynchronous-read findings are unchanged.
+
+The 49-project default-mode corpus comparison removes one SC9012 at
+`app-game/packages/pixijs-research/webgl/3d-wireframe/main.tsx:186`:
+**3,425 → 3,424 uncertifiable**, with all **538 violations unchanged**, no
+added findings and no project errors. Most sampled IIFEs still require
+unavailable helper/package behavior in their synchronous prefix. This is a
+small reduction in a numerous leaf-callback family, not a claim to close that
+family. DOM reentrancy, opaque callbacks, unknown dispatch and conditional
+suspension remain open.
+
+Validation: 276 IR unit tests, 62 armed diagnostics process tests and the final
+immediate-call regression passed, along with coverage of 297 fixture projects,
+42 ownership cases, published-type checks and the universal handoff set. Only
+the two named fixture snapshots changed. Full `make verify`, performance and
+WASM parity were deferred for this focused IR change.
+
 ## 2026-10-16 — Share exact source callable identity with leaf-scope analysis
 
 The leaf checker previously resolved direct functions, exact class instances

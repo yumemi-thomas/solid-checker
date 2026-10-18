@@ -337,7 +337,7 @@ func (p *project) resolveCallRunLocked(
 		mappingOffset = argumentEnd
 
 		callee := node.Expression()
-		target := p.checker.GetSymbolAtLocation(callee)
+		target := p.checker.GetSymbolAtLocation(transparentCallCallee(callee))
 		signature := checker.Checker_getResolvedSignature(p.checker, node, nil, checker.CheckModeNormal)
 		if target != nil {
 			target = p.canonicalSymbol(target)
@@ -373,7 +373,8 @@ func (p *project) resolveCallRunLocked(
 			fillUnresolvedArgumentMappings(call.Arguments, typefacts.ArgumentMappingRecoverySignature)
 			continue
 		}
-		if calleeType != nil && calleeType.Flags()&checker.TypeFlagsUnion != 0 {
+		if calleeType != nil && calleeType.Flags()&checker.TypeFlagsUnion != 0 &&
+			!singleOptionalCallConstituent(node, calleeType) {
 			call.Targets = p.unionCallTargetsLocked(node, calleeType, evidence)
 			fillUnresolvedArgumentMappings(call.Arguments, typefacts.ArgumentMappingCompositeSignature)
 			continue
@@ -382,9 +383,137 @@ func (p *project) resolveCallRunLocked(
 		declaration := p.currentSignatureDeclaration(signature, target)
 		call.Declaration = p.resolvedDeclaration(signature, declaration, target)
 		evidence.declaration(call.Declaration)
+		if call.Declaration != nil && call.Kind == typefacts.CallKindCall {
+			call.DefaultLibraryBinding = p.defaultLibraryBinding(callee, target, evidence)
+			evidence.declaration(call.DefaultLibraryBinding)
+		}
 		p.fillArgumentMappingsLocked(call.Arguments, node, signature, declaration, demand.objectShape, evidence)
 	}
 	return nil
+}
+
+// Overload selection may choose an ambient augmentation even though the exact
+// direct global binding also has a default-library declaration. Keep these two
+// facts separate: the selected overload still owns every parameter and return.
+// Imports, local aliases, structural properties and runtime implementations do
+// not gain library identity from their types or names.
+func transparentCallCallee(callee *ast.Node) *ast.Node {
+	for callee != nil && (ast.IsParenthesizedExpression(callee) || ast.IsAssertionExpression(callee) || ast.IsNonNullExpression(callee) || ast.IsSatisfiesExpression(callee)) {
+		callee = callee.Expression()
+	}
+	return callee
+}
+
+func (p *project) defaultLibraryBinding(callee *ast.Node, target *ast.Symbol, evidence *semanticEvidence) *typefacts.ResolvedDeclaration {
+	callee = transparentCallCallee(callee)
+	if callee == nil || !ast.IsIdentifier(callee) || target == nil {
+		return nil
+	}
+	if symbol := p.checker.GetSymbolAtLocation(callee); symbol == nil || symbol.Flags&ast.SymbolFlagsAlias != 0 || p.canonicalSymbol(symbol) != target {
+		return nil
+	}
+	var library *typefacts.ResolvedDeclaration
+	runtimeImplementation := false
+	for _, declaration := range target.Declarations {
+		source := ast.GetSourceFileOfNode(declaration)
+		if source == nil {
+			return nil
+		}
+		if !source.IsDeclarationFile && !p.program.IsSourceFileDefaultLibrary(source.Path()) {
+			runtimeImplementation = true
+		}
+		if p.program.IsSourceFileDefaultLibrary(source.Path()) && ast.IsFunctionDeclaration(declaration) {
+			candidate := p.resolvedDeclaration(nil, declaration, target)
+			if candidate != nil && len(candidate.Owners) == 0 {
+				library = candidate
+			}
+		}
+	}
+	if library == nil {
+		return nil
+	}
+	// This negative write census crosses source files. Re-evaluate the run in
+	// every generation, including when a write or implementation is removed;
+	// a previous absence of references is never an invalidation dependency.
+	evidence.durable = false
+	if runtimeImplementation {
+		return nil
+	}
+	if p.libraryPropertyWrites == nil {
+		p.libraryPropertyWrites = make(map[string]bool)
+		var visit func(*ast.Node) bool
+		visit = func(node *ast.Node) bool {
+			member := ast.IsPropertyAccessExpression(node) || ast.IsElementAccessExpression(node)
+			if member && node.Parent != nil && (ast.GetAssignmentTarget(node) != nil || ast.IsDeleteExpression(node.Parent)) {
+				if ast.IsPropertyAccessExpression(node) {
+					p.libraryPropertyWrites[node.Name().Text()] = true
+				} else if ast.IsElementAccessExpression(node) {
+					key := transparentCallCallee(node.AsElementAccessExpression().ArgumentExpression)
+					if key != nil && (ast.IsStringLiteral(key) || ast.IsNoSubstitutionTemplateLiteral(key)) {
+						p.libraryPropertyWrites[key.Text()] = true
+					}
+				}
+			}
+			node.ForEachChild(visit)
+			return false
+		}
+		for _, source := range p.program.SourceFiles() {
+			if !source.IsDeclarationFile {
+				source.AsNode().ForEachChild(visit)
+			}
+		}
+	}
+	if p.libraryPropertyWrites[library.Name] {
+		return nil
+	}
+	p.referenceIndex.ensure(p)
+	id := p.idFor(target)
+	p.referenceIndex.markUsed(id)
+	for _, reference := range p.referenceIndex.locations(id) {
+		source := p.program.GetSourceFile(reference.Path)
+		if source == nil {
+			return nil
+		}
+		node := deepestNodeAt(ast.GetNodeAtPosition(source, reference.StartByte, false), reference.StartByte)
+		if node == nil {
+			return nil
+		}
+		if parent := node.Parent; parent != nil && ast.IsPropertyAccessExpression(parent) && parent.Name() == node {
+			node = parent
+		}
+		if ast.GetAssignmentTarget(node) != nil {
+			return nil
+		}
+	}
+	return library
+}
+
+// Optional chaining excludes nullish alternatives before invocation. A single
+// remaining callable therefore retains the compiler-selected signature and
+// its argument mapping. This is not a runtime target or execution proof: the
+// call may be skipped, and a structural signature stays structural. Multiple
+// callable alternatives and open constituents keep the composite-call path.
+func singleOptionalCallConstituent(node *ast.Node, calleeType *checker.Type) bool {
+	if !ast.IsOptionalChain(node) {
+		return false
+	}
+	const open = checker.TypeFlagsAny | checker.TypeFlagsUnknown |
+		checker.TypeFlagsNever | checker.TypeFlagsInstantiable |
+		checker.TypeFlagsUnion | checker.TypeFlagsIntersection | checker.TypeFlagsIncludesError
+	count := 0
+	for _, constituent := range calleeType.Types() {
+		if constituent == nil {
+			return false
+		}
+		if constituent.Flags()&(checker.TypeFlagsNull|checker.TypeFlagsUndefined) != 0 {
+			continue
+		}
+		if constituent.Flags()&open != 0 {
+			return false
+		}
+		count++
+	}
+	return count == 1
 }
 
 // isExactCallableImplementationKind names declaration kinds that identify one

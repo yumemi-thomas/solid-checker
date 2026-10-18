@@ -20,7 +20,7 @@ stack. The closed uses are:
 | IndependentObjectSlots: `load` (stored) | uncertifiable |
 | InlineBody, SafeAndStrict, EagerRenderProp (the child calls the prop in its body, ADR 0204) | violation |
 | ForwardedInlineBody: an expression-bodied identifier chain ending in a body-time call. It warns at runtime, but the chain's `const` callees may be uninitialized when it runs, so it is not proven | uncertifiable |
-| SiblingInvoke (a method calling `this.key()`), SiblingValueOf (an inherited `valueOf` returns the object), SiblingTag (a template tag), SiblingNamedInvoke (a named function), LabelledUntrack (`untrack(read, "label")` warns) | uncertifiable |
+| SiblingInvoke (a method calling `this.key()`; since ADR 0320 also an `SC9012` dispatch obligation, because a literal method that uses its receiver withholds the literal's members), SiblingValueOf (an inherited `valueOf` returns the object), SiblingTag (a template tag), SiblingNamedInvoke (a named function), LabelledUntrack (`untrack(read, "label")` warns) | uncertifiable |
 | SiblingAbsent (an absent sibling may be inherited from an extended `Object.prototype`), SiblingOverwritten, PrototypeWritten (a field written after construction), JsxPrototype (a `__proto__` attribute), LabelledInsideMemo (a labelled `untrack` under a memo), ComponentInsideMemo (a component entered inside a memo opens its own strict window) | uncertifiable |
 | GatedInline (a throwing default parameter), GateArgument (an argument in its temporal dead zone) | uncertifiable, never a violation |
 | SiblingAbsentRead: an absent sibling is read, which runs any getter project code installed on `Object.prototype` | uncertifiable |

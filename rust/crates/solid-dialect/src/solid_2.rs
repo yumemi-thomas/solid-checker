@@ -415,6 +415,8 @@ impl Dialect for Solid2 {
             | Primitive::Until
             | Primitive::Lazy
             | Primitive::UseHead
+            // ADR 0323: `children(fn)` is a lazy memo over `fn`.
+            | Primitive::Children
             | Primitive::CreateRevealOrder => &[0],
             _ => &[],
         }
@@ -540,6 +542,39 @@ impl Dialect for Solid2 {
         primitive == Primitive::CreateRoot && argument == 0
     }
 
+    /// ADR 0323 (review round 10). `createRoot(init)` is `runWithOwner(createOwner(),
+    /// () => init(dispose))` (`@solidjs/signals@2.0.0-rc.13`
+    /// `dist/dev-shared.js:3478-3481`) and `runWithOwner` swaps `context` and
+    /// sets `tracking = false` around `fn()` and nothing else
+    /// (`dist/dev-shared.js:6919-6947`); `strictRead` is never touched, and a
+    /// read warns whenever it is set (`dist/dev-shared.js:6511-6516`). A
+    /// component body runs under `untrack(() => Comp(props), label)`, which sets
+    /// it for the synchronous call (`:5863-5888`). So a read in either callback
+    /// warns exactly where the same read written at the call would, and
+    /// nowhere else (an event handler or a timer has no window). `untrack(fn)`
+    /// without a label *sets* `strictRead = false`, so it is the explicit
+    /// untracked intent and stays out of this set. `flush` clears neither and
+    /// is already modelled as inheriting the caller's role; `batch` is not an
+    /// export of this vocabulary. 1.x had no strict-read window at all. The
+    /// other primitives the dialect lists as `runs_callback_deferred` were read
+    /// the same way: `onSettled`, `action` and `clientOnly` run their callback
+    /// from a queue or an invocation, never at the call; `resolve` and `until`
+    /// evaluate it as an effect compute (`recompute` clears `strictRead`,
+    /// `dist/dev-shared.js:4890-4896`); and
+    /// `createReaction`'s invalidation callback and `lazy`'s loader are
+    /// reporting slots already, because the runtime runs them in a window of
+    /// its own.
+    fn callback_inherits_calling_window(&self, primitive: Primitive, argument: usize) -> bool {
+        matches!(
+            (primitive, argument),
+            (Primitive::CreateRoot, 0)
+                | (Primitive::RunWithOwner, 1)
+                // `createOwner()` then `runWithOwner(owner, () => { const value
+                // = fn(); ... })` (`@solidjs/signals@2.0.0-rc.13` `dist/dev.js:10170-10179`).
+                | (Primitive::CreateRevealOrder, 0)
+        )
+    }
+
     /// Source: `solid-js`'s dev `createComponent` is `devComponent`, which runs
     /// the component as `createRoot(() => { …; return untrack(() =>
     /// Comp(props)) }, { transparent: true })` (`solid-js@2.0.0-rc.3`
@@ -636,6 +671,41 @@ impl Dialect for Solid2 {
 
     fn release_owners(&self) -> &'static [crate::ReleaseOwner] {
         releases::OWNERS
+    }
+
+    /// ADR 0324. The audited `@solidjs/router` releases, each read in full on
+    /// the installed bytes (`dist/index.js` for the default condition, and for
+    /// the `solid` condition `dist/index.jsx` re-exporting `routing.js` and
+    /// `utils.js`):
+    ///
+    /// | release | `dist/index.js` sha256 | `routing.js` | `utils.js` |
+    /// | --- | --- | --- | --- |
+    /// | `2.0.0-next.26` | `b657bc8d…baa35` | `639f16fd…153ea` | `562b280a…7e2a` |
+    ///
+    /// What was read: `createMatcher` assigns `match.params[key] = locSegment`
+    /// (a segment of `location.split("/")`) and a splat's remainder string
+    /// (`index.js:76,85`; `utils.js:81,91`); `mergeParams` is an
+    /// `Object.assign` of those (`index.js:1040-1046`; `routing.js:483-489`);
+    /// `useParams()` is `useRoute().params` (`index.js:700-702`;
+    /// `routing.js:163-165`), `createMemoObject` of that merge unless
+    /// `utils.paramsWrapper` replaces it (`index.js:1306`; `routing.js:725-728`,
+    /// `954`), a Proxy whose `get` is a memo of `fn()[property]`
+    /// (`index.js:113`; `utils.js:124-`). The declared type is
+    /// `Record<string, string | undefined>` (`types.d.ts:27`). Versions
+    /// before `2.0.0-next.26` (`next.16` to `next.19` in the corpus, and
+    /// `0.15.3`) were not read and are not claimed.
+    fn router_params_are_url_strings(&self, version: &str) -> bool {
+        releases::AUDITED_ROUTER_RELEASES.contains(&version)
+    }
+
+    fn audited_router_releases(&self) -> &'static [&'static str] {
+        releases::AUDITED_ROUTER_RELEASES
+    }
+
+    fn audited_router_digest(&self, version: &str) -> Option<&'static str> {
+        releases::AUDITED_ROUTER_DIGESTS
+            .iter()
+            .find_map(|(audited, digest)| (*audited == version).then_some(*digest))
     }
 
     fn audited_installation(&self) -> &'static [(&'static str, &'static str)] {
@@ -755,6 +825,8 @@ impl Dialect for Solid2 {
             | Primitive::CreateProjection
             | Primitive::CreateOptimistic
             | Primitive::CreateOptimisticStore
+            // ADR 0323: the memo `children` creates owns `fn`'s runs.
+            | Primitive::Children
             | Primitive::Resolve => &[(0, CallbackOwner::Creates)],
             // `@solidjs/signals@2.0.0-rc.9` `until` (`dist/dev.js:2717-2785`,
             // `dist/prod/signals.js:530`): `new Promise(… createRoot(dispose =>
@@ -1267,7 +1339,15 @@ impl Dialect for Solid2 {
             | Primitive::CreateOptimistic
             | Primitive::CreateOptimisticStore
             | Primitive::Dynamic
-            | Primitive::UseHead => &[(0, Execution::Tracked)],
+            | Primitive::UseHead
+            // ADR 0323: `children(fn)` is `createMemo(fn, { lazy: true })`
+            // (`solid-js@2.0.0-rc.13` `dist/solid.js:21-24`,
+            // `dist/solid.dev.js:20-23`; the same bytes in rc.0, rc.6, rc.8
+            // and rc.9), so `fn` is a computation of its own and a read in it
+            // subscribes that memo, never the body that wrote the literal.
+            // Lazy: it first runs when the result is read, not during the
+            // call, so no `TrackedCallbackTiming` is stated for it.
+            | Primitive::Children => &[(0, Execution::Tracked)],
             Primitive::CreateEffect | Primitive::CreateRenderEffect => {
                 &[(0, Execution::Tracked), (1, Execution::Deferred)]
             }
@@ -1891,6 +1971,24 @@ impl Dialect for Solid2 {
         &[("Dynamic", "component")]
     }
 
+    /// ADR 0313: `<Dynamic component="button" …/>`. Read on the audited
+    /// `@solidjs/web@2.0.0-rc.13` client builds: `Dynamic(props)` renders
+    /// `createComponent(dynamic(() => props.component), omit(props,
+    /// "component"))` (`dist/web.dev.js:2403`), and `dynamic`'s returned
+    /// component answers a string with `staticElement(component, props)`
+    /// (`:2375`), which creates the element and runs `spread(el, props)`
+    /// (`:2396-2399`) -- the helper a compiled JSX spread onto an intrinsic
+    /// element calls. Its `assignProp` turns an un-namespaced `on…` key into an
+    /// event listener (`:1803`). The production and observe builds are the same
+    /// code (`dist/web.js:2137`, `:2154-2157`, `:1578`;
+    /// `dist/web.observe.js:2185`, `:2202-2205`, `:1626`). Earlier releases were
+    /// not re-read for this answer; they take the audited release's under their
+    /// `SC9014` notice. A server build creates no element and dispatches no
+    /// event.
+    fn intrinsic_tag_renderers(&self) -> &'static [(&'static str, &'static str)] {
+        &[("Dynamic", "component")]
+    }
+
     /// `createMemo(compute)`, one argument, `compute` taking no parameters. The
     /// value `compute` returns is the node's value, and the node is reachable
     /// from program code only through the accessor `createMemo` returns
@@ -2288,8 +2386,73 @@ mod tests {
         assert!(two.wraps_function_arguments_in_memo(Primitive::Merge));
         assert!(!two.wraps_function_arguments_in_memo(Primitive::Omit));
 
-        // Silence is an answer contract emission must keep as "unknown".
+        // Silence is an answer contract emission must keep as "unknown": the
+        // *contract* word for `children` stays unstated. ADR 0323 gives it an
+        // *attribution* answer, which is a different question: its callback is
+        // a lazy memo's computation, so reads in it are tracked.
         assert_eq!(word(Primitive::Children, 0, 1), None);
+        assert_eq!(
+            two.callback_execution_at(Primitive::Children, 0, 1),
+            Some(Execution::Tracked)
+        );
+        assert_eq!(
+            two.callback_owner_at(Primitive::Children, 0, 1),
+            Some(CallbackOwner::Creates)
+        );
+        assert!(!two.runs_callback_deferred(Primitive::Children));
+        assert_eq!(two.tracked_callback_timing(Primitive::Children, 0, 1), None);
+    }
+
+    /// ADR 0324: the audited router release table is exact-version.
+    #[test]
+    fn only_the_audited_router_release_hands_out_url_strings() {
+        let two: &dyn Dialect = &Solid2::RC9;
+        assert!(two.router_params_are_url_strings("2.0.0-next.26"));
+        for version in [
+            "2.0.0-next.18",
+            "2.0.0-next.27",
+            "2.0.0",
+            "0.15.3",
+            "2.0.0-next.26-rc",
+            "",
+        ] {
+            assert!(!two.router_params_are_url_strings(version), "{version}");
+        }
+        assert_eq!(two.audited_router_releases(), &["2.0.0-next.26"]);
+        // Every audited release has exactly one digest, and no other has.
+        for version in two.audited_router_releases() {
+            assert!(two.audited_router_digest(version).is_some_and(|digest| {
+                digest.len() == 64 && digest.bytes().all(|byte| byte.is_ascii_hexdigit())
+            }));
+        }
+        assert_eq!(two.audited_router_digest("2.0.0-next.18"), None);
+    }
+
+    /// ADR 0323 (review round 10): which callbacks run in their call's own
+    /// strict-read window. `untrack` clears it, and the rest are queued, tracked
+    /// or reporting slots.
+    #[test]
+    fn only_synchronous_owner_swappers_inherit_the_calling_window() {
+        let two: &dyn Dialect = &Solid2::RC9;
+        assert!(two.callback_inherits_calling_window(Primitive::CreateRoot, 0));
+        assert!(two.callback_inherits_calling_window(Primitive::RunWithOwner, 1));
+        assert!(two.callback_inherits_calling_window(Primitive::CreateRevealOrder, 0));
+        assert!(!two.callback_inherits_calling_window(Primitive::RunWithOwner, 0));
+        for primitive in [
+            Primitive::Untrack,
+            Primitive::Flush,
+            Primitive::OnSettled,
+            Primitive::Action,
+            Primitive::CreateMemo,
+            Primitive::CreateReaction,
+            Primitive::Resolve,
+            Primitive::Lazy,
+        ] {
+            assert!(
+                !two.callback_inherits_calling_window(primitive, 0),
+                "{primitive:?}"
+            );
+        }
     }
 
     /// The three `<For>` overloads from rc.0's `flow.d.ts`, plus the two
@@ -2684,6 +2847,7 @@ mod tests {
         // error that should answer empty rather than guess index 0.
         assert!(Solid2.callback_positions(Primitive::For).is_empty());
         assert!(Solid2.callback_positions(Primitive::Loading).is_empty());
-        assert!(Solid2.callback_positions(Primitive::Children).is_empty());
+        // `children(fn)` takes its thunk at 0 (ADR 0323).
+        assert_eq!(Solid2.callback_positions(Primitive::Children), &[0]);
     }
 }

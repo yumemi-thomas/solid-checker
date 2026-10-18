@@ -799,6 +799,10 @@ type Call struct {
 	Validity       ResolvedCallValidity
 	Kind           CallKind
 	Declaration    *ResolvedDeclaration
+	// DefaultLibraryBinding identifies a default-library declaration of the
+	// same direct global callee symbol, independently of the selected overload.
+	// It is binding identity, not signature substitution or a mutation proof.
+	DefaultLibraryBinding *ResolvedDeclaration
 	// Targets carries the exact candidate declarations of a composite
 	// (union) callee when the compiler proves the set exhaustive. It is
 	// complementary to Declaration, which stays nil for composite callees

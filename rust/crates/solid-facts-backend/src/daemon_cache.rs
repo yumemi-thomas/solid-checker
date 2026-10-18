@@ -15,6 +15,9 @@ pub(crate) struct CachedAnswer {
     pub(crate) generation: u64,
     /// The imported package roots whose manifests `input_files` re-reads.
     pub(crate) modules: Vec<String>,
+    /// The installed router directories the analysis resolved to, whose bytes
+    /// `input_files` re-hashes (ADR 0324).
+    pub(crate) router_roots: Vec<PathBuf>,
     pub(crate) input_files: Vec<InputFile>,
     /// The inference closure observed before analysis, including absent probes
     /// and directory/symlink identities. Rehash it on reuse; do not rediscover
@@ -59,6 +62,7 @@ mod tests {
         CachedAnswer {
             generation: 3,
             modules: vec!["solid-js".into()],
+            router_roots: Vec::new(),
             input_files: vec![(PathBuf::from("package.json"), [7; 32])],
             inference_inputs: Vec::new(),
             presets: vec!["preferences".into()],

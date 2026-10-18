@@ -137,6 +137,9 @@ struct DiagnosticIdentity {
     /// too: an install that moves `solid-js` between an audited and an
     /// unaudited release changes the result without changing a source file.
     release_notice: Option<dialect::ReleaseNotice>,
+    /// ADR 0324: whether the router-parameters premise applies; it moves with
+    /// the resolved router release as well as with the sources.
+    router_params: solid_reactive_ir::router_params::RouterParamsStatus,
 }
 
 struct RetainedDiagnostic {
@@ -337,12 +340,19 @@ impl DiagnosticSession {
         if rule_options.runtime.program_boundary.is_none() {
             rule_options.runtime.program_boundary = Some(default_program_boundary(project));
         }
+        rule_options.runtime.router_install =
+            crate::installed_bytes::router_install_evidence(project, facts);
         rule_options.development_feedback = enablement.feedback_facts;
         // Scoped to this generation's facts: a gap about named exports is due
         // only where the project reaches one (`release_scope`), so the answer
         // moves with the sources as well as the install.
         let release_notice = dialect::release_notice(self.dialect, project)
             .and_then(|notice| notice.scoped_to(facts));
+        let router_params = solid_reactive_ir::router_params::router_params_status(
+            facts,
+            self.dialect.vocabulary,
+            &rule_options.runtime.router_install,
+        );
         // Consult the builder before a diagnostic hit: its identity includes
         // ADR 0266's visible veto even when fact generation is unchanged.
         let (program, _) = self.builder.build_with_analysis_inputs_shared(
@@ -359,6 +369,7 @@ impl DiagnosticSession {
             contracts: inputs.cache_fingerprints(),
             rule_options: rule_options.clone(),
             release_notice: release_notice.clone(),
+            router_params: router_params.clone(),
         };
         if let Some(retained) = &self.retained
             && retained.identity == identity
@@ -393,6 +404,23 @@ impl DiagnosticSession {
         if let Some(notice) = &release_notice {
             findings.push(unaudited_release_finding(notice));
         }
+        // ADR 0324: a router release nobody audited gets its own notice, at
+        // the import that reaches it.
+        if let solid_reactive_ir::router_params::RouterParamsStatus::Unaudited {
+            version,
+            bytes_differ,
+            path,
+            span,
+        } = &router_params
+        {
+            findings.push(unaudited_router_finding(
+                self.dialect,
+                version.as_deref(),
+                *bytes_differ,
+                path,
+                *span,
+            ));
+        }
         let metrics = analysis_metrics(facts, &program);
         let mut snapshot = snapshot_of(sources, metrics, findings);
         snapshot.feedback_facts = program.development_feedback.clone();
@@ -400,6 +428,13 @@ impl DiagnosticSession {
             snapshot
                 .premises
                 .push("standard runtime configuration (ADRs 0266/0268)".into());
+        }
+        if let solid_reactive_ir::router_params::RouterParamsStatus::Applies { version } =
+            &router_params
+        {
+            snapshot.premises.push(format!(
+                "router parameters (ADR 0324): @solidjs/router {version}, as audited, hands out route parameters as URL path-segment strings, or undefined for an absent optional one"
+            ));
         }
         if !facts.dependency_source_roots.is_empty() {
             snapshot.premises.push("package integrity (ADR 0300): code outside the analyzed program neither provides selected packages' exported contexts nor rewrites objects those packages create".into());
@@ -634,6 +669,69 @@ pub fn unaudited_release_finding(notice: &dialect::ReleaseNotice) -> Finding {
     finding.analysis_context = "dialect-detection".into();
     finding.subject_kind = "project".into();
     finding.evidence = evidence;
+    finding
+}
+
+/// The `SC9014` notice for a router release the dialect did not audit
+/// (ADR 0324). The premise it gates is not applied, so the findings beside it
+/// that it could have discharged stand; the notice names the release, where
+/// the project reaches it, and the audited one.
+#[must_use]
+pub fn unaudited_router_finding(
+    dialect: &Dialect,
+    version: Option<&str>,
+    bytes_differ: bool,
+    path: &str,
+    span: solid_facts::core::Span,
+) -> Finding {
+    let location = typefacts::Location {
+        path: path.into(),
+        start_byte: u64::from(span.start),
+        end_byte: u64::from(span.end),
+    };
+    let audited = dialect.vocabulary.audited_router_releases();
+    let found = version.map_or_else(
+        || "an @solidjs/router whose release was not resolved".to_owned(),
+        |version| format!("@solidjs/router {version}"),
+    );
+    let installed = if bytes_differ {
+        format!("{found} is installed, but its installed bytes differ from the audited release")
+    } else {
+        format!("{found} is installed")
+    };
+    let message = format!(
+        "{installed}; this build audited route parameters on {}, so the router-parameters premise (ADR 0324) was not applied and what it could have settled stays open",
+        english_list(
+            &audited
+                .iter()
+                .map(|version| format!("@solidjs/router {version}"))
+                .collect::<Vec<_>>()
+        ),
+    );
+    let metadata = solid_reactive_ir::RuleMetadata {
+        code: dialect::UNAUDITED_RELEASE_CODE,
+        name: dialect::UNAUDITED_RELEASE_RULE,
+        severity: "warning",
+        uncertifiable: true,
+        default_enabled: true,
+        presets: &[],
+    };
+    let mut finding = Finding::new(metadata, message, location.clone());
+    finding.hint = format!(
+        "Findings beside this notice stand. To have route parameters settled, install {}.",
+        english_list(
+            &audited
+                .iter()
+                .map(|version| format!("@solidjs/router {version}"))
+                .collect::<Vec<_>>()
+        ),
+    );
+    finding.analysis_context = "router-release".into();
+    finding.subject_kind = "project".into();
+    finding.evidence = vec![solid_reactive_ir::EvidenceStep {
+        message: "this import reaches useParams from the router".into(),
+        location: Some(location),
+    }];
     finding
 }
 

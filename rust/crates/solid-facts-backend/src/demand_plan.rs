@@ -677,6 +677,15 @@ fn plan_file(
     for spread in &file.ast.spreads {
         add_symbol(spread.argument, false);
     }
+    // ADR 0317: an `extends` expression names the base class an exact
+    // instance's chain resolves through (`class_instance_is_exact`). An
+    // imported base has no local class declaration, so only its symbol says
+    // which class it is.
+    for class in &file.ast.classes {
+        if let Some(heritage) = class.heritage {
+            add_symbol(file.ast.peel_ts_sugar_span(heritage), false);
+        }
+    }
     for assignment in &file.ast.assignments {
         add_symbol(assignment.target, false);
         for slot in assignment.array_slots.iter().flatten() {

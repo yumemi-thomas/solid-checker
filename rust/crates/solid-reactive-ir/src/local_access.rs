@@ -28,7 +28,7 @@ use crate::execution_role::{
     control_flow_execution_role, direct_control_flow_body_role, host_callback_timing,
     missing_jsx_census, named_callback_execution_role, nested_literal_runs_during_body,
     pending_accessor_probe, read_analysis_context, semantic_execution_role,
-    semantic_write_execution_role,
+    semantic_write_execution_role, unclassified_callback_reaches_modelled_consumer,
 };
 use crate::identity::SymbolId;
 use crate::indexes::{EntitySymbols, SemanticLookup};
@@ -271,7 +271,7 @@ impl LocalAccessContext<'_, '_> {
                     file.path.clone(),
                     CachedLocalAccessFile {
                         source_hash: file.source_hash.clone(),
-                        cross_file_proofs: self.lookup.cross_file_proof_digest(),
+                        cross_file_proofs: self.lookup.member_resolution_digest(),
                         compiler: file.compiler.clone(),
                         dependencies: self.dependencies(file),
                         call_multiplicities: self.call_multiplicities(file),
@@ -452,7 +452,7 @@ impl LocalAccessContext<'_, '_> {
     ) -> bool {
         retained_source_path
             && cached.source_hash == file.source_hash
-            && cached.cross_file_proofs == self.lookup.cross_file_proof_digest()
+            && cached.cross_file_proofs == self.lookup.member_resolution_digest()
             && (Arc::ptr_eq(&cached.compiler, &file.compiler)
                 || same_compiler_semantics(&cached.compiler, &file.compiler))
             && (global_async_context_unchanged || cached.contribution.async_reads.is_empty())
@@ -466,6 +466,87 @@ impl LocalAccessContext<'_, '_> {
     /// Own body only: nested parameter defaults retain ADR 0204's existing
     /// authored-site proof. Select the innermost function before admitting a
     /// named helper, so an anonymous nested closure is not its parent's read.
+    /// ADR 0323: whether the view expression at `expression` hides `key`: an
+    /// `omit` call (written there, or the initializer of the `const` the
+    /// expression names) with `key` among its string-literal hidden arguments,
+    /// or whose first argument is such a view. Such a view has no `key`:
+    /// reading it reads nothing of its source. A spread, a computed or a
+    /// predicate argument hides nothing nameable, so the read stays a read, and
+    /// a `merge` between the layers stops the walk (another argument may
+    /// supply the key).
+    fn view_hides_key(
+        &self,
+        file: &solid_facts::FileFacts,
+        expression: solid_facts::core::Span,
+        key: &str,
+        depth: usize,
+    ) -> bool {
+        if depth > 8 {
+            return false;
+        }
+        let expression = file.ast.peel_ts_sugar_span(expression);
+        // A `const` view name: continue at its initializer.
+        let named =
+            crate::source_discovery::reference_symbol(file, expression, self.entities, self.lookup)
+                .and_then(|symbol| {
+                    file.ast.bindings.iter().find(|binding| {
+                        binding.immutable
+                            && binding.shape == solid_facts::ast::BindingShape::Identifier
+                            && binding.names.first().is_some_and(|name| {
+                                self.entities.get(&location(file.path.shared(), name.span))
+                                    == Some(&symbol)
+                            })
+                    })
+                })
+                .and_then(|binding| binding.call_initializer);
+        let Some(call) = file.ast.call_at(named.map_or(expression, |initializer| {
+            file.ast.peel_ts_sugar_span(initializer)
+        })) else {
+            return false;
+        };
+        let Some(primitive) = self.lookup.primitive_at_call(file, call.span) else {
+            return false;
+        };
+        if !self.lookup.dialect.splits_props(primitive)
+            || call.arguments.iter().any(|argument| argument.spread)
+        {
+            return false;
+        }
+        let Some((source, hidden)) = call.arguments.split_first() else {
+            return false;
+        };
+        if hidden.iter().any(|argument| {
+            matches!(
+                &argument.literal_value,
+                solid_facts::ast::ArgumentLiteralFact::String(hidden) if hidden.as_str() == key
+            )
+        }) {
+            return true;
+        }
+        self.view_hides_key(file, source.span, key, depth + 1)
+    }
+
+    /// The source an inline `omit` or `merge` view expression reads through to
+    /// ([`crate::source_discovery::view_root`]): a props parameter or a store.
+    fn inline_view_root(
+        &self,
+        file: &solid_facts::FileFacts,
+        expression: solid_facts::core::Span,
+    ) -> Option<SymbolId> {
+        crate::source_discovery::view_root(
+            file,
+            expression,
+            self.entities,
+            self.lookup,
+            &|symbol| {
+                self.prop_sources.contains_key(symbol)
+                    || (self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store)
+                        && self.accessors.contains_key(symbol))
+            },
+            0,
+        )
+    }
+
     fn component_prop_helper<'file>(
         &self,
         file: &'file solid_facts::FileFacts,
@@ -521,6 +602,23 @@ impl LocalAccessContext<'_, '_> {
                 let semantics =
                     dialect.callback_semantics_at(primitive, index, call.arguments.len());
                 let execution = semantics.execution?;
+                // ADR 0323: a callback that runs synchronously in the call's
+                // own strict-read window (`createRoot`, `runWithOwner`) runs
+                // in the role of the call.
+                if dialect.callback_inherits_calling_window(primitive, index) {
+                    return match semantic_execution_role(
+                        file,
+                        call.callee,
+                        &allowed_callback_spans(file, self.lookup),
+                        self.entities,
+                        self.symbol_names,
+                        self.lookup,
+                    ) {
+                        ExecutionRole::TrackedJsx => Some(ExecutionRole::DeferredCallback),
+                        ExecutionRole::ModuleInitialization | ExecutionRole::Unknown => None,
+                        other => Some(other),
+                    };
+                }
                 if semantics.requires_return_invocation
                     || semantics.stores_as_value
                     || dialect.callback_runs_on_result_access(
@@ -642,6 +740,7 @@ impl LocalAccessContext<'_, '_> {
         // The lexical census includes undemanded references. Missing call
         // facts open the proof rather than hiding an observed call or escape.
         let mut unproven_use = dynamic_lexical_observation;
+        let mut retained_in_layer = false;
         for reference in file.ast.identifiers.iter().filter(|identifier| {
             identifier.role == solid_facts::ast::IdentifierRole::Reference
                 && file.ast.reference_declaration(identifier.span) == Some(name.span)
@@ -682,6 +781,26 @@ impl LocalAccessContext<'_, '_> {
                     }
                 } else {
                     unproven_use = true;
+                    // ADR 0323 (review round 10): a reference that keeps the
+                    // helper (an alias, a store, a return, a property) inside
+                    // an admitted anonymous layer may run it where nothing
+                    // here sees. A pass to a call (an unknown consumer) is
+                    // option B's silence; this is an obligation.
+                    if !file
+                        .ast
+                        .arguments_containing(reference.span)
+                        .any(|(outer, index)| {
+                            file.ast.peel_ts_sugar_span(outer.arguments[index].span)
+                                == reference.span
+                        })
+                        && unclassified_callback_reaches_modelled_consumer(
+                            file,
+                            reference.span,
+                            self.lookup,
+                        )
+                    {
+                        retained_in_layer = true;
+                    }
                 }
                 continue;
             };
@@ -756,8 +875,23 @@ impl LocalAccessContext<'_, '_> {
                         && crate::owners::written_directly_in(&file.ast, caller, call.span)
                         && (control.is_some() || (non_strict_role && (component || event))))
             });
-            let admitted =
-                component || primitive_callback || control.is_some() || (non_strict_role && event);
+            // ADR 0323: an anonymous callback that reaches a modelled consumer
+            // (a project callee, an inline standard-library callback, an IIFE)
+            // is a layer of its own: a helper called directly in its body runs
+            // when the callback does. Whether that is during the body is still
+            // `callee_timing`'s answer below.
+            let anonymous_layer = caller.is_some_and(|caller| {
+                caller.method_name.is_none()
+                    && function_binding_name(file, caller).is_none()
+                    && self.lookup.function_component_status(file, caller)
+                        == crate::indexes::ComponentStatus::No
+                    && unclassified_callback_reaches_modelled_consumer(file, call.span, self.lookup)
+            });
+            let admitted = component
+                || primitive_callback
+                || control.is_some()
+                || (non_strict_role && event)
+                || anonymous_layer;
             let host_timing = host_callback_timing(file, call.span, execution, self.lookup);
             let callee_timing = callee_callback_timing(file, call.span, execution, self.lookup);
             let timing_proven =
@@ -797,6 +931,16 @@ impl LocalAccessContext<'_, '_> {
         if unproven_use && definition_admitted {
             let counts = counts_as_strict_read_root(file, site, read.execution, self.lookup);
             result.reads.push(Arc::new(read));
+            if counts {
+                result.strict_read_obligations += 1;
+            }
+        } else if retained_in_layer {
+            // The helper may run in the render window through the reference
+            // that keeps it: not proven, not silent.
+            let mut retained = read;
+            retained.callee_callback_timing = true;
+            let counts = counts_as_strict_read_root(file, site, retained.execution, self.lookup);
+            result.reads.push(Arc::new(retained));
             if counts {
                 result.strict_read_obligations += 1;
             }
@@ -1193,7 +1337,40 @@ impl LocalAccessContext<'_, '_> {
                     member.object
                 },
             );
-            let Some(symbol) = self.entities.get(&object) else {
+            // ADR 0323: an inline view (`omit(props, "y").x`) is the same
+            // expression as a bound one; its root is the source, and a read
+            // through a view is never an exact root read.
+            // Type Facts keeps no entity at an identifier under a TypeScript
+            // wrapper (`(props as P).x`, `props!.x`); the binder resolves it.
+            let binder_symbol = if receiver_is_identifier && self.entities.get(&object).is_none() {
+                crate::source_discovery::reference_symbol(
+                    file,
+                    receiver,
+                    self.entities,
+                    self.lookup,
+                )
+            } else {
+                None
+            };
+            // An entity may sit at the view call itself (its result), which
+            // is no source: the view's root is.
+            let known_source = |symbol: &SymbolId| {
+                self.prop_sources.contains_key(symbol)
+                    || self.accessors.contains_key(symbol)
+                    || self.typed_sources.contains_key(symbol)
+            };
+            let inline_root = if binder_symbol.is_none()
+                && !self.entities.get(&object).is_some_and(known_source)
+            {
+                self.inline_view_root(file, member.object)
+            } else {
+                None
+            };
+            let Some(symbol) = inline_root
+                .as_ref()
+                .or(self.entities.get(&object))
+                .or(binder_symbol.as_ref())
+            else {
                 continue;
             };
             let execution = semantic_execution_role(
@@ -1210,7 +1387,12 @@ impl LocalAccessContext<'_, '_> {
                 .filter(|_| self.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store))
                 .and_then(|_| self.component_prop_helper(file, member.span));
             let gate_refuses = (inside_non_component_function(file, member.span, self.lookup)
-                || inside_unclassified_callback(file, member.span))
+                || (inside_unclassified_callback(file, member.span)
+                    && !unclassified_callback_reaches_modelled_consumer(
+                        file,
+                        member.span,
+                        self.lookup,
+                    )))
                 && named_callback_execution_role(file, member.span, self.lookup).is_none()
                 // This literal is the exact dialect-owned children callback,
                 // and this site is in its own body (nested defaults excluded).
@@ -1265,6 +1447,9 @@ impl LocalAccessContext<'_, '_> {
             } else {
                 file.source_text(member.property)
             };
+            if property.is_some_and(|key| self.view_hides_key(file, member.object, key, 0)) {
+                continue;
+            }
             // A component's `ref` prop is an imperative output channel: the
             // child calls it once to publish its handle. This is not a
             // reactive read, but only when the complete member expression is
@@ -1291,7 +1476,8 @@ impl LocalAccessContext<'_, '_> {
                 // A view/alias can have different keys from the original
                 // parameter. ADR 0216's classification is for that parameter,
                 // not permission to certify a merge view's local head Get.
-                let exact_root = self.entities.get(prop_declaration) == Some(symbol)
+                let exact_root = inline_root.is_none()
+                    && self.entities.get(prop_declaration) == Some(symbol)
                     && props_root_is_current(file, prop_declaration, symbol, self.entities)
                     && !self.prop_sources.iter().any(|(other, (_, declaration))| {
                         other != symbol && declaration == prop_declaration
@@ -1487,7 +1673,14 @@ impl LocalAccessContext<'_, '_> {
         }
         for spread in &file.ast.spreads {
             let argument = location(file.path.shared(), spread.argument);
-            let Some(symbol) = self.entities.get(&argument) else {
+            let inline_root = if !self.entities.get(&argument).is_some_and(|symbol| {
+                self.prop_sources.contains_key(symbol) || self.accessors.contains_key(symbol)
+            }) {
+                self.inline_view_root(file, spread.argument)
+            } else {
+                None
+            };
+            let Some(symbol) = inline_root.as_ref().or(self.entities.get(&argument)) else {
                 continue;
             };
             let execution = semantic_execution_role(
@@ -1499,7 +1692,12 @@ impl LocalAccessContext<'_, '_> {
                 self.lookup,
             );
             if (inside_non_component_function(file, spread.span, self.lookup)
-                || inside_unclassified_callback(file, spread.span))
+                || (inside_unclassified_callback(file, spread.span)
+                    && !unclassified_callback_reaches_modelled_consumer(
+                        file,
+                        spread.span,
+                        self.lookup,
+                    )))
                 && named_callback_execution_role(file, spread.span, self.lookup).is_none()
                 && !matches!(
                     execution,
@@ -1525,7 +1723,18 @@ impl LocalAccessContext<'_, '_> {
             {
                 match self.props_reactivity.object_use(declaration) {
                     PropUse::Static => continue,
-                    PropUse::Reactive => {}
+                    // ADR 0323: a spread of a view (an `omit` or a merge)
+                    // reads the view's keys, not the parameter's: the keys a
+                    // view hides may be the only reactive ones, so the
+                    // parameter's classification proves nothing for it.
+                    PropUse::Reactive => {
+                        if inline_root.is_some()
+                            || self.entities.get(declaration) != Some(symbol)
+                            || !props_root_is_current(file, declaration, symbol, self.entities)
+                        {
+                            uncertain = true;
+                        }
+                    }
                     PropUse::Unknown => uncertain = true,
                 }
             }

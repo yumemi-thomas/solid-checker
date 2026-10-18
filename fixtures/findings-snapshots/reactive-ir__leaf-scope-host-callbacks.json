@@ -96,6 +96,76 @@
       "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/AugmentedTimers.tsx",
+      "start": 547,
+      "end": 559,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/AugmentedTimers.tsx",
+      "start": 717,
+      "end": 726,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/AugmentedTimers.tsx",
+      "start": 790,
+      "end": 801,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/Fetch.tsx",
+      "start": 574,
+      "end": 586,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/Fetch.tsx",
+      "start": 712,
+      "end": 721,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/Fetch.tsx",
+      "start": 786,
+      "end": 791,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/Fetch.tsx",
+      "start": 898,
+      "end": 903,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/Focus.tsx",
       "start": 286,
       "end": 305,

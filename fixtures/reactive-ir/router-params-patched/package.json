@@ -1,0 +1,1 @@
+{"name": "router-params-patched", "private": true, "patchedDependencies": {"@solidjs/router@2.0.0-next.26": "patches/@solidjs%2Frouter@2.0.0-next.26.patch"}}

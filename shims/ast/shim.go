@@ -28,11 +28,23 @@ func HasSyntacticModifier(node *ast.Node, flags ast.ModifierFlags) bool
 //go:linkname IsExpression github.com/microsoft/typescript-go/internal/ast.IsExpression
 func IsExpression(node *ast.Node) bool
 
+//go:linkname IsOptionalChain github.com/microsoft/typescript-go/internal/ast.IsOptionalChain
+func IsOptionalChain(node *ast.Node) bool
+
 //go:linkname IsAsExpression github.com/microsoft/typescript-go/internal/ast.IsAsExpression
 func IsAsExpression(node *ast.Node) bool
 
+//go:linkname IsAssertionExpression github.com/microsoft/typescript-go/internal/ast.IsAssertionExpression
+func IsAssertionExpression(node *ast.Node) bool
+
 //go:linkname IsArrayBindingPattern github.com/microsoft/typescript-go/internal/ast.IsArrayBindingPattern
 func IsArrayBindingPattern(node *ast.Node) bool
+
+//go:linkname IsLabeledStatement github.com/microsoft/typescript-go/internal/ast.IsLabeledStatement
+func IsLabeledStatement(node *ast.Node) bool
+
+//go:linkname IsPropertyAssignment github.com/microsoft/typescript-go/internal/ast.IsPropertyAssignment
+func IsPropertyAssignment(node *ast.Node) bool
 
 //go:linkname IsArrayLiteralExpression github.com/microsoft/typescript-go/internal/ast.IsArrayLiteralExpression
 func IsArrayLiteralExpression(node *ast.Node) bool
@@ -134,6 +146,12 @@ func IsPrefixUnaryExpression(node *ast.Node) bool
 
 //go:linkname IsPropertyAccessExpression github.com/microsoft/typescript-go/internal/ast.IsPropertyAccessExpression
 func IsPropertyAccessExpression(node *ast.Node) bool
+
+//go:linkname IsElementAccessExpression github.com/microsoft/typescript-go/internal/ast.IsElementAccessExpression
+func IsElementAccessExpression(node *ast.Node) bool
+
+//go:linkname IsDeleteExpression github.com/microsoft/typescript-go/internal/ast.IsDeleteExpression
+func IsDeleteExpression(node *ast.Node) bool
 
 //go:linkname IsObjectLiteralExpression github.com/microsoft/typescript-go/internal/ast.IsObjectLiteralExpression
 func IsObjectLiteralExpression(node *ast.Node) bool

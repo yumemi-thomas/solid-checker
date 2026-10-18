@@ -9,6 +9,10 @@ consumer's execution role; tracked consumers stay non-violating.
 Second calls, exported functions, function aliases/escapes, reassignment,
 default/rest parameters, argument spreads, `arguments` use and parameter
 escape refuse this channel. After-await execution remains uncertifiable.
+The `input` string handed on in `Apply` and `AsyncPrefix` raises no ADR 0320
+unmodeled-use obligation: each effect's apply callback receives what its
+compute returns, the literal `"input"` (a proof from the producer, not from
+the declared type).
 The exported control is also refused for closed apps; library exports retain
 the existing ADR 0193 open-program boundary. No type grants source authority.
 

@@ -2,7 +2,7 @@
 //! dialect model; this module reads no core contract or receipt documents.
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs, io,
     path::{Path, PathBuf},
 };
@@ -28,6 +28,67 @@ fn namespace_import(facts: &solid_facts::ProjectFacts, importer: &str, specifier
                         !binding.type_only
                             && binding.kind == solid_facts::ast::ImportKind::Namespace
                     })
+            })
+        })
+}
+
+/// ADR 0322: whether every runtime namespace import of `specifier` in
+/// `importer` is used only through static members, each of which a redirect
+/// binds to the selected runtime source.
+fn namespace_import_redirected(
+    facts: &solid_facts::ProjectFacts,
+    importer: &str,
+    specifier: &str,
+) -> bool {
+    let Some(file) = facts
+        .files
+        .iter()
+        .find(|file| file.path.as_str() == importer)
+    else {
+        return false;
+    };
+    let aliases = crate::source_redirects::canonical_symbol_aliases(facts);
+    let entities = facts
+        .typescript
+        .entities()
+        .filter(|entity| entity.location.path.as_ref() == importer)
+        .map(|entity| {
+            (
+                (entity.location.start_byte, entity.location.end_byte),
+                entity,
+            )
+        })
+        .collect::<HashMap<_, _>>();
+    file.ast
+        .imports
+        .iter()
+        .filter(|import| !import.type_only && import.module.as_str() == specifier)
+        .flat_map(|import| import.bindings.iter())
+        .filter(|binding| {
+            !binding.type_only && binding.kind == solid_facts::ast::ImportKind::Namespace
+        })
+        .all(|binding| {
+            let Some(members) =
+                crate::source_redirects::namespace_static_members(file, binding.local.span)
+            else {
+                return false;
+            };
+            // Each reference names its member at two spans (the property and
+            // the whole member, or a tag's property and name); one of them must
+            // carry an entity a redirect binds.
+            members.chunks(2).all(|pair| {
+                pair.iter().any(|(span, _)| {
+                    entities
+                        .get(&(u64::from(span.start), u64::from(span.end)))
+                        .is_some_and(|entity| {
+                            facts.runtime_symbol_redirects.contains_key(
+                                &crate::source_redirects::canonical_symbol(
+                                    &entity.symbol,
+                                    &aliases,
+                                ),
+                            )
+                        })
+                })
             })
         })
 }
@@ -115,7 +176,19 @@ fn external_package_boundary_with(
     let mut boundary = PackageBoundary::default();
     let mut owners = HashMap::new();
     if let Some(imports) = &facts.resolved_imports {
+        let imported: HashSet<&str> = imports
+            .iter()
+            .map(|(_, import)| import.resolved_path.as_ref())
+            .collect();
         for (importer, import) in imports.iter() {
+            // Vite loads its configuration in Node while building; the file is
+            // no part of the program the browser runs, so what its imports
+            // do cannot reach a reactive read, an owner or a callback of that
+            // program. Only a file nothing in the program imports is exempt:
+            // an importer would make the config's exports part of that program.
+            if is_build_tool_config(importer) && !imported.contains(importer) {
+                continue;
+            }
             let package = import
                 .resolver_package_name
                 .as_deref()
@@ -123,7 +196,9 @@ fn external_package_boundary_with(
             if package.is_some_and(solid_dialect::primitive_defining_package) {
                 continue;
             }
-            if is_package_local_edge(reader, &mut owners, importer, import) {
+            if is_package_local_edge(reader, &mut owners, importer, import)
+                || is_workspace_project_edge(facts, import)
+            {
                 continue;
             }
             let key = ImportKey::new(importer, import.text.to_string());
@@ -149,7 +224,9 @@ fn external_package_boundary_with(
                 .dependency_source_root(&import.resolved_path)
                 .is_some()
             {
-                if !namespace_import(facts, importer, &import.text) {
+                if !namespace_import(facts, importer, &import.text)
+                    || namespace_import_redirected(facts, importer, &import.text)
+                {
                     continue;
                 }
                 record(
@@ -222,6 +299,52 @@ fn is_package_local_edge(
     };
     owning_named_manifest(reader, owners, Path::new(import.resolved_path.as_ref()))
         .is_some_and(|target_owner| target_owner == importer_owner)
+}
+
+/// Whether `import` is a bare specifier that a workspace link resolved to a
+/// file of this project's own program: no package boundary, because the
+/// target is project code, analyzed like any other project file. The
+/// dependency selection reads such a root the same way ("it is project code,
+/// not a dependency"), so a requirement marker raised here claimed that the
+/// behaviour of a callee was unknown while its body sat in the facts.
+///
+/// Exact: the resolver's realpath-normalized file lies under no `node_modules`
+/// directory, and the program holds facts for exactly that file. A file the
+/// program does not hold (a declaration-only or unselected target) and an
+/// installed copy under `node_modules` keep the marker.
+fn is_workspace_project_edge(
+    facts: &solid_facts::ProjectFacts,
+    import: &solid_facts::AttestedImport,
+) -> bool {
+    let target = import.resolved_path.as_ref();
+    !target.is_empty()
+        && import.resolution == solid_facts::ImportResolution::NodeModules
+        && !Path::new(target)
+            .components()
+            .any(|component| component.as_os_str() == "node_modules")
+        && facts.dependency_source_root(target).is_none()
+        && facts.files.iter().any(|file| file.path.as_str() == target)
+}
+
+/// Whether `path` is a file Vite itself resolves as its configuration
+/// (`vite.config.<ext>`, and `vitest.config.<ext>` for the test runner built on
+/// it): the exact names those tools document, not a pattern guessed from a
+/// package. [`crate::dependency_sources::is_build_config`] is the prefix test;
+/// the extension must also be one of the script extensions, so a helper that
+/// merely starts with the name is not a configuration.
+fn is_build_tool_config(path: &str) -> bool {
+    let path = Path::new(path);
+    crate::dependency_sources::is_build_config(path)
+        && path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| {
+                matches!(extension, "js" | "mjs" | "cjs" | "ts" | "mts" | "cts")
+            })
+        && path
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .is_some_and(|stem| matches!(stem, "vite.config" | "vitest.config"))
 }
 
 /// The nearest `package.json` above `file` whose object declares a string
@@ -772,6 +895,86 @@ mod tests {
                 "a refusal about another copy joins nothing"
             );
         }
+    }
+
+    /// A workspace package linked into `node_modules` resolves, by realpath,
+    /// to the project's own directory. When the program holds that file it is
+    /// project code and raises nothing; a target the program does not hold,
+    /// and an installed copy, keep the marker.
+    #[test]
+    fn a_workspace_link_to_a_program_file_is_project_code() {
+        let mut f = Fixture::new("workspace-link");
+        f.file("packages/ui/package.json", SOLID_DEPENDENCY);
+        f.file("node_modules/pkg/package.json", SOLID_DEPENDENCY);
+        f.source("packages/ui/src/utils.ts", "export const x = 1;");
+        let nm = ImportResolution::NodeModules;
+        let held = f.import(
+            "src/main.ts",
+            "pkg/utils",
+            nm,
+            "packages/ui/src/utils.ts",
+            Some("pkg"),
+            Some("packages/ui/package.json"),
+        );
+        let unheld = f.import(
+            "src/main.ts",
+            "pkg/other",
+            nm,
+            "packages/ui/src/other.ts",
+            Some("pkg"),
+            Some("packages/ui/package.json"),
+        );
+        let installed = f.import(
+            "src/main.ts",
+            "pkg/dist",
+            nm,
+            "node_modules/pkg/index.js",
+            Some("pkg"),
+            Some("node_modules/pkg/package.json"),
+        );
+        let boundary = f.boundary();
+        assert!(untouched(&boundary, &f, held));
+        assert!(kept(&boundary, &f, unheld));
+        assert!(kept(&boundary, &f, installed));
+    }
+
+    /// A Vite configuration nothing imports is a build-time Node file. The same
+    /// import in any other file, or in a configuration the program imports,
+    /// keeps the marker.
+    #[test]
+    fn a_vite_config_nothing_imports_raises_nothing() {
+        let mut f = Fixture::new("vite-config");
+        f.file("node_modules/pkg/package.json", SOLID_DEPENDENCY);
+        let nm = ImportResolution::NodeModules;
+        let row = |f: &mut Fixture, importer: &str| {
+            f.import(
+                importer,
+                "pkg",
+                nm,
+                "node_modules/pkg/index.js",
+                Some("pkg"),
+                Some("node_modules/pkg/package.json"),
+            )
+        };
+        let config = row(&mut f, "vite.config.ts");
+        let vitest = row(&mut f, "tests/vitest.config.mts");
+        let app = row(&mut f, "src/main.ts");
+        let lookalike = row(&mut f, "src/vite.config.helper.ts");
+        let imported = row(&mut f, "web/vite.config.js");
+        f.import(
+            "src/entry.ts",
+            "../web/vite.config.js",
+            ImportResolution::Relative,
+            "web/vite.config.js",
+            None,
+            None,
+        );
+        let boundary = f.boundary();
+        assert!(untouched(&boundary, &f, config));
+        assert!(untouched(&boundary, &f, vitest));
+        assert!(kept(&boundary, &f, app));
+        assert!(kept(&boundary, &f, lookalike));
+        assert!(kept(&boundary, &f, imported));
     }
 
     #[test]

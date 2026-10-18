@@ -3086,6 +3086,22 @@ impl Resolver<'_, '_> {
             return None;
         }
         let span = file.ast.peel_ts_sugar_span(span);
+        if let Some(choice) = file
+            .ast
+            .conditional_expressions
+            .iter()
+            .find(|c| c.span == span)
+        {
+            // Both runtime alternatives must close. A missing alternative is
+            // not permission to keep only the known package object.
+            let mut values = self.closed_dependency_objects(file, choice.consequent, depth - 1)?;
+            for value in self.closed_dependency_objects(file, choice.alternate, depth - 1)? {
+                if !values.contains(&value) {
+                    values.push(value);
+                }
+            }
+            return (!values.is_empty()).then_some(values);
+        }
         if let Some(shape) = file.ast.object_get_shapes.iter().find(|s| s.span == span) {
             return shape.closed.then(|| vec![(file.path.to_string(), span)]);
         }
@@ -3221,11 +3237,48 @@ impl Resolver<'_, '_> {
         let (bound_file, binding, symbol) =
             self.lookup.binding_at_reference(file.path.as_str(), span)?;
         if !binding.immutable
-            || binding.shape != ast::BindingShape::Identifier
             || binding.names.len() != 1
             || crate::indexes::binding_written(bound_file, binding.names[0].span)
             || crate::value_identity::binding_has_write(bound_file, self.lookup.entities(), &symbol)
         {
+            return None;
+        }
+        if binding.shape == ast::BindingShape::Object {
+            let [slot] = binding.object_slots.as_slice() else {
+                return None;
+            };
+            if !slot.plain_identifier_key || slot.local.span != binding.names[0].span {
+                return None;
+            }
+            let mut values = Vec::new();
+            for (path, object) in
+                self.closed_dependency_objects(bound_file, binding.initializer?, depth - 1)?
+            {
+                // A package-owned data descriptor is stable under the same
+                // integrity premise as an ordinary member projection. No
+                // project receiver escape census is waived here.
+                self.facts.dependency_source_root(&path)?;
+                if !self.dependency_member_stable(&path, object, slot.property.as_str()) {
+                    return None;
+                }
+                let owner = self.lookup.file_by_path(&path)?;
+                let property = direct_data_properties(owner, object)
+                    .into_iter()
+                    .find(|p| {
+                        owner
+                            .source_text(p.key)
+                            .map(|key| key.trim_matches(['\'', '"']))
+                            == Some(slot.property.as_str())
+                    })?;
+                values.extend(self.closed_dependency_objects(
+                    owner,
+                    property.shorthand_binding.unwrap_or(property.value),
+                    depth - 1,
+                )?);
+            }
+            return (!values.is_empty()).then_some(values);
+        }
+        if binding.shape != ast::BindingShape::Identifier {
             return None;
         }
         let values = self.closed_dependency_objects(bound_file, binding.initializer?, depth - 1)?;
@@ -3388,6 +3441,18 @@ impl Resolver<'_, '_> {
         if depth == 0 || !visited.insert(location(file.path.shared(), span)) {
             return;
         }
+        if let Some(choice) = file
+            .ast
+            .conditional_expressions
+            .iter()
+            .find(|c| c.span == span)
+        {
+            // May-provenance retains each known alternative even when its
+            // sibling cannot supply the complete proof above.
+            self.derived_objects(file, choice.consequent, depth - 1, visited, objects);
+            self.derived_objects(file, choice.alternate, depth - 1, visited, objects);
+            return;
+        }
         let declaration = file.ast.reference_declaration(span).unwrap_or(span);
         if let Some((path, argument)) = self
             .parameter_inputs
@@ -3520,6 +3585,37 @@ impl Resolver<'_, '_> {
         else {
             return;
         };
+        if binding.shape == ast::BindingShape::Object
+            && binding.names.len() == 1
+            && let [slot] = binding.object_slots.as_slice()
+            && slot.plain_identifier_key
+            && slot.local.span == binding.names[0].span
+            && let Some(initializer) = binding.initializer
+        {
+            let mut receivers = Vec::new();
+            self.derived_objects(bound_file, initializer, depth - 1, visited, &mut receivers);
+            for (path, object) in receivers {
+                let Some(owner) = self.lookup.file_by_path(&path) else {
+                    continue;
+                };
+                for property in direct_data_properties(owner, object) {
+                    if owner
+                        .source_text(property.key)
+                        .map(|key| key.trim_matches(['\'', '"']))
+                        == Some(slot.property.as_str())
+                    {
+                        self.derived_objects(
+                            owner,
+                            property.shorthand_binding.unwrap_or(property.value),
+                            depth - 1,
+                            visited,
+                            objects,
+                        );
+                    }
+                }
+            }
+            return;
+        }
         if binding.shape == ast::BindingShape::Identifier
             && binding.names.len() == 1
             && let Some(initializer) = binding.initializer

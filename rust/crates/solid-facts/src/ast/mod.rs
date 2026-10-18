@@ -29,7 +29,7 @@ use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 63;
+pub const AST_FACTS_SCHEMA: u32 = 64;
 
 mod argument_completion;
 mod binding_references;
@@ -170,6 +170,12 @@ pub struct AstFacts {
     /// Runtime `typeof value` expressions are deliberately not recorded.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub type_queries: Vec<Span>,
+    /// Type names written in a type position, erased at runtime (facts
+    /// schema 64): the name of every type reference (`X.Props<T>`), every
+    /// class `implements` clause and every interface `extends` clause. An
+    /// `import A = X.Y` alias is a runtime binding and is not recorded.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub type_names: Vec<Span>,
     /// The tag expression of each tagged template (facts schema 48). The
     /// template calls its tag, with the member's object as `this` when the
     /// tag is a member expression; no call fact records that invocation.
@@ -330,6 +336,14 @@ pub struct AstFacts {
     /// coercion of a caller's argument, never by a rule.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub coercing_operands: Vec<Span>,
+    /// Every operator expression whose value is a primitive whatever its
+    /// operands are, by span, sorted (facts schema 64): arithmetic, shift,
+    /// bitwise, relational, equality, `in` and `instanceof` binaries; the
+    /// prefix `+ - ~ ! typeof delete`; and `++`/`--`. Not `void` (it yields
+    /// `undefined`, which selects a parameter default) nor a logical or
+    /// conditional operator (it yields one of its operands).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub primitive_results: Vec<Span>,
     /// Every value the iteration protocol is driven over, by span, sorted: the
     /// iterated operand of a `for…of` (and `for await…of`), of an array or
     /// argument spread (an object spread is a property enumeration, not an
@@ -1141,6 +1155,14 @@ pub struct ReturnFact {
     /// `return;` is `Nullish`.
     #[serde(default)]
     pub runtime_value_kind: RuntimeValueKind,
+    /// The `return` statement sits in its function's straight-line flow, as
+    /// [`AstFacts::unconditional_awaits`] are: no conditional, loop, switch,
+    /// `try`, labelled body or logical construct between the function entry
+    /// and it, so every run that does not leave earlier executes it (facts
+    /// schema 64). Always false for an arrow's expression body, which has no
+    /// `return` statement.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub straight_line: bool,
 }
 
 impl ReturnFact {
@@ -1710,6 +1732,7 @@ impl AstFacts {
             import_equals: Vec::new(),
             type_imports: Vec::new(),
             type_queries: Vec::new(),
+            type_names: Vec::new(),
             tagged_template_tags: Vec::new(),
             module_hazards: Vec::new(),
             module_blocks: Vec::new(),
@@ -1740,6 +1763,7 @@ impl AstFacts {
             template_literals: Vec::new(),
             coercive_operands: Vec::new(),
             coercing_operands: Vec::new(),
+            primitive_results: Vec::new(),
             iterated_operands: Vec::new(),
             assignments: Vec::new(),
             write_targets: Vec::new(),
@@ -1875,6 +1899,7 @@ struct Collector<'s, 'semantic> {
     import_equals: Vec<ImportEqualsFact>,
     type_imports: Vec<TypeImportFact>,
     type_queries: Vec<Span>,
+    type_names: Vec<Span>,
     tagged_template_tags: Vec<Span>,
     /// The declaration spans of `export import S = require("m")`, recorded by
     /// the export visitor before the walk reaches the declaration itself.
@@ -1910,6 +1935,7 @@ struct Collector<'s, 'semantic> {
     template_literals: Vec<TemplateLiteralFact>,
     coercive_operands: Vec<CoerciveOperandFact>,
     coercing_operands: Vec<Span>,
+    primitive_results: Vec<Span>,
     iterated_operands: Vec<Span>,
     assignments: Vec<AssignmentFact>,
     write_targets: Vec<Span>,
@@ -2091,6 +2117,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             import_equals: Vec::new(),
             type_imports: Vec::new(),
             type_queries: Vec::new(),
+            type_names: Vec::new(),
             tagged_template_tags: Vec::new(),
             exported_import_equals: Vec::new(),
             module_hazards: Vec::new(),
@@ -2124,6 +2151,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             template_literals: Vec::new(),
             coercive_operands: Vec::new(),
             coercing_operands: Vec::new(),
+            primitive_results: Vec::new(),
             iterated_operands: Vec::new(),
             assignments: Vec::new(),
             write_targets: Vec::new(),
@@ -2171,6 +2199,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.module_hazards.sort_by_key(|fact| fact.span);
         self.type_queries.sort_unstable();
         self.type_queries.dedup();
+        self.type_names.sort_unstable();
+        self.type_names.dedup();
         self.tagged_template_tags.sort_unstable();
         self.module_blocks.sort_unstable();
         self.identifiers.sort_by_key(|identifier| identifier.span);
@@ -2201,6 +2231,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.coercive_operands.sort_by_key(|fact| fact.span);
         self.coercing_operands.sort_unstable();
         self.coercing_operands.dedup();
+        self.primitive_results.sort_unstable();
+        self.primitive_results.dedup();
         self.iterated_operands.sort_unstable();
         self.iterated_operands.dedup();
         self.assignments.sort_by_key(|fact| fact.target);
@@ -2241,6 +2273,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             import_equals: self.import_equals,
             type_imports: self.type_imports,
             type_queries: self.type_queries,
+            type_names: self.type_names,
             tagged_template_tags: self.tagged_template_tags,
             module_hazards: self.module_hazards,
             module_blocks: self.module_blocks,
@@ -2271,6 +2304,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             template_literals: self.template_literals,
             coercive_operands: self.coercive_operands,
             coercing_operands: self.coercing_operands,
+            primitive_results: self.primitive_results,
             iterated_operands: self.iterated_operands,
             assignments: self.assignments,
             write_targets: self.write_targets,
@@ -2397,6 +2431,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
                 callee: None,
                 structure: None,
                 runtime_value_kind: RuntimeValueKind::Nullish,
+                straight_line: false,
             };
         };
         let argument_span = span(expression.span());
@@ -2509,6 +2544,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
                     properties,
                 })
             }),
+            straight_line: false,
         }
     }
 
@@ -3479,6 +3515,21 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         walk::walk_ts_type_query(self, query);
     }
 
+    fn visit_ts_type_reference(&mut self, reference: &oxc_ast::ast::TSTypeReference<'a>) {
+        self.type_names.push(span(reference.type_name.span()));
+        walk::walk_ts_type_reference(self, reference);
+    }
+
+    fn visit_ts_class_implements(&mut self, implements: &oxc_ast::ast::TSClassImplements<'a>) {
+        self.type_names.push(span(implements.expression.span()));
+        walk::walk_ts_class_implements(self, implements);
+    }
+
+    fn visit_ts_interface_heritage(&mut self, heritage: &oxc_ast::ast::TSInterfaceHeritage<'a>) {
+        self.type_names.push(span(heritage.expression.span()));
+        walk::walk_ts_interface_heritage(self, heritage);
+    }
+
     fn visit_ts_import_type(&mut self, import: &TSImportType<'a>) {
         let mut qualifier = import.qualifier.as_ref();
         let mut member = None;
@@ -3671,20 +3722,36 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     fn visit_await_expression(&mut self, expression: &AwaitExpression<'a>) {
         self.awaits.push(span(expression.span));
         self.await_operands.push(span(expression.argument.span()));
-        if self.conditional_flow_depth
-            == self
-                .function_flow_depths
-                .last()
-                .copied()
-                .unwrap_or_default()
+        // `g?.(await p)` and `t?.[await p]` skip their arguments and keys
+        // when the base is nullish (facts schema 64); what precedes a chain's
+        // first `?.` always runs.
+        let await_span = span(expression.span);
+        let skippable = self.skippable_chain_sites.contains(&await_span)
+            || self
+                .skippable_chain_ranges
+                .iter()
+                .any(|range| range.contains(await_span));
+        if !skippable
+            && self.conditional_flow_depth
+                == self
+                    .function_flow_depths
+                    .last()
+                    .copied()
+                    .unwrap_or_default()
         {
-            self.unconditional_awaits.push(span(expression.span));
+            self.unconditional_awaits.push(await_span);
         }
         walk::walk_await_expression(self, expression);
     }
 
     fn visit_return_statement(&mut self, statement: &ReturnStatement<'a>) {
-        let returned = self.return_fact(statement.argument.as_ref(), statement.span);
+        let mut returned = self.return_fact(statement.argument.as_ref(), statement.span);
+        returned.straight_line = self.conditional_flow_depth
+            == self
+                .function_flow_depths
+                .last()
+                .copied()
+                .unwrap_or_default();
         self.returns.push(returned);
         walk::walk_return_statement(self, statement);
         self.mark_function_exit();
@@ -3797,8 +3864,40 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 | AssignmentOperator::LogicalNullish
         );
         self.logical_assignment_depth += usize::from(logical);
+        // The right side of `??=`, `||=` and `&&=` runs only when the target
+        // allows: an await or call there is not straight-line (facts schema 64).
+        self.conditional_flow_depth += usize::from(logical);
         walk::walk_assignment_expression(self, expression);
+        self.conditional_flow_depth -= usize::from(logical);
         self.logical_assignment_depth -= usize::from(logical);
+    }
+
+    /// A labelled statement's body can be left early by `break label` (or a
+    /// labelled `continue`), skipping whatever follows the jump inside it
+    /// while the code after the statement still runs (facts schema 64).
+    fn visit_labeled_statement(&mut self, statement: &oxc_ast::ast::LabeledStatement<'a>) {
+        self.conditional_flow_depth += 1;
+        walk::walk_labeled_statement(self, statement);
+        self.conditional_flow_depth -= 1;
+    }
+
+    /// A destructuring default runs only when the value is `undefined`
+    /// (facts schema 64).
+    fn visit_assignment_pattern(&mut self, pattern: &oxc_ast::ast::AssignmentPattern<'a>) {
+        self.visit_binding_pattern(&pattern.left);
+        self.conditional_flow_depth += 1;
+        self.visit_expression(&pattern.right);
+        self.conditional_flow_depth -= 1;
+    }
+
+    fn visit_assignment_target_with_default(
+        &mut self,
+        target: &oxc_ast::ast::AssignmentTargetWithDefault<'a>,
+    ) {
+        self.visit_assignment_target(&target.binding);
+        self.conditional_flow_depth += 1;
+        self.visit_expression(&target.init);
+        self.conditional_flow_depth -= 1;
     }
 
     fn visit_simple_assignment_target(
@@ -3814,6 +3913,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_update_expression(&mut self, expression: &UpdateExpression<'a>) {
+        self.primitive_results.push(span(expression.span));
         if self.simple_assignment_target_has_unresolved(&expression.argument) {
             self.module_hazards.push(ModuleHazardFact {
                 span: span(expression.span),
@@ -4551,6 +4651,8 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
 
     fn visit_binary_expression(&mut self, expression: &BinaryExpression<'a>) {
         use oxc_syntax::operator::BinaryOperator;
+        // Every binary operator yields a number, bigint, string or boolean.
+        self.primitive_results.push(span(expression.span));
 
         if matches!(
             expression.operator,
@@ -4638,6 +4740,9 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
 
     fn visit_unary_expression(&mut self, expression: &UnaryExpression<'a>) {
         use oxc_syntax::operator::UnaryOperator;
+        if expression.operator != UnaryOperator::Void {
+            self.primitive_results.push(span(expression.span));
+        }
         if expression.operator == UnaryOperator::Delete {
             self.deleted_targets.push(span(expression.argument.span()));
         }
@@ -5049,6 +5154,56 @@ mod tests {
         assert_eq!(lines, [4, 5, 13], "{lines:?}");
     }
 
+    /// ADR 0320 (facts schema 64): an await is unconditional only when no
+    /// construct that can skip it lies between the function entry and it:
+    /// logical assignments, optional chains, destructuring defaults and
+    /// labelled statements (whose body a `break label` leaves) join the
+    /// conditionals, loops, switches and `try` already counted.
+    #[test]
+    fn unconditional_awaits_exclude_every_skippable_construct() {
+        let source = concat!(
+            "declare const p: Promise<number>; declare const c: boolean;\n",
+            "declare const g: ((n: number) => void) | undefined;\n",
+            "declare const t: Record<number, number> | undefined;\n",
+            "async function f(o: { a?: number }) {\n",
+            "  let x: number | undefined;\n",
+            "  x ??= await p;\n",
+            "  x ||= await p;\n",
+            "  x &&= await p;\n",
+            "  g?.(await p);\n",
+            "  void t?.[await p];\n",
+            "  skip: { if (c) break skip; await p; }\n",
+            "  outer: { { if (c) break outer; } await p; }\n",
+            "  const { a = await p } = o;\n",
+            "  ({ a: x = await p } = o);\n",
+            "  void a;\n",
+            "  await p;\n",
+            "  const y = await p;\n",
+            "  return y;\n",
+            "}\n",
+        );
+        let facts = super::extract("awaits.ts", source).unwrap();
+        let line_of =
+            |span: crate::core::Span| source[..span.start as usize].matches('\n').count() + 1;
+        let lines = facts
+            .unconditional_awaits
+            .iter()
+            .map(|span| line_of(*span))
+            .collect::<Vec<_>>();
+        assert_eq!(lines, [16, 17], "{lines:?}");
+        let calls = super::extract(
+            "calls.ts",
+            "declare function s(): number;\nlet x: number | undefined;\nx ??= s();\nl: { s(); }\nconst { a = s() } = {} as { a?: number };\ns();\n",
+        )
+        .unwrap();
+        assert_eq!(
+            calls.straight_line_calls.len(),
+            1,
+            "{:?}",
+            calls.straight_line_calls
+        );
+    }
+
     /// ADR 0276: a completion site is straight-line in its own function and
     /// no earlier `return`, `break` or `continue` of that function may skip
     /// it. A jump in a nested function does not count.
@@ -5263,6 +5418,27 @@ export const short = async () => 2;
         // The trailing string literal sits after a statement and is not a
         // module directive.
         assert_eq!(facts.module_directives.len(), 2);
+    }
+
+    #[test]
+    fn type_names_are_erased_but_import_aliases_are_not() {
+        let source = "import * as X from \"m\"; type P = X.Props<string>; \
+            class C implements X.Shape {} interface I extends X.Base {} \
+            import A = X.Value; const v: X.Props<number> = X.make();";
+        let facts = extract("/project/types.ts", source).unwrap();
+        let texts: Vec<&str> = facts
+            .type_names
+            .iter()
+            .map(|name| &source[name.start as usize..name.end as usize])
+            .collect();
+        assert_eq!(texts, ["X.Props", "X.Shape", "X.Base", "X.Props"]);
+        let runtime = source.find("X.make").unwrap() as u32;
+        assert!(
+            facts
+                .type_names
+                .iter()
+                .all(|name| !name.contains(Span::new(runtime, runtime + 1)))
+        );
     }
 
     #[test]
@@ -6452,7 +6628,7 @@ S.createErrorBoundary;
             "export default 1;\n",
         );
         let facts = extract("/p/specifiers.ts", source).unwrap();
-        assert_eq!(facts.schema, 63);
+        assert_eq!(facts.schema, AST_FACTS_SCHEMA);
         let imports = facts
             .imports
             .iter()

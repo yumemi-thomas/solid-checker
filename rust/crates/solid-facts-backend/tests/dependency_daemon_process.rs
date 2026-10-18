@@ -432,6 +432,30 @@ fn an_edited_folded_package_file_is_the_one_shot_answer() {
     );
 }
 
+/// ADR 0322: a namespace import that starts escaping as a value (and, on
+/// restore, stops) moves its redirection and its `NamespaceValue` obligation;
+/// a requested daemon never answers either way.
+#[test]
+fn an_escaping_namespace_import_is_the_one_shot_answer() {
+    let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    mutation_case(
+        &typefacts,
+        "dependency-source-namespace-import",
+        "namespace-escape",
+        &["dep-ns/widget"],
+        |_| {},
+        |scratch| {
+            edit(
+                &scratch.path("App.tsx"),
+                "const now = Widget.readNow(() => count());",
+                "const all = Widget;\n  const now = all.readNow(() => count());",
+            );
+        },
+    );
+}
+
 /// ADR 0297: one check with exactly `args` after the project, retained or
 /// one-shot, whatever its exit status.
 fn invoke(typefacts: &str, project: &Path, args: &[&str], retained: bool) -> (bool, Run) {
@@ -994,10 +1018,13 @@ fn a_read_only_project_is_analyzed_from_source() {
     assert!(scratch.siblings().is_empty());
 }
 
-/// The same for a namespace import inside a selected package's own source:
-/// the package it names keeps its contract, and nothing proves the call.
+/// A namespace import inside a selected package's own source. Since ADR 0313
+/// it does not take the package it names off source; since ADR 0322 a
+/// namespace used only through static members binds each member like the
+/// named import, so the call is proved exactly as the unedited
+/// `import { readInner }` proves it.
 #[test]
-fn a_namespace_import_in_package_source_keeps_that_package_on_contracts() {
+fn a_static_namespace_import_in_package_source_proves_its_call() {
     let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
         return;
     };
@@ -1016,7 +1043,7 @@ fn a_namespace_import_in_package_source_keeps_that_package_on_contracts() {
     let (success, run) = invoke(&typefacts, &scratch.project, &HOST, false);
     assert!(success, "{}", run.stderr);
     assert!(
-        run.notes().iter().any(|note| note
+        !run.notes().iter().any(|note| note
             .contains("dependency source dep-inner: imported through a namespace binding")),
         "{}",
         run.stderr
@@ -1029,7 +1056,7 @@ fn a_namespace_import_in_package_source_keeps_that_package_on_contracts() {
         + 1;
     let findings = run.json()["findings"].as_array().unwrap().clone();
     assert!(
-        !findings
+        findings
             .iter()
             .any(|finding| finding["kind"] == "violation"
                 && finding["primaryLocation"]["line"] == line),
@@ -1040,6 +1067,23 @@ fn a_namespace_import_in_package_source_keeps_that_package_on_contracts() {
         findings
             .iter()
             .any(|finding| finding["kind"] == "violation"),
+        "{findings:#?}"
+    );
+    // The namespace escaping as a value redirects nothing: the call is
+    // proved by nothing.
+    edit(
+        &scratch.path("node_modules/dep-hooks/src/index.jsx"),
+        "return inner.readInner(source);",
+        "const all = inner;\n  return all.readInner(source);",
+    );
+    let (success, run) = invoke(&typefacts, &scratch.project, &HOST, false);
+    assert!(success, "{}", run.stderr);
+    let findings = run.json()["findings"].as_array().unwrap().clone();
+    assert!(
+        !findings
+            .iter()
+            .any(|finding| finding["kind"] == "violation"
+                && finding["primaryLocation"]["line"] == line),
         "{findings:#?}"
     );
 }

@@ -1,0 +1,1 @@
+{"name": "router-params-linked-dependency", "private": true, "dependencies": {"@solidjs/router": "link:../router"}}

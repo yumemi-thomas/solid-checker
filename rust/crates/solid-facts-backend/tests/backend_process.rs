@@ -8,6 +8,8 @@ mod process_support;
 #[path = "accessor_provenance_process.rs"]
 mod accessor_provenance_process;
 
+#[path = "callback_props_reads_process.rs"]
+mod callback_props_reads_process;
 #[path = "cli_process.rs"]
 mod cli_process;
 #[path = "cross_file_callbacks_process.rs"]
@@ -16,12 +18,18 @@ mod cross_file_callbacks_process;
 mod cross_file_digest_process;
 #[path = "harness_process.rs"]
 mod harness_process;
+#[path = "imported_const_process.rs"]
+mod imported_const_process;
+#[path = "invocation_flow_process.rs"]
+mod invocation_flow_process;
 #[path = "owner_parity_process.rs"]
 mod owner_parity_process;
 #[path = "props_reactivity_process.rs"]
 mod props_reactivity_process;
 #[path = "reachability_parity_process.rs"]
 mod reachability_parity_process;
+#[path = "router_params_process.rs"]
+mod router_params_process;
 #[path = "rule_quality_process.rs"]
 mod rule_quality_process;
 #[path = "sessions_process.rs"]

@@ -221,6 +221,18 @@ pub fn symbol_redirects(
                         solid_facts::ast::ImportKind::Named | solid_facts::ast::ImportKind::Default
                     )
             });
+            // ADR 0322: a namespace import whose every runtime reference is a
+            // static member (`X.member`, `<X.Member>`) binds each member it
+            // names, exactly as a named import of that export would.
+            for binding in import.bindings.iter().filter(|binding| {
+                binding.runtime_referenced
+                    && !binding.type_only
+                    && binding.kind == solid_facts::ast::ImportKind::Namespace
+            }) {
+                if let Some(members) = namespace_static_members(importer, binding.local.span) {
+                    pairs.extend(members);
+                }
+            }
             for binding in bindings {
                 let exported = match binding.kind {
                     solid_facts::ast::ImportKind::Named => binding.imported.as_deref(),
@@ -280,6 +292,64 @@ pub fn symbol_redirects(
         }
     }
     Ok(redirects)
+}
+
+/// ADR 0322: the static members a namespace import declared at `local`
+/// reads, as `(span, exported name)` pairs: the member's property span and
+/// its whole span, and a dotted JSX tag's property span. `None` when any
+/// runtime reference is anything else: a computed member (`X[k]`), the
+/// namespace handed, returned, stored, spread or aliased, `typeof X` in a
+/// value. A reference inside a type query is erased and allowed.
+pub(crate) fn namespace_static_members(
+    file: &solid_facts::FileFacts,
+    local: solid_facts::core::Span,
+) -> Option<Vec<(solid_facts::core::Span, String)>> {
+    let mut pairs = Vec::new();
+    let mut referenced = false;
+    for (reference, _) in file
+        .ast
+        .reference_declarations
+        .iter()
+        .filter(|(reference, declared)| *declared == local && *reference != local)
+    {
+        referenced = true;
+        if file
+            .ast
+            .type_queries
+            .iter()
+            .chain(&file.ast.type_names)
+            .any(|erased| erased.contains(*reference))
+        {
+            continue;
+        }
+        if let Some(member) = file.ast.members.iter().find(|member| {
+            member.object == *reference
+                && file
+                    .ast
+                    .computed_members
+                    .binary_search(&member.span)
+                    .is_err()
+        }) {
+            let name = file.source_text(member.property)?.to_owned();
+            pairs.push((member.property, name.clone()));
+            pairs.push((member.span, name));
+            continue;
+        }
+        if let Some(element) = file.ast.jsx_elements.iter().find(|element| {
+            element.member_object == Some(*reference)
+                || element.closing_name.is_some_and(|closing| {
+                    closing.start == reference.start && element.member_object.is_some()
+                })
+        }) {
+            let property = element.member_property?;
+            let name = file.source_text(property)?.to_owned();
+            pairs.push((property, name.clone()));
+            pairs.push((element.name.span, name));
+            continue;
+        }
+        return None;
+    }
+    referenced.then_some(pairs)
 }
 
 /// Resolve the selected runtime graph, including bare re-exports. Explicit

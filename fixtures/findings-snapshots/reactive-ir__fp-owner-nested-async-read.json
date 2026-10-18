@@ -2,16 +2,6 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/fp-owner-nested-async-read/App.tsx",
-      "start": 337,
-      "end": 405,
-      "fixes": 0
-    },
-    {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "violation",

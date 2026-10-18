@@ -1,0 +1,530 @@
+import { type InteractionRef, type NavigationRef } from "./attribution-hooks.js";
+import type { ChangeOrigin, CreateEvent, EffectRunEvent, FallbackEvent, FlightEvent, FlushEvent, GraphEvent, HoldEvent, InteractionEvent, NavigationEvent, RerunEvent } from "./attribution.js";
+import type { Computed, Owner, Signal } from "./types.js";
+export interface DevHooks {
+    onOwner?: (owner: Owner) => void;
+    onGraph?: (value: any, owner: Owner | null) => void;
+    onUpdate?: () => void;
+    onStoreNodeUpdate?: (state: any, property: PropertyKey, value: any, prev: any) => void;
+}
+/**
+ * `info` is the advisory tier: a structural fact worth surfacing that is not
+ * presumptively a bug (e.g. a 2-deep sequential fetch chain, which may be an
+ * intrinsic data dependency). Budget/assertion consumers should treat only
+ * `warn`/`error` as failures unless they opt in to `info`.
+ */
+export type DiagnosticSeverity = "info" | "warn" | "error";
+export type DiagnosticCode = "STRICT_READ_UNTRACKED" | "PENDING_ASYNC_UNTRACKED_READ" | "PENDING_ASYNC_FORBIDDEN_SCOPE" | "REACTIVE_WRITE_IN_OWNED_SCOPE" | "ASYNC_STORE_SETTER" | "ACTION_CALLED_IN_OWNED_SCOPE" | "RUN_WITH_DISPOSED_OWNER" | "NO_OWNER_CLEANUP" | "CLEANUP_IN_FORBIDDEN_SCOPE" | "SETTLED_CLEANUP_UNOWNED" | "SETTLE_WALK_UNINITIALIZED_SOURCE" | "FLUSH_IN_EFFECT_CALLBACK" | "PRIMITIVE_IN_FORBIDDEN_SCOPE" | "NO_OWNER_EFFECT" | "NO_OWNER_BOUNDARY" | "ASYNC_OUTSIDE_LOADING_BOUNDARY" | "LOADING_ON_OUTSIDE_HOLD" | "INVALID_REFRESH_TARGET" | "INVALID_AFFECTS_TARGET" | "MISSING_EFFECT_FN" | "SYNC_NODE_RECEIVED_ASYNC" | "UNTRACKED_READ_AFTER_AWAIT" | "REACTIVITY_HALTED" | "INVARIANT_VIOLATION" | "HUGE_FAN_OUT" | "HUGE_FAN_IN" | "GRAPH_GROWTH" | "HOT_SCOPE_RERUNS" | "HOT_SCOPE_TIME" | "WIDE_SCOPE_DEPS" | "UNSTABLE_MEMO_OUTPUT" | "WASTED_RECOMPUTE" | "ASYNC_WATERFALL" | "HOT_SCOPE_FANOUT" | "SILENT_HOLD" | "LONG_HOLD" | "UNTRACKED_ASYNC_HANDLER" | "ABANDONED_FLIGHTS" | "FALLBACK_FLASH" | "STACKED_HOLDS" | "OPTIMISTIC_REVERTED" | "EFFECT_WRITES_OWN_SOURCE" | "EFFECT_RELAY_TEAR" | "IMMUTABLE_UPDATE_IN_STORE" | "UNSTABLE_LIST_IDENTITY" | "SSR_RENDER_ERROR_CONTAINED" | "SSR_SUBTREE_ABANDONED" | "SSR_STREAM_ABANDONED" | "SSR_CLIENT_CONTENT_MASKED" | "LATE_HEADER_WRITE" | "SERVER_ERROR_SANITIZED" | "SSR_BOUNDARY_WATERFALL" | "SSR_UNDECLARED_LIVE_SOURCE" | "SERVER_WRITE" | "REVEAL_IN_RENDER_TO_STRING" | "LAZY_ASSET_UNMAPPED" | "PRELOAD_DESCRIPTOR_INVALID" | "HEAD_TAG_INVALID" | "UNRECOGNIZED_INSERT_VALUE" | "UNSCOPED_HOLE_ALLOCATED_IDS" | "ATTRIBUTE_SLOT_POSITION" | "FRAME_MARKER_CORRUPTED" | "DYNAMIC_ASYNC_COMPONENT";
+export type DiagnosticKind = "strict-read" | "async" | "write" | "lifecycle" | "owner" | "error" | "perf" | "graph"
+/** Perceived responsiveness: the runtime behaved correctly but the user saw no feedback. */
+ | "responsiveness"
+/** Server rendering: boundaries, fragments, the stream, the server-function wire. */
+ | "ssr"
+/** The response head: `<head>` tags, preload descriptors, HTTP headers. */
+ | "head"
+/** The renderer's insert positions, on either platform: a value it has no rendering for. */
+ | "render";
+/** First warning when a change reaches (or a pass tracks) this many edges. */
+export declare const GRAPH_SIZE_WARN_AT = 2000;
+/** Re-warn once the count has grown by this much since the last warning. */
+export declare const GRAPH_SIZE_WARN_EVERY = 500;
+export interface DiagnosticEvent {
+    sequence: number;
+    code: DiagnosticCode;
+    kind: DiagnosticKind;
+    severity: DiagnosticSeverity;
+    message: string;
+    ownerId?: string;
+    ownerName?: string;
+    nodeName?: string;
+    /**
+     * Root-first chain of named owners enclosing the subject of the event —
+     * component roots as `<Name>`, computations by their `name` option (or
+     * the `effect`/`computed` default) — e.g. `["<App>", "<TodoRow>", "effect"]`.
+     * Unnamed owners (plain roots) are skipped. Absent when the subject has no
+     * named owner at all (a top-level scope, or an unowned primitive — which
+     * is usually the finding itself).
+     */
+    ownerPath?: string[];
+    data?: Record<string, unknown>;
+}
+/**
+ * A findings listener. `subject` is the live node the event is about, when
+ * the emitter located one — passed BESIDE the serializable event, the way
+ * the records channel passes `live` — for an in-process consumer that goes
+ * from a finding to the scope (devtools, a console task lookup);
+ * `undefined` for an event with no location, or a host event whose owners
+ * are not signals' owners.
+ */
+export type DiagnosticListener = (event: DiagnosticEvent, subject: DiagnosticSubject | undefined) => void;
+export interface DiagnosticCapture {
+    readonly events: readonly DiagnosticEvent[];
+    clear(): void;
+    stop(): DiagnosticEvent[];
+}
+export interface Diagnostics {
+    subscribe(listener: DiagnosticListener): () => void;
+    capture(): DiagnosticCapture;
+    /**
+     * Records an event on the channel from outside the reactive core — a host
+     * runtime reporting its own findings (hydration mismatches, server render
+     * faults) so consumers see one stream. `subject` locates it like the
+     * internal sites do; a host whose owners are not signals' owners passes
+     * `ownerPath` on the event instead and it is used as-is.
+     */
+    emit(event: Omit<DiagnosticEvent, "sequence">, subject?: DiagnosticSubject | null): DiagnosticEvent;
+}
+/**
+ * The core's side of attribution: the slot the engine installs into, and
+ * the interaction frame the rendering runtime opens around event dispatch.
+ * The engine itself — "why did this run", costs, holds, feedback — is
+ * `@solidjs/signals/attribution`, a separate entry so an observe build pays
+ * for it only when something imports it; enabling it is what installs.
+ */
+export interface AttributionSlot {
+    /**
+     * The installed engine, or `null` when none is enabled — the one fact a
+     * runtime reads off the slot (`solid-js` opens a `console.createTask` per
+     * component only while an engine is there to attribute to it). The
+     * object is the engine's hook table, opaque here: the hook contract is
+     * between the core and its engine, not public surface.
+     */
+    readonly installed: object | null;
+    /**
+     * Run `fn` as a user interaction's handler: root writes inside stamp it as
+     * their origin, and actions/effects/flights it causes carry it. The web
+     * runtime wraps every event dispatch in this; custom renderers and test
+     * harnesses call it themselves. `fn()` when no engine is installed.
+     */
+    withInteraction<T>(ref: InteractionRef, fn: () => T): T;
+    /**
+     * Run `fn` as a declared unit of work — a router's navigation, described
+     * by the parametrized route it matched: root writes inside are attributed
+     * to it (under the enclosing interaction, if any), so the hold behind the
+     * route's data, the re-runs and the verdicts carry the route's name. Any
+     * router calls this around its location write; nothing else is
+     * router-specific. `fn()` when no engine is installed.
+     */
+    withOrigin<T>(ref: NavigationRef, fn: () => T): T;
+    /**
+     * The provenance a root write performed now would be stamped with — the
+     * interaction whose handler is running, the navigation or effect or action
+     * frame open, or inside a recompute the origin of the change that caused
+     * it — as the installed engine sees it; `undefined` with no engine, or when
+     * nothing is in effect (external). For a runtime recording a fact of its
+     * own beside the engine's records: `@solidjs/web` stamps its `"call"`
+     * record with this, so a server-function call joins the interaction or
+     * navigation it ran for by the identity of the object, not by time.
+     */
+    currentOrigin(): ChangeOrigin | undefined;
+}
+/**
+ * The records delivered on `OBSERVE.records`, by type — each entry
+ * `{ event, live }`: the serializable record and the live handle (the node
+ * that ran, a thrown error, a request) an in-process consumer may want
+ * beside it. This package declares the attribution engine's records here —
+ * the engine ships in this package, behind its own entry, and emits on the
+ * same channel as every runtime — and the runtimes that emit declare theirs
+ * by augmentation, so the union of record types is whatever loaded.
+ * `solid-js` augments THIS interface (its `"boundary"` and `"recovery"`
+ * records); the runtimes above it — `@solidjs/web`'s `"invocation"`,
+ * `"frame"` and `"call"`, a router's — augment `HostRecordTypes`, reached
+ * through the `solid-js` re-export, which this interface extends so the
+ * channel sees one catalogue.
+ *
+ * Two interfaces, one augmenter each, by design: TypeScript merges an
+ * augmentation into a re-exported interface by following the alias, and
+ * two augmentations reaching the same interface through DIFFERENT aliases
+ * (`"@solidjs/signals"` from solid-js, `"solid-js"` from web) merge
+ * order-dependently — one set is lost. So each layer augments an interface
+ * of its own, through one module name.
+ *
+ * The engine's records (`@solidjs/signals/attribution`; none is emitted
+ * until `attribution.enable()`): `live` is the computation the record is
+ * about where there is one — the node that ran for `rerun`, `create` and
+ * `effect`, the async node for `flight`, the boundary's subtree for
+ * `fallback` (when the boundary reported one), the first held root signal
+ * for `hold` (the subject the SILENT_HOLD finding names) — and `undefined`
+ * for the records with no single subject (`flush`, `interaction`,
+ * `navigation`, `graph`). The records are the same objects the engine's
+ * ring buffers hold (`attribution.history(type)`), delivered synchronously
+ * the moment each is complete — a re-run at recompute end, a hold, a
+ * navigation, an interaction when it settles, bottom-up — so a listener
+ * runs inside the engine and must not write signals. The timeline records
+ * (`create`, `effect`, `flush`, `flight`, `fallback`) and `graph` enter no
+ * ring buffer and are built only while `observed(type)`: subscribing is
+ * what turns them on. `rerun` is built while something wants it — a
+ * listener, an imported fold (`costs`/`feedback`) or the console log; the
+ * engine's own checks read the facts, not the record.
+ */
+export interface RecordTypes extends HostRecordTypes {
+    rerun: {
+        event: RerunEvent;
+        live: Computed<any>;
+    };
+    create: {
+        event: CreateEvent;
+        live: Computed<any>;
+    };
+    effect: {
+        event: EffectRunEvent;
+        live: Computed<any>;
+    };
+    flush: {
+        event: FlushEvent;
+        live: undefined;
+    };
+    flight: {
+        event: FlightEvent;
+        live: Computed<any>;
+    };
+    fallback: {
+        event: FallbackEvent;
+        live: Computed<any> | undefined;
+    };
+    interaction: {
+        event: InteractionEvent;
+        live: undefined;
+    };
+    hold: {
+        event: HoldEvent;
+        live: Signal<any>;
+    };
+    navigation: {
+        event: NavigationEvent;
+        live: undefined;
+    };
+    graph: {
+        event: GraphEvent;
+        live: undefined;
+    };
+}
+/** The record types host runtimes declare — see `RecordTypes`. */
+export interface HostRecordTypes {
+}
+export type RecordType = keyof RecordTypes & string;
+export type RecordEvent<K extends RecordType> = RecordTypes[K] extends {
+    event: infer E;
+} ? E : never;
+export type RecordLive<K extends RecordType> = RecordTypes[K] extends {
+    live: infer L;
+} ? L : never;
+export type RecordListener<K extends RecordType> = (event: RecordEvent<K>, live: RecordLive<K>) => void;
+/**
+ * What a `Records.subscribe` asks of the emitter beyond the record itself.
+ */
+export interface RecordSubscribeOptions {
+    /**
+     * Ask for the record's BODIES: the live handles that cost the emitter
+     * something per record to take, and are taken only while a listener of
+     * the type has asked — so a consumer that reads ids, statuses and
+     * timings (an APM adapter, the performance tracks) never pays for what a
+     * body viewer (devtools' network panel) reads. Accepted for any type, the
+     * channel being generic; meaningful today for `"call"`, whose
+     * `live.request` (a reconstruction of the dispatched request) and
+     * `live.response` (an unread clone, a transient double-buffer of the
+     * payload) are taken only under it — without it, the transport's own
+     * objects. An emitter asks with `observed(type, "bodies")`.
+     */
+    bodies?: boolean;
+}
+/**
+ * The records channel — `OBSERVE.records`, on either platform: one place a
+ * consumer (an APM adapter's `init()`, devtools, the diagnostics harness)
+ * subscribes to the completed, serializable summaries of the things the
+ * runtimes did — a `<Loading>` boundary that waited on the server, a
+ * server-function execution or call, a frame stream produced or applied,
+ * and the attribution engine's: a re-run, a hold, an interaction — each
+ * delivered synchronously the moment it is complete, with its live handle
+ * passed BESIDE it. Any number of listeners; none can alter what it
+ * observes; one that throws is reported and the rest run. The engine's
+ * records are declared here and emitted only while the engine
+ * (`@solidjs/signals/attribution`, a separate entry the observe build pays
+ * for only when imported) is enabled; `observed(type)` is the one gate an
+ * emitter of either kind checks before building a record.
+ *
+ * The object is created once per PROCESS under a registered symbol, so a
+ * subscription made before the emitting runtime has loaded, or from a
+ * second bundled copy of the core, reaches the same listener set. Absent in
+ * prod with the rest of `OBSERVE`.
+ */
+export interface Records {
+    /**
+     * Deliver `type` records as they complete; returns the unsubscribe. The
+     * subscription is the channel's, not any emitter's: it outlives the
+     * attribution engine's `enable()`/`disable()` cycles and is dropped only
+     * by its own unsubscribe. `options` asks the emitter for more than the
+     * record — see `RecordSubscribeOptions`. One entry per listener function:
+     * its options are read at its first subscription to the type, a repeat
+     * subscription of the same function changes nothing, and either disposer
+     * removes it. What an emitter takes is decided once per record from the
+     * union of the type's subscribers, so a listener without `bodies` that
+     * shares a call with one that asked receives the same `live` — the clone.
+     */
+    subscribe<K extends RecordType>(type: K, listener: RecordListener<K>, options?: RecordSubscribeOptions): () => void;
+    /**
+     * Whether anything is subscribed to `type` — an emitter's pre-check, so
+     * a record nobody will hear costs nothing to not build (no clock read).
+     */
+    observed(type: RecordType): boolean;
+    /**
+     * Whether a listener of `type` asked for its bodies
+     * (`subscribe(type, listener, { bodies: true })`) — the emitter's
+     * pre-check for the live handles that cost something per record to take.
+     * `false` while every listener of the type is a plain one, and once the
+     * last body-wanting one unsubscribed.
+     */
+    observed(type: RecordType, facet: "bodies"): boolean;
+    /**
+     * Delivers a completed record to `type`'s listeners, synchronously: how a
+     * runtime publishes. Snapshot semantics without a snapshot — the listener
+     * list is replaced, never mutated, on subscribe/unsubscribe — so a
+     * listener unsubscribing mid-delivery neither skips nor double-calls
+     * anyone this round, and delivery allocates nothing.
+     */
+    emit<K extends RecordType>(type: K, event: RecordEvent<K>, live: RecordLive<K>): void;
+}
+/**
+ * The server runtime's observe surface — where a server-side consumer
+ * installs what only the server has: the trace-context provider slot.
+ * Declared EMPTY here and typed by the runtime that owns the surface:
+ * `solid-js`'s server entry augments this interface with `trace:
+ * ServerTrace`, an interface of its own that `@solidjs/web`'s server
+ * entries fill in (`provide`) — so the core never learns that shape and
+ * the consumer still finds it on the one `OBSERVE`. One augmenter per
+ * interface: see `RecordTypes` for why.
+ *
+ * The OBJECT behind it is not the core's either: the core has one artifact
+ * per tier for both platforms, and the client would carry it for nothing.
+ * `solid-js`'s server entry replaces this empty literal with the
+ * process-wide slot the moment it evaluates (see `serverSlots` in
+ * solid-js/src/server/observe.ts), so a consumer that imports only
+ * `solid-js` can provide before the web runtime that reads it has loaded,
+ * and from a second copy when a host bundles one. On the client this stays
+ * `{}`.
+ */
+export interface ServerObserve {
+}
+/**
+ * The observe tier: the structured channel and the attribution wiring —
+ * everything a production observability consumer needs, and nothing that
+ * assumes a developer at a console. Present in dev and observe builds
+ * (`__OBSERVE__`); `undefined` in prod.
+ */
+export interface Observe {
+    diagnostics: Diagnostics;
+    /** Completed records from the runtimes, by type — see `Records`. */
+    records: Records;
+    /** The attribution hook slot and interaction frame — see `AttributionSlot`. */
+    attribution: AttributionSlot;
+    /** The server runtime's surface — see `ServerObserve`. */
+    server: ServerObserve;
+    /**
+     * Marks `owner`'s subtree as the observer's own. A consumer that renders
+     * inside the app it watches — an APM adapter's panel, devtools — would
+     * otherwise see its own effects, stores and holds reported as findings about
+     * the app. Under an excluded owner: diagnostics whose subject sits in the
+     * subtree are neither delivered nor reported (the entry is still built, so
+     * a site that throws its message still throws), and the attribution engine
+     * records no runs for its computations. Mark the root as it is created
+     * (`createRoot(() => { OBSERVE.exclude(getOwner()!); … })`); the signals
+     * and stores created under it are excluded subjects wherever their writes
+     * come from (a click handler, an adapter callback), so writes need no
+     * `runWithOwner` — and must not use one: a write under an owner is a write
+     * in an owned scope (REACTIVE_WRITE_IN_OWNED_SCOPE). One mark per owner:
+     * a later `exclude` or `include` on the same owner replaces it, and
+     * `include` re-admits a subtree beneath it.
+     */
+    exclude(owner: Owner): void;
+    /**
+     * Marks `owner`'s subtree as the app's again, beneath an excluded owner.
+     * The verdict for a subject is the NEAREST marked ancestor's (the subject
+     * itself included): an `include` under an `exclude` re-admits that
+     * subtree, an `exclude` under an `include` excludes it again, and the
+     * markers nest to any depth. For an observer that WRAPS the app it
+     * watches — a toolbar rendering `<DevToolbar><App/></DevToolbar>` — so
+     * the toolbar's own root is excluded and the app's root, created under
+     * it, is included back. Mark the root as it is created, as with
+     * `exclude`: the attribution engine caches each node's verdict the first
+     * time it asks and keeps it for the node's life, so a mark set after a
+     * node was judged does not reach it. Alone — with no excluded ancestor —
+     * an included owner is what it already was. One mark per owner: a later
+     * `exclude` or `include` on the same owner replaces it.
+     */
+    include(owner: Owner): void;
+    /**
+     * Whether `subject` sits under an excluded owner (itself included) — the
+     * nearest marked ancestor on its owner chain answers, with the one mark
+     * (the latest `exclude`/`include`) that owner carries.
+     */
+    isExcluded(subject: DiagnosticSubject | null | undefined): boolean;
+    /**
+     * Root-first names of the owners enclosing `subject` (inclusive when the
+     * subject is itself a named owner) — component roots as `<Name>`,
+     * computations by their `name` option — the labels every finding and
+     * record carries as `ownerPath` (`["<App>", "<TodoRow>", "label"]`), from
+     * the one walk that stamps them, so a consumer locating a live node it
+     * was handed (`live`, a diagnostic's `subject`) reads the same path.
+     * Signals hop to their registering owner; unnamed owners are skipped;
+     * `undefined` when nothing on the chain is named. Names exist only in the
+     * observing tiers, which is why the walk lives here and not on the prod
+     * surface.
+     */
+    ownerPath(subject: DiagnosticSubject | null | undefined): string[] | undefined;
+}
+/**
+ * The dev tier: devtools hooks, graph traversal, and the console face of the
+ * diagnostics channel. Present only in dev builds (`__DEV__`).
+ */
+export interface Dev {
+    hooks: DevHooks;
+    getChildren: typeof getChildren;
+    getSignals: typeof getSignals;
+    getParent: typeof getParent;
+    getSources: typeof getSources;
+    getObservers: typeof getObservers;
+    /** Console face of an emitted event — see `reportDiagnostic`. */
+    report(entry: DiagnosticEvent): void;
+    /**
+     * The stable URL of `code`'s section in the repair guide — the
+     * `reactivity-diagnostics` skill shipped with `solid-js`, one section per
+     * code. The one place the URL is built: the console footer prints it and
+     * the performance tracks' Insights link (`learnMoreUrl`) reads it, so both
+     * name the same section. Dev-tier: it is guidance for a developer, and a
+     * URL string on a retained object is a cost every observe build would pay.
+     */
+    guideUrl(code: DiagnosticCode): string;
+}
+/**
+ * Registers the console footer appended to the first console report of
+ * each diagnostic code — a discovery pointer to deeper guidance. Reported
+ * events carry it as trailing lines of the same console entry; events that
+ * surface as a thrown error instead get it as a follow-up line. Returning
+ * undefined for an event suppresses the footer. Passing undefined
+ * unregisters and resets the once-per-code memory.
+ *
+ * @internal A seam for `solid-js`, which owns the repair skill the footer
+ * names and installs it from both of its entries; not part of `DEV`. No-op
+ * outside dev builds, where nothing reports to the console.
+ */
+export declare function setConsoleFooter(footer: ((event: DiagnosticEvent) => string | undefined) | undefined): void;
+export declare const OBSERVE: Observe;
+export declare function isExcluded(subject: DiagnosticSubject | null | undefined): boolean;
+/** For engines that cache the verdict per node: is anything excluded at all? */
+export declare function anyExcluded(): boolean;
+/** Was `entry` built for an excluded subject? Once-per-key reporters must not spend their slot on it. */
+export declare function isSuppressed(entry: DiagnosticEvent): boolean;
+export declare const DEV: Dev;
+/**
+ * Dev-mode internal consistency check. A failure means the reactive system
+ * contradicted itself (not that user code misbehaved) — see
+ * INTERNALS-ASYNC-STATE.md for the invariant catalog. Throws under __TEST__
+ * so the suite (and fuzzing) treats any violation as a hard failure; logs in
+ * dev builds so user apps degrade instead of crashing.
+ */
+export declare function assertInvariant(condition: boolean, name: string, message: string): void;
+/** Anything a diagnostic can be about: an owner (root, computed, effect) or a signal. */
+export type DiagnosticSubject = Owner | Signal<any> | Computed<any>;
+/**
+ * Root-first names of the owners enclosing `subject` (inclusive when the
+ * subject is itself a named owner). Signals hop to their registering owner
+ * (`_owner`, set by registerGraph). Unnamed owners are skipped so the path
+ * reads as the component tree plus the scope: `<App> › <TodoRow> › effect`.
+ * Public as `OBSERVE.ownerPath`; the core's own sites import it directly.
+ */
+export declare function ownerPath(subject: DiagnosticSubject | null | undefined): string[] | undefined;
+/**
+ * Records a diagnostic on the structured channel (listeners, captures) and
+ * returns the entry. `subject` locates it: the current reactive `context` by
+ * default (right for the synchronous rule checks — they fire inside the
+ * scope that misbehaved); pass the node for scheduler-time findings whose
+ * ambient context is the flush, or `null` for events that have no location
+ * by nature. An `ownerPath` already on the event wins over the subject walk
+ * (hosts whose owners are not signals' owners compute their own). Console
+ * output is a separate, dev-tier step — see `reportDiagnostic`.
+ */
+export declare function emitDiagnostic(event: Omit<DiagnosticEvent, "sequence">, subject?: DiagnosticSubject | null | undefined): DiagnosticEvent;
+/**
+ * The console face of a diagnostic — ONE entry per finding: the message, the
+ * owner path (`in <App> › <TodoRow> › effect`) so a human can locate it, the
+ * once-per-code footer as trailing lines, and — when the subject is a
+ * binding effect the rendering runtime tagged — the element it writes, as a
+ * second console argument (hover highlights it, click jumps to Elements).
+ * Severity picks the console method. Call sites report the entry
+ * `emitDiagnostic` returned so the structured and console channels never
+ * disagree. Dev-tier: in an observe build this is a no-op, so wiring paths
+ * that both emit and report (graph-size warnings) reach the channel only —
+ * production observability never writes to the console.
+ */
+export declare function reportDiagnostic(entry: DiagnosticEvent): void;
+/**
+ * Shared strict-read diagnostics for core read() and the store proxy traps.
+ * Single source for the message text — the #2897 safeguard parity between
+ * memos and stores is exactly these firing identically from both paths.
+ */
+export declare function throwPendingUntrackedRead(strictReadLabel: string, fields?: Partial<Omit<DiagnosticEvent, "sequence" | "data" | "ownerPath">>): never;
+export declare function warnStrictReadUntracked(strictReadLabel: string, fields?: Partial<Omit<DiagnosticEvent, "sequence" | "ownerPath">>): void;
+/**
+ * Observe-tier: stamp a signal with its creating owner so `ownerPath` can
+ * locate signal subjects. The per-owner `_signals` list and the devtools
+ * `onGraph` hook are dev-tier — the observe build pays one property write.
+ */
+export declare function registerGraph(value: any, owner: Owner | null): void;
+export declare function clearSignals(node: Owner): void;
+export declare function registerRoot(owner: Owner): void;
+export declare function unregisterRoot(owner: Owner): void;
+/**
+ * The live top-level roots, for a walk of the owner tree (the engine's
+ * `graphSize`): dead refs are dropped as they are met. Empty in prod.
+ */
+export declare function liveRootOwners(): Owner[];
+export declare function getChildren(owner: Owner): Owner[];
+export declare function getSignals(owner: Owner): any[];
+export declare function getParent(owner: Owner): Owner | null;
+export declare function getSources(computation: Computed<any>): (Signal<any> | Computed<any>)[];
+export declare function getObservers(node: Signal<any> | Computed<any>): Computed<any>[];
+/**
+ * The root invalidation a HUGE_FAN_OUT finding was priced on, when the
+ * attribution engine is the one reporting it: a signal/store write, a
+ * `refresh()`, or an async landing. The always-on core check counts the
+ * notify walk of any change and cannot tell — it reports no `write`.
+ */
+export type FanOutWrite = "write" | "refresh" | "async";
+/**
+ * Observe-tier: a committed change on `node` is about to re-run `count`
+ * subscribers. Two reporters, one finding, one dedupe: the core counts the
+ * notify walk in `insertSubs` as it goes (fan-out costs exactly one local
+ * increment in a loop that already visits every edge, and nothing at link
+ * time) and fires from GRAPH_SIZE_WARN_AT up, always-on wherever the
+ * channel exists — a graph-size pathology should surface without asking.
+ * The attribution engine, while enabled, reports the same code from its
+ * lower `fanOut` threshold (default 250) on the root writes it stamps, with
+ * the write kind it knows, and hands over to the core at
+ * GRAPH_SIZE_WARN_AT so one change never carries two findings. Both fire on
+ * the write rather than the link: a fan-out that is never written costs
+ * nothing, and one that is re-runs every subscriber this flush. Once per
+ * node, re-warning only once the count has grown by GRAPH_SIZE_WARN_EVERY.
+ */
+export declare function noteFanOut(node: Signal<any> | Computed<any>, count: number, write?: FanOutWrite): void;
+/**
+ * Observe-tier: a recompute pass of `node` tracked `count` distinct sources
+ * (its trimmed dep list, walked once at the end of the pass — see recompute;
+ * no per-link work, no pass bracket). Fires from GRAPH_SIZE_WARN_AT up.
+ */
+export declare function noteFanIn(node: Computed<any>, count: number): void;
+/**
+ * Dev-only: attribute reads that run after an `await` inside an async compute.
+ * JS has no async context, so a native-promise flight is consumed by a uniquely
+ * named async function instead of `.then`; V8's async stack traces then carry a
+ * `__solidAsyncCompute_<id>` frame on every read in the compute's continuation.
+ * `await` on a native promise settles on the same tick as `.then`, so dev and
+ * prod timing match. Other thenables, and engines without async frames
+ * (Firefox, Safari), are left alone and never warn.
+ */
+export declare let asyncTailFlights: number;
+export declare function watchAsyncTail<T>(el: Computed<T>, flight: PromiseLike<T>): PromiseLike<T>;
+/**
+ * `dep` is the node a tracked read would have linked (undefined when a store key
+ * was never tracked); `holder`/`key` identify the read for once-only reporting.
+ */
+export declare function checkPostAwaitRead(dep: object | undefined, holder: object, key: PropertyKey | undefined, nodeName: string | undefined, throwsPending: boolean): void;

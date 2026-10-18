@@ -1,5 +1,24 @@
 # Package integrity: getter
 
+`Conditional.tsx` extends exact getter provenance through conditional values.
+Both alternatives must independently close before a Get is a proven read.
+`BothKnown` reports SC1001 violation; `UnknownBranch` and `InertBranch` retain
+SC9012 uncertifiable obligations; `TrackedConditional` stays clean. Known
+alternatives also participate in may-provenance when a sibling is unresolved,
+so a conditional cannot silently hide a possible package getter. All existing
+provider, mutation, integrity and recursion gates remain in force. The added
+source passes strict and loose TypeScript checks against published Solid
+2.0.0-rc.13 typings without this fixture's Solid declaration stub.
+
+The same file covers extracting the stable `location` data member with a
+single plain object-binding slot, including renaming. `DestructuredObject`
+and `RenamedObject` must still report SC1001 violation at the later reactive
+`search` read. `MutableObject` stays SC9012 uncertifiable; `TrackedObject`
+is clean. This does not certify destructuring reactive values: the existing
+`App.tsx` `SearchDestructured` getter read remains a violation. Defaulted,
+computed, rest and multi-binding patterns receive no new exact proof, and
+project-created receiver escape checks are not waived.
+
 ADR 0300: a selected package's sole provider and stable accessor-reading
 getter prove four SC1001 untracked reads. Tracked JSX, memo, event, inert,
 shadowed and project-created getter controls stay clean.

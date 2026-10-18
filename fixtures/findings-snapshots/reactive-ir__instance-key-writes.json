@@ -1,0 +1,15 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/instance-key-writes/App.tsx",
+      "start": 702,
+      "end": 705,
+      "fixes": 0
+    }
+  ]
+}

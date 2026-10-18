@@ -16,6 +16,163 @@ mod no_package_contracts_process;
 use support::{assert_rule_findings, diagnostic_fixture, findings_for_rule};
 
 #[test]
+fn conditional_package_getters_require_every_alternative() {
+    let Ok(producer) = std::env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+        .env("SOLID_TYPEFACTS_BIN", producer)
+        .env("SOLID_CHECKER_DAEMON", "0")
+        .args([
+            "--format",
+            "json",
+            "--runtime-target",
+            "browser",
+            "--runtime-build",
+            "development",
+            "--dependency-source",
+            "dep-router",
+            "--project",
+        ])
+        .arg(root.join("fixtures/reactive-ir/dependency-source-integrity-getter/tsconfig.json"))
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let source = include_str!(
+        "../../../../fixtures/reactive-ir/dependency-source-integrity-getter/Conditional.tsx"
+    );
+    let rows = report["findings"].as_array().unwrap();
+    for (name, expected) in [
+        ("BothKnown", Some(("SC1001", "violation"))),
+        ("UnknownBranch", Some(("SC9012", "uncertifiable"))),
+        ("InertBranch", Some(("SC9012", "uncertifiable"))),
+        ("TrackedConditional", None),
+        ("DestructuredObject", Some(("SC1001", "violation"))),
+        ("RenamedObject", Some(("SC1001", "violation"))),
+        ("MutableObject", Some(("SC9012", "uncertifiable"))),
+        ("TrackedObject", None),
+    ] {
+        let function = source.find(&format!("export function {name}(")).unwrap();
+        let expression = if name == "RenamedObject" {
+            "current.search"
+        } else {
+            "location.search"
+        };
+        let site = function + source[function..].find(expression).unwrap();
+        let selected = rows
+            .iter()
+            .filter(|row| {
+                row["primaryLocation"]["path"]
+                    .as_str()
+                    .is_some_and(|p| p.ends_with("/Conditional.tsx"))
+                    && row["primaryLocation"]["startByte"].as_u64() == Some(site as u64)
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            selected.len(),
+            usize::from(expected.is_some()),
+            "{name}: {selected:#?}"
+        );
+        if let Some((code, kind)) = expected {
+            assert_eq!(selected[0]["id"], code, "{name}");
+            assert_eq!(selected[0]["kind"], kind, "{name}");
+        }
+    }
+}
+
+#[test]
+fn immediate_leaf_helpers_follow_bodies_and_async_prefixes() {
+    let Some(findings) = diagnostic_fixture("leaf-scope-helper-completion") else {
+        return;
+    };
+    let source =
+        include_str!("../../../../fixtures/reactive-ir/leaf-scope-helper-completion/Immediate.tsx");
+    for (name, expected) in [
+        ("CleanImmediate", None),
+        ("ForbiddenImmediate", Some(("SC3001", "violation"))),
+        ("AsyncPrefix", Some(("SC3001", "violation"))),
+        ("ConditionalImmediate", Some(("SC3001", "uncertifiable"))),
+        ("KnownArgument", None),
+        ("KnownTrueArgument", Some(("SC3001", "violation"))),
+        ("SpreadArgument", Some(("SC3001", "uncertifiable"))),
+        ("StableTransportFalse", None),
+        ("StableTransportTrue", Some(("SC3001", "violation"))),
+        ("StableTransportSpread", Some(("SC3001", "uncertifiable"))),
+        ("StableMemberReceiver", Some(("SC3001", "uncertifiable"))),
+        ("UnknownImmediate", Some(("SC9012", "uncertifiable"))),
+        ("DefaultImmediate", Some(("SC9012", "uncertifiable"))),
+        ("ConditionalSuspension", Some(("SC3001", "uncertifiable"))),
+        ("OpaqueSelection", Some(("SC9012", "uncertifiable"))),
+        ("WrappedImmediate", Some(("SC3001", "violation"))),
+    ] {
+        let start = source.find(&format!("export function {name}(")).unwrap();
+        let end = source[start + 1..]
+            .find("export function ")
+            .map_or(source.len(), |offset| start + 1 + offset);
+        let rows = findings
+            .iter()
+            .filter(|row| {
+                row["primaryLocation"]["path"]
+                    .as_str()
+                    .is_some_and(|path| path.ends_with("/Immediate.tsx"))
+                    && row["primaryLocation"]["startByte"]
+                        .as_u64()
+                        .is_some_and(|byte| (start as u64..end as u64).contains(&byte))
+                    && matches!(row["id"].as_str(), Some("SC3001" | "SC9012"))
+            })
+            .collect::<Vec<_>>();
+        if let Some((code, kind)) = expected {
+            let count = if name == "DefaultImmediate" { 2 } else { 1 };
+            assert_eq!(rows.len(), count, "{name}: {rows:#?}");
+            assert_eq!(rows[0]["id"], code, "{name}");
+            assert_eq!(rows[0]["kind"], kind, "{name}");
+            if name == "WrappedImmediate" {
+                let begin = rows[0]["primaryLocation"]["startByte"].as_u64().unwrap() as usize;
+                let end = rows[0]["primaryLocation"]["endByte"].as_u64().unwrap() as usize;
+                assert!(source[begin..end].contains("as () => void"));
+                continue;
+            }
+            if name == "DefaultImmediate" {
+                assert_eq!(rows[1]["id"], "SC9012");
+                assert_eq!(rows[1]["kind"], "uncertifiable");
+                assert_eq!(
+                    rows[1]["primaryLocation"]["startByte"],
+                    (start + source[start..end].find("unknown()").unwrap()) as u64
+                );
+            }
+            let callee = match name {
+                "StableTransportFalse" | "StableTransportTrue" | "StableTransportSpread" => {
+                    start + source[start..end].find("register(").unwrap()
+                }
+                "StableMemberReceiver" => {
+                    start + source[start..end].find("target.register(").unwrap()
+                }
+                _ => {
+                    let anchor = source[start..end]
+                        .find("    (")
+                        .or_else(|| source[start..end].find("    void ("))
+                        .unwrap();
+                    let line = &source[start + anchor..end];
+                    start + anchor + line.find('(').unwrap() + 1
+                }
+            };
+            assert_eq!(
+                rows[0]["primaryLocation"]["startByte"], callee as u64,
+                "{name}"
+            );
+        } else {
+            assert!(rows.is_empty(), "{name}: {rows:#?}");
+        }
+    }
+}
+
+#[test]
 fn leaf_scopes_follow_exact_source_objects_without_trusting_receivers() {
     let Some(findings) = diagnostic_fixture("leaf-source-call-targets") else {
         return;
@@ -82,6 +239,250 @@ fn leaf_scopes_follow_exact_source_objects_without_trusting_receivers() {
             "{method}: {findings:#?}"
         );
     }
+}
+
+#[test]
+fn merged_global_timers_keep_audited_timing_without_trusting_lookalikes() {
+    let Some(findings) = diagnostic_fixture("leaf-scope-host-callbacks") else {
+        return;
+    };
+    let source = include_str!(
+        "../../../../fixtures/reactive-ir/leaf-scope-host-callbacks/AugmentedTimers.tsx"
+    );
+    let rows = findings
+        .iter()
+        .filter(|row| {
+            row["primaryLocation"]["path"]
+                .as_str()
+                .is_some_and(|path| path.ends_with("/AugmentedTimers.tsx"))
+        })
+        .collect::<Vec<_>>();
+    let native_end = source.find("export function OpaqueTimer").unwrap() as u64;
+    assert!(
+        rows.iter()
+            .all(|row| row["primaryLocation"]["startByte"].as_u64().unwrap() >= native_end),
+        "native timer callbacks run on a fresh stack: {rows:#?}"
+    );
+    let opaque = source.find("    unknownTimer(").unwrap() + 4;
+    let shadow = source.rfind("    setInterval(").unwrap() + 4;
+    for (start, code, kind) in [
+        (opaque, "SC9012", "uncertifiable"),
+        (shadow, "SC3001", "violation"),
+    ] {
+        let row = rows
+            .iter()
+            .find(|row| {
+                row["id"] == code
+                    && row["primaryLocation"]["startByte"].as_u64() == Some(start as u64)
+            })
+            .unwrap_or_else(|| panic!("missing {code} at {start}: {rows:#?}"));
+        assert_eq!(row["kind"], kind);
+    }
+}
+
+#[test]
+fn eager_read_summaries_require_exact_fresh_stack_global_bindings() {
+    let Some(findings) = diagnostic_fixture("accessor-provenance") else {
+        return;
+    };
+    let source =
+        include_str!("../../../../fixtures/reactive-ir/accessor-provenance/RuntimeStack.tsx");
+    for (name, uncertain) in [
+        ("Timer", false),
+        ("Microtask", false),
+        ("Wrapped", false),
+        ("Helper", false),
+        ("NestedInline", false),
+        ("NestedOpaque", true),
+        ("Inline", true),
+        ("Listener", true),
+        ("SynchronousThenable", true),
+        ("ReceiverCatch", true),
+        ("Unknown", true),
+        ("Shadowed", true),
+        ("ScheduledAndReturned", true),
+    ] {
+        let start = source.find(&format!("export function {name}(")).unwrap();
+        let end = source[start..]
+            .find("\n\n")
+            .map_or(source.len(), |offset| start + offset);
+        let rows = findings
+            .iter()
+            .filter(|row| {
+                row["primaryLocation"]["path"]
+                    .as_str()
+                    .is_some_and(|path| path.ends_with("/RuntimeStack.tsx"))
+                    && row["primaryLocation"]["startByte"]
+                        .as_u64()
+                        .is_some_and(|byte| (start as u64..end as u64).contains(&byte))
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(rows.len(), usize::from(uncertain), "{name}: {rows:#?}");
+        if uncertain {
+            assert_eq!(rows[0]["id"], "SC1001", "{name}");
+            assert_eq!(rows[0]["kind"], "uncertifiable", "{name}");
+        }
+    }
+}
+
+#[test]
+fn factory_read_summaries_respect_dialect_callback_boundaries() {
+    let Some(findings) = diagnostic_fixture("accessor-provenance") else {
+        return;
+    };
+    let source = include_str!("../../../../fixtures/reactive-ir/accessor-provenance/Scope.tsx");
+    for (name, expected) in [
+        ("MemoAccessor", None),
+        ("MemoClosure", None),
+        ("MemoHelper", None),
+        ("MemoReturned", None),
+        ("NamespaceMemo", None),
+        ("MemoArray", None),
+        ("EffectCompute", None),
+        ("SettledRead", None),
+        ("ShadowMemo", Some("uncertifiable")),
+        ("EagerRead", Some("violation")),
+        ("UnknownRead", Some("uncertifiable")),
+        ("RenderApply", Some("uncertifiable")),
+    ] {
+        let start = source.find(&format!("export function {name}(")).unwrap();
+        let end = source[start + 1..].find("\n}").unwrap() + start + 3;
+        let rows = findings
+            .iter()
+            .filter(|row| {
+                row["primaryLocation"]["path"]
+                    .as_str()
+                    .is_some_and(|path| path.ends_with("/Scope.tsx"))
+                    && row["primaryLocation"]["startByte"]
+                        .as_u64()
+                        .is_some_and(|byte| (start as u64..end as u64).contains(&byte))
+            })
+            .collect::<Vec<_>>();
+        if let Some(kind) = expected {
+            assert_eq!(rows.len(), 1, "{name}: {rows:#?}");
+            assert_eq!(rows[0]["id"], "SC1001", "{name}");
+            assert_eq!(rows[0]["kind"], kind, "{name}");
+        } else {
+            assert!(rows.is_empty(), "{name}: {rows:#?}");
+        }
+    }
+}
+
+#[test]
+fn anonymous_summary_changes_preserve_captured_and_unknown_callback_obligations() {
+    let Some(findings) = diagnostic_fixture("accessor-provenance") else {
+        return;
+    };
+    let source = include_str!("../../../../fixtures/reactive-ir/accessor-provenance/Anonymous.tsx");
+    for (name, expected) in [
+        ("InvokedInline", Some(("SC1001", "violation"))),
+        ("CapturedOnly", None),
+        ("InvokedReturned", Some(("SC1001", "violation"))),
+        ("UnknownConsumer", Some(("SC1001", "uncertifiable"))),
+        ("UnknownFactoryCall", Some(("SC1001", "uncertifiable"))),
+        (
+            "CapturedParameterDispatch",
+            Some(("SC9012", "uncertifiable")),
+        ),
+    ] {
+        let start = source.find(&format!("export function {name}(")).unwrap();
+        let end = source[start + 1..]
+            .find("\n}")
+            .map_or(source.len(), |offset| start + 1 + offset + 2);
+        let rows = findings
+            .iter()
+            .filter(|row| {
+                row["primaryLocation"]["path"]
+                    .as_str()
+                    .is_some_and(|path| path.ends_with("/Anonymous.tsx"))
+                    && row["primaryLocation"]["startByte"]
+                        .as_u64()
+                        .is_some_and(|byte| (start as u64..end as u64).contains(&byte))
+            })
+            .collect::<Vec<_>>();
+        if let Some((code, kind)) = expected {
+            assert_eq!(rows.len(), 1, "{name}: {rows:#?}");
+            assert_eq!(rows[0]["id"], code, "{name}");
+            assert_eq!(rows[0]["kind"], kind, "{name}");
+        } else {
+            assert!(rows.is_empty(), "{name}: {rows:#?}");
+        }
+    }
+}
+
+#[test]
+fn merged_global_fetch_preserves_opaque_and_getter_obligations() {
+    let Some(findings) = diagnostic_fixture("leaf-scope-host-callbacks") else {
+        return;
+    };
+    let source =
+        include_str!("../../../../fixtures/reactive-ir/leaf-scope-host-callbacks/Fetch.tsx");
+    for (name, expected) in [
+        ("NativeFetch", None),
+        ("AsyncFetch", None),
+        ("OpaqueFetch", Some(("SC9012", "uncertifiable"))),
+        ("ShadowedFetch", Some(("SC3001", "violation"))),
+        ("FetchWithGetter", Some(("SC9012", "uncertifiable"))),
+    ] {
+        let start = source.find(&format!("export function {name}(")).unwrap();
+        let end = source[start + 1..]
+            .find("export function ")
+            .map_or(source.len(), |offset| start + 1 + offset);
+        let rows = findings
+            .iter()
+            .filter(|row| {
+                row["primaryLocation"]["path"]
+                    .as_str()
+                    .is_some_and(|path| path.ends_with("/Fetch.tsx"))
+                    && row["primaryLocation"]["startByte"]
+                        .as_u64()
+                        .is_some_and(|byte| (start as u64..end as u64).contains(&byte))
+                    && matches!(row["id"].as_str(), Some("SC3001" | "SC9012"))
+            })
+            .collect::<Vec<_>>();
+        if let Some((code, kind)) = expected {
+            assert_eq!(rows.len(), 1, "{name}: {rows:#?}");
+            assert_eq!(rows[0]["id"], code, "{name}");
+            assert_eq!(rows[0]["kind"], kind, "{name}");
+        } else {
+            assert!(rows.is_empty(), "{name}: {rows:#?}");
+        }
+    }
+}
+
+#[test]
+fn optional_primitive_signatures_preserve_dispatch_and_callback_boundaries() {
+    let Some(findings) = diagnostic_fixture("literal-argument-member-dispatch") else {
+        return;
+    };
+    let rows = findings
+        .iter()
+        .filter(|row| {
+            row["primaryLocation"]["path"]
+                .as_str()
+                .is_some_and(|path| path.ends_with("/Optional.tsx"))
+        })
+        .collect::<Vec<_>>();
+    let source = include_str!(
+        "../../../../fixtures/reactive-ir/literal-argument-member-dispatch/Optional.tsx"
+    );
+    for (expression, code, kind) in [
+        ("date);", "SC9012", "uncertifiable"),
+        ("name());", "SC1001", "uncertifiable"),
+    ] {
+        let start = source.find(expression).unwrap();
+        let row = rows
+            .iter()
+            .find(|row| row["primaryLocation"]["startByte"].as_u64() == Some(start as u64))
+            .unwrap_or_else(|| panic!("missing {expression}: {rows:#?}"));
+        assert_eq!(row["id"], code);
+        assert_eq!(row["kind"], kind);
+    }
+    assert_eq!(
+        rows.len(),
+        2,
+        "the primitive chain must stay clean: {rows:#?}"
+    );
 }
 
 #[test]
@@ -213,8 +614,10 @@ fn routed_options_callbacks_compose_source_contexts() {
                 .is_some_and(|path| path.ends_with("/RoutedMembers.tsx"))
         })
         .collect::<Vec<_>>();
-    assert_eq!(rows.len(), 9, "{rows:#?}");
-    for (name, helper, dispatch, strict) in [
+    // ADR 0321: each `read` arrow is written in the argument literal, so its
+    // dispatch resolves to it; the read keeps the source context proven here.
+    assert_eq!(rows.len(), 4, "{rows:#?}");
+    for (name, helper, _routed_dispatch, strict) in [
         ("RoutedTracked", "routedMember", false, false),
         ("RoutedMixed", "mixedRoutedMember", true, true),
         ("RoutedFresh", "freshRoutedMember", false, false),
@@ -234,12 +637,7 @@ fn routed_options_callbacks_compose_source_contexts() {
             owner + source[owner..].find(&format!("{helper}(")).unwrap() + helper.len() + 1;
         let read = argument + "{ read: () => ".len();
         for (code, expected, start, width) in [
-            (
-                "SC9012",
-                dispatch,
-                argument,
-                "{ read: () => count() }".len(),
-            ),
+            ("SC9012", false, argument, "{ read: () => count() }".len()),
             ("SC1001", strict, read, "count()".len()),
         ] {
             let row = rows.iter().find(|row| {
@@ -326,6 +724,87 @@ fn local_declaration_dispatch_rejects_escapes() {
 }
 
 #[test]
+fn nested_parameter_members_require_closed_values_at_every_level() {
+    let Some(findings) = diagnostic_fixture("literal-argument-member-dispatch") else {
+        return;
+    };
+    let source = include_str!(
+        "../../../../fixtures/reactive-ir/literal-argument-member-dispatch/Nested.tsx"
+    );
+    let rows = findings
+        .iter()
+        .filter(|row| {
+            row["primaryLocation"]["path"]
+                .as_str()
+                .is_some_and(|path| path.ends_with("/Nested.tsx"))
+        })
+        .collect::<Vec<_>>();
+    for (name, expected) in [
+        ("NestedLiteral", None),
+        ("NestedBinding", None),
+        ("NestedAliases", None),
+        ("NestedNamespace", None),
+        ("NestedMethod", None),
+        ("NestedReactiveRead", Some("SC1001")),
+        ("NestedWrongLevel", Some("SC1001")),
+        ("NestedUnknown", Some("SC9012")),
+        ("NestedGetter", Some("SC9012")),
+        ("NestedSpread", Some("SC9012")),
+        ("NestedMutable", None),
+        ("NestedReassignedLet", Some("SC9012")),
+        ("NestedEscaped", Some("SC9012")),
+        ("NestedReplaced", Some("SC9012")),
+        ("NestedReceiver", Some("SC9012")),
+        ("NestedCalleeEscape", Some("SC9012")),
+        ("NestedCalleeWrite", Some("SC9012")),
+        ("NestedDefault", None),
+        ("NestedDefaultUndefined", Some("SC9012")),
+        ("NestedDefaultUnknown", Some("SC9012")),
+        ("NestedConditional", Some("SC9012")),
+        ("NestedFactory", Some("SC9012")),
+        ("NestedMethodArguments", Some("SC9012")),
+        ("NestedComputedPrefix", Some("SC9012")),
+    ] {
+        let start = source.find(&format!("export function {name}(")).unwrap();
+        let end = source[start..].find("\n}").unwrap() + start;
+        let selected = rows
+            .iter()
+            .filter(|row| {
+                row["primaryLocation"]["startByte"]
+                    .as_u64()
+                    .is_some_and(|offset| offset >= start as u64 && offset < end as u64)
+                    && (row["id"] == "SC9012"
+                        || row["id"] == "SC1001"
+                            && row["message"]
+                                .as_str()
+                                .is_some_and(|message| message.contains("read through")))
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            selected.len(),
+            usize::from(expected.is_some()),
+            "{name}: {selected:#?}"
+        );
+        if let Some(code) = expected {
+            assert_eq!(selected[0]["id"], code, "{name}: {selected:#?}");
+            assert_eq!(
+                selected[0]["kind"], "uncertifiable",
+                "{name}: {selected:#?}"
+            );
+            if code == "SC9012" {
+                // ADR 0320: `undefined` selects the callee's default.
+                let context = if name == "NestedDefaultUndefined" {
+                    "parameter-default-unresolved"
+                } else {
+                    "parameter-member-path-unresolved"
+                };
+                assert_eq!(selected[0]["analysisContext"], context);
+            }
+        }
+    }
+}
+
+#[test]
 fn member_dispatch_keeps_the_source_invocation_context() {
     let Some(findings) = diagnostic_fixture("forwarded-tracked-compute") else {
         return;
@@ -341,7 +820,7 @@ fn member_dispatch_keeps_the_source_invocation_context() {
                 .is_some_and(|path| path.ends_with("/MemberContexts.tsx"))
         })
         .collect::<Vec<_>>();
-    assert_eq!(rows.len(), 6, "{rows:#?}");
+    assert_eq!(rows.len(), 3, "{rows:#?}");
     for (name, helper, unresolved) in [
         ("TrackedMember", "trackedMember", false),
         ("MixedMember", "mixedMember", true),
@@ -358,7 +837,8 @@ fn member_dispatch_keeps_the_source_invocation_context() {
                 && row["primaryLocation"]["startByte"].as_u64() == Some(argument as u64)
                 && row["primaryLocation"]["endByte"].as_u64() == Some(argument_end as u64)
         });
-        assert_eq!(row.is_some(), unresolved, "{name}: {rows:#?}");
+        // ADR 0321: the dispatch resolves to the argument literal's arrow.
+        assert!(row.is_none(), "{name}: {rows:#?}");
         if let Some(row) = row {
             assert_eq!(row["kind"], "uncertifiable", "{name}: {row:#?}");
         }
@@ -499,7 +979,7 @@ fn local_member_dispatch_requires_only_tracked_exact_callers() {
                 && row["analysisContext"] == "parameter-member-target-unresolved"
         })
         .collect::<Vec<_>>();
-    assert_eq!(rows.len(), 11, "{rows:#?}");
+    assert_eq!(rows.len(), 10, "{rows:#?}");
     for (name, occurrence, unresolved) in [
         ("DirectTracked", 0, false),
         ("LocalTracked", 0, false),
@@ -507,7 +987,8 @@ fn local_member_dispatch_requires_only_tracked_exact_callers() {
         ("ChainedTracked", 0, false),
         ("MixedCalls", 0, true),
         ("EscapedHelper", 0, true),
-        ("AsyncHelper", 0, true),
+        // ADR 0320: the call follows an await reached on every path.
+        ("AsyncHelper", 0, false),
         ("RecursiveHelper", 0, true),
         ("ClearedTracking", 0, false),
         ("ShadowedHelper", 0, true),
@@ -1841,12 +2322,13 @@ fn interprocedural_diagnostics_point_to_the_calling_component() {
         ("recursive", 1, "readA"),
         ("returned-closure", 1, "readCount"),
         ("store-flow", 1, "\"state.count\""),
-        // Four: class, generic-function, the object passed to `invoke`, and
-        // the conditional with equivalent reactive summaries. The direct
-        // object-member call stays unproven after the receiver-proof change;
-        // this count agrees with the checked-in snapshot. Divergent and
-        // computed dispatch are SC9012.
-        ("interprocedural-methods-v2", 4, "count"),
+        // Two: class and generic-function. The object passed to `invoke` and
+        // the conditional over two readers name `objectReader`, an exported
+        // `const`, which ADR 0320 no longer resolves through its initializer
+        // (other files' references to it are outside a retained answer), so
+        // those are SC9012 obligations; so are divergent and computed
+        // dispatch. This count agrees with the checked-in snapshot.
+        ("interprocedural-methods-v2", 2, "count"),
     ] {
         let Some(findings) = diagnostic_fixture(fixture) else {
             return;

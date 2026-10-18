@@ -42,4 +42,8 @@ const TypeFactsTableSchemaVersionV18 uint64 = 18
 // mappings: bit 0 is Call.AssertionSignature, bit 1 Call.NeverReturns. No
 // other row changes.
 const TypeFactsTableSchemaVersionV19 uint64 = 19
-const TypeFactsTableSchemaVersion uint64 = TypeFactsTableSchemaVersionV19
+
+// v20 appends an optional direct-global default-library binding declaration
+// to each resolved call. Selected declarations and parameter mappings stay intact.
+const TypeFactsTableSchemaVersionV20 uint64 = 20
+const TypeFactsTableSchemaVersion uint64 = TypeFactsTableSchemaVersionV20

@@ -58,3 +58,14 @@ export function formattedObject(input: Date): string {
     .getTime()
     .toString();
 }
+export function optionalWords(input: string | undefined) {
+  return input?.trim().toLowerCase();
+}
+
+export function optionalStamp(input: Date | undefined) {
+  return input?.getTime();
+}
+
+export function optionalFill(input: string | undefined, name: () => string) {
+  return input?.replace("{name}", () => name());
+}

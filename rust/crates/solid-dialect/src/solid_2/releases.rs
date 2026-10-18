@@ -93,6 +93,21 @@ const SOLID_JS: &str = "solid-js";
 const SIGNALS: &str = "@solidjs/signals";
 const WEB: &str = "@solidjs/web";
 
+/// ADR 0324: the `@solidjs/router` releases audited for route parameters, by
+/// exact `package.json` version. Not a release owner: the router decides no
+/// vocabulary answer, only the value domain of `useParams()` members.
+pub(super) const AUDITED_ROUTER_RELEASES: &[&str] = &["2.0.0-next.26"];
+
+/// ADR 0324: the digest of the installed bytes of each audited router release
+/// (`scripts/router-digest.mjs`: the manifest fields `name`, `version`,
+/// `main`, `module`, `exports`, `type` and every file under `dist/`), by
+/// version, computed from the registry install the audit read. The release
+/// string is a claim a patch, a fork or an override keeps; the digest is not.
+pub(super) const AUDITED_ROUTER_DIGESTS: &[(&str, &str)] = &[(
+    "2.0.0-next.26",
+    "e67af5395e06b46fba92846736c3efa5f2076281e05e864dda248d96689204d6",
+)];
+
 /// The three owners, in the order [`Solid2`]'s answers are read from them.
 pub(super) const OWNERS: &[ReleaseOwner] = &[
     ReleaseOwner {
@@ -1271,6 +1286,11 @@ mod tests {
         for vocabulary in std::iter::once(&Solid2::CONSERVATIVE).chain(VARIANTS.iter()) {
             assert_eq!(
                 vocabulary.component_prop_renderers(),
+                &[("Dynamic", "component")]
+            );
+            // ADR 0313: and a string `component` renders that intrinsic element.
+            assert_eq!(
+                vocabulary.intrinsic_tag_renderers(),
                 &[("Dynamic", "component")]
             );
             assert!(vocabulary.accessor_yields_only_its_compute(Primitive::CreateMemo));

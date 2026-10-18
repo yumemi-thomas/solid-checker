@@ -1,4 +1,5 @@
 mod daemon_cache;
+mod daemon_resolution;
 mod idle_memory;
 mod json_output;
 mod snapshot_emission;

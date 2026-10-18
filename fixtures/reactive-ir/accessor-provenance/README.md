@@ -1,5 +1,35 @@
 # Exact accessor provenance
 
+`RuntimeStack.tsx` pins fresh-stack global scheduling in eager read summaries.
+Native timers and microtasks do not contribute callback reads to their
+enclosing factories. The proof requires an independent exact global binding,
+including when the selected signature itself is native. A declared
+`typeof queueMicrotask` lookalike, an unknown nested consumer, ordinary inline
+callbacks, event listeners, synchronous thenables and receiver-dependent
+Promise catch callbacks retain their obligations. A scheduled function that
+is also returned retains its own read summary. Transparent scheduler wrappers
+and audited inline carriers are positive controls. These cases pass strict
+and loose TypeScript checks against published RC.13 typings.
+
+`Scope.tsx` pins the dialect listener boundary for eager read summaries.
+Transported accessors, source closures, ordinary helper calls and returned
+getters used inside memo/effect computes or queued `onSettled` callbacks do
+not contribute an eager read to the enclosing factory. Namespace primitive
+imports keep the same boundary. Eager reads remain violations; unknown
+consumer timing, a same-name local `createMemo` and render-effect applies
+that inherit their first run retain their existing obligations. No new
+anonymous function summaries are admitted. The added `createRenderEffect`
+and `onSettled` signatures preserve the published RC.13 declarations.
+
+`Anonymous.tsx` guards summary ownership when expanding the function universe.
+Retaining an anonymous function alone does not read its captured signal;
+invoking it inline or invoking an exact returned closure does. An unknown
+consumer retains the callback read obligation. Its enclosing factory also
+retains a possible-read obligation at callers: the unknown consumer may run
+the callback synchronously. Giving the lambda a separate summary owner must
+not erase that possibility. A captured parameter member invoked through an
+inline callback likewise retains SC9012 at the enclosing helper's caller.
+
 Cross-file generic factories return a signal slot, memo, or a data-property
 closure that reads it, at one direct member level only. A default-less context transports one exact provider
 object/closure through useContext and wrappers. Reads must be claimed at their
@@ -20,11 +50,13 @@ the notes closure and the consumer invokes decor.notes() in its own body,
 where SC1001 must retain the original signal read. Object construction itself
 never proves callback invocation. Unprojected definitions retain the ordinary
 callee-callback-timing SC1001 obligation. RetainedOptionCallback mirrors an
-object-literal option callback passed to a local factory that retains it: the
-read through animate must stay uncertifiable, even though the returned factory
-closure is invoked from an event. Definition-site obligations are never suppressed
-by a proven invocation: another factory instance or opaque consumer can still
-invoke the same callable.
+object-literal option callback passed to a local factory that retains it. ADR
+0319 supersedes the hold this case used to pin: the program is closed, the
+factory is entered through its one call, and the returned closure's only
+invocation is the click handler, so the read through animate is clean. A
+second factory instance, an opaque consumer, or any position the walk does not
+follow still leaves the definition-site obligation in place
+(fixtures/reactive-ir/invocation-flow).
 ObjectConsumerTracked separately pins an exact member invocation in tracked JSX:
 the consumer stays non-violating while its definition retains an obligation.
 

@@ -142,6 +142,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callback-parameter-completion/App.tsx",
+      "start": 3305,
+      "end": 3317,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -152,6 +162,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callback-parameter-completion/App.tsx",
+      "start": 3602,
+      "end": 3609,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -159,6 +179,16 @@
       "path": "fixtures/reactive-ir/callback-parameter-completion/App.tsx",
       "start": 3616,
       "end": 3623,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callback-parameter-completion/App.tsx",
+      "start": 3742,
+      "end": 3756,
       "fixes": 0
     },
     {

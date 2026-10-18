@@ -257,6 +257,9 @@ pub(crate) struct CachedInterproceduralGraph {
     pub(crate) nodes: Vec<SummaryNode>,
     pub(crate) contribution: InterproceduralGraphContribution,
     pub(crate) compiler: Arc<solid_facts::compiler::ExecutionMap>,
+    /// ADR 0320: the member-resolution digest the contribution was built
+    /// under; member calls resolve through the program-wide census.
+    pub(crate) member_resolution: Option<crate::indexes::CrossFileProofDigest>,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]

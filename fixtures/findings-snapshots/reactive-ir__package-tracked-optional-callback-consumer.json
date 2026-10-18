@@ -97,16 +97,6 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/package-tracked-optional-callback-consumer/App.tsx",
-      "start": 1705,
-      "end": 1713,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/package-tracked-optional-callback-consumer/App.tsx",
       "start": 1754,
       "end": 1762,
       "fixes": 0

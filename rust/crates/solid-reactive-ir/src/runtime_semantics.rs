@@ -200,7 +200,7 @@ pub(super) fn argument_behavior(
 ) -> Option<RuntimeArgumentBehavior> {
     let behavior = timing_behavior(call, actual_callability, argument)?;
     let fresh_stack = behavior == RuntimeArgumentBehavior::DeferredCallback
-        && call.declaration.as_ref().is_some_and(|declaration| {
+        && runtime_declaration(call).is_some_and(|declaration| {
             declaration.standard_library
                 && FRESH_STACK_SCHEDULERS.contains(&declaration.qualified_name.as_ref())
         });
@@ -209,6 +209,43 @@ pub(super) fn argument_behavior(
     } else {
         behavior
     })
+}
+
+/// Only the reviewed global runtime calls consume the independent
+/// default-library binding fact. It never promotes a package declaration or
+/// a structurally typed method into the general library model.
+/// `fetch` gains no callback timing row: the selected overload still decides
+/// which arguments are values. As for ordinary default-library calls, implicit
+/// conversions are outside this model, and the leaf walk refuses literal getters.
+pub(super) fn augmented_global_runtime_call(call: &ResolvedCall) -> bool {
+    call.validity == ResolvedCallValidity::Valid
+        && call.kind == CallKind::Call
+        && call.targets.is_none()
+        && !call.target.is_empty()
+        && call
+            .default_library_binding
+            .as_ref()
+            .is_some_and(|declaration| {
+                declaration.standard_library
+                    && declaration.owners.is_empty()
+                    && matches!(
+                        declaration.qualified_name.as_ref(),
+                        "setTimeout"
+                            | "setInterval"
+                            | "queueMicrotask"
+                            | "requestAnimationFrame"
+                            | "requestIdleCallback"
+                            | "fetch"
+                    )
+            })
+}
+
+fn runtime_declaration(call: &ResolvedCall) -> Option<&typefacts::ResolvedDeclaration> {
+    if augmented_global_runtime_call(call) {
+        call.default_library_binding.as_deref()
+    } else {
+        call.declaration.as_ref()
+    }
 }
 
 /// Whether the host may invoke `argument` on its *invoker's* stack: after the
@@ -279,7 +316,7 @@ fn timing_behavior(
         return None;
     }
     let parameter = resolved_parameter(call, argument)?;
-    let declaration = call.declaration.as_ref()?;
+    let declaration = runtime_declaration(call)?;
     let argument_callable = potentially_callable(actual_callability);
     if declaration.standard_library {
         let known_callback = match declaration.qualified_name.as_ref() {
@@ -640,6 +677,7 @@ mod tests {
         };
         ResolvedCall {
             target: Arc::from(name),
+            default_library_binding: None,
             return_type_text: Arc::from("unknown"),
             assertion_signature: false,
             never_returns: false,
@@ -768,6 +806,70 @@ mod tests {
                 "same spelling outside the default library"
             );
         }
+    }
+
+    #[test]
+    fn augmented_scheduler_keeps_the_selected_signature_and_requires_binding_evidence() {
+        let native = resolved_call("setInterval", None, true, Callability::Callable);
+        let mut call = resolved_call("setInterval", Some("ambient"), false, Callability::Callable);
+        assert_eq!(
+            argument_behavior(&call, Some(Callability::Callable), 0),
+            None
+        );
+        call.default_library_binding = native.declaration.clone().map(Arc::new);
+        assert_eq!(
+            argument_behavior(&call, Some(Callability::Callable), 0),
+            Some(RuntimeArgumentBehavior::FreshStackCallback)
+        );
+        assert!(!call.declaration.as_ref().unwrap().standard_library);
+        call.arguments = Arc::from([argument_mapping(0, Callability::NonCallable)]);
+        assert_eq!(
+            argument_behavior(&call, Some(Callability::NonCallable), 0),
+            Some(RuntimeArgumentBehavior::ValueOnly)
+        );
+        call.arguments = Arc::from([]);
+        assert_eq!(
+            argument_behavior(&call, Some(Callability::Callable), 0),
+            None
+        );
+        call.arguments = native.arguments.clone();
+        call.validity = ResolvedCallValidity::Recovery;
+        assert_eq!(
+            argument_behavior(&call, Some(Callability::Callable), 0),
+            None
+        );
+        call.validity = ResolvedCallValidity::Valid;
+        Arc::make_mut(call.default_library_binding.as_mut().unwrap()).qualified_name =
+            Arc::from("unreviewed");
+        assert!(!augmented_global_runtime_call(&call));
+        assert_eq!(
+            argument_behavior(&call, Some(Callability::Callable), 0),
+            None
+        );
+    }
+
+    #[test]
+    fn augmented_fetch_keeps_value_parameters_without_inventing_callback_timing() {
+        let native = resolved_call("fetch", None, true, Callability::NonCallable);
+        let mut call = resolved_call("fetch", None, false, Callability::NonCallable);
+        assert!(!augmented_global_runtime_call(&call));
+        call.default_library_binding = native.declaration.map(Arc::new);
+        assert!(augmented_global_runtime_call(&call));
+        assert_eq!(
+            argument_behavior(&call, Some(Callability::NonCallable), 0),
+            Some(RuntimeArgumentBehavior::ValueOnly)
+        );
+        assert!(!call.declaration.as_ref().unwrap().standard_library);
+        call.arguments = Arc::from([argument_mapping(0, Callability::Callable)]);
+        assert_eq!(
+            argument_behavior(&call, Some(Callability::Callable), 0),
+            None
+        );
+        call.kind = CallKind::Construct;
+        assert!(!augmented_global_runtime_call(&call));
+        call.kind = CallKind::Call;
+        call.validity = ResolvedCallValidity::Recovery;
+        assert!(!augmented_global_runtime_call(&call));
     }
 
     #[test]

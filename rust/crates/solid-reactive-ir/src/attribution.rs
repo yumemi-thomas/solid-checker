@@ -31,6 +31,12 @@ use crate::StaticDefect;
 use crate::identity::SymbolId;
 use crate::indexes::{EntitySymbols, SemanticLookup};
 
+/// ADR 0324: the `<Show>` a children-callback parameter belongs to.
+struct ShowChild {
+    when: Span,
+    keyed: bool,
+}
+
 /// Discharges, in a closed program, the obligation an exported helper raises
 /// for invoking a member of its own parameter (ADR 0203).
 ///
@@ -55,10 +61,16 @@ pub(crate) fn discharge_closed_program_export_dispatch(
     };
     let passed_parameter =
         |defect: &StaticDefect| defect.analysis_context == "parameter-member-target-unresolved";
+    let unmodeled = |defect: &StaticDefect| defect.analysis_context == "parameter-use-unmodeled";
+    let diverging =
+        |defect: &StaticDefect| defect.analysis_context == "parameter-member-targets-diverge";
     if !lookup.program_closed
-        || !defects
-            .iter()
-            .any(|defect| exported_dispatch(defect) || passed_parameter(defect))
+        || !defects.iter().any(|defect| {
+            exported_dispatch(defect)
+                || passed_parameter(defect)
+                || unmodeled(defect)
+                || diverging(defect)
+        })
     {
         return;
     }
@@ -86,13 +98,28 @@ pub(crate) fn discharge_closed_program_export_dispatch(
         if exported_dispatch(defect) {
             return !graph.entered_only_through_call_expressions(file.path.as_str(), span);
         }
+        // ADR 0320: an argument that holds a primitive on every run carries
+        // no project member (`unmodeled`); a fresh literal whose handed-on
+        // member does carries none at that member.
+        if unmodeled(defect) {
+            return !graph.value_is_primitive(file, span, PASS_THROUGH_DEPTH, None);
+        }
         if passed_parameter(defect)
             && let crate::StaticDefectKind::ReactiveDispatchUnresolved {
                 member: Some(member),
                 ..
             } = &defect.kind
         {
-            return !graph.value_holds_builtin(file, span, member, PASS_THROUGH_DEPTH);
+            return !graph.value_holds_builtin(file, span, member, PASS_THROUGH_DEPTH)
+                && !graph.literal_member_is_primitive(file, span, member);
+        }
+        if diverging(defect)
+            && let crate::StaticDefectKind::ReactiveDispatchUnresolved {
+                member: Some(member),
+                ..
+            } = &defect.kind
+        {
+            return !graph.literal_member_is_primitive(file, span, member);
         }
         true
     });
@@ -574,9 +601,10 @@ impl<'a> CallGraph<'a, '_> {
         depth: usize,
     ) -> bool {
         depth > 0
-            // The member veto holds for every origin, the direct one included.
-            && !self.lookup.member_name_may_be_reassigned(member)
-            && !self.lookup.member_name_may_be_reassigned("__proto__")
+            // The member veto holds for every origin, the direct one included;
+            // every origin here is a built-in value (ADR 0314).
+            && !self.lookup.member_may_be_reassigned_on_builtin(member)
+            && !self.lookup.member_may_be_reassigned_on_builtin("__proto__")
             && (matches!(
                 self.lookup.value_origin(
                     file,
@@ -587,6 +615,812 @@ impl<'a> CallGraph<'a, '_> {
                 Some(crate::indexes::ValueOrigin::Builtin)
             ) || self.parameter_holds_builtin(file, span, member, depth)
                 || self.prop_holds_builtin(file, span, member, depth))
+    }
+
+    /// ADR 0320: whether the value at `span` is a primitive other than
+    /// `undefined` on every run, proven from what produces it, never from a
+    /// declared type:
+    ///
+    /// - its own expression (`SemanticLookup::proven_primitive`);
+    /// - a conditional or logical expression all of whose results are;
+    /// - an unwritten `const` of the same file initialized with one;
+    /// - a parameter every entry of whose function passes one (ADR 0213's
+    ///   census: entered only through call expressions, no spread before it;
+    ///   a missing argument is `undefined` unless a proven default covers it),
+    ///   or the first parameter of an effect's apply callback whose compute
+    ///   returns one on every path;
+    /// - `props.name` that every tag rendering the component passes, as a
+    ///   string, a boolean, or an expression that holds one (ADR 0214's
+    ///   census; a tag without the attribute passes `undefined`);
+    /// - a signal accessor's value: a proven initial value, and every setter
+    ///   reference a call in its file writing one (an updater's returns are
+    ///   proven with its previous value assumed); a bare memo's compute
+    ///   returning one on every path;
+    /// - an exact project function's result, every return of which is one and
+    ///   one of which runs on every path.
+    ///
+    /// An assertion anywhere on the way refuses; `assumed` is the one
+    /// parameter (an updater's previous value) taken as proven.
+    fn value_is_primitive(
+        &self,
+        file: &'a FileFacts,
+        span: Span,
+        depth: usize,
+        assumed: Option<(&str, Span)>,
+    ) -> bool {
+        if depth == 0 {
+            return false;
+        }
+        let Some(value) = SemanticLookup::peel_parentheses(file, span) else {
+            return false;
+        };
+        if self.lookup.proven_primitive(file, value, 6) {
+            return true;
+        }
+        if let Some(conditional) = file
+            .ast
+            .conditional_expressions
+            .iter()
+            .find(|conditional| conditional.span == value)
+        {
+            return self.value_is_primitive(file, conditional.consequent, depth - 1, assumed)
+                && self.value_is_primitive(file, conditional.alternate, depth - 1, assumed);
+        }
+        if let Some(logical) = file
+            .ast
+            .logical_expressions
+            .iter()
+            .find(|logical| logical.span == value)
+        {
+            return self.value_is_primitive(file, logical.left, depth - 1, assumed)
+                && self.value_is_primitive(file, logical.right, depth - 1, assumed);
+        }
+        if let Some(call) = file.ast.call_at(value) {
+            return !call.construct
+                && !call.arguments.iter().any(|argument| argument.spread)
+                && (self.accessor_holds_primitive(file, call, depth)
+                    || self.call_returns_primitive(file, call, depth)
+                    || self.show_accessor_holds_primitive(file, call, depth));
+        }
+        if file.ast.members.iter().any(|member| member.span == value) {
+            return self.prop_holds_primitive(file, value, depth);
+        }
+        let Some(declaration) = file.ast.reference_declaration(value) else {
+            return false;
+        };
+        if let Some((path, parameter)) = assumed
+            && path == file.path.as_str()
+            && parameter == declaration
+        {
+            return true;
+        }
+        // ADR 0324: the value a keyed `<Show>` hands its children callback.
+        if let Some(show) = self.show_child_parameter(file, declaration)
+            && show.keyed
+            && self.truthy_value_is_primitive(file, show.when, depth)
+        {
+            return true;
+        }
+        if let Some(binding) = file.ast.bindings.iter().find(|binding| {
+            binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding
+                    .names
+                    .first()
+                    .is_some_and(|name| name.span == declaration)
+        }) && !file.ast.functions.iter().any(|function| {
+            function
+                .parameters
+                .iter()
+                .any(|parameter| parameter.names.iter().any(|name| name.span == declaration))
+        }) {
+            return binding.immutable
+                && !crate::indexes::binding_written(file, declaration)
+                && binding.initializer.is_some_and(|initializer| {
+                    self.value_is_primitive(file, initializer, depth - 1, assumed)
+                });
+        }
+        self.parameter_holds_primitive(file, value, declaration, depth)
+    }
+
+    /// ADR 0324: the `<Show>` whose children callback declares the parameter
+    /// at `declaration`, with its `when` expression and whether it is keyed.
+    /// Only the exact shape the audited `Show` implementation hands a value:
+    /// the dialect's `Show` (never a lookalike), no spread attribute, one
+    /// `when`, `keyed` absent or a boolean literal, and the sole child a
+    /// function literal of exactly one plain, never-reassigned parameter
+    /// (`solid-js@2.0.0-rc.13` `dist/solid.dev.js:1462-1486`: the keyed form
+    /// calls the child with the condition's value, the other with an accessor
+    /// that returns that value or throws).
+    fn show_child_parameter(&self, file: &'a FileFacts, declaration: Span) -> Option<ShowChild> {
+        use solid_facts::ast::BindingShape;
+        let primitives = self.lookup.primitives(file);
+        for (index, element) in file.ast.jsx_elements.iter().enumerate() {
+            if crate::known_primitive(primitives.jsx.get(index)?)
+                != Some(solid_dialect::Primitive::Show)
+                || !element.spreads.is_empty()
+            {
+                continue;
+            }
+            let keyed = element
+                .boolean_properties
+                .iter()
+                .find(|property| file.source_text(property.name) == Some("keyed"))
+                .map(|property| property.value);
+            if keyed.is_none()
+                && element
+                    .properties
+                    .iter()
+                    .any(|property| file.source_text(*property) == Some("keyed"))
+            {
+                continue;
+            }
+            let mut whens = element.attributes.iter().filter(|attribute| {
+                attribute.namespace.is_none()
+                    && file.source_text(attribute.local_name) == Some("when")
+            });
+            let (Some(when), None) = (whens.next(), whens.next()) else {
+                continue;
+            };
+            let Some(when) = when.expression else {
+                continue;
+            };
+            let mut callback = None;
+            let mut sole = true;
+            for child in &element.children {
+                let Some(text) = file.source_text(*child) else {
+                    sole = false;
+                    continue;
+                };
+                if text.trim().is_empty() {
+                    continue;
+                }
+                let Some(inner) = text
+                    .strip_prefix('{')
+                    .and_then(|rest| rest.strip_suffix('}'))
+                else {
+                    sole = false;
+                    continue;
+                };
+                let (Ok(lead), Ok(trail)) = (
+                    u32::try_from(inner.len() - inner.trim_start().len()),
+                    u32::try_from(inner.len() - inner.trim_end().len()),
+                ) else {
+                    sole = false;
+                    continue;
+                };
+                if callback.is_some() {
+                    sole = false;
+                }
+                callback =
+                    Some(file.ast.peel_ts_sugar_span(Span::new(
+                        child.start + 1 + lead,
+                        child.end - 1 - trail,
+                    )));
+            }
+            let Some(callback) = callback.filter(|_| sole) else {
+                continue;
+            };
+            if file.ast.functions.iter().any(|function| {
+                function.span == callback
+                    && !function.r#async
+                    && !function.generator
+                    && !function.rest_parameter
+                    && matches!(function.parameters.as_slice(), [parameter]
+                        if parameter.shape == BindingShape::Identifier
+                            && parameter.initializer.is_none()
+                            && parameter.names.first().is_some_and(|name| name.span == declaration))
+            }) && !crate::indexes::binding_written(file, declaration)
+            {
+                return Some(ShowChild {
+                    when: file.ast.peel_ts_sugar_span(when),
+                    keyed: keyed == Some(true),
+                });
+            }
+        }
+        None
+    }
+
+    /// ADR 0324: `id()` where `id` is the accessor a non-keyed `<Show>` hands
+    /// its children callback.
+    fn show_accessor_holds_primitive(
+        &self,
+        file: &'a FileFacts,
+        call: &solid_facts::ast::CallFact,
+        depth: usize,
+    ) -> bool {
+        if !call.arguments.is_empty() || call.construct {
+            return false;
+        }
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        if file
+            .ast
+            .identifiers
+            .binary_search_by_key(&callee, |identifier| identifier.span)
+            .is_err()
+        {
+            return false;
+        }
+        let Some(declaration) = file.ast.reference_declaration(callee) else {
+            return false;
+        };
+        self.show_child_parameter(file, declaration)
+            .is_some_and(|show| {
+                !show.keyed && self.truthy_value_is_primitive(file, show.when, depth)
+            })
+    }
+
+    /// ADR 0324: whether every truthy value of `when` is a primitive: a route
+    /// parameter (a string or `undefined`), or an expression that is a
+    /// primitive other than `undefined` on every run.
+    fn truthy_value_is_primitive(&self, file: &'a FileFacts, when: Span, depth: usize) -> bool {
+        depth > 0
+            && (self.router_param_member(file, when)
+                || self.value_is_primitive(file, when, depth - 1, None))
+    }
+
+    /// ADR 0324: `params.key` where `params` is the direct `const` of a
+    /// `useParams()` call imported by name from `@solidjs/router`, a release
+    /// the dialect audited and a project that replaces nothing the audit read
+    /// ([`crate::router_params`]). The value is a URL path-segment string, or
+    /// `undefined` for an absent optional parameter. Refused: a computed key,
+    /// a name of `Object.prototype` (a route that lacks the parameter falls
+    /// through the merged object to it), a name some assignment or reflective
+    /// definition of the program writes, and any object that is not that
+    /// direct binding (an alias, a wrapper, a re-export, a namespace member).
+    fn router_param_member(&self, file: &'a FileFacts, expression: Span) -> bool {
+        const OBJECT_PROTOTYPE: [&str; 12] = [
+            "constructor",
+            "hasOwnProperty",
+            "isPrototypeOf",
+            "propertyIsEnumerable",
+            "toLocaleString",
+            "toString",
+            "valueOf",
+            "__proto__",
+            "__defineGetter__",
+            "__defineSetter__",
+            "__lookupGetter__",
+            "__lookupSetter__",
+        ];
+        if !self.lookup.router_params().applies() {
+            return false;
+        }
+        let Some(expression) = SemanticLookup::peel_parentheses(file, expression) else {
+            return false;
+        };
+        let Some(member) = file
+            .ast
+            .members
+            .iter()
+            .find(|member| member.span == expression)
+        else {
+            return false;
+        };
+        if file
+            .ast
+            .computed_members
+            .binary_search(&member.span)
+            .is_ok()
+        {
+            return false;
+        }
+        let Some(key) = file.source_text(member.property) else {
+            return false;
+        };
+        if OBJECT_PROTOTYPE.contains(&key)
+            || key.is_empty()
+            || self.lookup.member_may_be_reassigned_on_builtin(key)
+            || self.lookup.member_may_be_reassigned_on_builtin("__proto__")
+            || self.lookup.property_may_be_defined_reflectively_as(key)
+        {
+            return false;
+        }
+        let object = file.ast.peel_ts_sugar_span(member.object);
+        if SemanticLookup::peel_parentheses(file, member.object).is_none()
+            || file
+                .ast
+                .identifiers
+                .binary_search_by_key(&object, |identifier| identifier.span)
+                .is_err()
+        {
+            return false;
+        }
+        let Some(declaration) = file.ast.reference_declaration(object) else {
+            return false;
+        };
+        let Some(binding) = file.ast.bindings.iter().find(|binding| {
+            binding.immutable
+                && binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding
+                    .names
+                    .first()
+                    .is_some_and(|name| name.span == declaration)
+        }) else {
+            return false;
+        };
+        let Some(call) = binding
+            .call_initializer
+            .and_then(|span| file.ast.call_at(file.ast.peel_ts_sugar_span(span)))
+        else {
+            return false;
+        };
+        if call.construct
+            || binding
+                .initializer
+                .is_none_or(|initializer| file.ast.peel_ts_sugar_span(initializer) != call.span)
+        {
+            return false;
+        }
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        let Some(declared) = file.ast.reference_declaration(callee) else {
+            return false;
+        };
+        // The callee is the local name of `import { useParams } from
+        // "@solidjs/router"`: a named import, not a type-only one.
+        file.ast.imports.iter().any(|import| {
+            import.module.as_str() == crate::router_params::ROUTER_PACKAGE
+                && !import.type_only
+                && import.bindings.iter().any(|binding| {
+                    binding.kind != solid_facts::ast::ImportKind::Namespace
+                        && binding.imported.as_deref() == Some("useParams")
+                        && binding.local.span == declared
+                })
+        })
+    }
+
+    /// See [`Self::value_is_primitive`]: a parameter, by every entry of its
+    /// function, or an effect apply callback's value.
+    fn parameter_holds_primitive(
+        &self,
+        file: &'a FileFacts,
+        reference: Span,
+        declaration: Span,
+        depth: usize,
+    ) -> bool {
+        let Some((function, index)) = file
+            .ast
+            .functions_body_containing(reference)
+            .filter_map(|function| {
+                function
+                    .parameters
+                    .iter()
+                    .position(|parameter| {
+                        parameter.shape == solid_facts::ast::BindingShape::Identifier
+                            && parameter
+                                .names
+                                .first()
+                                .is_some_and(|name| name.span == declaration)
+                    })
+                    .map(|index| (function, index))
+            })
+            .next()
+        else {
+            return false;
+        };
+        if (function.rest_parameter && index + 1 == function.parameters.len())
+            || crate::indexes::binding_written(file, declaration)
+            || function.r#async
+            || function.generator
+            || file.ast.identifiers.iter().any(|id| {
+                function.body.contains(id.span) && file.source_text(id.span) == Some("arguments")
+            })
+        {
+            return false;
+        }
+        let default = function.parameters[index].initializer;
+        if default.is_some_and(|default| !self.value_is_primitive(file, default, depth - 1, None)) {
+            return false;
+        }
+        // The value an effect's apply callback receives first is what its
+        // compute returned.
+        if index == 0
+            && let Some(effect) = file.ast.calls.iter().find(|call| {
+                call.arguments.get(1).is_some_and(|argument| {
+                    file.ast.peel_ts_sugar_span(argument.span) == function.span
+                })
+            })
+            && matches!(
+                self.lookup.primitive_at_call(file, effect.span),
+                Some(
+                    solid_dialect::Primitive::CreateEffect
+                        | solid_dialect::Primitive::CreateRenderEffect
+                )
+            )
+        {
+            return default.is_none()
+                && effect.arguments.len() == 2
+                && crate::cleanup::callback_argument_literal(file, effect.arguments[0].span)
+                    .is_some_and(|compute| self.returns_primitive(file, compute, depth, None));
+        }
+        if !self.entered_only_through_call_expressions(file.path.as_str(), function.span) {
+            return false;
+        }
+        let sites = self
+            .lookup
+            .function_call_sites(file.path.as_str(), function.span);
+        !sites.is_empty()
+            && sites.into_iter().all(|(caller, callee)| {
+                let Some(call) = self.lookup.call_by_callee(caller, callee) else {
+                    return false;
+                };
+                if call.construct
+                    || call
+                        .arguments
+                        .iter()
+                        .take(index + 1)
+                        .any(|argument| argument.spread)
+                {
+                    return false;
+                }
+                match call.arguments.get(index) {
+                    Some(passed) => {
+                        // `undefined` written selects the default.
+                        caller.source_text(caller.ast.peel_ts_sugar_span(passed.span))
+                            != Some("undefined")
+                            && self.value_is_primitive(caller, passed.span, depth - 1, None)
+                    }
+                    None => default.is_some(),
+                }
+            })
+    }
+
+    /// See [`Self::value_is_primitive`]: `props.name` by every tag.
+    fn prop_holds_primitive(&self, file: &'a FileFacts, argument: Span, depth: usize) -> bool {
+        use solid_facts::ast::JsxAttributeValueKind;
+        if file.ast.computed_members.binary_search(&argument).is_ok() {
+            return false;
+        }
+        let Some(access) = file
+            .ast
+            .members
+            .iter()
+            .find(|access| access.span == argument)
+        else {
+            return false;
+        };
+        let Some(name) = file.source_text(access.property) else {
+            return false;
+        };
+        if name == "children" {
+            return false;
+        }
+        let Some(declaration) = file
+            .ast
+            .reference_declaration(file.ast.peel_ts_sugar_span(access.object))
+        else {
+            return false;
+        };
+        let Some(component) = file.ast.functions.iter().find(|function| {
+            function.body.contains(argument)
+                && matches!(function.parameters.as_slice(), [parameter]
+                    if parameter.shape == solid_facts::ast::BindingShape::Identifier
+                        && parameter.initializer.is_none()
+                        && parameter.names.first().is_some_and(|name| name.span == declaration))
+        }) else {
+            return false;
+        };
+        let targets = file
+            .ast
+            .assignments
+            .iter()
+            .map(|assignment| assignment.target)
+            .chain(file.ast.iteration_targets.iter().copied())
+            .chain(file.ast.deleted_targets.iter().copied())
+            .collect::<Vec<_>>();
+        let only_read = file
+            .ast
+            .reference_declarations
+            .iter()
+            .filter(|(_, declared)| *declared == declaration)
+            .all(|(reference, _)| {
+                file.ast.members.iter().any(|read| {
+                    read.object == *reference
+                        && !targets.iter().any(|target| target.contains(read.span))
+                        && !file
+                            .ast
+                            .calls
+                            .iter()
+                            .any(|call| file.ast.peel_ts_sugar_span(call.callee) == read.span)
+                })
+            });
+        if !only_read {
+            return false;
+        }
+        let Some(renders) = self.rendered_only_through_jsx(file.path.as_str(), component.span)
+        else {
+            return false;
+        };
+        !renders.is_empty()
+            && renders.into_iter().all(|(caller, element)| {
+                let mut passed = element.attributes.iter().filter(|attribute| {
+                    attribute.namespace.is_none()
+                        && caller.source_text(attribute.local_name) == Some(name)
+                });
+                let Some(attribute) = passed.next() else {
+                    return false;
+                };
+                element.spreads.is_empty()
+                    && passed.next().is_none()
+                    && match attribute.value_kind {
+                        JsxAttributeValueKind::Boolean | JsxAttributeValueKind::String => true,
+                        JsxAttributeValueKind::Expression => {
+                            attribute.expression.is_some_and(|expression| {
+                                self.value_is_primitive(caller, expression, depth - 1, None)
+                            })
+                        }
+                        JsxAttributeValueKind::Element | JsxAttributeValueKind::Fragment => false,
+                    }
+            })
+    }
+
+    /// See [`Self::value_is_primitive`]: a signal or bare memo accessor's
+    /// value, read through a call of the accessor in its own file.
+    fn accessor_holds_primitive(
+        &self,
+        file: &'a FileFacts,
+        call: &solid_facts::ast::CallFact,
+        depth: usize,
+    ) -> bool {
+        use solid_dialect::Primitive;
+        if !call.arguments.is_empty() {
+            return false;
+        }
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        let Some((binding_file, binding, _)) =
+            self.lookup.binding_at_reference(file.path.as_str(), callee)
+        else {
+            return false;
+        };
+        let Some(initializer_span) = binding.call_initializer else {
+            return false;
+        };
+        let initializer_span = binding_file.ast.peel_ts_sugar_span(initializer_span);
+        let Some(initializer) = binding_file
+            .ast
+            .calls
+            .iter()
+            .find(|candidate| candidate.span == initializer_span)
+        else {
+            return false;
+        };
+        if binding_file.path != file.path || !binding.immutable {
+            return false;
+        }
+        match (
+            binding.shape,
+            self.lookup
+                .primitive_at_call(binding_file, initializer.span),
+        ) {
+            (solid_facts::ast::BindingShape::Array, Some(Primitive::CreateSignal)) => {
+                let Some(Some(accessor)) = binding.array_slots.first() else {
+                    return false;
+                };
+                // A tuple slot rest or extra slot could take another value.
+                if file.ast.reference_declaration(callee) != Some(accessor.span)
+                    || binding.names.len() > 2
+                    || initializer.arguments.len() > 2
+                {
+                    return false;
+                }
+                let Some(initial) = initializer.arguments.first() else {
+                    // No initial value: `undefined`.
+                    return false;
+                };
+                if initial.spread
+                    || matches!(
+                        initial.value,
+                        solid_facts::ast::ArgumentValueKind::Function
+                            | solid_facts::ast::ArgumentValueKind::AsyncFunction
+                    )
+                    || !self.value_is_primitive(file, initial.span, depth - 1, None)
+                {
+                    return false;
+                }
+                match binding.array_slots.get(1) {
+                    Some(Some(setter)) => self.setter_writes_primitive(file, setter.span, depth),
+                    Some(None) => false,
+                    None => binding.names.len() == 1,
+                }
+            }
+            (solid_facts::ast::BindingShape::Identifier, Some(Primitive::CreateMemo)) => {
+                let [compute] = initializer.arguments.as_slice() else {
+                    return false;
+                };
+                crate::cleanup::callback_argument_literal(file, compute.span)
+                    .is_some_and(|function| self.returns_primitive(file, function, depth, None))
+            }
+            _ => false,
+        }
+    }
+
+    /// Every reference to the setter declared at `setter` is the callee of a
+    /// call in its file writing a proven primitive, or an updater whose
+    /// returns are proven with its previous value assumed. A setter handed
+    /// anywhere else may write anything.
+    fn setter_writes_primitive(&self, file: &'a FileFacts, setter: Span, depth: usize) -> bool {
+        let references = file
+            .ast
+            .reference_declarations
+            .iter()
+            .filter(|(reference, declaration)| *declaration == setter && *reference != setter)
+            .collect::<Vec<_>>();
+        if self
+            .lookup
+            .symbol_references(
+                self.entities
+                    .at(file.path.as_str(), setter)
+                    .map_or("", |symbol| symbol.as_str()),
+            )
+            .iter()
+            .any(|reference| reference.path.as_ref() != file.path.as_str())
+        {
+            return false;
+        }
+        references.into_iter().all(|(reference, _)| {
+            let Some(call) = self
+                .lookup
+                .call_by_callee(file, *reference)
+                .filter(|call| file.ast.peel_ts_sugar_span(call.callee) == *reference)
+            else {
+                return false;
+            };
+            let [written] = call.arguments.as_slice() else {
+                return false;
+            };
+            if written.spread {
+                return false;
+            }
+            if matches!(
+                written.value,
+                solid_facts::ast::ArgumentValueKind::Function
+                    | solid_facts::ast::ArgumentValueKind::AsyncFunction
+            ) {
+                let Some(updater) = crate::cleanup::callback_argument_literal(file, written.span)
+                else {
+                    return false;
+                };
+                let previous = updater
+                    .parameters
+                    .first()
+                    .filter(|parameter| {
+                        parameter.shape == solid_facts::ast::BindingShape::Identifier
+                            && parameter.initializer.is_none()
+                    })
+                    .and_then(|parameter| parameter.names.first())
+                    .map(|name| name.span)
+                    .filter(|name| !crate::indexes::binding_written(file, *name));
+                return self.returns_primitive(
+                    file,
+                    updater,
+                    depth,
+                    previous.map(|name| (file.path.as_str(), name)),
+                );
+            }
+            self.value_is_primitive(file, written.span, depth - 1, None)
+        })
+    }
+
+    /// Every value the synchronous `function` returns is proven primitive,
+    /// and one return runs on every path (no fall-through to `undefined`).
+    fn returns_primitive(
+        &self,
+        file: &'a FileFacts,
+        function: &solid_facts::ast::FunctionFact,
+        depth: usize,
+        assumed: Option<(&str, Span)>,
+    ) -> bool {
+        if function.r#async || function.generator || depth == 0 {
+            return false;
+        }
+        let proven = |returned: &solid_facts::ast::ReturnFact| {
+            returned
+                .argument
+                .is_some_and(|argument| self.value_is_primitive(file, argument, depth - 1, assumed))
+        };
+        if function.expression_body {
+            return function.expression_return.as_ref().is_some_and(proven);
+        }
+        let mut returns = file.ast.own_returns(function).peekable();
+        returns.peek().is_some()
+            && file
+                .ast
+                .own_returns(function)
+                .any(|returned| returned.straight_line)
+            && returns.all(proven)
+    }
+
+    /// See [`Self::value_is_primitive`]: an exact project function's result.
+    fn call_returns_primitive(
+        &self,
+        file: &'a FileFacts,
+        call: &solid_facts::ast::CallFact,
+        depth: usize,
+    ) -> bool {
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        if self.lookup.is_member_span(file, callee)
+            || file.ast.computed_members.binary_search(&callee).is_ok()
+        {
+            return false;
+        }
+        let Some((function_file, function)) = self
+            .lookup
+            .callee_symbol(file, call.callee)
+            .and_then(|symbol| self.lookup.function_for_symbol(symbol))
+        else {
+            return false;
+        };
+        self.lookup
+            .function_value_is_current(function_file, function)
+            && self.returns_primitive(function_file, function, depth, None)
+    }
+
+    /// ADR 0320: the argument at `span` is a fresh object literal, passed to
+    /// a callee that only reads members of that parameter, whose own `member`
+    /// property -- the last one, with no spread, getter or computed key in
+    /// the literal -- holds a proven primitive.
+    fn literal_member_is_primitive(&self, file: &'a FileFacts, span: Span, member: &str) -> bool {
+        if member.contains('.') {
+            return false;
+        }
+        let Some(value) = SemanticLookup::peel_parentheses(file, span) else {
+            return false;
+        };
+        let Some(shape) = file
+            .ast
+            .object_get_shapes
+            .iter()
+            .find(|shape| shape.span == value)
+        else {
+            return false;
+        };
+        if !shape.closed
+            || shape
+                .properties
+                .iter()
+                .any(|property| property.getter.is_some())
+        {
+            return false;
+        }
+        let Some((call, index)) = file
+            .ast
+            .arguments_containing(span)
+            .find(|(call, index)| call.arguments[*index].span == span)
+        else {
+            return false;
+        };
+        let mut consulted = Vec::new();
+        if !self
+            .lookup
+            .parameter_only_member_accessed_consulting(file, call, index, &mut consulted)
+        {
+            return false;
+        }
+        let properties = file
+            .ast
+            .object_properties
+            .iter()
+            .filter(|property| value.contains(property.span))
+            .filter(|property| {
+                !file.ast.object_properties.iter().any(|outer| {
+                    outer.span != property.span
+                        && value.contains(outer.span)
+                        && outer.value.contains(property.span)
+                })
+            })
+            .collect::<Vec<_>>();
+        if properties.iter().any(|property| property.computed) {
+            return false;
+        }
+        properties
+            .iter()
+            .rev()
+            .find(|property| {
+                crate::execution_role::property_static_key(file, property).as_deref()
+                    == Some(member)
+            })
+            .is_some_and(|property| {
+                self.value_is_primitive(file, property.value, PASS_THROUGH_DEPTH, None)
+            })
     }
 
     /// ADR 0214: whether `props.name` at `argument` holds a built-in value on
@@ -610,8 +1444,8 @@ impl<'a> CallGraph<'a, '_> {
     ) -> bool {
         use solid_facts::ast::JsxAttributeValueKind;
         if depth == 0
-            || self.lookup.member_name_may_be_reassigned(member)
-            || self.lookup.member_name_may_be_reassigned("__proto__")
+            || self.lookup.member_may_be_reassigned_on_builtin(member)
+            || self.lookup.member_may_be_reassigned_on_builtin("__proto__")
         {
             return false;
         }
@@ -767,8 +1601,8 @@ impl<'a> CallGraph<'a, '_> {
         depth: usize,
     ) -> bool {
         if depth == 0
-            || self.lookup.member_name_may_be_reassigned(member)
-            || self.lookup.member_name_may_be_reassigned("__proto__")
+            || self.lookup.member_may_be_reassigned_on_builtin(member)
+            || self.lookup.member_may_be_reassigned_on_builtin("__proto__")
         {
             return false;
         }

@@ -84,10 +84,6 @@ pub mod dependency_program;
 pub mod dependency_sources;
 mod diagnostics;
 pub mod dialect;
-/// Authorizing a fixture-supplied contract, so a corpus can analyze a
-/// consumer against an accepted one. Never reached by an ordinary
-/// analysis: the trust it mints is returned to the caller, not written
-/// into the project.
 mod host_config;
 pub mod host_constants;
 mod host_inline;
@@ -95,6 +91,11 @@ mod host_invocation;
 mod host_loadable;
 mod host_plugins;
 mod inferred_host;
+/// Authorizing a fixture-supplied contract, so a corpus can analyze a
+/// consumer against an accepted one. Never reached by an ordinary
+/// analysis: the trust it mints is returned to the caller, not written
+/// into the project.
+pub mod installed_bytes;
 mod package_requirements;
 mod release_scope;
 pub mod runtime_resolution;
@@ -1034,6 +1035,16 @@ impl NativeIncrementalSession {
             .into_iter()
             .map(|module| module.path.to_string())
             .collect())
+    }
+
+    /// The open program's module graph with every import's resolution: what
+    /// a retained caller observes to notice that the filesystem now resolves
+    /// the program differently (a relinked package, an edited manifest).
+    pub fn resolution_graph(&mut self) -> Result<typefacts::ModuleGraph, BackendError> {
+        self.typescript.module_graph(&typefacts::ModuleGraphDemand {
+            imports: true,
+            ..typefacts::ModuleGraphDemand::default()
+        })
     }
 
     /// Recovery is the session's own concern now.
@@ -2247,7 +2258,7 @@ function opaque() { consume(() => 4); }
             // declarator. Each must carry both signature facts, because
             // `export_kind_proof` reads absence at one of these spans as a
             // refusal.
-            "const value = createMemo(async () => 1); const effectArgs: [() => number] = [() => 1]; createEffect(...effectArgs); const local = 1; const o: { a: number } = { a: 1 }; export { local }; export class K {} export const { a } = o; export default class {} export function Card(props: { title: string }) { const key = 'title'; const copy = { ...props }; return <div>{props[key]}{copy.title}{value()}</div>; }",
+            "const value = createMemo(async () => 1); const effectArgs: [() => number] = [() => 1]; createEffect(...effectArgs); const local = 1; const o: { a: number } = { a: 1 }; export { local }; export class K {} class KK extends K {} export const { a } = o; export default class {} export function Card(props: { title: string }) { const key = 'title'; const copy = { ...props }; return <div>{props[key]}{copy.title}{value()}</div>; }",
         );
         let demands = semantic_demands(
             dialect::default_dialect(),
@@ -2263,6 +2274,16 @@ function opaque() { consume(() => 4); }
                     .iter()
                     .any(|demand| demand.symbol && demand.location == location),
                 "member object {location:?} must retain symbol provenance"
+            );
+        }
+        // ADR 0317: a class's `extends` expression names its base class.
+        for heritage in file.ast.classes.iter().filter_map(|class| class.heritage) {
+            let location = typefacts_location(file.path.as_str(), heritage);
+            assert!(
+                demands
+                    .iter()
+                    .any(|demand| demand.symbol && demand.location == location),
+                "heritage {location:?} must retain symbol provenance"
             );
         }
         for spread in &file.ast.spreads {
