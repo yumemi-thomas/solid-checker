@@ -1,0 +1,3 @@
+{
+  "note": "control: owner primitives written directly in an event handler are a proven SC4001"
+}

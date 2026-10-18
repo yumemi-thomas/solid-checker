@@ -1,0 +1,20 @@
+{
+  "note": "oracle-owner-flow with the helper imported from another module",
+  "open": [
+    {
+      "code": "NO_OWNER_EFFECT",
+      "site": "App.tsx:8",
+      "reason": "Owner family: missing-owner is silent for owner primitives in a callback handed to a project helper that returns it as an event handler. Written directly in the handler it is a proven SC4001 (oracle-owner-direct)."
+    },
+    {
+      "code": "NO_OWNER_CLEANUP",
+      "site": "App.tsx:9",
+      "reason": "Owner family: missing-owner is silent for owner primitives in a callback handed to a project helper that returns it as an event handler. Written directly in the handler it is a proven SC4001 (oracle-owner-direct)."
+    },
+    {
+      "code": "NO_OWNER_CLEANUP",
+      "site": "App.tsx:17",
+      "reason": "Owner family: missing-owner is silent for owner primitives in a callback handed to a project helper that returns it as an event handler. Written directly in the handler it is a proven SC4001 (oracle-owner-direct)."
+    }
+  ]
+}

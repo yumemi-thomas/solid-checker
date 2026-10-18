@@ -676,11 +676,25 @@ async function collectProject(project, scenario, tools, browser, responses = new
     // A Solid dev diagnostic is the runtime's own report. Its site is the first
     // frame that maps to configured source; otherwise it keeps its frames and
     // attribution class, exactly as an unmapped read does.
+    // Every frame below the site that maps to configured source is kept as the
+    // diagnostic's `stack`, outermost last: a static finding may anchor at the
+    // call that led to the read rather than at the read itself.
+    async function mappedStack(frames, located) {
+      if (!located.site) return [];
+      const stack = [];
+      for (const frame of frames.slice(located.attributions.length)) {
+        const row = await attribute(frame);
+        if (row.outcome === "mapped") stack.push(site(row));
+      }
+      return stack;
+    }
     const diagnostics = [];
     for (const row of raw.diagnostics) {
       const located = await locate(row.frames ?? [], row.stackTruncated ?? null);
+      const stack = await mappedStack(row.frames ?? [], located);
       diagnostics.push({ code: row.code, kind: row.kind, severity: row.severity, message: row.message, document: row.document,
         channel: "runtime-diagnostic", authority: false, certification: false, operation: operationFrame(located.attributions),
+        ...(stack.length ? { stack } : {}),
         ...(located.site ? { siteKind: siteExpressionKind(sourceFiles.get(located.site.location.path).text, located.site.location.path,
           Buffer.from(sourceFiles.get(located.site.location.path).text).subarray(0, located.site.location.startByte).toString().length) } : {}),
         ...(located.site ? { site: located.site } : { site: null, attribution: located.unmapped.attribution,

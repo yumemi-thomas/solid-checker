@@ -1,5 +1,36 @@
 # Precision backlog
 
+## 2026-10-19 — Runtime oracle: two unproven-clean families
+
+`scripts/runtime-oracle.mjs` (cases in `fixtures/runtime-oracle/`) runs small
+projects in Chrome on the rc.13 dev build and reports every runtime
+diagnostic where the checker is silent. The first run covered 31 reviewer
+counterexamples from the ADR 0319 to 0325 rounds, a control and four probes:
+17 covered by an uncertifiable result, 3 by a violation, 9 quiet, and 7 with
+an unproven clean claim. Those 7 fall into three families, all listed as
+`open` in their cases:
+
+- **Owner primitives in a value-flowed event callback** (`c6-leak`,
+  `r4c-leak`, `oracle-owner-flow`, `oracle-owner-flow-import`).
+  `createEffect`/`onCleanup` in a callback that a project helper returns as an
+  `onClick` raise `NO_OWNER_EFFECT`/`NO_OWNER_CLEANUP`, but `missing-owner`
+  reports nothing, in the same file or across an import. Written directly in
+  the handler, the same code is a proven `SC4001` (`oracle-owner-direct`).
+  The minimum fix is an uncertifiable result where the callback's role is not
+  proven; ADR 0319's event role would make it a violation.
+- **A function child called in the receiving component's body**
+  (`r2b-render`, `oracle-children-body`). `props.children(1)` in `Kids`'s
+  body runs the child untracked (`STRICT_READ_UNTRACKED`), but the checker
+  is silent. The same shape through a `render` prop is a proven `SC1001`.
+  This is likely ADR 0323's row treating `children` as a tracked lazy memo,
+  which does not hold for a function child the body calls.
+- **The recorded c2/c2c/c2d/c3d gap** (`c2d-method-tracked`): a function
+  registered from a method called in JSX and run by a later component body.
+
+`r4c-leak` line 43 (`ASYNC_OUTSIDE_LOADING_BOUNDARY`) is an attribution
+mismatch, not a missing finding: the runtime names the JSX read of the memo,
+while the checker's `SC5003` uncertifiable sits at the async read on line 41.
+
 ## 2026-10-18 — Route parameters and imported constants (ADRs 0324, 0325)
 
 Against `/tmp/sweep-final17.json` (4,210 uncertifiable, 554 violations):

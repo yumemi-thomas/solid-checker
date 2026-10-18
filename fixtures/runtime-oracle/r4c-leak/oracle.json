@@ -1,0 +1,20 @@
+{
+  "note": "reviewer r4c: value-flow roles must not leak into owner, async and write rules",
+  "open": [
+    {
+      "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+      "site": "App.tsx:43",
+      "reason": "Attribution, not a missing finding: the runtime names the JSX read of the memo, the checker's SC5003 uncertifiable sits at the async read on line 41. The oracle has no frame linking the two."
+    },
+    {
+      "code": "NO_OWNER_EFFECT",
+      "site": "App.tsx:20",
+      "reason": "Owner family: missing-owner is silent for owner primitives in a callback handed to a project helper that returns it as an event handler. Written directly in the handler it is a proven SC4001 (oracle-owner-direct)."
+    },
+    {
+      "code": "NO_OWNER_CLEANUP",
+      "site": "App.tsx:21",
+      "reason": "Owner family: missing-owner is silent for owner primitives in a callback handed to a project helper that returns it as an event handler. Written directly in the handler it is a proven SC4001 (oracle-owner-direct)."
+    }
+  ]
+}
