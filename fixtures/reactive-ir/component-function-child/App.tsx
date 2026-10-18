@@ -135,3 +135,50 @@ export function AliasedChild() {
     </Aliased>
   );
 }
+
+function Deleting(props: { children?: () => JSX.Element }) {
+  const saved = props.children;
+  delete props.children;
+  (props as { children?: () => JSX.Element }).children?.();
+  return <div>{saved?.()}</div>;
+}
+
+// Uncertifiable, no violation: the body deletes `children` before the call.
+export function DeletedChild() {
+  const [count] = createSignal(0);
+  return (
+    <Deleting>
+      {() => {
+        const n = count();
+        return <span>{n}</span>;
+      }}
+    </Deleting>
+  );
+}
+
+type Replacing = { children: () => JSX.Element; replace: () => void };
+
+function Replaced(props: Replacing) {
+  const saved = props.children;
+  props.replace();
+  props.children();
+  return <div>{saved()}</div>;
+}
+
+// Uncertifiable, no violation: `props.replace()` runs with `props` as `this`
+// and replaces `children` before the call.
+export function ReplacedChild() {
+  const [count] = createSignal(0);
+  return (
+    <Replaced
+      replace={function (this: Replacing) {
+        this.children = () => <span>replacement</span>;
+      }}
+    >
+      {() => {
+        const n = count();
+        return <span>{n}</span>;
+      }}
+    </Replaced>
+  );
+}

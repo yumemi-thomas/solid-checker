@@ -32,7 +32,7 @@ a non-literal value) leaves the key unproven.
 | `UsesGetterRoot` | `SC1001` uncertifiable | a getter in the merged literal |
 | `UsesShadowRoot` | `SC1001` uncertifiable | a project function named `Dynamic` is not the dialect's |
 | `UsesTooltip` | `SC1001` uncertifiable | not an `on…` prop |
-| `UsesCallingRoot` | `SC1001` violation | the consumer calls the prop while it renders (ADR 0204) |
+| `UsesCallingRoot` | `SC1001` uncertifiable | the consumer calls the prop while it renders, but it also hands `props` to `omit`; a single-source view may be `props` itself, so the body proof refuses (ADR 0326 review round 2). The read stays a proof obligation, not a proven violation |
 
 The reads in `CallingRoot` and the shadowing `Dynamic` belong to other
 rules and do not move.

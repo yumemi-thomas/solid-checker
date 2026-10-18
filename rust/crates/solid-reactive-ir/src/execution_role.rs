@@ -955,26 +955,24 @@ fn component_invokes_prop_in_body(
     }) {
         return false;
     }
-    // Every use of `props` must be a member read or an argument of a props
-    // view primitive (`omit`, `merge`, `splitProps`), and nothing in the
-    // body may write a member named `prop` on any object: an alias, a
-    // spread, another argument or a destructuring may write `props.<prop>`
-    // where the check above cannot see it (`const alias = props;
-    // alias.children = …`).
+    // Every use of `props` in the component must be a static member read
+    // that is not written, deleted, or called (a call hands `props` over as
+    // `this`), except the call of `prop` itself; and no member named `prop`
+    // (or a computed one) may be written or deleted on any object. Anything
+    // else -- an alias, a spread, an argument (a single-source `merge(props)`
+    // is `props`), a destructuring -- may replace `props.<prop>` before the
+    // call, which then runs something else.
     let peel = |span: Span| file.ast.peel_ts_sugar_span(span);
-    let view_argument = |reference: Span| {
+    let written = |member: Span| {
         file.ast
-            .arguments_containing(reference)
-            .any(|(call, index)| {
-                !call.arguments[index].spread
-                    && peel(call.arguments[index].span) == reference
-                    && lookup
-                        .primitive_at_call(file, call.span)
-                        .is_some_and(|primitive| {
-                            lookup.dialect.splits_props(primitive)
-                                || lookup.dialect.merges_props_reactivity(primitive)
-                        })
-            })
+            .assignments
+            .iter()
+            .any(|assignment| assignment.target.contains(member))
+            || file
+                .ast
+                .deleted_targets
+                .iter()
+                .any(|target| target.contains(member))
     };
     if file
         .ast
@@ -982,22 +980,24 @@ fn component_invokes_prop_in_body(
         .iter()
         .filter(|(reference, declaration)| *declaration == name.span && *reference != name.span)
         .any(|(reference, _)| {
-            !view_argument(*reference)
-                && !file.ast.members.iter().any(|member| {
-                    peel(member.object) == *reference
-                        && !file
-                            .ast
-                            .assignments
-                            .iter()
-                            .any(|assignment| assignment.target.contains(member.span))
-                })
+            !file.ast.members.iter().any(|member| {
+                peel(member.object) == *reference
+                    && !written(member.span)
+                    && member_static_key(file, member).is_some_and(|key| {
+                        key == prop
+                            || !(file
+                                .ast
+                                .calls
+                                .iter()
+                                .any(|call| peel(call.callee) == member.span)
+                                || flow_tagged_or_chained(file, member.span))
+                    })
+            })
         })
-        || file.ast.assignments.iter().any(|assignment| {
-            component.span.contains(assignment.target)
-                && file.ast.members.iter().any(|member| {
-                    member.span == peel(assignment.target)
-                        && member_static_key(file, member).is_none_or(|key| key == prop)
-                })
+        || file.ast.members.iter().any(|member| {
+            component.span.contains(member.span)
+                && written(member.span)
+                && member_static_key(file, member).is_none_or(|key| key == prop)
         })
     {
         return false;

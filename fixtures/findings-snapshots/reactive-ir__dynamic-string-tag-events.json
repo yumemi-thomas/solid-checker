@@ -1,5 +1,5 @@
 {
-  "status": "violation",
+  "status": "uncertifiable",
   "findings": [
     {
       "rule": "strict-read-untracked",
@@ -64,7 +64,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dynamic-string-tag-events/App.tsx",
       "start": 2321,
