@@ -432,6 +432,16 @@ fn owner_node(
     let component = component_status == crate::indexes::ComponentStatus::Proven;
     let component_uncertain = component_status == crate::indexes::ComponentStatus::Uncertain;
     let mut seed_context = compiler_owner_context(file, function.body);
+    // ADR 0319's walk, in its owner mode, proved that every invocation of
+    // this literal is a host event dispatch (a callback a helper calls from
+    // the handler it returns, which the caller spreads onto an element): it
+    // runs with no owner, as the same literal written on the element does.
+    if lookup
+        .unowned_event_literals()
+        .contains(&(file.path.to_string(), function.span))
+    {
+        seed_context |= OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED;
+    }
     match component_status {
         crate::indexes::ComponentStatus::Proven => seed_context |= OWNER_CONTEXT_OWNED,
         crate::indexes::ComponentStatus::Uncertain => {

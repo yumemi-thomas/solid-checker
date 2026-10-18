@@ -121,7 +121,8 @@ with the baseline and the new binary:
 - SC4001 missing owner (`onCleanup` in the handler): the inline twin is a
   violation; the flowed twin is silent in the baseline and with this ADR. The
   owner rules do not consume this role, so the gap is pre-existing and this ADR
-  neither opens nor closes it.
+  neither opens nor closes it. (Closed by ADR 0327, with a stricter owner mode
+  of this walk.)
 - SC1007 reactive-handler-frozen judges the JSX attribute expression, not the
   handler body; this role is never asked there.
 

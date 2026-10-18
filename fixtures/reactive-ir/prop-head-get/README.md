@@ -15,7 +15,7 @@ replaced.
 | `KeyedShow` | violation | the captured prop, not the keyed item, is read |
 | `Rows` through `Forwarder` | violation | exact cross-file forward of a live value |
 | `PlainInner` ← `PlainMiddle` ← `PlainOuter` | none | complete plain forwarding stays static |
-| `Shadowed` | none | a local `For` names no primitive and never runs its child |
+| `Shadowed` | uncertifiable | a local `For` names no primitive, so the child is its `children` prop; nothing proves when (or that) it runs it (ADR 0326: until then the compiler's `Deferred` projection of a component child kept this silent) |
 | `WrappedChild` | uncertifiable | `replaceChild(fn)` passes its result, not the literal |
 | `DormantDefault` | uncertifiable | a nested function's unused default is not a body read |
 | `MergedHead`, `AliasedHead` | uncertifiable | a view is not the parameter's own keys |

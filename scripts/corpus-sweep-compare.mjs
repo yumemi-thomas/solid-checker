@@ -59,3 +59,4 @@ console.log("added", added.length, byIdAndKind(added));
 console.log("removed by app", byApp(removed));
 console.log("added by app", byApp(added));
 for (const key of added.slice(0, listLimit)) console.log("ADD", key);
+for (const key of removed.slice(0, listLimit)) console.log("REM", key);

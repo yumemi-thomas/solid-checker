@@ -1,5 +1,46 @@
 # Precision backlog
 
+## 2026-10-19 — The oracle's two families are closed (ADRs 0326, 0327)
+
+The runtime oracle has no unproven clean claim left except the two recorded
+ones: `c2d-method-tracked` and the `r4c-leak` line 43 attribution mismatch.
+On 37 cases: 18 covered by an uncertifiable result, 7 by a violation, 10 quiet,
+2 known open.
+
+- **ADR 0326, a component's function child is its `children` prop.** The cause
+  was not ADR 0323. The compiler fact projects a component's child as a
+  `Deferred` callback ("the receiving component invokes it"), and the IR read
+  that as a deferred, silent role. The child is now placed like a function
+  attribute: a proven `SC1001` when the component's body calls
+  `props.children`, followed by ADR 0319's walk otherwise, and uncertifiable
+  when nothing places it. Fixture `component-function-child`.
+- **ADR 0327, a callback only an event runs has no owner.** ADR 0319's walk
+  runs in an owner mode that refuses every primitive slot and never borrows
+  the read role at a call, because `createRoot`/`runWithOwner` pass their
+  caller's read role through while supplying an owner. A literal whose every
+  invocation is an event dispatch is seeded proven-unowned. Fixture
+  `invocation-flow-owner`, process test `helper_event_edits_match_cold`.
+
+Corpus A/B against `635ed74d4` (49 projects, browser/development/csr): **0
+removed, +17 added.**
+- +1 `SC4001` violation, a real missing owner: app-game `solid-dockview`,
+  `createTrackedEffect` reached from a click handler.
+- +5 `SC4001` uncertifiable: `createEventListener` in a handler object spread
+  onto a button, app-game `docking`.
+- +10 `SC1001` and +1 `SC9012` uncertifiable: function children of library
+  components and of en-passant's unresolved `<For>` (the app has no
+  `node_modules`). These were silent before.
+
+A first draft also dropped the `Deferred` role of non-function children, which
+added 288 false `SC1001` violations on `{props.children}`. Another draft let
+the children proof answer "unproven" for `<Show>` callbacks, which turned 41
+violations into uncertifiables. The corpus A/B caught both; neither is in the
+final change.
+
+Still open: a literal run both by an event and elsewhere refuses as a whole
+(ADR 0327). An intrinsic element's function child (`<div>{() => count()}</div>`)
+stays uncertifiable, as before.
+
 ## 2026-10-19 — Runtime oracle: two unproven-clean families
 
 `scripts/runtime-oracle.mjs` (cases in `fixtures/runtime-oracle/`) runs small

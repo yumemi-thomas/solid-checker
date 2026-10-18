@@ -107,6 +107,16 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/prop-head-get/App.tsx",
+      "start": 4407,
+      "end": 4418,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/prop-head-get/App.tsx",
       "start": 4788,
       "end": 4799,
       "fixes": 0

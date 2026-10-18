@@ -631,6 +631,8 @@ pub(super) struct SemanticLookup<'a> {
     functions_by_symbol: OnceLock<HashMap<&'a str, SymbolFunction>>,
     /// ADR 0319: every literal's invocation-flow answer.
     invocation_flow_answers: OnceLock<HashMap<(String, Span), crate::ExecutionRole>>,
+    /// The literals whose every invocation is a host event dispatch.
+    unowned_event_literals: OnceLock<HashSet<(String, Span)>>,
     /// ADR 0320: whether some call may copy keys into an existing object.
     objects_assigned_into: OnceLock<bool>,
     router_params: OnceLock<crate::router_params::RouterParamsStatus>,
@@ -805,6 +807,7 @@ impl<'a> SemanticLookup<'a> {
             symbol_names,
             functions_by_symbol: OnceLock::new(),
             invocation_flow_answers: OnceLock::new(),
+            unowned_event_literals: OnceLock::new(),
             objects_assigned_into: OnceLock::new(),
             router_params: OnceLock::new(),
             assigned_member_names: OnceLock::new(),
@@ -1168,6 +1171,16 @@ impl<'a> SemanticLookup<'a> {
                     hasher.update(span.end.to_le_bytes());
                     hasher.update(format!("{role:?}").as_bytes());
                     hasher.update([0]);
+                }
+                // The owner seeds read the same walk's owner answers.
+                let mut literals = self.unowned_event_literals().iter().collect::<Vec<_>>();
+                literals.sort_unstable();
+                hasher.update(b"unowned-event-literals\0");
+                for (path, span) in literals {
+                    hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
+                    hasher.update(path.as_bytes());
+                    hasher.update(span.start.to_le_bytes());
+                    hasher.update(span.end.to_le_bytes());
                 }
             }
             for (path, span) in component_keys {
@@ -1757,6 +1770,13 @@ impl<'a> SemanticLookup<'a> {
     pub(crate) fn invocation_flow_answers(&self) -> &HashMap<(String, Span), crate::ExecutionRole> {
         self.invocation_flow_answers
             .get_or_init(|| crate::execution_role::invocation_flow_answers(self))
+    }
+
+    /// The literals whose every invocation is a host event dispatch, for the
+    /// owner seeds; see [`crate::execution_role::unowned_event_literals`].
+    pub(crate) fn unowned_event_literals(&self) -> &HashSet<(String, Span)> {
+        self.unowned_event_literals
+            .get_or_init(|| crate::execution_role::unowned_event_literals(self))
     }
 
     pub(super) fn tuple_iteration_may_be_mutated(&self) -> bool {

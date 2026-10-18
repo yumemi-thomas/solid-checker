@@ -55,7 +55,9 @@ The `c*` and `r*` cases are the reviewer counterexamples from the ADR 0319 to
 `rust/target/research/session-2026-10-19/`). Two were edited only to
 type-check against the real typings: `c3-misc` (`run(undefined)`) and `r4b`
 (`(String(), g)()`). The `oracle-*` cases are minimal probes for the families
-the first run found. `control-body-read` is a known-detected control.
+the first run found, both closed by ADRs 0326 and 0327; `oracle-owner-flow-owned`
+is the owned control for the second. `control-body-read` is a known-detected
+control.
 
 The `r10` (router) and `r11` (imported constant) reviewer sets are not here
 yet: they need a router install and a scenario for navigation.

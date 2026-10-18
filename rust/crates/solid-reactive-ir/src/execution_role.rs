@@ -230,15 +230,19 @@ pub(super) fn execution_role(
     span: Span,
     allowed: &[Span],
 ) -> ExecutionRole {
-    execution_role_where(facts, span, allowed, |_| true)
+    execution_role_where(facts, span, allowed, None, |_| true)
 }
 
 fn execution_role_where(
     facts: &solid_facts::compiler::ExecutionMap,
     span: Span,
     allowed: &[Span],
+    within: Option<Span>,
     callback_applies: impl Fn(&solid_facts::compiler::CallbackRole) -> bool,
 ) -> ExecutionRole {
+    // Only facts strictly inside `within` place `span`, when given.
+    let inside =
+        |region: Span| within.is_none_or(|within| within.contains(region) && within != region);
     // Deletion dominates, rather than competing on region width like the rest.
     // A discarded region is code the emitter removed, and removed code cannot
     // contain code that runs: any narrower region inside it would describe
@@ -261,36 +265,39 @@ fn execution_role_where(
         return ExecutionRole::DeferredCallback;
     }
     let tracked = facts.tracked_regions.iter().filter_map(|region| {
-        region
-            .span
-            .contains(span)
-            .then_some((region.span, ExecutionRole::TrackedJsx, 2_u8))
+        (region.span.contains(span) && inside(region.span)).then_some((
+            region.span,
+            ExecutionRole::TrackedJsx,
+            2_u8,
+        ))
     });
     let untracked = facts.untracked_regions.iter().filter_map(|region| {
-        region
-            .span
-            .contains(span)
-            .then_some((region.span, ExecutionRole::UntrackedRendering, 1_u8))
+        (region.span.contains(span) && inside(region.span)).then_some((
+            region.span,
+            ExecutionRole::UntrackedRendering,
+            1_u8,
+        ))
     });
     let callbacks = facts.callback_roles.iter().filter_map(|callback| {
-        (callback.span.contains(span) && callback_applies(callback)).then_some((
-            callback.span,
-            match callback.role {
-                solid_facts::compiler::CallbackRoleKind::EventHandler => {
-                    ExecutionRole::EventCallback
-                }
-                solid_facts::compiler::CallbackRoleKind::Deferred => {
-                    ExecutionRole::DeferredCallback
-                }
-                solid_facts::compiler::CallbackRoleKind::DirectiveApply => {
-                    ExecutionRole::DirectiveApply
-                }
-                solid_facts::compiler::CallbackRoleKind::Render => {
-                    ExecutionRole::UntrackedRendering
-                }
-            },
-            0_u8,
-        ))
+        (callback.span.contains(span) && inside(callback.span) && callback_applies(callback))
+            .then_some((
+                callback.span,
+                match callback.role {
+                    solid_facts::compiler::CallbackRoleKind::EventHandler => {
+                        ExecutionRole::EventCallback
+                    }
+                    solid_facts::compiler::CallbackRoleKind::Deferred => {
+                        ExecutionRole::DeferredCallback
+                    }
+                    solid_facts::compiler::CallbackRoleKind::DirectiveApply => {
+                        ExecutionRole::DirectiveApply
+                    }
+                    solid_facts::compiler::CallbackRoleKind::Render => {
+                        ExecutionRole::UntrackedRendering
+                    }
+                },
+                0_u8,
+            ))
     });
     if let Some((_, role, _)) = tracked
         .chain(untracked)
@@ -314,7 +321,19 @@ fn source_execution_role(
     span: Span,
     allowed: &[Span],
 ) -> ExecutionRole {
-    execution_role_where(&file.compiler, span, allowed, |callback| {
+    // A component's function child is projected `Deferred` because the
+    // receiving component, not the compiler, invokes it
+    // (`solid_facts::compiler`): that says nothing about when, and neither
+    // does a tracked region around the element. Like an attribute's
+    // function, it is placed by the arms that follow the value into the
+    // component, or stays unproven; only facts inside it place code there.
+    let within = file
+        .ast
+        .functions_body_containing(span)
+        .filter(|function| component_child_function(file, function.span))
+        .min_by_key(|function| function.span.end - function.span.start)
+        .map(|function| function.span);
+    execution_role_where(&file.compiler, span, allowed, within, |callback| {
         // A component's `ref` is a prop, not an ownerless ref application.
         (callback.role != solid_facts::compiler::CallbackRoleKind::DirectiveApply
             || crate::owners::ref_application_on_intrinsic(file, callback.span))
@@ -856,6 +875,41 @@ fn prop_literal_invoked_during_render(
         return false;
     };
     component_invokes_prop_in_body(component_file, component, prop, lookup)
+}
+
+/// [`prop_literal_invoked_during_render`] for a function written as a
+/// component's sole child, which the component receives as `children`. A
+/// `children` attribute competes with it and a spread may be merged around
+/// it, so both refuse.
+fn child_literal_invoked_during_render(
+    file: &solid_facts::FileFacts,
+    literal: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let Some(element) = file.ast.jsx_containing(literal).find(|element| {
+        !intrinsic_element(file, element)
+            && element
+                .children
+                .iter()
+                .any(|child| jsx_child_expression(file, *child) == Some(literal))
+    }) else {
+        return false;
+    };
+    if !element.spreads.is_empty()
+        || jsx_children(file, element).len() != 1
+        || element
+            .attributes
+            .iter()
+            .any(|attribute| file.source_text(attribute.name) == Some("children"))
+    {
+        return false;
+    }
+    let Some((component_file, component)) =
+        lookup.function_called_at(file.path.as_str(), element.name.span)
+    else {
+        return false;
+    };
+    component_invokes_prop_in_body(component_file, component, "children", lookup)
 }
 
 /// Whether `component`'s own body calls `props.<prop>` directly; see
@@ -1557,6 +1611,36 @@ fn const_binding_of(
 }
 
 /// Whether the function written at `function` is the value of a JSX attribute.
+/// Whether `span` sits in a function, inside `region`, that is written as the
+/// whole child expression of a component element: the component receives it
+/// as `children` and decides when it runs. An intrinsic element's function
+/// child is not one; the compiler inserts and runs it.
+fn component_child_function_within(
+    file: &solid_facts::FileFacts,
+    region: Span,
+    span: Span,
+) -> bool {
+    file.ast.functions_body_containing(span).any(|function| {
+        region.contains(function.span) && component_child_function(file, function.span)
+    })
+}
+
+/// Whether `function` is written as the whole child expression of a
+/// component element (`<Kids>{(x) => …}</Kids>`).
+fn component_child_function(file: &solid_facts::FileFacts, function: Span) -> bool {
+    file.ast
+        .functions
+        .iter()
+        .any(|candidate| candidate.span == function)
+        && file.ast.jsx_containing(function).any(|element| {
+            !intrinsic_element(file, element)
+                && element
+                    .children
+                    .iter()
+                    .any(|child| jsx_child_expression(file, *child) == Some(function))
+        })
+}
+
 fn jsx_attribute_value_function(file: &solid_facts::FileFacts, function: Span) -> bool {
     file.ast.jsx_containing(function).any(|element| {
         element.attributes.iter().any(|attribute| {
@@ -2261,11 +2345,19 @@ fn semantic_role_before_awaits(
         return role;
     }
     {
+        // A function written as a component's child expression
+        // (`<Kids>{(x) => …}</Kids>`) is the `children` prop's value, handed
+        // to the component exactly as an attribute's is; the region lowering
+        // that child does not run it. Such a region places nothing, and the
+        // flow and lexical arms below decide where the function runs.
         let mut regions = file
             .compiler
             .tracked_regions
             .iter()
-            .filter(|region| region.span.contains(span))
+            .filter(|region| {
+                region.span.contains(span)
+                    && !component_child_function_within(file, region.span, span)
+            })
             .peekable();
         if regions.peek().is_some() {
             // A region is tracked for its *expression*. A function literal
@@ -3243,6 +3335,14 @@ fn callee_callback_timing_within(
                 // ADR 0204: unless the consumer is proven to call it while it
                 // renders.
                 return !prop_literal_invoked_during_render(file, literal.span, lookup);
+            }
+            // A component's function child is its `children` prop, under the
+            // same proof. Only the proof answers here: a control-flow
+            // component's children callback is placed below.
+            if component_child_function(file, literal.span)
+                && child_literal_invoked_during_render(file, literal.span, lookup)
+            {
+                return false;
             }
             // An IIFE runs where it is written, so its timing is its
             // surroundings'.
@@ -5532,6 +5632,12 @@ struct InvocationFlow<'a, 'l, 'c> {
     /// Components the walk is inside through their props parameter, with
     /// the element that rendered each: what `props.x` reads there.
     props_stack: Vec<PropsFrame<'a>>,
+    /// The owner question ([`unowned_event_literals`]): a primitive's
+    /// callback slot refuses, and a call's role comes only from the walk
+    /// itself or a compiler event-handler fact, never from the read role at
+    /// the call (which `createRoot` and `runWithOwner` pass through from
+    /// their caller although they supply an owner).
+    owner_mode: bool,
 }
 
 /// ADR 0319: the one role every invocation of the function literal directly
@@ -5631,10 +5737,55 @@ fn literal_flow_role(
         seen: HashSet::new(),
         frames: Vec::new(),
         props_stack: Vec::new(),
+        owner_mode: false,
     };
     let role = flow.function_role(file, literal).flatten();
     flow.classifying.remove(&key);
     role
+}
+
+/// Every function literal of a closed program whose invocations, followed
+/// forward as ADR 0319 follows them, all run as a host event dispatch: an
+/// intrinsic element's `on…` attribute or spread key, or a function the
+/// compiler classifies as an event handler. Such a literal runs with no
+/// owner, exactly as the same literal written on the element does. Any
+/// invocation through a primitive's callback slot refuses: who owns that run
+/// is the owner graph's question, not this walk's.
+pub(crate) fn unowned_event_literals(lookup: &SemanticLookup<'_>) -> HashSet<(String, Span)> {
+    let mut literals = HashSet::new();
+    if !lookup.program_closed
+        || lookup.files().iter().any(|file| {
+            file.ast
+                .module_hazards
+                .iter()
+                .any(|hazard| hazard.kind == solid_facts::ast::ModuleHazardKind::Eval)
+        })
+    {
+        return literals;
+    }
+    for file in lookup.files() {
+        for literal in &file.ast.functions {
+            if literal.generator
+                || lookup.function_component_status(file, literal) != ComponentStatus::No
+            {
+                continue;
+            }
+            let mut classifying = HashSet::new();
+            let mut flow = InvocationFlow {
+                lookup,
+                classifying: &mut classifying,
+                budget: FLOW_BUDGET,
+                seen: HashSet::new(),
+                frames: Vec::new(),
+                props_stack: Vec::new(),
+                owner_mode: true,
+            };
+            if flow.function_role(file, literal) == Some(Some(ExecutionRole::EventCallback)) {
+                literals.insert((file.path.to_string(), literal.span));
+            }
+        }
+    }
+    literals
 }
 
 impl<'a> InvocationFlow<'a, '_, '_> {
@@ -5691,6 +5842,9 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         frames: Vec<FlowFrame<'a>>,
     ) -> Option<Option<ExecutionRole>> {
         let callee = file.ast.call_at(call)?.callee;
+        if self.owner_mode {
+            return self.owner_site_role(file, call, frames);
+        }
         let here = semantic_execution_role_within(
             file,
             callee,
@@ -5724,6 +5878,41 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         }
         // The function runs in the callee activations the call was found in:
         // a value it returns goes back to those calls.
+        let outer = std::mem::replace(&mut self.frames, frames);
+        let role = self.function_role(file, owner);
+        self.frames = outer;
+        self.classifying.remove(&key);
+        role
+    }
+
+    /// [`Self::site_role`] for the owner question: the call is written
+    /// directly in a function the compiler classifies as an event handler,
+    /// or it takes the one role of every invocation of the plain function it
+    /// is written in.
+    fn owner_site_role(
+        &mut self,
+        file: &'a solid_facts::FileFacts,
+        call: Span,
+        frames: Vec<FlowFrame<'a>>,
+    ) -> Option<Option<ExecutionRole>> {
+        let owner = containing_ast_function(&file.ast, call)?;
+        if !owner.body.contains(call)
+            || (owner.r#async && follows_await_in_async_function(file, call))
+            || owner.generator
+            || self.lookup.function_component_status(file, owner) != ComponentStatus::No
+        {
+            return None;
+        }
+        if file.compiler.callback_roles.iter().any(|callback| {
+            callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
+                && file.ast.peel_ts_sugar_span(callback.span) == owner.span
+        }) {
+            return Some(Some(ExecutionRole::EventCallback));
+        }
+        let key = (format!("\0owner-flow:{}", file.path.as_str()), owner.span);
+        if !self.classifying.insert(key.clone()) {
+            return None;
+        }
         let outer = std::mem::replace(&mut self.frames, frames);
         let role = self.function_role(file, owner);
         self.frames = outer;
@@ -5935,7 +6124,7 @@ impl<'a> InvocationFlow<'a, '_, '_> {
             // slot, a slot that stores the function or runs it on result
             // access, and every unmodelled slot refuse.
             if let Some(primitive) = self.lookup.primitive_at_call(file, call.span) {
-                if !path.is_empty() {
+                if !path.is_empty() || self.owner_mode {
                     return None;
                 }
                 // A callback that runs synchronously in the call's own window
@@ -6014,6 +6203,33 @@ impl<'a> InvocationFlow<'a, '_, '_> {
                     file,
                     element,
                     path,
+                    self.enclosing_props(file, element.span),
+                    out,
+                );
+            }
+            // A component's sole child expression is its `children` prop,
+            // set after every attribute and spread. Several children make an
+            // array, and a `children` attribute competes: both refuse.
+            if element
+                .children
+                .iter()
+                .any(|child| jsx_child_expression(file, *child) == Some(expr))
+            {
+                if intrinsic_element(file, element)
+                    || jsx_children(file, element).len() != 1
+                    || element
+                        .attributes
+                        .iter()
+                        .any(|attribute| file.source_text(attribute.name) == Some("children"))
+                {
+                    return None;
+                }
+                let mut prop_path = vec!["children".to_owned()];
+                prop_path.extend(path);
+                return self.component_props_uses(
+                    file,
+                    element,
+                    prop_path,
                     self.enclosing_props(file, element.span),
                     out,
                 );

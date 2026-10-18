@@ -22,6 +22,8 @@ mod harness_process;
 mod imported_const_process;
 #[path = "invocation_flow_process.rs"]
 mod invocation_flow_process;
+#[path = "owner_flow_process.rs"]
+mod owner_flow_process;
 #[path = "owner_parity_process.rs"]
 mod owner_parity_process;
 #[path = "props_reactivity_process.rs"]
