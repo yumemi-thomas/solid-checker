@@ -113,3 +113,25 @@ export function ExpressionChild() {
   const [count] = createSignal(0);
   return <Wrap>{count()}</Wrap>;
 }
+
+function Aliased(props: { children: () => JSX.Element }) {
+  const saved = props.children;
+  const alias = props;
+  alias.children = () => <span>replacement</span>;
+  props.children();
+  return <div>{saved()}</div>;
+}
+
+// Uncertifiable, no violation: `props` escapes into an alias that replaces
+// `children`, so the body's call runs the replacement, not this child.
+export function AliasedChild() {
+  const [count] = createSignal(0);
+  return (
+    <Aliased>
+      {() => {
+        const n = count();
+        return <span>{n}</span>;
+      }}
+    </Aliased>
+  );
+}

@@ -67,6 +67,8 @@ it").
 | an enclosing region places nothing | regions containing the child function are skipped | the region's tracking pass evaluates the element, not the prop's body | `BodyChildInRegion` |
 | body invocation | sole child, no spread, no `children` attribute, `props.children(…)` called directly in the resolved component's body | ADR 0204 | `BodyChild`; `SpreadChild` refuses |
 | flow through `children` | sole child, no `children` attribute, component resolved and current | ADR 0319 | `TrackedChild`, `EventChild` |
+| `props` does not escape | every reference to the props parameter is a member read that is not an assignment target (applies to ADR 0204's attribute proof too; corpus: no movement) | an alias, spread, argument or pattern could replace the prop unseen | `AliasedChild` (review round 1) |
+| the call is reached | a direct call anywhere in the body's own flow, conditional or not | the feasible-path premise every direct body read already rests on (`if (false) n()` is a violation today) | review round 1 `dead-child`, kept by that premise |
 | control flow unchanged | the timing branch is positive-only; `control_flow_execution_role` answers first | ADR 0323 | corpus: 0 removed |
 
 ## Consequences

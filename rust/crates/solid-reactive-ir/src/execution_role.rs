@@ -955,6 +955,53 @@ fn component_invokes_prop_in_body(
     }) {
         return false;
     }
+    // Every use of `props` must be a member read or an argument of a props
+    // view primitive (`omit`, `merge`, `splitProps`), and nothing in the
+    // body may write a member named `prop` on any object: an alias, a
+    // spread, another argument or a destructuring may write `props.<prop>`
+    // where the check above cannot see it (`const alias = props;
+    // alias.children = …`).
+    let peel = |span: Span| file.ast.peel_ts_sugar_span(span);
+    let view_argument = |reference: Span| {
+        file.ast
+            .arguments_containing(reference)
+            .any(|(call, index)| {
+                !call.arguments[index].spread
+                    && peel(call.arguments[index].span) == reference
+                    && lookup
+                        .primitive_at_call(file, call.span)
+                        .is_some_and(|primitive| {
+                            lookup.dialect.splits_props(primitive)
+                                || lookup.dialect.merges_props_reactivity(primitive)
+                        })
+            })
+    };
+    if file
+        .ast
+        .reference_declarations
+        .iter()
+        .filter(|(reference, declaration)| *declaration == name.span && *reference != name.span)
+        .any(|(reference, _)| {
+            !view_argument(*reference)
+                && !file.ast.members.iter().any(|member| {
+                    peel(member.object) == *reference
+                        && !file
+                            .ast
+                            .assignments
+                            .iter()
+                            .any(|assignment| assignment.target.contains(member.span))
+                })
+        })
+        || file.ast.assignments.iter().any(|assignment| {
+            component.span.contains(assignment.target)
+                && file.ast.members.iter().any(|member| {
+                    member.span == peel(assignment.target)
+                        && member_static_key(file, member).is_none_or(|key| key == prop)
+                })
+        })
+    {
+        return false;
+    }
     file.ast.calls.iter().any(|call| {
         crate::owners::written_directly_in(&file.ast, component, call.span)
             && !file.ast.any_jsx_containing(call.span)

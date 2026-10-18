@@ -21,6 +21,7 @@ component's children callback (`<For>`, `<Show>`) is unchanged.
 | `EventChild` | none | `OnClick` calls the child only from a click handler |
 | `IntrinsicChild` | `SC1001` uncertifiable (unchanged) | an intrinsic element's function child is the compiler's, not a prop |
 | `ExpressionChild` | none | a non-function child is the compiler's `children` getter, as before |
+| `AliasedChild` | `SC1001` uncertifiable | `props` escapes into an alias that replaces `children`; the body proof needs every use of `props` to be a member read or a props-view argument (`Aliased` also draws the existing `SC2003` for the write) |
 
 `{shown() && …}` also draws the style rule `SC8015` (prefer `<Show>`). `Kids`
 reading `props.children` in its body is the existing props-read
