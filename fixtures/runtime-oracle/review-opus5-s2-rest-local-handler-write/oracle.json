@@ -1,0 +1,15 @@
+{
+  "note": "Opus review round 5 (s2-rest-local-handler-write): Show/Match function children by arity, with nested deferred code",
+  "steps": [
+    {
+      "action": "click",
+      "selector": "#b"
+    },
+    {
+      "action": "assert-text",
+      "id": "ran",
+      "selector": "#k",
+      "text": "1"
+    }
+  ]
+}

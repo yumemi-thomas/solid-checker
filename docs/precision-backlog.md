@@ -1,5 +1,22 @@
 # Precision backlog
 
+## 2026-10-19 — Opus review round 5
+
+115 new cases of ordinary application code (forms, lists, context, hooks,
+stores, effects with cleanup, `onSettled`, `createTrackedEffect`,
+`Loading`/`Errored`, refs, actions, async memos) found no false positive users
+would see, except one introduced by round 4's arity gate: it ran before the
+check that gives a function nested in the child its own role, so a write in a
+timer or a `.then` inside a zero-length `Show`/`Match` child was a proven
+`SC2001`. The gate now applies to the child's own body only.
+
+Recorded trade of round 4's component-children rule: a wrapper that evaluates
+its children eagerly in its own body (`return props.children`, `const c =
+props.children`, `function W({ children })`) makes the runtime warn at a read
+in those children, and that read is now uncertifiable; so is an `SC1007` on a
+button in such a wrapper's children. The corpus has one such wrapper
+(solid-pixi `Application.tsx`). Oracle: 682 cases, exit 0, 0 unproven clean.
+
 ## 2026-10-19 — Opus review round 4: four false-positive families in app code
 
 A broad search of ordinary application code (not class fields) found four

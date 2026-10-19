@@ -4577,10 +4577,15 @@ pub(super) fn control_flow_execution_role(
                     })
             })
             .max_by_key(|function| function.body.end - function.body.start)?;
+    let owner = containing_ast_function(&file.ast, span)?;
+    if owner.span != callback.span {
+        return Some(ExecutionRole::DeferredCallback);
+    }
     // `Show`/`Match` run a function child as a callback only when its
     // `length` is above 0; a function of length 0 (no parameters, or a
     // default on the first) is inserted as an ordinary child and runs in the
-    // insert's tracked effect (review round 4).
+    // insert's tracked effect (review round 4). Only the child's own body:
+    // a function nested in it keeps its own role (review round 5).
     let length = callback
         .parameters
         .iter()
@@ -4594,10 +4599,6 @@ pub(super) fn control_flow_execution_role(
             .is_some_and(|primitive| dialect.children_callback_requires_parameters(primitive))
     {
         return Some(ExecutionRole::TrackedJsx);
-    }
-    let owner = containing_ast_function(&file.ast, span)?;
-    if owner.span != callback.span {
-        return Some(ExecutionRole::DeferredCallback);
     }
     // A fragment has no element fact, so its children are consulted through
     // its own span table: `<>{tone()}</>` is as tracked as `<b>{tone()}</b>`.
