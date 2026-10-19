@@ -1,0 +1,293 @@
+use super::{
+    OWNER_CONTEXT_COMPONENT_UNCERTAIN, OWNER_CONTEXT_LATER_RUN_UNOWNED, OWNER_CONTEXT_LEAF,
+    OWNER_CONTEXT_OWNED, OWNER_CONTEXT_PROVEN_UNOWNED, OWNER_CONTEXT_UNOWNED, OwnerEdgeKind,
+    OwnerNode, binding_returns_reactive_source, callback_owner_edge_kind, compiler_owner_context,
+    compose_owner_edge, owner_edge_context, propagate_owner_contexts, providing_region_chain,
+    returned_arrow_function, root_owned_at, seed_contexts,
+};
+use solid_facts::ast;
+use solid_facts::compiler::{
+    COMPILER_FACTS_PROTOCOL, ExecutionMap, OwnershipRegion, OwnershipRegionKind,
+};
+use solid_facts::core::SourceHash;
+use solid_facts::core::Span;
+
+fn returned_arrow(source: &str) -> bool {
+    let source = format!("function outer() {{ return {source}; }}");
+    let facts = ast::extract("test.tsx", &source).unwrap();
+    facts
+        .returns
+        .first()
+        .and_then(|returned| returned.argument)
+        .is_some_and(|argument| returned_arrow_function(&facts, argument))
+}
+
+#[test]
+fn returned_arrow_identity_comes_from_ast_facts() {
+    assert!(returned_arrow("(a = (0)) /* run */ => a"));
+    assert!(returned_arrow("async => async"));
+    assert!(!returned_arrow("function () { return 1; }"));
+}
+
+fn binding_accepts(source: &str) -> bool {
+    let facts = ast::extract("test.tsx", source).unwrap();
+    binding_returns_reactive_source(
+        facts.bindings.first().unwrap(),
+        facts.calls.first().unwrap(),
+    )
+}
+
+#[test]
+fn returned_source_binding_identity_comes_from_ast_facts() {
+    assert!(binding_accepts(
+        "const [go] = /* gate */ makeGate<Array<T>>();"
+    ));
+    assert!(!binding_accepts("let [go] = makeGate();"));
+    assert!(!binding_accepts("const [, go] = makeGate();"));
+}
+
+/// One file with a real AST and a hand-built execution map.
+fn owner_context_file(source: &str, compiler: ExecutionMap) -> solid_facts::FileFacts {
+    const PATH: &str = "test.tsx";
+    solid_facts::FileFacts {
+        generation: solid_facts::core::Generation::new(1).unwrap(),
+        path: solid_facts::core::SourcePath::new(PATH).unwrap(),
+        source_hash: SourceHash::of(source),
+        source: std::sync::Arc::from(source),
+        ast: std::sync::Arc::new(ast::extract(PATH, source).unwrap()),
+        compiler: std::sync::Arc::new(compiler),
+    }
+}
+
+#[test]
+fn compiler_ownership_regions_seed_owner_analysis() {
+    let source = "function run() {}";
+    let facts = ExecutionMap {
+        compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
+        source_hash: SourceHash::of(source),
+        semantic_model: Default::default(),
+        tracked_regions: vec![],
+        untracked_regions: vec![],
+        discarded_regions: vec![],
+        ownership_regions: vec![OwnershipRegion {
+            span: Span::new(0, 17),
+            kind: OwnershipRegionKind::Leaf,
+        }],
+        callback_roles: vec![],
+        jsx_operations: vec![],
+    };
+    assert_eq!(
+        compiler_owner_context(&owner_context_file(source, facts), Span::new(15, 17)),
+        OWNER_CONTEXT_LEAF
+    );
+}
+
+#[test]
+fn owner_edge_context_transforms_the_source_bits_per_edge_kind() {
+    assert_eq!(
+        owner_edge_context(OwnerEdgeKind::Preserve, OWNER_CONTEXT_OWNED),
+        OWNER_CONTEXT_OWNED
+    );
+    assert_eq!(
+        owner_edge_context(OwnerEdgeKind::Owned, OWNER_CONTEXT_UNOWNED),
+        OWNER_CONTEXT_OWNED
+    );
+    assert_eq!(
+        owner_edge_context(OwnerEdgeKind::Unowned, OWNER_CONTEXT_OWNED),
+        OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED
+    );
+    assert_eq!(
+        owner_edge_context(
+            OwnerEdgeKind::Preserve,
+            OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_COMPONENT_UNCERTAIN,
+        ),
+        OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_COMPONENT_UNCERTAIN
+    );
+    assert_eq!(
+        owner_edge_context(OwnerEdgeKind::Conditional, 0),
+        OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED
+    );
+    assert_eq!(
+        owner_edge_context(OwnerEdgeKind::Leaf, OWNER_CONTEXT_OWNED),
+        OWNER_CONTEXT_LEAF
+    );
+}
+
+#[test]
+fn callback_owner_edge_kinds_map_one_to_one() {
+    use solid_dialect::CallbackOwner;
+    assert_eq!(
+        callback_owner_edge_kind(CallbackOwner::Creates),
+        OwnerEdgeKind::Owned
+    );
+    assert_eq!(
+        callback_owner_edge_kind(CallbackOwner::Conditional),
+        OwnerEdgeKind::Conditional
+    );
+    assert_eq!(
+        callback_owner_edge_kind(CallbackOwner::Inherits),
+        OwnerEdgeKind::Preserve
+    );
+    assert_eq!(
+        callback_owner_edge_kind(CallbackOwner::None),
+        OwnerEdgeKind::Unowned
+    );
+    assert_eq!(
+        callback_owner_edge_kind(CallbackOwner::Leaf),
+        OwnerEdgeKind::Leaf
+    );
+}
+
+#[test]
+fn composing_owner_edges_lets_an_explicit_callback_owner_dominate() {
+    assert_eq!(
+        compose_owner_edge(OwnerEdgeKind::Unowned, OwnerEdgeKind::Preserve),
+        OwnerEdgeKind::Unowned
+    );
+    assert_eq!(
+        compose_owner_edge(OwnerEdgeKind::Unowned, OwnerEdgeKind::Owned),
+        OwnerEdgeKind::Owned
+    );
+    assert_eq!(
+        compose_owner_edge(OwnerEdgeKind::Owned, OwnerEdgeKind::Leaf),
+        OwnerEdgeKind::Leaf
+    );
+}
+
+fn node(seed_context: u8) -> OwnerNode {
+    OwnerNode {
+        path: "app.tsx".to_owned(),
+        span: Span::new(0, 10),
+        body: Span::new(0, 10),
+        symbol: None,
+        exported: false,
+        component: seed_context & OWNER_CONTEXT_OWNED != 0,
+        component_uncertain: false,
+        seed_context,
+    }
+}
+
+#[test]
+fn semantic_seeds_preserve_proven_owner_states() {
+    let nodes = [
+        node(OWNER_CONTEXT_OWNED),
+        node(OWNER_CONTEXT_UNOWNED),
+        node(0),
+        node(OWNER_CONTEXT_LEAF),
+    ];
+    assert_eq!(
+        seed_contexts(&nodes),
+        vec![
+            OWNER_CONTEXT_OWNED,
+            OWNER_CONTEXT_UNOWNED,
+            0,
+            OWNER_CONTEXT_LEAF
+        ]
+    );
+}
+
+#[test]
+fn propagation_reaches_a_fixed_point_and_accumulates_bits() {
+    // 0 --preserve--> 1 --conditional--> 2, plus a cycle 1 <-> 0.
+    let mut contexts = vec![OWNER_CONTEXT_OWNED, 0, OWNER_CONTEXT_LEAF];
+    let outgoing = vec![
+        vec![(1, OwnerEdgeKind::Preserve)],
+        vec![
+            (0, OwnerEdgeKind::Preserve),
+            (2, OwnerEdgeKind::Conditional),
+        ],
+        vec![],
+    ];
+    propagate_owner_contexts(&mut contexts, &outgoing);
+    assert_eq!(
+        contexts,
+        vec![
+            OWNER_CONTEXT_OWNED,
+            OWNER_CONTEXT_OWNED,
+            OWNER_CONTEXT_LEAF | OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED,
+        ]
+    );
+}
+
+/// Documents current behavior: only nodes whose seeded context is nonzero
+/// enter the worklist, so even an `Owned` edge (whose contribution does
+/// not depend on the source's bits) stays dormant when its source has no
+/// context of its own.
+#[test]
+fn propagation_does_not_walk_edges_out_of_context_free_nodes() {
+    let mut contexts = vec![0, 0];
+    let outgoing = vec![vec![(1, OwnerEdgeKind::Owned)], vec![]];
+    propagate_owner_contexts(&mut contexts, &outgoing);
+    assert_eq!(contexts, vec![0, 0]);
+}
+
+#[test]
+fn owner_providing_regions_contain_spans_inclusively() {
+    let regions = [Span::new(10, 20), Span::new(40, 50)];
+    let none = std::iter::empty::<((), Span, Span)>;
+    assert_eq!(
+        providing_region_chain(&regions, none(), Span::new(12, 18)),
+        Some(vec![])
+    );
+    assert_eq!(
+        providing_region_chain(&regions, none(), Span::new(40, 50)),
+        Some(vec![])
+    );
+    assert_eq!(
+        providing_region_chain(&regions, none(), Span::new(19, 21)),
+        None
+    );
+    assert_eq!(providing_region_chain(&[], none(), Span::new(0, 0)), None);
+}
+
+/// `createRoot(() => { createEffect(c, () => { createRoot(() => { OP }) }) })`
+/// as spans: the outer root callback 10..100, the effect apply 20..90, the
+/// inner root callback 30..80, and an operation in each.
+#[test]
+fn providing_region_chain_stops_at_the_innermost_region() {
+    let regions = [Span::new(10, 100), Span::new(30, 80)];
+    let functions = [
+        ("outer-root", Span::new(10, 100), Span::new(15, 100)),
+        ("effect-apply", Span::new(20, 90), Span::new(25, 90)),
+        ("inner-root", Span::new(30, 80), Span::new(35, 80)),
+    ];
+    let chain = |span| providing_region_chain(&regions, functions, span);
+    assert_eq!(chain(Span::new(16, 18)), Some(vec!["outer-root"]));
+    assert_eq!(
+        chain(Span::new(26, 28)),
+        Some(vec!["outer-root", "effect-apply"])
+    );
+    // The inner root sits inside the detached apply and answers for what
+    // it contains: the apply is not in its chain.
+    assert_eq!(chain(Span::new(40, 50)), Some(vec!["inner-root"]));
+    let context = |function: &&str| match *function {
+        "effect-apply" => OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED,
+        _ => OWNER_CONTEXT_OWNED,
+    };
+    assert!(root_owned_at(chain(Span::new(16, 18)).as_deref(), context));
+    assert!(!root_owned_at(chain(Span::new(26, 28)).as_deref(), context));
+    assert!(root_owned_at(chain(Span::new(40, 50)).as_deref(), context));
+    assert!(!root_owned_at(None::<&[&str]>, context));
+}
+
+#[test]
+fn root_owned_at_withholds_for_either_detaching_bit() {
+    let chain = [0_u8];
+    for (context, answered) in [
+        (OWNER_CONTEXT_OWNED, true),
+        (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED, true),
+        (OWNER_CONTEXT_LEAF, true),
+        (0, true),
+        (OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED, false),
+        (
+            OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LATER_RUN_UNOWNED,
+            false,
+        ),
+    ] {
+        assert_eq!(
+            root_owned_at(Some(&chain[..]), |_| context),
+            answered,
+            "context {context:#b}"
+        );
+    }
+}
