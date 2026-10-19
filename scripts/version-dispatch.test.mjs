@@ -22,7 +22,7 @@ import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const VERSION_ENUM = "rust/crates/solid-dialect/src/lib.rs";
+const VERSION_ENUM = "rust/crates/solid-dialect/src/version.rs";
 
 const read = (path) => readFileSync(join(ROOT, path), "utf8");
 
