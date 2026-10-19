@@ -1,3 +1,3 @@
 # Inferred host: dynamic-unknown
 
-Copy of `inferred-host-spa` (`dynamic-unknown`): browser admission is refused and the browser upgrade of `startClosed()` stays withheld (explicit browser is the control). Package contracts are removed (ADR 0312), so `startClosed(): void` carries no ownership requirement and the snapshot is certified with no findings either way: the fixture no longer pins the admission outcome through a finding. No published signature is loosened.
+Copy of `inferred-host-spa` whose Vite config contains an unknown plugin spread in a dynamic branch: browser admission is refused, so the snapshot is `certified` with no finding. The admitted twin is `inferred-host-dynamic` (`uncertifiable`); the status difference between the two is the pin, since `startClosed(): void` carries no ownership requirement (ADR 0312).

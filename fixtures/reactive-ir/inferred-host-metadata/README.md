@@ -1,3 +1,3 @@
 # Inferred host: metadata
 
-Copy of `inferred-host-spa` with private package metadata omitted: admission is browser and the module registration is a proven missing-owner violation (explicit browser is the control). `startClosed(): void` states an ownership requirement TypeScript cannot express; no published signature is loosened.
+Copy of `inferred-host-spa` with private package metadata omitted: browser admission is given, which shows as status `uncertifiable` with no finding (`inferred-host-metadata-published` is the refused twin, `certified`). `startClosed(): void` is opaque since package contracts were removed (ADR 0312), so the admission is not pinned by a finding.

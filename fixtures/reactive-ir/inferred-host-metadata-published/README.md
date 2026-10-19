@@ -1,3 +1,3 @@
 # Inferred host: metadata-published
 
-Copy of `inferred-host-spa` (`metadata-published`): browser admission is refused and the browser upgrade of `startClosed()` stays withheld (explicit browser is the control). Package contracts are removed (ADR 0312), so `startClosed(): void` carries no ownership requirement and the snapshot is certified with no findings either way: the fixture no longer pins the admission outcome through a finding. No published signature is loosened.
+Copy of `inferred-host-spa` whose `package.json` publishes `exports` (published entry points permit unknown execution hosts): browser admission is refused, so the snapshot is `certified` with no finding. The admitted twin is `inferred-host-metadata` (`uncertifiable`); the status difference between the two is the pin. This fixture also stands for the published-library case.

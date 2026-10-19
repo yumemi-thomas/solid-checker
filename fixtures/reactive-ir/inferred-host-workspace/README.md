@@ -1,3 +1,3 @@
 # Inferred host: workspace
 
-Copy of `inferred-host-spa` as a workspace member: admission is browser and the module registration is a proven missing-owner violation (explicit browser is the control). `startClosed(): void` states an ownership requirement TypeScript cannot express; no published signature is loosened.
+Copy of `inferred-host-spa` as a workspace member (shared `tsconfig.base.json`): browser admission is given, which shows as status `uncertifiable` with no finding (`inferred-host-workspace-published` is the refused twin, `certified`). `startClosed(): void` is opaque since package contracts were removed (ADR 0312), so the admission is not pinned by a finding.
