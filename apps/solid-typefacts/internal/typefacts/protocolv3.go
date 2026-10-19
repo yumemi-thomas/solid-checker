@@ -536,7 +536,7 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // includes the count, so the numbers move together.
 const (
 	TypeFactsHandshakeProtocol uint64 = 79
-	TypeFactsSchemaSHA256             = "sha256:5f14d7cc2644b9096b2a4affdefc0e0dd41e88c1a75f19efc3302f11006389fe"
+	TypeFactsSchemaSHA256             = "sha256:2533cc3d559a1318cd62a6adc256bd96aa610a7a9e4b1d6fea985e0996e6d527"
 )
 
 type ServiceHandshake struct {

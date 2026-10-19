@@ -39,7 +39,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V19: u64 = 19;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V20: u64 = 20;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:5f14d7cc2644b9096b2a4affdefc0e0dd41e88c1a75f19efc3302f11006389fe";
+    "sha256:2533cc3d559a1318cd62a6adc256bd96aa610a7a9e4b1d6fea985e0996e6d527";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
