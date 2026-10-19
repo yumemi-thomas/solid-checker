@@ -1,10 +1,10 @@
 {
-  "status": "violation",
+  "status": "uncertifiable",
   "findings": [
     {
       "rule": "no-direct-mutation",
       "code": "SC2003",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/fp-owner-destructured-prop-mutation/App.tsx",
       "start": 222,
@@ -14,7 +14,7 @@
     {
       "rule": "no-direct-mutation",
       "code": "SC2003",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/fp-owner-destructured-prop-mutation/App.tsx",
       "start": 419,

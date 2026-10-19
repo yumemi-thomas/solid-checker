@@ -2259,10 +2259,43 @@ fn semantic_execution_role_within(
     // statement-level awaits count (`unconditional_awaits`); a skippable one
     // (`x ??= await p`, an optional-call argument, a labelled break) keeps
     // the role its position earned.
-    if role.reports_untracked_read() && follows_unconditional_await(file, span) {
+    if role.reports_untracked_read()
+        && (follows_unconditional_await(file, span) || follows_any_suspension(file, span))
+    {
         return ExecutionRole::Unknown;
     }
     role
+}
+
+/// Whether code at `span` is written, in its async function's own body,
+/// inside or after a `for await` loop: the loop awaits its first `next()`
+/// before the body runs, so code there has left the component body's
+/// strict-read window (ADR 0323) on every path that reaches it. A skippable
+/// `await` (`if (c) await p`, `x ??= await p`) is not such a point: the path
+/// that skips it is feasible and runs the read in the window (ADR 0320), the
+/// premise every direct read rests on. The loop's iterated operand is
+/// evaluated before the first suspension.
+fn follows_any_suspension(file: &solid_facts::FileFacts, span: Span) -> bool {
+    let Some(function) = containing_ast_function(&file.ast, span) else {
+        return false;
+    };
+    if !function.r#async {
+        return false;
+    }
+    let own = |point: Span| {
+        function.body.contains(point)
+            && containing_ast_function(&file.ast, point)
+                .is_some_and(|owner| owner.span == function.span)
+    };
+    file.ast.implicit_suspensions.iter().any(|suspension| {
+        own(*suspension)
+            && suspension.start < span.start
+            && !file
+                .ast
+                .iterated_operands
+                .iter()
+                .any(|operand| suspension.contains(*operand) && operand.contains(span))
+    })
 }
 
 fn semantic_role_before_awaits(

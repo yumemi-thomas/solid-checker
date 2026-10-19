@@ -15,9 +15,13 @@ stays a read. A spread of a view is an obligation, never a violation: the keys
 the view hides may be the only reactive ones (this also holds for `merge`
 views).
 
-`Write` is the one proven finding: the omit proxy's `set` trap is a no-op
-(`@solidjs/signals@2.0.0-rc.13` `dist/prod/store/utils.js:850`, `set: trueFn`),
-so `o.ref = 1` is dropped (SC2003). The type of an `omit` result is writable,
+`Write` is an uncertifiable `SC2003` (2026-10-19). `omit` of a proxy (a
+`merge` or split props object) returns a proxy whose `set` is a no-op, so the
+write is dropped (`@solidjs/signals@2.0.0-rc.13` `dist/prod/store/utils.js:850`,
+`set: trueFn`); `omit` of the compiler's plain props object returns a plain
+copy (`dist/dev.js:4573-4600`), where the write succeeds (runtime oracle case
+`r9-d5-writeomit` reads the value back). Which one the props object is, is not
+proven here. The type of an `omit` result is writable,
 so `tsc` reports nothing on it; the whole tree passes `tsc --noEmit` against
 the published rc.13 declarations (copied unchanged from
 `standard-runtime-configuration`).

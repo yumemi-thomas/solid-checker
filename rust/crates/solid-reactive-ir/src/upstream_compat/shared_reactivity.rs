@@ -699,7 +699,13 @@ fn no_direct_mutation(
             location: location(file.path.shared(), assignment.target),
             analysis_context: String::new(),
             fixes: vec![],
-            uncertain: props && context.uncertain_prop_sources.contains(symbol),
+            // A write through a 2.0 props object, or a `merge`/`omit` view of
+            // it, is not dropped: on rc.13 the assigned value reads back
+            // (runtime oracle cases `r9-d5-writeplainprops`, `-writemerge`,
+            // `-writeomit`, `review-r1-alias-mutation`). Only a getter-backed
+            // prop rejects it (a TypeError), and which props are getters is
+            // not proven here, so the claim stays an obligation.
+            uncertain: props,
         });
     }
 }

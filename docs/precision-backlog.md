@@ -1,5 +1,33 @@
 # Precision backlog
 
+## 2026-10-19 — Possible false positives from the oracle port, fixed
+
+The 561-case oracle flagged 18 cases where the checker proved a violation and
+the rc.13 dev runtime stayed silent. Fixed, all user-facing:
+
+- **Props writes (`SC2003`)**: a write through a 2.0 props object or a
+  `merge`/`omit` view is uncertifiable, not a dropped write. The compiler's
+  props object is plain (a new key is written, a getter-backed key throws) and
+  `omit` of it is a plain copy (`@solidjs/signals@2.0.0-rc.13`
+  `dist/dev.js:4573-4600`); only a proxy drops the write. Corpus: 1 violation
+  (app-game `Item.tsx`, `others.ref = element`) is now uncertifiable.
+- **`for await`**: code in or after a `for await` loop is past the first
+  suspension; no proven strict read.
+- **`no-destructure` with an unknown role**: a destructure whose role is
+  `Unknown` (no fact, or a mix of non-reporting roles) is uncertifiable, not a
+  proven snapshot.
+- **Prop provenance through JSX**: a signal read inside a JSX element passed as
+  a prop runs in that element's own effects and no longer makes the prop
+  reactive. Corpus: **7 kui `SC1001` violations** (`Dialog.tsx`, `Drawer.tsx`:
+  `props.closeOnScrimClick`/`initialFocus`, which every caller passes static)
+  were false; they are uncertifiable now. 5 `SC8015` style findings that rested
+  on the same provenance are gone.
+
+Corpus (vs the previous sweep): 13 removed (1 `SC2003`, 7 `SC1001`, 5
+`SC8015`), 8 added (all uncertifiable). Known false-positive shape left:
+`try { await p } finally { read() }` reports the read, although no realistic
+path skips the await (oracle `r9-d3-tryawait`; none in the corpus).
+
 ## 2026-10-19 — The ESLint adapter no longer serves stale snapshots across passes
 
 `packages/cli/eslint.cjs` kept one in-process `snapshotCache` keyed on

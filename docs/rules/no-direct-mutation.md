@@ -7,6 +7,13 @@ setter.
 
 ## What it does
 
+**Props (2026-10-19).** A write through a 2.0 props object, or a `merge`/`omit`
+view of it, is an uncertifiable result, not a violation. The compiler hands a
+component a plain object (a write to a new key succeeds, a write to a
+getter-backed key throws), and `omit` of it is a plain copy; only a proxy
+(`merge`, split props) drops the write. Which one the object is, is not proven
+at the write. Store writes are unaffected.
+
 Flags direct writes to reactive values — reassigning a signal accessor binding,
 or writing through a proven signal, store, or props proxy without going through
 its setter. Shared with the 1.x catalog as

@@ -173,6 +173,30 @@ records its exact code, runtime site, and reason; none is a claim of safety.
 | Nested class-field, default-parameter, and JSX-getter owner flow (ADR 0327) | 3 | `review-r5-owner-class-control`, `review-r6-owner-default-control`, `review-r6-owner-jsx-getter-control` |
 | Event tuple handler not followed by owner seeding | 1 | `review-r7-event-array` |
 
+### Static-only after the fixes of 2026-10-19
+
+Re-run on the current checker: **7 static-only cases**, each accounted for.
+
+- Fixed (no longer static-only): reads after a `for await` (now no proven
+  read), every `no-direct-mutation` write through props or a `merge`/`omit`
+  view (now uncertifiable: the object may be the compiler's plain object), the
+  two `no-destructure` cases with a mixed or unknown role (now uncertifiable),
+  and `r8-nsbase` (a signal read inside a JSX element passed as a prop is no
+  longer a reactive witness for the prop).
+- Real defects with no dev diagnostic: `r9-e2-storedirectwrite`,
+  `r9-e2-storeviewwrite` (the store drops the write).
+- Kept by the feasible-path premise every direct read rests on:
+  `r9-d3-ifawait`, `r9-d3-loopawait` (a path that skips the await reads in the
+  window). `r9-d3-tryawait` is the one shape where no realistic path skips the
+  await; it is recorded as a known false-positive shape in
+  `docs/precision-backlog.md`.
+- Kept by ADR 0327's inherited event-owner premise: `review-r7-sync-scroll`,
+  `review-r7-sync-child-scroll` (a synchronous `dispatchEvent` from an owned
+  scope).
+
+The original investigation below is kept as the record of what the port found
+on `checker-6a4940bc9`.
+
 ### Static-only investigation
 
 Possible false positives are retained, without changing checker code:

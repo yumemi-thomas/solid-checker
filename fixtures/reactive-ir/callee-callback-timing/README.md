@@ -54,7 +54,8 @@ handler, so since ADR 0199 both literals run on event dispatch and report
 nothing; the consumers that leave such a read uncertifiable are pinned in
 `forwarded-event-prop`. The eager snapshot control reads
 in the component body and remains a violation. A direct write to the props
-container remains SC2003; writes to a nested mutable value, including a wrapped
+container remains SC2003 (uncertifiable since 2026-10-19: the props object may
+be a plain object the write succeeds on); writes to a nested mutable value, including a wrapped
 value, are silent because shallow props readonly behavior proves nothing about
 the nested object. All these cases pass TypeScript 5.9.3 against the published
 RC.9 core/signals/web declarations with strict/noEmit and JSX runtime types.

@@ -1773,7 +1773,9 @@ fn props_container_and_callback_creation_do_not_prove_nested_behavior() {
     let mutations = findings_for_rule(&props, "no-direct-mutation");
     assert_eq!(mutations.len(), 1, "{props:#?}");
     assert_eq!(mutations[0]["primaryLocation"]["line"], 36);
-    assert_eq!(mutations[0]["kind"], "violation");
+    // A write through the props container is an obligation: the props object
+    // may be the compiler's plain object, where the write succeeds.
+    assert_eq!(mutations[0]["kind"], "uncertifiable");
 }
 
 #[test]

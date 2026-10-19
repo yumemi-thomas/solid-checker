@@ -180,8 +180,12 @@ fn component_props_destructure(ctx: &AnalysisContext<'_>, draft: &mut ProgramDra
             {
                 continue;
             }
-            let mut uncertain =
-                prop_symbol.is_some_and(|symbol| ctx.uncertain_prop_sources.contains(symbol));
+            // An unknown role proves no setup-time read: it is either no fact
+            // at all, or invocations in several non-reporting roles (ADR
+            // 0323's merge: a tracked memo and an `untrack`, an event and a
+            // lazy memo), each fresh at call time. Not a proven snapshot.
+            let mut uncertain = role == crate::ExecutionRole::Unknown
+                || prop_symbol.is_some_and(|symbol| ctx.uncertain_prop_sources.contains(symbol));
             if let Some(declaration) = &prop_declaration {
                 match destructured_props_use(ctx, binding, declaration) {
                     crate::source_discovery::PropUse::Static => continue,

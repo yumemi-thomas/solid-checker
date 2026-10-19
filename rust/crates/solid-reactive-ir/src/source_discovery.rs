@@ -3420,18 +3420,37 @@ fn classify_passed_expression(
         .functions_within(expression)
         .map(|function| function.span)
         .collect();
+    // A nested function runs when called, and a JSX element or fragment
+    // written in the value runs its own reads in its own tracked effects
+    // (`<span>{count()}</span>` passed as `children`): neither is evaluated
+    // by the getter the compiler makes of this value. Their reads witness
+    // nothing here; the JSX itself makes the value unknown below.
+    let nested_jsx: Vec<Span> = file
+        .ast
+        .jsx_within(expression)
+        .map(|element| element.span)
+        .chain(
+            file.ast
+                .jsx_fragments
+                .iter()
+                .copied()
+                .filter(|fragment| expression.contains(*fragment)),
+        )
+        .collect();
     let inside_nested = |span: Span| {
         nested_functions
             .iter()
             .any(|function| function.contains(span))
     };
+    let inside_nested_or_jsx =
+        |span: Span| inside_nested(span) || nested_jsx.iter().any(|element| element.contains(span));
     let mut result = PropUse::Static;
     // Member chains rooted at a proven store or props object are reactive;
     // rooted at anything resolvable they are static; unresolvable roots are
     // unknown.
     for member in &file.ast.members {
         if !expression.contains(member.span)
-            || inside_nested(member.span)
+            || inside_nested_or_jsx(member.span)
             // Only chain roots: prefixes repeat the same root.
             || file
                 .ast
@@ -3522,7 +3541,7 @@ fn classify_passed_expression(
         }
     }
     for call in file.ast.calls_within(expression) {
-        if inside_nested(call.span) {
+        if inside_nested_or_jsx(call.span) {
             continue;
         }
         let callee = entities.get(&location(file.path.shared(), call.callee));
@@ -3549,7 +3568,7 @@ fn classify_passed_expression(
     }
     for identifier in file.ast.identifiers_within(expression) {
         if identifier.role != solid_facts::ast::IdentifierRole::Reference
-            || inside_nested(identifier.span)
+            || inside_nested_or_jsx(identifier.span)
             || chain_roots.contains(&identifier.span)
         {
             continue;
