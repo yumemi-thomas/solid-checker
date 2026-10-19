@@ -1,5 +1,34 @@
 # Precision backlog
 
+## 2026-10-19 — Recall measurements and what was not built
+
+Two recall instruments now exist; neither shows a miss with real-code yield.
+
+- **Seeded mutants** (`scripts/mutants.mjs`, report in
+  `rust/target/research/mutants-2026-10-19/`): 459 sites in 36 corpus apps,
+  each a runtime-confirmed defect template (strict read in a body, owner
+  primitive in an inline handler, write in a memo). **100% proven** for all
+  three, 0% uncertifiable, 271/271 on the type-clean subset. The templates use
+  fresh local bindings and inline handlers, so this measures the direct shapes
+  only; the next round should seed through existing bindings, imported
+  handlers, wrappers and async.
+- **Runtime oracle** (561 cases): 0 unproven clean claims, 15 known-open sites.
+  Triage by real-code occurrence in the 49-project corpus: `useParams()`
+  destructuring (`r10-destructured`) occurs 0 times; every `children()` helper
+  accessor in the corpus is read in JSX, never in the body
+  (`r9-b3-childrenreadinbody`); the owner sites are reviewer shapes (event
+  tuples, class fields, defaults, JSX getters, mixed invocations) and c2d is a
+  registry closure. None was built: the yield is zero on the corpus, and ADR
+  0328 makes a miss invisible to users only as a missing violation, which the
+  mutants show is rare for the direct shapes.
+- **Shared reference/identity layer** (`Resolved<T> | Unknown`): not started.
+  The direction gated it on misses that show which resolution gaps matter, and
+  none did. The evidence that does point at it is on the precision side: every
+  false positive the seven ADR 0326 review rounds and the oracle port found was
+  a proof re-deriving "is this still the same value" (props aliases, `arguments`,
+  `delete`, redeclaration, reassigned tags, views of props). A shared answer to
+  that question is the right next structural change when a new proof needs it.
+
 ## 2026-10-19 — Possible false positives from the oracle port, fixed
 
 The 561-case oracle flagged 18 cases where the checker proved a violation and
