@@ -282,8 +282,6 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     caches: BuildCaches<'_>,
     runtime_configuration: crate::RuntimeConfigurationPremise,
 ) -> Result<(Program, BuildTimings), BuildError> {
-    // A recorded refusal that the facts do not support is an error.
-    crate::source_refusal::check(inputs.boundary, facts)?;
     let BuildCaches {
         ast_indexes: ast_indexes_cache,
         source_discovery: source_discovery_cache,

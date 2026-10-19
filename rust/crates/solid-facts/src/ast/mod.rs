@@ -32,31 +32,21 @@ use thiserror::Error;
 pub const AST_FACTS_SCHEMA: u32 = 64;
 
 mod argument_completion;
-mod binding_references;
-mod class_obligation;
 mod completion_call_cover;
 mod component_value_flow;
 mod emission;
 mod host_call_completion;
 mod host_constants;
 mod host_execution;
-mod import_reexport;
-mod inert_erasure;
 mod inert_javascript;
 mod literal_array;
 mod module_requests;
-mod object_binding;
 mod primitive_completion;
 mod proxy_get_forward;
-mod reexport_chain;
-mod retained_arguments;
 mod span_index;
-mod super_argument;
 mod unconditional_calls;
 
 pub use argument_completion::{ParameterValue, SiteStanding, argument_site_standings};
-pub use binding_references::import_binding_references;
-pub use class_obligation::{ClassObligation, ClassObligationKind, class_obligation};
 pub use completion_call_cover::{completion_call_cover, completion_return_cover};
 pub use component_value_flow::{ComponentPropSite, ComponentValueFlow, component_value_flows};
 pub use host_constants::{
@@ -68,31 +58,14 @@ pub use host_execution::{
     HostCallSequence, HostConstantIdentity, HostDefaultInitializer, HostExecutionFact,
     HostExecutionPredicate, HostExecutionSiteKind,
 };
-pub use import_reexport::reexport_only_import_names;
-pub use inert_erasure::{
-    ImportFreeErasure, InertErasure, RelativeImportErasure, import_free_erasure, inert_erasure,
-    relative_import_erasure,
-};
 pub use inert_javascript::{
     InertJavaScriptModule, InertJavaScriptRefusal, inert_javascript_module,
     inert_javascript_module_with_export_all,
 };
 pub use literal_array::{literal_array_element, this_expression_spans};
 pub use module_requests::static_module_requests;
-pub use object_binding::{
-    UnwrittenObjectBinding, UnwrittenPrimitiveBinding, unwritten_object_binding,
-    unwritten_primitive_binding,
-};
 pub use primitive_completion::primitive_completion_by_syntax;
 pub use proxy_get_forward::proxy_get_forward_target;
-pub use reexport_chain::{ModuleGraph, ModuleLanding, entry_names_publishing_import};
-pub use retained_arguments::{
-    RetainedConstructorArguments, RetainedParameter, retained_constructor_arguments,
-};
-pub use super_argument::{
-    SuperArgumentFunction, SuperArgumentSite, super_argument_function,
-    super_argument_sites_of_binding,
-};
 pub use unconditional_calls::{synchronously_unconditional_calls, unconditional_calls};
 
 pub use emission::{

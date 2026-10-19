@@ -87,21 +87,7 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
             reexported,
             ..
         } => {
-            if defect
-                .analysis_context
-                .starts_with(crate::contracts::SOURCE_BOUNDARY_WITHHELD_CONTEXT)
-            {
-                // A recorded refusal, not a contract verdict: neither the
-                // contract's absence or invalidity, nor an export's absence,
-                // nor a runtime target is claimed. The hint names no module
-                // and no fix, because none is established.
-                (
-                    format!(
-                        "source analysis was withheld for {module}: the available facts do not establish the source boundary needed to determine its reactive behavior"
-                    ),
-                    "This finding does not certify reactive behavior across this edge. It does not establish a runtime target, execution, or the existence of an export.".into(),
-                )
-            } else if defect.analysis_context.starts_with("obsolete-policy1-receipt:") {
+            if defect.analysis_context.starts_with("obsolete-policy1-receipt:") {
                 (
                     format!(
                         "the discovered reactivity contract for {module} was authorized only by obsolete proof policy 1; its claims cannot be used for {} export {export}",
@@ -395,13 +381,6 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
                 .starts_with("unbound-contract-claims:") =>
         {
             "the imported package contract carries a claim about this callback that the call site does not let solid-checker bind"
-        }
-        StaticDefectKind::PackageContractExportMissing { .. }
-            if defect
-                .analysis_context
-                .starts_with(crate::contracts::SOURCE_BOUNDARY_WITHHELD_CONTEXT) =>
-        {
-            "the analysis input recorded that source-boundary analysis was withheld for this exact occurrence"
         }
         StaticDefectKind::PackageContractExportMissing { .. }
             if defect
@@ -968,17 +947,6 @@ fn collapse_unaccepted_contract_defects(
         else {
             return None;
         };
-        // A recorded source-edge refusal is one exact occurrence's own
-        // finding. Without this, the final arm below would collapse equal
-        // `(module, export, context)` across files into one "package-export"
-        // finding with an import-site count, erasing which occurrences the
-        // caller recorded.
-        if defect
-            .analysis_context
-            .starts_with(crate::contracts::SOURCE_BOUNDARY_WITHHELD_CONTEXT)
-        {
-            return None;
-        }
         // An obligation raised at an exact argument of an exact call keeps its
         // own finding when the site *is* the content: an unbound claim, whose
         // fix is at that call. Open claims at an argument name the package,
@@ -1346,18 +1314,6 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
 fn coverage_group(seed: FindingSeed<'_>) -> Option<(&'static str, String)> {
     match seed {
         FindingSeed::StaticDefect(defect) => match &defect.kind {
-            // A caller's recorded refusal at one occurrence is no coverage
-            // gap of a package: filed under "package-contract" it would be
-            // printed as an import from a package without a complete
-            // reactivity contract, a contract-absence statement it does not
-            // make.
-            StaticDefectKind::PackageContractExportMissing { .. }
-                if defect
-                    .analysis_context
-                    .starts_with(crate::contracts::SOURCE_BOUNDARY_WITHHELD_CONTEXT) =>
-            {
-                None
-            }
             StaticDefectKind::PackageContractExportMissing { module, .. } => {
                 Some(("package-contract", package_of_specifier(module).to_owned()))
             }
@@ -2030,69 +1986,8 @@ mod tests {
         }
     }
 
-    fn withheld(form: &str, at: u64) -> StaticDefect {
-        contract_defect(
-            &format!(
-                "{}{form}",
-                crate::contracts::SOURCE_BOUNDARY_WITHHELD_CONTEXT
-            ),
-            crate::ContractDefectSite::Import,
-            at,
-        )
-    }
-
     #[test]
-    fn a_recorded_source_edge_refusal_projects_the_exact_neutral_finding() {
-        // A dialect's removed-export advice never applies to a refusal.
-        let terms = StaticDefectTerms {
-            removed_export_hint: |_, _| Some("migrate the removed export".into()),
-            ..evidence_terms()
-        };
-        let defect = withheld("import", 7);
-        let text = static_defect_text(&defect, &terms);
-        let finding = project_finding(FindingSeed::StaticDefect(&defect), &ErrorCatalog);
-        assert_eq!(finding.id, "SC9005");
-        assert_eq!(finding.kind, "uncertifiable");
-        assert_eq!(finding.severity, "error");
-        assert_eq!(finding.analysis_context, "source-boundary-withheld:import");
-        assert_eq!(
-            text.message,
-            "source analysis was withheld for pkg: the available facts do not establish the source boundary needed to determine its reactive behavior"
-        );
-        assert_eq!(
-            text.hint,
-            "This finding does not certify reactive behavior across this edge. It does not establish a runtime target, execution, or the existence of an export."
-        );
-        assert_eq!(
-            text.evidence,
-            "the analysis input recorded that source-boundary analysis was withheld for this exact occurrence"
-        );
-        // No coverage heading: it would print as an import from a package
-        // without a complete reactivity contract.
-        assert_eq!(finding.coverage_family, "");
-        assert_eq!(finding.coverage_subject, String::new());
-        // Nothing here claims what a contract or the type system would.
-        for sentence in [&text.message, &text.hint] {
-            for word in ["contract", "invalid", "missing", "no such", "not found"] {
-                assert!(!sentence.contains(word), "{word}: {sentence}");
-            }
-        }
-    }
-
-    #[test]
-    fn recorded_occurrences_are_never_collapsed_into_one_finding() {
-        let one = withheld("import", 1);
-        let two = withheld("import", 2);
-        let findings = collapse_unaccepted_contract_defects(&[one, two], &ErrorCatalog);
-        assert_eq!(findings.len(), 2, "one finding per exact occurrence");
-        for finding in &findings {
-            assert!(
-                !finding.message.contains("import sites"),
-                "{}",
-                finding.message
-            );
-        }
-        // The acceptance gate's own two sites are one finding, as before.
+    fn the_acceptance_gate_sites_collapse_into_one_finding() {
         let gate = |at| {
             contract_defect(
                 crate::contracts::UNACCEPTED_IMPORT_CONTEXT,
@@ -2107,10 +2002,7 @@ mod tests {
     }
 
     #[test]
-    fn a_recorded_refusal_is_filed_under_no_coverage_family() {
-        assert!(
-            super::coverage_group(FindingSeed::StaticDefect(&withheld("require", 3))).is_none()
-        );
+    fn an_unaccepted_import_is_filed_under_a_coverage_family() {
         assert!(
             super::coverage_group(FindingSeed::StaticDefect(&contract_defect(
                 crate::contracts::UNACCEPTED_IMPORT_CONTEXT,

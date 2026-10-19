@@ -17,14 +17,8 @@
 //! projection holds the exact keys that controlled the acceptance gate before
 //! the boundary existed, and only those keys reach it. The recorded reasons
 //! are explanation until the phase that rewords that gate.
-//!
-//! A **source-edge refusal** is the one record here that does move a finding:
-//! the caller's statement that source-boundary analysis was withheld for one
-//! exact occurrence of an import specifier. See [`SourceEdgeSite`]. It is the
-//! caller's decision, stored beside the package identities and never inside
-//! them; this module neither discovers it nor authenticates it.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use sha2::{Digest as _, Sha256};
 
@@ -62,132 +56,6 @@ pub struct BoundarySite {
     pub path: String,
     pub start_byte: u64,
     pub end_byte: u64,
-}
-
-/// How a project file names the specifier of a source-edge refusal. The
-/// spellings are the stable context suffixes of the finding.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum SourceEdgeForm {
-    /// `import … from "m"`.
-    Import,
-    /// `export … from "m"`, including `export * from` and `export * as ns from`.
-    ExportFrom,
-    /// `import S = require("m")`, exported or not.
-    ImportEquals,
-    /// `import("m")` with a literal specifier.
-    DynamicImport,
-    /// `require("m")` with a literal specifier and an unshadowed `require`.
-    Require,
-}
-
-impl SourceEdgeForm {
-    /// A stable spelling, for contexts and error text; not a wire value.
-    #[must_use]
-    pub const fn code(self) -> &'static str {
-        match self {
-            Self::Import => "import",
-            Self::ExportFrom => "export-from",
-            Self::ImportEquals => "import-equals",
-            Self::DynamicImport => "dynamic-import",
-            Self::Require => "require",
-        }
-    }
-
-    /// The one-byte tag the analysis identity hashes. Explicit, so reordering
-    /// the variants can never move an identity.
-    const fn tag(self) -> u8 {
-        match self {
-            Self::Import => 0,
-            Self::ExportFrom => 1,
-            Self::ImportEquals => 2,
-            Self::DynamicImport => 3,
-            Self::Require => 4,
-        }
-    }
-
-    /// Whether the contract-era binder ever bound this form to an accepted
-    /// contract. Only these forms deny an accepted contract; the others are
-    /// recorded and reported but never had a contract binding to withhold.
-    #[must_use]
-    pub const fn is_contract_bound(self) -> bool {
-        matches!(self, Self::Import | Self::ExportFrom)
-    }
-}
-
-impl std::fmt::Display for SourceEdgeForm {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str(self.code())
-    }
-}
-
-/// One exact occurrence: its form and the byte range of the whole statement
-/// or expression, as the facts of the same generation report it. Multiplicity
-/// is the set: two statements are two sites, and the same range under two
-/// forms is two sites.
-///
-/// A site carries no reason, package identity or generation. It is joined to
-/// the supplied facts by exact membership and by nothing else, so the caller
-/// must reacquire its records for each coherent facts generation; an equal
-/// range in a changed generation joins exactly as before.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct SourceEdgeSite {
-    pub form: SourceEdgeForm,
-    pub start_byte: u64,
-    pub end_byte: u64,
-}
-
-/// A recorded source-edge refusal that the supplied facts do not support, or
-/// that the analysis cannot honor exactly. Each variant is a statement about
-/// the join, never about the module, an export or a runtime target: a failed
-/// join proves none of them missing.
-#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
-pub enum SourceEdgeMismatch {
-    #[error(
-        "a source-edge refusal names {importer:?}, which is not a file of the facts supplied with this analysis"
-    )]
-    UnknownImporter { importer: String },
-    #[error(
-        "a source-edge refusal names {importer:?}, a file of a dependency source root, whose findings are not reported"
-    )]
-    ImporterInDependencySource { importer: String },
-    #[error(
-        "a source-edge refusal for {specifier:?} in {importer:?} names a {form} occurrence at bytes {start_byte}..{end_byte}, and the supplied facts hold no such occurrence"
-    )]
-    NoSuchOccurrence {
-        importer: String,
-        specifier: String,
-        form: SourceEdgeForm,
-        start_byte: u64,
-        end_byte: u64,
-    },
-    #[error(
-        "a source-edge refusal for {specifier:?} in {importer:?} leaves the {form} occurrence at bytes {start_byte}..{end_byte} unrecorded, while it denies the accepted contract of the whole key"
-    )]
-    UnrecordedOccurrence {
-        importer: String,
-        specifier: String,
-        form: SourceEdgeForm,
-        start_byte: u64,
-        end_byte: u64,
-    },
-    #[error(
-        "the runtime namespace import of {specifier:?} in {importer:?} at bytes {start_byte}..{end_byte} cannot be recorded, and cannot share a key whose accepted contract is denied"
-    )]
-    UnsupportedOccurrence {
-        importer: String,
-        specifier: String,
-        start_byte: u64,
-        end_byte: u64,
-    },
-    #[error(
-        "the import of {specifier:?} in {importer:?} at bytes {start_byte}..{end_byte} has an unreferenced binding and is not a supported occurrence, so it cannot share a key whose accepted contract is denied: the denial would withhold an obligation the analysis could otherwise report there"
-    )]
-    UnreferencedCollateral {
-        importer: String,
-        specifier: String,
-        start_byte: u64,
-        end_byte: u64,
-    },
 }
 
 /// One export demanded through a refused import: a named or namespace member
@@ -429,11 +297,6 @@ struct LegacyRequirements {
 pub struct PackageBoundary {
     imports: BTreeMap<ImportKey, UnanalyzableImport>,
     legacy: LegacyRequirements,
-    /// Exact occurrences whose source-boundary analysis the caller withheld.
-    /// Apart from `imports` on purpose: it creates no [`UnanalyzableImport`],
-    /// so `identify`'s conflict history and every package identity stay what
-    /// they were, and `import` answers `None` for a key that only has sites.
-    source_edges: BTreeMap<ImportKey, BTreeSet<SourceEdgeSite>>,
 }
 
 impl PackageBoundary {
@@ -442,7 +305,6 @@ impl PackageBoundary {
         self.imports.is_empty()
             && self.legacy.markers.is_empty()
             && self.legacy.refusal_overrides.is_empty()
-            && self.source_edges.is_empty()
     }
 
     /// Records one import-wide cause, with the identity the producer resolved.
@@ -476,46 +338,6 @@ impl PackageBoundary {
 
     pub fn imports(&self) -> impl Iterator<Item = (&ImportKey, &UnanalyzableImport)> {
         self.imports.iter()
-    }
-
-    /// Records that source-boundary analysis was withheld for one exact
-    /// occurrence. Valid only for the facts generation the caller read the
-    /// site from; the analysis checks it against the facts it is given.
-    pub fn record_source_edge_refusal(&mut self, key: ImportKey, site: SourceEdgeSite) {
-        self.source_edges.entry(key).or_default().insert(site);
-    }
-
-    /// Every recorded key with its sites, in key order and then site order.
-    pub fn source_edge_refusals(
-        &self,
-    ) -> impl Iterator<Item = (&ImportKey, &BTreeSet<SourceEdgeSite>)> {
-        self.source_edges.iter()
-    }
-
-    #[must_use]
-    pub fn source_edge_sites(
-        &self,
-        importer: &str,
-        specifier: &str,
-    ) -> Option<&BTreeSet<SourceEdgeSite>> {
-        self.source_edges.get(&ImportKey::new(importer, specifier))
-    }
-
-    /// Whether any source-edge refusal is recorded. The analysis does no work
-    /// for this input when it is false.
-    #[must_use]
-    pub fn has_source_edge_refusals(&self) -> bool {
-        !self.source_edges.is_empty()
-    }
-
-    /// The recorded keys of one importer, in specifier order.
-    pub(crate) fn source_edges_of<'a>(
-        &'a self,
-        importer: &'a str,
-    ) -> impl Iterator<Item = (&'a ImportKey, &'a BTreeSet<SourceEdgeSite>)> + 'a {
-        self.source_edges
-            .range(ImportKey::new(importer, "")..)
-            .take_while(move |(key, _)| key.importer == importer)
     }
 
     /// Adds `key` to the contract-era requirement set. A later reason for the
@@ -562,7 +384,7 @@ impl PackageBoundary {
     }
 
     /// Folds `other` in: every cause of both, and `self`'s requirement and
-    /// override answers before `other`'s. Source-edge sites are unioned.
+    /// override answers before `other`'s.
     pub fn extend(&mut self, other: Self) {
         for (key, import) in other.imports {
             let entry = self.imports.entry(key).or_default();
@@ -585,9 +407,6 @@ impl PackageBoundary {
         }
         for (key, refusal) in other.legacy.refusal_overrides {
             self.legacy.refusal_overrides.entry(key).or_insert(refusal);
-        }
-        for (key, sites) in other.source_edges {
-            self.source_edges.entry(key).or_default().extend(sites);
         }
     }
 
@@ -656,22 +475,6 @@ impl PackageBoundary {
             text(hash, &key.importer);
             text(hash, &key.specifier);
             optional(hash, refusal.as_deref());
-        }
-        // Nothing is hashed for a boundary with no source-edge records, so
-        // every boundary keeps the digest it had before they existed.
-        if !self.source_edges.is_empty() {
-            hash.update(b"source-edge-refusals-v1");
-            hash.update((self.source_edges.len() as u64).to_be_bytes());
-            for (key, sites) in &self.source_edges {
-                text(hash, &key.importer);
-                text(hash, &key.specifier);
-                hash.update((sites.len() as u64).to_be_bytes());
-                for site in sites {
-                    hash.update([site.form.tag()]);
-                    hash.update(site.start_byte.to_be_bytes());
-                    hash.update(site.end_byte.to_be_bytes());
-                }
-            }
         }
     }
 

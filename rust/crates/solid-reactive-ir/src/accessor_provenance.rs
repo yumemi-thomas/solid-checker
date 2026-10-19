@@ -2358,7 +2358,6 @@ impl Resolver<'_, '_> {
             .cloned()?;
         Some(SummaryRead {
             transported: true,
-            contract_read_context: None,
             symbol: symbol.clone(),
             display,
             kind: Some("accessor".into()),

@@ -247,11 +247,9 @@ mod tests {
                     "value".into(),
                     crate::ReturnSummary {
                         kind: "accessor".into(),
-                        prototype: None,
                         ..Default::default()
                     },
                 )]),
-                prototype: None,
                 ..Default::default()
             };
             assert_eq!(

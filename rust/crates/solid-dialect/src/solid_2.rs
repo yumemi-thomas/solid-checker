@@ -1029,49 +1029,6 @@ impl Dialect for Solid2 {
             _ => None,
         }
     }
-    /// ADR 0146. Source: `@solidjs/signals@2.0.0-rc.9`, the audited release
-    /// (`dist/prod/signals.js` `createSignal`, `dist/prod/core/core.js`
-    /// `signal` and `read`). `createSignal(e, t)` takes the memo path only when
-    /// `typeof e === "function"`; otherwise it builds a plain `signal` node,
-    /// whose only callbacks are `t?.equals` (called by the setter) and
-    /// `t?.unobserved` (called when the last observer unlinks), both read off
-    /// the options object. Its accessor is `read.bind(null, node)`, and `read`
-    /// of a node with no compute function (`ce`), no firewall owner (`Te`) and
-    /// no pending status serves the committed or staged value, linking the
-    /// current observer when tracking: it runs no code. With every argument a
-    /// primitive by grammar there is neither a function first argument nor an
-    /// options object, so no path through it runs any. ADR 0162 states the
-    /// precondition by what it excludes, which is all the bytes test: the memo
-    /// path is taken only for `typeof e === "function"` (also the only test
-    /// `solid-js`' `hydratedCreateSignal` and server `createSignal` make of
-    /// the first argument, audit 2026-09-30 § 6), so an array or object
-    /// literal first argument takes the plain path exactly as a primitive
-    /// does; and `signal(e, t)` reads `t.equals`, `t.ownedWrite`, `t.unobserved`
-    /// off the options object, so an options object every member of which is a
-    /// primitive keeps no callback. `createMemo`'s accessor recomputes its
-    /// caller's function and is not stated here (see
-    /// [`Dialect::computed_accessor_read`]).
-    fn inert_accessor_read(&self, primitive: Primitive, slot: ResultSlot) -> bool {
-        matches!(
-            (primitive, slot),
-            (Primitive::CreateSignal, ResultSlot::TupleItem(0))
-        )
-    }
-
-    /// ADR 0180. Source: `@solidjs/signals@2.0.0-rc.9`, `dist/dev-shared.js`
-    /// `signal` and `read`. `signal(v, options)` copies `options.equals`,
-    /// `options.ownedWrite` and `options.name` onto the node and stores
-    /// `options.unobserved` on its extension, all at creation. `equals` is
-    /// called by the setter and by the commit of a pending write, `unobserved`
-    /// when the node's last subscriber unlinks; `read` consults neither.
-    /// Probed on the rc.9 dev and prod builds under Node 24: a `createSignal(false,
-    /// options)` whose `equals` and `unobserved` record each call was read
-    /// untracked, inside a `createMemo` and inside a `createEffect`, with two
-    /// flushes and no write -- neither callback ran; `unobserved` ran once, when
-    /// the root was disposed and its subscribers unlinked.
-    fn inert_read_ignores_options(&self, primitive: Primitive) -> bool {
-        primitive == Primitive::CreateSignal
-    }
 
     /// ADR 0183. Source: `@solidjs/signals@2.0.0-rc.9`, `dist/dev-shared.js`
     /// `computed` and `setupComputedNode`: `createMemo(fn, options)` builds a
@@ -1100,41 +1057,6 @@ impl Dialect for Solid2 {
         matches!(
             (primitive, argument, argument_count),
             (Primitive::CreateMemo, 0, 1) | (Primitive::CreateEffect, 0, 2)
-        )
-    }
-
-    /// ADR 0162. Source: `@solidjs/signals@2.0.0-rc.9`, the audited release
-    /// (`dist/prod/signals.js` `createMemo`, `accessor`; `dist/prod/core/core.js`
-    /// `computed` and `read`). `createMemo(e, t)` is `accessor(computed(e, t))`
-    /// and `accessor(n)` is `read.bind(null, n)`. `read` of a node that has a
-    /// compute function (`ce`) calls `prepareComputed` / `updateIfNecessary`,
-    /// which re-run **that registered function `e`** when the node is stale --
-    /// and nothing else of anyone's: not the read's arguments (`read` ignores
-    /// what it is bound over), not the options' callbacks except `equals`,
-    /// which the same recomputation compares with. It may also throw the node's
-    /// own error or a not-ready signal. So invoking the whole result of
-    /// `createMemo` is a tracked read whose only possible execution is the
-    /// registered computation, the one the creating call already registered
-    /// (the dialect's `createMemo` row is that registration), and whose
-    /// executions the creating call's own claims account for.
-    ///
-    /// ADR 0175: `createSignal`'s accessor is in this row too. Its first
-    /// argument decides the path (`typeof first === "function"` takes
-    /// `computed(first, second)` and hands back `accessor(node)`, exactly the
-    /// memo's read; anything else takes `signal` and an inert read), so when
-    /// grammar cannot rule the function out the accessor is *possibly* a
-    /// memo's, and this row's claim -- may re-run the registered computation,
-    /// may throw -- is true of both paths. [`Dialect::inert_accessor_read`] is
-    /// the stronger answer for the same slot and is asked first; this one is
-    /// what remains when its argument condition cannot be discharged. The
-    /// computation the function path registers is `createSignal`'s callback
-    /// position 0 (`callback_positions`), so it is accounted where it is
-    /// registered, as the memo's is.
-    fn computed_accessor_read(&self, primitive: Primitive, slot: ResultSlot) -> bool {
-        matches!(
-            (primitive, slot),
-            (Primitive::CreateMemo, ResultSlot::Whole)
-                | (Primitive::CreateSignal, ResultSlot::TupleItem(0))
         )
     }
 

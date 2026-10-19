@@ -9,9 +9,7 @@ use serde::Serialize;
 
 /// Which protocol of the caller's value an `invoke` operation runs.
 ///
-/// A call is the historical meaning of every `invoke`, and stays the one
-/// spelled by absence: [`crate::contract_semantics::Operation::protocol`] is `None` for it, and a decoded
-/// `call` normalizes to `None`, so the model has one meaning for it. The other
+/// A call is the historical meaning of every `invoke`. The other
 /// four are the non-call invocations of caller-supplied code `semantic-model.md`
 /// § callbacks names: a property read that may run a getter or a proxy trap
 /// (`Get`), the iteration protocol (`Iterate`), ToPrimitive (`Coerce`), and
@@ -193,9 +191,7 @@ impl CallbackSummary {
     /// Whether this row is an invocation of the argument *as a callable* --
     /// the only kind of row an interprocedural or owner pass models.
     ///
-    /// A non-call row is kept in [`crate::ContractExport::callbacks`] so a closed
-    /// enumeration stays closed and re-emission republishes it; every pass
-    /// that reads rows to build edges, invoked parameters, wrappers, owner
+    /// Every pass that reads rows to build edges, invoked parameters, wrappers, owner
     /// edges or accessor arguments filters on this first. A property read or
     /// coercion of the caller's value runs that value's own traps at the call,
     /// on the caller's stack, in the caller's tracking context -- what the
@@ -245,9 +241,6 @@ pub struct ReturnSummary {
     pub parameter: Option<usize>,
     pub elements: Vec<Option<ReturnSummary>>,
     pub properties: BTreeMap<String, ReturnSummary>,
-    /// Receipt-projected recipe only. Generation never proposes this shape.
-    #[serde(skip)]
-    pub prototype: Option<crate::contract_semantics::PrototypeInstanceRecipe>,
 }
 
 #[cfg(test)]

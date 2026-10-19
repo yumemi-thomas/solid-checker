@@ -563,12 +563,10 @@ fn effective_inner_call_return(
                 Some(ReturnSummary {
                     kind: kind.into(),
                     label: "wrapped reactive value".into(),
-                    prototype: None,
                     ..ReturnSummary::default()
                 }),
                 None,
             ],
-            prototype: None,
             ..ReturnSummary::default()
         });
     }
@@ -578,7 +576,6 @@ fn effective_inner_call_return(
         .then(|| ReturnSummary {
             kind: kind.into(),
             label: "wrapped reactive value".into(),
-            prototype: None,
             ..ReturnSummary::default()
         })
 }

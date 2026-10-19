@@ -330,8 +330,8 @@ The dependency-source sibling tsconfig's bytes live in a scratch directory (`$TM
 Design: one flow fact per proven reactive value (nodes = allocation sites, edges from exact references, terminals = read events, known non-invoking operations, or unknown escapes), certifying only when every flow ends at a read with a row and reporting an unknown escape as an obligation, never silence. Today only a private observational `value_flow` stage exists: it runs when `SOLID_CHECKER_VALUE_FLOW_AUDIT` or timings are requested, keeps every seed's coverage open, and moves no finding; the production migration stays held. Owner: `rust/crates/solid-reactive-ir/src/value_flow.rs`.
 
 <a id="adr-0310"></a>
-## ADR 0310 — A source-edge refusal is a caller's recorded withholding
-`PackageBoundary` can hold, per importer and specifier, exact occurrence sites (form and byte range) where the caller withheld source-boundary analysis; each projects one SC9005 uncertifiable `source-boundary-withheld:<form>` finding and withholds the key's accepted claims. It neither discovers nor authenticates the refusal, and builds error on a record that matches no occurrence. No production caller constructs one yet (dormant consumer). Owners: `rust/crates/solid-reactive-ir/src/package_boundary.rs`, `source_refusal.rs`.
+## ADR 0310 — A source-edge refusal is a caller's recorded withholding (removed)
+Superseded by deletion on 2026-10-19. `PackageBoundary` could hold exact occurrence sites where a caller withheld source-boundary analysis, projecting one SC9005 `source-boundary-withheld:<form>` finding. No production caller ever constructed one (only unit tests did), so the record type, `source_refusal.rs`, the `BuildError::SourceEdge` variant and the projection branches were deleted together with the rest of the dead package-contract surface; a caller that needs the behavior again designs it from the current boundary.
 
 <a id="adr-0311"></a>
 ## ADR 0311 — A dependency-source check is a fresh one-shot check

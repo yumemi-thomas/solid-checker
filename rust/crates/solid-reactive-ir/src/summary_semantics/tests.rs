@@ -5,10 +5,6 @@
 use std::collections::BTreeMap;
 
 use super::{CallbackSchedule, CallbackSummary, InvokeProtocol, ReturnSummary};
-use crate::contract_semantics::{
-    PrototypeInstanceRecipe, PrototypeMember, PrototypeMemberKind, PrototypePopulation,
-    PrototypeTrack,
-};
 
 fn leaf(kind: &str, label: &str) -> ReturnSummary {
     ReturnSummary {
@@ -18,33 +14,17 @@ fn leaf(kind: &str, label: &str) -> ReturnSummary {
     }
 }
 
-fn recipe(member: &str) -> PrototypeInstanceRecipe {
-    PrototypeInstanceRecipe {
-        members: vec![PrototypeMember {
-            name: member.into(),
-            kind: PrototypeMemberKind::Getter,
-            tracks: vec![PrototypeTrack {
-                cache: "signals".into(),
-                argument: Some(0),
-                shared: None,
-            }],
-        }],
-        population: PrototypePopulation::Values,
-    }
-}
-
 // T1: `interproc::equivalent_callbacks` uses this JSON as an equality key, so
-// the key names, their order, `null` for `None`, the ordered map and the
-// skipped prototype recipe (at every depth) are all part of the contract.
+// the key names, their order, `null` for `None` and the ordered map are all
+// part of the contract.
 #[test]
-fn return_summary_serializes_with_a_fixed_key_order_and_no_prototype() {
+fn return_summary_serializes_with_a_fixed_key_order() {
     let inner = ReturnSummary {
         kind: "plain".into(),
         label: String::new(),
         parameter: None,
         elements: Vec::new(),
         properties: BTreeMap::new(),
-        prototype: Some(recipe("deep")),
     };
     let value = ReturnSummary {
         kind: "accessor".into(),
@@ -55,7 +35,6 @@ fn return_summary_serializes_with_a_fixed_key_order_and_no_prototype() {
             ("zeta".to_owned(), leaf("k", "z")),
             ("alpha".to_owned(), inner),
         ]),
-        prototype: Some(recipe("shallow")),
     };
     let expected = concat!(
         r#"{"kind":"accessor","label":"a\"b","parameter":2,"#,
@@ -171,141 +150,3 @@ fn callback_predicates_separate_call_from_non_call_and_member_from_argument() {
     assert!(!row(call, &[], "deferred", Some(CallbackSchedule::Queued)).is_result_access());
     assert!(!row(call, &[], "deferred", None).is_result_access());
 }
-
-#[test]
-fn clearing_follows_only_inline_and_deferred_untracked() {
-    use crate::contract_semantics::Tracking;
-    assert!(CallbackSummary::clears_tracking_from(
-        "inline",
-        Tracking::Untracked
-    ));
-    assert!(CallbackSummary::clears_tracking_from(
-        "deferred",
-        Tracking::Untracked
-    ));
-    assert!(!CallbackSummary::clears_tracking_from(
-        "tracked",
-        Tracking::Untracked
-    ));
-    assert!(!CallbackSummary::clears_tracking_from(
-        "inline",
-        Tracking::Tracked
-    ));
-}
-
-// T4: `contracts::project_return` orders returns by their `Debug` text and
-// then dedups. Corresponding rows share type names, so the first differing
-// byte is value text; this pins the order for pairs that agree on kind, label
-// and parameter and differ only in children, vector or map termination,
-// optional-child presence, prototype presence, and escaped strings that
-// quote either type name. Rows are named by test metadata, outside the shape.
-fn shape(
-    elements: Vec<Option<ReturnSummary>>,
-    properties: Vec<(&str, ReturnSummary)>,
-) -> ReturnSummary {
-    ReturnSummary {
-        elements,
-        properties: properties
-            .into_iter()
-            .map(|(key, value)| (key.to_owned(), value))
-            .collect(),
-        ..leaf("accessor", "x")
-    }
-}
-
-#[test]
-fn debug_sorted_returns_keep_the_baseline_order() {
-    let a = || leaf("a", "a");
-    let b = || leaf("a", "b");
-    let nested = |child: ReturnSummary| shape(vec![Some(child)], vec![]);
-    let mut rows: Vec<(&str, ReturnSummary)> = vec![
-        ("map-two", shape(vec![], vec![("k", a()), ("l", a())])),
-        ("vec-then-none", shape(vec![Some(a()), None], vec![])),
-        (
-            "label-quote-both",
-            leaf("accessor", "ReturnSummary\", ContractReturn"),
-        ),
-        ("nested-deep-some", nested(nested(a()))),
-        (
-            "prototype-b",
-            ReturnSummary {
-                prototype: Some(recipe("b")),
-                ..shape(vec![], vec![])
-            },
-        ),
-        ("vec-b", shape(vec![Some(b())], vec![])),
-        ("label-ab", leaf("accessor", "ab")),
-        ("empty", shape(vec![], vec![])),
-        ("map-one", shape(vec![], vec![("k", a())])),
-        ("label-ab-escaped-quote", leaf("accessor", "ab\"c")),
-        ("vec-none", shape(vec![None], vec![])),
-        ("nested-deep-none", nested(shape(vec![None], vec![]))),
-        (
-            "parameter-one",
-            ReturnSummary {
-                parameter: Some(1),
-                ..shape(vec![], vec![])
-            },
-        ),
-        ("label-new-name", leaf("accessor", "ReturnSummary")),
-        ("label-old-name", leaf("accessor", "ContractReturn")),
-        ("label-abc", leaf("accessor", "abc")),
-        ("vec-a", shape(vec![Some(a())], vec![])),
-        (
-            "prototype-a",
-            ReturnSummary {
-                prototype: Some(recipe("a")),
-                ..shape(vec![], vec![])
-            },
-        ),
-        ("kind-old-name", leaf("ContractReturn", "x")),
-        ("kind-new-name", leaf("ReturnSummary", "x")),
-        ("empty-again", shape(vec![], vec![])),
-        (
-            "label-struct-text",
-            leaf("accessor", "ReturnSummary { kind: \"a\" }"),
-        ),
-        ("map-other-key", shape(vec![], vec![("j", a())])),
-    ];
-    rows.sort_by(|left, right| format!("{:?}", left.1).cmp(&format!("{:?}", right.1)));
-    let order = rows.iter().map(|(id, _)| *id).collect::<Vec<_>>();
-    assert_eq!(
-        order, EXPECTED_ORDER,
-        "baseline Debug order of the summary rows moved"
-    );
-    let mut values = rows.into_iter().map(|(_, value)| value).collect::<Vec<_>>();
-    values.dedup();
-    assert_eq!(values.len(), EXPECTED_ORDER.len() - 1);
-}
-
-// Derived by hand from the byte order of the `Debug` text, then confirmed by
-// running at the baseline commit: kind and label strings first (uppercase
-// before lowercase, a space and `"` before the escape's `\`, a shorter string
-// before its extension), then `parameter: None` before `Some(`, then
-// `elements: [None`, `[Some(` and `[]` in that byte order, then a map entry
-// before the closing `}`, and an absent prototype before a present one.
-const EXPECTED_ORDER: &[&str] = &[
-    "kind-old-name",
-    "kind-new-name",
-    "label-old-name",
-    "label-struct-text",
-    "label-new-name",
-    "label-quote-both",
-    "label-ab",
-    "label-ab-escaped-quote",
-    "label-abc",
-    "vec-none",
-    "vec-then-none",
-    "vec-a",
-    "vec-b",
-    "nested-deep-none",
-    "nested-deep-some",
-    "map-other-key",
-    "map-two",
-    "map-one",
-    "empty",
-    "empty-again",
-    "prototype-a",
-    "prototype-b",
-    "parameter-one",
-];

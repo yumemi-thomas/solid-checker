@@ -59,7 +59,6 @@ pub(crate) mod accessor_provenance;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct SummaryRead {
     pub(super) transported: bool,
-    pub(super) contract_read_context: Option<crate::ContractReadContext>,
     pub(super) symbol: SymbolId,
     pub(super) display: SymbolId,
     pub(super) kind: Option<String>,
@@ -129,7 +128,6 @@ impl SummaryReads {
         if !self.seen.insert(Self::key(&read))
             && self.ordered.iter().any(|previous| {
                 Self::key(previous) == Self::key(&read)
-                    && previous.contract_read_context == read.contract_read_context
                     && previous.transported == read.transported
                     && (!previous.local || read.local)
                     && (!previous.conditional || read.conditional)
@@ -174,7 +172,6 @@ fn equivalent_summary_reads(left: &SummaryReads, right: &SummaryReads) -> bool {
         &'r SymbolId,
         Option<&'r str>,
         &'r Location,
-        &'r Option<crate::ContractReadContext>,
         bool,
         bool,
     );
@@ -187,7 +184,6 @@ fn equivalent_summary_reads(left: &SummaryReads, right: &SummaryReads) -> bool {
                     &read.display,
                     read.kind.as_deref(),
                     &read.declaration,
-                    &read.contract_read_context,
                     read.transported,
                     read.undecided,
                 )
@@ -1507,7 +1503,6 @@ fn callback_argument_contracts(
             Some(ReturnSummary {
                 kind: "accessor".into(),
                 label: display.to_string(),
-                prototype: None,
                 ..ReturnSummary::default()
             })
         })
@@ -4482,7 +4477,6 @@ impl StructuredReturnDiscovery<'_, '_> {
             return Some(ReturnSummary {
                 kind: "argument".into(),
                 parameter: Some(parameter),
-                prototype: None,
                 ..ReturnSummary::default()
             });
         }
@@ -4537,7 +4531,6 @@ impl StructuredReturnDiscovery<'_, '_> {
                         })
                     })
                     .collect(),
-                prototype: None,
                 ..returned.clone()
             }),
             "object" => Some(ReturnSummary {
@@ -4549,7 +4542,6 @@ impl StructuredReturnDiscovery<'_, '_> {
                             .map(|property| (name.clone(), property))
                     })
                     .collect(),
-                prototype: None,
                 ..returned.clone()
             }),
             _ => Some(returned.clone()),
@@ -4659,7 +4651,6 @@ impl StructuredReturnDiscovery<'_, '_> {
         reactive.then(|| ReturnSummary {
             kind: "store-path".into(),
             label: fallback_label.into(),
-            prototype: None,
             ..ReturnSummary::default()
         })
     }
@@ -4751,7 +4742,6 @@ impl StructuredReturnDiscovery<'_, '_> {
                     "accessor".into()
                 },
                 label: fallback_label.into(),
-                prototype: None,
                 ..ReturnSummary::default()
             });
         }
@@ -4915,7 +4905,6 @@ impl StructuredReturnDiscovery<'_, '_> {
                 .map(|_| ReturnSummary {
                     kind: "store-path".into(),
                     label: fallback_label.into(),
-                    prototype: None,
                     ..ReturnSummary::default()
                 })
         }?;
@@ -4958,7 +4947,6 @@ impl StructuredReturnDiscovery<'_, '_> {
             "store-path" => Some(ReturnSummary {
                 kind: "store-path".into(),
                 label: fallback_label.into(),
-                prototype: None,
                 ..ReturnSummary::default()
             }),
             _ => None,
@@ -5338,7 +5326,6 @@ impl StructuredReturnDiscovery<'_, '_> {
                 return Some(ReturnSummary {
                     kind: "object".into(),
                     properties,
-                    prototype: None,
                     ..ReturnSummary::default()
                 });
             }
@@ -5368,7 +5355,6 @@ impl StructuredReturnDiscovery<'_, '_> {
                 return Some(ReturnSummary {
                     kind: "accessor".into(),
                     label: fallback_label.into(),
-                    prototype: None,
                     ..ReturnSummary::default()
                 });
             }
@@ -5429,7 +5415,6 @@ impl StructuredReturnDiscovery<'_, '_> {
                         "accessor".into()
                     },
                     label: fallback_label.into(),
-                    prototype: None,
                     ..ReturnSummary::default()
                 });
             }
@@ -5439,7 +5424,6 @@ impl StructuredReturnDiscovery<'_, '_> {
                 return Some(ReturnSummary {
                     kind: "accessor".into(),
                     label: fallback_label.into(),
-                    prototype: None,
                     ..ReturnSummary::default()
                 });
             }
@@ -5465,7 +5449,6 @@ impl StructuredReturnDiscovery<'_, '_> {
                         "accessor".into()
                     },
                     label: fallback_label.into(),
-                    prototype: None,
                     ..ReturnSummary::default()
                 });
             }
@@ -5486,7 +5469,6 @@ impl StructuredReturnDiscovery<'_, '_> {
             return Some(ReturnSummary {
                 kind: "store-path".into(),
                 label: fallback_label.into(),
-                prototype: None,
                 ..ReturnSummary::default()
             });
         }
@@ -5501,7 +5483,6 @@ impl StructuredReturnDiscovery<'_, '_> {
                 "accessor".into()
             },
             label: fallback_label.to_owned(),
-            prototype: None,
             ..ReturnSummary::default()
         }
     }
@@ -5549,7 +5530,6 @@ fn discover_structured_returns(
                     return Some(ReturnSummary {
                         kind: "tuple".into(),
                         elements,
-                        prototype: None,
                         ..ReturnSummary::default()
                     });
                 }
@@ -5568,7 +5548,6 @@ fn discover_structured_returns(
                     return Some(ReturnSummary {
                         kind: "object".into(),
                         properties,
-                        prototype: None,
                         ..ReturnSummary::default()
                     });
                 }
@@ -6471,7 +6450,6 @@ fn interprocedural_result_reads_for_file(
                         &mut effective,
                         SummaryRead {
                             transported: false,
-                            contract_read_context: None,
                             symbol: argument_symbol.clone(),
                             display: display.clone(),
                             kind: Some("accessor".into()),
@@ -6622,7 +6600,6 @@ fn interprocedural_result_reads_for_file(
                             &mut effective,
                             SummaryRead {
                                 transported: false,
-                                contract_read_context: None,
                                 symbol: argument_symbol.clone(),
                                 display: SymbolId::from(
                                     file.source_text(argument.span).unwrap_or("store"),
@@ -6968,7 +6945,6 @@ fn interprocedural_result_reads_for_file(
                         &mut activated_defaults,
                         SummaryRead {
                             transported: false,
-                            contract_read_context: None,
                             symbol: accessor.clone(),
                             display: display.clone(),
                             kind: Some("accessor".into()),
@@ -7025,7 +7001,6 @@ fn interprocedural_result_reads_for_file(
                         &mut activated_defaults,
                         SummaryRead {
                             transported: false,
-                            contract_read_context: None,
                             symbol: store.clone(),
                             display: SymbolId::from(
                                 callee_file.source_text(member.span).unwrap_or("store"),
@@ -7321,10 +7296,6 @@ fn interprocedural_result_reads_for_file(
         // this call keeps the finding a violation.
         effective.sort_by_key(|(direct, read)| (read.undecided, !*direct, read.transported));
         for (direct, read) in effective {
-            let (execution, read_unproven) = read
-                .contract_read_context
-                .as_ref()
-                .map_or((execution, false), |context| context.at_call(execution));
             let accessor = read.display.to_string();
             // A summary read whose symbol is the callee itself is the export's
             // own contracted `reads`, not a value passed in. ADR 0246: so is
@@ -7337,10 +7308,7 @@ fn interprocedural_result_reads_for_file(
             if seen.insert((
                 callee.path.clone(),
                 callee.start_byte,
-                format!(
-                    "{}#contract-context:{:?}",
-                    read.symbol, read.contract_read_context
-                ),
+                read.symbol.to_string(),
             )) {
                 result.push(ReactiveRead {
                     kind: read
@@ -7359,7 +7327,7 @@ fn interprocedural_result_reads_for_file(
                     via: label.clone().into(),
                     origin: Some(read.origin),
                     origin_context: read.origin_context.into(),
-                    uncertain: read_unproven || read.undecided,
+                    uncertain: read.undecided,
                     missing_jsx_census: missing_jsx_census(file, call.span, execution),
                     host_callback_timing: host_callback_timing(file, call.span, execution, lookup),
                     project_consumer_non_strict: false,
@@ -8114,7 +8082,6 @@ fn direct_reference_contributions(
         {
             let read = SummaryRead {
                 transported: false,
-                contract_read_context: None,
                 symbol: source.symbol.clone(),
                 display: source.display.clone(),
                 kind: Some(
@@ -8165,7 +8132,6 @@ fn direct_reference_contributions(
                         owner,
                         read: SummaryRead {
                             transported: false,
-                            contract_read_context: None,
                             symbol: source.symbol.clone(),
                             display: SymbolId::from(format!(
                                 "{}.{}",
@@ -8288,7 +8254,6 @@ fn typed_candidate_contributions(
             owner,
             read: SummaryRead {
                 transported: false,
-                contract_read_context: None,
                 symbol: SymbolId::from(format!(
                     "typed:{}\0{}\0{}",
                     call_location.path, call_location.start_byte, call_location.end_byte
@@ -9008,7 +8973,6 @@ fn interprocedural_reads(
                         {
                             returned[index].push_unique(SummaryRead {
                                 transported: false,
-                                contract_read_context: None,
                                 symbol: symbol.clone(),
                                 display: display.clone(),
                                 kind: Some(
@@ -9710,7 +9674,6 @@ mod tests {
     fn read(symbol: &str, display: &str, origin: u64) -> SummaryRead {
         SummaryRead {
             transported: false,
-            contract_read_context: None,
             symbol: SymbolId::from(symbol),
             display: SymbolId::from(display),
             kind: None,
