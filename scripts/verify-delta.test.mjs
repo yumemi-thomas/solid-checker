@@ -39,8 +39,10 @@ test("every check a row or the universal set names actually exists", () => {
 
 test("each table row claims its own owner's paths", () => {
   const expected = [
-    ["rust/crates/solid-facts/src/lib.rs", ["facts-lib"]],
-    ["rust/crates/solid-reactive-ir/src/rules/mod.rs", ["ir-lib", "coverage"]],
+    ["rust/crates/solid-facts/src/lib.rs", ["facts-lib", "wasm-compile"]],
+    ["rust/crates/solid-reactive-ir/src/rules/mod.rs", ["ir-lib", "coverage", "wasm-compile"]],
+    ["rust/dialects/solid-v2/rules/src/lib.rs", ["dialects-process", "wasm-compile"]],
+    ["rust/dialects/solid-v2/compiler/src/lib.rs", ["dialects-process"]],
     ["rust/crates/solid-facts-backend/src/diagnostics.rs", ["backend-process", "coverage"]],
     ["fixtures/reactive-ir/store-flow/App.tsx", ["coverage", "ownership-gate"]],
     ["fixtures/findings-snapshots/engine__oxlint-conformance.json", ["coverage", "ownership-gate"]],
@@ -60,7 +62,7 @@ test("the longest matching prefix wins, so no row swallows another's directory",
     "backend-process",
     "coverage",
   ]);
-  assert.deepEqual(classify("rust/crates/solid-facts/src/dialect.rs").checks, ["facts-lib"]);
+  assert.deepEqual(classify("rust/crates/solid-facts/src/dialect.rs").checks, ["facts-lib", "wasm-compile"]);
 });
 
 test("a mapped change set runs preflight checks before building and testing", () => {
@@ -80,6 +82,7 @@ test("a mapped change set runs preflight checks before building and testing", ()
     "ir-lib",
     "coverage",
     "ownership-gate",
+    "wasm-compile",
   ]);
   // No duplicate, even though both rows select coverage.
   assert.equal(plan.checks.filter((check) => check === "coverage").length, 1);
@@ -87,7 +90,7 @@ test("a mapped change set runs preflight checks before building and testing", ()
 
 test("a change that needs no checker skips the debug build", () => {
   const plan = planFor(["rust/crates/solid-facts/src/ast.rs"]);
-  assert.deepEqual(withoutUniversal(plan.checks), ["build-typefacts", "facts-lib"]);
+  assert.deepEqual(withoutUniversal(plan.checks), ["build-typefacts", "facts-lib", "wasm-compile"]);
   assert.ok(!plan.checks.includes("build-debug"));
 });
 
@@ -105,6 +108,29 @@ test("a WASM package change runs the parity gate once, before the package tests"
   assert.equal(plan.full, false);
   assert.deepEqual(plan.unmapped, []);
   assert.deepEqual(plan.checks, ["build-typefacts", ...UNIVERSAL, "wasm-parity", "bun-test-wasm"]);
+});
+
+test("analysis-only changes get the WASM compile check, never the package build or parity", () => {
+  for (const path of [
+    "rust/crates/solid-reactive-ir/src/lib.rs",
+    "rust/crates/solid-facts/src/lib.rs",
+    "rust/dialects/solid-v2/rules/src/lib.rs",
+  ]) {
+    const plan = planFor([path]);
+    assert.ok(plan.checks.includes("wasm-compile"), path);
+    assert.ok(!plan.checks.includes("wasm-parity"), path);
+  }
+  assert.ok(CHECKS["wasm-compile"].command.includes("--no-default-features"));
+  // Host code, the WASM crate and the package keep their own answers.
+  for (const path of [
+    "rust/crates/solid-facts-backend/src/lib.rs",
+    "rust/dialects/solid-v2/compiler/src/lib.rs",
+  ]) {
+    assert.ok(!planFor([path]).checks.includes("wasm-compile"), path);
+  }
+  // Parity builds the package, so it replaces the compile check.
+  const both = planFor(["rust/crates/solid-facts/src/lib.rs", "packages/wasm/src/index.ts"]);
+  assert.ok(both.checks.includes("wasm-parity") && !both.checks.includes("wasm-compile"));
 });
 
 test("the universal handoff set precedes tests in every mapped plan", () => {

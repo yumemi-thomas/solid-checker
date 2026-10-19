@@ -129,6 +129,16 @@ export const CHECKS = {
       "builds the package and records the update frames before the gate, which builds nothing",
     command: ["make", "wasm-parity"],
   },
+  "wasm-compile": {
+    why:
+      "an analysis-only change moves the native and WASM builds of the same analysis identically, so the " +
+      "package build and parity gate are skipped; this seconds-long check keeps a WASM-only compile break " +
+      "(the crate without its default napi host) failing here rather than only in `make verify`",
+    command: [
+      "cargo", TOOLCHAIN, "check", "--manifest-path", MANIFEST, "-p", "solid-checker-wasm",
+      "--all-targets", "--no-default-features", "--features", "dialect-v2",
+    ],
+  },
   // The universal handoff set, appended to every plan.
   "fmt-check": {
     command: ["cargo", TOOLCHAIN, "fmt", "--manifest-path", MANIFEST, "--all", "--", "--check"],
@@ -162,11 +172,21 @@ export const UNIVERSAL = [
  * name fragment or regex: a row applies to a directory, exactly.
  */
 export const ROWS = [
-  { prefix: "rust/crates/solid-facts/", owner: "solid-facts (AST, normalized facts)", checks: ["facts-lib"] },
+  // The three analysis-only rows (solid-facts, solid-reactive-ir, the v2 rules
+  // crate) select `wasm-compile` and never the WASM package build or parity:
+  // parity compares two builds of one analysis, so an edit confined to the
+  // analysis moves both identically. Every other rust/ row, and anything
+  // under packages/wasm, solid-checker-wasm, typefacts, apps/, shims/ or
+  // scripts/wasm-parity*, keeps its own answer; `make verify` is the authority.
+  {
+    prefix: "rust/crates/solid-facts/",
+    owner: "solid-facts (AST, normalized facts)",
+    checks: ["facts-lib", "wasm-compile"],
+  },
   {
     prefix: "rust/crates/solid-reactive-ir/",
     owner: "solid-reactive-ir (IR, indexes, source summaries, interprocedural, rules engine)",
-    checks: ["ir-lib", "coverage"],
+    checks: ["ir-lib", "coverage", "wasm-compile"],
   },
   {
     prefix: "rust/crates/solid-facts-backend/",
@@ -183,6 +203,11 @@ export const ROWS = [
     prefix: "rust/dialects/",
     owner: "dialects at the process boundary",
     checks: ["dialects-process"],
+  },
+  {
+    prefix: "rust/dialects/solid-v2/rules/",
+    owner: "the Solid 2 rules crate (analysis only)",
+    checks: ["dialects-process", "wasm-compile"],
   },
   {
     prefix: "fixtures/",
@@ -260,6 +285,9 @@ export function planFor(paths) {
     // Before the WASM package's own tests: its Make target builds the package
     // (owned artifacts included) that those tests load on a fresh tree.
     ...["wasm-parity"].filter((id) => selected.has(id)),
+    // The parity gate builds the package, which compiles the WASM crate
+    // itself, so the cheap compile check is only for plans without it.
+    ...(selected.has("wasm-compile") && !selected.has("wasm-parity") ? ["wasm-compile"] : []),
     ...["bun-test-cli", "bun-test-wasm"].filter((id) => selected.has(id)),
   ];
   return { full: false, unmapped, decisions, checks: ordered };
