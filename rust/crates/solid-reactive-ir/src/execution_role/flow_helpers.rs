@@ -43,10 +43,11 @@ pub(super) fn primitive_callback_slot_role(
 }
 
 /// Whether a role, or the mix of them [`InvocationFlow::function_role`]
-/// answers as [`ExecutionRole::Unknown`] (which only that merge produces), keeps
-/// a read out of every reporting role.
+/// answers as [`ExecutionRole::Unreported`], keeps a read out of every
+/// reporting role. [`ExecutionRole::Unknown`] is accepted as before, and keeps
+/// the merge it enters unknown.
 pub(super) fn non_reporting_mix(role: ExecutionRole) -> bool {
-    flow_safe_role(role) || role == ExecutionRole::Unknown
+    flow_safe_role(role) || matches!(role, ExecutionRole::Unknown | ExecutionRole::Unreported)
 }
 
 /// Whether a role keeps a read out of the render window and untracked

@@ -144,6 +144,26 @@
     {
       "rule": "reactive-write-in-owned-scope",
       "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/setter-in-root-rc9/root.ts",
+      "start": 2589,
+      "end": 2600,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/setter-in-root-rc9/root.ts",
+      "start": 2606,
+      "end": 2657,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/setter-in-root-rc9/root.ts",

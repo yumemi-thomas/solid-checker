@@ -1566,7 +1566,10 @@ fn solid2_precision_corrections_are_end_to_end() {
         ("reactive-read-after-await", 2),
         ("invalid-cleanup-return", 0),
         ("cleanup-return-unresolved", 0),
-        ("strict-read-untracked", 5),
+        // Five placed reads, and three reads in the Promise, wrapper-built and
+        // unresolved callbacks after the await, which no role places and which
+        // are uncertifiable (ADR 0332).
+        ("strict-read-untracked", 8),
         // Still four, but not the same four: the 2026-08-17 narrowing traded the
         // three root-record writes for the nested, cast, and props writes
         // asserted by span below. A count alone cannot tell those apart.
@@ -2159,18 +2162,26 @@ fn rc9_call_forms_follow_the_runtime_they_select() {
         );
         let writes = findings_for_rule(&findings, "reactive-write-in-owned-scope");
         // DefaultWrite, FalseWrite, DeferStreamWrite, BodyStaticWrite; the
-        // module-scope static write and both unknown-form writes are silent.
+        // module-scope static write is silent, and both unknown-form writes
+        // are uncertifiable: no role places them (ADR 0332).
         assert_eq!(
             writes
                 .iter()
-                .map(|finding| line(finding))
+                .map(|finding| (line(finding), finding["kind"].as_str()))
                 .collect::<Vec<_>>(),
-            [Some(50), Some(57), Some(62), Some(71)],
+            [
+                (Some(50), Some("violation")),
+                (Some(57), Some("violation")),
+                (Some(62), Some("violation")),
+                (Some(71), Some("violation")),
+                (Some(92), Some("uncertifiable")),
+                (Some(100), Some("uncertifiable")),
+            ],
             "{findings:#?}"
         );
-        // Seven findings, and the SC9014 notice: rc.9 is older than the
+        // Nine findings, and the SC9014 notice: rc.9 is older than the
         // audited rc.13 (ADR 0194).
-        assert_eq!(findings.len(), 8, "{findings:#?}");
+        assert_eq!(findings.len(), 10, "{findings:#?}");
         assert_eq!(
             findings_for_rule(&findings, "unaudited-solid-release").len(),
             1,
@@ -2179,8 +2190,13 @@ fn rc9_call_forms_follow_the_runtime_they_select() {
     }
     if let Some(findings) = diagnostic_fixture("rc9-omit-predicate") {
         // The only violation is the control: the body read beside a
-        // predicate. No predicate body is placed in a component.
-        let reads = findings_for_rule(&findings, "strict-read-untracked");
+        // predicate. No predicate body is placed in a component, so a read
+        // there is uncertifiable (ADR 0332).
+        let (reads, unplaced): (Vec<_>, Vec<_>) =
+            findings_for_rule(&findings, "strict-read-untracked")
+                .into_iter()
+                .partition(|finding| finding["kind"] == "violation");
+        assert!(!unplaced.is_empty() && unplaced.iter().all(|finding| line(finding) != Some(48)));
         assert_eq!(
             reads
                 .iter()
@@ -2224,14 +2240,16 @@ fn rc9_call_forms_follow_the_runtime_they_select() {
                 .all(|finding| finding["kind"] == "uncertifiable"),
             "{findings:#?}"
         );
-        // The control and the eight predicates, and the SC9014 notice: rc.9
-        // is older than the audited rc.13 (ADR 0194). The exported wrapper
-        // owes no package obligation: nothing is generated.
+        // The control, the eight predicates, the predicate bodies' five
+        // unplaced reads and one unplaced write (ADR 0332), and the SC9014
+        // notice: rc.9 is older than the audited rc.13 (ADR 0194). The
+        // exported wrapper owes no package obligation: nothing is generated.
         assert!(
             findings_for_rule(&findings, "package-behavior-unavailable").is_empty(),
             "{findings:#?}"
         );
-        assert_eq!(findings.len(), 10, "{findings:#?}");
+        assert_eq!(unplaced.len(), 5, "{findings:#?}");
+        assert_eq!(findings.len(), 16, "{findings:#?}");
         assert_eq!(
             findings_for_rule(&findings, "unaudited-solid-release").len(),
             1,
@@ -2336,7 +2354,32 @@ fn interprocedural_diagnostics_point_to_the_calling_component() {
         let Some(findings) = diagnostic_fixture(fixture) else {
             return;
         };
-        let strict = findings_for_rule(&findings, "strict-read-untracked");
+        // ADR 0332: a read no fact places is an uncertifiable obligation at
+        // the read itself (the method bodies of `interprocedural-methods-v2`'s
+        // exported readers, which nothing in the project calls). The calling
+        // component's findings are the rest.
+        let (unplaced, strict): (Vec<_>, Vec<_>) =
+            findings_for_rule(&findings, "strict-read-untracked")
+                .into_iter()
+                .partition(|finding| {
+                    finding["message"]
+                        .as_str()
+                        .is_some_and(|text| text.contains("no compiler or semantic fact places"))
+                });
+        assert_eq!(
+            unplaced.len(),
+            if fixture == "interprocedural-methods-v2" {
+                3
+            } else {
+                0
+            },
+            "fixture {fixture}: {unplaced:#?}"
+        );
+        assert!(
+            unplaced
+                .iter()
+                .all(|finding| finding["kind"] == "uncertifiable")
+        );
         assert_eq!(
             strict.len(),
             expected_count,

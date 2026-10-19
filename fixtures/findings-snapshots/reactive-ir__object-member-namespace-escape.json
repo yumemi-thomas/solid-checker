@@ -40,6 +40,16 @@
       "start": 122,
       "end": 131,
       "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/object-member-namespace-escape/source.ts",
+      "start": 193,
+      "end": 200,
+      "fixes": 0
     }
   ]
 }

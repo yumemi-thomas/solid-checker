@@ -12,6 +12,16 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc9-omit-predicate/App.tsx",
+      "start": 1067,
+      "end": 1073,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -19,6 +29,26 @@
       "path": "fixtures/reactive-ir/rc9-omit-predicate/App.tsx",
       "start": 1346,
       "end": 1402,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc9-omit-predicate/App.tsx",
+      "start": 1361,
+      "end": 1373,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc9-omit-predicate/App.tsx",
+      "start": 1617,
+      "end": 1623,
       "fixes": 0
     },
     {
@@ -42,6 +72,16 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc9-omit-predicate/App.tsx",
+      "start": 2724,
+      "end": 2730,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -58,6 +98,16 @@
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc9-omit-predicate/App.tsx",
       "start": 2956,
+      "end": 2980,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc9-omit-predicate/App.tsx",
+      "start": 2973,
       "end": 2980,
       "fixes": 0
     },
@@ -88,6 +138,16 @@
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc9-omit-predicate/App.tsx",
       "start": 4378,
+      "end": 4401,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc9-omit-predicate/App.tsx",
+      "start": 4395,
       "end": 4401,
       "fixes": 0
     },

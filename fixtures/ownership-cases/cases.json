@@ -1300,11 +1300,28 @@
         }
        ]
       }
+     },
+     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "marker": "count()"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "distinct-claim",
+       "diagnostics": [],
+       "justification": "TypeScript rejects the call's argument types; the checker's obligation is about execution, not types: no role places the target arrow `affects` retains, so whether its read runs untracked is unproven (ADR 0332). Uncertifiable, so internal only (ADR 0328)."
+      }
      }
     ],
     "absent": []
    },
-   "note": "TypeScript still rejects this call, and the removed SC7003 arm stays silent. The diagnostic moved with the audited release: on rc.3 (`Store<T> = Readonly<T>`) the two-argument overload rejected the arrow target (TS2345 at `() => count()`); on rc.9 (`Store<T> = T`) it binds the arrow as the store and rejects the key instead (TS2345: `'\"value\"'` is not assignable to `never`)."
+   "note": "TypeScript still rejects this call, and the removed SC7003 arm stays silent. The diagnostic moved with the audited release: on rc.3 (`Store<T> = Readonly<T>`) the two-argument overload rejected the arrow target (TS2345 at `() => count()`); on rc.9 (`Store<T> = T`) it binds the arrow as the store and rejects the key instead (TS2345: `'\"value\"'` is not assignable to `never`). The read in the target arrow is an uncertifiable SC1001 (ADR 0332), a distinct claim: no role places the arrow `affects` retains."
   },
   {
    "id": "affects-target-unresolved/typescript-owned/001",

@@ -12,7 +12,9 @@ children-capable owner: a component body, a `createRoot` body, a memo, or an
 effect's compute function. Actions may be invoked from event handlers, effect apply callbacks,
 and the children-forbidden leaf scopes `onSettled` and `createTrackedEffect` —
 the runtime's action guard uses the same owner test as the write guard and
-explicitly exempts leaf imperative scopes.
+explicitly exempts leaf imperative scopes. An invocation no fact places (a
+helper with no resolved caller, a JSX attribute function, code after an
+`await`) is **uncertifiable**.
 
 A `createRoot` body runs during the call with the new root as the ambient
 owner, and the action guard has no root exemption on any release: an action

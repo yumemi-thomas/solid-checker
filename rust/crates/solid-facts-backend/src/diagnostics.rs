@@ -386,17 +386,19 @@ impl DiagnosticSession {
         let reactive_ir = ir_started.elapsed();
         let solve_started = Instant::now();
         let mut findings = self.dialect.solve(&program);
-        retain_enabled(self.dialect, &rule_options, &mut findings)?;
+        let mut withheld_coverage = retain_enabled(self.dialect, &rule_options, &mut findings)?;
         // ADR 0284: a package analyzed as source is not the project's code.
         // Its own findings are not reported; what it does to project values
         // is reported at the project's call sites, through summaries and,
         // for owner requirements, through ADR 0290's attribution.
         if !facts.dependency_source_roots.is_empty() {
-            findings.retain(|finding| {
+            let in_project = |finding: &Finding| {
                 facts
                     .dependency_source_root(&finding.primary_location.path)
                     .is_none()
-            });
+            };
+            findings.retain(in_project);
+            withheld_coverage.retain(in_project);
         }
         suppress_findings_owned_by_enabled_rules(&mut findings, self.dialect.catalog_capabilities);
         // After enablement, like the refusal: the notice is about the installed
@@ -472,6 +474,11 @@ impl DiagnosticSession {
         }
         let metrics = analysis_metrics(facts, &program);
         let mut snapshot = snapshot_of(sources, metrics, findings);
+        // A disabled coverage rule hides its obligations, not the gap they
+        // name: the analysis is still incomplete there, so it cannot certify.
+        if snapshot.status == "certified" && !withheld_coverage.is_empty() {
+            snapshot.status = "uncertifiable".into();
+        }
         snapshot.feedback_facts = program.development_feedback.clone();
         if program.runtime_configuration.permits_proof() {
             snapshot
@@ -528,23 +535,37 @@ pub fn analyze_project_inputs_measured_with_enablement(
         .analyze_inputs_measured_with_enablement(project, sources, facts, inputs, enablement)
 }
 
+/// Drops the findings of disabled rules. Returns the dropped findings of
+/// coverage rules (`RuleMetadata::uncertifiable`: SC9005, SC9011, SC9012),
+/// which report where the analysis is incomplete rather than a defect.
 fn retain_enabled(
     dialect: &Dialect,
     options: &RuleOptions,
     findings: &mut Vec<Finding>,
-) -> Result<(), BackendError> {
+) -> Result<Vec<Finding>, BackendError> {
     let mut unknown = Vec::new();
-    findings.retain(|finding| match (dialect.rule_metadata)(&finding.rule) {
-        Some(metadata) => {
-            options.is_enabled(&finding.rule, metadata.default_enabled, metadata.presets)
+    let mut withheld_coverage = Vec::new();
+    for finding in std::mem::take(findings) {
+        match (dialect.rule_metadata)(&finding.rule) {
+            Some(metadata)
+                if options.is_enabled(
+                    &finding.rule,
+                    metadata.default_enabled,
+                    metadata.presets,
+                ) =>
+            {
+                findings.push(finding);
+            }
+            Some(metadata) => {
+                if metadata.uncertifiable && finding.kind == "uncertifiable" {
+                    withheld_coverage.push(finding);
+                }
+            }
+            None => unknown.push(finding.rule.clone()),
         }
-        None => {
-            unknown.push(finding.rule.clone());
-            false
-        }
-    });
+    }
     if unknown.is_empty() {
-        return Ok(());
+        return Ok(withheld_coverage);
     }
     unknown.sort_unstable();
     unknown.dedup();

@@ -4,6 +4,16 @@
     {
       "rule": "reactive-write-in-owned-scope",
       "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-exec-await-argument-write/App.tsx",
+      "start": 199,
+      "end": 225,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/fp-exec-await-argument-write/App.tsx",

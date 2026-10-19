@@ -615,7 +615,9 @@ impl LocalAccessContext<'_, '_> {
                         self.lookup,
                     ) {
                         ExecutionRole::TrackedJsx => Some(ExecutionRole::DeferredCallback),
-                        ExecutionRole::ModuleInitialization | ExecutionRole::Unknown => None,
+                        ExecutionRole::ModuleInitialization
+                        | ExecutionRole::Unknown
+                        | ExecutionRole::Unreported => None,
                         other => Some(other),
                     };
                 }

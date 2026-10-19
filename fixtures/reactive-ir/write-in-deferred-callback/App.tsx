@@ -20,14 +20,14 @@ export function now(callback: () => void) {
   callback();
 }
 
-// Clean: `later` stores the callback, which runs from the interval.
+// Legal at runtime, and uncertifiable here: `later` stores the callback, which runs from the interval.
 export function DeferredByCallee() {
   const [count, setCount] = createSignal(0);
   later(() => setCount(1));
   return <p>{count()}</p>;
 }
 
-// Clean: the write is in the closure `keep`'s source returns, which runs
+// Legal at runtime, and uncertifiable here: the write is in the closure `keep`'s source returns, which runs
 // only from the click handler.
 export function ReturnedClosure() {
   const [count, setCount] = createSignal(0);
@@ -35,7 +35,7 @@ export function ReturnedClosure() {
   return <button onClick={() => kept?.()}>{count()}</button>;
 }
 
-// Clean: `@solid-primitives/history`'s `createUndoHistory` shape. The source
+// Legal at runtime, and uncertifiable here: `@solid-primitives/history`'s `createUndoHistory` shape. The source
 // reads during the call and returns the setter closure, which the history runs
 // later from `undo()`.
 export function UndoHistoryShape() {

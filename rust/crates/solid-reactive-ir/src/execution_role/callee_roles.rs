@@ -123,7 +123,7 @@ pub(super) fn semantic_role_before_awaits(
             ExecutionRole::TrackedJsx => ExecutionRole::DeferredCallback,
             // One-shot module evaluation is no component window, and the
             // role before this ADR was the silent deferred one.
-            ExecutionRole::ModuleInitialization => ExecutionRole::Unknown,
+            ExecutionRole::ModuleInitialization => ExecutionRole::Unreported,
             other => other,
         };
     }

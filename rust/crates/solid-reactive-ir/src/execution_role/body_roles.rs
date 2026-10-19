@@ -555,9 +555,14 @@ pub(super) fn semantic_execution_role_within(
     // statement-level awaits count (`unconditional_awaits`); a skippable one
     // (`x ??= await p`, an optional-call argument, a labelled break) keeps
     // the role its position earned.
-    if role.reports_untracked_read()
-        && (follows_unconditional_await(file, span) || follows_any_suspension(file, span))
-    {
+    // Past an unconditional await the window is proven closed: no breach,
+    // only no single role. An implicit suspension (`for await`, `await using`)
+    // is placed by position alone, which does not prove it runs (a loop under
+    // a branch), so there the read is unplaced, not proven silent.
+    if role.reports_untracked_read() && follows_unconditional_await(file, span) {
+        return ExecutionRole::Unreported;
+    }
+    if role.reports_untracked_read() && follows_any_suspension(file, span) {
         return ExecutionRole::Unknown;
     }
     // Review round 4: code written in a component element's children (an

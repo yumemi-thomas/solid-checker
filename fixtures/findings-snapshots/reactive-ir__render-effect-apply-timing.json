@@ -72,13 +72,23 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
+      "start": 2346,
+      "end": 2360,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
-      "start": 2822,
-      "end": 2840,
+      "start": 2825,
+      "end": 2843,
       "fixes": 0
     },
     {
@@ -87,8 +97,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
-      "start": 3072,
-      "end": 3083,
+      "start": 3075,
+      "end": 3086,
       "fixes": 0
     },
     {
@@ -97,8 +107,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
-      "start": 3542,
-      "end": 3550,
+      "start": 3545,
+      "end": 3553,
       "fixes": 0
     },
     {
@@ -107,8 +117,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
-      "start": 3711,
-      "end": 3722,
+      "start": 3714,
+      "end": 3725,
       "fixes": 0
     },
     {
@@ -117,8 +127,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/render-effect-apply-timing/App.tsx",
-      "start": 4206,
-      "end": 4214,
+      "start": 4209,
+      "end": 4217,
       "fixes": 0
     }
   ]

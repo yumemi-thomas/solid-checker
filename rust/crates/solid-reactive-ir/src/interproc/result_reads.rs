@@ -54,7 +54,7 @@ pub(super) fn local_dispatch_exclusion_depth(
     }
     if !matches!(
         role,
-        ExecutionRole::Unknown | ExecutionRole::UntrackedRendering
+        ExecutionRole::Unknown | ExecutionRole::Unreported | ExecutionRole::UntrackedRendering
     ) || file.ast.identifiers.iter().any(|id| {
         // Direct eval can call a local binding without an identifier use.
         // This spelling only refuses proof, including a shadowed eval.

@@ -93,7 +93,7 @@ export function RenderComputeCleanup() {
 
 // Writes. The first apply answers to the component's owner and throws in dev
 // when it runs during the call, which needs the compute to settle
-// synchronously; the checker cannot prove that, so it reports nothing here
+// synchronously; the checker cannot prove that, so the write is uncertifiable
 // rather than a violation or a certified-legal write.
 export function RenderApplyWrite() {
   createRenderEffect(

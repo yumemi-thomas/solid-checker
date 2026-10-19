@@ -443,3 +443,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/imported-const-primitives/node_modules/**
 !fixtures/reactive-ir/imported-const-commonjs/node_modules/
 !fixtures/reactive-ir/imported-const-commonjs/node_modules/**
+!fixtures/reactive-ir/unplaced-site-obligations/node_modules/
+!fixtures/reactive-ir/unplaced-site-obligations/node_modules/**

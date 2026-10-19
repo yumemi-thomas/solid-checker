@@ -63,6 +63,12 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   synchronous dispatch in the body reaches the listener, so even that case stays
   uncertifiable. A JSX event handler (`onClick={...}`) is the compiler's event
   callback and is not reported.
+- **A read no fact places is uncertifiable.** Code in a component's element
+  children, in a helper with no resolved caller, or in a closure a tracked
+  scope only stores has no execution role; a read there is reported as
+  **uncertifiable**, never dropped. A read past the strict-read window (after
+  an unconditional `await`) or in several non-reporting roles (ADR 0323) is
+  proven silent.
 - **A named local handler can forward a callback prop.** A project component
   may invoke a callback prop from a synchronous immutable local arrow bound
   only to intrinsic event attributes or exact component props that themselves

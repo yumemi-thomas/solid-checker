@@ -101,13 +101,13 @@ invocation is proven. It is proven for:
 - a named closure whose call site is itself in the body.
 
 Anywhere else the write takes the role its invocation sites prove, and with
-none nothing is reported. That covers a literal handed to a function that
+none it is **uncertifiable**. That covers a literal handed to a function that
 stores it (`later(() => setCount(1))` with a timer calling it), a closure a
 callback returns (`keep(() => () => setCount(1))`), and a literal handed to a
 package export whose behavior is unavailable from source. The write may throw, if the
 function calls it during the body, or be legal, if it runs later. An unproven
-write position is never claimed as a violation. The matching read there is
-`strict-read-untracked` uncertifiable
+write position is never claimed as a violation; it and the matching read
+there (`strict-read-untracked`) are uncertifiable
 (`fixtures/reactive-ir/write-in-deferred-callback`).
 
 A package export’s callback requires exact source facts or reviewed dialect

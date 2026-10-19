@@ -365,6 +365,7 @@ const fn unnamed_read_context(execution: crate::ExecutionRole) -> &'static str {
     match execution {
         crate::ExecutionRole::ModuleInitialization => "module scope",
         crate::ExecutionRole::EffectApply => "effect apply callback",
+        crate::ExecutionRole::Unknown => "code the analysis cannot place",
         _ => "rendering function",
     }
 }
@@ -385,6 +386,20 @@ pub fn strict_read_message_with_compute(read: &ReactiveRead, compute_reads_sourc
     } else {
         &read.context
     };
+    // No fact places the read: neither the compiler's census nor the semantic
+    // roles say whether it runs tracked, untracked, in a callback, or at all.
+    if read.execution == ExecutionRole::Unknown {
+        let through = if read.via.is_empty() {
+            String::new()
+        } else {
+            format!(" through {}", read.via)
+        };
+        return format!(
+            "{} {:?} is read{through} in {context}, but no compiler or semantic fact places where this code runs (tracked, untracked, in a callback, or never), so whether this read is untracked cannot be proven either way",
+            reactive_value_label(&read.kind),
+            read.accessor,
+        );
+    }
     if read.callback_invocation_unproven {
         let tracking = if read.missing_jsx_census
             || read.host_callback_timing
@@ -509,7 +524,9 @@ fn reactive_value_label(kind: &str) -> &'static str {
 /// facts; over a census hole it would be an overstatement, since the compiler
 /// never reported on that region at all.
 fn untracked_evidence_sentence(read: &ReactiveRead, subject: &str) -> String {
-    if read.callback_invocation_unproven {
+    if read.execution == ExecutionRole::Unknown {
+        format!("no compiler or semantic fact places where {subject} runs")
+    } else if read.callback_invocation_unproven {
         format!(
             "{subject} is an accessor passed to an accepted inline callback slot whose call-scoped cardinality does not guarantee an invocation"
         )

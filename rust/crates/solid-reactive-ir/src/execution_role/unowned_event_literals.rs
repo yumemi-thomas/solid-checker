@@ -77,11 +77,15 @@ impl<'a> InvocationFlow<'a, '_, '_> {
                 // the read. No single role describes the mix without
                 // overclaiming for some other consumer (a tracked role claims
                 // a subscription the `untrack` run does not make), so the
-                // answer is the no-claim role, which every read rule
+                // answer is the no-claim role (`Unreported`), which every read rule
                 // suppresses and which a caller merging it treats as the mix
                 // it is. A reporting role among them refuses, as before.
                 Some(role) if non_reporting_mix(role) && non_reporting_mix(here) => {
-                    ExecutionRole::Unknown
+                    if role == ExecutionRole::Unknown || here == ExecutionRole::Unknown {
+                        ExecutionRole::Unknown
+                    } else {
+                        ExecutionRole::Unreported
+                    }
                 }
                 Some(_) => return None,
             });

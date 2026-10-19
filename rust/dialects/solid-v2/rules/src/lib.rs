@@ -100,15 +100,27 @@ impl CatalogWording for Catalog {
             FindingSeed::OwnedWrite(write) => owned_write_wording(write),
             FindingSeed::Action(action) => FindingWording::new(
                 Rule::ActionCalledInOwnedScope.metadata(),
-                format!(
-                    "action {:?} is called inside owned scope {}; invoking an action starts a write transaction (optimistic writes, refresh) under a children-capable owner, which re-triggers the scope that called it",
-                    action.action, action.context
-                ),
+                if action.is_uncertifiable() {
+                    format!(
+                        "action {:?} is called in {}, but no compiler or semantic fact places where this code runs, so whether it starts a write transaction under a children-capable owner cannot be proven either way",
+                        action.action,
+                        unplaced_context(&action.context)
+                    )
+                } else {
+                    format!(
+                        "action {:?} is called inside owned scope {}; invoking an action starts a write transaction (optimistic writes, refresh) under a children-capable owner, which re-triggers the scope that called it",
+                        action.action, action.context
+                    )
+                },
                 "Call the action from an event handler, onSettled, createTrackedEffect, or another imperative boundary; untrack() does not lift the restriction. To load data reactively you don't need an action: return the Promise from a computation and read it under a <Loading> boundary.",
             )
             .with_evidence(vec![EvidenceStep {
-                message: "invoking an action starts a write transaction while a children-capable owner is active"
-                    .into(),
+                message: if action.is_uncertifiable() {
+                    "no compiler or semantic fact places where this invocation runs".into()
+                } else {
+                    "invoking an action starts a write transaction while a children-capable owner is active"
+                        .into()
+                },
                 location: Some(action.location.clone()),
             }]),
             FindingSeed::LeafOperation(operation) => leaf_operation_wording(operation),
@@ -160,13 +172,22 @@ impl CatalogWording for Catalog {
     }
 }
 
+/// Where an unplaced site is written, for a message that claims no role.
+fn unplaced_context(context: &str) -> &str {
+    if context.is_empty() {
+        "code the analysis cannot place"
+    } else {
+        context
+    }
+}
+
 fn owned_write_wording(write: &solid_reactive_ir::ReactiveWrite) -> FindingWording {
     let context = if write.context.is_empty() {
         "owned scope"
     } else {
         &write.context
     };
-    let (message, hint, provenance) = match write.operation {
+    let (mut message, hint, provenance) = match write.operation {
         ReactiveWriteOperation::Refresh => (
             format!(
                 "refresh() is called inside owned scope {context}; a write transaction cannot start while an owner is tracking, and Solid throws here in dev"
@@ -192,21 +213,31 @@ fn owned_write_wording(write: &solid_reactive_ir::ReactiveWrite) -> FindingWordi
             )
         }
     };
-    FindingWording::new(
-        Rule::ReactiveWriteInOwnedScope.metadata(),
-        message,
-        hint,
+    let scope = if write.is_uncertifiable() {
+        let call = match write.operation {
+            ReactiveWriteOperation::Refresh => "refresh()".to_owned(),
+            ReactiveWriteOperation::Setter => format!("setter {:?}", write.setter),
+        };
+        message = format!(
+            "{call} is called in {}, but no compiler or semantic fact places where this code runs, so whether it runs under a children-capable owner, where Solid throws, cannot be proven either way",
+            unplaced_context(&write.context)
+        );
+        "no compiler or semantic fact places where this write runs".into()
+    } else {
+        "this scope runs under a children-capable owner; writes are only legal outside one — event handlers, actions, effect apply callbacks, and the leaf scopes onSettled and createTrackedEffect — and untrack() keeps the enclosing owner".into()
+    };
+    FindingWording::new(Rule::ReactiveWriteInOwnedScope.metadata(), message, hint).with_evidence(
+        vec![
+            EvidenceStep {
+                message: provenance,
+                location: Some(write.declaration.clone()),
+            },
+            EvidenceStep {
+                message: scope,
+                location: Some(write.location.clone()),
+            },
+        ],
     )
-    .with_evidence(vec![
-        EvidenceStep {
-            message: provenance,
-            location: Some(write.declaration.clone()),
-        },
-        EvidenceStep {
-            message: "this scope runs under a children-capable owner; writes are only legal outside one — event handlers, actions, effect apply callbacks, and the leaf scopes onSettled and createTrackedEffect — and untrack() keeps the enclosing owner".into(),
-            location: Some(write.location.clone()),
-        },
-    ])
 }
 
 fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> FindingWording {
@@ -441,6 +472,7 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
             // compiler deleted cannot throw, so selection excludes it exactly
             // as it excludes an unclassified span.
             ExecutionRole::Unknown
+            | ExecutionRole::Unreported
             | ExecutionRole::TrackedJsx
             | ExecutionRole::DeferredCallback
             | ExecutionRole::UntrackedCallback

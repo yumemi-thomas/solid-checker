@@ -136,9 +136,18 @@ use typefacts::Location;
 #[serde(rename_all = "kebab-case")]
 pub enum ExecutionRole {
     /// Neither compiler facts nor semantic facts classify this span. Unknown
-    /// is not a violation: projection suppresses it instead of converting a
-    /// missing fact into a user-facing claim.
+    /// is not a violation, and not a silent clean either: projection reports a
+    /// read, write or action here as an uncertifiable obligation of its rule
+    /// ([`ReactiveRead::is_uncertifiable`], [`ReactiveWrite::is_uncertifiable`],
+    /// [`ActionInvocation::is_uncertifiable`]).
     Unknown,
+    /// Proven to run only where no read, write or action rule reports, but in
+    /// no single role: invocations in several non-reporting roles (ADR 0323's
+    /// merge), or code past the strict-read window (after an unconditional
+    /// `await`). Every consumer treats it as it treats [`Self::Unknown`],
+    /// except projection, which reports nothing here: the absence of a breach
+    /// is proven, only the role is not one.
+    Unreported,
     /// One-shot module evaluation: reads are untracked, but writes do not run
     /// inside an owned tracking computation.
     ModuleInitialization,
@@ -370,6 +379,14 @@ impl ExecutionRole {
     pub const fn reports_disallowed_write(self) -> bool {
         matches!(self, Self::TrackedJsx | Self::UntrackedRendering)
     }
+
+    /// Whether a read, write or action in this role is reported at all: a
+    /// proven role that breaks the rule, or [`Self::Unknown`], where no fact
+    /// rules the breach out and the finding is an uncertifiable obligation.
+    #[must_use]
+    pub const fn reports_unplaced(self) -> bool {
+        matches!(self, Self::Unknown)
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -459,7 +476,8 @@ impl ReactiveRead {
     /// ([`Self::host_callback_timing`]), or the read's function literal is
     /// handed to a project function not proven to invoke it during the call
     /// ([`Self::callee_callback_timing`]), or an accepted callback invocation
-    /// is possible but not guaranteed ([`Self::callback_invocation_unproven`]).
+    /// is possible but not guaranteed ([`Self::callback_invocation_unproven`]),
+    /// or no fact places the read at all ([`ExecutionRole::Unknown`]).
     ///
     /// This is one predicate on purpose. The projection sets a finding's `kind`
     /// from it and each dialect's wording selects its hint from it; when the two
@@ -472,6 +490,7 @@ impl ReactiveRead {
             || self.host_callback_timing
             || self.callee_callback_timing
             || self.callback_invocation_unproven
+            || self.execution == ExecutionRole::Unknown
     }
 }
 
@@ -487,6 +506,16 @@ pub struct ReactiveWrite {
     pub execution: ExecutionRole,
     pub allowed_by_option: bool,
     pub context: Arc<str>,
+}
+
+impl ReactiveWrite {
+    /// Whether a finding about this write is an uncertifiable obligation: no
+    /// fact places the write ([`ExecutionRole::Unknown`]), so whether it runs
+    /// under a children-capable owner is neither proven nor ruled out.
+    #[must_use]
+    pub fn is_uncertifiable(&self) -> bool {
+        self.execution == ExecutionRole::Unknown
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -505,6 +534,15 @@ pub struct ActionInvocation {
     pub declaration: Location,
     pub execution: ExecutionRole,
     pub context: Arc<str>,
+}
+
+impl ActionInvocation {
+    /// Whether a finding about this invocation is an uncertifiable obligation,
+    /// for [`ReactiveWrite::is_uncertifiable`]'s reason.
+    #[must_use]
+    pub fn is_uncertifiable(&self) -> bool {
+        self.execution == ExecutionRole::Unknown
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -1486,7 +1524,7 @@ fn callback_execution_word(execution: ExecutionRole) -> Option<&'static str> {
     match execution {
         // Unknown timing is an open obligation, never an inline promise. A consumer must not execute user code eagerly because the
         // producer lacked an execution proof.
-        ExecutionRole::Unknown => None,
+        ExecutionRole::Unknown | ExecutionRole::Unreported => None,
         // A callback the compiler deleted has no execution timing to publish.
         // "inline" would be a promise that a consumer may run the callback
         // eagerly, and this role is evidence that nothing runs it at all — a

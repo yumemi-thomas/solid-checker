@@ -112,6 +112,16 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-scope-roots-rc3/roots.ts",
+      "start": 1511,
+      "end": 1517,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-write-in-owned-scope",
       "code": "SC2001",
       "kind": "violation",
@@ -129,6 +139,16 @@
       "path": "fixtures/reactive-ir/write-scope-roots-rc3/roots.ts",
       "start": 1690,
       "end": 1696,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-scope-roots-rc3/roots.ts",
+      "start": 1770,
+      "end": 1809,
       "fixes": 0
     },
     {

@@ -172,6 +172,16 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-scope-roots-rc9/roots.ts",
+      "start": 1511,
+      "end": 1517,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-write-in-owned-scope",
       "code": "SC2001",
       "kind": "violation",

@@ -16,7 +16,6 @@ Strict read in a setup body (`strict-read-untracked`, SC1001):
 - `r9-b3-childrenreadinbody` (App.tsx:14): the accessor returned by `children()` is called in the component body.
 - `r9-d1-mixmemoslotreadinbody` (App.tsx:7): a helper builds a memo from a callback and reads `m()` in the helper body.
 - `review-opus2-c04-ctor-body` (App.tsx:12): a constructor read, class instantiated in the body.
-- `review-opus2-c18-field-iife-body-new` (App.tsx:12): an instance field initializer run by `new K()` in the body. Construction sites are not followed.
 - `review-opus3-g06-yield-star-spread-body` (App.tsx:13): a read in a generator reached through `yield*` and spread in the body. Delegation is not followed.
 - `precision-ref-callback-read` (App.tsx:4): a read in an intrinsic `ref` callback runs untracked in the apply phase; the read rule places nothing in the `DirectiveApply` role.
 
@@ -59,7 +58,7 @@ Not a miss: `r4c-leak` line 43 is listed open only because the runtime names the
 A violation withheld, or turned uncertifiable, to keep zero false positives. Each loses recall on purpose.
 
 - Instance field initializer: every violation whose primary location is in one is demoted to uncertifiable, whichever rule claimed it (`diagnostics.rs`, `site_in_instance_field`). Static fields and static blocks keep their placement.
-- Code in a component's element children (`<Show>`, `<Loading>`, `<Errored>`, portals, wrappers rendering `props.children`) has no proven placement (`inside_component_element_children`); `strict-read-untracked` is silent there. A wrapper that evaluates its children eagerly in its own body (`return props.children`) makes the runtime warn at a read in those children, and that read is uncertifiable too.
+- Code in a component's element children (`<Show>`, `<Loading>`, `<Errored>`, portals, wrappers rendering `props.children`) has no proven placement (`inside_component_element_children`); a read there is an uncertifiable `strict-read-untracked`, including where a wrapper evaluates its children eagerly in its own body (`return props.children`) and the runtime warns.
 - `reactive-handler-frozen` (SC1007) on an element inside a tracked JSX expression or a component's children is uncertifiable: the listener is replaced when the scope re-runs.
 - `async-outside-loading-boundary` (SC5003) through a forwarding wrapper that reads `children` with no `Loading` of its own is unresolved (`loading_cover_at`); a wrapper that resolves `children()` outside any `Loading` is uncertifiable.
 - `no-direct-mutation` (SC2003): a write through a 2.0 props object or a `merge`/`omit` view is uncertifiable. The compiler's props object is plain, so the write may land; only a proxy drops it.
@@ -68,6 +67,7 @@ A violation withheld, or turned uncertifiable, to keep zero false positives. Eac
 - A signal read inside a JSX element passed as a prop does not make that prop reactive; reads of it are uncertifiable.
 - A generator body is never placed where it is written. A call to a generator runs none of its body.
 - A function returning JSX with no rendering tag is a proven component only when every reference to it is its declaration, module surface, a dialect callback, a dialect renderer prop or a `lazy` default; otherwise (alias, object storage, a call argument, a router config not read from source, a method, an anonymous default export) its body reads and writes are uncertifiable. Solid makes a function a component only where `createComponent` calls it (`precision-map-renderer`, `precision-method-renderer`).
+- A read, write or action no fact places (`ExecutionRole::Unknown`: a JSX attribute function, a closure stored in a tracked scope, a write after an `await` not proven to dominate it, a helper with no resolved caller) is an uncertifiable finding of its rule, never silent; `Unreported` (several non-reporting roles, or past the strict-read window) stays silent. A coverage rule disabled by options still keeps the result from certifying.
 - Mixed invocation of one callback (owned setup and event dispatch) refuses the owner proof as a whole (ADR 0327). A callback run only by events is proven unowned.
 
 Known false-positive shapes left open (fire today, wanted gone):

@@ -2,6 +2,16 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-summary-returned-closure/App.tsx",
+      "start": 333,
+      "end": 362,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -29,6 +39,16 @@
       "path": "fixtures/reactive-ir/fp-summary-returned-closure/DirectReturns.tsx",
       "start": 242,
       "end": 248,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-summary-returned-closure/hooks.ts",
+      "start": 419,
+      "end": 448,
       "fixes": 0
     },
     {

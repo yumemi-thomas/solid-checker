@@ -217,6 +217,16 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
+      "start": 3261,
+      "end": 3264,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/getter-parameter-read/App.tsx",
       "start": 3506,
       "end": 3509,
       "fixes": 0
@@ -609,6 +619,16 @@
       "path": "fixtures/reactive-ir/getter-parameter-read/helpers.tsx",
       "start": 2082,
       "end": 2159,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/getter-parameter-read/helpers.tsx",
+      "start": 2647,
+      "end": 2654,
       "fixes": 0
     }
   ]

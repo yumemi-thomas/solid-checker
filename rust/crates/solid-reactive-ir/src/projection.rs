@@ -495,7 +495,7 @@ pub fn project_findings(
             .reads
             .iter()
             .filter(|read| {
-                read.execution.reports_untracked_read()
+                (read.execution.reports_untracked_read() || read.execution.reports_unplaced())
                     && !read.project_consumer_non_strict
                     && (capabilities.module_scope_strict_reads
                         || read.execution != crate::ExecutionRole::ModuleInitialization)
@@ -516,7 +516,8 @@ pub fn project_findings(
             .iter()
             .filter(|write| {
                 !write.allowed_by_option
-                    && write.execution.reports_disallowed_write()
+                    && (write.execution.reports_disallowed_write()
+                        || write.execution.reports_unplaced())
                     && (capabilities.untracked_rendering_writes
                         || write.execution != crate::ExecutionRole::UntrackedRendering)
             })
@@ -614,7 +615,10 @@ pub fn project_findings(
             program
                 .actions
                 .iter()
-                .filter(|action| action.execution.reports_disallowed_write())
+                .filter(|action| {
+                    action.execution.reports_disallowed_write()
+                        || action.execution.reports_unplaced()
+                })
                 .map(|action| project_finding(FindingSeed::Action(action), catalog)),
         );
     }
@@ -844,6 +848,9 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
                 write.context.to_string()
             };
             finding.related_locations = vec![write.declaration.clone()];
+            if write.is_uncertifiable() {
+                finding.kind = "uncertifiable".into();
+            }
         }
         FindingSeed::LeafOperation(operation) => {
             finding.fixes = operation.fix.clone().into_iter().collect();
@@ -917,9 +924,12 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
                 );
             }
         }
-        FindingSeed::Action(_)
-        | FindingSeed::DirectiveCreation(_)
-        | FindingSeed::OwnerRequirement(_) => {}
+        FindingSeed::Action(action) => {
+            if action.is_uncertifiable() {
+                finding.kind = "uncertifiable".into();
+            }
+        }
+        FindingSeed::DirectiveCreation(_) | FindingSeed::OwnerRequirement(_) => {}
     }
     if let Some((family, subject)) = coverage_group(seed) {
         finding.coverage_family = family.into();

@@ -70,6 +70,55 @@ fn unknown_finding_identities_fail_closed() {
 }
 
 #[test]
+fn a_disabled_coverage_rule_returns_its_withheld_obligations() {
+    let finding = |code: &'static str, name: &'static str, uncertifiable: bool| {
+        let mut finding = solid_reactive_ir::Finding::new(
+            solid_reactive_ir::RuleMetadata {
+                code,
+                name,
+                severity: "warning",
+                uncertifiable,
+                default_enabled: true,
+                presets: &[],
+            },
+            "synthetic".into(),
+            typefacts::Location {
+                path: "synthetic.tsx".into(),
+                start_byte: 0,
+                end_byte: 1,
+            },
+        );
+        if uncertifiable {
+            finding.kind = "uncertifiable".into();
+        }
+        finding
+    };
+    let mut findings = vec![
+        finding("SC9012", "reactive-dispatch-unresolved", true),
+        finding("SC1001", "strict-read-untracked", false),
+    ];
+    let options = solid_reactive_ir::RuleOptions::parse(
+        r#"{ "schemaVersion": 1, "rules": {
+          "reactive-dispatch-unresolved": { "enabled": false },
+          "strict-read-untracked": { "enabled": false } } }"#,
+        |_| true,
+    )
+    .unwrap();
+    let withheld =
+        retain_enabled(crate::dialect::default_dialect(), &options, &mut findings).unwrap();
+    assert!(findings.is_empty());
+    // Only the coverage rule's obligation keeps the result from certifying;
+    // a disabled defect rule is a rule the project chose not to check.
+    assert_eq!(
+        withheld
+            .iter()
+            .map(|finding| finding.id.as_str())
+            .collect::<Vec<_>>(),
+        ["SC9012"]
+    );
+}
+
+#[test]
 fn diagnostic_session_reuses_the_complete_result() {
     let facts = ProjectFacts {
         generation: Generation::new(1).unwrap(),

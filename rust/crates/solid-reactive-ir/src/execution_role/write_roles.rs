@@ -229,7 +229,7 @@ pub(super) fn semantic_write_execution_role_within(
                 );
                 match first_run {
                     ExecutionRole::DiscardedRendering => return first_run,
-                    ExecutionRole::Unknown => return ExecutionRole::Unknown,
+                    ExecutionRole::Unknown | ExecutionRole::Unreported => return first_run,
                     role if role.reports_disallowed_write() => return ExecutionRole::Unknown,
                     _ => break,
                 }
@@ -262,6 +262,20 @@ pub(super) fn semantic_write_execution_role_within(
         lookup,
         &mut HashSet::from([write_classification_marker()]),
     );
+    // A proven non-reporting mix walks on exactly as an unknown role does;
+    // only where the walk ends without a role does it answer `Unreported`
+    // rather than `Unknown`.
+    let unreported = direct == ExecutionRole::Unreported;
+    let direct = if unreported {
+        ExecutionRole::Unknown
+    } else {
+        direct
+    };
+    let unknown = if unreported {
+        ExecutionRole::Unreported
+    } else {
+        ExecutionRole::Unknown
+    };
     // Directly in a component body the dev owner is the component's root, so
     // a guard that exempts roots exempts the body too. Only the body itself:
     // tracked JSX in it runs in a render effect, and a callback nested in it
@@ -290,7 +304,7 @@ pub(super) fn semantic_write_execution_role_within(
     // change that. The tracked or rendering role such a wrapper gives the
     // *expression* is not a proof about the function inside it.
     if direct.reports_disallowed_write() && enclosed_by_jsx_attribute_function(file, span) {
-        return ExecutionRole::Unknown;
+        return unknown;
     }
     // A tracked role reaches every closure written inside the tracked region
     // or callback, including ones only stored there (`createMemo(() => ({ go:
@@ -299,26 +313,29 @@ pub(super) fn semantic_write_execution_role_within(
     if direct == ExecutionRole::TrackedJsx
         && enclosed_by_stored_function(file, span, entities, symbol_names, lookup)
     {
-        return ExecutionRole::Unknown;
+        return unknown;
     }
     // Code after an `await` in an async function runs on a later task, with no
     // owner; neither the lexical role nor the role at the function's call sites
     // describes it. Not proven to follow an await on every path (an `await`
     // inside a branch), so the answer is no claim rather than a legal write.
+    // An implicit suspension (`for await`) is the same, and is not proven to
+    // run at all; its callers' roles do not describe the code after it.
     if (direct == ExecutionRole::Unknown || direct.reports_disallowed_write())
-        && follows_await_in_async_function(file, span)
+        && (follows_await_in_async_function(file, span)
+            || super::body_roles::follows_any_suspension(file, span))
     {
-        return ExecutionRole::Unknown;
+        return unknown;
     }
     if direct != ExecutionRole::Unknown {
         return direct;
     }
     let Some(function) = crate::owners::containing_ast_function(&file.ast, span) else {
-        return ExecutionRole::Unknown;
+        return unknown;
     };
     let key = (file.path.to_string(), function.span);
     if !visiting.insert(key.clone()) {
-        return ExecutionRole::Unknown;
+        return unknown;
     }
     let mut imperative = None;
     for (caller_file, callee) in lookup.function_call_sites(file.path.as_str(), function.span) {
@@ -346,7 +363,7 @@ pub(super) fn semantic_write_execution_role_within(
         }
     }
     visiting.remove(&key);
-    imperative.unwrap_or(ExecutionRole::Unknown)
+    imperative.unwrap_or(unknown)
 }
 
 /// Whether `span` sits in a function literal that is the value of a JSX

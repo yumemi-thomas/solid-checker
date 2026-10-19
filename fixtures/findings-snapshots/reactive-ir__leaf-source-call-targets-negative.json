@@ -80,6 +80,16 @@
       "start": 372,
       "end": 381,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-source-call-targets/service.ts",
+      "start": 965,
+      "end": 982,
+      "fixes": 0
     }
   ]
 }

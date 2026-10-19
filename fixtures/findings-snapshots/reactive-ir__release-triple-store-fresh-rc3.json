@@ -30,6 +30,26 @@
       "start": 597,
       "end": 614,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/release-triple-store-fresh-rc3/store.ts",
+      "start": 885,
+      "end": 936,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/release-triple-store-fresh-rc3/store.ts",
+      "start": 940,
+      "end": 992,
+      "fixes": 0
     }
   ]
 }

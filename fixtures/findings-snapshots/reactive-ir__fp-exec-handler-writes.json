@@ -12,6 +12,26 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-exec-handler-writes/App.tsx",
+      "start": 522,
+      "end": 535,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-exec-handler-writes/App.tsx",
+      "start": 527,
+      "end": 530,
+      "fixes": 0
+    },
+    {
       "rule": "prefer-show",
       "code": "SC8015",
       "kind": "violation",
@@ -20,6 +40,56 @@
       "start": 685,
       "end": 744,
       "fixes": 1
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-exec-handler-writes/App.tsx",
+      "start": 715,
+      "end": 722,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-exec-handler-writes/App.tsx",
+      "start": 883,
+      "end": 890,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-exec-handler-writes/App.tsx",
+      "start": 1036,
+      "end": 1043,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-exec-handler-writes/App.tsx",
+      "start": 1203,
+      "end": 1210,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-exec-handler-writes/App.tsx",
+      "start": 2943,
+      "end": 2954,
+      "fixes": 0
     },
     {
       "rule": "reactive-write-in-owned-scope",
@@ -59,6 +129,56 @@
       "path": "fixtures/reactive-ir/fp-exec-handler-writes/App.tsx",
       "start": 3790,
       "end": 3797,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-exec-handler-writes/App.tsx",
+      "start": 4188,
+      "end": 4202,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-exec-handler-writes/App.tsx",
+      "start": 4381,
+      "end": 4396,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-exec-handler-writes/App.tsx",
+      "start": 5073,
+      "end": 5081,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-exec-handler-writes/hook.ts",
+      "start": 332,
+      "end": 350,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fp-exec-handler-writes/hook.ts",
+      "start": 372,
+      "end": 384,
       "fixes": 0
     },
     {
