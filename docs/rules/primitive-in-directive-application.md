@@ -17,6 +17,12 @@ Value-form state (`createSignal(0)`, `createStore({...})`) is **not**
 flagged: it allocates plain state that needs no owner and misbehaves in no
 way.
 
+Code in a `ref` expression that runs while rendering is owned and **not**
+flagged: an eager argument (`ref={tooltip(createMemo(…))}`), an IIFE, a
+default parameter, or a creation inside a `createRoot` callback. Where the
+owner cannot be decided (`runWithOwner`, a project helper, a discarded factory
+result, a generator) the result is uncertifiable (ADR 0330).
+
 ## Why is this bad?
 
 Directives in Solid 2.0 compose through `ref` with a two-phase factory

@@ -119,7 +119,7 @@ use std::{
 };
 
 use execution_role::{
-    NamedCallbackRoles, allowed_callback_spans, assigned_member_function_contains, execution_role,
+    NamedCallbackRoles, allowed_callback_spans, assigned_member_function_contains,
     named_callback_roles, semantic_execution_role,
 };
 use identity::{SymbolId, SymbolInterner, SymbolName, symbol_id, symbol_name};
@@ -927,6 +927,11 @@ pub struct PrimitiveCreation {
     pub primitive: String,
     pub location: Location,
     pub returned_closure: bool,
+    /// The creation runs under an owner the analysis cannot decide
+    /// (`runWithOwner(owner, …)` in the apply phase): an obligation, not a
+    /// proven leak.
+    #[serde(default)]
+    pub uncertain: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

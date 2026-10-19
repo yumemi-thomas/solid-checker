@@ -855,6 +855,9 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
                 finding.kind = "uncertifiable".into();
             }
         }
+        FindingSeed::DirectiveCreation(creation) if creation.uncertain => {
+            finding.kind = "uncertifiable".into();
+        }
         FindingSeed::StaticViolation(violation) => {
             finding.analysis_context = violation.analysis_context.clone();
             finding.fixes = violation.fixes.clone();

@@ -407,3 +407,8 @@ Users see a finding when it is not uncertifiable or is a project-level notice (`
 <a id="adr-0329"></a>
 ## ADR 0329 — A DOM call that dispatches synchronously is not trusted
 In the leaf-scope walk a call is refused, optional or not, when its exact `lib.dom` declaration is `focus`, `blur`, `click`, `dispatchEvent`, `checkValidity` or `reportValidity` on any interface (and window globals), or `HTMLFormElement.reset`/`requestSubmit`, `HTMLElement.showPopover`/`hidePopover`/`togglePopover`, `HTMLDialogElement.show`/`showModal`/`close`/`requestClose`, `AbortController.abort`, `XMLHttpRequest.open`/`abort`, `Document.execCommand`. Tree mutation and attribute writes stay trusted. Owner: `synchronously_dispatching_dom_member` in `rust/crates/solid-reactive-ir/src/cleanup.rs`.
+
+
+<a id="adr-0330"></a>
+## ADR 0330 — A ref creation is SC6001 only in the unowned apply phase
+A creation inside a `ref` expression is an SC6001 violation only when it runs when the applied callback runs and nothing between gives it an owner. Eager arguments, IIFEs and default parameters run while rendering (owned); a `createRoot` callback, directly or through inline synchronous slots, owns it. Any other owner-supplying slot (`runWithOwner`), a project helper, an unread callee, a discarded factory result or a generator makes it uncertifiable. Premise: a per-element `createRoot` is never disposed. Owners: `ref_phase`, `nested_owner`, `discover_directive_creations` in `rust/crates/solid-reactive-ir/src/directives.rs`.

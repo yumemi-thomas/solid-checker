@@ -18,6 +18,7 @@ Strict read in a setup body (`strict-read-untracked`, SC1001):
 - `review-opus2-c04-ctor-body` (App.tsx:12): a constructor read, class instantiated in the body.
 - `review-opus2-c18-field-iife-body-new` (App.tsx:12): an instance field initializer run by `new K()` in the body. Construction sites are not followed.
 - `review-opus3-g06-yield-star-spread-body` (App.tsx:13): a read in a generator reached through `yield*` and spread in the body. Delegation is not followed.
+- `precision-ref-callback-read` (App.tsx:4): a read in an intrinsic `ref` callback runs untracked in the apply phase; the read rule places nothing in the `DirectiveApply` role.
 
 Async read outside a loading boundary (`async-outside-loading-boundary`, SC5003):
 
@@ -68,6 +69,8 @@ Known false-positive shapes left open (fire today, wanted gone):
 
 - `missing-owner` (SC4001): a synchronous `dispatchEvent` or `click()` from an owned scope runs the handler under that owner; every event handler is taken to run with no owner. Oracle: `review-r7-sync-scroll`, `review-r7-sync-child-scroll`. Fixing it needs an owner-at-dispatch fact.
 - `strict-read-untracked` (SC1001): `try { await p } finally { read() }` reports the read. Only a synchronous throw while evaluating `p` skips the await. Oracle: `r9-d3-tryawait`; none in the corpus.
+- `missing-owner` (SC4001): an effect in an IIFE or an eagerly called factory callback inside a `ref` expression runs while rendering, owned, and one in a generator `ref` never runs; the owner walk takes both as apply phase. SC6001 no longer fires there (`directive-owned-subscopes`).
+- `primitive-in-directive-application` (SC6001): `createRoot` in an apply callback is reported even when its `dispose` is called; the rule's premise is that a per-element root is never disposed.
 - A read after `if (c) await` or a loop that may skip the await is reported: the feasible-path premise every direct read rests on. Oracle: `r9-d3-ifawait`, `r9-d3-loopawait`.
 
 ## 4. Open questions and live approximations

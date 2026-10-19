@@ -422,7 +422,7 @@ pub(crate) fn owner_callback_edges(
 ///
 /// Both owner passes reach this through [`owner_callback_edges`], so the
 /// batch and incremental graphs cannot disagree about it.
-pub(super) fn fresh_stack_scheduler_edges(
+pub(crate) fn fresh_stack_scheduler_edges(
     file: &solid_facts::FileFacts,
     call: &solid_facts::ast::CallFact,
     lookup: &SemanticLookup<'_>,
