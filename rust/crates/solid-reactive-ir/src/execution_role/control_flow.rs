@@ -105,7 +105,12 @@ pub(crate) fn control_flow_execution_role(
         .iter()
         .take_while(|parameter| parameter.initializer.is_none())
         .count()
-        .min(callback.parameters.len() - usize::from(callback.rest_parameter));
+        .min(
+            callback
+                .parameters
+                .len()
+                .saturating_sub(usize::from(callback.rest_parameter)),
+        );
     if length == 0
         && jsx_primitive_name(file, element, entities, symbol_names, dialect)
             .as_ref()
