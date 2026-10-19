@@ -9,7 +9,7 @@ test("focused tests reject an empty filter before starting any build", () => {
 
 test("focused tests forward an exact name as one argument and keep pins on both Cargo calls", () => {
   const calls = [];
-  const pinned = { SOLID_CHECKER_EXPECT_PROBE_PINS: "1", SOLID_TYPEFACTS_CERTIFICATION_SHA256: "pin" };
+  const pinned = { SOLID_CHECKER_EXPECT_PROBE_PINS: "1", SOLID_CHECKER_BUILD_ID: "pin" };
   const status = main({ TEST: "module::a_test", TEST_EXACT: "1" }, (command, args, options) => {
     calls.push({ command, args, options });
     return { status: 0, stdout: "module::a_test: test\n" };

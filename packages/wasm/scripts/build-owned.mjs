@@ -59,10 +59,6 @@ const artifact = (source, file, details) => {
   renameSync(join(owned, `${file}.partial`), join(owned, file));
   return { file, sha256: createHash("sha256").update(bytes).digest("hex"), bytes: bytes.length, ...details };
 };
-const pinNames = [
-  "SOLID_TYPEFACTS_CERTIFICATION_SHA256", "SOLID_TYPEFACTS_SOURCE_MANIFEST_SHA256",
-  "SOLID_CHECKER_PROBE_HARNESS_SHA256", "SOLID_CHECKER_PROBE_NODE_SHA256", "SOLID_CHECKER_PROBE_BROWSER_SHA256",
-];
 const manifest = {
   format: 1,
   buildId,
@@ -79,7 +75,6 @@ const manifest = {
     rustc: read("rustc", ["-vV"], { env: rustEnvironment }),
     go: read("go", ["version"], { env: goEnvironment }),
   },
-  certificationPins: Object.fromEntries(pinNames.map(name => [name, process.env[name] ?? null])),
 };
 writeFileSync(join(owned, "manifest.json.partial"), `${JSON.stringify(manifest, null, 2)}\n`);
 renameSync(join(owned, "manifest.json.partial"), join(owned, "manifest.json"));

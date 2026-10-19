@@ -5,8 +5,8 @@ import { test } from "vitest";
 const read = path => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const verify = read("scripts/verify.sh");
 
-test("verification pins every compilation before checking test targets", () => {
-  const pins = verify.indexOf("export SOLID_TYPEFACTS_CERTIFICATION_SHA256");
+test("verification shares one build environment across every compilation before checking test targets", () => {
+  const pins = verify.indexOf("step certification-pins");
   const preflight = verify.indexOf("step clippy");
   const tests = verify.indexOf("step go-rust-tests");
   assert.ok(pins > verify.indexOf("step build-typefacts"));

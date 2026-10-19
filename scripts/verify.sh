@@ -114,22 +114,16 @@ step build-typefacts
 TYPEFACTS_BUILD_ID="${SOLID_CHECKER_BUILD_ID:-dev}" scripts/build-typefacts.sh
 
 # ---------------------------------------------------------------------------
-# The Makefile's CERTIFICATION_ENV, for every step below that builds.
+# Compile-time inputs and the Node the runtime resolver runs.
 #
-# These two digests are read by `option_env!`, so they are part of the crate
-# fingerprint and can only be supplied at compile time.
-#
-# Compute these before *every* Cargo build, including Clippy and feature
-# checks, so preflight and tests do not alternate unpinned/pinned builds.
+# Every Cargo build below shares one environment (build id, probe Node), so
+# preflight and tests do not alternate between differently-fingerprinted builds.
 step certification-pins
 if ! command -v node >/dev/null 2>&1; then
-  echo "make verify: node is required (the Type Facts source manifest pin is computed with it)." >&2
+  echo "make verify: node is required (the runtime resolver runs project config with it)." >&2
   exit 127
 fi
 probe_node="${PROBE_NODE:-$(node -e 'process.stdout.write(require("fs").realpathSync(process.execPath))')}"
-SOLID_TYPEFACTS_CERTIFICATION_SHA256="sha256:$(shasum -a 256 bin/solid-typefacts | awk '{print $1}')"
-SOLID_TYPEFACTS_SOURCE_MANIFEST_SHA256="sha256:$(node scripts/typefacts-source-identity.mjs --build-id "${SOLID_CHECKER_BUILD_ID:-dev}" --digest)"
-export SOLID_TYPEFACTS_CERTIFICATION_SHA256 SOLID_TYPEFACTS_SOURCE_MANIFEST_SHA256
 # The runtime resolver (ADR 0220) runs project config with this Node.
 PROBE_NODE="$probe_node"
 SOLID_CHECKER_PROBE_NODE="$probe_node"

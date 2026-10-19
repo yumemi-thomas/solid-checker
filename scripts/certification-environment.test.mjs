@@ -1,19 +1,15 @@
 import assert from "node:assert/strict";
-import { readFileSync, realpathSync } from "node:fs";
-import { createHash } from "node:crypto";
+import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 import { certificationEnvironment } from "./lib/certification-environment.mjs";
-import { sourceDigest } from "./typefacts-source-identity.mjs";
 
-test("local Cargo drivers replace stale inherited pins and arm the test harness", () => {
+test("local Cargo drivers pin the build id and arm the test harness", () => {
   const root = fileURLToPath(new URL("../", import.meta.url));
   const node = realpathSync(process.execPath);
   const env = certificationEnvironment(root, { ...process.env, PROBE_NODE: node,
-    SOLID_TYPEFACTS_CERTIFICATION_SHA256: "stale" });
-  const sha = path => `sha256:${createHash("sha256").update(readFileSync(path)).digest("hex")}`;
-  assert.equal(env.SOLID_TYPEFACTS_CERTIFICATION_SHA256, sha(`${root}/bin/solid-typefacts`));
-  assert.equal(env.SOLID_TYPEFACTS_SOURCE_MANIFEST_SHA256, `sha256:${sourceDigest(root)}`);
+    SOLID_CHECKER_BUILD_ID: "x" });
+  assert.equal(env.TYPEFACTS_BUILD_ID, "x");
   assert.equal(env.PROBE_NODE, node);
   assert.equal(env.TYPEFACTS_TEST_BIN, env.SOLID_TYPEFACTS_BIN);
 });

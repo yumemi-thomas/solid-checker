@@ -1,13 +1,10 @@
-// Compile-time inputs shared by local Cargo drivers. Compute only after the
-// producer has been brought current; never inherit stale certification pins.
+// Environment shared by local Cargo drivers: build id, probe Node, and the
+// armed Type Facts test binary.
 import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
-import { readFileSync, realpathSync } from "node:fs";
+import { realpathSync } from "node:fs";
 import { join } from "node:path";
-import { sourceDigest as typefactsDigest } from "../typefacts-source-identity.mjs";
 
 export function certificationEnvironment(root, environment = process.env) {
-  const digest = path => `sha256:${createHash("sha256").update(readFileSync(path)).digest("hex")}`;
   const node = realpathSync(environment.PROBE_NODE || execFileSync("node", [
     "-e", "process.stdout.write(require('fs').realpathSync(process.execPath))"
   ], { env: environment, encoding: "utf8" }).trim());
@@ -17,8 +14,6 @@ export function certificationEnvironment(root, environment = process.env) {
     PROBE_NODE: node,
     SOLID_CHECKER_BUILD_ID: buildId,
     TYPEFACTS_BUILD_ID: buildId,
-    SOLID_TYPEFACTS_CERTIFICATION_SHA256: digest(join(root, "bin/solid-typefacts")),
-    SOLID_TYPEFACTS_SOURCE_MANIFEST_SHA256: `sha256:${typefactsDigest(root)}`,
     TYPEFACTS_TEST_BIN: join(root, "bin/solid-typefacts"),
     SOLID_TYPEFACTS_BIN: join(root, "bin/solid-typefacts"),
   };
