@@ -912,6 +912,16 @@ fn child_literal_invoked_during_render(
     component_invokes_prop_in_body(component_file, component, "children", lookup)
 }
 
+/// Whether `span` sits in a class written inside `function`: its field
+/// initializers and static blocks run at construction or class evaluation,
+/// not where the function's own flow places them.
+fn class_within(file: &solid_facts::FileFacts, function: Span, span: Span) -> bool {
+    file.ast
+        .classes
+        .iter()
+        .any(|class| function.contains(class.span) && class.span.contains(span))
+}
+
 /// Whether `component`'s own body calls `props.<prop>` directly; see
 /// [`prop_literal_invoked_during_render`].
 fn component_invokes_prop_in_body(
@@ -1019,6 +1029,7 @@ fn component_invokes_prop_in_body(
     }
     file.ast.calls.iter().any(|call| {
         crate::owners::written_directly_in(&file.ast, component, call.span)
+            && !class_within(file, component.span, call.span)
             && !file.ast.any_jsx_containing(call.span)
             && file.ast.members.iter().any(|member| {
                 member.span == file.ast.peel_ts_sugar_span(call.callee)
@@ -5963,6 +5974,10 @@ impl<'a> InvocationFlow<'a, '_, '_> {
             || owner.generator
             || self.lookup.function_component_status(file, owner) != ComponentStatus::No
         {
+            return None;
+        }
+        // A class field initializer runs at construction, wherever that is.
+        if class_within(file, owner.span, call) {
             return None;
         }
         if file.compiler.callback_roles.iter().any(|callback| {

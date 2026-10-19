@@ -63,6 +63,7 @@ proven violations (probed: `oracle-owner-flow-owned`).
 | every invocation is an event dispatch | intrinsic `on…` attribute or spread key, or a compiler event-handler function, reached by direct calls only | the host dispatches with no owner (rc.13 runtime: `NO_OWNER_*`) | `Spread`, `Attribute`, `Imported` |
 | no owner is supplied on the way | every primitive slot refuses; no read-role shortcut | `createRoot` and `runWithOwner` supply one | `UnderOwner`, `UnderRoot` |
 | mixed invocations refuse | one non-event invocation refuses the literal | a component-body call has an owner | `AlsoInBody`; the `LIB_BODY` edit |
+| a class runs elsewhere | a call inside a class written in the enclosing function refuses | field initializers run at construction, maybe under `createRoot` | `InClassField` (review round 5) |
 | an await ends the walk | a call after an await in an async function refuses | the continuation is not the dispatch | inherited from ADR 0319 |
 | a cached answer is current | the set is in the cross-file digest | the proof reads the helper's file | `helper_event_edits_match_cold` |
 

@@ -243,3 +243,24 @@ export function RedeclaredChild() {
     </Redeclaring>
   );
 }
+
+function Constructed(props: { children: () => JSX.Element }) {
+  class Later {
+    value = props.children();
+  }
+  return <button onClick={() => void new Later()}>click</button>;
+}
+
+// Uncertifiable, no violation: the call is a class field initializer, which
+// runs when `Later` is constructed (here on click), not in the body.
+export function FieldChild() {
+  const [count] = createSignal(0);
+  return (
+    <Constructed>
+      {() => {
+        const n = count();
+        return <span>{n}</span>;
+      }}
+    </Constructed>
+  );
+}

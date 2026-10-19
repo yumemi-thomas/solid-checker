@@ -67,3 +67,23 @@ export function AlsoInBody() {
   h.onClick();
   return <button {...h}>f</button>;
 }
+
+function constructed(cb: () => void) {
+  return {
+    onClick: () => {
+      class Later {
+        value = cb();
+      }
+      createRoot(() => void new Later());
+    },
+  };
+}
+
+// Negative: the call is a class field initializer, run when `Later` is
+// constructed inside `createRoot`, which supplies an owner.
+export function InClassField() {
+  const h = constructed(() => {
+    onCleanup(() => undefined);
+  });
+  return <button {...h}>g</button>;
+}

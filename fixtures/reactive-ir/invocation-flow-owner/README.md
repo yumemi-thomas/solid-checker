@@ -17,6 +17,7 @@ through while supplying an owner.
 | `UnderOwner` | none | the handler runs the callback under `runWithOwner(getOwner(), …)` |
 | `UnderRoot` | none | the handler runs the callback in `createRoot` |
 | `AlsoInBody` | none (not proven) | the handler is also called in the component body, which has an owner; mixed invocations refuse |
+| `InClassField` | none | the call is a class field initializer, constructed inside `createRoot`; a call inside a class refuses the walk |
 
 The runtime confirms the positives and the two owned controls:
 `fixtures/runtime-oracle/oracle-owner-flow`, `oracle-owner-flow-import` and
