@@ -15,7 +15,7 @@ run custom-element reactions, and WebGL `getContext` can fire
 | `OptionalListener` | none | registration runs nothing; the listener is deferred even though it would register a cleanup |
 | `OptionalRemoveListener`, `DirectRemoveListener` | `SC9012` uncertifiable | no audited timing for `removeEventListener`'s callable argument, in either form |
 | `OptionalFocus`, `OptionalClick`, `OptionalDispatch`, `OptionalSetAttribute`, `OptionalAppend`, `OptionalRemove`, `OptionalScroll`, `OptionalGetContext`, `OptionalSelect` | `SC9012` uncertifiable | not in the table |
-| `DirectFocus` | none (unchanged) | the non-optional form keeps the standard-library trust, which does not model dispatch |
+| `DirectFocus` | `SC9012` uncertifiable | `focus()` dispatches focus events synchronously in the non-optional form too (ADR 0329; clean before) |
 
 `solid-js.d.ts` and `tsconfig.json` are copied from `leaf-scope-host-callbacks`;
 the DOM declarations are TypeScript's own `lib.dom.d.ts`. The source passes

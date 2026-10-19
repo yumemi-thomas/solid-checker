@@ -37,6 +37,26 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/leaf-scope-host-timing/App.tsx",
+      "start": 1841,
+      "end": 1860,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-scope-host-timing/App.tsx",
+      "start": 2024,
+      "end": 2037,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-scope-host-timing/App.tsx",
       "start": 2411,
       "end": 2434,
       "fixes": 0

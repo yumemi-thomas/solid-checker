@@ -8,7 +8,9 @@ says so, and Type Facts resolved an argumentless call only when asked
 
 - `BuiltinMethods`: `dialog.focus()` and
   `document.body.getBoundingClientRect()` take no argument and are
-  standard-library methods. Clean (previously `SC9012` uncertifiable).
+  standard-library methods. `getBoundingClientRect` is clean; `focus()`
+  dispatches focus events synchronously, so it is `SC9012` uncertifiable
+  again (ADR 0329; clean between ADR 0192 and ADR 0329).
 - `OptionalBuiltin`: `maybeDialog?.focus()` stays `SC9012`. Type Facts states
   no resolved call for an optional call, with or without arguments; that is
   the producer's remaining gap.

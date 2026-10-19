@@ -18,11 +18,12 @@ positive NodeList examples populate their collection before iterating.
 | SameNamedProjectMethod | member boundary | SC9012 uncertifiable: matching method spelling is not a host fact |
 | ShadowedGlobal | shadowing | SC9012: caller-supplied registration function |
 | PromiseResolveStillOpen | unresolved | SC9012: executor resolve parameter is not specialized |
-| MediaQuerySynchronousDispatch | synchronous dispatch | none: the listener is deferred; synchronous dispatch is not modeled (ADR 0210) |
-| GlobalSynchronousDispatch | synchronous dispatch | none: the same for a global listener |
+| MediaQuerySynchronousDispatch | synchronous dispatch | SC9012 uncertifiable: `dispatchEvent` runs the registered listener before it returns (ADR 0329; silent before) |
+| GlobalSynchronousDispatch | synchronous dispatch | SC9012 uncertifiable: the same for the global `dispatchEvent` |
 | ListenerObjectStillOpen | object listener | none: a `handleEvent` object is a deferred listener too |
 
-Exact synchronous dispatch remains unmodeled (ADR 0210). The new registration
+Exact synchronous dispatch remains unmodeled (ADR 0210); since ADR 0329 a
+call that dispatches synchronously refuses instead of being trusted. The new registration
 slots therefore require a proven clean callback body even though registration
 itself does not invoke it. No new row claims these listeners run fresh.
 

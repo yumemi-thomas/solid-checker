@@ -110,6 +110,16 @@
       "start": 2863,
       "end": 2882,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-scope-optional-dom/App.tsx",
+      "start": 3131,
+      "end": 3145,
+      "fixes": 0
     }
   ]
 }

@@ -1,5 +1,15 @@
 # Precision backlog
 
+## 2026-10-19 — Synchronous DOM dispatch is not trusted (ADR 0329)
+
+`focus`, `blur`, `click`, `dispatchEvent`, form `reset`/`requestSubmit`,
+constraint validation, popover and dialog toggles run registered listeners
+before they return; the leaf-scope walk now refuses them in the non-optional
+form too (ADR 0318 refused only the optional form). Corpus: **0 removed, +20
+`SC9012` uncertifiable** (internal, ADR 0328). Open: custom-element reactions
+on tree mutation and attribute writes, focus loss on removing a focused
+element.
+
 ## 2026-10-19 — The oracle's two families are closed (ADRs 0326, 0327)
 
 The runtime oracle has no unproven clean claim left except the two recorded

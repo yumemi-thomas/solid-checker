@@ -805,6 +805,9 @@ fn helper_forbidden_operations(
         .resolved_callee_call(call_file, call.callee)
         .filter(|call| crate::runtime_semantics::augmented_global_runtime_call(call))
     {
+        if dispatches_dom_event(resolved) {
+            return false;
+        }
         return standard_library_argument_operations(
             resolution, call_file, call, resolved, kinds, visited, depth, guaranteed,
         );
@@ -842,6 +845,9 @@ fn helper_forbidden_operations(
         else {
             return false;
         };
+        if dispatches_dom_event(resolved) {
+            return false;
+        }
         return standard_library_argument_operations(
             resolution, call_file, call, resolved, kinds, visited, depth, guaranteed,
         );
@@ -914,19 +920,23 @@ fn member_call_operations(
     // whole-call host behavior. An optional DOM call stays open unless its
     // exact declaration is in the audited script-free table (ADR 0318):
     // focus/blur, dispatch and custom-element reactions can invoke registered
-    // user code without a callback argument at this site.
-    if std::path::Path::new(declaration.source_file.as_ref())
+    // user code without a callback argument at this site. ADR 0329: a member
+    // that dispatches an event synchronously (`el.focus()`, `el.click()`)
+    // re-enters registered listeners in the optional form or not.
+    let dom = std::path::Path::new(declaration.source_file.as_ref())
         .file_name()
-        .is_some_and(|name| name == "lib.dom.d.ts" || name == "lib.dom.iterable.d.ts")
-        && !script_free_dom_member(declaration.qualified_name.as_ref())
-        && (file
-            .ast
-            .optional_members
-            .iter()
-            .any(|member| callee.contains(*member))
-            || file
-                .source_text(Span::new(call.callee.end, call.span.end))
-                .is_some_and(|suffix| suffix.trim_start().starts_with("?.")))
+        .is_some_and(|name| name == "lib.dom.d.ts" || name == "lib.dom.iterable.d.ts");
+    if dom
+        && (synchronously_dispatching_dom_member(declaration.qualified_name.as_ref())
+            || (!script_free_dom_member(declaration.qualified_name.as_ref())
+                && (file
+                    .ast
+                    .optional_members
+                    .iter()
+                    .any(|member| callee.contains(*member))
+                    || file
+                        .source_text(Span::new(call.callee.end, call.span.end))
+                        .is_some_and(|suffix| suffix.trim_start().starts_with("?.")))))
     {
         return false;
     }
@@ -993,6 +1003,50 @@ const SCRIPT_FREE_DOM_MEMBERS: &[&str] = &[
     "Element.hasAttributes",
     "HTMLCanvasElement.toDataURL",
 ];
+
+/// Whether `resolved` is a `lib.dom` global (`dispatchEvent(…)`,
+/// `focus()`) that dispatches an event synchronously (ADR 0329).
+fn dispatches_dom_event(resolved: &typefacts::ResolvedCall) -> bool {
+    resolved.declaration.as_ref().is_some_and(|declaration| {
+        std::path::Path::new(declaration.source_file.as_ref())
+            .file_name()
+            .is_some_and(|name| name == "lib.dom.d.ts" || name == "lib.dom.iterable.d.ts")
+            && synchronously_dispatching_dom_member(declaration.qualified_name.as_ref())
+    })
+}
+
+/// ADR 0329: `lib.dom` members that dispatch an event synchronously, before
+/// they return, and so run listeners the program registered: focus moves
+/// (`focus`, `blur`), synthetic activation and dispatch (`click`,
+/// `dispatchEvent`), form `reset`, `requestSubmit` and constraint validation
+/// (`invalid`), and popover and dialog toggles (`beforetoggle`). Matched by
+/// member name on any `lib.dom` interface, which redeclares them, and on the
+/// global functions `lib.dom` declares for `window` (`dispatchEvent`,
+/// `focus`, `blur`).
+fn synchronously_dispatching_dom_member(qualified_name: &str) -> bool {
+    let member = qualified_name
+        .rsplit_once('.')
+        .map_or(qualified_name, |(_, member)| member);
+    {
+        matches!(
+            member,
+            "focus"
+                | "blur"
+                | "click"
+                | "dispatchEvent"
+                | "reset"
+                | "requestSubmit"
+                | "checkValidity"
+                | "reportValidity"
+                | "showPopover"
+                | "hidePopover"
+                | "togglePopover"
+                | "show"
+                | "showModal"
+                | "close"
+        )
+    }
+}
 
 /// Whether the exact `lib.dom` declaration `qualified_name` names a member of
 /// [`SCRIPT_FREE_DOM_MEMBERS`], or an `EventTarget` registration method, which
