@@ -262,6 +262,8 @@ fn run_ordinary_check(
                 "importIdentityModules": import_identity.modules,
                 "irNs": outcome.diagnostic_timings.reactive_ir.as_nanos(),
                 "solveAndSnapshotNs": outcome.diagnostic_timings.solve_and_snapshot.as_nanos(),
+                // Kept at zero for timing-summary readers (the feedback adapter copies it).
+                "contractEmissionNs": 0,
                 "moduleInventoryNs": 0,
                 "totalNs": started.elapsed().as_nanos(),
             })
