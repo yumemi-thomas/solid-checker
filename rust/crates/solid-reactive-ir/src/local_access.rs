@@ -952,440 +952,448 @@ impl LocalAccessContext<'_, '_> {
         let mut seen = HashSet::new();
         let allowed = allowed_callback_spans(file, self.lookup);
         for call in &file.ast.calls {
-            let callee = location(file.path.shared(), call.callee);
-            let Some(symbol) = self.lookup.callee_symbol(file, call.callee) else {
-                continue;
+            self.discover_call(file, call, &allowed, &mut result, &mut seen);
+        }
+        for member in &file.ast.members {
+            self.discover_member(file, member, &allowed, &mut result, &mut seen);
+        }
+        self.discover_spreads(file, &allowed, &mut result);
+        self.discover_dynamic_jsx(file, &mut result);
+        result
+    }
+
+    fn discover_call(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+        allowed: &[solid_facts::core::Span],
+        result: &mut LocalAccessResult,
+        seen: &mut HashSet<(Arc<str>, u64, u64)>,
+    ) {
+        let callee = location(file.path.shared(), call.callee);
+        let Some(symbol) = self.lookup.callee_symbol(file, call.callee) else {
+            return;
+        };
+        if inside_known_value_function_argument(file, call.callee, self.lookup) {
+            return;
+        }
+        let inside_function = file.ast.any_function_body_containing(call.span);
+        if inside_function && self.setters.contains_key(symbol) {
+            result.write_action_obligations.insert((
+                "write",
+                callee.path.to_string(),
+                callee.start_byte,
+                callee.end_byte,
+            ));
+        }
+        if inside_function && self.actions.contains_key(symbol) {
+            result.write_action_obligations.insert((
+                "action",
+                callee.path.to_string(),
+                callee.start_byte,
+                callee.end_byte,
+            ));
+        }
+        let execution = semantic_execution_role(
+            file,
+            call.callee,
+            allowed,
+            self.entities,
+            self.symbol_names,
+            self.lookup,
+        );
+        // A universal callback-context proof can certify an accessor
+        // read even when invocation is optional or resource-triggered.
+        // Keep write/action and owner classification on their existing
+        // execution proofs; this override applies only to known accessors.
+        // ADR 0294: a typed candidate whose implementation is not visible
+        // is located like an accessor read and reported as an obligation.
+        let typed_unknown = !self.accessors.contains_key(symbol)
+            && self
+                .lookup
+                .object_member_function(file, call.callee)
+                .is_none()
+            && self
+                .typed_sources
+                .get(symbol)
+                .is_some_and(|typed| !typed.implementation_visible);
+        let typed_effect_accessor = execution == ExecutionRole::EffectApply
+            && self
+                .lookup
+                .object_member_function(file, call.callee)
+                .is_none()
+            && call.arguments.is_empty()
+            && !crate::callback_return::binding_is_callback_result(self.lookup, file, call.callee)
+            && typed_accessor_descriptor_at(self.lookup, file.path.as_str(), call.callee).is_some();
+        let Some(multiplicity) = self.reachable_calls.get(&callee).copied().or_else(|| {
+            (typed_effect_accessor
+                || ((self.accessors.contains_key(symbol) || typed_unknown)
+                    && (execution == ExecutionRole::EffectApply
+                        || control_flow_execution_role(
+                            file,
+                            call.callee,
+                            self.entities,
+                            self.symbol_names,
+                            self.lookup.dialect,
+                        )
+                        .is_some()
+                        || named_callback_execution_role(file, call.callee, self.lookup)
+                            .is_some()
+                        || enclosing_render_function(file, call.callee, self.lookup))))
+            .then_some(1)
+        }) else {
+            return;
+        };
+        let key = (callee.path.clone(), callee.start_byte, callee.end_byte);
+        if let Some(accessor) = self.accessors.get(symbol)
+            && (!inside_non_component_function(file, call.callee, self.lookup)
+                || named_callback_execution_role(file, call.callee, self.lookup).is_some())
+            && seen.insert(key.clone())
+        {
+            self.push_accessor_read(file, call, symbol, accessor, execution, result);
+        }
+        // ADR 0294: a typed candidate read where an accessor read would be
+        // reported. Its type is the only evidence that it reads reactive
+        // state, so this is an obligation, never a read.
+        if typed_unknown
+            && execution.reports_untracked_read()
+            && (!inside_non_component_function(file, call.callee, self.lookup)
+                || named_callback_execution_role(file, call.callee, self.lookup).is_some())
+            && seen.insert(key.clone())
+        {
+            result
+                .dispatch_obligations
+                .push(typed_source_obligation(file, call.callee));
+        }
+        // The effect-apply shortcut: a no-argument call whose callee Type
+        // Facts types as the Accessor alias, with no symbol entry. The
+        // same premise as above, so the same obligation, unless the
+        // callee's own implementation is visible.
+        if !self.accessors.contains_key(symbol)
+            && !self
+                .typed_sources
+                .get(symbol)
+                .is_some_and(|typed| typed.implementation_visible)
+            && execution == ExecutionRole::EffectApply
+            && call.arguments.is_empty()
+            && !crate::callback_return::binding_is_callback_result(self.lookup, file, call.callee)
+            && typed_accessor_descriptor_at(self.lookup, file.path.as_str(), call.callee).is_some()
+            && seen.insert(key.clone())
+        {
+            result
+                .dispatch_obligations
+                .push(typed_source_obligation(file, call.callee));
+        }
+        if let Some((name, declaration, allowed_by_option, source_kind)) = self.setters.get(symbol)
+        {
+            // Under a root owner `setSignal`'s guard throws on every
+            // release; a store setter's only where the resolved signals
+            // dropped the root exemption (rc.9). In dev a component body
+            // runs under a root too, so the same answer covers it.
+            let root_body = match source_kind {
+                ReactiveSourceKind::Accessor => RootBodyGuard::Rejects,
+                ReactiveSourceKind::Store
+                    if !self.lookup.dialect.store_setter_guard_exempts_roots() =>
+                {
+                    RootBodyGuard::Rejects
+                }
+                ReactiveSourceKind::Store => RootBodyGuard::Exempts,
             };
-            if inside_known_value_function_argument(file, call.callee, self.lookup) {
-                continue;
-            }
-            let inside_function = file.ast.any_function_body_containing(call.span);
-            if inside_function && self.setters.contains_key(symbol) {
-                result.write_action_obligations.insert((
-                    "write",
-                    callee.path.to_string(),
-                    callee.start_byte,
-                    callee.end_byte,
-                ));
-            }
-            if inside_function && self.actions.contains_key(symbol) {
-                result.write_action_obligations.insert((
-                    "action",
-                    callee.path.to_string(),
-                    callee.start_byte,
-                    callee.end_byte,
-                ));
-            }
-            let execution = semantic_execution_role(
+            let mut write_execution = semantic_write_execution_role(
                 file,
                 call.callee,
-                &allowed,
+                allowed,
                 self.entities,
                 self.symbol_names,
                 self.lookup,
+                root_body,
             );
-            // A universal callback-context proof can certify an accessor
-            // read even when invocation is optional or resource-triggered.
-            // Keep write/action and owner classification on their existing
-            // execution proofs; this override applies only to known accessors.
-            // ADR 0294: a typed candidate whose implementation is not visible
-            // is located like an accessor read and reported as an obligation.
-            let typed_unknown = !self.accessors.contains_key(symbol)
+            // Where the resolved release's optimistic-store setter meets no
+            // owned-scope guard (rc.0), a store setter is reported only when
+            // it is proven to be `createStore`'s, whose writes do reach the
+            // guard. An optimistic-store setter is legal in every owned
+            // scope, and a store setter found only by its type could be
+            // either, so both take the role that reports nothing, as an
+            // exempted root-body write does: the second is a miss, never a
+            // violation the runtime does not raise.
+            if write_execution.reports_disallowed_write()
+                && *source_kind == ReactiveSourceKind::Store
+                && !self.lookup.dialect.optimistic_store_setter_guarded()
                 && self
-                    .lookup
-                    .object_member_function(file, call.callee)
-                    .is_none()
-                && self
-                    .typed_sources
+                    .source_primitives
                     .get(symbol)
-                    .is_some_and(|typed| !typed.implementation_visible);
-            let typed_effect_accessor = execution == ExecutionRole::EffectApply
-                && self
-                    .lookup
-                    .object_member_function(file, call.callee)
-                    .is_none()
-                && call.arguments.is_empty()
-                && !crate::callback_return::binding_is_callback_result(
-                    self.lookup,
-                    file,
-                    call.callee,
-                )
-                && typed_accessor_descriptor_at(self.lookup, file.path.as_str(), call.callee)
-                    .is_some();
-            let Some(multiplicity) = self.reachable_calls.get(&callee).copied().or_else(|| {
-                (typed_effect_accessor
-                    || ((self.accessors.contains_key(symbol) || typed_unknown)
-                        && (execution == ExecutionRole::EffectApply
-                            || control_flow_execution_role(
-                                file,
-                                call.callee,
-                                self.entities,
-                                self.symbol_names,
-                                self.lookup.dialect,
-                            )
-                            .is_some()
-                            || named_callback_execution_role(file, call.callee, self.lookup)
-                                .is_some()
-                            || enclosing_render_function(file, call.callee, self.lookup))))
-                .then_some(1)
-            }) else {
-                continue;
-            };
-            let key = (callee.path.clone(), callee.start_byte, callee.end_byte);
-            if let Some((name, declaration)) = self.accessors.get(symbol)
-                && (!inside_non_component_function(file, call.callee, self.lookup)
-                    || named_callback_execution_role(file, call.callee, self.lookup).is_some())
-                && seen.insert(key.clone())
+                    .and_then(|primitive| self.lookup.dialect.primitive(primitive))
+                    != Some(solid_dialect::Primitive::CreateStore)
             {
-                let origin = self.accessor_origins.get(symbol);
-                let display_name = call.static_callee(&file.source).unwrap_or(name);
-                result.reads.push(Arc::new(ReactiveRead {
-                    summary_attributed: false,
-                    transported: false,
-                    kind: "accessor".into(),
-                    accessor: origin
-                        .map_or_else(|| display_name.to_string(), |origin| origin.0.to_string())
-                        .into(),
+                write_execution = ExecutionRole::UntrackedCallback;
+            }
+            for _ in 0..multiplicity {
+                result.writes.push(Arc::new(ReactiveWrite {
+                    setter: name.to_string().into(),
+                    operation: crate::ReactiveWriteOperation::Setter,
+                    source_kind: *source_kind,
                     location: location(file.path.shared(), call.span),
-                    declaration: origin
-                        .map_or_else(|| declaration.clone(), |origin| origin.2.clone()),
-                    execution,
-                    context: read_analysis_context(file, call.span, execution, self.lookup).into(),
-                    via: origin.map_or_else(String::new, |_| name.to_string()).into(),
-                    origin: origin.map(|origin| origin.2.clone()),
-                    origin_context: origin
-                        .map_or_else(String::new, |origin| origin.1.to_string())
-                        .into(),
-                    uncertain: self.lookup.inside_possible_component(file, call.span),
-                    missing_jsx_census: missing_jsx_census(file, call.span, execution),
-                    host_callback_timing: host_callback_timing(
+                    declaration: declaration.clone(),
+                    execution: write_execution,
+                    allowed_by_option: *allowed_by_option,
+                    context: analysis_context(
                         file,
                         call.span,
-                        execution,
+                        self.entities,
+                        self.symbol_names,
+                        self.lookup.dialect,
                         self.lookup,
-                    ),
-                    project_consumer_non_strict: false,
-                    callback_invocation_unproven: false,
-                    callee_callback_timing: callee_callback_timing(
-                        file,
-                        call.span,
-                        execution,
-                        self.lookup,
-                    ),
+                    )
+                    .into(),
                 }));
-                if counts_as_strict_read_root(file, call.span, execution, self.lookup) {
-                    result.strict_read_obligations += 1;
-                }
-                let async_provenance = self.async_sources.contains(symbol);
-                let async_options = self.effective_async_options(symbol);
-                if (async_provenance
-                    || async_options.ssr_client_bare
-                    || async_options.server_rendering_unresolved)
-                    && !pending_accessor_probe(file, call.callee, self.lookup)
-                {
-                    let async_execution = async_execution_role(file, call.callee, execution);
-                    let async_execution = if async_options.ssr_client_bare
-                        || async_options.server_rendering_unresolved
-                    {
-                        async_execution
-                    } else {
-                        async_read_role(
-                            file,
-                            call.callee,
-                            async_execution,
-                            self.entities,
-                            self.symbol_names,
-                            self.lookup,
-                        )
-                    };
-                    let cover =
-                        read_loading_cover(self.lookup, file, call.callee, self.symbol_names);
-                    result.async_reads.push(Arc::new(AsyncRead {
-                        accessor: format!("{name}()").into(),
-                        location: location(file.path.shared(), call.span),
-                        declaration: declaration.clone(),
-                        execution: async_execution,
-                        leaf_owner: containing_leaf_owner(
-                            file,
-                            call.callee,
-                            self.entities,
-                            self.symbol_names,
-                            self.lookup,
-                        )
-                        .map(Into::into),
-                        under_loading: cover == LoadingCover::Covered,
-                        mount_unresolved: cover == LoadingCover::Unresolved,
-                        async_provenance,
-                        declared_loading: async_options.declared_loading,
-                        options_opaque: async_options.opaque,
-                        ssr_client_hole: async_options.ssr_client_bare,
-                        server_rendering_unresolved: async_options.server_rendering_unresolved,
-                        host_callback_timing: host_callback_timing(
-                            file,
-                            call.callee,
-                            async_execution,
-                            self.lookup,
-                        ),
-                        callee_callback_timing: callee_callback_timing(
-                            file,
-                            call.callee,
-                            async_execution,
-                            self.lookup,
-                        ),
-                        invocation_context_unproven: async_execution
-                            == ExecutionRole::UntrackedRendering
-                            && !nested_literal_runs_during_body(
-                                file,
-                                call.callee,
-                                self.entities,
-                                self.symbol_names,
-                                self.lookup,
-                            ),
-                    }));
-                }
-            }
-            // ADR 0294: a typed candidate read where an accessor read would be
-            // reported. Its type is the only evidence that it reads reactive
-            // state, so this is an obligation, never a read.
-            if typed_unknown
-                && execution.reports_untracked_read()
-                && (!inside_non_component_function(file, call.callee, self.lookup)
-                    || named_callback_execution_role(file, call.callee, self.lookup).is_some())
-                && seen.insert(key.clone())
-            {
-                result
-                    .dispatch_obligations
-                    .push(typed_source_obligation(file, call.callee));
-            }
-            // The effect-apply shortcut: a no-argument call whose callee Type
-            // Facts types as the Accessor alias, with no symbol entry. The
-            // same premise as above, so the same obligation, unless the
-            // callee's own implementation is visible.
-            if !self.accessors.contains_key(symbol)
-                && !self
-                    .typed_sources
-                    .get(symbol)
-                    .is_some_and(|typed| typed.implementation_visible)
-                && execution == ExecutionRole::EffectApply
-                && call.arguments.is_empty()
-                && !crate::callback_return::binding_is_callback_result(
-                    self.lookup,
-                    file,
-                    call.callee,
-                )
-                && typed_accessor_descriptor_at(self.lookup, file.path.as_str(), call.callee)
-                    .is_some()
-                && seen.insert(key.clone())
-            {
-                result
-                    .dispatch_obligations
-                    .push(typed_source_obligation(file, call.callee));
-            }
-            if let Some((name, declaration, allowed_by_option, source_kind)) =
-                self.setters.get(symbol)
-            {
-                // Under a root owner `setSignal`'s guard throws on every
-                // release; a store setter's only where the resolved signals
-                // dropped the root exemption (rc.9). In dev a component body
-                // runs under a root too, so the same answer covers it.
-                let root_body = match source_kind {
-                    ReactiveSourceKind::Accessor => RootBodyGuard::Rejects,
-                    ReactiveSourceKind::Store
-                        if !self.lookup.dialect.store_setter_guard_exempts_roots() =>
-                    {
-                        RootBodyGuard::Rejects
-                    }
-                    ReactiveSourceKind::Store => RootBodyGuard::Exempts,
-                };
-                let mut write_execution = semantic_write_execution_role(
-                    file,
-                    call.callee,
-                    &allowed,
-                    self.entities,
-                    self.symbol_names,
-                    self.lookup,
-                    root_body,
-                );
-                // Where the resolved release's optimistic-store setter meets no
-                // owned-scope guard (rc.0), a store setter is reported only when
-                // it is proven to be `createStore`'s, whose writes do reach the
-                // guard. An optimistic-store setter is legal in every owned
-                // scope, and a store setter found only by its type could be
-                // either, so both take the role that reports nothing, as an
-                // exempted root-body write does: the second is a miss, never a
-                // violation the runtime does not raise.
-                if write_execution.reports_disallowed_write()
-                    && *source_kind == ReactiveSourceKind::Store
-                    && !self.lookup.dialect.optimistic_store_setter_guarded()
-                    && self
-                        .source_primitives
-                        .get(symbol)
-                        .and_then(|primitive| self.lookup.dialect.primitive(primitive))
-                        != Some(solid_dialect::Primitive::CreateStore)
-                {
-                    write_execution = ExecutionRole::UntrackedCallback;
-                }
-                for _ in 0..multiplicity {
-                    result.writes.push(Arc::new(ReactiveWrite {
-                        setter: name.to_string().into(),
-                        operation: crate::ReactiveWriteOperation::Setter,
-                        source_kind: *source_kind,
-                        location: location(file.path.shared(), call.span),
-                        declaration: declaration.clone(),
-                        execution: write_execution,
-                        allowed_by_option: *allowed_by_option,
-                        context: analysis_context(
-                            file,
-                            call.span,
-                            self.entities,
-                            self.symbol_names,
-                            self.lookup.dialect,
-                            self.lookup,
-                        )
-                        .into(),
-                    }));
-                }
-            }
-            if let Some((name, declaration)) = self.actions.get(symbol) {
-                // An action call's guard has no root exemption on any release:
-                // it throws `ACTION_CALLED_IN_OWNED_SCOPE` directly in a
-                // `createRoot` body, and in a memo nested in one (probed
-                // rc.0-rc.9, dev).
-                let action_execution = semantic_write_execution_role(
-                    file,
-                    call.callee,
-                    &allowed,
-                    self.entities,
-                    self.symbol_names,
-                    self.lookup,
-                    RootBodyGuard::Rejects,
-                );
-                for _ in 0..multiplicity {
-                    result.action_invocations.push(Arc::new(ActionInvocation {
-                        action: name.to_string().into(),
-                        location: location(file.path.shared(), call.span),
-                        declaration: declaration.clone(),
-                        execution: action_execution,
-                        context: analysis_context(
-                            file,
-                            call.span,
-                            self.entities,
-                            self.symbol_names,
-                            self.lookup.dialect,
-                            self.lookup,
-                        )
-                        .into(),
-                    }));
-                }
             }
         }
-        for member in &file.ast.members {
-            // A member that is another member's object is read as part of the
-            // longer path, which is reported instead -- except a prop read at
-            // the head of a chain (`props.snapshot` in
-            // `props.snapshot?.messages[i]`): the getter that runs is that
-            // prop's, and the longer path's object resolves to no source.
-            let receiver = file.ast.peel_ts_sugar_span(member.object);
-            let receiver_is_identifier = file.ast.identifiers.iter().any(|identifier| {
-                identifier.span == receiver
-                    && identifier.role == solid_facts::ast::IdentifierRole::Reference
-            });
-            let prop_head = receiver_is_identifier
-                && self
-                    .entities
-                    .get(&location(
-                        file.path.shared(),
-                        file.ast.peel_ts_sugar_span(member.object),
-                    ))
-                    .is_some_and(|symbol| {
-                        self.prop_sources.contains_key(symbol)
-                            && self.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store)
-                    });
-            if !prop_head
-                && file
-                    .ast
-                    .members
-                    .iter()
-                    .any(|candidate| file.ast.peel_ts_sugar_span(candidate.object) == member.span)
-            {
-                continue;
-            }
-            // A plain assignment writes this exact member without reading its
-            // old value. Compound assignments, updates, and members nested
-            // inside a target (a computed key, a destructuring default) are
-            // retained as reads.
-            if file.ast.is_plain_assignment_target(member.span)
-                || file
-                    .ast
-                    .deleted_targets
-                    .iter()
-                    .any(|target| file.ast.peel_ts_sugar_span(*target) == member.span)
-                || file
-                    .ast
-                    .iteration_targets
-                    .iter()
-                    .any(|target| file.ast.peel_ts_sugar_span(*target) == member.span)
-            {
-                continue;
-            }
-            let object = location(
-                file.path.shared(),
-                if receiver_is_identifier {
-                    receiver
-                } else {
-                    member.object
-                },
+        if let Some((name, declaration)) = self.actions.get(symbol) {
+            // An action call's guard has no root exemption on any release:
+            // it throws `ACTION_CALLED_IN_OWNED_SCOPE` directly in a
+            // `createRoot` body, and in a memo nested in one (probed
+            // rc.0-rc.9, dev).
+            let action_execution = semantic_write_execution_role(
+                file,
+                call.callee,
+                allowed,
+                self.entities,
+                self.symbol_names,
+                self.lookup,
+                RootBodyGuard::Rejects,
             );
-            // ADR 0323: an inline view (`omit(props, "y").x`) is the same
-            // expression as a bound one; its root is the source, and a read
-            // through a view is never an exact root read.
-            // Type Facts keeps no entity at an identifier under a TypeScript
-            // wrapper (`(props as P).x`, `props!.x`); the binder resolves it.
-            let binder_symbol = if receiver_is_identifier && self.entities.get(&object).is_none() {
-                crate::source_discovery::reference_symbol(
+            for _ in 0..multiplicity {
+                result.action_invocations.push(Arc::new(ActionInvocation {
+                    action: name.to_string().into(),
+                    location: location(file.path.shared(), call.span),
+                    declaration: declaration.clone(),
+                    execution: action_execution,
+                    context: analysis_context(
+                        file,
+                        call.span,
+                        self.entities,
+                        self.symbol_names,
+                        self.lookup.dialect,
+                        self.lookup,
+                    )
+                    .into(),
+                }));
+            }
+        }
+    }
+
+    fn push_accessor_read(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+        symbol: &str,
+        accessor: &(SymbolId, Location),
+        execution: ExecutionRole,
+        result: &mut LocalAccessResult,
+    ) {
+        let (name, declaration) = accessor;
+        let origin = self.accessor_origins.get(symbol);
+        let display_name = call.static_callee(&file.source).unwrap_or(name);
+        result.reads.push(Arc::new(ReactiveRead {
+            summary_attributed: false,
+            transported: false,
+            kind: "accessor".into(),
+            accessor: origin
+                .map_or_else(|| display_name.to_string(), |origin| origin.0.to_string())
+                .into(),
+            location: location(file.path.shared(), call.span),
+            declaration: origin.map_or_else(|| declaration.clone(), |origin| origin.2.clone()),
+            execution,
+            context: read_analysis_context(file, call.span, execution, self.lookup).into(),
+            via: origin.map_or_else(String::new, |_| name.to_string()).into(),
+            origin: origin.map(|origin| origin.2.clone()),
+            origin_context: origin
+                .map_or_else(String::new, |origin| origin.1.to_string())
+                .into(),
+            uncertain: self.lookup.inside_possible_component(file, call.span),
+            missing_jsx_census: missing_jsx_census(file, call.span, execution),
+            host_callback_timing: host_callback_timing(file, call.span, execution, self.lookup),
+            project_consumer_non_strict: false,
+            callback_invocation_unproven: false,
+            callee_callback_timing: callee_callback_timing(file, call.span, execution, self.lookup),
+        }));
+        if counts_as_strict_read_root(file, call.span, execution, self.lookup) {
+            result.strict_read_obligations += 1;
+        }
+        let async_provenance = self.async_sources.contains(symbol);
+        let async_options = self.effective_async_options(symbol);
+        if (async_provenance
+            || async_options.ssr_client_bare
+            || async_options.server_rendering_unresolved)
+            && !pending_accessor_probe(file, call.callee, self.lookup)
+        {
+            let async_execution = async_execution_role(file, call.callee, execution);
+            let async_execution =
+                if async_options.ssr_client_bare || async_options.server_rendering_unresolved {
+                    async_execution
+                } else {
+                    async_read_role(
+                        file,
+                        call.callee,
+                        async_execution,
+                        self.entities,
+                        self.symbol_names,
+                        self.lookup,
+                    )
+                };
+            let cover = read_loading_cover(self.lookup, file, call.callee, self.symbol_names);
+            result.async_reads.push(Arc::new(AsyncRead {
+                accessor: format!("{name}()").into(),
+                location: location(file.path.shared(), call.span),
+                declaration: declaration.clone(),
+                execution: async_execution,
+                leaf_owner: containing_leaf_owner(
                     file,
-                    receiver,
+                    call.callee,
                     self.entities,
+                    self.symbol_names,
                     self.lookup,
                 )
+                .map(Into::into),
+                under_loading: cover == LoadingCover::Covered,
+                mount_unresolved: cover == LoadingCover::Unresolved,
+                async_provenance,
+                declared_loading: async_options.declared_loading,
+                options_opaque: async_options.opaque,
+                ssr_client_hole: async_options.ssr_client_bare,
+                server_rendering_unresolved: async_options.server_rendering_unresolved,
+                host_callback_timing: host_callback_timing(
+                    file,
+                    call.callee,
+                    async_execution,
+                    self.lookup,
+                ),
+                callee_callback_timing: callee_callback_timing(
+                    file,
+                    call.callee,
+                    async_execution,
+                    self.lookup,
+                ),
+                invocation_context_unproven: async_execution == ExecutionRole::UntrackedRendering
+                    && !nested_literal_runs_during_body(
+                        file,
+                        call.callee,
+                        self.entities,
+                        self.symbol_names,
+                        self.lookup,
+                    ),
+            }));
+        }
+    }
+
+    fn discover_member(
+        &self,
+        file: &solid_facts::FileFacts,
+        member: &solid_facts::ast::MemberFact,
+        allowed: &[solid_facts::core::Span],
+        result: &mut LocalAccessResult,
+        seen: &mut HashSet<(Arc<str>, u64, u64)>,
+    ) {
+        // A member that is another member's object is read as part of the
+        // longer path, which is reported instead -- except a prop read at
+        // the head of a chain (`props.snapshot` in
+        // `props.snapshot?.messages[i]`): the getter that runs is that
+        // prop's, and the longer path's object resolves to no source.
+        let receiver = file.ast.peel_ts_sugar_span(member.object);
+        let receiver_is_identifier = file.ast.identifiers.iter().any(|identifier| {
+            identifier.span == receiver
+                && identifier.role == solid_facts::ast::IdentifierRole::Reference
+        });
+        let prop_head = receiver_is_identifier
+            && self
+                .entities
+                .get(&location(
+                    file.path.shared(),
+                    file.ast.peel_ts_sugar_span(member.object),
+                ))
+                .is_some_and(|symbol| {
+                    self.prop_sources.contains_key(symbol)
+                        && self.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store)
+                });
+        if !prop_head
+            && file
+                .ast
+                .members
+                .iter()
+                .any(|candidate| file.ast.peel_ts_sugar_span(candidate.object) == member.span)
+        {
+            return;
+        }
+        // A plain assignment writes this exact member without reading its
+        // old value. Compound assignments, updates, and members nested
+        // inside a target (a computed key, a destructuring default) are
+        // retained as reads.
+        if file.ast.is_plain_assignment_target(member.span)
+            || file
+                .ast
+                .deleted_targets
+                .iter()
+                .any(|target| file.ast.peel_ts_sugar_span(*target) == member.span)
+            || file
+                .ast
+                .iteration_targets
+                .iter()
+                .any(|target| file.ast.peel_ts_sugar_span(*target) == member.span)
+        {
+            return;
+        }
+        let object = location(
+            file.path.shared(),
+            if receiver_is_identifier {
+                receiver
             } else {
-                None
-            };
-            // An entity may sit at the view call itself (its result), which
-            // is no source: the view's root is.
-            let known_source = |symbol: &SymbolId| {
-                self.prop_sources.contains_key(symbol)
-                    || self.accessors.contains_key(symbol)
-                    || self.typed_sources.contains_key(symbol)
-            };
-            let inline_root = if binder_symbol.is_none()
-                && !self.entities.get(&object).is_some_and(known_source)
-            {
+                member.object
+            },
+        );
+        // ADR 0323: an inline view (`omit(props, "y").x`) is the same
+        // expression as a bound one; its root is the source, and a read
+        // through a view is never an exact root read.
+        // Type Facts keeps no entity at an identifier under a TypeScript
+        // wrapper (`(props as P).x`, `props!.x`); the binder resolves it.
+        let binder_symbol = if receiver_is_identifier && self.entities.get(&object).is_none() {
+            crate::source_discovery::reference_symbol(file, receiver, self.entities, self.lookup)
+        } else {
+            None
+        };
+        // An entity may sit at the view call itself (its result), which
+        // is no source: the view's root is.
+        let known_source = |symbol: &SymbolId| {
+            self.prop_sources.contains_key(symbol)
+                || self.accessors.contains_key(symbol)
+                || self.typed_sources.contains_key(symbol)
+        };
+        let inline_root =
+            if binder_symbol.is_none() && !self.entities.get(&object).is_some_and(known_source) {
                 self.inline_view_root(file, member.object)
             } else {
                 None
             };
-            let Some(symbol) = inline_root
-                .as_ref()
-                .or(self.entities.get(&object))
-                .or(binder_symbol.as_ref())
-            else {
-                continue;
-            };
-            let execution = semantic_execution_role(
-                file,
-                member.span,
-                &allowed,
-                self.entities,
-                self.symbol_names,
-                self.lookup,
-            );
-            let helper = self
-                .prop_sources
-                .get(symbol)
-                .filter(|_| self.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store))
-                .and_then(|_| self.component_prop_helper(file, member.span));
-            let gate_refuses = inside_non_component_function(file, member.span, self.lookup)
+        let Some(symbol) = inline_root
+            .as_ref()
+            .or(self.entities.get(&object))
+            .or(binder_symbol.as_ref())
+        else {
+            return;
+        };
+        let execution = semantic_execution_role(
+            file,
+            member.span,
+            allowed,
+            self.entities,
+            self.symbol_names,
+            self.lookup,
+        );
+        let helper = self
+            .prop_sources
+            .get(symbol)
+            .filter(|_| self.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store))
+            .and_then(|_| self.component_prop_helper(file, member.span));
+        let gate_refuses = inside_non_component_function(file, member.span, self.lookup)
                 && named_callback_execution_role(file, member.span, self.lookup).is_none()
                 // This literal is the exact dialect-owned children callback,
                 // and this site is in its own body (nested defaults excluded).
@@ -1400,209 +1408,232 @@ impl LocalAccessContext<'_, '_> {
                     execution,
                     ExecutionRole::EffectApply | ExecutionRole::UntrackedCallback
                 );
-            if helper.is_none() && gate_refuses {
-                continue;
-            }
-            // ADR 0294: a Get of a typed store candidate. `Store<T>` is `T`,
-            // so the type says nothing about a proxy.
-            if !self.accessors.contains_key(symbol)
-                && !self.prop_sources.contains_key(symbol)
-                && let Some(typed) = self.typed_sources.get(symbol)
-                && typed.kind == ReactiveSourceKind::Store
-            {
-                let key = (object.path.clone(), object.start_byte, object.end_byte);
-                if !typed.implementation_visible
-                    && execution.reports_untracked_read()
-                    && seen.insert(key)
-                {
-                    result
-                        .dispatch_obligations
-                        .push(typed_source_obligation(file, member.span));
-                }
-                continue;
-            }
-            let source = if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
-                self.accessors.get(symbol)
-            } else {
-                self.prop_sources.get(symbol)
-            };
-            let Some((name, declaration)) = source else {
-                continue;
-            };
-            // A dynamic first key is not the prop bearing that key's source
-            // spelling. Literal keys use the parser's cooked property name.
-            let property = if file.ast.computed_members.contains(&member.span) {
-                file.ast
-                    .literal_computed_members
-                    .iter()
-                    .find(|key| key.span == member.span)
-                    .map(|key| key.key.as_str())
-            } else {
-                file.source_text(member.property)
-            };
-            if property.is_some_and(|key| self.view_hides_key(file, member.object, key, 0)) {
-                continue;
-            }
-            // A component's `ref` prop is an imperative output channel: the
-            // child calls it once to publish its handle. This is not a
-            // reactive read, but only when the complete member expression is
-            // the direct callee. Reading or aliasing `props.ref` still flows
-            // through strict-read analysis like every other prop.
-            if self.prop_sources.contains_key(symbol)
-                && property == Some("ref")
-                && file
-                    .ast
-                    .calls
-                    .iter()
-                    .any(|call| file.ast.peel_ts_sugar_span(call.callee) == member.span)
-            {
-                continue;
-            }
-            // Caller-proven props: a prop every call site passes statically
-            // compiles to a plain property — reading it is not a reactive
-            // read at all. Unprovable backing stays a proof obligation.
-            let mut uncertain = self.uncertain_prop_sources.contains(symbol)
-                || self.lookup.inside_possible_component(file, member.span);
-            if self.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store)
-                && let Some((_, prop_declaration)) = self.prop_sources.get(symbol)
-            {
-                // A view/alias can have different keys from the original
-                // parameter. ADR 0216's classification is for that parameter,
-                // not permission to certify a merge view's local head Get.
-                let exact_root = inline_root.is_none()
-                    && self.entities.get(prop_declaration) == Some(symbol)
-                    && props_root_is_current(file, prop_declaration, symbol, self.entities)
-                    && !self.prop_sources.iter().any(|(other, (_, declaration))| {
-                        other != symbol && declaration == prop_declaration
-                    });
-                let backing = if exact_root {
-                    property.map_or(PropUse::Unknown, |property| {
-                        self.props_reactivity.prop_use(prop_declaration, property)
-                    })
-                } else {
-                    PropUse::Unknown
-                };
-                match backing {
-                    PropUse::Static => continue,
-                    PropUse::Reactive => {}
-                    PropUse::Unknown => uncertain = true,
-                }
-            }
-            // ADR 0293: the store's strict-read warning is its head Get's.
-            // A `then` head does not warn; a key solid-checker cannot spell
-            // (a symbol, a dynamic expression) may not either. Review round
-            // 1: a `then` Get is withheld only when its backing runs nothing.
-            if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
-                match store_get_decision(file, member.span, declaration, self.lookup) {
-                    StoreHeadGet::Warns => {}
-                    StoreHeadGet::Exempt => continue,
-                    StoreHeadGet::Undecided(reason) => {
-                        let key = (object.path.clone(), object.start_byte, object.end_byte);
-                        if execution.reports_untracked_read() && seen.insert(key) {
-                            result.dispatch_obligations.push(crate::StaticDefect {
-                                kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
-                                    callee: file
-                                        .source_text(member.span)
-                                        .unwrap_or("this store Get")
-                                        .to_owned(),
-                                    member: None,
-                                },
-                                location: location(file.path.shared(), member.span),
-                                analysis_context: format!("{}{reason}", crate::STORE_KEY_UNDECIDED),
-                                fixes: vec![],
-                                uncertain: true,
-                            });
-                        }
-                        continue;
-                    }
-                }
-            }
+        if helper.is_none() && gate_refuses {
+            return;
+        }
+        // ADR 0294: a Get of a typed store candidate. `Store<T>` is `T`,
+        // so the type says nothing about a proxy.
+        if !self.accessors.contains_key(symbol)
+            && !self.prop_sources.contains_key(symbol)
+            && let Some(typed) = self.typed_sources.get(symbol)
+            && typed.kind == ReactiveSourceKind::Store
+        {
             let key = (object.path.clone(), object.start_byte, object.end_byte);
-            if !seen.insert(key) {
-                continue;
-            }
-            let accessor = if prop_head {
-                // Name the Get we proved, including brackets/optional syntax,
-                // rather than a suffix's property or an invented dotted key.
-                file.source_text(member.span)
-                    .unwrap_or(name.as_str())
-                    .to_owned()
-            } else {
-                usize::try_from(member.span.start)
-                    .ok()
-                    .zip(usize::try_from(member.span.end).ok())
-                    .and_then(|(start, end)| file.source.get(start..end))
-                    .and_then(|path| {
-                        path.find('.')
-                            .map(|index| format!("{name}{}", &path[index..]))
-                    })
-                    .unwrap_or_else(|| {
-                        format!(
-                            "{name}.{}",
-                            file.source_text(member.property).unwrap_or_default()
-                        )
-                    })
-            };
-            let read = ReactiveRead {
-                summary_attributed: false,
-                transported: false,
-                kind: if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
-                    "store-path".into()
-                } else {
-                    "component-props".into()
-                },
-                accessor: accessor.into(),
-                location: location(file.path.shared(), member.span),
-                declaration: declaration.clone(),
-                execution,
-                context: read_analysis_context(file, member.span, execution, self.lookup).into(),
-                via: Arc::from(""),
-                origin: None,
-                origin_context: Arc::from(""),
-                uncertain,
-                missing_jsx_census: missing_jsx_census(file, member.span, execution),
-                host_callback_timing: host_callback_timing(
-                    file,
-                    member.span,
-                    execution,
-                    self.lookup,
-                ),
-                project_consumer_non_strict: false,
-                callback_invocation_unproven: false,
-                callee_callback_timing: callee_callback_timing(
-                    file,
-                    member.span,
-                    execution,
-                    self.lookup,
-                ),
-            };
-            if let Some(helper) = helper {
-                self.project_helper_prop_read(
-                    file,
-                    helper,
-                    member.span,
-                    &allowed,
-                    read,
-                    !gate_refuses,
-                    &mut result,
-                );
-                continue;
-            }
-            result.reads.push(Arc::new(read));
-            if counts_as_strict_read_root(file, member.span, execution, self.lookup) {
-                result.strict_read_obligations += 1;
-            }
-            let member_async = self.async_sources.contains(symbol);
-            let member_options = self.effective_async_options(symbol);
-            if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store)
-                && (member_async
-                    || member_options.ssr_client_bare
-                    || member_options.server_rendering_unresolved)
+            if !typed.implementation_visible
+                && execution.reports_untracked_read()
+                && seen.insert(key)
             {
-                let async_execution = async_execution_role(file, member.span, execution);
-                let async_execution = if member_options.ssr_client_bare
-                    || member_options.server_rendering_unresolved
-                {
+                result
+                    .dispatch_obligations
+                    .push(typed_source_obligation(file, member.span));
+            }
+            return;
+        }
+        let source = if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
+            self.accessors.get(symbol)
+        } else {
+            self.prop_sources.get(symbol)
+        };
+        let Some((name, declaration)) = source else {
+            return;
+        };
+        // A dynamic first key is not the prop bearing that key's source
+        // spelling. Literal keys use the parser's cooked property name.
+        let property = if file.ast.computed_members.contains(&member.span) {
+            file.ast
+                .literal_computed_members
+                .iter()
+                .find(|key| key.span == member.span)
+                .map(|key| key.key.as_str())
+        } else {
+            file.source_text(member.property)
+        };
+        if property.is_some_and(|key| self.view_hides_key(file, member.object, key, 0)) {
+            return;
+        }
+        // A component's `ref` prop is an imperative output channel: the
+        // child calls it once to publish its handle. This is not a
+        // reactive read, but only when the complete member expression is
+        // the direct callee. Reading or aliasing `props.ref` still flows
+        // through strict-read analysis like every other prop.
+        if self.prop_sources.contains_key(symbol)
+            && property == Some("ref")
+            && file
+                .ast
+                .calls
+                .iter()
+                .any(|call| file.ast.peel_ts_sugar_span(call.callee) == member.span)
+        {
+            return;
+        }
+        // Caller-proven props: a prop every call site passes statically
+        // compiles to a plain property — reading it is not a reactive
+        // read at all. Unprovable backing stays a proof obligation.
+        let mut uncertain = self.uncertain_prop_sources.contains(symbol)
+            || self.lookup.inside_possible_component(file, member.span);
+        if self.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store)
+            && let Some((_, prop_declaration)) = self.prop_sources.get(symbol)
+        {
+            // A view/alias can have different keys from the original
+            // parameter. ADR 0216's classification is for that parameter,
+            // not permission to certify a merge view's local head Get.
+            let exact_root = inline_root.is_none()
+                && self.entities.get(prop_declaration) == Some(symbol)
+                && props_root_is_current(file, prop_declaration, symbol, self.entities)
+                && !self.prop_sources.iter().any(|(other, (_, declaration))| {
+                    other != symbol && declaration == prop_declaration
+                });
+            let backing = if exact_root {
+                property.map_or(PropUse::Unknown, |property| {
+                    self.props_reactivity.prop_use(prop_declaration, property)
+                })
+            } else {
+                PropUse::Unknown
+            };
+            match backing {
+                PropUse::Static => return,
+                PropUse::Reactive => {}
+                PropUse::Unknown => uncertain = true,
+            }
+        }
+        // ADR 0293: the store's strict-read warning is its head Get's.
+        // A `then` head does not warn; a key solid-checker cannot spell
+        // (a symbol, a dynamic expression) may not either. Review round
+        // 1: a `then` Get is withheld only when its backing runs nothing.
+        if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
+            match store_get_decision(file, member.span, declaration, self.lookup) {
+                StoreHeadGet::Warns => {}
+                StoreHeadGet::Exempt => return,
+                StoreHeadGet::Undecided(reason) => {
+                    let key = (object.path.clone(), object.start_byte, object.end_byte);
+                    if execution.reports_untracked_read() && seen.insert(key) {
+                        result.dispatch_obligations.push(crate::StaticDefect {
+                            kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
+                                callee: file
+                                    .source_text(member.span)
+                                    .unwrap_or("this store Get")
+                                    .to_owned(),
+                                member: None,
+                            },
+                            location: location(file.path.shared(), member.span),
+                            analysis_context: format!("{}{reason}", crate::STORE_KEY_UNDECIDED),
+                            fixes: vec![],
+                            uncertain: true,
+                        });
+                    }
+                    return;
+                }
+            }
+        }
+        let key = (object.path.clone(), object.start_byte, object.end_byte);
+        if !seen.insert(key) {
+            return;
+        }
+        let read = self.member_read(
+            file,
+            member,
+            symbol,
+            (name, declaration),
+            (execution, uncertain, prop_head),
+        );
+        if let Some(helper) = helper {
+            self.project_helper_prop_read(
+                file,
+                helper,
+                member.span,
+                allowed,
+                read,
+                !gate_refuses,
+                result,
+            );
+            return;
+        }
+        result.reads.push(Arc::new(read));
+        if counts_as_strict_read_root(file, member.span, execution, self.lookup) {
+            result.strict_read_obligations += 1;
+        }
+        self.push_member_async_read(file, member, symbol, (name, declaration), execution, result);
+    }
+
+    fn member_read(
+        &self,
+        file: &solid_facts::FileFacts,
+        member: &solid_facts::ast::MemberFact,
+        symbol: &SymbolId,
+        (name, declaration): (&SymbolId, &Location),
+        (execution, uncertain, prop_head): (ExecutionRole, bool, bool),
+    ) -> ReactiveRead {
+        let accessor = if prop_head {
+            // Name the Get we proved, including brackets/optional syntax,
+            // rather than a suffix's property or an invented dotted key.
+            file.source_text(member.span)
+                .unwrap_or(name.as_str())
+                .to_owned()
+        } else {
+            usize::try_from(member.span.start)
+                .ok()
+                .zip(usize::try_from(member.span.end).ok())
+                .and_then(|(start, end)| file.source.get(start..end))
+                .and_then(|path| {
+                    path.find('.')
+                        .map(|index| format!("{name}{}", &path[index..]))
+                })
+                .unwrap_or_else(|| {
+                    format!(
+                        "{name}.{}",
+                        file.source_text(member.property).unwrap_or_default()
+                    )
+                })
+        };
+        ReactiveRead {
+            summary_attributed: false,
+            transported: false,
+            kind: if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
+                "store-path".into()
+            } else {
+                "component-props".into()
+            },
+            accessor: accessor.into(),
+            location: location(file.path.shared(), member.span),
+            declaration: declaration.clone(),
+            execution,
+            context: read_analysis_context(file, member.span, execution, self.lookup).into(),
+            via: Arc::from(""),
+            origin: None,
+            origin_context: Arc::from(""),
+            uncertain,
+            missing_jsx_census: missing_jsx_census(file, member.span, execution),
+            host_callback_timing: host_callback_timing(file, member.span, execution, self.lookup),
+            project_consumer_non_strict: false,
+            callback_invocation_unproven: false,
+            callee_callback_timing: callee_callback_timing(
+                file,
+                member.span,
+                execution,
+                self.lookup,
+            ),
+        }
+    }
+
+    fn push_member_async_read(
+        &self,
+        file: &solid_facts::FileFacts,
+        member: &solid_facts::ast::MemberFact,
+        symbol: &SymbolId,
+        (name, declaration): (&SymbolId, &Location),
+        execution: ExecutionRole,
+        result: &mut LocalAccessResult,
+    ) {
+        let member_async = self.async_sources.contains(symbol);
+        let member_options = self.effective_async_options(symbol);
+        if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store)
+            && (member_async
+                || member_options.ssr_client_bare
+                || member_options.server_rendering_unresolved)
+        {
+            let async_execution = async_execution_role(file, member.span, execution);
+            let async_execution =
+                if member_options.ssr_client_bare || member_options.server_rendering_unresolved {
                     async_execution
                 } else {
                     async_read_role(
@@ -1614,55 +1645,61 @@ impl LocalAccessContext<'_, '_> {
                         self.lookup,
                     )
                 };
-                let cover = read_loading_cover(self.lookup, file, member.span, self.symbol_names);
-                result.async_reads.push(Arc::new(AsyncRead {
-                    accessor: format!(
-                        "{name}.{}",
-                        file.source_text(member.property).unwrap_or_default()
-                    )
-                    .into(),
-                    location: location(file.path.shared(), member.span),
-                    declaration: declaration.clone(),
-                    execution: async_execution,
-                    leaf_owner: containing_leaf_owner(
+            let cover = read_loading_cover(self.lookup, file, member.span, self.symbol_names);
+            result.async_reads.push(Arc::new(AsyncRead {
+                accessor: format!(
+                    "{name}.{}",
+                    file.source_text(member.property).unwrap_or_default()
+                )
+                .into(),
+                location: location(file.path.shared(), member.span),
+                declaration: declaration.clone(),
+                execution: async_execution,
+                leaf_owner: containing_leaf_owner(
+                    file,
+                    member.span,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup,
+                )
+                .map(Into::into),
+                under_loading: cover == LoadingCover::Covered,
+                mount_unresolved: cover == LoadingCover::Unresolved,
+                async_provenance: member_async,
+                declared_loading: member_options.declared_loading,
+                options_opaque: member_options.opaque,
+                ssr_client_hole: member_options.ssr_client_bare,
+                server_rendering_unresolved: member_options.server_rendering_unresolved,
+                host_callback_timing: host_callback_timing(
+                    file,
+                    member.span,
+                    async_execution,
+                    self.lookup,
+                ),
+                callee_callback_timing: callee_callback_timing(
+                    file,
+                    member.span,
+                    async_execution,
+                    self.lookup,
+                ),
+                invocation_context_unproven: async_execution == ExecutionRole::UntrackedRendering
+                    && !nested_literal_runs_during_body(
                         file,
                         member.span,
                         self.entities,
                         self.symbol_names,
                         self.lookup,
-                    )
-                    .map(Into::into),
-                    under_loading: cover == LoadingCover::Covered,
-                    mount_unresolved: cover == LoadingCover::Unresolved,
-                    async_provenance: member_async,
-                    declared_loading: member_options.declared_loading,
-                    options_opaque: member_options.opaque,
-                    ssr_client_hole: member_options.ssr_client_bare,
-                    server_rendering_unresolved: member_options.server_rendering_unresolved,
-                    host_callback_timing: host_callback_timing(
-                        file,
-                        member.span,
-                        async_execution,
-                        self.lookup,
                     ),
-                    callee_callback_timing: callee_callback_timing(
-                        file,
-                        member.span,
-                        async_execution,
-                        self.lookup,
-                    ),
-                    invocation_context_unproven: async_execution
-                        == ExecutionRole::UntrackedRendering
-                        && !nested_literal_runs_during_body(
-                            file,
-                            member.span,
-                            self.entities,
-                            self.symbol_names,
-                            self.lookup,
-                        ),
-                }));
-            }
+            }));
         }
+    }
+
+    fn discover_spreads(
+        &self,
+        file: &solid_facts::FileFacts,
+        allowed: &[solid_facts::core::Span],
+        result: &mut LocalAccessResult,
+    ) {
         for spread in &file.ast.spreads {
             let argument = location(file.path.shared(), spread.argument);
             let inline_root = if !self.entities.get(&argument).is_some_and(|symbol| {
@@ -1678,7 +1715,7 @@ impl LocalAccessContext<'_, '_> {
             let execution = semantic_execution_role(
                 file,
                 spread.span,
-                &allowed,
+                allowed,
                 self.entities,
                 self.symbol_names,
                 self.lookup,
@@ -1761,6 +1798,9 @@ impl LocalAccessContext<'_, '_> {
                 result.strict_read_obligations += 1;
             }
         }
+    }
+
+    fn discover_dynamic_jsx(&self, file: &solid_facts::FileFacts, result: &mut LocalAccessResult) {
         for element in &file.ast.jsx_elements {
             let name_location = location(file.path.shared(), element.name.span);
             let Some(symbol) = self.entities.get(&name_location) else {
@@ -1805,7 +1845,6 @@ impl LocalAccessContext<'_, '_> {
                 invocation_context_unproven: false,
             }));
         }
-        result
     }
 }
 
