@@ -963,17 +963,22 @@ fn component_invokes_prop_in_body(
     // is `props`), a destructuring -- may replace `props.<prop>` before the
     // call, which then runs something else.
     let peel = |span: Span| file.ast.peel_ts_sugar_span(span);
+    // Every write form: assignments, destructuring leaves, updates and loop
+    // heads (`write_targets`, `iteration_targets`), and `delete`.
     let written = |member: Span| {
         file.ast
             .assignments
             .iter()
-            .any(|assignment| assignment.target.contains(member))
-            || file
-                .ast
-                .deleted_targets
-                .iter()
-                .any(|target| target.contains(member))
+            .map(|assignment| assignment.target)
+            .chain(file.ast.write_targets.iter().copied())
+            .chain(file.ast.iteration_targets.iter().copied())
+            .chain(file.ast.deleted_targets.iter().copied())
+            .any(|target| target.contains(member))
     };
+    // A redeclaration (`var props = …`) or any write of the parameter itself.
+    if crate::indexes::binding_written(file, name.span) {
+        return false;
+    }
     // `arguments[0]` is `props` under another name, and `eval` can name it.
     if file.ast.identifiers.iter().any(|identifier| {
         component.span.contains(identifier.span)

@@ -160,6 +160,46 @@
       "start": 5050,
       "end": 5057,
       "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/component-function-child/App.tsx",
+      "start": 5277,
+      "end": 5291,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/component-function-child/App.tsx",
+      "start": 5497,
+      "end": 5504,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/component-function-child/App.tsx",
+      "start": 5751,
+      "end": 5765,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/component-function-child/App.tsx",
+      "start": 5973,
+      "end": 5980,
+      "fixes": 0
     }
   ]
 }

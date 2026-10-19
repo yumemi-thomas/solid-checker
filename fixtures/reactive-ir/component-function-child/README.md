@@ -25,6 +25,8 @@ component's children callback (`<For>`, `<Show>`) is unchanged.
 | `DeletedChild` | `SC1001` uncertifiable | the body deletes `children` before calling it |
 | `ReplacedChild` | `SC1001` uncertifiable | `props.replace()` gets `props` as `this` and replaces `children` first |
 | `ArgumentsChild` | `SC1001` uncertifiable | `arguments[0]` is `props`; a component mentioning `arguments` or `eval` refuses the body proof |
+| `LoopChild` | `SC1001` uncertifiable | a `for … of` head writes `props.children` |
+| `RedeclaredChild` | `SC1001` uncertifiable | `var props` replaces the parameter |
 
 `{shown() && …}` also draws the style rule `SC8015` (prefer `<Show>`). `Kids`
 reading `props.children` in its body is the existing props-read

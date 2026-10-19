@@ -203,3 +203,43 @@ export function ArgumentsChild() {
     </ByArguments>
   );
 }
+
+function LoopReplaced(props: { children: () => JSX.Element }) {
+  for (props.children of [() => <span>replacement</span>]) {
+    break;
+  }
+  return props.children();
+}
+
+// Uncertifiable, no violation: the loop head writes `props.children`.
+export function LoopChild() {
+  const [count] = createSignal(0);
+  return (
+    <LoopReplaced>
+      {() => {
+        const n = count();
+        return <span>{n}</span>;
+      }}
+    </LoopReplaced>
+  );
+}
+
+type Redeclared = { children: () => JSX.Element };
+
+function Redeclaring(props: Redeclared) {
+  var props: Redeclared = { children: () => <span>replacement</span> };
+  return props.children();
+}
+
+// Uncertifiable, no violation: `var props` replaces the parameter.
+export function RedeclaredChild() {
+  const [count] = createSignal(0);
+  return (
+    <Redeclaring>
+      {() => {
+        const n = count();
+        return <span>{n}</span>;
+      }}
+    </Redeclaring>
+  );
+}
