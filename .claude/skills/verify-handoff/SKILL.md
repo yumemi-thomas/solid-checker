@@ -18,8 +18,8 @@ environment are unchanged.
 
 ## Suspiciously green?
 
-- A process test passed under bare `cargo test` without `SOLID_TYPEFACTS_BIN`:
-  it skipped.
+- A process test passed with `SOLID_TYPEFACTS_BIN` overridden to empty, or
+  against a stale `bin/solid-typefacts` (run `make build-typefacts`).
 - Coverage ran against `bin/solid-checker-rust` instead of the fresh debug
   build (`make coverage` uses the fresh one).
 - A negative fixture is vacuous: it would stay clean even if the rule were

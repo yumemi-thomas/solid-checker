@@ -61,10 +61,24 @@ oxc_miette = { package = "oxc-miette", version = "2.7" }
 sha2 = "0.10"
 thiserror = "2"
 
-# Full verification exercises several dialect/target combinations and does not
-# need debugger symbols or per-crate incremental object caches. Keeping those
-# artifacts in a dedicated profile prevents handoff checks from multiplying the
-# normal edit-loop target tree; ordinary dev/test builds retain Cargo's defaults.
+# Third-party crates carry no debug info and workspace crates only line
+# tables: enough for backtraces with line numbers. Full DWARF on macOS keeps
+# every object file (about 175k files, 21 GB in rust/target/debug), which made
+# cloning a target for a parallel worktree slow. For a debugger session, build
+# with `--profile debugger`.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = 0
+
+[profile.debugger]
+inherits = "dev"
+debug = 2
+
+# Full verification exercises several dialect/target combinations and needs no
+# debug info or incremental object caches. A dedicated profile keeps handoff
+# checks from multiplying the edit-loop target tree.
 [profile.verify]
 inherits = "dev"
 debug = 0

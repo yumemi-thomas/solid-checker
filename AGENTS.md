@@ -67,8 +67,9 @@ and docs/decisions.md (live decisions by ADR number).
 
 - Iterate on one Rust test: `make test-focused TEST=<filter> TEST_PACKAGE=<crate>`
   (library tests only).
-- Process tests skip silently unless armed:
-  `SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" cargo +1.97 test --manifest-path rust/Cargo.toml -p solid-facts-backend --test <name>`.
+- Process tests: `cargo +1.97 test --manifest-path rust/Cargo.toml -p solid-facts-backend --test <name>`.
+  `.cargo/config.toml` points them at `bin/solid-typefacts` and sets the build
+  ids, so bare `cargo` and `make` share one build.
 - After a slice: `make verify-delta BASE=<commit the slice started from>`. It
   maps changed paths to their owning checks plus fmt, clippy, and manifest
   validation, and escalates any unmapped path to `make verify`.

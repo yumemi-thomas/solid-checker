@@ -5,12 +5,12 @@
 // It builds nothing. `make wasm-parity` builds the package, the native
 // checker and the bridge test's recorded update frames first; a missing
 // artifact, toolchain or input fails here rather than skipping. Nothing is
-// cached. The legacy cases carry the exact expectations transplanted from the
+// cached; the Node and Bun drivers run concurrently. The legacy cases carry the exact expectations transplanted from the
 // S1b consumer witness (scripts/wasm-parity/expectations.json); the only
 // rendering is the literal case root (`<root>`, and `<root-relative>` in tsc
 // output). Any other difference fails and needs a disposition, never an
 // update. See scripts/wasm-parity/README.md.
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   appendFileSync, chmodSync, copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, readFileSync, renameSync,
@@ -627,8 +627,22 @@ const DECLARED = [
   ...Object.keys(A2), ...A2_MOUNT.map(name => `mount:${name}`),
 ];
 
-const engines = {};
-for (const engine of ["node", "bun"]) {
+// The two engines run their drivers concurrently: each writes only its own
+// results directory (Node is held to that by its permission grant), and the
+// trees they read are frozen. Sequential runs cost about 30 s per verify.
+const runAsync = (command, args, settings) => new Promise(resolvePromise => {
+  const child = spawn(command, args, { ...settings, stdio: ["ignore", "pipe", "pipe"] });
+  const stdout = [];
+  const stderr = [];
+  child.stdout.on("data", chunk => stdout.push(chunk));
+  child.stderr.on("data", chunk => stderr.push(chunk));
+  child.on("error", error => fail(`${command} could not run: ${error.message}`));
+  child.on("close", status => resolvePromise({
+    status, stdout: Buffer.concat(stdout).toString("utf8"), stderr: Buffer.concat(stderr).toString("utf8"),
+  }));
+});
+
+const engineRuns = await Promise.all(["node", "bun"].map(async engine => {
   const out = join(scratch, `results-${engine}`);
   mkdirSync(out, { recursive: true });
   const planPath = join(out, "plan.json");
@@ -647,25 +661,27 @@ for (const engine of ["node", "bun"]) {
     ]
     : [join(consumer, "driver.mjs"), planPath];
   const started = Date.now();
-  const result = run(engine === "node" ? nodePath : bunPath, args, {
+  const result = await runAsync(engine === "node" ? nodePath : bunPath, args, {
     cwd: consumer,
     env: { PATH: process.env.PATH, HOME: process.env.HOME, NODE_ENV: "production", WASM_PARITY_URL_LOG: urlLog },
   });
   writeFileSync(join(out, "driver.stdout"), result.stdout);
   writeFileSync(join(out, "driver.stderr"), result.stderr);
-  if (!check(result.status === 0 && existsSync(join(out, "driver.json")), `${engine}: the driver exited ${result.status}: ${result.stderr.slice(-2000)}`)) continue;
-  const oldEntry = run(engine === "node" ? nodePath : bunPath, [join(consumer, "old-entry.mjs")], {
+  if (!check(result.status === 0 && existsSync(join(out, "driver.json")), `${engine}: the driver exited ${result.status}: ${result.stderr.slice(-2000)}`)) return null;
+  const oldEntry = await runAsync(engine === "node" ? nodePath : bunPath, [join(consumer, "old-entry.mjs")], {
     cwd: consumer, env: { PATH: process.env.PATH, HOME: process.env.HOME, NODE_ENV: "production" },
   });
   writeFileSync(join(out, "old-entry.stdout"), oldEntry.stdout);
   writeFileSync(join(out, "old-entry.stderr"), oldEntry.stderr);
-  engines[engine] = {
+  return [engine, {
     wallMs: Date.now() - started,
     driver: JSON.parse(readFileSync(join(out, "driver.json"), "utf8")),
     urls: [...new Set(readFileSync(urlLog, "utf8").split("\n").filter(Boolean))].sort(),
     oldEntry: oldEntry.status === 0 ? JSON.parse(oldEntry.stdout) : { status: oldEntry.status, stderr: oldEntry.stderr },
-  };
-}
+  }];
+}));
+// Fixed engine order, whichever finished first.
+const engines = Object.fromEntries(engineRuns.filter(Boolean));
 
 // Both engines have checked and validated: lift the denials, and the trees
 // they guarded are still exactly what was frozen.

@@ -74,13 +74,8 @@ per fixture project, holding rule, code, kind, severity, path, and span
 (messages excluded, except for the wording-under-test projects listed in
 `scripts/coverage.mjs`).
 
-1. After Rust source changes, compare with the **fresh debug binary** so a
-   stale checked-in binary cannot hide the change:
-
-   ~~~sh
-   SOLID_CHECKER_BIN="$PWD/rust/target/debug/solid-checker-rust" \
-   SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" node scripts/coverage.mjs
-   ~~~
+1. Run `make coverage`. It builds the fresh debug checker and compares with
+   it, so a stale packaged binary cannot hide the change.
 
 2. Review the reported diff. Every moved finding must be explainable by the
    intended semantic change — a snapshot update is a record of a deliberate

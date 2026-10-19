@@ -1,0 +1,12 @@
+# Defaults for every cargo command run from this repository. A variable already
+# set in the environment wins (make, CI and release jobs set their own build ids).
+[env]
+# The build ids are compiled in through option_env!. Leaving them unset in a bare
+# `cargo test` while `make` sets them rebuilds the whole crate chain on every
+# switch between the two.
+TYPEFACTS_BUILD_ID = "dev"
+SOLID_CHECKER_BUILD_ID = "dev"
+# Process tests skip silently without a producer; point them at the built one so
+# a bare `cargo test` runs them (and fails loudly if it is missing).
+SOLID_TYPEFACTS_BIN = { value = "bin/solid-typefacts", relative = true }
+TYPEFACTS_TEST_BIN = { value = "bin/solid-typefacts", relative = true }
