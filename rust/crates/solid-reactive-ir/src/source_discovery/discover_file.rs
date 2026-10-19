@@ -2,6 +2,35 @@
 
 use super::*;
 
+/// Whether a store-family creation is provably the value form
+/// (`createStore(value)` / `createOptimisticStore(value)`), which never
+/// builds a compute node. Runtime ground truth (probed, rc.0): `refresh()`
+/// on such a store — or on any of its child records — throws
+/// `INVALID_REFRESH_TARGET` in dev, while the function forms, projections,
+/// and function-form optimistic stores all accept it. The runtime branches
+/// on `typeof first === "function"`, so the proof is that argument 0 is a
+/// non-callable value: a container or primitive literal, `null`, or
+/// `undefined`. An identifier or other expression could still be a derive
+/// function, so it stays unknown and refresh acceptance is preserved.
+pub(super) fn store_is_value_form(
+    call: &solid_facts::ast::CallFact,
+    primitive: Option<Primitive>,
+) -> bool {
+    use solid_facts::ast::ArgumentValueKind;
+    if !matches!(
+        primitive,
+        Some(Primitive::CreateStore | Primitive::CreateOptimisticStore)
+    ) {
+        return false;
+    }
+    call.arguments.first().is_some_and(|argument| {
+        matches!(
+            argument.value,
+            ArgumentValueKind::Null | ArgumentValueKind::Undefined
+        ) || argument.runtime_value_kind.is_data_literal()
+    })
+}
+
 pub(crate) fn discover_file_sources(
     lookup: &SemanticLookup<'_>,
     file: &FileFacts,
