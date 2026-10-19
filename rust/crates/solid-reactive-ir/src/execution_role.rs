@@ -974,6 +974,16 @@ fn component_invokes_prop_in_body(
                 .iter()
                 .any(|target| target.contains(member))
     };
+    // `arguments[0]` is `props` under another name, and `eval` can name it.
+    if file.ast.identifiers.iter().any(|identifier| {
+        component.span.contains(identifier.span)
+            && matches!(
+                file.source_text(identifier.span),
+                Some("arguments" | "eval")
+            )
+    }) {
+        return false;
+    }
     if file
         .ast
         .reference_declarations

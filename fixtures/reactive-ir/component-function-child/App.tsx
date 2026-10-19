@@ -182,3 +182,24 @@ export function ReplacedChild() {
     </Replaced>
   );
 }
+
+function ByArguments(props: { children: () => JSX.Element }) {
+  const saved = props.children;
+  Reflect.set(arguments[0], "children", () => <span>replacement</span>);
+  props.children();
+  return <div>{saved()}</div>;
+}
+
+// Uncertifiable, no violation: `arguments[0]` is `props`, and the body
+// replaces `children` through it before the call.
+export function ArgumentsChild() {
+  const [count] = createSignal(0);
+  return (
+    <ByArguments>
+      {() => {
+        const n = count();
+        return <span>{n}</span>;
+      }}
+    </ByArguments>
+  );
+}

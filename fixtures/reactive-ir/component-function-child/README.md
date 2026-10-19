@@ -24,6 +24,7 @@ component's children callback (`<For>`, `<Show>`) is unchanged.
 | `AliasedChild` | `SC1001` uncertifiable | `props` escapes into an alias that replaces `children`; the body proof needs every use of `props` to be a plain member read (`Aliased` also draws the existing `SC2003` for the write) |
 | `DeletedChild` | `SC1001` uncertifiable | the body deletes `children` before calling it |
 | `ReplacedChild` | `SC1001` uncertifiable | `props.replace()` gets `props` as `this` and replaces `children` first |
+| `ArgumentsChild` | `SC1001` uncertifiable | `arguments[0]` is `props`; a component mentioning `arguments` or `eval` refuses the body proof |
 
 `{shown() && …}` also draws the style rule `SC8015` (prefer `<Show>`). `Kids`
 reading `props.children` in its body is the existing props-read
