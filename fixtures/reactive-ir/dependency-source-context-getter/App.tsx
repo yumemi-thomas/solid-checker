@@ -68,7 +68,7 @@ export function SearchOnClick() {
 }
 
 // Scope control: a getter object the project creates is not this change's
-// subject; its Get stays as before (docs/precision-backlog.md).
+// subject; its Get stays as before (docs/open-work.md).
 function makeLocation() {
   const [path] = createSignal("/");
   return {

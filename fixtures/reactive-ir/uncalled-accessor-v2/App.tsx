@@ -1,5 +1,5 @@
 // SC1005 `uncalled-accessor` after the 2026-08-17 narrowing
-// (docs/precision-backlog.md).
+// (the tsc-oracle ledger row).
 //
 // Three of the rule's six value positions were ones the type system closes, in
 // both dialects, so they are gone:

@@ -518,8 +518,8 @@ const (
 // implementation, and records nothing joining them — so the two are unrelated
 // modules that happen to share a name on disk, and no field here will ever say
 // otherwise. Recovering that edge by matching file names is the substitution
-// this fact exists to avoid. See
-// docs/adr/0018-v1-attested-resolved-module-graph.md.
+// this fact exists to avoid (Type Facts ADR 0018, archived under the tag
+// docs-archive-2026-10-19).
 //
 // Both fields are always populated; which one equals the module's own path
 // says whether the program holds the input or the output.

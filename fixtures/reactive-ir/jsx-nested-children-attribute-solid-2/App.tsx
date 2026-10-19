@@ -5,7 +5,7 @@ import { createEffect, createSignal, onCleanup, onSettled } from "solid-js";
 // promotion"). Before that move, `<div><span children={x()} /></div>` made
 // the fork's own census name a `jsx-child` site that nested lowering never
 // resolved -- a hard reconciliation failure, so `solid-checker-rust` exited 2
-// and the file was never analyzed at all (docs/precision-backlog.md,
+// and the file was never analyzed at all (the archived backlog file,
 // "Divergence 4 stays a hard reconciliation failure by design"). There was no
 // checker-side mitigation to test, because there was nothing to certify or
 // mark uncertain -- the process never got that far.
@@ -34,7 +34,7 @@ function NestedChildrenAttributeFollowsNextFastPath() {
 // The spelling is `{"a" + "b"}`, not a bare `{"a literal string"}`, and that
 // is a parity constraint rather than a style choice: a *literal-spelled*
 // nested `children` attribute crashes the parity-target Babel plugin outright
-// (recorded in docs/precision-backlog.md as a pre-existing fork-repo
+// (recorded in the archived backlog file as a pre-existing fork-repo
 // divergence note), so there is no parity-verified verdict to pin for it. A
 // concatenation of two literals is non-literal in spelling and confidently
 // foldable in value, which is exactly the case both compilers agree on.
@@ -65,7 +65,7 @@ function LiteralChildrenAttributeStaysSilent() {
 // a read that happens, and this one does not happen in either compiler's
 // output. Deleted code is projected as a *discarded* region, distinct from an
 // untracked one (`ExecutionRole::DiscardedRendering`); see
-// docs/precision-backlog.md, 2026-08-24.
+// the archived backlog file, 2026-08-24.
 //
 // Silence here is not a certification either. Nothing about this span is
 // proven safe -- it is proven absent, which is a different thing and licenses

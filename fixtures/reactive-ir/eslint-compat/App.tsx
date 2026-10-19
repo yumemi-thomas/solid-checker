@@ -22,7 +22,7 @@ export function Wrong() {
       {/* Silent since 2026-08-17: two byte-identical attribute names are
           TS17001 ("JSX elements cannot have multiple attributes with the same
           name"), so the duplicate-prop rule was narrowed off that spelling —
-          on intrinsics and components alike (docs/precision-backlog.md). */}
+          on intrinsics and components alike (the tsc-oracle ledger row). */}
       <div class="card" id="a" class="wide" />
       <button onClick={() => {}} onClick={() => {}} />
       {/* SC8003, the surviving domain: two *differently spelled* props that the

@@ -12,7 +12,7 @@ declare module "solid-js" {
   // and `onSettled(callback: () => void | (() => void))`. Do not loosen these:
   // a stub that returns `unknown` manufactures cleanup-return defects no real
   // project can produce, which is how the removed SC3004/SC9002 pair survived
-  // for a full cycle (docs/precision-backlog.md).
+  // for a full cycle (fixtures/tsc-oracle/README.md).
   export function createEffect<T>(
     compute: () => T,
     apply: (value: T, previous?: T) => (() => void) | void,
