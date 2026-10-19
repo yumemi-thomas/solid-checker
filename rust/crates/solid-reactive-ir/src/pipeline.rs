@@ -49,6 +49,7 @@ pub(crate) struct ProgramDraft {
     pub(crate) static_defects: Vec<StaticDefect>,
     pub(crate) leaf_operations: Vec<LeafOwnerOperation>,
     pub(crate) directive_creations: Vec<PrimitiveCreation>,
+    pub(crate) undecided_component_regions: Vec<crate::UndecidedRegion>,
     pub(crate) missing_owners: Vec<OwnerRequirement>,
     pub(crate) strict_read_obligations: usize,
     pub(crate) write_action_obligations: HashSet<(&'static str, String, u64, u64)>,
@@ -142,6 +143,7 @@ impl ProgramDraft {
             directive_creations: self.directive_creations,
             missing_owners: self.missing_owners,
             async_reads: self.async_reads,
+            undecided_component_regions: self.undecided_component_regions,
             obligation_counts: ObligationCounts {
                 strict_reads: self.strict_read_obligations,
                 writes_and_actions: self.write_action_obligations.len(),
@@ -556,6 +558,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     server_rules::check_project(&analysis, &mut draft);
     clock.finish(&mut build_timings, ReactiveIrStage::StaticApi);
     directives::discover_directive_creations(&analysis, &mut draft);
+    draft.undecided_component_regions = semantic_lookup.undecided_component_regions();
     clock.finish(&mut build_timings, ReactiveIrStage::Directives);
     owners::collect_project(
         &analysis,

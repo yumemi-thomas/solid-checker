@@ -1694,66 +1694,12 @@ impl<'a> CallGraph<'a, '_> {
         {
             return true;
         }
-        // The declaration that introduces the function, and the import/export
-        // surface that forwards it, are not runtime entries: emission resolves
-        // the export surface itself, by name.
-        if file
-            .ast
-            .functions
-            .iter()
-            .any(|function| function.name.as_ref().is_some_and(|name| name.span == span))
-        {
-            return true;
-        }
-        if file
-            .ast
-            .bindings
-            .iter()
-            .any(|binding| binding.names.iter().any(|name| name.span == span))
-        {
-            return true;
-        }
-        // Only the export *specifier* — `export { Panel }`, or the name a
-        // declaration export introduces. An `ExportNamedDeclaration`'s own span
-        // covers the whole declaration, body included (solid-facts
-        // `visit_export_named_declaration`), so testing containment accepted
-        // every reference written inside an exported function: `apply(Panel)`
-        // and `return Panel` read as "export surface", and the escape they
-        // prove was lost. That is the unsound direction — the caller reads a
-        // true verdict as "the enumerated callers are all of them" and
-        // certifies exports that a value-escaped function can reach.
-        //
-        // `<Panel/>` is not in that list, and is not accepted here either: a
-        // rendered tag is a call site, so `known_call_sites` above already
-        // holds its span — both of its spans, for `<Panel></Panel>`, since the
-        // closing tag rides on the same edge. The acceptance is the call-graph
-        // edge, not a syntactic exception for tags, so a tag that resolves to
-        // nothing (an unresolved import) reaches none of these branches, which
-        // is the honest answer: something the graph cannot name renders it.
-        //
-        // A dotted tag is the case where the edge exists and the reference is
-        // still unaccounted for. `<ns.Panel/>` *does* resolve: TypeScript
-        // reports the symbol at the whole `ns.Panel` name span, so the graph
-        // emits an edge whose callee is that whole span. But the reference this
-        // test walks is the `Panel` property *inside* the name, and this set is
-        // a byte-exact span membership test, so the property does not match the
-        // whole name and the enumeration reports itself incomplete. That is the
-        // conservative direction; closing it means making the edge's callee and
-        // the walked reference name the same span, which is a resolution
-        // question rather than a widening one.
-        if file.ast.exports.iter().any(|export| {
-            export
-                .specifiers
-                .iter()
-                .chain(export.declarations.iter())
-                .any(|specifier| specifier.local.span == span)
-        }) {
-            return true;
-        }
-        file.ast
-            .imports
-            .iter()
-            .any(|import| import.span.contains(span))
+        // `<Panel/>` is accepted above, never here: a rendered tag is a call
+        // site, so `known_call_sites` holds its span (both spans, for
+        // `<Panel></Panel>`, since the closing tag rides on the same edge). A
+        // tag that resolves to nothing reaches no branch, which is the honest
+        // answer: something the graph cannot name renders it.
+        crate::indexes::reference_is_declaration_or_module_surface(file, span)
     }
 
     fn file(&self, path: &str) -> Option<&'a FileFacts> {

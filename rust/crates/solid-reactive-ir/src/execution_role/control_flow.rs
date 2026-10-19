@@ -190,6 +190,75 @@ pub(crate) fn direct_control_flow_body_role(
     })
 }
 
+/// Whether the function at `function` is a callback a dialect primitive
+/// places itself: written directly as a control-flow element's child
+/// (`<For>{(item) => …}</For>`), or passed directly at a primitive's callback
+/// slot. It runs in the context that primitive creates, however the function
+/// around it is entered. Merely being written somewhere inside such an element
+/// (`<Show><Table columns={[{ cell: (row) => … }]} /></Show>`) is not this.
+pub(crate) fn function_placed_by_dialect(
+    file: &solid_facts::FileFacts,
+    function: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    file.ast.jsx_containing(function).any(|element| {
+        element
+            .children
+            .iter()
+            .any(|child| jsx_child_expression(file, *child) == Some(function))
+            && jsx_primitive_name(
+                file,
+                element,
+                lookup.entities(),
+                lookup.symbol_names(),
+                lookup.dialect,
+            )
+            .as_ref()
+            .and_then(PrimitiveName::primitive)
+            .is_some_and(|primitive| lookup.dialect.renders_children_through_callback(primitive))
+    }) || file
+        .ast
+        .arguments_containing(function)
+        .any(|(call, index)| {
+            !call.arguments[index].spread
+                && file.ast.peel_ts_sugar_span(call.arguments[index].span) == function
+                && lookup
+                    .primitive_at_call(file, call.span)
+                    .is_some_and(|primitive| {
+                        lookup
+                            .dialect
+                            .callback_semantics_at(primitive, index, call.arguments.len())
+                            .execution
+                            .is_some()
+                    })
+        })
+}
+
+/// Whether the function at `function` is passed directly at a primitive's
+/// inline synchronous callback slot (`untrack(() => …)`): it runs at once, in
+/// the context of the function around the call.
+pub(crate) fn function_runs_inline(
+    file: &solid_facts::FileFacts,
+    function: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    file.ast
+        .arguments_containing(function)
+        .any(|(call, index)| {
+            !call.arguments[index].spread
+                && file.ast.peel_ts_sugar_span(call.arguments[index].span) == function
+                && lookup
+                    .primitive_at_call(file, call.span)
+                    .is_some_and(|primitive| {
+                        lookup.dialect.synchronous_callback_slot(
+                            primitive,
+                            index,
+                            call.arguments.len(),
+                        )
+                    })
+        })
+}
+
 /// The expression an expression-container child (`{expression}`) holds, with
 /// transparent TypeScript wrappers peeled. `None` for a text, element or
 /// fragment child, which holds no expression of its own.

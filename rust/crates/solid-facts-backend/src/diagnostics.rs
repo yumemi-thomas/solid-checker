@@ -450,6 +450,26 @@ impl DiagnosticSession {
                 );
             }
         }
+        // A function analyzed as a component whose identity is not proven
+        // (`solid_reactive_ir::UndecidedRegion`): Solid makes it a component
+        // only where `createComponent` calls it, so no violation in its own
+        // body is proven. Style rules claim nothing about execution.
+        for finding in &mut findings {
+            if finding.kind == "violation"
+                && !finding.id.starts_with("SC80")
+                && solid_reactive_ir::site_in_undecided_component(
+                    &program,
+                    finding.primary_location.path.as_ref(),
+                    finding.primary_location.start_byte,
+                    finding.primary_location.end_byte,
+                )
+            {
+                finding.kind = "uncertifiable".into();
+                finding.message.push_str(
+                    "; this code is in a function that returns JSX but is also handed to code that may call it as a plain function, so whether it runs as a component is not proven",
+                );
+            }
+        }
         let metrics = analysis_metrics(facts, &program);
         let mut snapshot = snapshot_of(sources, metrics, findings);
         snapshot.feedback_facts = program.development_feedback.clone();

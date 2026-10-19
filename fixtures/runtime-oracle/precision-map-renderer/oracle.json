@@ -1,0 +1,1 @@
+{ "note": "Precision probe 2026-10-19: Row handed to items().map inside tracked JSX runs as a plain call in that tracked scope; no STRICT_READ_UNTRACKED. Its body read was a proven SC1001 and is now uncertifiable (fixture reactive-ir/component-identity-escapes)." }

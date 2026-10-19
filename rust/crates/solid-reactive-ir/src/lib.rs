@@ -1109,6 +1109,37 @@ pub struct Program {
     pub missing_owners: Vec<OwnerRequirement>,
     pub async_reads: Vec<AsyncRead>,
     pub obligation_counts: ObligationCounts,
+    /// Bodies of functions analyzed as components whose identity is not
+    /// proven ([`site_in_undecided_component`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub undecided_component_regions: Vec<UndecidedRegion>,
+}
+
+/// The body of a function analyzed as a component because it returns JSX,
+/// although a reference hands it to code that may call it as a plain function
+/// (`items().map(Row)`, `{ badge: Row }`, a router config not read from
+/// source). Solid runs a function as a component only when `createComponent`
+/// calls it, so where the body runs is not proven. Callbacks a dialect
+/// primitive places itself are carved out: they run in the primitive's
+/// context however the function is entered.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UndecidedRegion {
+    pub body: Location,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub placed_callbacks: Vec<Location>,
+}
+
+/// Whether the byte range `start..end` of `path` lies in one of `program`'s
+/// [`UndecidedRegion`]s: no violation claimed there is proven.
+pub fn site_in_undecided_component(program: &Program, path: &str, start: u64, end: u64) -> bool {
+    let within = |location: &Location| {
+        location.path.as_ref() == path && location.start_byte <= start && end <= location.end_byte
+    };
+    program
+        .undecided_component_regions
+        .iter()
+        .any(|region| within(&region.body) && !region.placed_callbacks.iter().any(within))
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]

@@ -20,6 +20,10 @@ Strict read in a setup body (`strict-read-untracked`, SC1001):
 - `review-opus3-g06-yield-star-spread-body` (App.tsx:13): a read in a generator reached through `yield*` and spread in the body. Delegation is not followed.
 - `precision-ref-callback-read` (App.tsx:4): a read in an intrinsic `ref` callback runs untracked in the apply phase; the read rule places nothing in the `DirectiveApply` role.
 
+Write in an owned scope (`reactive-write-in-owned-scope`, SC2001):
+
+- A setter call in a component's default parameter initializer runs in the owned component scope; the write rule places nothing there (reviewer case `r4-param-write`).
+
 Async read outside a loading boundary (`async-outside-loading-boundary`, SC5003):
 
 - `r9-b3-childrenasync` (App.tsx:15): an async memo read flows through `children()` into JSX with no `Loading`.
@@ -63,6 +67,7 @@ A violation withheld, or turned uncertifiable, to keep zero false positives. Eac
 - Code in or after a `for await` loop is past the first suspension; no strict read is proven.
 - A signal read inside a JSX element passed as a prop does not make that prop reactive; reads of it are uncertifiable.
 - A generator body is never placed where it is written. A call to a generator runs none of its body.
+- A function returning JSX with no rendering tag is a proven component only when every reference to it is its declaration, module surface, a dialect callback, a dialect renderer prop or a `lazy` default; otherwise (alias, object storage, a call argument, a router config not read from source, a method, an anonymous default export) its body reads and writes are uncertifiable. Solid makes a function a component only where `createComponent` calls it (`precision-map-renderer`, `precision-method-renderer`).
 - Mixed invocation of one callback (owned setup and event dispatch) refuses the owner proof as a whole (ADR 0327). A callback run only by events is proven unowned.
 
 Known false-positive shapes left open (fire today, wanted gone):
@@ -70,6 +75,7 @@ Known false-positive shapes left open (fire today, wanted gone):
 - `missing-owner` (SC4001): a synchronous `dispatchEvent` or `click()` from an owned scope runs the handler under that owner; every event handler is taken to run with no owner. Oracle: `review-r7-sync-scroll`, `review-r7-sync-child-scroll`. Fixing it needs an owner-at-dispatch fact.
 - `strict-read-untracked` (SC1001): `try { await p } finally { read() }` reports the read. Only a synchronous throw while evaluating `p` skips the await. Oracle: `r9-d3-tryawait`; none in the corpus.
 - `missing-owner` (SC4001): an effect in an IIFE or an eagerly called factory callback inside a `ref` expression runs while rendering, owned, and one in a generator `ref` never runs; the owner walk takes both as apply phase. SC6001 no longer fires there (`directive-owned-subscopes`).
+- `strict-read-untracked` (SC1001): a function rendered by a tag the program never reaches (`<Show when={false}><Row/></Show>`) and also called plainly (`items().map(Row)`) keeps its component proof; every visible tag is taken as rendered, the same feasible-path premise as a direct read.
 - `primitive-in-directive-application` (SC6001): `createRoot` in an apply callback is reported even when its `dispose` is called; the rule's premise is that a per-element root is never disposed.
 - A read after `if (c) await` or a loop that may skip the await is reported: the feasible-path premise every direct read rests on. Oracle: `r9-d3-ifawait`, `r9-d3-loopawait`.
 

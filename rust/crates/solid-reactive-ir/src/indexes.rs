@@ -25,6 +25,51 @@ mod components;
 mod member_values;
 mod primitive_proof;
 
+/// Functions by `(path, span)`: the proven components, then the escaped ones
+/// among them ([`SemanticLookup::escaped_component_functions`]).
+pub(super) type ComponentSets<'a> = (HashSet<(&'a str, Span)>, HashSet<(&'a str, Span)>);
+
+/// Whether the reference at `span` is the declaration that introduces a
+/// binding or the import/export surface that forwards it. Neither is a runtime
+/// entry: emission resolves the export surface itself, by name.
+///
+/// Only the export *specifier* counts: `export { Panel }`, or the name a
+/// declaration export introduces. An `ExportNamedDeclaration`'s own span
+/// covers the whole declaration, body included (solid-facts
+/// `visit_export_named_declaration`), so testing containment accepted every
+/// reference written inside an exported function: `apply(Panel)` and
+/// `return Panel` read as "export surface", and the escape they prove was
+/// lost. That is the unsound direction: callers read a true verdict as "the
+/// enumerated entries are all of them".
+///
+/// A dotted tag stays unaccounted for. `<ns.Panel/>` resolves at the whole
+/// `ns.Panel` name span, but the reference walked is the `Panel` property
+/// inside it, so it matches no surface here. That is the conservative
+/// direction; closing it is a resolution question rather than a widening one.
+pub(crate) fn reference_is_declaration_or_module_surface(file: &FileFacts, span: Span) -> bool {
+    file.ast
+        .functions
+        .iter()
+        .any(|function| function.name.as_ref().is_some_and(|name| name.span == span))
+        || file
+            .ast
+            .bindings
+            .iter()
+            .any(|binding| binding.names.iter().any(|name| name.span == span))
+        || file.ast.exports.iter().any(|export| {
+            export
+                .specifiers
+                .iter()
+                .chain(export.declarations.iter())
+                .any(|specifier| specifier.local.span == span)
+        })
+        || file
+            .ast
+            .imports
+            .iter()
+            .any(|import| import.span.contains(span))
+}
+
 /// The string a computed key names when it is a `const` bound to a string
 /// literal in the same file (`const key = "run"; c[key] = f`).
 fn constant_string_key(file: &FileFacts, key: Span) -> Option<String> {
@@ -669,7 +714,9 @@ pub(super) struct SemanticLookup<'a> {
     callback_capabilities: OnceLock<DialectCallbackCapabilities>,
     returned_callback_proof_digest: OnceLock<Option<CrossFileProofDigest>>,
     project_has_component_type: OnceLock<bool>,
-    component_functions: OnceLock<HashSet<(&'a str, Span)>>,
+    /// Proven components, then functions whose only missing proof is an
+    /// escaping reference (`ComponentStatus::Uncertain`).
+    component_functions: OnceLock<ComponentSets<'a>>,
     result_access_forwarded: OnceLock<HashMap<&'a str, Vec<ResultAccessForwarded>>>,
     cross_file_proof_digest: OnceLock<Option<CrossFileProofDigest>>,
     tuple_iteration_veto: OnceLock<bool>,
@@ -1038,6 +1085,12 @@ impl<'a> SemanticLookup<'a> {
             let components = self.component_functions();
             let mut component_keys = components.iter().copied().collect::<Vec<_>>();
             component_keys.sort_unstable();
+            let mut escaped_keys = self
+                .escaped_component_functions()
+                .iter()
+                .copied()
+                .collect::<Vec<_>>();
+            escaped_keys.sort_unstable();
             let mut hasher = Sha256::new();
             hasher.update(b"components\0");
             // ADR 0282: a mutation in another file can withdraw the tuple
@@ -1191,6 +1244,13 @@ impl<'a> SemanticLookup<'a> {
                 }
             }
             for (path, span) in component_keys {
+                hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
+                hasher.update(path.as_bytes());
+                hasher.update(span.start.to_le_bytes());
+                hasher.update(span.end.to_le_bytes());
+            }
+            hasher.update(b"escaped-components\0");
+            for (path, span) in escaped_keys {
                 hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
                 hasher.update(path.as_bytes());
                 hasher.update(span.start.to_le_bytes());

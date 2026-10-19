@@ -63,6 +63,20 @@ pub(super) fn lazy_default_render_witness(
     call: &solid_facts::ast::CallFact,
     lookup: &SemanticLookup<'_>,
 ) -> Option<(Span, Span)> {
+    let (function, property, _) = lazy_default_render_candidate(file, call, lookup)?;
+    (lookup.function_component_status(file, function) == crate::indexes::ComponentStatus::Proven)
+        .then_some((function.span, property))
+}
+
+/// Every condition of [`lazy_default_render_witnesses`] but the component
+/// proof and the reflective-write veto: `(component, default property, its
+/// value)`. Component identity itself asks this, so the `default` value is a
+/// reference the loader's render accounts for rather than an escape.
+pub(crate) fn lazy_default_render_candidate<'f>(
+    file: &'f solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<(&'f solid_facts::ast::FunctionFact, Span, Span)> {
     use crate::interproc::accessor_provenance::{closed_properties, single_return};
     let primitive = lookup.primitive_at_call(file, call.span)?;
     let slot = lookup
@@ -136,12 +150,8 @@ pub(super) fn lazy_default_render_witness(
                     && outer.span.contains(function.span)
             })
     })?;
-    (!function.r#async
-        && !function.generator
-        && lookup.function_value_is_current(file, function)
-        && lookup.function_component_status(file, function)
-            == crate::indexes::ComponentStatus::Proven)
-        .then_some((function.span, property.span))
+    (!function.r#async && !function.generator && lookup.function_value_is_current(file, function))
+        .then_some((function, property.span, value))
 }
 
 /// Whether the loader call initializes an unexported, unwritten `const` whose

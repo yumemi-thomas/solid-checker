@@ -80,30 +80,53 @@ impl<'a> SemanticLookup<'a> {
     }
 
     pub(super) fn component_functions(&self) -> &HashSet<(&'a str, Span)> {
+        &self.component_statuses().0
+    }
+
+    /// Functions that would be proven components but for a reference that
+    /// enters them some other way. They are analyzed as components, so no
+    /// finding is lost, and every violation in their own body is withdrawn to
+    /// an obligation ([`Self::undecided_component_regions`]).
+    pub(super) fn escaped_component_functions(&self) -> &HashSet<(&'a str, Span)> {
+        &self.component_statuses().1
+    }
+
+    fn component_statuses(&self) -> &ComponentSets<'a> {
         self.component_functions.get_or_init(|| {
-            self.facts
-                .files
-                .iter()
-                .flat_map(|file| {
-                    file.ast.functions.iter().filter_map(move |function| {
-                        self.compute_function_is_component(file, function)
-                            .then_some((file.path.as_str(), function.span))
-                    })
-                })
-                .collect()
+            let mut proven = HashSet::new();
+            let mut escaped = HashSet::new();
+            for file in &self.facts.files {
+                for function in &file.ast.functions {
+                    match self.compute_function_component_status(file, function) {
+                        ComponentStatus::Proven => {
+                            proven.insert((file.path.as_str(), function.span));
+                        }
+                        // Analyzed as a component, as before; findings in
+                        // its own body are obligations (`UndecidedRegion`).
+                        ComponentStatus::Uncertain => {
+                            proven.insert((file.path.as_str(), function.span));
+                            escaped.insert((file.path.as_str(), function.span));
+                        }
+                        ComponentStatus::No => {}
+                    }
+                }
+            }
+            (proven, escaped)
         })
     }
 
-    fn compute_function_is_component(
+    /// `Proven` or `No`, or `Uncertain` when only an escaping reference
+    /// withholds the direct-JSX-return proof.
+    fn compute_function_component_status(
         &self,
         file: &FileFacts,
         function: &solid_facts::ast::FunctionFact,
-    ) -> bool {
+    ) -> ComponentStatus {
         if self
             .jsx_call_site_loading(file.path.as_str(), function.span)
             .any
         {
-            return true;
+            return ComponentStatus::Proven;
         }
         let binding_name = crate::owners::component_binding_name(file, function);
         let directly_contains_jsx = |span: Span| {
@@ -132,22 +155,13 @@ impl<'a> SemanticLookup<'a> {
         // type can still establish component identity. Avoid building the
         // project-wide reference and call-site indexes for ordinary helpers.
         if !directly_returns_jsx {
-            if !self.project_has_component_type() {
-                return false;
-            }
-            let Some(name) = binding_name else {
-                return false;
+            return if self.project_has_component_type()
+                && self.binding_has_component_type(file, binding_name)
+            {
+                ComponentStatus::Proven
+            } else {
+                ComponentStatus::No
             };
-            let Some(descriptor) =
-                self.smallest_contained_descriptor(file.path.as_str(), name.span)
-            else {
-                return false;
-            };
-            return descriptor.alias_declarations.iter().any(|declaration| {
-                self.dialect
-                    .type_role(descriptor.origin_module.as_ref(), declaration.name.as_ref())
-                    == Some(solid_dialect::TypeRole::Component)
-            });
         }
         // Component identity is about the function value itself, not anything
         // lexically nested below a callback expression. The largest function
@@ -222,6 +236,12 @@ impl<'a> SemanticLookup<'a> {
                             })
                 })
         };
+        // A value written at a prop spelled `component` is analyzed as a
+        // component value, as it always was. It renders as one only where the
+        // dialect says the receiving export renders that prop
+        // (`<Dynamic component={…}/>`, ADR 0138), resolved through its
+        // declaration: only that accounts for the reference in the census
+        // below; a project component's `component` prop is just a prop.
         let component_value_operation = |candidate: &FileFacts, span: Span| {
             candidate.compiler.jsx_operations.iter().any(|operation| {
                 if operation.kind == "component-property" && operation.span.contains(span) {
@@ -241,6 +261,10 @@ impl<'a> SemanticLookup<'a> {
                     })
             })
         };
+        let rendered_by_dialect_prop = |candidate: &FileFacts, span: Span| {
+            self.prop_render_sites_at(candidate.path.as_str(), span)
+                .is_some()
+        };
         let used_as_render_value = file.compiler.jsx_operations.iter().any(|operation| {
             matches!(
                 operation.kind.as_str(),
@@ -251,27 +275,53 @@ impl<'a> SemanticLookup<'a> {
         });
         let mut referenced_as_callback = false;
         let mut referenced_as_component_property = false;
-        if let Some(symbol) = binding_name
-            .and_then(|name| self.entities.at(file.path.as_str(), name.span))
-            .and_then(|symbol| {
-                self.symbols_by_id
-                    .get_or_init(|| {
-                        self.facts
-                            .typescript
-                            .symbols()
-                            .map(|candidate| (candidate.id(), candidate))
-                            .collect()
-                    })
-                    .get(symbol.as_str())
-                    .copied()
-            })
+        // Solid runs a function as a component only when `createComponent`
+        // calls it (a tag, a dialect renderer prop, `lazy`); called directly,
+        // its body runs in the caller's scope, tracked inside JSX. A direct JSX
+        // return therefore proves identity only when every reference to the
+        // function is accounted for: its declaration, its module surface, a
+        // dialect callback value, a dialect renderer's prop (ADR 0138) or a
+        // dialect loader's `default` (ADR 0292). Any other use hands it to
+        // code that may call it plainly: `items().map(Row)`, `{ badge: Row }`,
+        // an alias, a router config the analysis does not read. So does a
+        // function with no resolvable binding, a reference in a file not
+        // analyzed, and an object or class method, reached through its object,
+        // whose aliases its name's references do not enumerate
+        // (`renderers.badge()` is absent from them). Each leaves identity
+        // undecided rather than proven.
+        let method =
+            function.name.is_none() && crate::owners::own_method_name(file, function).is_some();
+        let mut reference_escapes = true;
+        if !method
+            && let Some(symbol) = binding_name
+                .and_then(|name| self.entities.at(file.path.as_str(), name.span))
+                .and_then(|symbol| {
+                    self.symbols_by_id
+                        .get_or_init(|| {
+                            self.facts
+                                .typescript
+                                .symbols()
+                                .map(|candidate| (candidate.id(), candidate))
+                                .collect()
+                        })
+                        .get(symbol.as_str())
+                        .copied()
+                })
         {
+            reference_escapes = false;
             for reference in symbol.references() {
                 let Some((candidate, span)) = reference_span(reference) else {
+                    reference_escapes = true;
                     continue;
                 };
-                referenced_as_callback |= reference_is_callback_value(candidate, span);
-                referenced_as_component_property |= component_value_operation(candidate, span);
+                let callback = reference_is_callback_value(candidate, span);
+                let component_value = component_value_operation(candidate, span);
+                referenced_as_callback |= callback;
+                referenced_as_component_property |= component_value;
+                reference_escapes |= !(callback && !component_value)
+                    && !rendered_by_dialect_prop(candidate, span)
+                    && !reference_is_declaration_or_module_surface(candidate, span)
+                    && !self.lazy_default_value(candidate, function, span);
             }
         }
         let hoc_bound = binding_name.is_some()
@@ -279,7 +329,7 @@ impl<'a> SemanticLookup<'a> {
         let directly_called = !self
             .function_call_sites(file.path.as_str(), function.span)
             .is_empty();
-        if directly_returns_jsx
+        let direct_return_proof = directly_returns_jsx
             && (self.dialect.direct_jsx_return_is_component()
                 || hoc_bound
                 || referenced_as_component_property)
@@ -287,10 +337,25 @@ impl<'a> SemanticLookup<'a> {
             && (!used_as_callback_value(file) || hoc_bound)
             && (!used_as_any_call_argument || hoc_bound)
             && !used_as_render_value
-            && (!referenced_as_callback || referenced_as_component_property)
+            && (!referenced_as_callback || referenced_as_component_property);
+        if direct_return_proof && !reference_escapes
+            || self.binding_has_component_type(file, binding_name)
         {
-            return true;
+            ComponentStatus::Proven
+        } else if direct_return_proof {
+            ComponentStatus::Uncertain
+        } else {
+            ComponentStatus::No
         }
+    }
+
+    /// Whether the binding's compiler-resolved type is an exact Solid
+    /// component type alias.
+    fn binding_has_component_type(
+        &self,
+        file: &FileFacts,
+        binding_name: Option<&solid_facts::ast::NamedSpan>,
+    ) -> bool {
         let Some(name) = binding_name else {
             return false;
         };
@@ -303,6 +368,23 @@ impl<'a> SemanticLookup<'a> {
                 .type_role(descriptor.origin_module.as_ref(), declaration.name.as_ref())
                 == Some(solid_dialect::TypeRole::Component)
         })
+    }
+
+    /// Whether `reference` is the `default` value of a module object a
+    /// dialect component loader renders, naming `function` (ADR 0292): that
+    /// render is the reference's only use. A reflective prototype write
+    /// anywhere vetoes it, as it vetoes the render witness.
+    fn lazy_default_value(
+        &self,
+        file: &FileFacts,
+        function: &solid_facts::ast::FunctionFact,
+        reference: Span,
+    ) -> bool {
+        file.ast.calls.iter().any(|call| {
+            crate::owners::lazy_default_render_candidate(file, call, self).is_some_and(
+                |(component, _, value)| component.span == function.span && value == reference,
+            )
+        }) && !crate::interproc::accessor_provenance::reflective_prototype_write(self)
     }
 
     fn project_has_component_type(&self) -> bool {
@@ -333,6 +415,51 @@ impl<'a> SemanticLookup<'a> {
         file.ast.functions_body_containing(span).any(|function| {
             self.function_component_status(file, function) == ComponentStatus::Uncertain
         })
+    }
+
+    /// The bodies of [`Self::escaped_component_functions`], each without the
+    /// callbacks a dialect primitive places itself inside it
+    /// (`<For>{(item) => …}</For>`, an effect's callbacks) and without nested
+    /// functions a tag renders (`<Inner/>`): those run in a context of their
+    /// own however the function is entered. An inline callback
+    /// (`untrack(() => …)`) runs in the body's own context and stays in the
+    /// region.
+    pub(crate) fn undecided_component_regions(&self) -> Vec<crate::UndecidedRegion> {
+        let mut regions = self
+            .escaped_component_functions()
+            .iter()
+            .filter_map(|(path, span)| {
+                let file = self.file_by_path(path)?;
+                let function = file
+                    .ast
+                    .functions
+                    .iter()
+                    .find(|function| function.span == *span)?;
+                Some(crate::UndecidedRegion {
+                    body: crate::location(*path, function.body),
+                    placed_callbacks: file
+                        .ast
+                        .functions_within(function.body)
+                        .filter(|inner| {
+                            (crate::execution_role::function_placed_by_dialect(
+                                file, inner.span, self,
+                            ) && !crate::execution_role::function_runs_inline(
+                                file, inner.span, self,
+                            ))
+                                // A nested component a tag renders is a
+                                // component however this body is entered.
+                                || (self.jsx_call_site_loading(path, inner.span).any
+                                    && !self
+                                        .escaped_component_functions()
+                                        .contains(&(*path, inner.span)))
+                        })
+                        .map(|inner| crate::location(*path, inner.span))
+                        .collect(),
+                })
+            })
+            .collect::<Vec<_>>();
+        regions.sort_by(|left, right| crate::location_order(&left.body, &right.body));
+        regions
     }
 
     /// Compiler-derived callability at `span`, falling back to the smallest
