@@ -2,6 +2,226 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/AfterAwait.tsx",
+      "start": 504,
+      "end": 510,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/AfterAwait.tsx",
+      "start": 677,
+      "end": 690,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/AfterAwait.tsx",
+      "start": 1184,
+      "end": 1192,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/AfterAwait.tsx",
+      "start": 1202,
+      "end": 1210,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/AfterAwait.tsx",
+      "start": 1220,
+      "end": 1228,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/AfterAwait.tsx",
+      "start": 1238,
+      "end": 1245,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/AfterAwait.tsx",
+      "start": 1255,
+      "end": 1264,
+      "fixes": 0
+    },
+    {
+      "rule": "until-in-tracked-scope",
+      "code": "SC2005",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/Scopes.tsx",
+      "start": 245,
+      "end": 250,
+      "fixes": 0
+    },
+    {
+      "rule": "resolve-in-tracked-scope",
+      "code": "SC2004",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/Scopes.tsx",
+      "start": 299,
+      "end": 306,
+      "fixes": 0
+    },
+    {
+      "rule": "until-in-tracked-scope",
+      "code": "SC2005",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/Scopes.tsx",
+      "start": 460,
+      "end": 465,
+      "fixes": 0
+    },
+    {
+      "rule": "resolve-in-tracked-scope",
+      "code": "SC2004",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/Scopes.tsx",
+      "start": 537,
+      "end": 544,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/Scopes.tsx",
+      "start": 717,
+      "end": 720,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/Scopes.tsx",
+      "start": 743,
+      "end": 746,
+      "fixes": 0
+    },
+    {
+      "rule": "resolve-in-tracked-scope",
+      "code": "SC2004",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/Scopes.tsx",
+      "start": 1424,
+      "end": 1431,
+      "fixes": 0
+    },
+    {
+      "rule": "sync-computation-received-async",
+      "code": "SC7002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/SyncOptions.tsx",
+      "start": 317,
+      "end": 327,
+      "fixes": 0
+    },
+    {
+      "rule": "sync-computation-received-async",
+      "code": "SC7002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/SyncOptions.tsx",
+      "start": 438,
+      "end": 448,
+      "fixes": 0
+    },
+    {
+      "rule": "sync-computation-received-async",
+      "code": "SC7002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/SyncOptions.tsx",
+      "start": 497,
+      "end": 507,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/SyncOptions.tsx",
+      "start": 820,
+      "end": 823,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/SyncOptions.tsx",
+      "start": 825,
+      "end": 828,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/SyncOptions.tsx",
+      "start": 830,
+      "end": 833,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/SyncOptions.tsx",
+      "start": 835,
+      "end": 838,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/SyncOptions.tsx",
+      "start": 840,
+      "end": 843,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-write-in-owned-scope",
       "code": "SC2001",
       "kind": "uncertifiable",

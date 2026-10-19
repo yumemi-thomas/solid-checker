@@ -103,16 +103,42 @@ impl StaticApiContext<'_> {
             let options_index = kind
                 .filter(|kind| dialect.supports_sync_option(*kind))
                 .and_then(|kind| dialect.options_argument(kind));
-            if let Some(options_index) = options_index
-                && call.arguments.get(options_index).is_some_and(|argument| {
-                    argument.boolean_properties.iter().any(|property| {
-                        file.source_text(property.name) == Some("sync") && property.value
-                    })
-                })
-                && call
-                    .arguments
+            let sync_literal = options_index.map(|options_index| {
+                (
+                    call.arguments.get(options_index).is_some_and(|argument| {
+                        argument.boolean_properties.iter().any(|property| {
+                            file.source_text(property.name) == Some("sync") && property.value
+                        })
+                    }),
+                    crate::call_option_literal(file, call, options_index, "sync"),
+                )
+            });
+            let async_compute = || {
+                call.arguments
                     .first()
                     .is_some_and(|argument| computation_is_async(self.lookup, file, argument.span))
+            };
+            // Options the syntax cannot read (`createMemo(fn, opts)`, a spread,
+            // a non-literal `sync:` value) may assert `sync: true`: with an
+            // async computation that is an obligation, not a silent clean.
+            if let Some((false, solid_dialect::OptionLiteral::Unknown)) = sync_literal
+                && async_compute()
+            {
+                result.violations.push(StaticViolation {
+                    id: "SC7002".into(),
+                    rule: "sync-computation-received-async".into(),
+                    message: format!(
+                        "{primitive}'s computation can return a Promise or AsyncIterable, and its options cannot be read statically; if they set sync: true, dev throws SYNC_NODE_RECEIVED_ASYNC and production stores the unawaited value, and whether they do cannot be proven either way"
+                    ),
+                    hint: "Pass the options as an object literal with a literal sync value, so solid-checker can read it; drop sync: true for an async computation.".into(),
+                    location: location(file.path.shared(), call.callee),
+                    analysis_context: String::new(),
+                    fixes: vec![],
+                    uncertain: true,
+                });
+            }
+            if let Some((true, _)) = sync_literal
+                && async_compute()
             {
                 result.violations.push(StaticViolation {
                     id: "SC7002".into(),
@@ -156,6 +182,22 @@ impl StaticApiContext<'_> {
                     uncertain: false,
                 });
             }
+            // The same guard where nothing places the call: a helper that a
+            // tracked scope may reach (`createMemo(() => waitReady())`).
+            if kind == Some(Primitive::Resolve)
+                && resolve_scope_unplaced(file, call, &allowed, self)
+            {
+                result.violations.push(StaticViolation {
+                    id: "SC2004".into(),
+                    rule: "resolve-in-tracked-scope".into(),
+                    message: "resolve() is called in code the analysis cannot place; if an observer is active when it runs (a memo or effect compute, or tracked JSX, that reaches it through a helper), Solid throws \"Cannot call resolve inside a reactive scope\" in dev, and whether one is cannot be proven either way".into(),
+                    hint: "Call resolve() from imperative code — an event handler, onSettled, or an effect's apply function. To depend on a pending value inside a computation, read the accessor directly: tracked reads suspend and re-run on their own. A deliberate one-shot read can be wrapped in untrack(), which clears the observer the runtime guards on.".into(),
+                    location: location(file.path.shared(), call.callee),
+                    analysis_context: String::new(),
+                    fixes: vec![],
+                    uncertain: true,
+                });
+            }
             // SC2005: until() in a tracked scope. `@solidjs/signals@2.0.0-rc.9`
             // opens `until` with the same observer guard `resolve` has
             // (`dist/dev.js:2718-2722`, `if (getObserver()) throw new
@@ -178,6 +220,21 @@ impl StaticApiContext<'_> {
                     analysis_context: String::new(),
                     fixes: vec![],
                     uncertain: false,
+                });
+            }
+            // The same guard where nothing places the call: a helper that a
+            // tracked scope may reach (`createMemo(() => waitReady())`).
+            if kind == Some(Primitive::Until) && resolve_scope_unplaced(file, call, &allowed, self)
+            {
+                result.violations.push(StaticViolation {
+                    id: "SC2005".into(),
+                    rule: "until-in-tracked-scope".into(),
+                    message: "until() is called in code the analysis cannot place; if an observer is active when it runs (a memo or effect compute, or tracked JSX, that reaches it through a helper), Solid throws \"Cannot call until inside a reactive scope\" in dev, and whether one is cannot be proven either way".into(),
+                    hint: "Await until() from imperative code — an action step (`yield until(...)`), an event handler, onSettled, or an effect's apply function. Inside a computation, read the condition directly: tracked reads re-run the computation when it changes.".into(),
+                    location: location(file.path.shared(), call.callee),
+                    analysis_context: String::new(),
+                    fixes: vec![],
+                    uncertain: true,
                 });
             }
             // SC2007: a promise-valued source for rc.9's static `dynamic`
@@ -469,6 +526,76 @@ fn resolve_tracked_scope(
             context.lookup,
         ) == crate::ExecutionRole::TrackedJsx)
         .then(|| "tracked JSX".to_owned())
+}
+
+/// Whether a `resolve`/`until` call that [`resolve_tracked_scope`] does not
+/// report is still not proven free of an observer: an obligation unless a
+/// fact proves no observer is active where it runs.
+///
+/// A callback of a primitive whose callback execution the dialect states is
+/// that function's to judge. Otherwise the call is proven only in a role that
+/// clears the observer (a component body, `untrack`, an effect apply, an
+/// event, a directive application, module scope, a deferred callback, or
+/// deleted code), and only when a body-written literal is not handed to a
+/// consumer that may run it later. A tracked role [`resolve_tracked_scope`]
+/// did not place (a named callback, `createMemo(read)`), `Unreported` (whose
+/// mix may hold a tracked run) and `Unknown` are obligations.
+fn resolve_scope_unplaced(
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    allowed: &[Span],
+    context: &StaticApiContext<'_>,
+) -> bool {
+    use crate::ExecutionRole;
+    if resolve_tracked_scope(file, call, allowed, context).is_some() {
+        return false;
+    }
+    let judged_by_primitive = file
+        .ast
+        .arguments_containing(call.span)
+        .any(|(container, index)| {
+            crate::execution_role::direct_callback_contains(
+                file,
+                container.arguments[index].span,
+                call.span,
+            ) && context
+                .lookup
+                .primitive_at_call(file, container.span)
+                .is_some_and(|primitive| {
+                    crate::owners::callback_execution_at_call(
+                        file,
+                        container,
+                        primitive,
+                        index,
+                        context.lookup,
+                    )
+                    .is_some()
+                })
+        });
+    if judged_by_primitive {
+        return false;
+    }
+    let role = crate::execution_role::semantic_execution_role(
+        file,
+        call.span,
+        allowed,
+        context.entities,
+        context.symbol_names,
+        context.lookup,
+    );
+    let observer_cleared = matches!(
+        role,
+        ExecutionRole::UntrackedRendering
+            | ExecutionRole::UntrackedCallback
+            | ExecutionRole::EffectApply
+            | ExecutionRole::EventCallback
+            | ExecutionRole::DirectiveApply
+            | ExecutionRole::ModuleInitialization
+            | ExecutionRole::DeferredCallback
+            | ExecutionRole::DiscardedRendering
+    );
+    !observer_cleared
+        || crate::execution_role::callee_callback_timing(file, call.span, role, context.lookup)
 }
 
 /// Why a `dynamic` source provably returns a Promise, phrased for the

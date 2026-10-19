@@ -20,6 +20,9 @@ and the expression dominates every later read in the same function body. Props
 member reads follow the component's caller classification (see
 [strict-read-untracked](strict-read-untracked.md)): proven-static props are not
 reactive and stay silent; unprovable ones are reported as **uncertifiable**.
+A call after the await to a project function whose body reads an accessor
+(`await load(); return byUser(posts)`) is **uncertifiable**: the read is past
+the await, but whether the callee reads on this call is not proven.
 
 Both proofs exclude nested closures by default, with one proven exception. A
 function written **directly** in the argument of the exact built-in

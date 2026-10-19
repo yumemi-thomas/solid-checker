@@ -10,7 +10,9 @@ AsyncIterable.
 Flags the signal-family constructors — `createMemo`, `createSignal(fn)`,
 `createOptimistic(fn)`, `createEffect`, and related computation nodes — whose
 options include `sync: true` while the computation's callback is async or
-statically returns a Promise/AsyncIterable.
+statically returns a Promise/AsyncIterable. Options the syntax cannot read
+(`createMemo(fn, opts)`, a spread, a non-literal `sync:` value) beside an async
+computation are **uncertifiable**: they may set `sync: true`.
 
 The store-family constructors (`createStore(fn, …)`, `createProjection`,
 `createOptimisticStore`) are deliberately not checked: the runtime rebuilds

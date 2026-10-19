@@ -77,6 +77,12 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
             ),
             "Read reactive values before the first await and carry the results through the async work. If the value must stay live after the await, split the read into its own synchronous computation.".into(),
         ),
+        StaticDefectKind::ReactiveReadAfterAwaitThroughCall { accessor, via } => (
+            format!(
+                "{via} reads reactive accessor {accessor:?} and is called after an await, where dependency tracking has ended; whether it reads {accessor:?} on this call, rather than only on some paths or later, is not proven, so this untracked read is uncertifiable"
+            ),
+            "Read reactive values before the first await and pass the results to the helper. If the value must stay live after the await, split the read into its own synchronous computation.".into(),
+        ),
         StaticDefectKind::ComponentReturnsConditionally => (
             "this component's return value depends on a reactive condition, but a component body runs once; whichever branch is taken at setup renders forever, and the condition is never re-evaluated".into(),
             "Return a single JSX tree and move the branch into it: wrap the alternatives in <Show when={...} fallback={...}> (or <Switch>/<Match> for multiple cases), or use a ternary inside JSX where it stays tracked.".into(),
@@ -360,6 +366,9 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         // invocation, no invalid API, and no untracked read.
         StaticDefectKind::ReactiveSourceUncaptured { .. } => {
             "a reference bound to a reactive accessor occupies this call expression's argument position; if the call executes, the available analysis does not establish whether reads through that accessor stay tracked"
+        }
+        StaticDefectKind::ReactiveReadAfterAwaitThroughCall { .. } => {
+            "this call runs after the computation's first await, and the callee's body reads the accessor"
         }
         StaticDefectKind::ReactiveReadAfterAwait { .. }
         | StaticDefectKind::MissingEffectFunction

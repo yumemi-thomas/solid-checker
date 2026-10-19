@@ -98,8 +98,9 @@ runtime guards on (runtime-legal; the value still will not update).
 - **Component bodies, event handlers, effect apply callbacks, `createRoot`
   bodies, module scope** — probed: no observer is active in any of them.
 - **Helpers.** The proof is lexical: a `resolve()` inside a named helper that
-  a memo happens to call is not claimed (the helper may equally be called
-  from an event handler).
+  a memo happens to call is not claimed as a violation (the helper may equally
+  be called from an event handler). Where nothing places the call at all, the
+  finding is **uncertifiable**.
 - **`onSettled` / leaf owners.** `resolve()` passes the observer guard there,
   so this rule is silent — but note that in an *owner-backed* `onSettled` the
   promise still rejects in dev with `PRIMITIVE_IN_FORBIDDEN_SCOPE` (probed):

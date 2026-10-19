@@ -89,7 +89,8 @@ step, an event handler, `onSettled`, an effect's apply function.
   callbacks, `createRoot` bodies, module scope** — no observer is active in any
   of them, as for `resolve`.
 - **Helpers.** The proof is lexical: an `until()` inside a named helper that a
-  memo happens to call is not claimed.
+  memo happens to call is not claimed as a violation. Where nothing places the
+  call at all, the finding is **uncertifiable**.
 - **Before rc.5.** `until` arrives in `@solidjs/signals@2.0.0-rc.5`, and the
   `solid-js` root re-exports it from the same release. On an installation
   where either is older, or either is a release nobody compared, `until` is not

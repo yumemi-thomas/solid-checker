@@ -13,8 +13,8 @@ use crate::pipeline::{AnalysisContext, ProgramDraft};
 use crate::runtime_semantics::is_proven_array_filter;
 use crate::symbols::AsyncSymbolRoots;
 use crate::{
-    ReactiveSourceKind, StaticDefect, StaticDefectKind, call_primitive_name, known_primitive,
-    location,
+    ReactiveRead, ReactiveSourceKind, StaticDefect, StaticDefectKind, call_primitive_name,
+    known_primitive, location,
 };
 use solid_facts::core::Span;
 use std::collections::HashSet;
@@ -465,6 +465,108 @@ fn reactive_read_after_await(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
                 }
             }
         }
+    }
+}
+
+/// SC1002 through a call: a call after the first await of a tracked async
+/// computation whose callee reads an accessor in its own body (`await load();
+/// return byUser(posts)`). The prepass above proves only a read written in the
+/// computation itself; the callee's read reaches this call as a read the
+/// interprocedural pass attributed to it (`ReactiveRead::origin`), which the
+/// prepass runs too early to see. That read runs after the await, so it is not
+/// tracked, but whether the callee reads on this call rather than on some
+/// paths is not proven: the finding is an obligation, never a violation.
+pub(crate) fn reactive_read_after_await_through_calls(
+    ctx: &AnalysisContext<'_>,
+    draft: &mut ProgramDraft,
+) {
+    let files_by_path: std::collections::HashMap<&str, &solid_facts::FileFacts> = ctx
+        .facts
+        .files
+        .iter()
+        .map(|file| (file.path.as_str(), file))
+        .collect();
+    let mut attributed = std::collections::HashMap::<(&str, u64, u64), Vec<&ReactiveRead>>::new();
+    for read in draft.reads.iter().filter(|read| read.origin.is_some()) {
+        attributed
+            .entry((
+                read.location.path.as_ref(),
+                read.location.start_byte,
+                read.location.end_byte,
+            ))
+            .or_default()
+            .push(read);
+    }
+    if attributed.is_empty() {
+        return;
+    }
+    let mut computations: Option<AsyncComputations> = None;
+    let mut defects = Vec::new();
+    for typescript_file in ctx.facts.typescript.files() {
+        for function in typescript_file.async_functions.iter() {
+            let calls: Vec<(
+                &solid_facts::FileFacts,
+                &solid_facts::ast::CallFact,
+                &[&ReactiveRead],
+            )> = function
+                .calls_after_await
+                .iter()
+                .filter_map(|call| {
+                    let file = *files_by_path.get(call.path.as_ref())?;
+                    let candidate = file.ast.calls.iter().find(|candidate| {
+                        u64::from(candidate.callee.start) == call.start_byte
+                            && u64::from(candidate.callee.end) == call.end_byte
+                    })?;
+                    let reads = attributed.get(&(
+                        file.path.as_str(),
+                        u64::from(candidate.span.start),
+                        u64::from(candidate.span.end),
+                    ))?;
+                    Some((file, candidate, reads.as_slice()))
+                })
+                .collect();
+            if calls.is_empty() {
+                continue;
+            }
+            let index = computations
+                .get_or_insert_with(|| AsyncComputations::new(ctx, &ctx.facts.typescript));
+            let Some(analysis_context) = tracked_async_computation_context(ctx, function, index)
+            else {
+                continue;
+            };
+            for (file, candidate, reads) in calls {
+                // The prepass owns an accessor callee and a typed candidate.
+                if call_accessor_symbol(ctx, file, candidate).is_some_and(|symbol| {
+                    ctx.accessors.contains_key(symbol) || typed_unknown(ctx, symbol)
+                }) {
+                    continue;
+                }
+                let mut reported = HashSet::new();
+                for read in reads {
+                    // ADR 0195: a source already read before the first
+                    // suspension is a dependency, and stays one.
+                    if ctx.entities.get(&read.declaration).is_some_and(|symbol| {
+                        tracked_before_first_suspension(ctx, &files_by_path, function, symbol)
+                    }) || !reported.insert(read.accessor.clone())
+                    {
+                        continue;
+                    }
+                    defects.push(StaticDefect {
+                        kind: StaticDefectKind::ReactiveReadAfterAwaitThroughCall {
+                            accessor: read.accessor.to_string(),
+                            via: read.via.to_string(),
+                        },
+                        location: location(file.path.shared(), candidate.span),
+                        analysis_context: analysis_context.clone(),
+                        fixes: vec![],
+                        uncertain: true,
+                    });
+                }
+            }
+        }
+    }
+    for defect in defects {
+        draft.push_defect(defect);
     }
 }
 

@@ -690,6 +690,14 @@ pub enum StaticDefectKind {
     ReactiveReadAfterAwait {
         accessor: String,
     },
+    /// A call after an await whose callee reads `accessor` in its own body
+    /// (`await load(); return byUser(posts)`): that read runs after the await,
+    /// but nothing proves it runs on this call rather than on some paths, so
+    /// the finding is an obligation.
+    ReactiveReadAfterAwaitThroughCall {
+        accessor: String,
+        via: String,
+    },
     ComponentReturnsConditionally,
     PackageBehaviorUnavailable {
         module: String,
@@ -872,7 +880,10 @@ impl StaticDefectKind {
     pub const fn family(&self) -> StaticDefectFamily {
         match self {
             Self::ReactiveObjectDestructure { .. } => StaticDefectFamily::ReactiveObjectDestructure,
-            Self::ReactiveReadAfterAwait { .. } => StaticDefectFamily::ReactiveReadAfterAwait,
+            Self::ReactiveReadAfterAwait { .. }
+            | Self::ReactiveReadAfterAwaitThroughCall { .. } => {
+                StaticDefectFamily::ReactiveReadAfterAwait
+            }
             Self::ComponentReturnsConditionally => {
                 StaticDefectFamily::ComponentReturnsConditionally
             }
@@ -908,6 +919,7 @@ impl StaticDefectKind {
         match self {
             Self::ReactiveObjectDestructure { .. } => "ReactiveObjectDestructure",
             Self::ReactiveReadAfterAwait { .. } => "ReactiveReadAfterAwait",
+            Self::ReactiveReadAfterAwaitThroughCall { .. } => "ReactiveReadAfterAwaitThroughCall",
             Self::ComponentReturnsConditionally => "ComponentReturnsConditionally",
             Self::PackageBehaviorUnavailable { .. } => "PackageBehaviorUnavailable",
             Self::MissingEffectFunction => "MissingEffectFunction",
