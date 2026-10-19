@@ -39,8 +39,8 @@ make verify-delta BASE=<rev>   # the checks the changed paths call for, then the
 make verify                    # the full authority; run before proposing a change
 ```
 
-`verify-delta` diffs against `origin/main` unless `BASE=` names the commit the
-slice started from, prints the plan it matched, and escalates to `make verify`
+`verify-delta` diffs against the last commit a full `make verify` passed on with
+a clean tree (else `origin/main`; `BASE=` overrides), prints the plan it matched, and escalates to `make verify`
 for any path it cannot map. `bun scripts/verify-delta.mjs --dry-run` prints the
 plan without running it. The table of narrow checks per changed area is in
 [AGENTS.md](AGENTS.md). Focused loop:

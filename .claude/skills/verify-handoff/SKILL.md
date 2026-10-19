@@ -8,8 +8,8 @@ description: Choose validation checks proportional to a solid-checker change and
 Run each check once; do not repeat one while source, fixtures, binaries, and
 environment are unchanged.
 
-1. `make verify-delta BASE=<commit the slice started from>` selects the checks
-   for the changed paths. Add `make coverage` after touching any fixture
+1. `make verify-delta` selects the checks for the paths changed since the last
+   fully green commit (`BASE=<rev>` overrides). Add `make coverage` after touching any fixture
    `node_modules` (git cannot see it).
 2. `make verify` once before claiming done. Confirm success from its summary:
    a `FAILED during step` line or a missing TOTAL row means it did not pass.

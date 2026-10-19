@@ -10,13 +10,14 @@
 //
 //   bun scripts/verify-delta.mjs              plan and run
 //   bun scripts/verify-delta.mjs --dry-run    print the plan, run nothing
-//   bun scripts/verify-delta.mjs --base REV   diff against REV instead of
-//                                             origin/main (or SOLID_VERIFY_BASE;
+//   bun scripts/verify-delta.mjs --base REV   diff against REV (or SOLID_VERIFY_BASE;
 //                                             `make verify-delta BASE=REV`)
 //
-// The default base, `origin/main`, is right only when the branch is near it.
-// A long-lived local branch diffs thousands of paths against it, so every plan
-// escalates. Pass the commit the slice started from instead.
+// Without an explicit base, the plan diffs against the last commit a full
+// `make verify` passed on with a clean tree (rust/target/verify-green-commit,
+// written by scripts/verify.sh) when that commit is an ancestor of HEAD, and
+// otherwise against origin/main. Everything since the last green run is
+// planned; nothing before it needs re-checking.
 //
 // **`make verify` remains the handoff authority.** This is the fast loop, and
 // it is only ever as good as the mapping below; a full run is what a claim of
@@ -427,15 +428,33 @@ const commandsOf = (check) => CHECKS[check].commands ?? [CHECKS[check].command];
 
 const render = (command) => command.join(" ");
 
-/** `--base REV`, then `SOLID_VERIFY_BASE`, then `origin/main`. */
-export function baseOf(argv, env) {
+/** Where scripts/verify.sh records the last clean, fully green commit. */
+const GREEN_STAMP = "rust/target/verify-green-commit";
+
+/**
+ * `--base REV`, then `SOLID_VERIFY_BASE`, then the last green commit when it
+ * is an ancestor of HEAD, then `origin/main`.
+ */
+export function baseOf(argv, env, green = null) {
   const index = argv.indexOf("--base");
   if (index !== -1) {
     const value = argv[index + 1];
     if (!value || value.startsWith("--")) return { error: "--base needs a revision" };
     return { base: value };
   }
-  return { base: env.SOLID_VERIFY_BASE || "origin/main" };
+  if (env.SOLID_VERIFY_BASE) return { base: env.SOLID_VERIFY_BASE };
+  if (green) return { base: green, green: true };
+  return { base: "origin/main" };
+}
+
+/** The recorded green commit, only if it is still an ancestor of HEAD. */
+export function greenCommit(root = ROOT) {
+  const stamp = join(root, GREEN_STAMP);
+  if (!existsSync(stamp)) return null;
+  const commit = readFileSync(stamp, "utf8").trim();
+  if (!/^[0-9a-f]{40}$/.test(commit)) return null;
+  const ancestor = spawnSync("git", ["merge-base", "--is-ancestor", commit, "HEAD"], { cwd: root });
+  return ancestor.status === 0 ? commit : null;
 }
 
 /** Printed decisions are capped; a large change set is summarized by row. */
@@ -444,12 +463,13 @@ const DECISION_PRINT_LIMIT = 40;
 function main() {
   const dryRun = process.argv.includes("--dry-run");
   const drift = producerStampDrift(readProducerIdentity());
-  const selected = baseOf(process.argv, process.env);
+  const selected = baseOf(process.argv, process.env, greenCommit());
   if (selected.error) {
     console.error(`verify-delta: ${selected.error}`);
     return 2;
   }
   const { base } = selected;
+  if (selected.green) console.log(`verify-delta: base is the last fully green commit ${base.slice(0, 12)}.`);
   const changed = changedPaths(base);
   let plan;
   if (drift) {

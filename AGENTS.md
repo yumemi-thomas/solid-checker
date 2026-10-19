@@ -70,9 +70,10 @@ and docs/decisions.md (live decisions by ADR number).
 - Process tests: `cargo +1.97 test --manifest-path rust/Cargo.toml -p solid-facts-backend --test <name>`.
   `.cargo/config.toml` points them at `bin/solid-typefacts` and sets the build
   ids, so bare `cargo` and `make` share one build.
-- After a slice: `make verify-delta BASE=<commit the slice started from>`. It
-  maps changed paths to their owning checks plus fmt, clippy, and manifest
-  validation, and escalates any unmapped path to `make verify`.
+- After a slice: `make verify-delta`. It diffs against the last fully green
+  commit (`BASE=<rev>` overrides), maps changed paths to their owning checks
+  plus fmt, clippy, and manifest validation, and escalates any unmapped path to
+  `make verify`.
   Analysis-only paths (solid-facts, solid-reactive-ir, `rust/dialects/solid-v2/rules/`)
   get a seconds-long WASM compile check instead of the WASM package build and
   parity, which only `packages/wasm/` selects; `make verify` runs both.

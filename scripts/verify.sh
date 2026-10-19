@@ -251,3 +251,10 @@ bun scripts/doc-budget.mjs
 
 step ""
 summarize
+
+# A clean tree that passed every step is the default base for the next
+# `make verify-delta` (scripts/verify-delta.mjs): the fast loop then plans only
+# what changed since the last full green run.
+if [ -z "$(git status --porcelain)" ]; then
+  git rev-parse HEAD > rust/target/verify-green-commit
+fi

@@ -186,12 +186,17 @@ test("prose no check reads runs the universal set only", () => {
   }
 });
 
-test("the base comes from --base, then SOLID_VERIFY_BASE, then origin/main", () => {
+test("the base comes from --base, then SOLID_VERIFY_BASE, then the last green commit, then origin/main", () => {
   assert.deepEqual(baseOf(["bun", "x", "--base", "abc123"], { SOLID_VERIFY_BASE: "env" }), {
     base: "abc123",
   });
   assert.deepEqual(baseOf(["bun", "x"], { SOLID_VERIFY_BASE: "env" }), { base: "env" });
   assert.deepEqual(baseOf(["bun", "x"], {}), { base: "origin/main" });
+  // The last green commit sits between the environment and origin/main.
+  const green = "a".repeat(40);
+  assert.deepEqual(baseOf(["bun", "x"], {}, green), { base: green, green: true });
+  assert.deepEqual(baseOf(["bun", "x"], { SOLID_VERIFY_BASE: "env" }, green), { base: "env" });
+  assert.deepEqual(baseOf(["bun", "x", "--base", "abc"], {}, green), { base: "abc" });
   assert.ok(baseOf(["bun", "x", "--base"], {}).error);
   assert.ok(baseOf(["bun", "x", "--base", "--dry-run"], {}).error);
 });
