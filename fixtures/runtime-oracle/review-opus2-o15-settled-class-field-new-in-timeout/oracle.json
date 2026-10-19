@@ -1,0 +1,18 @@
+{
+  "note": "Opus review round 2 (o15-settled-class-field-new-in-timeout): class fields, generators, and synchronous DOM dispatch",
+  "steps": [
+    {
+      "action": "assert-text",
+      "selector": "#ran-a",
+      "text": "ran",
+      "id": "runtime-observation-0"
+    }
+  ],
+  "open": [
+    {
+      "code": "NO_OWNER_CLEANUP",
+      "site": "App.tsx:5",
+      "reason": "The class is constructed in a timer, so its field runs with no owner; construction sites are not followed (review round 2). The checker keeps an uncertifiable SC3001 at the field."
+    }
+  ]
+}

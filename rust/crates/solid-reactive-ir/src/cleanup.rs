@@ -328,6 +328,25 @@ pub(super) fn leaf_owner_operations_for_file(
             });
         }
     }
+    // An operation in an instance field initializer runs when an instance is
+    // constructed, not while the leaf callback the class is written in runs
+    // (review round 2): no proven forbidden call.
+    for operation in &mut operations {
+        if lookup
+            .file_by_path(operation.location.path.as_ref())
+            .is_some_and(|operation_file| {
+                crate::execution_role::inside_instance_field(
+                    operation_file,
+                    Span::new(
+                        u32::try_from(operation.location.start_byte).unwrap_or(u32::MAX),
+                        u32::try_from(operation.location.end_byte).unwrap_or(u32::MAX),
+                    ),
+                )
+            })
+        {
+            operation.uncertain = true;
+        }
+    }
     operations
 }
 
@@ -1023,8 +1042,9 @@ fn dispatches_dom_event(resolved: &typefacts::ResolvedCall) -> bool {
 /// owner, the members whose name is shared with non-dispatching ones: form
 /// `reset`/`requestSubmit`, popover toggles (`beforetoggle`), dialog
 /// `show`/`showModal`/`close`/`requestClose`, `AbortController.abort`
-/// (`abort` on its signal), `XMLHttpRequest.open`/`abort`
-/// (`readystatechange`, `abort`) and `Document.execCommand` (`input`).
+/// (`abort` on its signal), `XMLHttpRequest.open`/`abort`/`send`
+/// (`readystatechange`, `abort`, `loadstart`), `FileReader.abort` (`abort`,
+/// `loadend`) and `Document.execCommand` (`input`).
 /// `lib.dom` also declares `dispatchEvent`, `focus` and `blur` as globals for
 /// `window`.
 fn synchronously_dispatching_dom_member(qualified_name: &str) -> bool {
@@ -1046,7 +1066,8 @@ fn synchronously_dispatching_dom_member(qualified_name: &str) -> bool {
                 "show" | "showModal" | "close" | "requestClose"
             )
             | ("AbortController", "abort")
-            | ("XMLHttpRequest", "open" | "abort")
+            | ("XMLHttpRequest", "open" | "abort" | "send")
+            | ("FileReader", "abort")
             | ("Document", "execCommand")
     )
 }
@@ -1420,6 +1441,12 @@ fn function_forbidden_operations(
         // whatever later invokes that function.
         if !crate::owners::written_directly_in(&helper_file.ast, helper, inner.span) {
             continue;
+        }
+        // An instance field initializer of a class written here runs when an
+        // instance is constructed, which this walk does not place (review
+        // round 2): the scope is not proven free, nor a proven forbidden call.
+        if crate::execution_role::inside_instance_field(helper_file, inner.span) {
+            return false;
         }
         // After an `await` that every run of the helper reaches first, the
         // call executes from a promise continuation: the leaf scope that

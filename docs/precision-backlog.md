@@ -1,5 +1,32 @@
 # Precision backlog
 
+## 2026-10-19 — Opus review round 2: class fields completed
+
+Round 1's class-field guard keyed on the function directly around the read,
+so a read in an IIFE or an inline callback inside a field initializer still
+climbed to the component body (`SC1001`), and the leaf-scope walk counted a
+field initializer of a class declared in `onSettled` as code run by the
+callback (`SC3001`). Both pre-existing and user-facing; fixed:
+
+- `inside_instance_field` (`execution_role.rs`): a site in an instance field
+  initializer, directly or in a function written there, has no placement.
+  Static fields and static blocks run where the class is evaluated and keep
+  their placement (a static block reading props in a body stays a violation).
+- Owner requirements and leaf-scope operations inside an instance field are
+  uncertain (`push_owner_requirement`, the leaf operation list in
+  `cleanup.rs`); a call there makes the leaf walk incomplete.
+- ADR 0329: `XMLHttpRequest.send` (`loadstart`) and `FileReader.abort` added.
+
+Recall traded (open in the oracle): `new K()` in the body runs the field there
+(`review-opus2-c18-field-iife-body-new`), a constructor read
+(`review-opus2-c04-ctor-body`, pre-existing), and a class constructed in a
+timer (`review-opus2-o15-…`): construction sites are not followed. Oracle: 592
+cases, exit 0, 0 unproven clean. Corpus: no movement. The review found the
+generator fix, the ADR 0329 owner names (checked against the producer's
+lib.dom) and the daemon witness sound; the daemon still never reuses a program
+whose `extends` names a package with an `exports` map (e.g.
+`astro/tsconfigs/strict`), as before.
+
 ## 2026-10-19 — Opus review round 1 of the day's slices
 
 No false positive introduced by the day's commits. Fixed from the review:

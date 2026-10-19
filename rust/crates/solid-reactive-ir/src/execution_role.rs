@@ -898,6 +898,21 @@ fn rendered_component<'f>(
     .then_some((component_file, component))
 }
 
+/// Whether `span` sits in an instance field initializer of some class,
+/// directly or in a function written there (review round 2: an IIFE or an
+/// inline callback in the initializer). The initializer runs when an
+/// instance is constructed, not where the class is written.
+pub(crate) fn inside_instance_field(file: &solid_facts::FileFacts, span: Span) -> bool {
+    file.ast.classes.iter().any(|class| {
+        class.span.contains(span)
+            && class.elements.iter().any(|element| {
+                element.kind == solid_facts::ast::ClassElementKind::Field
+                    && !element.r#static
+                    && element.value.is_some_and(|value| value.contains(span))
+            })
+    })
+}
+
 /// Whether `span` sits in a class written inside `function`: its field
 /// initializers and static blocks run at construction or class evaluation,
 /// not where the function's own flow places them.
@@ -2324,13 +2339,12 @@ fn semantic_role_before_awaits(
     if discarded_region_contains(file, span) {
         return ExecutionRole::DiscardedRendering;
     }
-    // A class field initializer or static block written in a function is no
-    // function fact, so every path below would place it in that function. It
-    // runs at construction or class evaluation instead, which no path here
-    // places.
-    if containing_ast_function(&file.ast, span)
-        .is_some_and(|function| class_within(file, function.span, span))
-    {
+    // An instance field initializer is no function fact, so every path below
+    // would place it -- and any literal written in it -- in the function the
+    // class is declared in. It runs at construction instead, which no path
+    // here places. (A static field or block runs where the class is
+    // evaluated, in that function, so it keeps its placement.)
+    if inside_instance_field(file, span) {
         return ExecutionRole::Unknown;
     }
     // Also ahead of every semantic path, for the mirror-image reason: code

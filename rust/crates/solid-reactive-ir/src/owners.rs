@@ -2368,10 +2368,14 @@ pub(crate) fn push_owner_requirement(
     }
     {
         let missing_jsx_census = crate::execution_role::missing_jsx_census_region(file, span);
+        // An instance field initializer runs at construction: the owner (or
+        // leaf scope) of the function the class is written in says nothing
+        // about it (review round 2).
+        let constructed = crate::execution_role::inside_instance_field(file, span);
         requirements.push(OwnerRequirement {
             operation: crate::OwnerRequirementOperation::from_internal(operation),
             location,
-            uncertain: status.uncertain || missing_jsx_census,
+            uncertain: status.uncertain || missing_jsx_census || constructed,
             runtime_uncertain: status.runtime_uncertain,
             caller_uncertain: status.caller_uncertain,
             conditional_owner: status.conditional_owner,
