@@ -250,12 +250,17 @@ pub const RULE_ALIASES: &[(&str, &str)] = &[
     ),
     (
         "package-contract-export-missing",
-        "package-contract-incomplete",
+        "package-behavior-unavailable",
     ),
-    ("package-contract-missing", "package-contract-incomplete"),
+    ("package-contract-missing", "package-behavior-unavailable"),
     (
         "package-contract-callback-missing",
+        "package-behavior-unavailable",
+    ),
+    // SC9005 was named for the removed package-contract model (ADR 0312).
+    (
         "package-contract-incomplete",
+        "package-behavior-unavailable",
     ),
     ("component-props-destructure", "no-destructure"),
     ("component-returns-conditionally", "components-return-once"),

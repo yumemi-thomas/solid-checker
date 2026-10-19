@@ -439,8 +439,7 @@
         "--format",
         "json",
         "--project",
-        "<root>/tsconfig.json",
-        "--no-package-contracts"
+        "<root>/tsconfig.json"
       ],
       "native": {
         "status": 0,
@@ -511,8 +510,7 @@
         "--format",
         "json",
         "--project",
-        "<root>/tsconfig.json",
-        "--no-package-contracts"
+        "<root>/tsconfig.json"
       ],
       "native": {
         "status": 0,
@@ -566,8 +564,7 @@
         "--format",
         "json",
         "--project",
-        "<root>/tsconfig.json",
-        "--no-package-contracts"
+        "<root>/tsconfig.json"
       ],
       "native": {
         "status": 0,
@@ -598,7 +595,7 @@
       "findings": [
         {
           "id": "SC9005",
-          "rule": "package-contract-incomplete",
+          "rule": "package-behavior-unavailable",
           "kind": "uncertifiable",
           "path": "<root>/App.tsx",
           "startByte": 563,
@@ -632,7 +629,6 @@
         "json",
         "--project",
         "<root>/tsconfig.json",
-        "--no-package-contracts",
         "--runtime-target",
         "browser",
         "--runtime-build",
@@ -710,7 +706,6 @@
         "json",
         "--project",
         "<root>/tsconfig.json",
-        "--no-package-contracts",
         "--runtime-target",
         "browser",
         "--runtime-build",
@@ -782,8 +777,7 @@
         "--format",
         "json",
         "--project",
-        "<root>/tsconfig.json",
-        "--no-package-contracts"
+        "<root>/tsconfig.json"
       ],
       "native": {
         "status": 0,
@@ -854,8 +848,7 @@
         "--format",
         "json",
         "--project",
-        "<root>/tsconfig.json",
-        "--no-package-contracts"
+        "<root>/tsconfig.json"
       ],
       "native": {
         "status": 0,
@@ -918,8 +911,7 @@
         "--format",
         "json",
         "--project",
-        "<root>/tsconfig.json",
-        "--no-package-contracts"
+        "<root>/tsconfig.json"
       ],
       "native": {
         "status": 0,

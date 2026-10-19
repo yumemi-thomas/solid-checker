@@ -68,7 +68,7 @@ const ownedRules = new Map();
  * `--format default` applies the same rule (`snapshot_emission::user_facing`).
  */
 /** The unavailable-package-behavior rule no shipped config enables (ADR 0248). */
-const UNAVAILABLE_BEHAVIOR_RULE = "package-contract-incomplete";
+const UNAVAILABLE_BEHAVIOR_RULE = "package-behavior-unavailable";
 
 function userFacing(finding) {
   return finding.kind !== "uncertifiable" || finding.subjectKind === "project";
@@ -803,7 +803,9 @@ const DEPRECATED_RULE_KEYS = [
   // The `v1/` alias went with the 1.x catalog (ADR 0110): a deprecation alias
   // can only delegate to a rule that still exists, and its target does not.
   ["resolve-in-reactive-scope", "resolve-in-tracked-scope"],
-  ["sync-node-received-async", "sync-computation-received-async"]
+  ["sync-node-received-async", "sync-computation-received-async"],
+  // SC9005 was named for the removed package-contract model (ADR 0312).
+  ["package-contract-incomplete", "package-behavior-unavailable"]
 ];
 
 for (const catalog of Object.values(manifests)) {
@@ -836,7 +838,7 @@ plugin.configs.recommended = {
   plugins: { "solid-checker": plugin },
   rules: {
     "solid-checker/certification": "error",
-    "solid-checker/contract-note": "warn"
+    "solid-checker/package-note": "warn"
   }
 };
 for (const catalog of Object.values(manifests)) {
@@ -850,7 +852,7 @@ for (const catalog of Object.values(manifests)) {
       "solid-checker/certification": "off",
       // Every shipped config enables the note rule at `warn`, so no listing
       // order can make a note fail a lint.
-      "solid-checker/contract-note": "warn",
+      "solid-checker/package-note": "warn",
       // ADR 0248: unavailable package behavior is opt-in. They are not findings about the
       // user's code, so no shipped config enables them.
       ...Object.fromEntries(
@@ -877,7 +879,7 @@ for (const catalog of Object.values(manifests)) {
     plugins: { "solid-checker": plugin },
     settings: { solidChecker: { preset: ["preferences"] } },
     rules: {
-      "solid-checker/contract-note": "warn",
+      "solid-checker/package-note": "warn",
       ...Object.fromEntries(
         preferenceRules.map(entry => [
           `solid-checker/${entry.name}`,

@@ -18,11 +18,11 @@ const config: Linter.Config[] = [
     settings: { solidChecker: settings },
     rules: {
       "solid-checker/strict-read-untracked": "warn",
-      "solid-checker/contract-note": "off"
+      "solid-checker/package-note": "off"
     }
   }
 ];
 
-export const noteRule: Rule.RuleModule = solidChecker.rules["contract-note"];
+export const noteRule: Rule.RuleModule = solidChecker.rules["package-note"];
 
 export default config;

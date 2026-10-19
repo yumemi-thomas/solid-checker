@@ -83,7 +83,7 @@ fn the_requirement_boundary_survives_without_any_package_source() {
     let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
         return;
     };
-    let project = fixture("package-contract-absent");
+    let project = fixture("package-behavior-unavailable");
     let disabled = snapshot(&run(
         &typefacts,
         &project,
@@ -112,7 +112,7 @@ fn removed_contract_flags_are_refused() {
     let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
         return;
     };
-    let project = fixture("package-contract-absent");
+    let project = fixture("package-behavior-unavailable");
     for arguments in [
         vec!["--accepted-contracts", "absent.json"],
         vec!["--receipt-trust-configuration=absent.json"],

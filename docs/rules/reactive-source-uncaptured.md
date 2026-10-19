@@ -54,5 +54,5 @@ Package contracts and receipts are no longer consumed (ADR 0312).
 
 ## Related
 
-- [package-contract-incomplete](package-contract-incomplete.md) — required package behavior is unavailable from source
+- [package-behavior-unavailable](package-behavior-unavailable.md) — required package behavior is unavailable from source
 - [strict-read-untracked](strict-read-untracked.md) — reads proven untracked

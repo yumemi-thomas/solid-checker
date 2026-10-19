@@ -187,8 +187,7 @@ SOLID_CHECKER_BIN="$checker_bin" \
 
 # The WASM package (P5 S2): its Node-API module and the owned check's two
 # reactors, built one after the other with the pins exported above. Then the
-# packed owned check, installed in isolation, against this checker with
-# --no-package-contracts. The gate builds nothing itself and fails on any
+# packed owned check, installed in isolation, against this checker. The gate builds nothing itself and fails on any
 # missing input; the bridge test records the update frames it replays, in the
 # same scratch tree outside the repository. See scripts/wasm-parity/README.md.
 step build-wasm-package
@@ -229,7 +228,7 @@ bun run --cwd packages/cli test
 # every case as well, so it takes the same fresh verification build as coverage
 # and ownership -- the packaged binary may lag rust/ source.
 step tsc-oracle-test
-# The whole glob, exactly as CI's contracts job runs it.
+# The whole glob, exactly as CI's scripts-and-cli job runs it.
 SOLID_CHECKER_NATIVE_BIN="$checker_bin" \
   SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" \
   bun packages/cli/node_modules/vitest/vitest.mjs run \

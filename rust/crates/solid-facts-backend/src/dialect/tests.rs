@@ -195,7 +195,7 @@ fn dialect_ids_are_unique_and_resolvable() {
 fn compatibility_registry_counts_match_the_catalog_migration() {
     assert_eq!(
         RULE_ALIASES.len(),
-        19,
+        20,
         "the migration note must list every transferred configuration key"
     );
     assert_eq!(

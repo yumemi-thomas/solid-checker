@@ -90,7 +90,7 @@ process.stdout.write(JSON.stringify({status:'certified',findings:[]}));`);
           commandArgs: [analyzer, `solid-checker: note: ${decision}`] } },
         report: descriptor => reports.push(descriptor)
       };
-      plugin.rules["contract-note"].create(context).Program({ type: "Program" });
+      plugin.rules["package-note"].create(context).Program({ type: "Program" });
       assert.equal(reports.length, 1);
       assert.equal(reports[0].messageId, "notice");
       assert.equal(reports[0].data.message, `[solid-checker note] ${decision}`);
@@ -145,7 +145,7 @@ test("exports an Oxlint-compatible certification plugin", () => {
   // Every shipped config carries the note rule, at warn, so a note never
   // fails a lint by itself.
   for (const [name, config] of Object.entries(exported.configs)) {
-    assert.equal(config.rules["solid-checker/contract-note"], "warn", name);
+    assert.equal(config.rules["solid-checker/package-note"], "warn", name);
   }
 });
 
@@ -362,12 +362,12 @@ test("per-rule surface: every discovered catalog identity is an ESLint rule", ()
   // shipped config carries.
   assert.equal(
     Object.keys(plugin.configs.v2.rules).length,
-    v2.rules.filter(entry => entry.defaultEnabled && entry.name !== "package-contract-incomplete")
+    v2.rules.filter(entry => entry.defaultEnabled && entry.name !== "package-behavior-unavailable")
       .length + 2
   );
-  assert.equal(plugin.configs.v2.rules["solid-checker/package-contract-incomplete"], undefined);
+  assert.equal(plugin.configs.v2.rules["solid-checker/package-behavior-unavailable"], undefined);
   assert.equal(plugin.configs.v2.rules["solid-checker/certification"], "off");
-  assert.equal(plugin.configs.v2.rules["solid-checker/contract-note"], "warn");
+  assert.equal(plugin.configs.v2.rules["solid-checker/package-note"], "warn");
 });
 
 test("browser configs are the dialect config with the browser runtime target", () => {
@@ -387,7 +387,7 @@ test("preference configs and recommendation metadata follow generated catalogs",
     assert.deepEqual(
       Object.keys(config.rules).sort(),
       [
-        "solid-checker/contract-note",
+        "solid-checker/package-note",
         ...preferences.map(entry => `solid-checker/${entry.name}`)
       ].sort()
     );
@@ -398,7 +398,7 @@ test("preference configs and recommendation metadata follow generated catalogs",
       );
       assert.equal(
         `solid-checker/${entry.name}` in plugin.configs[catalog.config].rules,
-        entry.defaultEnabled && entry.name !== "package-contract-incomplete"
+        entry.defaultEnabled && entry.name !== "package-behavior-unavailable"
       );
     }
   }
@@ -542,6 +542,19 @@ test("deprecated rule keys delegate without entering dialect presets", () => {
       assert.ok(!(`solid-checker/${oldName}` in config.rules));
     }
   }
+});
+
+test("the former SC9005 rule name still loads and maps to package-behavior-unavailable", () => {
+  assert.ok(
+    plugin._testing.deprecatedRuleKeys.some(
+      ([oldName, currentName]) =>
+        oldName === "package-contract-incomplete" && currentName === "package-behavior-unavailable"
+    )
+  );
+  const old = plugin.rules["package-contract-incomplete"];
+  assert.ok(old);
+  assert.equal(old.meta.deprecated, true);
+  assert.deepEqual(old.meta.replacedBy, ["package-behavior-unavailable"]);
 });
 
 test("recommended followed by a dialect config reports each finding once", () => {
@@ -707,7 +720,7 @@ test("a finding collapsed over a package export is reported in every file holdin
   // depends on the subject kind alone.
   const collapsed = {
     id: "SC9005",
-    rule: "package-contract-incomplete",
+    rule: "package-behavior-unavailable",
     kind: "violation",
     severity: "warning",
     message: "pkg is not analyzed from source here, so the behaviour of imported export run is unknown; " +
@@ -722,7 +735,7 @@ test("a finding collapsed over a package export is reported in every file holdin
   };
   const snapshot = { status: "uncertifiable", findings: [collapsed] };
   const text = "0123456789ab";
-  const rule = "package-contract-incomplete";
+  const rule = "package-behavior-unavailable";
 
   // The per-rule rule reports it; the catch-all leaves findings a
   // per-rule rule owns to that rule.
@@ -866,7 +879,7 @@ test("a note reaches ESLint once per linted file, as a warning", () => {
   for (const name of ["App.js", "Other.js"]) {
     const messages = lint(plugin.configs.recommended.rules, name);
     assert.equal(messages.length, 1, `${name} carries the note`);
-    assert.equal(messages[0].ruleId, "solid-checker/contract-note");
+    assert.equal(messages[0].ruleId, "solid-checker/package-note");
     // A note never fails CI by itself, even under `recommended`, whose
     // certification rule is an error.
     assert.equal(messages[0].severity, 1);
@@ -887,23 +900,23 @@ test("a note reaches ESLint once per linted file, as a warning", () => {
   ]) {
     const messages = lint(rules, "App.js");
     assert.equal(messages.length, 1);
-    assert.equal(messages[0].ruleId, "solid-checker/contract-note");
+    assert.equal(messages[0].ruleId, "solid-checker/package-note");
     assert.equal(messages[0].severity, 1);
   }
   // Certification alone, and the per-rule rules alone, report findings only.
   assert.deepEqual(lint({ "solid-checker/certification": "error" }, "App.js"), []);
   assert.deepEqual(
-    lint({ ...plugin.configs.v2.rules, "solid-checker/contract-note": "off" }, "App.js"),
+    lint({ ...plugin.configs.v2.rules, "solid-checker/package-note": "off" }, "App.js"),
     []
   );
   // Disabling the note rule is the user's choice to hide notes.
   assert.deepEqual(
-    lint({ ...plugin.configs.recommended.rules, "solid-checker/contract-note": "off" }, "App.js"),
+    lint({ ...plugin.configs.recommended.rules, "solid-checker/package-note": "off" }, "App.js"),
     []
   );
   // A severity the user raises is theirs too.
   const raised = lint(
-    { ...plugin.configs.recommended.rules, "solid-checker/contract-note": "error" },
+    { ...plugin.configs.recommended.rules, "solid-checker/package-note": "error" },
     "App.js"
   );
   assert.equal(raised.length, 1);
@@ -929,7 +942,7 @@ test("a note reaches ESLint once per linted file, as a warning", () => {
   for (const rules of [plugin.configs.v2.rules, plugin.configs.recommended.rules]) {
     const after = lint(rules, "Third.js");
     assert.equal(after.length, 1, "the note survives a pass that aborted");
-    assert.equal(after[0].ruleId, "solid-checker/contract-note");
+    assert.equal(after[0].ruleId, "solid-checker/package-note");
     assert.match(after[0].message, /^\[solid-checker note\]/);
   }
   plugin._testing.snapshotCache.clear();
@@ -1002,12 +1015,11 @@ process.stdout.write(JSON.stringify({ status: "certified", findings: [],
   };
 }
 
-// `--no-package-contracts` reads catalog files and installed package entries
-// the cross-pass key does not follow, so a run with it is analyzed afresh every
-// pass, while the rules of one pass still share one analysis. The same token consumed as a
-// value option's value is a value, and changes nothing.
-test("a run with --no-package-contracts is reused within one pass only", () => {
-  const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-contracts-off-"));
+// Nothing is reused across passes (native answers a repeat check from its
+// daemon), while the rules of one pass still share one analysis. The same token
+// consumed as a value option's value is a value, and changes nothing.
+test("a run with a native flag is reused within one pass only", () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-native-flag-"));
   try {
     const project = join(root, "tsconfig.json");
     writeFileSync(project, "{}\n");
@@ -1036,7 +1048,7 @@ test("a run with --no-package-contracts is reused within one pass only", () => {
     }], { filename: join(root, "App.js") }).map(m => m.message);
     plugin._testing.snapshotCache.clear();
 
-    const off = ["--no-package-contracts"];
+    const off = ["--internal"];
     assert.deepEqual(messages(off), ["before-edit 1", "before-edit 1"],
       "every rule of one pass shares one analysis");
     edit();
@@ -1048,7 +1060,7 @@ test("a run with --no-package-contracts is reused within one pass only", () => {
     assert.equal(runs(), 3);
 
     // Any other run, too: a later edit is seen on the next pass.
-    const valued = ["--runtime-condition", "--no-package-contracts"];
+    const valued = ["--runtime-condition", "--internal"];
     assert.deepEqual(messages(valued), ["after-edit 4", "after-edit 4"]);
     writeFileSync(join(root, "epoch.txt"), "later-edit");
     assert.deepEqual(messages(valued), ["later-edit 5", "later-edit 5"],
@@ -1060,8 +1072,8 @@ test("a run with --no-package-contracts is reused within one pass only", () => {
   }
 });
 
-test("--no-package-contracts in commandArgs reaches native unchanged", () => {
-  const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-contracts-off-argv-"));
+test("a native flag in commandArgs reaches native unchanged", () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-native-flag-argv-"));
   try {
     const project = join(root, "tsconfig.json");
     writeFileSync(project, "{}\n");
@@ -1072,12 +1084,12 @@ test("--no-package-contracts in commandArgs reaches native unchanged", () => {
       physicalFilename: join(root, "App.tsx"),
       sourceCode: sourceCode("export {};"),
       settings: { solidChecker: {
-        command, commandArgs: [...commandArgs, "--no-package-contracts"], project
+        command, commandArgs: [...commandArgs, "--internal"], project
       } },
       options: []
     });
     assert.equal(invocations().length, 1);
-    assert.equal(invocations()[0].filter(arg => arg === "--no-package-contracts").length, 1);
+    assert.equal(invocations()[0].filter(arg => arg === "--internal").length, 1);
   } finally {
     plugin._testing.snapshotCache.clear();
     rmSync(root, { recursive: true, force: true });
@@ -1154,7 +1166,7 @@ test("no commandArgs make a pass reuse another's analysis", () => {
 
     // A condition spelled like a flag is a condition: native defaults to
     // source, so no pass reuses another's analysis.
-    const condition = ["--runtime-condition", "--no-package-contracts"];
+    const condition = ["--runtime-condition", "--internal"];
     assert.equal(lint(host, condition), "before-edit");
     edit();
     assert.equal(lint(host, condition), "after-edit", "a later pass analyzes again");

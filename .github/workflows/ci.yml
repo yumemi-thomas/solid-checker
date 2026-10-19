@@ -180,7 +180,7 @@ jobs:
       - run: bun pm pack --dry-run
         working-directory: packages/wasm
 
-  contracts:
+  scripts-and-cli:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

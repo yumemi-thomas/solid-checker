@@ -26,7 +26,7 @@
 //! | `reachability` | Positive execution reachability and call multiplicity. |
 //! | `hosts`, `callback_host` | Browser/server host reachability and callback invocation premises. |
 //! | `reactive_analysis` | The coupled local/interprocedural stage. |
-//! | `attribution` | Which functions can reach an unresolved proof obligation. |
+//! | `attribution` | Discharges parameter-member dispatch obligations in a closed program. |
 //! | `cleanup`, `directives`, `effect_api`, `effect_execution` | Leaf-owner diagnostics, directive discovery, `createEffect` semantics. |
 //! | `argument_values`, `callback_return`, `literal_member_slots`, `object_members`, `value_flow`, `value_identity` | What arguments, returns, members and values prove. |
 //! | `summary_semantics`, `runtime_semantics`, `runtime_configuration` | Summary vocabulary, audited runtime behaviour, assumed runtime conditions. |
@@ -813,7 +813,7 @@ impl StaticDefectFamily {
             Self::ReactiveObjectDestructure => "no-destructure",
             Self::ReactiveReadAfterAwait => "reactive-read-after-await",
             Self::ComponentReturnsConditionally => "components-return-once",
-            Self::PackageBehaviorUnavailable => "package-contract-incomplete",
+            Self::PackageBehaviorUnavailable => "package-behavior-unavailable",
             Self::MissingEffectFunction => "missing-effect-function",
             Self::ReactiveSourceUncaptured => "reactive-source-uncaptured",
             Self::ReactiveDispatchUnresolved => "reactive-dispatch-unresolved",

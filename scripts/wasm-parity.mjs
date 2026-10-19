@@ -1,5 +1,5 @@
 // The WASM parity gate (P5 S2): the owned check, packed and installed in
-// isolation, against the native ordinary check with --no-package-contracts,
+// isolation, against the native ordinary check,
 // over the same frozen project bytes at the same absolute paths.
 //
 // It builds nothing. `make wasm-parity` builds the package, the native
@@ -248,7 +248,7 @@ const usesGate = 'import { Gate } from "./Gate";\nexport function Use() {\n  ret
 const TREES = {
   "w1-real-typings-violation": [typedProject(w1Files)],
   "w2-real-typings-clean": [typedProject({ "Hello.tsx": w1Files["Hello.tsx"] })],
-  "w2-uncertifiable": [fixture("package-contract-absent")],
+  "w2-uncertifiable": [fixture("package-behavior-unavailable")],
   "w3-dependency-source-program": [fixture("dependency-source-program")],
   "w3-visible-js": [fixture("dependency-source-integrity-r2-visible-js")],
   "w4-omission": [fixture("dependency-source-program"), root => rmSync(join(root, "node_modules/dep-hooks/src/read.js"))],
@@ -284,7 +284,7 @@ const trees = Object.fromEntries(Object.entries(TREES).map(([name, [source, muta
 function caseRequest(tree, projectId = join(tree.root, "tsconfig.json")) {
   const metadataPath = join(tree.root, ".solid-checker", "runtime.json");
   const metadata = existsSync(metadataPath) && lstatSync(metadataPath).isFile() ? JSON.parse(readFileSync(metadataPath, "utf8")) : {};
-  const argv = ["--format", "json", "--project", projectId, "--no-package-contracts"];
+  const argv = ["--format", "json", "--project", projectId];
   const runtime = {};
   for (const [key, flag] of [["target", "--runtime-target"], ["build", "--runtime-build"],
     ["rendering", "--rendering"], ["programBoundary", "--program-boundary"]]) {
@@ -567,7 +567,7 @@ if (run("mkfifo", [join(mountCases, "fifo/project/pipe")]).status !== 0) fail("m
 const outside = join(scratch, "canary-write.txt");
 // S3d: directory mode follows the outside link as native does.
 native.outsideLinkReached = runNativeRaw("directory-outside-link-reached",
-  ["--format", "json", "--project", join(mountCases, "outside-link/project/escape/tsconfig.json"), "--no-package-contracts"]);
+  ["--format", "json", "--project", join(mountCases, "outside-link/project/escape/tsconfig.json")]);
 
 // --- the driver, under both engines -----------------------------------------------
 const plan = {
@@ -1048,7 +1048,7 @@ for (const [engine, { driver, urls, oldEntry }] of Object.entries(engines)) {
 for (const engine of Object.keys(engines)) cpSync(join(scratch, `results-${engine}`), join(evidence, `results-${engine}`), { recursive: true });
 const versionOf = path => run(path, ["--version"]).stdout.trim();
 const summary = {
-  question: "Does the packed owned check, installed in isolation, answer as the native ordinary check with --no-package-contracts over the same bytes, and do its lifecycle and negative controls hold?",
+  question: "Does the packed owned check, installed in isolation, answer as the native ordinary check over the same bytes, and do its lifecycle and negative controls hold?",
   witness: expectations.source,
   inputs: {
     nativeChecker: { path: nativeChecker, sha256: sha256(readFileSync(nativeChecker)) },

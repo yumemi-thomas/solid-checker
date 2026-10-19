@@ -932,7 +932,7 @@ fn coverage_group(seed: FindingSeed<'_>) -> Option<(&'static str, String)> {
     match seed {
         FindingSeed::StaticDefect(defect) => match &defect.kind {
             StaticDefectKind::PackageBehaviorUnavailable { module, .. } => {
-                Some(("package-contract", package_of_specifier(module).to_owned()))
+                Some(("package-boundary", package_of_specifier(module).to_owned()))
             }
             StaticDefectKind::ReactiveDispatchUnresolved { callee, .. } => {
                 let context = defect.analysis_context.as_str();

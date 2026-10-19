@@ -369,7 +369,7 @@ mod tests {
     fn dedup_identities_are_pinned_per_finding_family() {
         assert_eq!(
             StaticDefectFamily::PackageBehaviorUnavailable.dedup_identity(),
-            "package-contract-incomplete"
+            "package-behavior-unavailable"
         );
         assert_eq!(
             StaticDefectFamily::ReactiveDispatchUnresolved.dedup_identity(),

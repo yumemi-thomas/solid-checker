@@ -1,8 +1,9 @@
-# package-contract-incomplete (SC9005)
+# package-behavior-unavailable (SC9005)
 
 An imported package’s required runtime behavior could not be established from
 source. This is an **uncertifiable** finding, never a proved violation.
-The historical rule name remains a compatibility spelling.
+The former name `package-contract-incomplete` is still accepted as an alias in
+`rule-options.json` and in ESLint configurations.
 
 Dependency source selection requires a declared runtime target and build under
 the Vite and Solid plugin premises. Unsupported source selection, unavailable

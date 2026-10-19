@@ -385,7 +385,7 @@ for (const [index, testCase] of ledger.cases.entries()) {
 // silently. A new rule must arrive with its positive spelling and the oracle's
 // verdict on it.
 const EXEMPT = {
-  "package-contract-incomplete": "asks whether a package's behavior is available from analyzed source, which is an analyzability fact about an external artifact; no snippet against real Solid typings can express it",
+  "package-behavior-unavailable": "asks whether a package's behavior is available from analyzed source, which is an analyzability fact about an external artifact; no snippet against real Solid typings can express it",
   "server-function-module-directive": "needs a module-level \"use server\" prologue and the project's server surface",
   // The one catalog identity with no source subject at all. It is decided by
   // dialect detection from the nearest node_modules/solid-js/package.json,

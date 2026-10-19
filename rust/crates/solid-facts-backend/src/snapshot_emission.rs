@@ -127,7 +127,7 @@ pub(crate) fn emit(
 /// see (a package whose behavior is unavailable, a dispatch it could not resolve), not a
 /// claim about code the user wrote. ADR 0202 groups them in the default output.
 const COVERAGE_RULES: &[&str] = &[
-    "package-contract-incomplete",
+    "package-behavior-unavailable",
     "reactive-dispatch-unresolved",
     "reactive-source-uncaptured",
     "unaudited-solid-release",
@@ -253,7 +253,7 @@ const COVERAGE_SUBJECTS_SHOWN: usize = 5;
 /// ADR 0205: the heading of a coverage family, and what its subjects are.
 fn coverage_family_heading(family: &str) -> Option<(&'static str, &'static str, &'static str)> {
     Some(match family {
-        "package-contract" => (
+        "package-boundary" => (
             "imports from packages whose behavior is unavailable from source",
             "package",
             "packages",

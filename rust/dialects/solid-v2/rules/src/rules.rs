@@ -204,7 +204,7 @@ impl Rule {
                 ("SC7007", "server-function-rich-argument", "error", false)
             }
             Self::PackageBehaviorUnavailable => {
-                ("SC9005", "package-contract-incomplete", "error", true)
+                ("SC9005", "package-behavior-unavailable", "error", true)
             }
             // Uncertifiable, not a violation: the project's own code is not
             // the defect. The checker cannot model the runtime it installs,

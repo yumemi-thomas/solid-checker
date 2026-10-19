@@ -2228,7 +2228,7 @@ fn rc9_call_forms_follow_the_runtime_they_select() {
         // is older than the audited rc.13 (ADR 0194). The exported wrapper
         // owes no package obligation: nothing is generated.
         assert!(
-            findings_for_rule(&findings, "package-contract-incomplete").is_empty(),
+            findings_for_rule(&findings, "package-behavior-unavailable").is_empty(),
             "{findings:#?}"
         );
         assert_eq!(findings.len(), 10, "{findings:#?}");

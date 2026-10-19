@@ -56,7 +56,7 @@ export interface SolidCheckerPlugin extends ESLint.Plugin {
      * `warn` in every shipped config; `off` hides the notes.
      */
     "package-note": Rule.RuleModule;
-    /** Compatibility alias for package-note. */
+    /** @deprecated Alias of package-note, kept so existing configs keep loading. */
     "contract-note": Rule.RuleModule;
   };
   configs: Record<string, Linter.Config> & {

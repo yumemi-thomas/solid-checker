@@ -12,7 +12,7 @@
       "fixes": 0
     },
     {
-      "rule": "package-contract-incomplete",
+      "rule": "package-behavior-unavailable",
       "code": "SC9005",
       "kind": "uncertifiable",
       "severity": "error",

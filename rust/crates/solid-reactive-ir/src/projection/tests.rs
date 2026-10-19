@@ -76,7 +76,7 @@ impl CatalogWording for ErrorCatalog {
         FindingWording::new(
             RuleMetadata {
                 code: "SC9005",
-                name: "package-contract-incomplete",
+                name: "package-behavior-unavailable",
                 severity: "error",
                 uncertifiable: true,
                 default_enabled: true,

@@ -51,7 +51,10 @@ export interface CheckRequest {
   installedPackages?: InstalledPackage[]
   /** Accepted for compatibility; has no effect (ADR 0228). */
   exportConditions?: string[]
-  /** Accepted for compatibility; has no effect (ADR 0228). */
+  /**
+   * @deprecated Accepted so an older host's request decodes; has no effect.
+   * Package contracts were removed (ADR 0312).
+   */
   bundledContracts?: boolean
 }
 

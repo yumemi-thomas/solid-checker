@@ -1766,8 +1766,7 @@ type T = import("p").Q;
 
 /// Every way to install a property accessor at run time, which is the
 /// condition the `reads` implementation census refuses on
-/// (`docs/package-contract-v2/phase21/2026-09-10-reads-veto-observation-design.md`
-/// § 7-§ 9).
+/// (design note of 2026-09-10, no longer in the tree).
 ///
 /// The set is not a style preference: each member is pinned by a
 /// zero-form case in the producer's

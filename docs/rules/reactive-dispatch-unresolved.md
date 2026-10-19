@@ -126,7 +126,7 @@ The same holds one project wrapper away. If
 the project, the argument at `hidden`'s position is judged at that call. The
 wrapper's own `omit` claims nothing, because the body is its callers'. An
 exported wrapper still keeps an open callback for callers outside the project
-([package-contract-incomplete](package-contract-incomplete.md)).
+([package-behavior-unavailable](package-behavior-unavailable.md)).
 
 Not followed: a predicate forwarded through two or more wrappers, through a
 destructured or renamed parameter, or through a spread argument. Code in such

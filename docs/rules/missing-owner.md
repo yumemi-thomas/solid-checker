@@ -113,4 +113,4 @@ analysis; unresolved callers and ownership remain uncertifiable.
 
 - [leaf-owner rules](leaf-owner-forbidden-call.md) — calls made under an owner whose lifetime is nevertheless unsuitable
 - [async-outside-loading-boundary](async-outside-loading-boundary.md) — async work that needs an owned loading boundary
-- [package-contract-incomplete](package-contract-incomplete.md) — missing external ownership facts
+- [package-behavior-unavailable](package-behavior-unavailable.md) — missing external ownership facts

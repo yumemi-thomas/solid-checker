@@ -109,7 +109,7 @@ pub struct Finding {
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub subject_kind: String,
     /// ADR 0205: for an analysis-coverage finding, the kind of gap it is
-    /// (`package-contract`, `caller-supplied-member`, …) and what it is about
+    /// (`package-boundary`, `caller-supplied-member`, …) and what it is about
     /// (the package, helper or owner primitive). A reporter groups by these
     /// instead of by message text. Empty for every other finding.
     #[serde(default, skip_serializing_if = "String::is_empty")]

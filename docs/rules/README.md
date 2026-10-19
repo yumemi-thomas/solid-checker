@@ -96,21 +96,22 @@ whose disables deliberately do not transfer are listed in the
 | SC8003 | [jsx-no-duplicate-props](jsx-no-duplicate-props.md) | error | on |
 | SC8014 | [prefer-for](prefer-for.md) | error | on |
 | SC8015 | [prefer-show](prefer-show.md) | warning | on |
-| SC9005 | [package-contract-incomplete](package-contract-incomplete.md) | error | on |
+| SC9005 | [package-behavior-unavailable](package-behavior-unavailable.md) | error | on |
 | SC9011 | [reactive-source-uncaptured](reactive-source-uncaptured.md) | warning | on |
 | SC9012 | [reactive-dispatch-unresolved](reactive-dispatch-unresolved.md) | warning | on |
 | SC9013 | [unsupported-solid-runtime](unsupported-solid-runtime.md) | error | on |
 | SC9014 | [unaudited-solid-release](unaudited-solid-release.md) | warning | on |
 
-`http-response-after-flush`, `package-contract-incomplete`,
+`http-response-after-flush`, `package-behavior-unavailable`,
 `reactive-source-uncaptured`, `reactive-dispatch-unresolved`,
 `unsupported-solid-runtime`, and `unaudited-solid-release` can produce
 uncertifiable results. Their pages name
 the missing evidence and remediation.
 
-SC9005 retains the compatibility name `package-contract-incomplete`; it now
-means required package behavior is unavailable from source. Package contracts
-and receipts are no longer consumed; see [ADR 0312](../decisions.md#adr-0312).
+SC9005 was named `package-contract-incomplete`; that name remains an alias of
+`package-behavior-unavailable`, which means required package behavior is
+unavailable from source. Package contracts and receipts are no longer consumed;
+see [ADR 0312](../decisions.md#adr-0312).
 
 `unsupported-solid-runtime` and `unaudited-solid-release` are the two
 identities here the rules engine never produces. Dialect detection decides

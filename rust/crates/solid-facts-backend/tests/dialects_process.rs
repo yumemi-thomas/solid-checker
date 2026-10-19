@@ -389,7 +389,7 @@ fn retired_policy1_async_summary_no_longer_supplies_behavior() {
     }
     let findings = project_snapshot_findings(
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/fixtures/contract-async/tsconfig.json"),
+            .join("tests/fixtures/stale-async-summary/tsconfig.json"),
         Some("solid-v2"),
     );
     assert!(findings.iter().all(|finding| finding["id"] != "SC7002"));
