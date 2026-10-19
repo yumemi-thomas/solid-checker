@@ -1,0 +1,10 @@
+{
+  "note": "r10 reviewer: HistoryInGetter. Runtime-only witnesses supply the original ambient globals (no-op sink/runner, true flag, resolved promise); their declarations remain opaque to analysis. Runs on helge-dev (@solidjs/router next.26, Solid rc.13). Minimal runtime adaptation: mount C on /:id/:a/:b under the original router (or an added memory router), initialize the URL, and click navigation after settling. Removed obsolete Router component API in RouterComponentProp in favor of createRouter.",
+  "install": "helge-dev",
+  "steps": [
+    {
+      "action": "click",
+      "selector": "#oracle-next"
+    }
+  ]
+}

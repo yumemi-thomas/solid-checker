@@ -1,0 +1,3 @@
+{
+  "note": "r9 reviewer: b3/ChildrenWrite. Runtime-only witnesses supply the original ambient globals (no-op sink/runner, true flag, resolved promise); their declarations remain opaque to analysis. Runtime adaptation: mount the original component with populated signal-backed props so its reactive reads and control-flow branches execute."
+}

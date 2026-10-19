@@ -1,0 +1,3 @@
+{
+  "note": "r5 reviewer: t1. Runtime adaptation: mount the original component with populated signal-backed props so its reactive reads and control-flow branches execute. Retained-session source-edit variant lib.event.ts, pinned independently as a cold runtime case."
+}

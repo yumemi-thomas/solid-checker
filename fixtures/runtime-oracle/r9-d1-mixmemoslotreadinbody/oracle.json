@@ -1,0 +1,10 @@
+{
+  "note": "r9 reviewer: d1/MixMemoSlotReadInBody.",
+  "open": [
+    {
+      "code": "STRICT_READ_UNTRACKED",
+      "site": "App.tsx:7",
+      "reason": "Real read miss: a helper creates a memo from the supplied callback and immediately reads m() in the helper body; the helper-local returned accessor lacks a setup-time reactive-read proof."
+    }
+  ]
+}

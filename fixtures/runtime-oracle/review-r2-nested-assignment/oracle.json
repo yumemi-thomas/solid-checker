@@ -1,0 +1,11 @@
+{
+  "note": "ADR 0326/0327 reviewer r2: nested-assignment. Static-only investigation: assert the replacement and saved child both render. The static function-valued props are writable at runtime and the saved child reads in tracked JSX; no-direct-mutation remains a possible false positive for plain props.",
+  "steps": [
+    {
+      "action": "assert-text",
+      "selector": "#oracle-replacement",
+      "text": "replacement0",
+      "id": "runtime-observation-0"
+    }
+  ]
+}

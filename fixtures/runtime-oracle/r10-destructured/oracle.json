@@ -1,0 +1,17 @@
+{
+  "note": "r10 reviewer: Destructured. Runtime-only witnesses supply the original ambient globals (no-op sink/runner, true flag, resolved promise); their declarations remain opaque to analysis. Runs on helge-dev (@solidjs/router next.26, Solid rc.13). Minimal runtime adaptation: mount C on /:id/:a/:b under the original router (or an added memory router), initialize the URL, and click navigation after settling. Removed obsolete Router component API in RouterComponentProp in favor of createRouter.",
+  "install": "helge-dev",
+  "steps": [
+    {
+      "action": "click",
+      "selector": "#oracle-next"
+    }
+  ],
+  "open": [
+    {
+      "code": "STRICT_READ_UNTRACKED",
+      "site": "App.tsx:12",
+      "reason": "Real read miss: destructuring useParams() reads the reactive parameter proxy during setup, but dependency-source proof does not establish that destructuring as reactive; ADR 0324 only proves URL-string values."
+    }
+  ]
+}

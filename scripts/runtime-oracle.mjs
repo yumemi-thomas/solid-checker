@@ -15,7 +15,8 @@
 // component in its own root. The entry then drives the page itself: two passes
 // dispatch a fixed set of DOM events on every element (the second reaches
 // elements the first one revealed), so a case needs no per-site steps. An
-// optional `oracle.json` adds a note, further feedback scenario steps, and the
+// optional `oracle.json` adds a note, further feedback scenario steps, an
+// `install` corpus app name (relative to the parent of --install), and the
 // case's known open sites (each an unproven clean claim with its reason):
 //   { "note": "what the case pins", "steps": [ ... ],
 //     "open": [{ "code": "NO_OWNER_CLEANUP", "site": "App.tsx:13", "reason": "..." }] }
@@ -63,12 +64,12 @@ assert(!existsSync(output), "use a fresh output path");
 assert(process.env.SOLID_CHECKER_NATIVE_BIN && process.env.SOLID_TYPEFACTS_BIN, "set SOLID_CHECKER_NATIVE_BIN and SOLID_TYPEFACTS_BIN");
 
 const install = resolve(options.install);
+const appsRoot = dirname(install);
 const tooling = resolve(options.tooling ?? install);
 const browser = options.browser ? resolve(options.browser) : defaultChromium();
 const solidVersion = JSON.parse(readFileSync(join(install, "node_modules/solid-js/package.json"), "utf8")).version;
 assert(solidVersion.startsWith("2."), `--install resolves solid-js ${solidVersion}, not 2.x`);
 // Cases run inside the install so its node_modules is their ancestor.
-const runRoot = join(install, ".solid-checker-runtime-oracle");
 
 function defaultChromium() {
   const cache = join(process.env.HOME, "Library/Caches/ms-playwright");
@@ -136,7 +137,7 @@ const html = `<!doctype html><html><head><meta charset="utf-8"></head><body><div
 // claims (REACTIVITY_HALTED, an uncaught error's consequence) is reported as
 // `no-rule`, never as a missing finding.
 const codeRules = {
-  STRICT_READ_UNTRACKED: ["strict-read-untracked"],
+  STRICT_READ_UNTRACKED: ["strict-read-untracked", "no-destructure"],
   NO_OWNER_CLEANUP: ["missing-owner"],
   NO_OWNER_EFFECT: ["missing-owner"],
   NO_OWNER_BOUNDARY: ["missing-owner"],
@@ -178,7 +179,10 @@ async function runCase(id) {
   const source = join(resolve(options.cases), id);
   const specPath = join(source, "oracle.json");
   const spec = existsSync(specPath) ? JSON.parse(readFileSync(specPath, "utf8")) : {};
-  const dir = join(runRoot, id);
+  const caseInstall = spec.install ? resolve(appsRoot, spec.install) : install;
+  const caseSolid = JSON.parse(readFileSync(join(caseInstall, "node_modules/solid-js/package.json"), "utf8")).version;
+  assert(caseSolid === solidVersion, `${id}: install has solid-js ${caseSolid}, expected ${solidVersion}`);
+  const dir = join(caseInstall, ".solid-checker-runtime-oracle", id);
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
   const files = sourceFiles(source);
@@ -197,6 +201,10 @@ async function runCase(id) {
   try { report = JSON.parse(result.stdout.slice(result.stdout.indexOf("{"))); } catch { /* recorded below */ }
   if (report) writeFileSync(join(dir, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
   if (!report) return { id, verdict: "harness-error", error: (result.stderr || result.stdout).slice(-1500), wallMs };
+  if (!report.analysis || !report.execution) return {
+    id, verdict: report.typingErrorCount ? "type-error" : "harness-error",
+    error: report.failure?.message ?? "feedback report has no analysis or execution", wallMs,
+  };
 
   const caseFile = (path) => path && path.startsWith(dir + "/") && !path.endsWith("/main.tsx") ? relative(dir, path) : null;
   const findings = (report.analysis?.findings ?? [])
@@ -238,7 +246,7 @@ async function runCase(id) {
   const staticOnly = findings.filter((finding) => finding.kind === "violation"
     && !["prefer-show", "prefer-for"].includes(finding.rule)
     && !diagnostics.some((row) => row.file === finding.file && finding.line <= row.line && row.line <= finding.endLine));
-  const failure = report.execution?.failure?.message ?? null;
+  const failure = report.failure?.message ?? report.execution?.failure?.message ?? null;
   const typingErrors = report.typingErrorCount ?? null;
   // A known open site is listed in oracle.json with its reason; it is not a
   // pass, it is debt the gate keeps visible. A listed site that no longer

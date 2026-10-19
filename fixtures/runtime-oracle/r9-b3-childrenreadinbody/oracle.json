@@ -1,0 +1,10 @@
+{
+  "note": "r9 reviewer: b3/ChildrenReadInBody. Runtime-only witnesses supply the original ambient globals (no-op sink/runner, true flag, resolved promise); their declarations remain opaque to analysis. Runtime adaptation: mount the original component with populated signal-backed props so its reactive reads and control-flow branches execute.",
+  "open": [
+    {
+      "code": "STRICT_READ_UNTRACKED",
+      "site": "App.tsx:14",
+      "reason": "Real read miss: children() returns a reactive accessor c, and c() is read directly in the component body; the returned children accessor is not recognized as a strict reactive read."
+    }
+  ]
+}

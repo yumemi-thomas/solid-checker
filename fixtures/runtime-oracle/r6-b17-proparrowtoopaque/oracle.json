@@ -1,0 +1,10 @@
+{
+  "note": "r6 reviewer: b17/PropArrowToOpaque. Runtime-only witnesses supply the original ambient globals (no-op sink/runner, true flag, resolved promise); their declarations remain opaque to analysis. Runtime adaptation: mount the original component with populated signal-backed props so its reactive reads and control-flow branches execute.",
+  "open": [
+    {
+      "code": "STRICT_READ_UNTRACKED",
+      "site": "App.tsx:25",
+      "reason": "Real read miss under the explicit runtime witness: an opaque callback consumer invokes the prop-reading arrow synchronously. No consumer invocation/source premise reaches the prop read; runtime attributes the getter to the mount wrapper."
+    }
+  ]
+}

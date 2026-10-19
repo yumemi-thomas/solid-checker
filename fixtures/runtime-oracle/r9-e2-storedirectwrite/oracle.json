@@ -1,0 +1,11 @@
+{
+  "note": "r9 reviewer: e2/StoreDirectWrite. Runtime-only witnesses supply the original ambient globals (no-op sink/runner, true flag, resolved promise); their declarations remain opaque to analysis. Runtime observation: assert the store remains 1 after assigning 3; rc.13 silently drops the write, so this static-only finding detects a real mutation defect without a dev diagnostic.",
+  "steps": [
+    {
+      "action": "assert-text",
+      "selector": "#oracle-store",
+      "text": "1",
+      "id": "runtime-observation-0"
+    }
+  ]
+}

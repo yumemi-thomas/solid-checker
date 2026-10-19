@@ -1,0 +1,11 @@
+{
+  "note": "r9 reviewer: d3/NamedAsyncNoAwaitCall. Runtime-only witnesses supply the original ambient globals (no-op sink/runner, true flag, resolved promise); their declarations remain opaque to analysis. Static-only investigation: the first read runs before await and warns; assert the continuation reaches the second read, which is silent at runtime although strict-read-untracked also reports that line.",
+  "steps": [
+    {
+      "action": "assert-text",
+      "selector": "#oracle-path",
+      "text": "true",
+      "id": "runtime-observation-0"
+    }
+  ]
+}

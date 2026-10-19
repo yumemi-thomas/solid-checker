@@ -1,0 +1,10 @@
+{
+  "note": "ADR 0326/0327 reviewer r6: owner-jsx-getter-control.",
+  "open": [
+    {
+      "code": "NO_OWNER_CLEANUP",
+      "site": "App.tsx:15",
+      "reason": "Documented JSX-getter owner gap (ADR 0327): cb() is evaluated by the Holder event reading its value prop; the owner walk refuses the containing JSX expression."
+    }
+  ]
+}

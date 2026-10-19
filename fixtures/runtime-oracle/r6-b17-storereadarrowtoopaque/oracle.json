@@ -1,0 +1,10 @@
+{
+  "note": "r6 reviewer: b17/StoreReadArrowToOpaque. Runtime-only witnesses supply the original ambient globals (no-op sink/runner, true flag, resolved promise); their declarations remain opaque to analysis.",
+  "open": [
+    {
+      "code": "STRICT_READ_UNTRACKED",
+      "site": "App.tsx:20",
+      "reason": "Real read miss under the explicit runtime witness: an opaque callback consumer invokes a store-reading arrow during setup; no invocation/source proof places the callback."
+    }
+  ]
+}
