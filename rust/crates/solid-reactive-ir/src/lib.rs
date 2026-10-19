@@ -1,3 +1,40 @@
+//! The reactive IR: project indexes, interprocedural analysis, execution
+//! roles, owner and reachability proofs, and the findings they produce.
+//!
+//! Module map (each row is a file or directory under `src/`). The analysis
+//! modules reference each other cyclically (`execution_role`, `owners`,
+//! `indexes`, `interproc`), so the crate is split inside, not across.
+//! Directories hold a facade `foo.rs` with shared types plus child modules
+//! re-exported through it; `foo/tests.rs` holds the unit tests.
+//!
+//! | Module | Responsibility |
+//! | --- | --- |
+//! | `pipeline` | Build entry points and the staged incremental pipeline. |
+//! | `cache` | Cross-generation state: per-file contributions, fingerprints, reuse checks. |
+//! | `symbols` | TypeScript symbol, alias-root and entity indexes, full and incremental. |
+//! | `indexes` | `ProjectIndexes` and `SemanticLookup`, the semantic query surface. Children: completion, class_prototype, primitive_proof, callees, member_values, components. |
+//! | `identity` | Compact symbol identities shared by the indexes. |
+//! | `source_discovery` | Reactive sources, accessors and props reactivity. Children: returned_sources, discover_file, discover_sources, typed_sources, props_reactivity. |
+//! | `static_rules`, `static_api`, `server_rules` | File-local rules run right after source discovery. |
+//! | `local_access` | Per-file reads and writes of reactive values. |
+//! | `interproc` | Interprocedural reactive-read analysis. Children: parameter_use, retained_literal, graph, obligations, return_escape, callback_chain, structured_returns, result_view, result_reads, reads. |
+//! | `accessor_provenance` | Exact project-owned callable transport (a `#[path]` child of `interproc`). |
+//! | `property_gets` | Value Gets instantiated at a package call (a `#[path]` child of `interproc`). |
+//! | `execution_role` | Execution-role classification of a span. Children: events, callee_roles, named_callbacks, invocation_flow, unowned_event_literals and more. |
+//! | `project_consumer` | Closed, read-only project callback-use summaries (a `#[path]` child of `execution_role`). |
+//! | `owners` | Which computations need a reactive owner, and where one is missing. |
+//! | `reachability` | Positive execution reachability and call multiplicity. |
+//! | `hosts`, `callback_host` | Browser/server host reachability and callback invocation premises. |
+//! | `reactive_analysis` | The coupled local/interprocedural stage. |
+//! | `attribution` | Which functions can reach an unresolved proof obligation. |
+//! | `cleanup`, `directives`, `effect_api`, `effect_execution` | Leaf-owner diagnostics, directive discovery, `createEffect` semantics. |
+//! | `argument_values`, `callback_return`, `literal_member_slots`, `object_members`, `value_flow`, `value_identity` | What arguments, returns, members and values prove. |
+//! | `summary_semantics`, `runtime_semantics`, `runtime_configuration` | Summary vocabulary, audited runtime behaviour, assumed runtime conditions. |
+//! | `package_boundary`, `contracts`, `router_params` | Package-source boundary obligations and the router-parameters premise. |
+//! | `findings`, `projection` | The finding model and its projection onto dialect rule catalogs. |
+//! | `upstream_compat` | Retained eslint-plugin-solid 0.14.5 heuristics (see AGENTS.md before editing). |
+//! | `development_feedback`, `timings` | Executed-feedback models and the stage-timing contract. |
+
 mod argument_values;
 mod attribution;
 mod cache;

@@ -3,6 +3,24 @@
 //! This crate is intentionally checker-independent and regex-free. It parses
 //! original source once and exports finite, deterministic tables. Consumers
 //! join these spans with TypeScript-Go semantic facts; Oxc nodes never escape.
+//!
+//! Module map (files under `src/ast/`):
+//!
+//! | Module | Responsibility |
+//! | --- | --- |
+//! | `types` | The fact schema: every fact struct and enum, `AstFacts` and its accessors, `AstFactsError`. |
+//! | `extract` | `extract` and the `Collector` state that builds `AstFacts` from one parse. |
+//! | `visitor` | The oxc `Visit` implementation that records facts as the walk proceeds. |
+//! | `extract_helpers` | Free helpers: expression peeling, binding and key helpers, export names, chain parts. |
+//! | `span_index` | `AstSpanIndex` and `LazySpanIndex`, span-keyed lookups over the fact tables. |
+//! | `emission` | Module emission (`module_emission`) and export-assignment detection. |
+//! | `host_constants`, `host_execution`, `host_call_completion` | Host constant folding, host-execution facts, host call completion. |
+//! | `argument_completion`, `completion_call_cover`, `primitive_completion` | Completion standings for arguments, calls and primitives. |
+//! | `component_value_flow`, `proxy_get_forward`, `literal_array` | Component value flow, proxy Get forwarding, literal array elements. |
+//! | `unconditional_calls`, `module_requests`, `inert_javascript` | Synchronously unconditional calls, static module requests, inert JavaScript modules. |
+//!
+//! `mod.rs` keeps the submodule list and re-exports; fact types live in
+//! `types.rs`, and unit tests in `tests.rs` and per-module `tests.rs` files.
 
 use crate::core::{SourceIdentity, Span};
 use compact_str::CompactString;
