@@ -137,7 +137,7 @@ const html = `<!doctype html><html><head><meta charset="utf-8"></head><body><div
 // claims (REACTIVITY_HALTED, an uncaught error's consequence) is reported as
 // `no-rule`, never as a missing finding.
 const codeRules = {
-  STRICT_READ_UNTRACKED: ["strict-read-untracked", "no-destructure"],
+  STRICT_READ_UNTRACKED: ["strict-read-untracked", "no-destructure", "reactive-handler-frozen"],
   NO_OWNER_CLEANUP: ["missing-owner"],
   NO_OWNER_EFFECT: ["missing-owner"],
   NO_OWNER_BOUNDARY: ["missing-owner"],

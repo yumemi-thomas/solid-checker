@@ -2356,12 +2356,14 @@ fn interprocedural_diagnostics_point_to_the_calling_component() {
 
 #[test]
 fn control_flow_and_effect_phases_classify_strict_reads() {
-    // control-flow: the two frozen Show-callback reads, plus the two frozen
-    // reads under <For keyed={byId}> — a named key function proven callable
-    // through type facts keeps the custom-key accessor claims. The dynamic
-    // boolean `keyed={flag()}` functions contribute nothing: the callback
-    // shape is ambiguous, so neither parameter is claimed as an accessor.
-    for (fixture, expected) in [("control-flow", 4), ("execution-phases", 1)] {
+    // control-flow: one frozen Show-callback read (the other Show callback
+    // takes no parameter, so rc.13 inserts it as a tracked child -- review
+    // round 4), plus the two frozen reads under <For keyed={byId}> — a named
+    // key function proven callable through type facts keeps the custom-key
+    // accessor claims. The dynamic boolean `keyed={flag()}` functions
+    // contribute nothing: the callback shape is ambiguous, so neither
+    // parameter is claimed as an accessor.
+    for (fixture, expected) in [("control-flow", 3), ("execution-phases", 1)] {
         let Some(findings) = diagnostic_fixture(fixture) else {
             return;
         };

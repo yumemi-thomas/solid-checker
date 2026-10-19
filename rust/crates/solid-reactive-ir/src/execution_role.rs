@@ -2284,7 +2284,28 @@ fn semantic_execution_role_within(
     {
         return ExecutionRole::Unknown;
     }
+    // Review round 4: code written in a component element's children (an
+    // event-handler factory on a `<button>` inside `<Show>`, `<Loading>`, a
+    // portal or a wrapper rendering `props.children`) runs when the receiving
+    // component evaluates its children -- inside Show's memo, an insert, a
+    // later render -- not in this body's strict-read window, which the
+    // lexical rendering role assumes. No proven untracked read.
+    if role == ExecutionRole::UntrackedRendering && inside_component_element_children(file, span) {
+        return ExecutionRole::Unknown;
+    }
     role
+}
+
+/// Whether `span` is written in the children of a component (non-intrinsic)
+/// element, in the same function as that element, with no function between:
+/// code the receiving component runs when it evaluates `children`.
+pub(crate) fn inside_component_element_children(file: &solid_facts::FileFacts, span: Span) -> bool {
+    let function = containing_ast_function(&file.ast, span);
+    file.ast.jsx_containing(span).any(|element| {
+        !intrinsic_element(file, element)
+            && function.is_none_or(|function| function.body.contains(element.span))
+            && element.children.iter().any(|child| child.contains(span))
+    })
 }
 
 /// Whether code at `span` is written, in its async function's own body,
@@ -4556,6 +4577,24 @@ pub(super) fn control_flow_execution_role(
                     })
             })
             .max_by_key(|function| function.body.end - function.body.start)?;
+    // `Show`/`Match` run a function child as a callback only when its
+    // `length` is above 0; a function of length 0 (no parameters, or a
+    // default on the first) is inserted as an ordinary child and runs in the
+    // insert's tracked effect (review round 4).
+    let length = callback
+        .parameters
+        .iter()
+        .take_while(|parameter| parameter.initializer.is_none())
+        .count()
+        .min(callback.parameters.len() - usize::from(callback.rest_parameter));
+    if length == 0
+        && jsx_primitive_name(file, element, entities, symbol_names, dialect)
+            .as_ref()
+            .and_then(PrimitiveName::primitive)
+            .is_some_and(|primitive| dialect.children_callback_requires_parameters(primitive))
+    {
+        return Some(ExecutionRole::TrackedJsx);
+    }
     let owner = containing_ast_function(&file.ast, span)?;
     if owner.span != callback.span {
         return Some(ExecutionRole::DeferredCallback);

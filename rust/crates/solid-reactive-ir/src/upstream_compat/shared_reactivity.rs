@@ -328,7 +328,31 @@ fn expected_function_got_expression(
                 } else {
                     None
                 };
-                if let Some(uncertain) = uncertain {
+                // Review round 4: an element created inside a tracked JSX
+                // expression (`{cond && <button onClick={props.f}/>}`) or in a
+                // component's children (`<Show>`) is created again when that
+                // scope re-runs, installing the current handler: "installed
+                // once" is not proven there.
+                let recreated = file
+                    .ast
+                    .jsx_containing(expression)
+                    .find(|element| {
+                        element
+                            .attributes
+                            .iter()
+                            .any(|candidate| candidate.expression == Some(expression))
+                    })
+                    .is_some_and(|element| {
+                        file.compiler
+                            .tracked_regions
+                            .iter()
+                            .any(|region| region.span.contains(element.span))
+                            || crate::execution_role::inside_component_element_children(
+                                file,
+                                element.span,
+                            )
+                    });
+                if let Some(uncertain) = uncertain.map(|uncertain| uncertain || recreated) {
                     defects.push(StaticDefect {
                         kind: StaticDefectKind::ReactiveHandlerRead {
                             attribute: name.to_owned(),

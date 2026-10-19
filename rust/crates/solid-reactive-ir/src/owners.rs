@@ -2642,6 +2642,22 @@ fn loading_cover_at(
     }) {
         return LoadingCover::Covered;
     }
+    // A wrapper the site is a child of, with no `Loading` of its own, that
+    // reads its `children`: it may hand them to another component that has
+    // one (`<Layout><Loading>{props.children}</Loading></Layout>` behind a
+    // `Shell`), which this walk does not follow. Not proven uncovered (review
+    // round 4).
+    if file.ast.jsx_containing(span).any(|element| {
+        element.children.iter().any(|child| child.contains(span))
+            && jsx_target_function(lookup, file, element).is_some_and(|(target_file, target)| {
+                target_file.ast.members.iter().any(|member| {
+                    target.body.contains(member.span)
+                        && target_file.source_text(member.property) == Some("children")
+                })
+            })
+    }) {
+        return LoadingCover::Unresolved;
+    }
     // Walk outward from the innermost function. A closure nothing in the
     // project calls (a `<For>` row callback, a render prop) is part of the
     // function around it; the first function the project does render or call

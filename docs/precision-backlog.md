@@ -1,5 +1,41 @@
 # Precision backlog
 
+## 2026-10-19 — Opus review round 4: four false-positive families in app code
+
+A broad search of ordinary application code (not class fields) found four
+user-facing families, all pre-existing; fixed:
+
+1. **Code in a component's element children** (`<Show><button
+   onClick={make(props.id)}/></Show>`, `<Loading>`, `<Errored>`, portals,
+   wrappers rendering `props.children`): it runs when the receiving component
+   evaluates its children, not in the body's strict-read window. A site there
+   with the lexical rendering role has no proven placement
+   (`inside_component_element_children`). Corpus: **13 SC1001 violations**
+   removed (kui `Dialog.tsx` in 6 projects, probus `RouteDetail.tsx` inside a
+   `Reveal`).
+2. **SC1007 on an element that is recreated** (inside a tracked JSX expression
+   or a component's children): the listener is replaced when the scope
+   re-runs. Uncertain now. Corpus: both `SC1007` violations (inferay) are
+   uncertifiable.
+3. **`Show`/`Match` function children of length 0**: rc.13 runs a function
+   child as a callback only when `child.length > 0`
+   (`solid-js/dist/solid.dev.js:1476`, `:1523`); otherwise it is inserted and
+   tracked. New dialect question `children_callback_requires_parameters`.
+   Fixtures `control-flow` and `eslint-plugin-corpus` lose three such
+   findings (two violations, one uncertifiable); the zero-parameter `Show`
+   shape is also TS2745 against the real typings.
+4. **SC5003 through a forwarding wrapper**: a wrapper the site is a child of,
+   with no `Loading` of its own, that reads `children` may hand them to a
+   layout's `Loading`; `loading_cover_at` answers unresolved there. Recall
+   traded: a wrapper that resolves `children()` outside any `Loading` is
+   uncertifiable now too.
+
+The oracle counts `reactive-handler-frozen` as claiming a
+`STRICT_READ_UNTRACKED` diagnostic: SC1007 reports the same untracked setup
+read of a reactive prop. Oracle: 663 cases, exit 0, 0 unproven clean. Corpus:
+68 removed (13 `SC1001` violations, 2 `SC1007` violations, 53 uncertifiable),
+2 added (the two `SC1007` as uncertifiable).
+
 ## 2026-10-19 — Opus review round 3: one funnel for class fields
 
 Round 3 found the same root in seven more rules (`SC2001`, `SC2002`, `SC2004`,

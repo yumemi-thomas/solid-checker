@@ -7,16 +7,6 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/control-flow/App.tsx",
-      "start": 219,
-      "end": 226,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/control-flow/App.tsx",
       "start": 471,
       "end": 478,
       "fixes": 0

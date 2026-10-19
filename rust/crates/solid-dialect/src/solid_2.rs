@@ -1695,6 +1695,13 @@ impl Dialect for Solid2 {
     /// Source: the control-flow component lists `solid-reactive-ir`
     /// hardcoded before ADR 0006, extracted unchanged; this table is now the
     /// only place they live.
+    /// Source: `solid-js@2.0.0-rc.13` `dist/solid.dev.js:1476` (`Show`) and
+    /// `:1523` (`Match`): `typeof child === "function" && child.length > 0`
+    /// selects the callback path; otherwise the function itself is the child.
+    fn children_callback_requires_parameters(&self, primitive: Primitive) -> bool {
+        matches!(primitive, Primitive::Show | Primitive::Match)
+    }
+
     fn renders_children_through_callback(&self, primitive: Primitive) -> bool {
         matches!(
             primitive,

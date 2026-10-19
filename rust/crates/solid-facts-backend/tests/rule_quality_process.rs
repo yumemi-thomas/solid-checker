@@ -14,7 +14,9 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
     for (rule, count) in [
         ("reactive-write-in-owned-scope", 11),
         ("action-called-in-owned-scope", 2),
-        ("strict-read-untracked", 20),
+        // Review round 4: two zero-parameter `Show` children are tracked
+        // inserts, not strict-read callbacks.
+        ("strict-read-untracked", 18),
         ("reactive-read-after-await", 19),
         // ADR 0294: the exported `install(read: Accessor<number>)` shapes.
         ("reactive-dispatch-unresolved", 3),
@@ -72,7 +74,7 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         ),
         (
             "control-flow-invalid.tsx",
-            [("strict-read-untracked", 7)].as_slice(),
+            [("strict-read-untracked", 5)].as_slice(),
         ),
         (
             "props-extended-invalid.tsx",

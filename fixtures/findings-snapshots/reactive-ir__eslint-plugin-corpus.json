@@ -254,16 +254,6 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/eslint-plugin-corpus/control-flow-invalid.tsx",
-      "start": 231,
-      "end": 241,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/control-flow-invalid.tsx",
@@ -309,16 +299,6 @@
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/control-flow-invalid.tsx",
       "start": 1051,
       "end": 1058,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/eslint-plugin-corpus/control-flow-invalid.tsx",
-      "start": 1275,
-      "end": 1282,
       "fixes": 0
     },
     {

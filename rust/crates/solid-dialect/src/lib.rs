@@ -1845,6 +1845,15 @@ pub trait Dialect: Sync {
     /// directly, not through a callback.
     fn renders_children_through_callback(&self, primitive: Primitive) -> bool;
 
+    /// Whether `primitive` runs its function child as a callback only when the
+    /// function declares parameters (`child.length > 0`); a function child of
+    /// length 0 is returned as an ordinary child and inserted, so it runs in
+    /// the insert's tracked effect. Default: no such gate.
+    fn children_callback_requires_parameters(&self, primitive: Primitive) -> bool {
+        let _ = primitive;
+        false
+    }
+
     /// Whether calling this primitive produces a reactive source — an
     /// accessor, a store, or a tuple containing one.
     ///
