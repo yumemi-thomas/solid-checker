@@ -129,7 +129,9 @@ fn callee_edits_turn_a_props_read_on_and_off() {
         &[
             ("lib.ts", LIB_BODY, (true, true)),
             ("lib.ts", LIB_DEFERRED, (false, false)),
-            ("lib.ts", LIB_NO_BODY, (false, false)),
+            // A callee with no body is an unknown consumer: since the ADR
+            // 0323 amendment the read is uncertifiable, like its signal twin.
+            ("lib.ts", LIB_NO_BODY, (true, true)),
             ("lib.ts", LIB_BODY, (true, true)),
         ],
     );
@@ -170,7 +172,10 @@ fn local_callback_shape_edits_match_cold() {
         &[
             ("App.tsx", APP_TIMER, (false, false)),
             ("App.tsx", APP_IIFE, (true, true)),
-            ("App.tsx", APP_TIMER_IIFE, (false, false)),
+            // Closed: the walk places the IIFE in the timer, which does not
+            // report. Open: an obligation, like the signal twin (ADR 0323
+            // amendment).
+            ("App.tsx", APP_TIMER_IIFE, (false, true)),
             ("App.tsx", APP_FOR_EACH, (true, true)),
         ],
     );

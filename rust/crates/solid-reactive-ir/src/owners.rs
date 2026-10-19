@@ -2980,19 +2980,6 @@ fn object_literal_only_dispatched(
             .all(|(reference, _)| called_member_of(*reference) || closed_argument(*reference))
 }
 
-pub(crate) fn inside_unclassified_callback(file: &solid_facts::FileFacts, span: Span) -> bool {
-    if file
-        .compiler
-        .callback_roles
-        .iter()
-        .any(|callback| callback.span.contains(span))
-    {
-        return false;
-    }
-    containing_ast_function(&file.ast, span)
-        .is_some_and(|function| function_binding_name(file, function).is_none())
-}
-
 /// Whether `span` is inside a syntactically direct function argument that a
 /// known primitive provably never invokes.
 ///

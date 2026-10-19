@@ -520,3 +520,18 @@ Residual: a `createRoot` callback read in an exported component's props is an
 obligation, never proven; a view's hidden key through a `merge` is not skipped
 (another argument may supply it); `useThing({ onClose })` stays uncertifiable;
 unknown consumers stay silent for props and store reads (option B).
+
+## Amendment (2026-10-19): the silence is closed
+
+ADR 0328 made uncertifiable results internal, so the cost that kept the
+props/store gate (`inside_unclassified_callback` in
+`LocalAccessContext::discover`) no longer reaches users. The gate is removed:
+a props or store read in an anonymous callback is classified exactly like its
+signal twin, and `inside_unclassified_callback` is deleted. Named helpers and
+methods still go through the interprocedural summary
+(`inside_non_component_function`). Corpus: **0 removed, +505 `SC1001` and +5
+`SC9012` uncertifiable** (openbot 124, kui 99, en-passant 91 artifacts, derp
+38, sefer 30), **0 new `SC1001` violations**, and **+2 `SC8015`** style
+findings (inferay `DiffRow.tsx`, `SidebarFooter.tsx`: a `_props.x` condition
+in JSX, the shape the rule flags elsewhere). The first draft's four false
+violations (`children(...)`) stay fixed by part 1.

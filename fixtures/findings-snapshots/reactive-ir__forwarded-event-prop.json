@@ -126,6 +126,16 @@
       "code": "SC1001",
       "kind": "uncertifiable",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-event-prop/buttons.tsx",
+      "start": 3031,
+      "end": 3046,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-event-prop/EvalHandler.tsx",
       "start": 311,
       "end": 318,

@@ -1,5 +1,12 @@
 # Precision backlog
 
+## 2026-10-19 — Props and store reads in callbacks follow their consumer everywhere (ADR 0323 amendment)
+
+The owner decision recorded under ADR 0323 ("+811") is taken now that
+uncertifiable is internal: the gate that kept props/store reads in anonymous
+callbacks silent is removed. Corpus: 0 removed, +505 `SC1001` and +5 `SC9012`
+uncertifiable, 0 new violations, +2 correct `SC8015` style findings (inferay).
+
 ## 2026-10-19 — Synchronous DOM dispatch is not trusted (ADR 0329)
 
 `focus`, `blur`, `click`, `dispatchEvent`, form `reset`/`requestSubmit`,

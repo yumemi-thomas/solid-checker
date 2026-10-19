@@ -140,6 +140,46 @@
       "start": 0,
       "end": 0,
       "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callback-props-reads/Silent.tsx",
+      "start": 781,
+      "end": 788,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callback-props-reads/Silent.tsx",
+      "start": 1211,
+      "end": 1218,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callback-props-reads/Silent.tsx",
+      "start": 1427,
+      "end": 1434,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callback-props-reads/Silent.tsx",
+      "start": 1831,
+      "end": 1834,
+      "fixes": 0
     }
   ]
 }

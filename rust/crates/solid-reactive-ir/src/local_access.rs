@@ -9,7 +9,7 @@ use crate::owners::{
     LoadingCover, analysis_context, async_read_role, containing_ast_function,
     containing_leaf_owner, counts_as_strict_read_root, enclosing_render_function,
     function_binding_name, inside_known_value_function_argument, inside_non_component_function,
-    inside_unclassified_callback, read_loading_cover, typed_accessor_descriptor_at,
+    read_loading_cover, typed_accessor_descriptor_at,
 };
 use crate::pipeline::parallel_file_chunk_results;
 use crate::source_discovery::{AsyncSourceOptions, PropUse, PropsReactivityIndex};
@@ -1386,13 +1386,7 @@ impl LocalAccessContext<'_, '_> {
                 .get(symbol)
                 .filter(|_| self.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store))
                 .and_then(|_| self.component_prop_helper(file, member.span));
-            let gate_refuses = (inside_non_component_function(file, member.span, self.lookup)
-                || (inside_unclassified_callback(file, member.span)
-                    && !unclassified_callback_reaches_modelled_consumer(
-                        file,
-                        member.span,
-                        self.lookup,
-                    )))
+            let gate_refuses = inside_non_component_function(file, member.span, self.lookup)
                 && named_callback_execution_role(file, member.span, self.lookup).is_none()
                 // This literal is the exact dialect-owned children callback,
                 // and this site is in its own body (nested defaults excluded).
@@ -1691,13 +1685,7 @@ impl LocalAccessContext<'_, '_> {
                 self.symbol_names,
                 self.lookup,
             );
-            if (inside_non_component_function(file, spread.span, self.lookup)
-                || (inside_unclassified_callback(file, spread.span)
-                    && !unclassified_callback_reaches_modelled_consumer(
-                        file,
-                        spread.span,
-                        self.lookup,
-                    )))
+            if inside_non_component_function(file, spread.span, self.lookup)
                 && named_callback_execution_role(file, spread.span, self.lookup).is_none()
                 && !matches!(
                     execution,
