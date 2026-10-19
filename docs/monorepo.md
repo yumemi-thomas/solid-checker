@@ -70,9 +70,6 @@ configuration, output, optional source map, upstream base, and semantic
 implementation identity. The exact distribution and implementation revisions
 are deliberately separate and are recorded in the Phase 4 report.
 
-The detailed transition is in
-[Compiler and Type Facts bootstrap](package-contract-v2/compiler-and-typefacts-bootstrap.md).
-
 ## One compiler fork per dialect
 
 Each dialect crate depends on exactly one compiler fork, and a dialect's exact
@@ -132,10 +129,3 @@ The completed migration must not regress into mixed ownership states:
 - a branch name where an exact compiler revision is required.
 
 Each transition is atomic and fails closed on a mismatch.
-
-## Corpus policy
-
-Solid Primitives is a pinned compatibility corpus, not shipped code. Run
-`make corpus` to clone the reviewed revision into a temporary directory, build
-it, generate contracts to a fixed point, and validate all published artifacts.
-Set `SOLID_PRIMITIVES_CORPUS` to reuse an existing clean checkout.

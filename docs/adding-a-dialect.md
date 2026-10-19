@@ -19,6 +19,6 @@ that model requires exact source analysis; unknown behavior stays uncertifiable.
 7. Run compiler identity checks, armed process tests, coverage and ownership
    comparisons, then `make verify`. Review every semantic finding change.
 
-The current compiler identity lives under
-`docs/package-contract-v2/compiler-bootstrap/compiler-identity.json`.
-There is no package-contract bundle, receipt or negative-authority checklist.
+The current compiler identity lives in
+`rust/dialects/solid-v2/compiler-identity/compiler-identity.json`.
+A dialect carries no per-package behavior bundle or receipt.

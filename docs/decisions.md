@@ -340,7 +340,7 @@ An ordinary invocation whose effective dependency selection is non-empty (named 
 
 <a id="adr-0312"></a>
 ## ADR 0312 — Package contracts are removed
-Ordinary analysis uses project and selected dependency source plus the dialect's reviewed runtime premises; it consumes no catalog, authored tier, bundled contract or receipt. The package boundary derives from `package_requirements`; behavior unavailable from source is an explicit uncertifiable SC9005, never a guessed violation. Removed CLI and ESLint settings refuse with migration messages; `--no-package-contracts` is a no-op; WASM `checkSync` keeps bare runtime package imports open. Owners: `rust/crates/solid-facts-backend/src/package_requirements.rs`, `packages/cli/eslint.cjs`.
+Ordinary analysis uses project and selected dependency source plus the dialect's reviewed runtime premises; it consumes no catalog, authored tier, bundled contract or receipt. The package boundary derives from `package_requirements`; behavior unavailable from source is an explicit uncertifiable SC9005, never a guessed violation. Removed CLI and ESLint settings refuse with migration messages; `--no-package-contracts` is a no-op; WASM `checkSync` keeps bare runtime package imports open. SC9005 is renamed `package-behavior-unavailable` (the former `package-contract-incomplete` stays an alias in `rule-options.json` and ESLint configs), and the JSON `coverageFamily` value `package-contract` becomes `package-boundary`. Owners: `rust/crates/solid-facts-backend/src/package_requirements.rs`, `packages/cli/eslint.cjs`.
 
 <a id="adr-0313"></a>
 ## ADR 0313 — A string tag renders an intrinsic element

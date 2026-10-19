@@ -1,7 +1,7 @@
 # Compiler semantic facts
 
-The package-contract generator can demand semantic facts without reconstructing
-TypeScript semantics from text.
+The checker can demand semantic facts without reconstructing TypeScript
+semantics from text.
 
 ## Constant value
 
@@ -517,9 +517,6 @@ identities and validates local completeness and binding/path invariants before
 exposing the answer. Recovery signatures, composite dispatch, untyped
 `Function` calls, and `.call`/`.apply`/`.bind` remain explicit refusals rather
 than being approximated with wrapper signatures.
-
-The normative model and closure obligations are in
-[Type Facts invocation transcripts](../package-contract-v2/phase3/invocation-transcripts.md).
 
 ## Resolved module graph
 
