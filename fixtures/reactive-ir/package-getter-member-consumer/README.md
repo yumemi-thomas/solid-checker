@@ -1,3 +1,0 @@
-# Returned plain object getter members
-
-ADR 0272's authorized synthetic package returns an object with reactive plain-valued getters (`pathname`/`search`/`hash`/`state`), an inert `key` and a store-proxy `query` (not a router stub; real router pairs typecheck separately against published next.26/rc.13). Own enumerable getters prove SC1001 in a body, destructuring, spread, `Object.assign`, `values`/`entries`; JSX/memo reads, `key`, `Object.keys` are clean; serialization, accessor data members, async/generator/escaped callbacks and unprovable receivers are SC9012. Manifest and authorization identity match `package-lazy-getter-consumer`.

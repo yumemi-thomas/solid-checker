@@ -1,3 +1,0 @@
-# Exact constructor instance prototypes
-
-Hand-stated `prototype-instance` consumer (fictional zero-argument constructors so the empty callbacks census is sound; read signatures copied from installed next.2 typings, the constructor narrower; effect callback return from rc.13): the leaf-owner violation is proven under an observer for `has`/`size`/resumed reads; tracked reads are clean; a discarded generator is not resumed; arrays, aliases, casts, escapes, mutations, computed members and stored iterators keep obligations; a shadowed constructor never picks the import's recipe; `prototype-mutation` is a separate project.

@@ -1,3 +1,0 @@
-# A consumer of a registered computation
-
-Written (ADR 0114/0161) to pin that an export stating a registered computation makes an unowned call `SC4001` (`startTickerAlways`), uncertifiable (`startTicker`) or clean (`startTickerSilent`), with every call clean inside `Ticker`. That claim came from a package contract, and package contracts are removed (ADR 0312). Today the stub package has no `solid-js` peer dependency and no runtime source, and the snapshot holds only the SC9014 notice for the rc.0 stub: no call is reported, so the fixture no longer distinguishes the three exports. Signatures are `() => void`. The `solid-reactivity.json` beside the stub is inert.

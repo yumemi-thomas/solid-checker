@@ -1,3 +1,0 @@
-# Returned-callable captures consumer (hand-stated)
-
-`createTicker` retains argument 0 as a callback and a call of its returned value invokes it once, inline, in the invoker's owner and tracking context; `createPanel` may invoke it on an external timer with no owner. Proven SC1001 violations at the returned invocation (body, resource and operation-result captures); JSX, handlers, deferred reads, discards and shadows clean; two instances keep distinct captures; wrapped initializers, unknown captures and escapes are SC9012. Manifest, authorization and dialect stubs from `package-returned-callable-consumer`.

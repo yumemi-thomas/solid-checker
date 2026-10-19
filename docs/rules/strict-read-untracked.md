@@ -87,8 +87,7 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   The invocation's execution event and trigger must both be the export call;
   a same-stack schedule at a later event is insufficient. Tracked JSX and event
   handlers remain clean; a retained callback, a spread slot, or a non-call protocol item does
-  not establish a read during the package call
-  (`fixtures/reactive-ir/package-protocol-callbacks-consumer`).
+  not establish a read during the package call.
 - **Closed options callbacks can compose across source helpers.** An arrow
   forwarded in an exact options field is non-strict only when every consumer
   use, sibling field and enclosing callback carrier is accounted for. The

@@ -1,3 +1,0 @@
-# Tuple iteration veto
-
-Written (ADR 0282) to pin that a replaced array iterator (`mutations.ts`) makes the call to the package's `createTicker` factory `SC9012` uncertifiable, so the returned-member read in `TupleContractRead` must not keep a proven SC1001, with `package-effectful-member-consumer`'s `StartInBody` as the intact control. That relied on a package contract, which is removed (ADR 0312). Today the snapshot is certified with no findings: the stub package declares no `solid-js` peer dependency and nothing relates `start` to the factory, so the outcome no longer depends on the veto. The consumer and mutator are checked with real Solid rc.13 typings and a matching local runtime factory. The `solid-reactivity.json` beside the stub is inert.

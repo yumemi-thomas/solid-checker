@@ -1,3 +1,0 @@
-# A package's own tracked read
-
-Written (ADR 0239) to pin that a contract stating a package's own read of its reactive state decides whether the read is reported: `Watched`/`watchStatus` clean (tracked under an owner the export creates), `Peeked`, `PeekedThroughWrapper` and `PeekedThroughModule` (`peekStatus`, via `peek.ts`) an `SC1001` uncertifiable result at the package's own read. Package contracts are removed (ADR 0312). Today the snapshot holds only the SC9014 notice for the rc.0 stub: all four components are silent, so the fixture pins nothing about a package's own reads. The `solid-reactivity.json` beside the stub is inert.

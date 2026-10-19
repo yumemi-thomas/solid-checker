@@ -1,3 +1,0 @@
-# Explicit strict-read clearing
-
-Written to pin a hand-stated `strictRead` fact modelling rc.13 `untrack(fn, strictReadLabel)` (`@solidjs/signals` `dist/dev-shared.js:5863-5887`; the unlabelled use is `@solid-primitives/static-store` `dist/index.js:98`): `watchStatus` (at the call, through `localWrapper`, through `wrapper.ts`) would raise no SC1001, and `peekStatus` would give an `SC1001` uncertifiable. Package contracts are removed (ADR 0312). Today the snapshot holds only the SC9014 notice for the rc.0 stub: all four components are silent, so the cleared/uncleared difference is not pinned. The `solid-reactivity.json` beside the stub is inert.

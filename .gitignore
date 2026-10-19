@@ -160,26 +160,8 @@ packages/wasm/owned/
 # index on 2026-09-17. The files stay on disk; regenerate rather than commit.
 # Documents citing one by relative link are citing a local artifact, not a
 # repository file.
-!fixtures/reactive-ir/fixed-structural-return-consumer/node_modules/
-!fixtures/reactive-ir/fixed-structural-return-consumer/node_modules/**
-!fixtures/reactive-ir/partial-structural-return-consumer/node_modules/
-!fixtures/reactive-ir/partial-structural-return-consumer/node_modules/**
-!fixtures/reactive-ir/package-effectful-member-consumer/node_modules/
-!fixtures/reactive-ir/package-effectful-member-consumer/node_modules/**
-!fixtures/reactive-ir/package-own-tracked-read-consumer/node_modules/
-!fixtures/reactive-ir/package-own-tracked-read-consumer/node_modules/**
 
 # Callback-result provenance consumer fixture.
-!fixtures/reactive-ir/package-callback-result-consumer/node_modules/
-!fixtures/reactive-ir/package-callback-result-consumer/node_modules/**
-!fixtures/reactive-ir/package-member-receiver-consumer/node_modules/
-!fixtures/reactive-ir/package-member-receiver-consumer/node_modules/**
-!fixtures/reactive-ir/package-tracked-optional-callback-consumer/node_modules/
-!fixtures/reactive-ir/package-tracked-optional-callback-consumer/node_modules/**
-!fixtures/reactive-ir/package-mandatory-first-compute-consumer/node_modules/
-!fixtures/reactive-ir/package-mandatory-first-compute-consumer/node_modules/**
-!fixtures/reactive-ir/package-strict-read-cleared-consumer/node_modules/
-!fixtures/reactive-ir/package-strict-read-cleared-consumer/node_modules/**
 !fixtures/reactive-ir/forwarded-event-prop/node_modules/
 !fixtures/reactive-ir/forwarded-event-prop/node_modules/**
 !fixtures/reactive-ir/dynamic-string-tag-events/node_modules/
@@ -265,39 +247,13 @@ packages/wasm/owned/
 !fixtures/reactive-ir/shadowed-control-flow-tag/node_modules/
 !fixtures/reactive-ir/shadowed-control-flow-tag/node_modules/**
 
-!fixtures/reactive-ir/package-returned-callable-consumer/node_modules/
-!fixtures/reactive-ir/package-returned-callable-consumer/node_modules/**
 
-!fixtures/reactive-ir/package-owner-guards-consumer/node_modules/
-!fixtures/reactive-ir/package-owner-guards-consumer/node_modules/**
 
-!fixtures/reactive-ir/package-lazy-getter-consumer/node_modules/
-!fixtures/reactive-ir/package-lazy-getter-consumer/node_modules/**
-!fixtures/reactive-ir/package-getter-member-consumer/node_modules/
-!fixtures/reactive-ir/package-getter-member-consumer/node_modules/**
-!fixtures/reactive-ir/package-captured-callable-consumer/node_modules/
-!fixtures/reactive-ir/package-captured-callable-consumer/node_modules/**
 
-!fixtures/reactive-ir/package-prototype-instance-consumer/node_modules/
-!fixtures/reactive-ir/package-prototype-instance-consumer/node_modules/**
-!fixtures/reactive-ir/package-prototype-instance-mutation-consumer/node_modules/
-!fixtures/reactive-ir/package-prototype-instance-mutation-consumer/node_modules/**
 
-!fixtures/reactive-ir/package-prototype-input-consumer/node_modules/
-!fixtures/reactive-ir/package-prototype-input-consumer/node_modules/**
 
-!fixtures/reactive-ir/package-prototype-isolation-consumer/node_modules/
-!fixtures/reactive-ir/package-prototype-isolation-consumer/node_modules/**
 !fixtures/reactive-ir/root-callback-return/node_modules/
 !fixtures/reactive-ir/root-callback-return/node_modules/**
-!fixtures/reactive-ir/package-scalar-result-consumer/node_modules/
-!fixtures/reactive-ir/package-scalar-result-consumer/node_modules/**
-!fixtures/reactive-ir/package-derived-get-consumer/node_modules/
-!fixtures/reactive-ir/package-derived-get-consumer/node_modules/**
-!fixtures/reactive-ir/package-closed-map-owner-consumer/node_modules/
-!fixtures/reactive-ir/package-closed-map-owner-consumer/node_modules/**
-!fixtures/reactive-ir/package-captured-lookup-consumer/node_modules/
-!fixtures/reactive-ir/package-captured-lookup-consumer/node_modules/**
 
 !fixtures/reactive-ir/inferred-host-client-start/node_modules/
 !fixtures/reactive-ir/inferred-host-client-start/node_modules/**
@@ -431,14 +387,10 @@ packages/wasm/owned/
 !fixtures/reactive-ir/object-member-initialization/node_modules/**
 !fixtures/reactive-ir/dependency-source-integrity-r2-*/node_modules/
 !fixtures/reactive-ir/dependency-source-integrity-r2-*/node_modules/**
-!fixtures/reactive-ir/package-star-reexport-consumer/node_modules/
-!fixtures/reactive-ir/package-star-reexport-consumer/node_modules/**
 !fixtures/reactive-ir/deferred-effect-apply/node_modules/
 !fixtures/reactive-ir/deferred-effect-apply/node_modules/**
 !fixtures/reactive-ir/tuple-iteration-veto/node_modules/
 !fixtures/reactive-ir/tuple-iteration-veto/node_modules/**
-!fixtures/reactive-ir/package-tuple-iteration-veto/node_modules/
-!fixtures/reactive-ir/package-tuple-iteration-veto/node_modules/**
 !fixtures/reactive-ir/leaf-source-call-targets/node_modules/
 !fixtures/reactive-ir/leaf-source-call-targets/node_modules/**
 !fixtures/reactive-ir/leaf-source-call-targets-negative/node_modules/

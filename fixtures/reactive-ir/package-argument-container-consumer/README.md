@@ -1,3 +1,0 @@
-# A consumer of returns of argument containers
-
-Written (ADR 0115/0116) to pin that a contract closing `returns` over the caller's argument, a fresh array of it, or an invocation's result leaves nothing open, while the `*Open` controls raise `SC9005`. Package contracts are removed (ADR 0312). Today the snapshot is certified with no findings, including for `countOpen` and `greetingOpen`: the stub package declares no `solid-js` peer dependency, and no export here performs a reactive read, so the outcome does not depend on what the fixture was written to test. Declarations match `@solid-primitives/utils@7.0.0-next.4`. The `solid-reactivity.json` beside the stub is inert.

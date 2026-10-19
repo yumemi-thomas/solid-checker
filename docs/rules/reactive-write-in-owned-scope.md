@@ -119,8 +119,6 @@ prove an owned-scope write.
 - a function passed by name;
 - a closure the compute only returns.
 
-The case is pinned by `fixtures/reactive-ir/package-owned-computation-consumer`.
-
 This is the static counterpart of Solid's dev-mode `REACTIVE_WRITE_IN_OWNED_SCOPE`
 error.
 

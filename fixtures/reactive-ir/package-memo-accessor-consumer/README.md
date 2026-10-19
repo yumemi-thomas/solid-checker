@@ -1,3 +1,0 @@
-# A consumer of a returned memo accessor
-
-Written (ADR 0162) to pin that a contract whose closed `returns` hands back a callable reading an owned memo makes the consumer treat it as an accessor: `UntrackedDoubled` `SC1001`, `TrackedDoubled` clean, `DoubledOpen` `SC9005` plus `SC1001`. Package contracts are removed (ADR 0312). Today the three components are not told apart: each gets an `SC9011` `reactive-source-uncaptured` uncertifiable result at the `count` accessor passed to `createDoubled`/`createDoubledOpen`, and the `doubled()` read itself is never reported; the snapshot also holds the SC9014 notice for the rc.0 stub. No SC9005 is raised because the stub package declares no `solid-js` peer dependency. The `solid-reactivity.json` beside the stub is inert.

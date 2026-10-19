@@ -1,3 +1,0 @@
-# Exact fresh constructor population
-
-`Set` iterates values and `Map` also spreads yielded entries (signature copied from real next.2 declarations; callbacks census open): `ArraySetLeaf`, `ArrayEntryMapLeaf` prove `leaf-owner-forbidden-call` at the exact member invocation; `LiteralTracked`, `NullPopulation` add no prototype finding; `DynamicSet`, `DynamicMapEntry`, `AliasInput`, `SpreadInput` withhold the instance proof as SC9012. SC9005 constructor/import obligations may remain (this tests the member proof, not iterable/result closure); own manifest bytes, authorization and Solid 2 stubs; expectations hand-stated.

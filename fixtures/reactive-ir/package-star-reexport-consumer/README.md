@@ -1,3 +1,0 @@
-# Open package claims through star barrels
-
-Written (ADR 0301) to pin that a package export with `returns` left open raises `SC9005` when reached through `export *` barrels (`star.ts`, a second hop in `chain.ts`, an `export * as ns` member in `namespace.ts`), while a closed plain return and `shadow.ts`'s local `isReadyOpen` stay clean. Package contracts are removed (ADR 0312). Today the snapshot holds only the SC9014 notice for the rc.0 stub: `Status` and `StatusOpen` are both silent, because the stub package declares no `solid-js` peer dependency and so carries no package obligation. Barrel resolution is no longer pinned here; `package-behavior-unavailable` is the SC9005 fixture. The `solid-reactivity.json` beside the stub is inert.

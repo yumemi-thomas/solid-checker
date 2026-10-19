@@ -1,3 +1,0 @@
-# A consumer of a merged-props wrapper
-
-Written to pin an argument-position claim about `withDefaults` (props at argument 0) and `withOverrides` (props at argument 1): destructuring the merged result of props would give SC1003, and plain objects would stay clean. That claim came from a package contract, and package contracts are removed (ADR 0312). Today the stub package declares no `solid-js` peer dependency and ships no runtime source, so nothing relates the wrappers' results to their arguments. The snapshot holds only the SC9014 notice for the rc.0 `solid-js` stub: `Card`, `Static`, `Overridden` and `Defaulted` are all silent, so the fixture no longer exercises merged-props tracking. The `solid-reactivity.json` beside the stub is inert.
