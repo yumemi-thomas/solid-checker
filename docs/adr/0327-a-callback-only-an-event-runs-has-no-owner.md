@@ -82,6 +82,15 @@ uncertifiable.
 
 The oracle covers all five owner sites the first run listed as open.
 
+Inherited premise (review round 7): an event handler is taken to run with no
+owner. A synchronous dispatch from an owned scope breaks that premise:
+`el.dispatchEvent(new Event("scroll"))` in a component body runs the handler
+under the component's owner. The baseline already reports the inline form
+(`<div onScroll={() => onCleanup(…)}>` dispatched the same way) as a proven
+`SC4001`, so this ADR adds no new kind of claim. Lifting the premise needs an
+owner-at-dispatch fact for every event handler; it is recorded in
+`docs/precision-backlog.md`.
+
 Not covered, and silent as before: a call in a nested function's default parameter, a class field or a JSX expression written in the handler, even when that code runs during the dispatch (review round 6 controls).
 
 Not covered: a literal that is sometimes run by an event and sometimes

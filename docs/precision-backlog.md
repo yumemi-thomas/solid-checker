@@ -38,7 +38,10 @@ violations into uncertifiables. The corpus A/B caught both; neither is in the
 final change.
 
 Still open: a literal run both by an event and elsewhere refuses as a whole
-(ADR 0327). An intrinsic element's function child (`<div>{() => count()}</div>`)
+(ADR 0327). Every event handler, inline or flowed, is taken to run with no
+owner. A synchronous `dispatchEvent`/`click()` from an owned scope runs it
+under that owner, a false `SC4001` both before and after ADR 0327 (review
+round 7). Lifting this needs an owner-at-dispatch fact. An intrinsic element's function child (`<div>{() => count()}</div>`)
 stays uncertifiable, as before.
 
 ## 2026-10-19 — Runtime oracle: two unproven-clean families
