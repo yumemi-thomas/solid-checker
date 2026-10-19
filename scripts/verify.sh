@@ -1,6 +1,11 @@
 #!/bin/sh
 set -eu
 
+# What this run verifies, captured before any step: the green stamp written at
+# the end must name exactly this commit, on a tree that was clean throughout.
+verify_start_head=$(git rev-parse HEAD)
+verify_start_status=$(git status --porcelain)
+
 rust_manifest=rust/Cargo.toml
 cargo_profile=verify
 checker_bin="$PWD/rust/target/$cargo_profile/solid-checker-rust"
@@ -254,7 +259,10 @@ summarize
 
 # A clean tree that passed every step is the default base for the next
 # `make verify-delta` (scripts/verify-delta.mjs): the fast loop then plans only
-# what changed since the last full green run.
-if [ -z "$(git status --porcelain)" ]; then
-  git rev-parse HEAD > rust/target/verify-green-commit
+# what changed since the last full green run. Stamp only when the run started
+# clean and neither HEAD nor the tree moved while it ran; a commit made
+# mid-run was not verified.
+if [ -z "$verify_start_status" ] && [ -z "$(git status --porcelain)" ] &&
+  [ "$(git rev-parse HEAD)" = "$verify_start_head" ]; then
+  printf '%s\n' "$verify_start_head" > rust/target/verify-green-commit
 fi
