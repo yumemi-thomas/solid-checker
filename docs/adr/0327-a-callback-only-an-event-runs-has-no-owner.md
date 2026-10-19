@@ -63,6 +63,7 @@ proven violations (probed: `oracle-owner-flow-owned`).
 | every invocation is an event dispatch | intrinsic `on…` attribute or spread key, or a compiler event-handler function, reached by direct calls only | the host dispatches with no owner (rc.13 runtime: `NO_OWNER_*`) | `Spread`, `Attribute`, `Imported` |
 | no owner is supplied on the way | every primitive slot refuses; no read-role shortcut | `createRoot` and `runWithOwner` supply one | `UnderOwner`, `UnderRoot` |
 | mixed invocations refuse | one non-event invocation refuses the literal | a component-body call has an owner | `AlsoInBody`; the `LIB_BODY` edit |
+| the call runs in the function's own flow | `written_directly_in` (not a nested function's parameter), not inside a class or a JSX element written in that function (JSX around the function itself is fine) | a nested default runs when that function is called; a JSX expression becomes a getter run by its reader | `InDefault`, `InClassField` (review rounds 5-6) |
 | a class runs elsewhere | a call inside a class written in the enclosing function refuses | field initializers run at construction, maybe under `createRoot` | `InClassField` (review round 5) |
 | an await ends the walk | a call after an await in an async function refuses | the continuation is not the dispatch | inherited from ADR 0319 |
 | a cached answer is current | the set is in the cross-file digest | the proof reads the helper's file | `helper_event_edits_match_cold` |
@@ -80,6 +81,8 @@ uncertifiable.
   the package needs an owner is not proven.
 
 The oracle covers all five owner sites the first run listed as open.
+
+Not covered, and silent as before: a call in a nested function's default parameter, a class field or a JSX expression written in the handler, even when that code runs during the dispatch (review round 6 controls).
 
 Not covered: a literal that is sometimes run by an event and sometimes
 elsewhere refuses as a whole, even though one unowned path would prove the

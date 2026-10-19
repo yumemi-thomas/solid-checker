@@ -28,6 +28,7 @@ component's children callback (`<For>`, `<Show>`) is unchanged.
 | `LoopChild` | `SC1001` uncertifiable | a `for … of` head writes `props.children` |
 | `RedeclaredChild` | `SC1001` uncertifiable | `var props` replaces the parameter |
 | `FieldChild` | `SC1001` uncertifiable | the call is a class field initializer, run at construction (on click), not in the body |
+| `SwappedChild` | `SC1001` uncertifiable | the tag's binding is reassigned (`Swapped = Later`); the body proof needs the tag to run the declaration it names |
 
 `{shown() && …}` also draws the style rule `SC8015` (prefer `<Show>`). `Kids`
 reading `props.children` in its body is the existing props-read

@@ -87,3 +87,23 @@ export function InClassField() {
   });
   return <button {...h}>g</button>;
 }
+
+function defaulted(cb: () => void) {
+  return {
+    onClick: () => {
+      function later(value = cb()) {
+        return value;
+      }
+      createRoot(() => later());
+    },
+  };
+}
+
+// Negative: the call is a nested function's default parameter, run when
+// `later` is called inside `createRoot`.
+export function InDefault() {
+  const h = defaulted(() => {
+    onCleanup(() => undefined);
+  });
+  return <button {...h}>h</button>;
+}

@@ -869,9 +869,7 @@ fn prop_literal_invoked_during_render(
     {
         return false;
     }
-    let Some((component_file, component)) =
-        lookup.function_called_at(file.path.as_str(), element.name.span)
-    else {
+    let Some((component_file, component)) = rendered_component(file, element, lookup) else {
         return false;
     };
     component_invokes_prop_in_body(component_file, component, prop, lookup)
@@ -904,12 +902,33 @@ fn child_literal_invoked_during_render(
     {
         return false;
     }
-    let Some((component_file, component)) =
-        lookup.function_called_at(file.path.as_str(), element.name.span)
-    else {
+    let Some((component_file, component)) = rendered_component(file, element, lookup) else {
         return false;
     };
     component_invokes_prop_in_body(component_file, component, "children", lookup)
+}
+
+/// The project component `element`'s tag runs: its binding is current (no
+/// `Kids = Later` reassignment), and a member tag (`Menu.Item`) reaches
+/// exactly the declared member, as [`InvocationFlow::component_props_uses`]
+/// requires.
+fn rendered_component<'f>(
+    file: &solid_facts::FileFacts,
+    element: &solid_facts::ast::JsxElementFact,
+    lookup: &SemanticLookup<'f>,
+) -> Option<(
+    &'f solid_facts::FileFacts,
+    &'f solid_facts::ast::FunctionFact,
+)> {
+    let (component_file, component) =
+        lookup.function_called_at(file.path.as_str(), element.name.span)?;
+    let tag = file.ast.peel_ts_sugar_span(element.name.span);
+    let member_tag = file.ast.members.iter().any(|member| member.span == tag)
+        || file.ast.computed_members.binary_search(&tag).is_ok();
+    (lookup.function_value_is_current(component_file, component)
+        && (!member_tag
+            || member_runs_declared_method(file, tag, component_file, component, lookup)))
+    .then_some((component_file, component))
 }
 
 /// Whether `span` sits in a class written inside `function`: its field
@@ -5976,8 +5995,22 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         {
             return None;
         }
-        // A class field initializer runs at construction, wherever that is.
-        if class_within(file, owner.span, call) {
+        // Only a call in the function's own flow runs when it does: a nested
+        // function's default parameter runs when that function is called, a
+        // class field initializer at construction, and a JSX expression in
+        // the getter the compiler makes of it, wherever it is read.
+        if !crate::owners::written_directly_in(&file.ast, owner, call)
+            || class_within(file, owner.span, call)
+            || file
+                .ast
+                .jsx_containing(call)
+                .any(|element| owner.body.contains(element.span))
+            || file
+                .ast
+                .jsx_fragments
+                .iter()
+                .any(|fragment| owner.body.contains(*fragment) && fragment.contains(call))
+        {
             return None;
         }
         if file.compiler.callback_roles.iter().any(|callback| {

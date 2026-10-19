@@ -264,3 +264,24 @@ export function FieldChild() {
     </Constructed>
   );
 }
+
+let Swapped = (props: { children: () => JSX.Element }): JSX.Element => props.children();
+
+function Later(props: { children: () => JSX.Element }) {
+  return <button onClick={() => props.children()}>click</button>;
+}
+Swapped = Later;
+
+// Uncertifiable, no violation: `Swapped` is reassigned, so the tag may run
+// `Later`, which calls the child only on click.
+export function SwappedChild() {
+  const [count] = createSignal(0);
+  return (
+    <Swapped>
+      {() => {
+        const n = count();
+        return <span>{n}</span>;
+      }}
+    </Swapped>
+  );
+}

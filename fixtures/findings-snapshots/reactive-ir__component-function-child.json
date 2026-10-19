@@ -210,6 +210,26 @@
       "start": 6508,
       "end": 6515,
       "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/component-function-child/App.tsx",
+      "start": 6657,
+      "end": 6671,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/component-function-child/App.tsx",
+      "start": 7070,
+      "end": 7077,
+      "fixes": 0
     }
   ]
 }
