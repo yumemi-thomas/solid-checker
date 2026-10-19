@@ -73,6 +73,9 @@ and docs/decisions.md (live decisions by ADR number).
 - After a slice: `make verify-delta BASE=<commit the slice started from>`. It
   maps changed paths to their owning checks plus fmt, clippy, and manifest
   validation, and escalates any unmapped path to `make verify`.
+  Analysis-only paths (solid-facts, solid-reactive-ir, `rust/dialects/solid-v2/rules/`)
+  get a seconds-long WASM compile check instead of the WASM package build and
+  parity, which only `packages/wasm/` selects; `make verify` runs both.
 - Fixture or finding changes: `make coverage`, then `make ownership-gate`. Both
   build and use the fresh debug checker.
 - Handoff authority: `make verify`, once, at the end.
