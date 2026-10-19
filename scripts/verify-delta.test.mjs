@@ -1,5 +1,5 @@
 // `verify-delta` is only trustworthy if its mapping is, so the mapping is what
-// is tested: every row of AGENTS.md's table, the longest-prefix rule that keeps
+// is tested: every row of the mapping, the longest-prefix rule that keeps
 // two rows from stealing each other's paths, and -- the one that matters most --
 // the fail-closed fallback, because a wrong "no checks needed" is the failure
 // this script could plausibly have.
@@ -17,6 +17,7 @@ import {
   UNIVERSAL,
   classify,
   planFor,
+  baseOf,
   porcelainPaths,
   producerStampDrift,
 } from "./verify-delta.mjs";
@@ -71,8 +72,8 @@ test("a mapped change set runs preflight checks before building and testing", ()
   assert.equal(plan.full, false);
   assert.deepEqual(plan.unmapped, []);
   assert.deepEqual(plan.checks, [
-    // AGENTS.md's table says "coverage compare (fresh debug binary)", and a
-    // coverage run against a stale binary is the trap the document warns about.
+    // Coverage runs a fresh debug binary: a coverage run against a stale
+    // binary would hide the source change under test.
     "build-typefacts",
     ...UNIVERSAL,
     "build-debug",
@@ -92,7 +93,7 @@ test("a change that needs no checker skips the debug build", () => {
 
 test("every check a row selects is executed exactly once", () => {
   for (const row of ROWS) {
-    const plan = planFor([`${row.prefix}probe`]);
+    const plan = planFor([row.prefix.endsWith("/") ? `${row.prefix}probe` : row.prefix]);
     for (const check of row.checks) {
       assert.equal(plan.checks.filter((id) => id === check).length, 1, `${row.prefix}: ${check}`);
     }
@@ -108,7 +109,7 @@ test("a WASM package change runs the parity gate once, before the package tests"
 
 test("the universal handoff set precedes tests in every mapped plan", () => {
   for (const row of ROWS) {
-    const plan = planFor([`${row.prefix}probe`]);
+    const plan = planFor([row.prefix.endsWith("/") ? `${row.prefix}probe` : row.prefix]);
     assert.deepEqual(plan.checks.slice(1, 1 + UNIVERSAL.length), UNIVERSAL, row.prefix);
   }
   // Nothing changed is still the universal set, never nothing at all.
@@ -123,8 +124,11 @@ test("a path no row claims escalates to the full verify, and says which path did
     "schema/typefacts-v1.schema.json",
     "rust/Cargo.toml",
     "rust/Cargo.lock",
-    "AGENTS.md",
-    "docs/precision-backlog.md",
+    "docs/rules/no-destructure.md",
+    "docs/package-contract-v2/compiler-bootstrap/compiler.json",
+    "docs/precision-backlog.md.orig",
+    "AGENTS.mdx",
+    "README.md",
     ".github/workflows/ci.yml",
     "benchmarks/verify-performance.mjs",
     "rust/crates/solid-facts-something-new/src/lib.rs",
@@ -134,6 +138,33 @@ test("a path no row claims escalates to the full verify, and says which path did
     assert.deepEqual(plan.checks, ["verify"]);
     assert.deepEqual(plan.unmapped, [path]);
   }
+});
+
+test("prose no check reads runs the universal set only", () => {
+  for (const path of [
+    "AGENTS.md",
+    "CLAUDE.md",
+    "CONTEXT.md",
+    "CONTRIBUTING.md",
+    "docs/precision-backlog.md",
+    "docs/adr/0110-the-checker-analyzes-solid-2-only.md",
+    "docs/typefacts/adr/0026-example.md",
+    ".claude/skills/add-fixture/SKILL.md",
+  ]) {
+    const plan = planFor([path]);
+    assert.equal(plan.full, false, path);
+    assert.deepEqual(plan.checks, ["build-typefacts", ...UNIVERSAL], path);
+  }
+});
+
+test("the base comes from --base, then SOLID_VERIFY_BASE, then origin/main", () => {
+  assert.deepEqual(baseOf(["bun", "x", "--base", "abc123"], { SOLID_VERIFY_BASE: "env" }), {
+    base: "abc123",
+  });
+  assert.deepEqual(baseOf(["bun", "x"], { SOLID_VERIFY_BASE: "env" }), { base: "env" });
+  assert.deepEqual(baseOf(["bun", "x"], {}), { base: "origin/main" });
+  assert.ok(baseOf(["bun", "x", "--base"], {}).error);
+  assert.ok(baseOf(["bun", "x", "--base", "--dry-run"], {}).error);
 });
 
 test("one unmapped path escalates the whole plan, however many are mapped", () => {

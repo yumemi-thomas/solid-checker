@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// `make verify-delta`: AGENTS.md's "which check to run" table, mechanized.
+// `make verify-delta`: maps changed paths to the checks that own them.
 //
 // The table tells a reader which narrow check a change needs and which
 // expensive ones can wait. Applied by hand it is a judgement call made under
@@ -8,15 +8,22 @@
 // it matched for every path, and runs the universal preflight before the
 // selected tests and gates.
 //
-//   bun scripts/verify-delta.mjs             plan and run
-//   bun scripts/verify-delta.mjs --dry-run   print the plan, run nothing
+//   bun scripts/verify-delta.mjs              plan and run
+//   bun scripts/verify-delta.mjs --dry-run    print the plan, run nothing
+//   bun scripts/verify-delta.mjs --base REV   diff against REV instead of
+//                                             origin/main (or SOLID_VERIFY_BASE;
+//                                             `make verify-delta BASE=REV`)
+//
+// The default base, `origin/main`, is right only when the branch is near it.
+// A long-lived local branch diffs thousands of paths against it, so every plan
+// escalates. Pass the commit the slice started from instead.
 //
 // **`make verify` remains the handoff authority.** This is the fast loop, and
 // it is only ever as good as the mapping below; a full run is what a claim of
 // "verified" rests on.
 //
 // The mapping fails closed. A path that matches no row -- `scripts/`, the
-// `Makefile`, `schema/`, `rust/Cargo.toml`, documentation, anything new --
+// `Makefile`, `schema/`, `rust/Cargo.toml`, `docs/rules/`, anything new --
 // escalates to the full `make verify`, and prints which path did it. An
 // unmapped path can change any answer in the repository, so guessing that it
 // changes none is the one failure mode this script must not have.
@@ -54,9 +61,9 @@ const DEBUG_CHECKER = "rust/target/debug/solid-checker-rust";
 const TYPEFACTS = "bin/solid-typefacts";
 
 /**
- * The checks, keyed by the identifier AGENTS.md's table uses.
+ * The checks, by identifier.
  *
- * Commands are the table's commands verbatim, including the toolchain pin and
+ * Commands carry the toolchain pin and
  * the `SOLID_TYPEFACTS_BIN` arming that fixture-driven process tests skip
  * silently without.
  */
@@ -138,7 +145,7 @@ export const CHECKS = {
   verify: { command: ["scripts/verify.sh"] },
 };
 
-/** AGENTS.md's universal handoff set, run before expensive tests and gates. */
+/** The universal handoff set, run before expensive tests and gates. */
 export const UNIVERSAL = [
   "fmt-check",
   "whitespace-check",
@@ -148,7 +155,7 @@ export const UNIVERSAL = [
 ];
 
 /**
- * One row of AGENTS.md's table, as a prefix test.
+ * One row of the mapping, as a prefix test.
  *
  * Prefixes are matched longest-first, so `rust/crates/solid-facts-backend/`
  * cannot be swallowed by `rust/crates/solid-facts`. Nothing here matches by
@@ -166,13 +173,12 @@ export const ROWS = [
     owner: "solid-facts-backend process/diagnostics",
     checks: ["backend-process", "coverage"],
   },
-  // No `rust/crates/solid-dialect/` row, deliberately. AGENTS.md's table has
-  // none, and the crate owns the shared `Dialect` interface that
-  // `solid-reactive-ir` and both dialect crates consume -- so a change there can
-  // move findings, break the IR library tests, and break the backend's process
-  // tests alike. Writing a row narrower than that blast radius is exactly the
-  // guess this script must not make; adding a row is a policy change to the
-  // table, made there first. Until then the path is unmapped and escalates.
+  // No `rust/crates/solid-dialect/` row, deliberately. The crate owns the
+  // shared `Dialect` interface that `solid-reactive-ir` and the dialect crate
+  // consume -- so a change there can move findings, break the IR library
+  // tests, and break the backend's process tests alike. Writing a row narrower
+  // than that blast radius is exactly the guess this script must not make, so
+  // the path is unmapped and escalates.
   {
     prefix: "rust/dialects/",
     owner: "dialects at the process boundary",
@@ -185,11 +191,31 @@ export const ROWS = [
   },
   { prefix: "packages/cli/", owner: "packages/cli", checks: ["bun-test-cli"] },
   { prefix: "packages/wasm/", owner: "packages/wasm", checks: ["bun-test-wasm", "wasm-parity"] },
+  // Prose that no build, test, or gate reads: the universal set only. Only
+  // paths checked to be unread by code belong here. `docs/rules/` is read by
+  // the CLI tests and emitted in every finding's URL, and other `docs/`
+  // subtrees feed manifests and hints, so the rest of `docs/` stays unmapped.
+  ...[
+    "docs/adr/",
+    "docs/typefacts/adr/",
+    "docs/precision-backlog.md",
+    ".claude/",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "CONTEXT.md",
+    "CONTRIBUTING.md",
+  ].map((prefix) => ({ prefix, owner: "prose read by no check", checks: [] })),
 ].sort((a, b) => b.prefix.length - a.prefix.length);
 
-/** The table row a path belongs to, or `null` when nothing claims it. */
+/**
+ * The table row a path belongs to, or `null` when nothing claims it. A prefix
+ * ending in `/` claims a directory; any other prefix claims exactly one file.
+ */
 export function classify(path) {
-  return ROWS.find((row) => path.startsWith(row.prefix)) ?? null;
+  return (
+    ROWS.find((row) => (row.prefix.endsWith("/") ? path.startsWith(row.prefix) : path === row.prefix)) ??
+    null
+  );
 }
 
 /**
@@ -343,16 +369,16 @@ export const BASIS_CAVEATS = [
 ];
 
 /**
- * Everything this branch changed: the merge-base diff against `origin/main`
- * plus whatever the working tree has on top.
+ * Everything this branch changed: the merge-base diff against `base`
+ * (default `origin/main`) plus whatever the working tree has on top.
  *
- * A missing or unreadable `origin/main` is not "nothing changed" -- it is an
- * unknown change set, so it escalates the same way an unmapped path does.
+ * A missing or unreadable base is not "nothing changed" -- it is an unknown
+ * change set, so it escalates the same way an unmapped path does.
  */
-export function changedPaths() {
-  const diff = git(["diff", "--name-only", "-z", "origin/main...HEAD"]);
+export function changedPaths(base = "origin/main") {
+  const diff = git(["diff", "--name-only", "-z", `${base}...HEAD`]);
   if (diff.error) {
-    return { error: `cannot diff against origin/main (${diff.error})` };
+    return { error: `cannot diff against ${base} (${diff.error})` };
   }
   const status = git(["status", "--porcelain", "-z"]);
   if (status.error) {
@@ -370,10 +396,30 @@ const commandsOf = (check) => CHECKS[check].commands ?? [CHECKS[check].command];
 
 const render = (command) => command.join(" ");
 
+/** `--base REV`, then `SOLID_VERIFY_BASE`, then `origin/main`. */
+export function baseOf(argv, env) {
+  const index = argv.indexOf("--base");
+  if (index !== -1) {
+    const value = argv[index + 1];
+    if (!value || value.startsWith("--")) return { error: "--base needs a revision" };
+    return { base: value };
+  }
+  return { base: env.SOLID_VERIFY_BASE || "origin/main" };
+}
+
+/** Printed decisions are capped; a large change set is summarized by row. */
+const DECISION_PRINT_LIMIT = 40;
+
 function main() {
   const dryRun = process.argv.includes("--dry-run");
   const drift = producerStampDrift(readProducerIdentity());
-  const changed = changedPaths();
+  const selected = baseOf(process.argv, process.env);
+  if (selected.error) {
+    console.error(`verify-delta: ${selected.error}`);
+    return 2;
+  }
+  const { base } = selected;
+  const changed = changedPaths(base);
   let plan;
   if (drift) {
     console.log(`verify-delta: ${drift}.`);
@@ -387,23 +433,33 @@ function main() {
     console.log("verify-delta: escalating to the full `make verify` -- fail closed.");
     plan = { full: true, unmapped: [], decisions: [], checks: ["verify"] };
   } else if (changed.paths.length === 0) {
-    console.log("verify-delta: nothing changed against origin/main or in the working tree.");
+    console.log(`verify-delta: nothing changed against ${base} or in the working tree.`);
     plan = { full: false, unmapped: [], decisions: [], checks: ["build-typefacts", ...UNIVERSAL] };
   } else {
     plan = planFor(changed.paths);
   }
 
-  console.log(`\n=== verify-delta: mapping ${plan.decisions.length} changed path(s) ===`);
-  for (const decision of plan.decisions) {
-    console.log(
-      `  ${decision.path}\n      row: ${decision.row}` +
-        `\n      checks: ${decision.checks.length ? decision.checks.join(", ") : "(none)"}`,
-    );
+  console.log(`\n=== verify-delta: mapping ${plan.decisions.length} changed path(s) against ${base} ===`);
+  if (plan.decisions.length <= DECISION_PRINT_LIMIT) {
+    for (const decision of plan.decisions) {
+      console.log(
+        `  ${decision.path}\n      row: ${decision.row}` +
+          `\n      checks: ${decision.checks.length ? decision.checks.join(", ") : "(none)"}`,
+      );
+    }
+  } else {
+    const byRow = new Map();
+    for (const decision of plan.decisions) byRow.set(decision.row, (byRow.get(decision.row) ?? 0) + 1);
+    for (const [row, count] of byRow) console.log(`  ${count} path(s): ${row}`);
+    console.log(`  (more than ${DECISION_PRINT_LIMIT} paths; pass --base to narrow the change set)`);
   }
   if (plan.full && plan.unmapped.length > 0) {
+    const shown = plan.unmapped.slice(0, DECISION_PRINT_LIMIT);
+    const hidden = plan.unmapped.length - shown.length;
     console.log(
-      `\nverify-delta: ${plan.unmapped.length} path(s) match no row in AGENTS.md's table:` +
-        `\n  ${plan.unmapped.join("\n  ")}` +
+      `\nverify-delta: ${plan.unmapped.length} path(s) match no row in the mapping:` +
+        `\n  ${shown.join("\n  ")}` +
+        (hidden > 0 ? `\n  … and ${hidden} more` : "") +
         `\nAn unmapped path can change any answer here, so the plan escalates to the full` +
         ` \`make verify\` rather than guessing. Add a row only when a directory's blast radius` +
         ` is genuinely known.`,

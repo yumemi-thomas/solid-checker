@@ -119,13 +119,14 @@ verify:
 compiler-facts-identity:
 	$(BUN) scripts/check-compiler-facts-identity.mjs
 
-# AGENTS.md's "which check to run" table, mechanized: it maps every changed
-# path to the checks that own it, prints each mapping decision, and appends the
-# universal handoff set. A path the table does not claim escalates to the full
-# `verify` above -- which remains the handoff authority regardless. Add
-# `--dry-run` to see the plan without running it.
+# Maps every changed path to the checks that own it, prints each mapping
+# decision, and appends the universal handoff set. A path no row claims
+# escalates to the full `verify` above -- which remains the handoff authority
+# regardless. `BASE=<rev>` diffs against the commit the slice started from
+# instead of origin/main; `bun scripts/verify-delta.mjs --dry-run` shows the
+# plan without running it.
 verify-delta:
-	$(BUN) scripts/verify-delta.mjs
+	$(BUN) scripts/verify-delta.mjs $(if $(BASE),--base $(BASE))
 
 # "Does TypeScript already report this?", as a checkable claim. Provisioning
 # installs the audited Solid versions into rust/target/tsc-oracle and refuses
@@ -159,11 +160,15 @@ ownership-gate: tsc-oracle-provision build-checker-debug
 	  --require-retained --require-complete
 
 # Fixture-findings snapshots: "no finding moved" as a checkable claim.
-coverage: build-rust
-	SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" $(BUN) scripts/coverage.mjs
+# Coverage runs the fresh debug checker, like the ownership gate: it builds one
+# binary rather than the workspace and leaves the packaged bin/ checker alone.
+coverage: build-checker-debug
+	SOLID_CHECKER_BIN="$(CURDIR)/rust/target/debug/solid-checker-rust" \
+	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" $(BUN) scripts/coverage.mjs
 
-coverage-update: build-rust
-	SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" $(BUN) scripts/coverage.mjs --update
+coverage-update: build-checker-debug
+	SOLID_CHECKER_BIN="$(CURDIR)/rust/target/debug/solid-checker-rust" \
+	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" $(BUN) scripts/coverage.mjs --update
 
 verify-performance: build-typefacts
 	cargo +$(RUST_TOOLCHAIN) build --release --manifest-path $(RUST_MANIFEST) -p solid-facts-backend --bin solid-checker-session-bench

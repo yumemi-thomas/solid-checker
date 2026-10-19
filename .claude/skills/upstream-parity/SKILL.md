@@ -6,7 +6,7 @@ description: Investigate retained eslint-plugin-solid behavior after parity-corp
 # Upstream compatibility work
 
 eslint-plugin-solid 0.14.5 at commit `6d3bc311` is the audited source for the
-retained Solid 1.x compatibility heuristics. The former 465-case parity corpus
+retained Solid 1.x compatibility heuristics. The former parity corpus
 has been retired: `fixtures/ownership-cases/migration-ledger.json` reconciles
 all of it, and retained behavior now lives in product-owned cases with explicit
 TypeScript ownership.

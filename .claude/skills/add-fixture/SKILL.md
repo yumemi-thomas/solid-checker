@@ -65,7 +65,7 @@ parseability, the major, and whether git tracks the file —  through
 `scripts/lib/dialect-stubs.mjs`. It cannot see a stub added to an
 *already-tracked* fixture without running, though, so run coverage after
 touching any fixture's `node_modules` rather than trusting a `verify-delta`
-plan (AGENTS.md, "Fails closed for paths git reports").
+plan, whose basis is git and cannot see ignored files.
 
 ## Snapshot flow
 
