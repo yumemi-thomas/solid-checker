@@ -94,6 +94,34 @@ pub(super) fn attach_discovery_inputs(
     Ok(())
 }
 
+/// What one discovery run reads and never changes.
+struct DiscoveryCtx<'a> {
+    prepared: &'a DiscoveryInputs,
+    facts: &'a ProjectFacts,
+    dialect: &'a dyn solid_dialect::Dialect,
+    admitted: bool,
+    directory: PathBuf,
+    config: Config,
+    paths: BTreeMap<String, Vec<String>>,
+    resolutions: &'a solid_facts::resolution::AttestedImportIndex,
+    root_files: Vec<PathBuf>,
+    default_body: bool,
+    startup_modules: BTreeSet<String>,
+}
+
+/// What one discovery run builds up, file by file.
+struct DiscoveryState<'a> {
+    manifest: BrowserRootManifest,
+    modules: Vec<HostModule>,
+    scopes: BTreeMap<String, HostScope>,
+    functions: BTreeMap<String, String>,
+    blocked_imports: BTreeSet<(String, String)>,
+    unproven_semantics: BTreeSet<String>,
+    withheld_loads: BTreeMap<(String, String), &'static str>,
+    package_loads: crate::host_loadable::PackageLoads,
+    constants_by_file: BTreeMap<&'a str, BTreeMap<Span, (bool, bool)>>,
+}
+
 pub(super) fn discovered_index_with_inputs(
     prepared: &DiscoveryInputs,
     facts: &ProjectFacts,
@@ -110,13 +138,130 @@ pub(super) fn discovered_index_with_inputs(
     let directory = prepared.directory.clone();
     let config = prepared.config.clone();
     let paths = prepared.paths.clone();
-    let inputs = BTreeMap::new();
+    let (root_files, default_body) = discover_root_files(&directory, &config)?;
+    let resolutions = facts
+        .resolved_imports
+        .as_ref()
+        .required(&directory, "missing Type Facts import-resolution inventory")?;
+    // Select only exact static JS/TS edges. Loadability, export surfaces,
+    // hazards and cycles still independently gate the final root admission.
+    // Dynamic imports and type-only references never enlarge this premise.
+    let startup_modules = startup_module_set(facts, &config, &paths, &root_files, resolutions);
+    let mut manifest = BrowserRootManifest {
+        inputs: BTreeMap::new(),
+        reason: match config.mode {
+            EntryMode::ClientStart => {
+                "inferred browser: audited Solid client start entry probe order"
+            }
+            EntryMode::Html => "inferred browser: Vite index.html module entry",
+        }
+        .into(),
+        ..BrowserRootManifest::default()
+    };
+    manifest.runtime_resolution = facts.runtime_resolutions.as_ref().map(|index| {
+        let rows = serde_json::to_vec(&index.identity_rows()).expect("runtime rows serialize");
+        format!("sha256:{:x}", Sha256::digest(rows))
+    });
+    let ctx = DiscoveryCtx {
+        prepared,
+        facts,
+        dialect,
+        admitted,
+        directory,
+        config,
+        paths,
+        resolutions,
+        root_files,
+        default_body,
+        startup_modules,
+    };
+    let mut st = DiscoveryState {
+        manifest,
+        modules: Vec::new(),
+        scopes: BTreeMap::new(),
+        functions: BTreeMap::new(),
+        blocked_imports: BTreeSet::new(),
+        unproven_semantics: BTreeSet::new(),
+        withheld_loads: BTreeMap::new(),
+        package_loads: crate::host_loadable::PackageLoads::default(),
+        constants_by_file: BTreeMap::new(),
+    };
+    select_scopes(&ctx, &mut st)?;
+    for file in &facts.files {
+        discover_module(&ctx, &mut st, file)?;
+    }
+    let DiscoveryCtx {
+        directory,
+        config,
+        root_files,
+        startup_modules,
+        ..
+    } = ctx;
+    let DiscoveryState {
+        mut manifest,
+        modules,
+        scopes,
+        blocked_imports,
+        unproven_semantics,
+        withheld_loads,
+        ..
+    } = st;
+    if manifest.roots.is_empty()
+        || root_files.iter().any(|root| {
+            !facts
+                .files
+                .iter()
+                .any(|file| root.to_str() == Some(file.path.as_str()))
+        })
+    {
+        return Err(DiscoveryRefusal::new(
+            &directory,
+            "browser entry is absent from the analyzed Type Facts file set",
+        ));
+    }
+    manifest.reason.push_str(&format!(
+        "; roots: {}",
+        root_files
+            .iter()
+            .map(|path| path.display().to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+    ));
+    if !withheld_loads.is_empty() {
+        manifest
+            .reason
+            .push_str(&format!("; withheld static loads: {withheld_loads:?}"));
+    }
+    for module in modules
+        .iter()
+        .filter(|module| startup_modules.contains(&module.path) && module.completion == Some(false))
+    {
+        manifest.reason.push_str(&format!("; certain top-level exit contradicts the app-starts premise; browser root withheld: {}", module.path));
+    }
+    let mut index = ProjectHostIndex::build(
+        manifest,
+        &modules,
+        &scopes.into_values().collect::<Vec<_>>(),
+    );
+    index.blocked_imports = blocked_imports;
+    index.unproven_semantics = unproven_semantics;
+    if index.is_empty() {
+        index.manifest.reason =
+            empty_graph_refusal(facts, &config, &root_files, &modules, &withheld_loads).message();
+    }
+    Ok(index)
+}
+
+fn discover_root_files(
+    directory: &Path,
+    config: &Config,
+) -> Result<(Vec<PathBuf>, bool), DiscoveryRefusal> {
     let mut root_files = Vec::new();
     let mut default_body = false;
     match config.mode {
         EntryMode::ClientStart => {
             let (root, generated) = client_root(|path| directory.join(path).exists()).required(
-                &directory,
+                directory,
                 "no audited client entry (src/entry-client or src/App)",
             )?;
             root_files.push(directory.join(root));
@@ -133,7 +278,7 @@ pub(super) fn discovered_index_with_inputs(
                     .ok()
                     .required(&path, "missing HTML module entry")?
                     != path
-                    || !path.starts_with(&directory)
+                    || !path.starts_with(directory)
                 {
                     return Err(DiscoveryRefusal::new(
                         &path,
@@ -144,10 +289,16 @@ pub(super) fn discovered_index_with_inputs(
             }
         }
     }
-    let resolutions = facts
-        .resolved_imports
-        .as_ref()
-        .required(&directory, "missing Type Facts import-resolution inventory")?;
+    Ok((root_files, default_body))
+}
+
+fn startup_module_set(
+    facts: &ProjectFacts,
+    config: &Config,
+    paths: &BTreeMap<String, Vec<String>>,
+    root_files: &[PathBuf],
+    resolutions: &solid_facts::resolution::AttestedImportIndex,
+) -> BTreeSet<String> {
     // Select only exact static JS/TS edges. Loadability, export surfaces,
     // hazards and cycles still independently gate the final root admission.
     // Dynamic imports and type-only references never enlarge this premise.
@@ -182,7 +333,7 @@ pub(super) fn discovered_index_with_inputs(
                 && row.included_path.is_empty()
                 && !text.contains(['?', '#', '%', '\\'])
                 && !crate::host_loadable::resource_request(text)
-                && local_edge(facts, &config, &paths, &path, span, text, target)
+                && local_edge(facts, config, paths, &path, span, text, target)
                 && facts.files.iter().any(|file| file.path.as_str() == target)
                 && fs::canonicalize(target).ok().as_deref() == Some(Path::new(target))
             {
@@ -190,30 +341,29 @@ pub(super) fn discovered_index_with_inputs(
             }
         }
     }
-    let mut manifest = BrowserRootManifest {
-        inputs,
-        reason: match config.mode {
-            EntryMode::ClientStart => {
-                "inferred browser: audited Solid client start entry probe order"
-            }
-            EntryMode::Html => "inferred browser: Vite index.html module entry",
-        }
-        .into(),
-        ..BrowserRootManifest::default()
-    };
-    manifest.runtime_resolution = facts.runtime_resolutions.as_ref().map(|index| {
-        let rows = serde_json::to_vec(&index.identity_rows()).expect("runtime rows serialize");
-        format!("sha256:{:x}", Sha256::digest(rows))
-    });
-    let mut modules = Vec::new();
-    let mut scopes = BTreeMap::<String, HostScope>::new();
-    let mut functions = BTreeMap::<String, String>::new();
-    let mut blocked_imports = BTreeSet::new();
-    let mut unproven_semantics = BTreeSet::new();
-    let mut withheld_loads = BTreeMap::new();
-    let mut package_loads = crate::host_loadable::PackageLoads::default();
+    startup_modules
+}
+
+fn select_scopes<'a>(
+    ctx: &DiscoveryCtx<'a>,
+    st: &mut DiscoveryState<'a>,
+) -> Result<(), DiscoveryRefusal> {
+    let DiscoveryCtx {
+        prepared,
+        facts,
+        dialect,
+        startup_modules,
+        ..
+    } = ctx;
+    let DiscoveryState {
+        manifest,
+        scopes,
+        functions,
+        constants_by_file,
+        ..
+    } = st;
+    let dialect = *dialect;
     let scope_selection = HostStage::new("scope-host-view-selection");
-    let mut constants_by_file = BTreeMap::new();
     // Writes are generation facts, independent of the function being checked.
     // Resolve them once rather than joining every function with every write.
     let written_symbols = facts
@@ -233,7 +383,7 @@ pub(super) fn discovered_index_with_inputs(
                 "unsupported AST fact schema",
             ));
         }
-        let constants = execution_constants(prepared, facts, file, dialect, &mut manifest);
+        let constants = execution_constants(prepared, facts, file, dialect, manifest);
         // Contents with separate execution models cannot inherit initialization.
         for region in file
             .ast
@@ -325,236 +475,412 @@ pub(super) fn discovered_index_with_inputs(
         constants_by_file.insert(file.path.as_str(), constants);
     }
     drop(scope_selection);
-    for file in &facts.files {
-        let path = file.path.as_str();
-        let is_root = root_files.iter().any(|root| root.to_str() == Some(path));
-        let filename = Path::new(path)
-            .file_stem()
-            .and_then(|stem| stem.to_str())
-            .required(Path::new(path), "source has no UTF-8 file stem")?;
-        let mut module = HostModule {
-            path: path.into(),
-            static_dependencies: BTreeSet::new(),
-            completion: file
-                .ast
-                .host_execution
-                .iter()
-                .find(|fact| {
-                    fact.kind
-                        == if startup_modules.contains(path) {
-                            HostExecutionSiteKind::ModuleStartupCompletion
-                        } else {
-                            HostExecutionSiteKind::ModuleCompletion
+    Ok(())
+}
+
+fn discover_module<'a>(
+    ctx: &DiscoveryCtx<'_>,
+    st: &mut DiscoveryState<'a>,
+    file: &'a FileFacts,
+) -> Result<(), DiscoveryRefusal> {
+    let DiscoveryCtx {
+        facts,
+        directory,
+        config,
+        paths,
+        resolutions,
+        root_files,
+        default_body,
+        startup_modules,
+        ..
+    } = ctx;
+    let default_body = *default_body;
+    let DiscoveryState {
+        scopes,
+        functions,
+        unproven_semantics,
+        constants_by_file,
+        ..
+    } = st;
+    let path = file.path.as_str();
+    let is_root = root_files.iter().any(|root| root.to_str() == Some(path));
+    let filename = Path::new(path)
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .required(Path::new(path), "source has no UTF-8 file stem")?;
+    let mut module = HostModule {
+        path: path.into(),
+        static_dependencies: BTreeSet::new(),
+        completion: file
+            .ast
+            .host_execution
+            .iter()
+            .find(|fact| {
+                fact.kind
+                    == if startup_modules.contains(path) {
+                        HostExecutionSiteKind::ModuleStartupCompletion
+                    } else {
+                        HostExecutionSiteKind::ModuleCompletion
+                    }
+                    && fact.scope.is_none()
+            })
+            .and_then(|fact| {
+                let constants = &constants_by_file[path];
+                fact.predicate.evaluate_with_startup(
+                    &|identity| match identity {
+                        HostConstantIdentity::ViteSsr => Some(false),
+                        HostConstantIdentity::Import { declaration } => {
+                            constants.get(declaration).map(|(client, _)| *client)
                         }
-                        && fact.scope.is_none()
-                })
-                .and_then(|fact| {
-                    let constants = &constants_by_file[path];
-                    fact.predicate.evaluate_with_startup(
-                        &|identity| match identity {
-                            HostConstantIdentity::ViteSsr => Some(false),
-                            HostConstantIdentity::Import { declaration } => {
-                                constants.get(declaration).map(|(client, _)| *client)
-                            }
-                        },
-                        startup_modules.contains(path),
-                    )
-                }),
-            refused: !Path::new(path).starts_with(&directory)
-                || [".d.ts", ".d.mts", ".d.cts"]
-                    .iter()
-                    .any(|suffix| path.ends_with(suffix))
-                || !resolutions.covers(path)
-                || file
-                    .ast
-                    .module_directives
-                    .iter()
-                    .any(|directive| directive.value == "use server")
-                || ["entry-server", "middleware"].contains(&filename)
-                || (config.mode == EntryMode::ClientStart && filename == "Document"),
-        };
-        if startup_modules.contains(path) && module.completion == Some(false) {
-            module.refused = true;
-        }
-        if file
-            .ast
-            .module_hazards
-            .iter()
-            .any(|hazard| hazard.kind != ModuleHazardKind::NonliteralDynamicLoading)
-        {
-            // Opaque evaluation (notably eval) can replace a later local call
-            // target. Withholding only this file's findings cannot authenticate
-            // execution of a separately analyzed callee reached through it.
-            unproven_semantics.insert(path.into());
-            module.refused = true;
-        }
-        if file
-            .ast
-            .module_loads
-            .iter()
-            .any(|load| load.kind == ModuleLoadKind::Require)
+                    },
+                    startup_modules.contains(path),
+                )
+            }),
+        refused: !Path::new(path).starts_with(directory)
+            || [".d.ts", ".d.mts", ".d.cts"]
+                .iter()
+                .any(|suffix| path.ends_with(suffix))
+            || !resolutions.covers(path)
             || file
                 .ast
-                .import_equals
+                .module_directives
                 .iter()
-                .any(|import| !import.type_only)
+                .any(|directive| directive.value == "use server")
+            || ["entry-server", "middleware"].contains(&filename)
+            || (config.mode == EntryMode::ClientStart && filename == "Document"),
+    };
+    if startup_modules.contains(path) && module.completion == Some(false) {
+        module.refused = true;
+    }
+    if file
+        .ast
+        .module_hazards
+        .iter()
+        .any(|hazard| hazard.kind != ModuleHazardKind::NonliteralDynamicLoading)
+    {
+        // Opaque evaluation (notably eval) can replace a later local call
+        // target. Withholding only this file's findings cannot authenticate
+        // execution of a separately analyzed callee reached through it.
+        unproven_semantics.insert(path.into());
+        module.refused = true;
+    }
+    if file
+        .ast
+        .module_loads
+        .iter()
+        .any(|load| load.kind == ModuleLoadKind::Require)
+        || file
+            .ast
+            .import_equals
+            .iter()
+            .any(|import| !import.type_only)
+    {
+        // Authored CommonJS lowering/host availability is not attested by
+        // the admitted ESM roots. A Require syntax fact is unknown here,
+        // including a shadowed implementation; never guess a Node host.
+        module.refused = true;
+        unproven_semantics.insert(path.into());
+    }
+    for ancestor in Path::new(path)
+        .parent()
+        .required(Path::new(path), "source has no parent directory")?
+        .ancestors()
+        .take_while(|ancestor| *ancestor != directory.as_path())
+    {
+        if ancestor.join("package.json").exists() {
+            module.refused = true;
+        }
+    }
+    let is_route = route_file(directory, config, file);
+    if is_route && (server_route(&file.ast) || default_scope(file, facts, functions).is_none()) {
+        // Picked mixed-route lowering needs separate compiler authority.
+        module.refused = true;
+    }
+    let mut allowed_functions = functions
+        .iter()
+        .filter(|(_, id)| scopes.get(*id).is_some_and(|scope| scope.path == path))
+        .map(|(symbol, _)| symbol.clone())
+        .collect::<BTreeSet<_>>();
+    for load in static_loads(facts, file) {
+        process_static_load(ctx, st, file, load, (&mut module, &mut allowed_functions))?;
+    }
+    let DiscoveryState {
+        manifest,
+        scopes,
+        functions,
+        unproven_semantics,
+        ..
+    } = st;
+    // Dynamic import attestation joins to its literal's own exact span.
+    // Nonliteral imports and require add no edge and never cancel another.
+    for load in &file.ast.module_loads {
+        if load.kind != ModuleLoadKind::DynamicImport {
+            continue;
+        }
+        if !scopes
+            .get(&at_scope(file, load.span))
+            .required(Path::new(path), "missing dynamic-load execution scope")?
+            .client_live_site(load.span)
         {
-            // Authored CommonJS lowering/host availability is not attested by
-            // the admitted ESM roots. A Require syntax fact is unknown here,
-            // including a shadowed implementation; never guess a Node host.
+            continue;
+        }
+        let (Some(text), Some(span)) = (load.specifier.as_deref(), load.specifier_span) else {
+            continue;
+        };
+        if (resolver_selection_required(config, text)
+            || browser_selection_required(Path::new(path), manifest))
+            && facts.runtime_resolutions.is_none()
+        {
+            unproven_semantics.insert(path.into());
+            continue;
+        }
+        if facts.runtime_resolutions.is_none() && !congruent_alias(config, paths, text) {
+            unproven_semantics.insert(path.into());
+            continue;
+        }
+        let SpecifierAttestation::Attested(row) = resolutions.specifier(path, span, text) else {
+            continue;
+        };
+        let target = row.resolved_path.as_ref();
+        if matches!(
+            row.resolution,
+            ImportResolution::Relative | ImportResolution::NonRelative
+        ) && row.symlink_path.is_empty()
+            && row.included_path.is_empty()
+            && local_edge(facts, config, paths, path, span, text, target)
+            && !text.contains(['?', '#', '%', '\\'])
+            && facts.files.iter().any(|file| file.path.as_str() == target)
+            && fs::canonicalize(target).ok().as_deref() == Some(Path::new(target))
+        {
+            scopes
+                .get_mut(&at_scope(file, load.span))
+                .required(Path::new(path), "missing dynamic-load execution scope")?
+                .edges
+                .insert(scope_id(target, None));
+        }
+    }
+    if is_root {
+        manifest.roots.insert(scope_id(path, None));
+        if default_body && module.completion == Some(true) {
+            let body = default_scope(file, facts, functions).required(
+                Path::new(path),
+                "generated client root has no exact default callable export",
+            )?;
+            if jsx_body_ready(facts, scopes, &body) {
+                manifest.roots.insert(body);
+            }
+        }
+    }
+    for call in file.ast.calls.iter().filter(|call| !call.construct) {
+        let owner = at_scope(file, call.span);
+        if !scopes
+            .get(&owner)
+            .required(Path::new(path), "missing call/JSX execution scope")?
+            .client_live_site(call.span)
+        {
+            continue;
+        }
+        if let Some(function) = literal_body(file, call.callee) {
+            call_edges(
+                facts,
+                file,
+                &owner,
+                &scope_id(path, Some(function)),
+                call,
+                scopes,
+            )
+            .required(Path::new(path), "inconsistent local callable scope")?;
+        } else if direct_identifier(file, call.callee)
+            && let Some(symbol) = exact_symbol(facts, path, unwrapped(file, call.callee))
+            && allowed_functions.contains(&symbol)
+            && let Some(target) = functions.get(&symbol)
+        {
+            call_edges(facts, file, &owner, target, call, scopes)
+                .required(Path::new(path), "inconsistent local callable scope")?;
+        }
+        // Constructing/passing a function value does not execute its body.
+        // Callback edges need exact invocation and execution-host facts.
+    }
+    for element in &file.ast.jsx_elements {
+        let owner = at_scope(file, element.span);
+        if !scopes
+            .get(&owner)
+            .required(Path::new(path), "missing call/JSX execution scope")?
+            .client_live_site(element.span)
+        {
+            continue;
+        }
+        if element.member_object.is_none()
+            && let Some(symbol) = exact_symbol(facts, path, element.name.span)
+            && allowed_functions.contains(&symbol)
+            && let Some(target) = functions.get(&symbol)
+            && jsx_body_ready(facts, scopes, target)
+        {
+            scopes
+                .get_mut(&owner)
+                .required(Path::new(path), "missing JSX execution scope")?
+                .edges
+                .insert(target.clone());
+        }
+        // JSX child/prop function values likewise require invocation proof.
+    }
+    st.modules.push(module);
+    Ok(())
+}
+
+fn process_static_load(
+    ctx: &DiscoveryCtx<'_>,
+    st: &mut DiscoveryState<'_>,
+    file: &FileFacts,
+    (span, text, runtime): (Span, &str, bool),
+    (module, allowed_functions): (&mut HostModule, &mut BTreeSet<String>),
+) -> Result<(), DiscoveryRefusal> {
+    let DiscoveryCtx {
+        facts,
+        directory,
+        config,
+        paths,
+        resolutions,
+        ..
+    } = ctx;
+    let DiscoveryState {
+        manifest,
+        scopes,
+        functions,
+        blocked_imports,
+        unproven_semantics,
+        withheld_loads,
+        ..
+    } = st;
+    let path = file.path.as_str();
+    let browser_map = browser_selection_required(Path::new(path), manifest);
+    if (resolver_selection_required(config, text) || browser_map)
+        && facts.runtime_resolutions.is_none()
+    {
+        module.refused = true;
+        blocked_imports.insert((path.into(), text.into()));
+        unproven_semantics.insert(path.into());
+        withheld_loads.insert(
+            (path.to_owned(), text.to_owned()),
+            if browser_map {
+                "importer/enclosing browser map requires authenticated file selection"
+            } else {
+                "active tsconfig resolver requires authenticated file selection"
+            },
+        );
+        return Ok(());
+    }
+    // Even an unused value binding can survive client lowering.
+    // Without exact erasure facts, every authored value import and
+    // export-from must be loadable before this module can evaluate.
+    if facts.runtime_resolutions.is_none() && !congruent_alias(config, paths, text) {
+        blocked_imports.insert((path.into(), text.into()));
+        unproven_semantics.insert(path.into());
+        module.refused = true;
+        withheld_loads.insert(
+            (path.to_owned(), text.to_owned()),
+            "Vite alias and Type Facts paths disagree",
+        );
+        return Ok(());
+    }
+    if text == "virtual:file-routes" && config.routes.is_some() {
+        // A manifest contains lazy/eager references, not executed page
+        // bodies. Exact picked exports and invocation facts are needed.
+        unproven_semantics.insert(path.into());
+        // The exact audited provider always resolves this id. Only its
+        // all-lazy variant is independently loadable: $$route exports
+        // and codeSplitting:false emit eager picked static imports.
+        let mut route_inputs = Vec::new();
+        let loadable = lazy_route_manifest(directory, config, &mut route_inputs)
+            && facts.runtime_resolutions.is_none();
+        for input in route_inputs {
+            let key = input
+                .to_str()
+                .required(&input, "non-UTF-8 route manifest input")?
+                .to_owned();
+            let observed = graph_identity(manifest, &input)
+                .required(&input, "cannot fingerprint route manifest input")?;
+            manifest.inputs.insert(key, observed);
+        }
+        if !loadable {
+            module.refused = true;
+            withheld_loads.insert((path.to_owned(), text.to_owned()), "generated route manifest has unproved eager dependencies or requested resolver answer");
+        }
+        return Ok(());
+    }
+    if crate::host_loadable::resource_request(text) {
+        let mut resource_inputs = Vec::new();
+        let resource = crate::host_loadable::resource(
+            directory,
+            Path::new(path),
+            text,
+            config,
+            &mut resource_inputs,
+        );
+        for input in resource_inputs {
+            let key = input
+                .to_str()
+                .required(&input, "non-UTF-8 resource input")?
+                .to_owned();
+            let observed = graph_identity(manifest, &input)
+                .required(&input, "cannot fingerprint resource input")?;
+            manifest.inputs.insert(key, observed);
+        }
+        let admitted = resource.as_ref().is_some_and(|resource| {
+            facts
+                .runtime_resolutions
+                .as_ref()
+                .is_none_or(|runtime| resource.matches_outcome(runtime.outcome(path, span, text)))
+        });
+        if !admitted {
             module.refused = true;
             unproven_semantics.insert(path.into());
+            blocked_imports.insert((path.into(), text.into()));
+            withheld_loads.insert(
+                (path.to_owned(), text.to_owned()),
+                "Vite resource target, executable side input, or requested resolution is unproved",
+            );
         }
-        for ancestor in Path::new(path)
-            .parent()
-            .required(Path::new(path), "source has no parent directory")?
-            .ancestors()
-            .take_while(|ancestor| *ancestor != directory.as_path())
-        {
-            if ancestor.join("package.json").exists() {
-                module.refused = true;
-            }
-        }
-        let is_route = route_file(&directory, &config, file);
-        if is_route && (server_route(&file.ast) || default_scope(file, facts, &functions).is_none())
-        {
-            // Picked mixed-route lowering needs separate compiler authority.
+        // No analyzed implementation or callable edge: generated CSS
+        // maps and asset strings are a linking premise only.
+        return Ok(());
+    }
+    let SpecifierAttestation::Attested(row) = resolutions.specifier(path, span, text) else {
+        blocked_imports.insert((path.into(), text.into()));
+        unproven_semantics.insert(path.into());
+        module.refused = true;
+        withheld_loads.insert(
+            (path.to_owned(), text.to_owned()),
+            "missing exact Type Facts resolution row",
+        );
+        return Ok(());
+    };
+    if (row.resolution != ImportResolution::NodeModules && !row.symlink_path.is_empty())
+        || !row.included_path.is_empty()
+        || text.contains(['?', '#', '%', '\\'])
+    {
+        blocked_imports.insert((path.into(), text.into()));
+        unproven_semantics.insert(path.into());
+        module.refused = true;
+        withheld_loads.insert(
+            (path.to_owned(), text.to_owned()),
+            "redirected, symlinked local, or query-bearing module target",
+        );
+        return Ok(());
+    }
+    if matches!(
+        row.resolution,
+        ImportResolution::Relative | ImportResolution::NonRelative
+    ) {
+        let target = row.resolved_path.as_ref();
+        if !local_edge(facts, config, paths, path, span, text, target) {
+            blocked_imports.insert((path.into(), text.into()));
+            unproven_semantics.insert(path.into());
             module.refused = true;
-        }
-        let mut allowed_functions = functions
-            .iter()
-            .filter(|(_, id)| scopes.get(*id).is_some_and(|scope| scope.path == path))
-            .map(|(symbol, _)| symbol.clone())
-            .collect::<BTreeSet<_>>();
-        for (span, text, runtime) in static_loads(facts, file) {
-            // Resolver activity is app-wide. Do not approximate tsconfig
-            // discovery, inheritance, tokens, patterns or negative lookups.
-            // Only ADR 0220 can authenticate bare/aliased file selection.
-            let browser_map = browser_selection_required(Path::new(path), &mut manifest);
-            if (resolver_selection_required(&config, text) || browser_map)
-                && facts.runtime_resolutions.is_none()
-            {
-                module.refused = true;
-                blocked_imports.insert((path.into(), text.into()));
-                unproven_semantics.insert(path.into());
-                withheld_loads.insert(
-                    (path.to_owned(), text.to_owned()),
-                    if browser_map {
-                        "importer/enclosing browser map requires authenticated file selection"
-                    } else {
-                        "active tsconfig resolver requires authenticated file selection"
-                    },
-                );
-                continue;
-            }
-            // Even an unused value binding can survive client lowering.
-            // Without exact erasure facts, every authored value import and
-            // export-from must be loadable before this module can evaluate.
-            if facts.runtime_resolutions.is_none() && !congruent_alias(&config, &paths, text) {
-                blocked_imports.insert((path.into(), text.into()));
-                unproven_semantics.insert(path.into());
-                module.refused = true;
-                withheld_loads.insert(
-                    (path.to_owned(), text.to_owned()),
-                    "Vite alias and Type Facts paths disagree",
-                );
-                continue;
-            }
-            if text == "virtual:file-routes" && config.routes.is_some() {
-                // A manifest contains lazy/eager references, not executed page
-                // bodies. Exact picked exports and invocation facts are needed.
-                unproven_semantics.insert(path.into());
-                // The exact audited provider always resolves this id. Only its
-                // all-lazy variant is independently loadable: $$route exports
-                // and codeSplitting:false emit eager picked static imports.
-                let mut route_inputs = Vec::new();
-                let loadable = lazy_route_manifest(&directory, &config, &mut route_inputs)
-                    && facts.runtime_resolutions.is_none();
-                for input in route_inputs {
-                    let key = input
-                        .to_str()
-                        .required(&input, "non-UTF-8 route manifest input")?
-                        .to_owned();
-                    let observed = graph_identity(&mut manifest, &input)
-                        .required(&input, "cannot fingerprint route manifest input")?;
-                    manifest.inputs.insert(key, observed);
-                }
-                if !loadable {
-                    module.refused = true;
-                    withheld_loads.insert((path.to_owned(), text.to_owned()), "generated route manifest has unproved eager dependencies or requested resolver answer");
-                }
-                continue;
-            }
-            if crate::host_loadable::resource_request(text) {
-                let mut resource_inputs = Vec::new();
-                let resource = crate::host_loadable::resource(
-                    &directory,
-                    Path::new(path),
-                    text,
-                    &config,
-                    &mut resource_inputs,
-                );
-                for input in resource_inputs {
-                    let key = input
-                        .to_str()
-                        .required(&input, "non-UTF-8 resource input")?
-                        .to_owned();
-                    let observed = graph_identity(&mut manifest, &input)
-                        .required(&input, "cannot fingerprint resource input")?;
-                    manifest.inputs.insert(key, observed);
-                }
-                let admitted = resource.as_ref().is_some_and(|resource| {
-                    facts.runtime_resolutions.as_ref().is_none_or(|runtime| {
-                        resource.matches_outcome(runtime.outcome(path, span, text))
-                    })
-                });
-                if !admitted {
-                    module.refused = true;
-                    unproven_semantics.insert(path.into());
-                    blocked_imports.insert((path.into(), text.into()));
-                    withheld_loads.insert((path.to_owned(), text.to_owned()), "Vite resource target, executable side input, or requested resolution is unproved");
-                }
-                // No analyzed implementation or callable edge: generated CSS
-                // maps and asset strings are a linking premise only.
-                continue;
-            }
-            let SpecifierAttestation::Attested(row) = resolutions.specifier(path, span, text)
-            else {
-                blocked_imports.insert((path.into(), text.into()));
-                unproven_semantics.insert(path.into());
-                module.refused = true;
-                withheld_loads.insert(
-                    (path.to_owned(), text.to_owned()),
-                    "missing exact Type Facts resolution row",
-                );
-                continue;
-            };
-            if (row.resolution != ImportResolution::NodeModules && !row.symlink_path.is_empty())
-                || !row.included_path.is_empty()
-                || text.contains(['?', '#', '%', '\\'])
-            {
-                blocked_imports.insert((path.into(), text.into()));
-                unproven_semantics.insert(path.into());
-                module.refused = true;
-                withheld_loads.insert(
-                    (path.to_owned(), text.to_owned()),
-                    "redirected, symlinked local, or query-bearing module target",
-                );
-                continue;
-            }
-            if matches!(
-                row.resolution,
-                ImportResolution::Relative | ImportResolution::NonRelative
-            ) {
-                let target = row.resolved_path.as_ref();
-                if !local_edge(facts, &config, &paths, path, span, text, target) {
-                    blocked_imports.insert((path.into(), text.into()));
-                    unproven_semantics.insert(path.into());
-                    module.refused = true;
-                    // With an empty, closed plugin/alias set a TS-only paths
-                    // request has no Vite resolver. Other mismatches are unknown,
-                    // including requested resolver failures and divergent files.
-                    let unloaded = facts.runtime_resolutions.is_none()
+            // With an empty, closed plugin/alias set a TS-only paths
+            // request has no Vite resolver. Other mismatches are unknown,
+            // including requested resolver failures and divergent files.
+            let unloaded = facts.runtime_resolutions.is_none()
                         && config.plugins.is_empty()
                         && config.aliases.is_empty()
                         && text.starts_with("~/")
@@ -565,359 +891,212 @@ pub(super) fn discovered_index_with_inputs(
                                     Err(error) if matches!(error.kind(), std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory))
                             })
                         });
-                    withheld_loads.insert(
-                        (path.to_owned(), text.to_owned()),
-                        if unloaded {
-                            "provably unloadable TS-only paths request"
-                        } else {
-                            "Vite and Type Facts runtime targets are not congruent"
-                        },
-                    );
-                    continue;
-                }
-                if let Some(target_file) =
-                    facts.files.iter().find(|file| file.path.as_str() == target)
-                    && fs::canonicalize(target).ok().as_deref() == Some(Path::new(target))
-                {
-                    module.static_dependencies.insert(target.to_owned());
-                    if !explicit_static_surface(facts, file, span, target_file) {
-                        module.refused = true;
-                        withheld_loads.insert(
-                            (path.to_owned(), text.to_owned()),
-                            "unproved direct runtime export surface",
-                        );
-                        continue;
-                    }
-                    if runtime {
-                        scopes
-                            .get_mut(&scope_id(path, None))
-                            .required(Path::new(path), "missing initialization scope")?
-                            .edges
-                            .insert(scope_id(target, None));
-                    }
-                    for binding in file
-                        .ast
-                        .imports
-                        .iter()
-                        .filter(|import| import.span == span)
-                        .flat_map(|import| &import.bindings)
-                        .filter(|binding| !binding.type_only)
-                    {
-                        if let Some(symbol) = exact_symbol(facts, path, binding.local.span)
-                            && functions
-                                .get(&symbol)
-                                .and_then(|id| scopes.get(id))
-                                .is_some_and(|scope| scope.path == target)
-                        {
-                            // Canonical symbol identity alone loses reexport
-                            // provenance. A barrel can have an incongruent edge
-                            // even when this definition is initialized elsewhere.
-                            // Indirect callable exports need an exact value trail.
-                            allowed_functions.insert(symbol);
-                        }
-                    }
+            withheld_loads.insert(
+                (path.to_owned(), text.to_owned()),
+                if unloaded {
+                    "provably unloadable TS-only paths request"
                 } else {
-                    module.refused = true;
-                    withheld_loads.insert(
-                        (path.to_owned(), text.to_owned()),
-                        "resolved local target is not a canonical analyzed implementation",
-                    );
-                }
-            } else if row.resolution == ImportResolution::NodeModules
-                && config.aliases.keys().any(|find| {
-                    text == find.as_str()
-                        || text
-                            .strip_prefix(find.as_str())
-                            .is_some_and(|tail| tail.starts_with('/'))
-                })
-            {
-                // Local resolver edges do not authenticate a substituted
-                // package export's runtime surface. Keep package admission
-                // independent; an explicit package alias cannot strengthen it.
-                blocked_imports.insert((path.into(), text.into()));
-                unproven_semantics.insert(path.into());
-                module.refused = true;
-                withheld_loads.insert(
-                    (path.to_owned(), text.to_owned()),
-                    "package alias has no authenticated runtime export surface",
-                );
-            } else if row.resolution == ImportResolution::Unresolved {
-                blocked_imports.insert((path.into(), text.into()));
-                unproven_semantics.insert(path.into());
-                module.refused = true;
-                withheld_loads.insert(
-                    (path.to_owned(), text.to_owned()),
-                    "unresolved static module request",
-                );
-            } else if row.resolution == ImportResolution::NodeModules {
-                let mut package_inputs = Vec::new();
-                let resolver_active = config.tsconfig_paths || browser_map;
-                if !admitted {
-                    // The provisional graph schedules package analysis; its
-                    // optimistic edges are not final linking authority. Even
-                    // here a selected file must be handled by reviewed Vite.
-                    let unsupported_loader = package_loads
-                        .candidates(Path::new(path), text, &mut package_inputs)
-                        .is_some_and(|(_, _, entries)| {
-                            (resolver_active
-                                && !package_selection_agrees(
-                                    facts, path, span, text, &entries, true,
-                                ))
-                                || !entries
-                                    .iter()
-                                    .all(|entry| crate::host_loadable::static_entry(entry))
-                                || !crate::host_loadable::stylesheet_closure(
-                                    &entries,
-                                    &config,
-                                    &mut package_inputs,
-                                )
-                        });
-                    for input in package_inputs {
-                        let key = input
-                            .to_str()
-                            .required(&input, "non-UTF-8 provisional package input")?
-                            .to_owned();
-                        let observed = graph_identity(&mut manifest, &input)
-                            .required(&input, "cannot fingerprint provisional package input")?;
-                        manifest.inputs.insert(key, observed);
-                    }
-                    if unsupported_loader
-                        || (resolver_active && facts.runtime_resolutions.is_none())
-                    {
-                        module.refused = true;
-                        blocked_imports.insert((path.into(), text.into()));
-                        withheld_loads.insert(
-                            (path.to_owned(), text.to_owned()),
-                            "canonical installed package entry uses an unproved Vite loader or tsconfig resolver selection",
-                        );
-                    }
-                    continue;
-                }
-                let entries = package_loads
-                    .loadable(
-                        Path::new(path),
-                        text,
-                        row,
-                        dialect,
-                        &mut package_inputs,
-                        &config.optimize_exclude,
-                    )
-                    .filter(|entries| {
-                        crate::host_loadable::stylesheet_closure(
-                            entries.entries(),
-                            &config,
-                            &mut package_inputs,
-                        )
-                    });
-                // The audited provider adds runtime-owner dedupe in dev. The
-                // declaration package must also be the root-selected install.
-                let provider = config.plugins.iter().any(|plugin| {
-                    ["@solidjs/vite-plugin", "vite-plugin-solid"].contains(&plugin.as_str())
-                });
-                let core = crate::host_loadable::request(text).is_some_and(|(name, _)| {
-                    dialect
-                        .audited_installation()
-                        .iter()
-                        .any(|(owner, _)| *owner == name)
-                });
-                let deduped = !provider
-                    || !core
-                    || package_loads
-                        .loadable(
-                            &directory.join("index.ts"),
-                            text,
-                            row,
-                            dialect,
-                            &mut package_inputs,
-                            &config.optimize_exclude,
-                        )
-                        .is_some();
-                for input in package_inputs {
-                    let key = input
-                        .to_str()
-                        .required(&input, "non-UTF-8 static package input")?
-                        .to_owned();
-                    let observed = graph_identity(&mut manifest, &input)
-                        .required(&input, "cannot fingerprint static package input")?;
-                    manifest.inputs.insert(key, observed);
-                }
-                let loadable = deduped
-                    && !config.package_dedupe
-                    && entries.is_some_and(|entries| {
-                        package_selection_agrees(
-                            facts,
-                            path,
-                            span,
-                            text,
-                            entries.entries(),
-                            resolver_active,
-                        )
-                    });
-                if !loadable {
-                    module.refused = true;
-                    blocked_imports.insert((path.into(), text.into()));
-                    withheld_loads.insert((path.to_owned(), text.to_owned()), "missing exact installed client package entry, tsconfig rewrite, or requested resolver disagreement");
-                }
-            }
+                    "Vite and Type Facts runtime targets are not congruent"
+                },
+            );
+            return Ok(());
         }
-        // Dynamic import attestation joins to its literal's own exact span.
-        // Nonliteral imports and require add no edge and never cancel another.
-        for load in &file.ast.module_loads {
-            if load.kind != ModuleLoadKind::DynamicImport {
-                continue;
+        if let Some(target_file) = facts.files.iter().find(|file| file.path.as_str() == target)
+            && fs::canonicalize(target).ok().as_deref() == Some(Path::new(target))
+        {
+            module.static_dependencies.insert(target.to_owned());
+            if !explicit_static_surface(facts, file, span, target_file) {
+                module.refused = true;
+                withheld_loads.insert(
+                    (path.to_owned(), text.to_owned()),
+                    "unproved direct runtime export surface",
+                );
+                return Ok(());
             }
-            if !scopes
-                .get(&at_scope(file, load.span))
-                .required(Path::new(path), "missing dynamic-load execution scope")?
-                .client_live_site(load.span)
-            {
-                continue;
-            }
-            let (Some(text), Some(span)) = (load.specifier.as_deref(), load.specifier_span) else {
-                continue;
-            };
-            if (resolver_selection_required(&config, text)
-                || browser_selection_required(Path::new(path), &mut manifest))
-                && facts.runtime_resolutions.is_none()
-            {
-                unproven_semantics.insert(path.into());
-                continue;
-            }
-            if facts.runtime_resolutions.is_none() && !congruent_alias(&config, &paths, text) {
-                unproven_semantics.insert(path.into());
-                continue;
-            }
-            let SpecifierAttestation::Attested(row) = resolutions.specifier(path, span, text)
-            else {
-                continue;
-            };
-            let target = row.resolved_path.as_ref();
-            if matches!(
-                row.resolution,
-                ImportResolution::Relative | ImportResolution::NonRelative
-            ) && row.symlink_path.is_empty()
-                && row.included_path.is_empty()
-                && local_edge(facts, &config, &paths, path, span, text, target)
-                && !text.contains(['?', '#', '%', '\\'])
-                && facts.files.iter().any(|file| file.path.as_str() == target)
-                && fs::canonicalize(target).ok().as_deref() == Some(Path::new(target))
-            {
+            if runtime {
                 scopes
-                    .get_mut(&at_scope(file, load.span))
-                    .required(Path::new(path), "missing dynamic-load execution scope")?
+                    .get_mut(&scope_id(path, None))
+                    .required(Path::new(path), "missing initialization scope")?
                     .edges
                     .insert(scope_id(target, None));
             }
-        }
-        if is_root {
-            manifest.roots.insert(scope_id(path, None));
-            if default_body && module.completion == Some(true) {
-                let body = default_scope(file, facts, &functions).required(
-                    Path::new(path),
-                    "generated client root has no exact default callable export",
-                )?;
-                if jsx_body_ready(facts, &scopes, &body) {
-                    manifest.roots.insert(body);
+            for binding in file
+                .ast
+                .imports
+                .iter()
+                .filter(|import| import.span == span)
+                .flat_map(|import| &import.bindings)
+                .filter(|binding| !binding.type_only)
+            {
+                if let Some(symbol) = exact_symbol(facts, path, binding.local.span)
+                    && functions
+                        .get(&symbol)
+                        .and_then(|id| scopes.get(id))
+                        .is_some_and(|scope| scope.path == target)
+                {
+                    // Canonical symbol identity alone loses reexport
+                    // provenance. A barrel can have an incongruent edge
+                    // even when this definition is initialized elsewhere.
+                    // Indirect callable exports need an exact value trail.
+                    allowed_functions.insert(symbol);
                 }
             }
+        } else {
+            module.refused = true;
+            withheld_loads.insert(
+                (path.to_owned(), text.to_owned()),
+                "resolved local target is not a canonical analyzed implementation",
+            );
         }
-        for call in file.ast.calls.iter().filter(|call| !call.construct) {
-            let owner = at_scope(file, call.span);
-            if !scopes
-                .get(&owner)
-                .required(Path::new(path), "missing call/JSX execution scope")?
-                .client_live_site(call.span)
-            {
-                continue;
-            }
-            if let Some(function) = literal_body(file, call.callee) {
-                call_edges(
-                    facts,
-                    file,
-                    &owner,
-                    &scope_id(path, Some(function)),
-                    call,
-                    &mut scopes,
-                )
-                .required(Path::new(path), "inconsistent local callable scope")?;
-            } else if direct_identifier(file, call.callee)
-                && let Some(symbol) = exact_symbol(facts, path, unwrapped(file, call.callee))
-                && allowed_functions.contains(&symbol)
-                && let Some(target) = functions.get(&symbol)
-            {
-                call_edges(facts, file, &owner, target, call, &mut scopes)
-                    .required(Path::new(path), "inconsistent local callable scope")?;
-            }
-            // Constructing/passing a function value does not execute its body.
-            // Callback edges need exact invocation and execution-host facts.
-        }
-        for element in &file.ast.jsx_elements {
-            let owner = at_scope(file, element.span);
-            if !scopes
-                .get(&owner)
-                .required(Path::new(path), "missing call/JSX execution scope")?
-                .client_live_site(element.span)
-            {
-                continue;
-            }
-            if element.member_object.is_none()
-                && let Some(symbol) = exact_symbol(facts, path, element.name.span)
-                && allowed_functions.contains(&symbol)
-                && let Some(target) = functions.get(&symbol)
-                && jsx_body_ready(facts, &scopes, target)
-            {
-                scopes
-                    .get_mut(&owner)
-                    .required(Path::new(path), "missing JSX execution scope")?
-                    .edges
-                    .insert(target.clone());
-            }
-            // JSX child/prop function values likewise require invocation proof.
-        }
-        modules.push(module);
-    }
-    if manifest.roots.is_empty()
-        || root_files.iter().any(|root| {
-            !facts
-                .files
-                .iter()
-                .any(|file| root.to_str() == Some(file.path.as_str()))
+    } else if row.resolution == ImportResolution::NodeModules
+        && config.aliases.keys().any(|find| {
+            text == find.as_str()
+                || text
+                    .strip_prefix(find.as_str())
+                    .is_some_and(|tail| tail.starts_with('/'))
         })
     {
-        return Err(DiscoveryRefusal::new(
-            &directory,
-            "browser entry is absent from the analyzed Type Facts file set",
-        ));
+        // Local resolver edges do not authenticate a substituted
+        // package export's runtime surface. Keep package admission
+        // independent; an explicit package alias cannot strengthen it.
+        blocked_imports.insert((path.into(), text.into()));
+        unproven_semantics.insert(path.into());
+        module.refused = true;
+        withheld_loads.insert(
+            (path.to_owned(), text.to_owned()),
+            "package alias has no authenticated runtime export surface",
+        );
+    } else if row.resolution == ImportResolution::Unresolved {
+        blocked_imports.insert((path.into(), text.into()));
+        unproven_semantics.insert(path.into());
+        module.refused = true;
+        withheld_loads.insert(
+            (path.to_owned(), text.to_owned()),
+            "unresolved static module request",
+        );
+    } else if row.resolution == ImportResolution::NodeModules {
+        discover_package_static_load(ctx, st, module, (path, span, text), (row, browser_map))?;
     }
-    manifest.reason.push_str(&format!(
-        "; roots: {}",
-        root_files
-            .iter()
-            .map(|path| path.display().to_string())
-            .collect::<Vec<_>>()
-            .join(", ")
-    ));
-    if !withheld_loads.is_empty() {
-        manifest
-            .reason
-            .push_str(&format!("; withheld static loads: {withheld_loads:?}"));
-    }
-    for module in modules
-        .iter()
-        .filter(|module| startup_modules.contains(&module.path) && module.completion == Some(false))
-    {
-        manifest.reason.push_str(&format!("; certain top-level exit contradicts the app-starts premise; browser root withheld: {}", module.path));
-    }
-    let mut index = ProjectHostIndex::build(
+    Ok(())
+}
+
+fn discover_package_static_load(
+    ctx: &DiscoveryCtx<'_>,
+    st: &mut DiscoveryState<'_>,
+    module: &mut HostModule,
+    (path, span, text): (&str, Span, &str),
+    (row, browser_map): (&solid_facts::resolution::AttestedImport, bool),
+) -> Result<(), DiscoveryRefusal> {
+    let DiscoveryCtx {
+        facts,
+        dialect,
+        admitted,
+        directory,
+        config,
+        ..
+    } = ctx;
+    let admitted = *admitted;
+    let dialect = *dialect;
+    let DiscoveryState {
         manifest,
-        &modules,
-        &scopes.into_values().collect::<Vec<_>>(),
-    );
-    index.blocked_imports = blocked_imports;
-    index.unproven_semantics = unproven_semantics;
-    if index.is_empty() {
-        index.manifest.reason =
-            empty_graph_refusal(facts, &config, &root_files, &modules, &withheld_loads).message();
+        blocked_imports,
+        withheld_loads,
+        package_loads,
+        ..
+    } = st;
+    let mut package_inputs = Vec::new();
+    let resolver_active = config.tsconfig_paths || browser_map;
+    if !admitted {
+        // The provisional graph schedules package analysis; its
+        // optimistic edges are not final linking authority. Even
+        // here a selected file must be handled by reviewed Vite.
+        let unsupported_loader = package_loads
+            .candidates(Path::new(path), text, &mut package_inputs)
+            .is_some_and(|(_, _, entries)| {
+                (resolver_active
+                    && !package_selection_agrees(facts, path, span, text, &entries, true))
+                    || !entries
+                        .iter()
+                        .all(|entry| crate::host_loadable::static_entry(entry))
+                    || !crate::host_loadable::stylesheet_closure(
+                        &entries,
+                        config,
+                        &mut package_inputs,
+                    )
+            });
+        for input in package_inputs {
+            let key = input
+                .to_str()
+                .required(&input, "non-UTF-8 provisional package input")?
+                .to_owned();
+            let observed = graph_identity(manifest, &input)
+                .required(&input, "cannot fingerprint provisional package input")?;
+            manifest.inputs.insert(key, observed);
+        }
+        if unsupported_loader || (resolver_active && facts.runtime_resolutions.is_none()) {
+            module.refused = true;
+            blocked_imports.insert((path.into(), text.into()));
+            withheld_loads.insert(
+                            (path.to_owned(), text.to_owned()),
+                            "canonical installed package entry uses an unproved Vite loader or tsconfig resolver selection",
+                        );
+        }
+        return Ok(());
     }
-    Ok(index)
+    let entries = package_loads
+        .loadable(
+            Path::new(path),
+            text,
+            row,
+            dialect,
+            &mut package_inputs,
+            &config.optimize_exclude,
+        )
+        .filter(|entries| {
+            crate::host_loadable::stylesheet_closure(entries.entries(), config, &mut package_inputs)
+        });
+    // The audited provider adds runtime-owner dedupe in dev. The
+    // declaration package must also be the root-selected install.
+    let provider = config
+        .plugins
+        .iter()
+        .any(|plugin| ["@solidjs/vite-plugin", "vite-plugin-solid"].contains(&plugin.as_str()));
+    let core = crate::host_loadable::request(text).is_some_and(|(name, _)| {
+        dialect
+            .audited_installation()
+            .iter()
+            .any(|(owner, _)| *owner == name)
+    });
+    let deduped = !provider
+        || !core
+        || package_loads
+            .loadable(
+                &directory.join("index.ts"),
+                text,
+                row,
+                dialect,
+                &mut package_inputs,
+                &config.optimize_exclude,
+            )
+            .is_some();
+    for input in package_inputs {
+        let key = input
+            .to_str()
+            .required(&input, "non-UTF-8 static package input")?
+            .to_owned();
+        let observed = graph_identity(manifest, &input)
+            .required(&input, "cannot fingerprint static package input")?;
+        manifest.inputs.insert(key, observed);
+    }
+    let loadable = deduped
+        && !config.package_dedupe
+        && entries.is_some_and(|entries| {
+            package_selection_agrees(facts, path, span, text, entries.entries(), resolver_active)
+        });
+    if !loadable {
+        module.refused = true;
+        blocked_imports.insert((path.into(), text.into()));
+        withheld_loads.insert((path.to_owned(), text.to_owned()), "missing exact installed client package entry, tsconfig rewrite, or requested resolver disagreement");
+    }
+    Ok(())
 }
