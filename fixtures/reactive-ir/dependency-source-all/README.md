@@ -1,19 +1,3 @@
 # Dependency source: every Solid package (ADR 0291)
 
-Claim: `dependencySources: ["*"]` selects every Solid package the project
-loads at run time, and every Solid package those load, each resolved from
-where its importer is. A Solid package is one whose `dependencies` or
-`peerDependencies` name the dialect's runtime (`solid-js`, `@solidjs/web`,
-`@solidjs/signals`) or an `@solidjs/` package.
-
-| Case | Package | Expected |
-| --- | --- | --- |
-| `LabelNow` | `dep-hooks` (peer `solid-js`) | SC1001 at the call |
-| `Inner` | `dep-hooks` → `dep-inner`, from `dep-hooks/node_modules` | SC1001 at the call |
-| `Plain` | `plain-utils` (no Solid dependency) | SC9011: not selected, an unknown package |
-| `Pattern` | `dep-pattern` (`exports` pattern `./*`) | SC1001 at the call: the pattern resolves as Node resolves it |
-| `ExtensionOrder` | `dep-ext`, whose `./read` matches `read.mjs` and `read.js` | SC1001 at the call: Vite's order loads `read.mjs` |
-| `ArrayExports` | `dep-array` (`exports` array fallback) | SC9011 and SC9005: skipped with a note, an unknown package |
-
-`solid-js.d.ts` is `context-member-identity`'s stub (claim-bearing signatures
-copied from published 2.0.0-rc.13). `App.tsx` passes `tsc --noEmit`.
+`dependencySources: ["*"]` selects every Solid package the project loads at run time and every Solid package those load, each resolved from its importer (a Solid package's `dependencies`/`peerDependencies` name `solid-js`, `@solidjs/web`, `@solidjs/signals` or an `@solidjs/` package). Nested, `exports`-pattern and Vite extension-order packages give SC1001 at the call; packages with no Solid dependency give SC9011; `exports` array fallbacks are skipped with SC9011/SC9005. Stub `context-member-identity`'s (published rc.13).

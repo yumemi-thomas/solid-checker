@@ -1,21 +1,3 @@
 # host-dead-return-wildcard
 
-**Claim (ADR 0288).** `host-dead-return`'s proven `Loop`, in a project that
-also holds `Object.assign(target, source)` with an open source (ADR 0273's
-wildcard veto, `all`). ADR 0282 premises the stability of
-`Array.prototype[Symbol.iterator]`. Its amendment refuses the unresolved
-target: even though no other holder can reach the fresh returned literal,
-`target` may name Array.prototype or an iterator prototype. `Loop` is now
-uncertifiable, like the explicit target in `host-dead-return-prototype`.
-
-This is the shape that kept `createRAF`'s `start()` silent in the rc.13
-corpus under `--dependency-source @solid-primitives/raf`: app-game's
-`apps/abr-viewer/.../BrushDetailEditable.tsx` holds
-`setValues((draft) => Object.assign(draft, next))`.
-
-| Case | Finding | Why |
-| --- | --- | --- |
-| `Loop` | SC9012 uncertifiable at `start()` | the target may be an intrinsic prototype |
-
-Stubs and `tsc --noEmit -p` as in `host-dead-return`, whose `node_modules`
-this copies unchanged.
+**Claim (ADR 0288).** `host-dead-return`'s `Loop` in a project that also holds `Object.assign(target, source)` with an open source (ADR 0273 wildcard veto): ADR 0282 premises `Array.prototype[Symbol.iterator]` stable and its amendment refuses the unresolved target (it may name `Array.prototype` or an iterator prototype), so `Loop` is SC9012 uncertifiable at `start()`, like `host-dead-return-prototype`; the shape kept `createRAF`'s `start()` silent under `--dependency-source @solid-primitives/raf` in the rc.13 corpus. Stubs and `node_modules` copy `host-dead-return`.

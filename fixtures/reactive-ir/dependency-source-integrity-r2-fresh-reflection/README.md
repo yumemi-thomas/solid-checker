@@ -1,7 +1,3 @@
 # Package integrity: fresh-reflection
 
-A nonliteral descriptor-map key is a wildcard. It cannot be dropped
-because the map is a literal. The final package getter read is SC1001 violation.
-Fresh reflected targets discharge all supported Object/Reflect wildcard
-writes by exact allocation identity. The inherited faithful Solid
-signatures are unchanged; TypeScript --noEmit must pass.
+As `descriptor-map`, with fresh reflected targets discharging the supported Object/Reflect wildcard writes by allocation identity, so the final package getter read is an SC1001 violation. Solid signatures are the published rc.13 ones.

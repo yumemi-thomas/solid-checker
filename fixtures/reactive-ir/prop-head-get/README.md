@@ -1,34 +1,3 @@
 # prop-head-get
 
-**Claim (ADR 0221, G1).** In `props.value.text`, the head `props.value` is a
-Get the runtime performs first, before the suffix is read or checked for
-nullishness. When the read is written directly in the exact children
-callback of a dialect control-flow primitive, the head is a strict read
-whenever the prop is backed reactively (`local_access`,
-`execution_role::direct_control_flow_body_role`). The ADR 0216
-per-property forwarding fixpoint decides the backing. It is queried, not
-replaced.
-
-| Case | `SC1001` | Why |
-| --- | --- | --- |
-| `NamespaceChild` (`Solid.For`) | violation | exact primitive through a namespace import |
-| `KeyedShow` | violation | the captured prop, not the keyed item, is read |
-| `Rows` through `Forwarder` | violation | exact cross-file forward of a live value |
-| `PlainInner` ← `PlainMiddle` ← `PlainOuter` | none | complete plain forwarding stays static |
-| `Shadowed` | uncertifiable | a local `For` names no primitive, so the child is its `children` prop; nothing proves when (or that) it runs it (ADR 0326: until then the compiler's `Deferred` projection of a component child kept this silent) |
-| `WrappedChild` | uncertifiable | `replaceChild(fn)` passes its result, not the literal |
-| `DormantDefault` | uncertifiable | a nested function's unused default is not a body read |
-| `MergedHead`, `AliasedHead` | uncertifiable | a view is not the parameter's own keys |
-| `ReplacedRoot`, `ReplacedProperty` | uncertifiable | the incoming witness is withdrawn after a write |
-| `TypedInner`, `ThenInner`, `SymbolInner`, `DynamicStoreInner` | uncertifiable | type-only labels and protocol or dynamic store keys prove no backing |
-| `Dynamic` | uncertifiable | a dynamic key is not its spelling's sibling |
-| `SuffixInner`, `WholeInner`, `ChildrenInner`, `EscapingInner` | uncertifiable | ADR 0216 Unknown is kept |
-| `StableFunction`, `CapturedCorrect` | none | a bound handler or ref, and tracked or sampled reads |
-
-`Cooked` (an escaped literal key behind `as`) is meant as a positive but is
-not proven yet. The finding is absent there, which is a recall gap and not a
-clean result.
-
-The stubs are byte-faithful to the published 2.0.0-rc.13 declarations, as
-`solid-js.d.ts` says. The sources also pass `tsc --noEmit` against the real
-installed rc.13 typings.
+**Claim (ADR 0221, G1).** In `props.value.text` the head `props.value` is a Get the runtime performs first; written directly in the exact children callback of a dialect control-flow primitive it is a strict read whenever the prop is backed reactively (ADR 0216 forwarding fixpoint): violations for namespace children, keyed `Show`, cross-file forwarding; uncertifiable for shadowed local `For` (ADR 0326), wrapped children, dormant defaults, merged/aliased/replaced heads, type-only/protocol/dynamic keys. Stubs byte-faithful to published rc.13.
