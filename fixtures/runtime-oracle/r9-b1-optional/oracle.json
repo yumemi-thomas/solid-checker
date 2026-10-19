@@ -1,0 +1,3 @@
+{
+  "note": "r9 reviewer: b1/Optional. Runtime adaptation: mount the original component with populated signal-backed props so its reactive reads and control-flow branches execute."
+}

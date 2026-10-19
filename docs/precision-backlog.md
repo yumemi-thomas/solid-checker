@@ -44,6 +44,36 @@ form too (ADR 0318 refused only the optional form). Corpus: **0 removed, +20
 on tree mutation and attribute writes, focus loss on removing a focused
 element.
 
+## 2026-10-19 — Remaining reviewer cases are runtime regressions
+
+The runtime-oracle archive port adds 524 cases from ADR 0319–0325 rounds
+r5/r6/r8/r9/r10/r11 and the seven ADR 0326/0327 reviews, bringing the suite
+to 561 cases. No checker behavior changes. The earlier two-family closure
+below describes the original 37-case suite, not these expanded observations.
+
+Fourteen new runtime sites in thirteen cases remain explicitly open: opaque
+callback/receiver timing (3), route-parameter destructuring (1), returned
+children/memo accessor reads (2), children async provenance (1), mixed owner
+invocations (2), a handler returned from a root (1), nested class/default/JSX
+owner flow (3), and event tuples (1). The existing c2d sites and r4c async
+attribution mismatch remain, for 17 open entries total. Every entry names the
+exact code, runtime site, and missing premise in its `oracle.json`.
+
+Static-only investigation also preserves possible false positives: after-await
+strict-read placement (5 cases), successful plain-prop mutations (8), permitted
+mixed-context destructuring (2), synchronous owned event dispatch (2), and
+plain-child reactive provenance (1). Two store-write cases instead prove a
+silently dropped write: they remain real defects despite no dev diagnostic.
+Two destructuring rows are not reached because an earlier pending-async read
+throws. Remaining static-only rows match runtime application stack frames.
+Execution assertions and the case-by-case classification are in
+[the runtime oracle README](../fixtures/runtime-oracle/README.md#static-only-investigation).
+
+Workspace/package-version/patch counterexamples and CommonJS/declaration-only
+modules that cannot be faithfully run under this browser ESM harness are
+listed as skipped there. The r8 synthetic dependency was adapted to local
+source, so those cases do not certify the original package-resolution seam.
+
 ## 2026-10-19 — The oracle's two families are closed (ADRs 0326, 0327)
 
 The runtime oracle has no unproven clean claim left except the two recorded
