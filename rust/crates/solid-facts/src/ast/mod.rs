@@ -13,8 +13,8 @@
 //! | `visitor` | The oxc `Visit` implementation that records facts as the walk proceeds. |
 //! | `extract_helpers` | Free helpers: expression peeling, binding and key helpers, export names, chain parts. |
 //! | `span_index` | `AstSpanIndex` and `LazySpanIndex`, span-keyed lookups over the fact tables. |
-//! | `emission` | Module emission (`module_emission`) and export-assignment detection. |
-//! | `host_constants`, `host_execution`, `host_call_completion` | Host constant folding, host-execution facts, host call completion. |
+//! | `emission` | Whether a module's exact bytes emit any JavaScript (`module_emission`). |
+//! | `host_constants`, `host_execution`, `host_call_completion` | Host constant folding, host-execution facts, bounded synchronous host call completion. |
 //! | `argument_completion`, `completion_call_cover`, `primitive_completion` | Completion standings for arguments, calls and primitives. |
 //! | `component_value_flow`, `proxy_get_forward`, `literal_array` | Component value flow, proxy Get forwarding, literal array elements. |
 //! | `unconditional_calls`, `module_requests`, `inert_javascript` | Synchronously unconditional calls, static module requests, inert JavaScript modules. |
