@@ -10,7 +10,9 @@ Install it as a development dependency:
 bun add --dev solid-checker
 ```
 
-Then run `solid-checker --certify`.
+Then run `solid-checker --certify`. It reports proven violations and project
+notices only; results the analysis could not decide are internal (`--internal`
+or `--format json` shows them).
 
 ## Dependency analysis
 

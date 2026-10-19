@@ -58,8 +58,20 @@ function noticeMessage(notice) {
  */
 const ownedRules = new Map();
 
-/** The rule whose uncertifiable findings are contract gaps (ADR 0248). */
+/**
+ * Whether a finding is shown to users. Uncertifiable findings are an internal
+ * measure -- a user cannot act on "not proven either way" -- except a
+ * project-level notice (`subjectKind: "project"`: the installed Solid runtime
+ * is refused or its release is unaudited), without which a lint over a
+ * project that was never analyzed as stated would look clean. The native
+ * `--format default` applies the same rule (`snapshot_emission::user_facing`).
+ */
+/** The contract-gap rule no shipped config enables (ADR 0248). */
 const CONTRACT_GAP_RULE = "package-contract-incomplete";
+
+function userFacing(finding) {
+  return finding.kind !== "uncertifiable" || finding.subjectKind === "project";
+}
 
 function registerOwnedRule(filename, ruleName) {
   let owned = ownedRules.get(filename);
@@ -256,7 +268,7 @@ const NATIVE_VALUE_OPTIONS = new Set([
   "--framework-transform"
 ]);
 const NATIVE_FLAGS = new Set([
-  "--certify", "--feedback-facts", "--serve", "--help", "-h", "--no-package-contracts"
+  "--certify", "--internal", "--feedback-facts", "--serve", "--help", "-h", "--no-package-contracts"
 ]);
 /** Options whose presence may select package source under the native default. */
 const SOURCE_OPTIONS = new Set([
@@ -652,15 +664,8 @@ const certification = {
         // that rule reports them at its own severity, so certification
         // reporting them again would duplicate every one of its findings.
         const owned = ownedRules.get(contextFilename(context));
-        // ADR 0248: an import without a complete contract is a gap in what
-        // the analysis can see, not a finding about the user's code (ADR
-        // 0202). Editors showed one warning per such import, so the
-        // catch-all rule leaves them out; enabling
-        // `solid-checker/package-contract-incomplete` reports them again.
         const findings = (snapshot.findings ?? []).filter(
-          finding =>
-            !owned?.has(finding.rule) &&
-            !(finding.rule === CONTRACT_GAP_RULE && finding.kind === "uncertifiable")
+          finding => !owned?.has(finding.rule) && userFacing(finding)
         );
         projectFindings(context, program, findings);
       },
@@ -751,7 +756,7 @@ function reportingRule(entry, catalog) {
               : context;
           const snapshot = loadSnapshot(forced);
           const findings = (snapshot.findings ?? []).filter(
-            finding => finding.rule === entry.name
+            finding => finding.rule === entry.name && userFacing(finding)
           );
           if (findings.length === 0) return;
           projectFindings(context, program, findings);

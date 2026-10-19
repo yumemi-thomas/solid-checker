@@ -2380,10 +2380,12 @@ fn default_output_groups_coverage_gaps_after_findings_to_review() {
         return;
     };
     let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    let run = |fixture: &str, format: &str| {
+    // ADR 0328: the tiers are the maintainer view (`--internal`).
+    let run_with = |fixture: &str, format: &str, internal: bool| {
         let output = std::process::Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
             .env("SOLID_TYPEFACTS_BIN", &typefacts)
             .env("SOLID_CHECKER_DAEMON", "0")
+            .args(if internal { &["--internal"][..] } else { &[] })
             .args(["--format", format, "--project"])
             .arg(
                 root.join("fixtures/reactive-ir")
@@ -2399,6 +2401,13 @@ fn default_output_groups_coverage_gaps_after_findings_to_review() {
         );
         String::from_utf8(output.stdout).unwrap()
     };
+    let run = |fixture: &str, format: &str| run_with(fixture, format, true);
+
+    // Users see neither tier: both hold only uncertifiable findings.
+    let user = run_with("feedback-tiers-open", "default", false);
+    assert!(!user.contains("Needs review"), "{user}");
+    assert!(!user.contains("Analysis coverage"), "{user}");
+    assert!(!user.contains("SC9012"), "{user}");
 
     let open = run("feedback-tiers-open", "default");
     let review = open.find("Needs review (1)").expect("review heading");

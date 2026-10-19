@@ -1433,6 +1433,7 @@ fn answer(
         &request.project_id,
         &analysis.snapshot,
         false,
+        true,
         Duration::ZERO,
     )?
     .output
@@ -1682,10 +1683,20 @@ pub fn check(request: &Request) -> Result<i32, Box<dyn Error>> {
     }
     let (output, code) = if request.format == "json" {
         // The daemon caches the canonical JSON emission; it is the output.
-        (
-            body,
-            i32::from(request.certify && header.status != "certified"),
-        )
+        // A project-level notice lives in the findings, not the header.
+        let notices = request.certify
+            && !request.internal
+            && header.status == "uncertifiable"
+            && serde_json::from_slice::<serde_json::Value>(&body)?["findings"]
+                .as_array()
+                .is_some_and(|findings| {
+                    findings.iter().any(|finding| {
+                        finding["kind"] == "uncertifiable" && finding["subjectKind"] == "project"
+                    })
+                });
+        let fails =
+            crate::snapshot_emission::certify_fails(&header.status, notices, request.internal);
+        (body, i32::from(request.certify && fails))
     } else {
         let snapshot: solid_facts_backend::Snapshot = serde_json::from_slice(&body)?;
         if snapshot.status != header.status {
@@ -1697,6 +1708,7 @@ pub fn check(request: &Request) -> Result<i32, Box<dyn Error>> {
             &request.project_id,
             &snapshot,
             request.certify,
+            request.internal,
             started.elapsed(),
         )?;
         (emission.output, emission.exit_code)

@@ -37,6 +37,10 @@ struct Request {
     format: String,
     #[serde(default)]
     certify: bool,
+    /// Maintainer view: the human formats show internal (uncertifiable)
+    /// findings, and `--certify` fails on anything short of certified.
+    #[serde(default)]
+    internal: bool,
     #[serde(default)]
     feedback_facts: bool,
     /// Resolve every module load through the project's own bundler, which
@@ -152,6 +156,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             &request.project_id,
             &snapshot,
             request.certify,
+            request.internal,
             started.elapsed(),
         )?;
         io::stdout().write_all(&emission.output)?;
@@ -228,6 +233,7 @@ fn run_ordinary_check(
         &request.project_id,
         &outcome.analysis.snapshot,
         request.certify,
+        request.internal,
         started.elapsed(),
     )?;
     io::stdout().write_all(&emission.output)?;
@@ -399,6 +405,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
     let mut enable_rules = Vec::new();
     let mut format = "default".to_owned();
     let mut certify = false;
+    let mut internal = false;
     let mut feedback_facts = false;
     let mut runtime_resolution = false;
     let mut dependency_sources = Vec::new();
@@ -490,6 +497,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
             }
             "--format" => format = args.next().ok_or("--format needs a value")?,
             "--certify" => certify = true,
+            "--internal" => internal = true,
             "--feedback-facts" => feedback_facts = true,
             "--runtime-resolution" => {
                 runtime_resolution = match args.next().as_deref() {
@@ -598,6 +606,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         enable_rules,
         format,
         certify,
+        internal,
         feedback_facts,
         runtime_resolution,
         dependency_sources,
@@ -679,7 +688,9 @@ fn print_help() {
                                 analysis-coverage gaps grouped by cause; full: every\n\
                                 finding in place; text; json (default: default)\n\
            --dialect <ID>               Solid dialect (default: detect from solid-js; fallback: solid-v2)\n\
-           --certify                    Exit 1 unless the project is certified\n\
+           --certify                    Exit 1 on a violation or a project notice\n\
+           --internal                   Maintainer view: also show uncertifiable findings,\n\
+                                        and --certify fails unless fully certified\n\
            --runtime-resolution <MODE>  required: resolve module loads through the\n\
                                         project's own Vite, which runs its config\n\
                                         (SOLID_CHECKER_RUNTIME_RESOLVER names the\n\

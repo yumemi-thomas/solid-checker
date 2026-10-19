@@ -693,10 +693,13 @@ test("a finding collapsed over a package export is reported in every file holdin
   // the whole project: its related locations are further sites, not context.
   // A per-file reporter must still see it in each file that has one, once, at
   // that file's first site.
+  // A violation, because uncertifiable findings are internal and never
+  // reported (`internal findings are never reported` below); the collapse
+  // depends on the subject kind alone.
   const collapsed = {
     id: "SC9005",
     rule: "package-contract-incomplete",
-    kind: "uncertifiable",
+    kind: "violation",
     severity: "warning",
     message: "the reactivity contract for pkg leaves callbacks unknown for imported export run; " +
       "code whose proof depends on those claims cannot be certified (3 call sites)",
@@ -712,9 +715,8 @@ test("a finding collapsed over a package export is reported in every file holdin
   const text = "0123456789ab";
   const rule = "package-contract-incomplete";
 
-  // ADR 0248: the catch-all rule leaves contract gaps out; the opt-in
-  // per-rule rule reports them.
-  assert.equal(run(snapshot, "/tmp/app/App.ts", text).length, 0);
+  // The per-rule rule reports it; the catch-all leaves findings a
+  // per-rule rule owns to that rule.
 
   const primary = run(snapshot, "/tmp/app/App.ts", text, rule);
   assert.equal(primary.length, 1);
@@ -734,6 +736,32 @@ test("a finding collapsed over a package export is reported in every file holdin
     run({ status: "uncertifiable", findings: [context] }, "/tmp/app/Other.ts", text, rule).length,
     0
   );
+});
+
+test("internal findings are never reported, project notices are", () => {
+  const text = "0123456789ab";
+  const internal = {
+    id: "SC1001",
+    rule: "strict-read-untracked",
+    kind: "uncertifiable",
+    severity: "warning",
+    message: "not proven either way",
+    subjectKind: "accessor",
+    primaryLocation: { path: "/tmp/app/App.ts", startByte: 2, endByte: 4 }
+  };
+  const notice = {
+    ...internal,
+    id: "SC9014",
+    rule: "unaudited-solid-release",
+    message: "unaudited release",
+    subjectKind: "project",
+    primaryLocation: { path: "/tmp/app/node_modules/solid-js/package.json", startByte: 0, endByte: 1 }
+  };
+  const snapshot = { status: "uncertifiable", findings: [internal, notice] };
+  assert.equal(run(snapshot, "/tmp/app/App.ts", text, "strict-read-untracked").length, 0);
+  const all = run(snapshot, "/tmp/app/App.ts", text);
+  assert.equal(all.length, 1);
+  assert.match(all[0].data.message, /^\[SC9014\] unaudited release/);
 });
 
 function finding(id, rule, start, end) {

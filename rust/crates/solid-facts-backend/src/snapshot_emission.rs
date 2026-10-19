@@ -20,18 +20,75 @@ pub(crate) struct Emission {
     pub(crate) exit_code: i32,
 }
 
+/// Whether a finding is shown to users. Uncertifiable findings are an internal
+/// measure (sweeps, coverage, the runtime oracle): a user cannot act on "not
+/// proven either way". The exception is a project-level notice
+/// (`subjectKind: "project"`): the installed Solid runtime is refused or its
+/// release is unaudited, so the analysis did not apply as stated, and a run
+/// that hid it would look clean over a project it never vouched for.
+pub(crate) fn user_facing(kind: &str, subject_kind: &str) -> bool {
+    kind != "uncertifiable" || subject_kind == "project"
+}
+
+/// Whether `--certify` fails. For users, a violation or a project-level
+/// notice fails it; with `--internal`, anything short of certified does.
+pub(crate) fn certify_fails(status: &str, notices: bool, internal: bool) -> bool {
+    if internal {
+        status != "certified"
+    } else {
+        status == "violation" || notices
+    }
+}
+
+/// Whether `snapshot` holds a project-level notice.
+fn has_notice(snapshot: &Snapshot) -> bool {
+    snapshot
+        .findings
+        .iter()
+        .any(|finding| finding.kind == "uncertifiable" && finding.subject_kind == "project")
+}
+
+/// The status line users see: a violation, a project-level notice, or clean.
+fn user_status(snapshot: &Snapshot) -> &'static str {
+    if snapshot.status == "violation" {
+        "violation"
+    } else if has_notice(snapshot) {
+        "notice"
+    } else {
+        "clean"
+    }
+}
+
 /// Render a diagnostic snapshot and decide its process result.
 ///
 /// Callers only write the returned bytes; output formatting and certification
-/// semantics stay local to this module.
+/// semantics stay local to this module. `json` is the complete machine report
+/// (every finding, internal ones included); the human formats show users only
+/// [`user_facing`] findings unless `internal` asks for the complete view.
 pub(crate) fn emit(
     dialect: &'static Dialect,
     format: &str,
     project_id: &str,
     snapshot: &Snapshot,
     certify: bool,
+    internal: bool,
     elapsed: Duration,
 ) -> Result<Emission, Box<dyn std::error::Error>> {
+    let shown;
+    let snapshot = if internal || format == "json" {
+        snapshot
+    } else {
+        shown = Snapshot {
+            findings: snapshot
+                .findings
+                .iter()
+                .filter(|finding| user_facing(&finding.kind, &finding.subject_kind))
+                .cloned()
+                .collect(),
+            ..snapshot.clone()
+        };
+        &shown
+    };
     let output = match format {
         "json" => {
             let mut output = json_output::go_compatible(snapshot, true)?;
@@ -39,7 +96,12 @@ pub(crate) fn emit(
             output
         }
         "text" => {
-            let mut output = format!("{project_id}: {}\n", snapshot.status).into_bytes();
+            let status = if internal {
+                snapshot.status.as_str()
+            } else {
+                user_status(snapshot)
+            };
+            let mut output = format!("{project_id}: {status}\n").into_bytes();
             output.extend_from_slice(&render_premises(snapshot));
             for finding in &snapshot.findings {
                 output.extend_from_slice(
@@ -48,13 +110,16 @@ pub(crate) fn emit(
             }
             output
         }
+        "default" if !internal => render_user(dialect, project_id, snapshot, elapsed)?,
         "default" => render_default(dialect, project_id, snapshot, elapsed, true)?,
         "full" => render_default(dialect, project_id, snapshot, elapsed, false)?,
         format => return Err(format!("unsupported format {format:?}").into()),
     };
     Ok(Emission {
         output,
-        exit_code: i32::from(certify && snapshot.status != "certified"),
+        exit_code: i32::from(
+            certify && certify_fails(&snapshot.status, has_notice(snapshot), internal),
+        ),
     })
 }
 
@@ -76,6 +141,51 @@ fn render_premises(snapshot: &Snapshot) -> Vec<u8> {
         return Vec::new();
     }
     format!("Premises: {}.\n", snapshot.premises.join("; ")).into_bytes()
+}
+
+/// The default output users see: violations, then project-level notices.
+fn render_user(
+    dialect: &'static Dialect,
+    project_id: &str,
+    snapshot: &Snapshot,
+    elapsed: Duration,
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let project = Path::new(project_id);
+    let cwd = project.parent().unwrap_or_else(|| Path::new("."));
+    let mut output = render_premises(snapshot);
+    let (notices, violations): (Vec<_>, Vec<_>) = snapshot
+        .findings
+        .iter()
+        .partition(|finding| finding.kind == "uncertifiable");
+    if !violations.is_empty() {
+        output.extend_from_slice(format!("Violations ({})\n\n", violations.len()).as_bytes());
+        output.extend(render_diagnostics(dialect, cwd, violations)?);
+    }
+    if !notices.is_empty() {
+        output.extend_from_slice(
+            format!(
+                "Notices ({}): the analysis did not apply to this project as stated\n\n",
+                notices.len()
+            )
+            .as_bytes(),
+        );
+        output.extend(render_diagnostics(dialect, cwd, notices)?);
+    }
+    output.extend(render_footer(dialect, snapshot, elapsed));
+    Ok(output)
+}
+
+fn render_footer(dialect: &'static Dialect, snapshot: &Snapshot, elapsed: Duration) -> Vec<u8> {
+    let threads = std::thread::available_parallelism()
+        .map(usize::from)
+        .unwrap_or(1);
+    format!(
+        "Finished in {}ms on {} files with {} rules using {threads} threads.\n",
+        elapsed.as_millis(),
+        snapshot.metrics.files_analyzed,
+        dialect.rule_count,
+    )
+    .into_bytes()
 }
 
 fn render_default(
@@ -133,18 +243,7 @@ fn render_default(
             snapshot.findings.iter().collect(),
         )?);
     }
-    let threads = std::thread::available_parallelism()
-        .map(usize::from)
-        .unwrap_or(1);
-    output.extend_from_slice(
-        format!(
-            "Finished in {}ms on {} files with {} rules using {threads} threads.\n",
-            elapsed.as_millis(),
-            snapshot.metrics.files_analyzed,
-            dialect.rule_count,
-        )
-        .as_bytes(),
-    );
+    output.extend(render_footer(dialect, snapshot, elapsed));
     Ok(output)
 }
 
@@ -440,6 +539,7 @@ mod tests {
                 "project",
                 &snapshot,
                 false,
+                false,
                 Duration::ZERO,
             )
             .unwrap()
@@ -465,6 +565,7 @@ mod tests {
                     "project",
                     &snapshot("violation"),
                     true,
+                    false,
                     Duration::ZERO,
                 )
                 .unwrap()
@@ -478,6 +579,7 @@ mod tests {
                     "project",
                     &snapshot("certified"),
                     true,
+                    false,
                     Duration::ZERO,
                 )
                 .unwrap()
@@ -490,6 +592,7 @@ mod tests {
                     format,
                     "project",
                     &snapshot("violation"),
+                    false,
                     false,
                     Duration::ZERO,
                 )
@@ -534,6 +637,7 @@ mod tests {
             "project",
             &decoded,
             true,
+            false,
             Duration::ZERO,
         )
         .unwrap();
@@ -548,16 +652,30 @@ mod tests {
             "project",
             &snapshot("certified"),
             false,
+            false,
             Duration::ZERO,
         )
         .unwrap();
-        assert_eq!(text.output, b"project: certified\n");
+        // Users see `clean`; the internal view keeps the certification status.
+        assert_eq!(text.output, b"project: clean\n");
+        let internal = emit(
+            solid_facts_backend::dialect::default_dialect(),
+            "text",
+            "project",
+            &snapshot("certified"),
+            false,
+            true,
+            Duration::ZERO,
+        )
+        .unwrap();
+        assert_eq!(internal.output, b"project: certified\n");
 
         let json = emit(
             solid_facts_backend::dialect::default_dialect(),
             "json",
             "project",
             &snapshot("certified"),
+            false,
             false,
             Duration::ZERO,
         )
@@ -613,6 +731,7 @@ mod tests {
             &directory.join("tsconfig.json").to_string_lossy(),
             &snapshot,
             true,
+            false,
             Duration::from_millis(295),
         )
         .unwrap();
@@ -628,6 +747,64 @@ mod tests {
             solid_facts_backend::dialect::default_dialect().rule_count
         )));
         assert_eq!(rendered.exit_code, 1);
+
+        // ADR 0328: an uncertifiable finding is internal. Users see neither it
+        // nor a failing `--certify` for it; `--internal` shows it and fails.
+        let mut undecided = snapshot.clone();
+        undecided.status = "uncertifiable".into();
+        undecided.findings[0].kind = "uncertifiable".into();
+        undecided.findings[0].message = "could not prove this either way".into();
+        let user = emit(
+            solid_facts_backend::dialect::default_dialect(),
+            "default",
+            &directory.join("tsconfig.json").to_string_lossy(),
+            &undecided,
+            true,
+            false,
+            Duration::ZERO,
+        )
+        .unwrap();
+        assert!(
+            !String::from_utf8(user.output)
+                .unwrap()
+                .contains("could not prove")
+        );
+        assert_eq!(user.exit_code, 0);
+        let internal = emit(
+            solid_facts_backend::dialect::default_dialect(),
+            "default",
+            &directory.join("tsconfig.json").to_string_lossy(),
+            &undecided,
+            true,
+            true,
+            Duration::ZERO,
+        )
+        .unwrap();
+        assert!(
+            String::from_utf8(internal.output)
+                .unwrap()
+                .contains("could not prove")
+        );
+        assert_eq!(internal.exit_code, 1);
+
+        // A project-level notice stays visible and fails `--certify`.
+        undecided.findings[0].subject_kind = "project".into();
+        let notice = emit(
+            solid_facts_backend::dialect::default_dialect(),
+            "default",
+            &directory.join("tsconfig.json").to_string_lossy(),
+            &undecided,
+            true,
+            false,
+            Duration::ZERO,
+        )
+        .unwrap();
+        assert!(
+            String::from_utf8(notice.output)
+                .unwrap()
+                .contains("Notices (1)")
+        );
+        assert_eq!(notice.exit_code, 1);
         remove_dir_all(directory).unwrap();
     }
 }

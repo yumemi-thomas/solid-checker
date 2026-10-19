@@ -33,14 +33,18 @@ owner. No single tool can check those rules from source text alone, so
 - **Dependency source** — selected installed runtime files analyzed alongside
   project code; unavailable behavior stays uncertifiable.
 
-Combining them lets the analyzer **certify** the project rather than
-pattern-match risky-looking syntax. Every finding carries a stable code
-(`SCxxxx`), the evidence that proves it, and a fix hint, and is one of two
-kinds:
+Combining them lets the analyzer prove defects rather than pattern-match
+risky-looking syntax. Every finding you see carries a stable code (`SCxxxx`),
+the evidence that proves it, and a fix hint:
 
 - **violation** — the analyzer proved the code misbehaves at runtime.
-- **uncertifiable** — the analyzer could not prove the code correct, and the
-  rule page explains how to make it provable.
+- **notice** — the analysis did not apply to this project as stated: the
+  installed Solid runtime is unsupported, or its release is unaudited.
+
+Code the analyzer could neither prove correct nor prove wrong is not reported:
+those *uncertifiable* results are an internal measure of what the analysis
+cannot decide yet (`--format json` and `--internal` show them;
+[ADR 0328](docs/adr/0328-uncertifiable-results-are-internal.md)).
 
 Reports state their runtime premises. The [standard runtime configuration
 premise](docs/adr/0266-standard-runtime-configuration-premise.md), amended by
@@ -73,8 +77,8 @@ bunx --bun --no-install solid-checker --project tsconfig.json
 ```
 
 Diagnostics print as framed source excerpts with severity markers, evidence
-labels, and a fix hint. In CI, add `--certify` to fail the build unless the
-project is fully certified:
+labels, and a fix hint. In CI, add `--certify` to fail the build on any
+violation or project notice:
 
 ```sh
 bunx --bun --no-install solid-checker --project tsconfig.json --certify
@@ -188,8 +192,9 @@ Run `solid-checker --help` for the full list. The options you'll reach for most:
 | --- | --- |
 | `--project <PATH>` | TypeScript project to analyze (default: `tsconfig.json`). |
 | `--dialect solid-v2` | Override automatic Solid major-version detection. Also overrides the unsupported-runtime refusal. |
-| `--format <default\|full\|text\|json>` | Output format. `default` prints violations, then findings to review, both as framed source excerpts, then the analysis-coverage gaps (unanalyzable package imports, unresolved dispatch), one line per kind of gap naming its most frequent packages or helpers. `full` frames every finding in place, `text` is compact, `json` is machine-readable. |
-| `--certify` | Exit non-zero unless the project is fully certified. Use this in CI. |
+| `--format <default\|full\|text\|json>` | Output format. `default` prints violations, then project notices, as framed source excerpts. `full` frames every shown finding in place, `text` is compact, `json` is the complete machine-readable report, uncertifiable results included. |
+| `--certify` | Exit non-zero on any violation or project notice. Use this in CI. |
+| `--internal` | Maintainer view: the human formats also show uncertifiable results (findings to review, then analysis-coverage gaps), and `--certify` fails unless the project is fully certified. |
 | `--preset <NAME>` | Enable a catalog preset (repeatable; the compatibility `preferences` preset is currently available). |
 | `--enable-rule <NAME>` | Explicitly enable one rule (repeatable). |
 | `--runtime-target <browser\|node>`, `--runtime-build <development\|production>` | Declare the runtime host for dependency source selection under Vite with the Solid plugin. Unavailable selection keeps explicit uncertifiable package obligations. |
