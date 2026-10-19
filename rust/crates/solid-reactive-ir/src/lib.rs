@@ -28,7 +28,7 @@
 //! | `reactive_analysis` | The coupled local/interprocedural stage. |
 //! | `attribution` | Discharges parameter-member dispatch obligations in a closed program. |
 //! | `cleanup`, `directives`, `effect_api`, `effect_execution` | Leaf-owner diagnostics, directive discovery, `createEffect` semantics. |
-//! | `argument_values`, `callback_return`, `literal_member_slots`, `object_members`, `value_flow`, `value_identity` | What arguments, returns, members and values prove. |
+//! | `argument_values`, `callback_return`, `literal_member_slots`, `object_members`, `value_identity` | What arguments, returns, members and values prove. |
 //! | `summary_semantics`, `runtime_semantics`, `runtime_configuration` | Summary vocabulary, audited runtime behaviour, assumed runtime conditions. |
 //! | `package_boundary`, `boundary_defects`, `router_params` | Package-source boundary obligations and the router-parameters premise. |
 //! | `findings`, `projection` | The finding model and its projection onto dialect rule catalogs. |
@@ -74,7 +74,6 @@ pub mod summary_semantics;
 mod symbols;
 mod timings;
 mod upstream_compat;
-mod value_flow;
 mod value_identity;
 
 pub use owners::function_binding_name;
@@ -1160,9 +1159,6 @@ pub struct BuildTimings {
     pub typed_accessors_and_prop_roots: Duration,
     pub prop_propagation_and_control_flow: Duration,
     pub static_prepass: Duration,
-    /// ADR 0309's value-flow fact in shadow mode: built, audited, consumed by
-    /// no finding.
-    pub value_flow_shadow: Duration,
     pub local_and_interprocedural: Duration,
     pub local_reads_and_writes: Duration,
     pub interprocedural_summaries: Duration,

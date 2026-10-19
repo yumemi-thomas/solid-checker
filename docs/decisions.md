@@ -326,8 +326,8 @@ An effect apply's phase is not proof it runs: with literal `defer: true` (dialec
 The dependency-source sibling tsconfig's bytes live in a scratch directory (`$TMPDIR/solid-checker-programs` or `SOLID_CHECKER_PROGRAM_DIR`) and are opened by the producer as an overlay at a logical path beside the project's tsconfig (`-project-config`); read-only projects work; gates run with `SOLID_CHECKER_DAEMON=0`. Owner: `write_for_process`, `logical_path` in `rust/crates/solid-facts-backend/src/dependency_sources.rs`.
 
 <a id="adr-0309"></a>
-## ADR 0309 — A reactive value's flow is one fact
-Design: one flow fact per proven reactive value (nodes = allocation sites, edges from exact references, terminals = read events, known non-invoking operations, or unknown escapes), certifying only when every flow ends at a read with a row and reporting an unknown escape as an obligation, never silence. Today only a private observational `value_flow` stage exists: it runs when `SOLID_CHECKER_VALUE_FLOW_AUDIT` or timings are requested, keeps every seed's coverage open, and moves no finding; the production migration stays held. Owner: `rust/crates/solid-reactive-ir/src/value_flow.rs`.
+## ADR 0309 — A reactive value's flow is one fact (removed)
+Superseded by deletion on 2026-10-19. Only a private observational `value_flow` stage ever existed: it ran when `SOLID_CHECKER_VALUE_FLOW_AUDIT` or timings were requested, kept every seed's coverage open and moved no finding, and the production migration stayed held. The module, its `value-flow-shadow` timing stage, its `BuildTimings` field and the audit variable are gone; no script or package read any of them. A flow fact that certifies would be a new design, not this one revived.
 
 <a id="adr-0310"></a>
 ## ADR 0310 — A source-edge refusal is a caller's recorded withholding (removed)
