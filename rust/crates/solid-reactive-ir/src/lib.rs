@@ -44,6 +44,19 @@ mod value_flow;
 mod value_identity;
 
 pub use owners::function_binding_name;
+
+/// Whether `span` in `file` sits in an instance field initializer of a class,
+/// directly or in a function written there: code that runs only when an
+/// instance is constructed (review rounds 2-3 of 2026-10-19). The backend
+/// demotes every violation anchored there to an uncertifiable result, whatever
+/// rule placed it.
+#[must_use]
+pub fn site_in_instance_field(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+) -> bool {
+    execution_role::inside_instance_field(file, span)
+}
 pub use pipeline::{AnalysisInputs, build, build_with_analysis_inputs_measured};
 pub use returns_walk::{
     ArgumentContainer, ReturnsDecline, described_callable_returns, literal_structural_returns,

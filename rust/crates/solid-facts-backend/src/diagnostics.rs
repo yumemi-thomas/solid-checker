@@ -421,6 +421,35 @@ impl DiagnosticSession {
                 *span,
             ));
         }
+        // An instance field initializer runs when an instance is constructed,
+        // which no rule places; several rules decide "written directly in
+        // this callback" on their own and would place it in the function the
+        // class is written in (review rounds 2-3). No violation is proven
+        // there, whichever rule claims one: it is an obligation.
+        for finding in &mut findings {
+            if finding.kind == "violation"
+                && facts
+                    .files
+                    .iter()
+                    .find(|file| file.path.as_str() == finding.primary_location.path.as_ref())
+                    .is_some_and(|file| {
+                        solid_reactive_ir::site_in_instance_field(
+                            file,
+                            solid_facts::core::Span::new(
+                                u32::try_from(finding.primary_location.start_byte)
+                                    .unwrap_or(u32::MAX),
+                                u32::try_from(finding.primary_location.end_byte)
+                                    .unwrap_or(u32::MAX),
+                            ),
+                        )
+                    })
+            {
+                finding.kind = "uncertifiable".into();
+                finding.message.push_str(
+                    "; this code is in an instance field initializer, which runs when an instance is constructed, so where it runs is not proven",
+                );
+            }
+        }
         let metrics = analysis_metrics(facts, &program);
         let mut snapshot = snapshot_of(sources, metrics, findings);
         snapshot.feedback_facts = program.development_feedback.clone();

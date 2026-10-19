@@ -1,5 +1,21 @@
 # Precision backlog
 
+## 2026-10-19 — Opus review round 3: one funnel for class fields
+
+Round 3 found the same root in seven more rules (`SC2001`, `SC2002`, `SC2004`,
+`SC2005`, `SC2006`, `SC5001`, `SC1002`): each decides "written directly in
+this callback" on its own, and an instance field initializer is no function
+fact, so each placed the field in the function the class is written in
+(pre-existing, user-facing). Instead of a guard per rule, the backend now
+demotes every violation whose primary location is in an instance field
+initializer to uncertifiable (`diagnostics.rs`, before the snapshot;
+`solid_reactive_ir::site_in_instance_field`), whatever rule claimed it. The
+WASM adapter assembles findings on its own path and does not apply it yet.
+
+Oracle: 642 cases (50 from this round), exit 0, 0 unproven clean; one new
+recall gap recorded (`yield*` delegation spread in a body). Corpus: no
+movement.
+
 ## 2026-10-19 — Opus review round 2: class fields completed
 
 Round 1's class-field guard keyed on the function directly around the read,

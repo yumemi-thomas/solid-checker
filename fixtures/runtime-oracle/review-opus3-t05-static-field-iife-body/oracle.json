@@ -1,0 +1,11 @@
+{
+  "note": "Opus review round 3 (t05-static-field-iife-body): class-field and generator shapes across every rule",
+  "steps": [
+    {
+      "action": "assert-text",
+      "selector": "#ran-a",
+      "text": "ran",
+      "id": "runtime-observation-0"
+    }
+  ]
+}
