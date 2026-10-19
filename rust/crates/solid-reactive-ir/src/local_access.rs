@@ -1040,7 +1040,6 @@ impl LocalAccessContext<'_, '_> {
                 let origin = self.accessor_origins.get(symbol);
                 let display_name = call.static_callee(&file.source).unwrap_or(name);
                 result.reads.push(Arc::new(ReactiveRead {
-                    package_internal: false,
                     summary_attributed: false,
                     transported: false,
                     kind: "accessor".into(),
@@ -1545,7 +1544,6 @@ impl LocalAccessContext<'_, '_> {
                     })
             };
             let read = ReactiveRead {
-                package_internal: false,
                 summary_attributed: false,
                 transported: false,
                 kind: if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
@@ -1727,7 +1725,6 @@ impl LocalAccessContext<'_, '_> {
                 }
             }
             result.reads.push(Arc::new(ReactiveRead {
-                package_internal: false,
                 summary_attributed: false,
                 transported: false,
                 kind: if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {

@@ -1430,7 +1430,6 @@ dependencies = [
 name = "solid-facts-backend"
 version = "0.1.0"
 dependencies = [
- "libc",
  "oxc-miette 2.7.1",
  "oxc_allocator 0.118.0",
  "oxc_ast 0.118.0",

@@ -1361,14 +1361,6 @@ pub(super) fn interprocedural_result_reads_for_file(
         effective.sort_by_key(|(direct, read)| (read.undecided, !*direct, read.transported));
         for (direct, read) in effective {
             let accessor = read.display.to_string();
-            // A summary read whose symbol is the callee itself is the export's
-            // own contracted `reads`, not a value passed in. ADR 0246: so is
-            // one that reached this call through a project wrapper -- its
-            // symbol is still the contracted export whose state it reads, and
-            // the wrapper's call does not make that read the caller's.
-            let package_internal = (!array_entry || direct)
-                && crate::contract_declared_state(&read.declaration)
-                && read.symbol.as_str() == symbol;
             if seen.insert((
                 callee.path.clone(),
                 callee.start_byte,
@@ -1398,7 +1390,6 @@ pub(super) fn interprocedural_result_reads_for_file(
                     callback_invocation_unproven: false,
                     callee_callback_timing: object_callable
                         || callee_callback_timing(file, call.span, execution, lookup),
-                    package_internal,
                     summary_attributed: !direct,
                     transported: read.transported
                         || transported.is_some()
@@ -1687,7 +1678,6 @@ pub(super) fn dependency_getter_obligations(
                 let execution =
                     semantic_execution_role(file, span, &allowed, entities, symbol_names, lookup);
                 reads.push(ReactiveRead {
-                    package_internal: false,
                     summary_attributed: false,
                     transported: true,
                     kind: "reactive-getter".into(),

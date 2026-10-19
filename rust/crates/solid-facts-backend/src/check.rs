@@ -455,15 +455,6 @@ impl ProcessSessions {
             generated: Vec::new(),
         }
     }
-
-    /// The producer argument naming the last generated program's scratch
-    /// file, when one was opened.
-    #[must_use]
-    pub fn generated_config_argument(&self) -> Option<String> {
-        self.generated
-            .last()
-            .map(|generated| format!("-project-config={}", generated.config().display()))
-    }
 }
 
 impl ProducerSessions for ProcessSessions {

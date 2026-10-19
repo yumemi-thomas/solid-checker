@@ -265,7 +265,6 @@ pub(crate) fn apply_compute_reads(
                 && read.kind.as_ref() == "accessor"
                 && !read.is_uncertifiable()
                 && !read.summary_attributed
-                && !read.package_internal
         })
         .filter(|read| {
             function_at(read)

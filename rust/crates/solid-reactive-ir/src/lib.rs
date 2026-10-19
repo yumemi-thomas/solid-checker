@@ -126,7 +126,6 @@ use execution_role::{
 use identity::{SymbolId, SymbolInterner, SymbolName, symbol_id, symbol_name};
 use indexes::{EntitySymbols, ProjectIndexes, SemanticLookup};
 use interproc::{SummaryNode, SummaryRead, SummaryReads};
-pub use package_boundary::UncertifiableImportReason;
 use serde::{Deserialize, Serialize};
 use solid_dialect::{Dialect, Primitive};
 use solid_facts::ProjectFacts;
@@ -433,12 +432,6 @@ pub struct ReactiveRead {
     /// but its call-scoped cardinality does not prove an invocation occurs.
     #[serde(default, skip_serializing_if = "is_false")]
     pub callback_invocation_unproven: bool,
-    /// The read is the called package export reading reactive state of its
-    /// own while it runs, as its contract's `reads` states. Solid warns about
-    /// it at every use, so it is the package's implementation, not misuse at
-    /// the call site.
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub package_internal: bool,
     /// The read was attributed to this call through another function's
     /// interprocedural summary: the read runs inside that function's body, and
     /// whether it runs while the call does (not from a timer, listener,
@@ -1153,25 +1146,6 @@ pub struct Program {
     pub missing_owners: Vec<OwnerRequirement>,
     pub async_reads: Vec<AsyncRead>,
     pub obligation_counts: ObligationCounts,
-}
-
-/// How contract binding answered across the program's declarations.
-///
-/// A refusal is deliberately silent in the findings — the import becomes
-/// uncertifiable on the rules' own terms — but silent is not the same as
-/// invisible. A defect in the span join, in the attestation scope, or in a
-/// host's specifier offsets degrades contract coverage toward nothing without
-/// an error, and this is what makes that countable: `refused` above zero on a
-/// project whose contracts are supposed to apply is the signal.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ContractBindingCounts {
-    /// Declarations whose specifier a contract named and the resolution
-    /// confirmed.
-    pub bound: usize,
-    /// Declarations whose specifier a contract named and the resolution
-    /// refused.
-    pub refused: usize,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -1949,24 +1923,6 @@ fn exact_jsx_primitive_name(
 
 fn location(path: impl Into<Arc<str>>, span: Span) -> Location {
     span.location(path)
-}
-
-/// Whether `declaration` is reactive state a package contract declares for
-/// one of its exports (`<contract source>#<export>`), rather than a binding in
-/// the project's own source.
-pub(crate) fn contract_declared_state(declaration: &Location) -> bool {
-    let path = declaration.path.as_ref();
-    // ADR 0235: a returned member's effects (`<export location>[<key>]`).
-    // When it runs is the caller's choice -- `start()` in a click handler
-    // reads nothing untracked -- so its read is the call site's, not the
-    // package's implementation.
-    if path.ends_with(']') {
-        return false;
-    }
-    path.starts_with("accepted:")
-        || path
-            .split_once('#')
-            .is_some_and(|(source, _)| source.ends_with(".json"))
 }
 
 #[cfg(test)]

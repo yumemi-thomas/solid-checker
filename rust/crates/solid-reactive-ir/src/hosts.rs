@@ -260,14 +260,6 @@ impl ProjectHostIndex {
         self
     }
 
-    /// Whether any execution scope in this file has a positive browser witness.
-    #[must_use]
-    pub fn browser_at(&self, path: &str) -> bool {
-        self.scopes
-            .values()
-            .any(|scope| scope.path == path && self.browser.contains(&scope.id))
-    }
-
     /// Select the innermost execution boundary; never inherit its parent's host.
     #[must_use]
     pub fn browser_site(&self, path: &str, start: u64, end: u64) -> bool {

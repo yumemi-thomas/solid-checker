@@ -230,7 +230,6 @@ fn getter_reads(
             ),
             project_consumer_non_strict: false,
             callback_invocation_unproven: !guaranteed,
-            package_internal: false,
             summary_attributed: !guaranteed,
             transported: false,
         });

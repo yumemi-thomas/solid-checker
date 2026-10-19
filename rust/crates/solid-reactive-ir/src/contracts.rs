@@ -5,7 +5,6 @@ use solid_facts::ProjectFacts;
 use typefacts::Location;
 
 use super::{EntitySymbols, StaticDefect, StaticDefectKind, location};
-use crate::package_boundary::UncertifiableImportReason;
 
 /// A missing external-contract obligation must not invent a receipt
 /// requirement for a primitive already modeled by the selected dialect.
@@ -17,10 +16,6 @@ fn native_vocabulary_outranks_contract(
 ) -> bool {
     dialect.owns_module(module) && dialect.declares_primitive(imported)
 }
-
-/// The analysis context of [`push_unmet_context_premise`], followed by the
-/// premise exports the project provides.
-pub(crate) const CONTEXT_PREMISE_UNMET_CONTEXT: &str = "context-premise-unmet:";
 
 /// The package boundary's defects: one per demanded export of every import
 /// the boundary's requirement markers name, in file and import order. Solid
@@ -39,21 +34,13 @@ pub(super) fn discover_boundary_defects(
             {
                 continue;
             }
-            let Some(reason) = inputs
+            if !inputs
                 .boundary
-                .legacy_reason(file.path.as_str(), &import.module)
-            else {
+                .requires_legacy(file.path.as_str(), &import.module)
+            {
                 continue;
-            };
-            push_missing_accepted_import(
-                &mut defects,
-                file,
-                import,
-                entities,
-                dialect,
-                reason,
-                None,
-            );
+            }
+            push_missing_accepted_import(&mut defects, file, import, entities, dialect);
         }
     }
     defects
@@ -65,8 +52,6 @@ fn push_missing_accepted_import(
     import: &solid_facts::ast::ImportFact,
     entities: &EntitySymbols,
     dialect: &dyn Dialect,
-    reason: UncertifiableImportReason,
-    refusal: Option<&str>,
 ) {
     for binding in &import.bindings {
         if binding.type_only || !binding.runtime_referenced {
@@ -92,8 +77,6 @@ fn push_missing_accepted_import(
                         &import.module,
                         export,
                         location(file.path.shared(), member.property),
-                        reason,
-                        refusal,
                     );
                 }
             }
@@ -110,8 +93,6 @@ fn push_missing_accepted_import(
                 &import.module,
                 export,
                 location(file.path.shared(), import.span),
-                reason,
-                refusal,
             );
         }
     }
@@ -134,8 +115,6 @@ fn push_missing_accepted_export(
     module: &str,
     export: &str,
     location: Location,
-    reason: UncertifiableImportReason,
-    refusal: Option<&str>,
 ) {
     missing.push(StaticDefect {
         kind: StaticDefectKind::PackageContractExportMissing {
@@ -143,16 +122,10 @@ fn push_missing_accepted_export(
             export: export.into(),
             reexported: false,
             site: crate::ContractDefectSite::Import,
-            admission_refusal: refusal.map(str::to_owned),
+            admission_refusal: None,
         },
         location,
-        analysis_context: match reason {
-            UncertifiableImportReason::Unspecified => UNACCEPTED_IMPORT_CONTEXT,
-            UncertifiableImportReason::ObsoletePolicy1 => {
-                "obsolete-policy1-receipt: policy 1 cannot authorize analyzer semantics"
-            }
-        }
-        .into(),
+        analysis_context: UNACCEPTED_IMPORT_CONTEXT.into(),
         fixes: vec![],
         uncertain: false,
     });

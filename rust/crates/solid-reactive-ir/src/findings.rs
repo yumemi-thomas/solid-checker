@@ -463,7 +463,6 @@ pub fn strict_read_message_with_compute(read: &ReactiveRead, compute_reads_sourc
         && read.execution == crate::ExecutionRole::EffectApply
         && !read.is_uncertifiable()
         && !read.summary_attributed
-        && !read.package_internal
     {
         let through = if read.via.is_empty() {
             "directly".to_owned()

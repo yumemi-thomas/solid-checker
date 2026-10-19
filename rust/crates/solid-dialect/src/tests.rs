@@ -101,12 +101,12 @@ fn the_synchronous_clearing_set_is_the_inline_half_of_the_deferred_set() {
     );
     assert!(!two.runs_callback_synchronously(Primitive::Flush));
     // ADR 0183: the slot form names each of them at its callback slot only.
-    assert!(unambiguous_synchronous_callback_slot("createRoot", 0, 1));
-    assert!(unambiguous_synchronous_callback_slot("untrack", 0, 1));
-    assert!(unambiguous_synchronous_callback_slot("runWithOwner", 1, 2));
-    assert!(!unambiguous_synchronous_callback_slot("runWithOwner", 0, 2));
-    assert!(!unambiguous_synchronous_callback_slot("flush", 0, 1));
-    assert!(!unambiguous_synchronous_callback_slot("createMemo", 0, 1));
+    assert!(two.synchronous_callback_slot(Primitive::CreateRoot, 0, 1));
+    assert!(two.synchronous_callback_slot(Primitive::Untrack, 0, 1));
+    assert!(two.synchronous_callback_slot(Primitive::RunWithOwner, 1, 2));
+    assert!(!two.synchronous_callback_slot(Primitive::RunWithOwner, 0, 2));
+    assert!(!two.synchronous_callback_slot(Primitive::Flush, 0, 1));
+    assert!(!two.synchronous_callback_slot(Primitive::CreateMemo, 0, 1));
 
     // The two halves of `runs_callback_deferred` stay separable: a
     // genuinely later callback is never synchronous, and a primitive the
@@ -244,9 +244,6 @@ impl Dialect for Silent {
     fn ecosystem_scopes(&self) -> &'static [&'static str] {
         &[]
     }
-    fn runtime_model_identity(&self) -> &'static str {
-        "silent/model-0"
-    }
     fn primitive(&self, _name: &str) -> Option<Primitive> {
         None
     }
@@ -339,39 +336,19 @@ fn a_resolved_solid_js_version_picks_its_dialect() {
 }
 
 #[test]
-fn tuple_initial_value_preservation_requires_a_dialect_row() {
+fn a_dialect_that_states_nothing_is_handed_no_vocabulary_by_a_default() {
     let silent = &Silent as &dyn Dialect;
-    assert!(
-        !silent.tuple_accessor_preserves_initial_value(
-            Primitive::CreateSignal,
-            ResultSlot::TupleItem(0)
-        )
+    for primitive in [Primitive::CreateSignal, Primitive::CreateMemo] {
+        for slot in [ResultSlot::Whole, ResultSlot::TupleItem(0)] {
+            assert_eq!(silent.reactive_result_slot(primitive, slot), None);
+        }
+    }
+    assert!(!silent.callback_inherits_calling_window(Primitive::CreateEffect, 1));
+    assert!(!silent.synchronous_callback_slot(Primitive::CreateRoot, 0, 1));
+    assert_eq!(
+        silent.callback_execution_at(Primitive::CreateMemo, 0, 1),
+        None
     );
-    let solid = &Solid2 as &dyn Dialect;
-    let path = "/p/node_modules/@solidjs/signals/dist/types/core/verdict.d.ts";
-    assert!(solid.captured_lookup_runtime_hazard(path, 75, 84));
-    assert!(!silent.captured_lookup_runtime_hazard(path, 75, 84));
-    assert!(!solid.captured_lookup_runtime_hazard(path, 74, 84));
-    assert!(!solid.captured_lookup_runtime_hazard("/p/node_modules/other/verdict.d.ts", 75, 84));
-    assert!(
-        solid.tuple_accessor_preserves_initial_value(
-            Primitive::CreateSignal,
-            ResultSlot::TupleItem(0)
-        )
-    );
-    assert!(
-        !solid.tuple_accessor_preserves_initial_value(
-            Primitive::CreateSignal,
-            ResultSlot::TupleItem(1)
-        )
-    );
-    assert!(
-        !solid.tuple_accessor_preserves_initial_value(Primitive::CreateMemo, ResultSlot::Whole)
-    );
-    assert!(!solid.tuple_accessor_preserves_initial_value(
-        Primitive::CreateOptimistic,
-        ResultSlot::TupleItem(0)
-    ));
 }
 
 /// The per-argument questions are independent, and the 2.0 answer to each
@@ -569,14 +546,17 @@ fn callback_result_identity_is_an_explicit_dialect_claim() {
 }
 
 /// ADR 0162: the options argument of `createSignal` and `createMemo` is at
-/// index 1 in the audited dialect, and a name no dialect exports has none.
+/// index 1 in the audited dialect, and a name the dialect does not export has
+/// none.
 #[test]
 fn the_options_argument_is_the_dialects_own() {
-    assert_eq!(unambiguous_options_argument("createSignal"), Some(1));
-    assert_eq!(unambiguous_options_argument("createMemo"), Some(1));
-    assert_eq!(unambiguous_options_argument("createStore"), Some(2));
-    assert_eq!(unambiguous_options_argument("onCleanup"), None);
-    assert_eq!(unambiguous_options_argument("notADialectName"), None);
+    let two = &Solid2 as &dyn Dialect;
+    let options_argument = |name: &str| two.primitive(name).and_then(|p| two.options_argument(p));
+    assert_eq!(options_argument("createSignal"), Some(1));
+    assert_eq!(options_argument("createMemo"), Some(1));
+    assert_eq!(options_argument("createStore"), Some(2));
+    assert_eq!(options_argument("onCleanup"), None);
+    assert_eq!(options_argument("notADialectName"), None);
 }
 
 fn dialect_names(dialect: &'static dyn Dialect) -> Vec<&'static str> {
@@ -597,98 +577,87 @@ fn dialect_names(dialect: &'static dyn Dialect) -> Vec<&'static str> {
 }
 
 #[test]
-fn owner_requirement_roles_need_unambiguous_dialect_ownership() {
+fn owner_requirement_roles_need_exact_dialect_ownership() {
+    let two = &Solid2 as &dyn Dialect;
+    // Only the dialect's canonical spelling of a primitive carries its role.
+    let role = |name: &str| {
+        let primitive = two.primitive(name)?;
+        (two.name_of(primitive) == Some(name))
+            .then(|| two.owner_requirement_role(primitive))
+            .flatten()
+    };
+    assert_eq!(role("createEffect"), Some(OwnerRequirementRole::Effect));
+    assert_eq!(role("onCleanup"), Some(OwnerRequirementRole::Cleanup));
     assert_eq!(
-        unambiguous_owner_requirement_role("createEffect"),
-        Some(OwnerRequirementRole::Effect)
-    );
-    assert_eq!(
-        unambiguous_owner_requirement_role("onCleanup"),
-        Some(OwnerRequirementRole::Cleanup)
-    );
-    assert_eq!(
-        unambiguous_owner_requirement_role("onSettled"),
+        role("onSettled"),
         Some(OwnerRequirementRole::SettledCleanup)
     );
-    assert_eq!(unambiguous_owner_requirement_role("effect"), None);
-    assert_eq!(unambiguous_owner_requirement_role("createUnknown"), None);
+    assert_eq!(role("effect"), None);
+    assert_eq!(role("createUnknown"), None);
 }
 
 #[test]
-fn implementation_roles_require_canonical_vocabulary_agreement() {
-    assert!(unambiguous_callback_argument("createMemo", 0, 1));
-    // `createEffect`'s second argument is unambiguously the apply callback
-    // now that 2.0 is the only vocabulary. It was *ambiguous* while 1.x
-    // was compiled in, because 1.x's second argument is a seed value --
-    // the disagreement was the whole reason this predicate exists, and it
-    // will be load-bearing again the moment a second vocabulary returns.
-    assert!(unambiguous_callback_argument("createEffect", 1, 2));
-    assert!(!unambiguous_callback_argument("effect", 0, 1));
-    assert!(unambiguous_callable_result_tuple_item("createSignal", 0));
-    assert!(unambiguous_callable_result_tuple_item("createSignal", 1));
-    assert!(!unambiguous_callable_result_tuple_item("createSignal", 2));
-    assert!(!unambiguous_callable_result_tuple_item("createUnknown", 0));
-    assert!(unambiguous_callable_type("solid-js", "Accessor"));
-    assert!(unambiguous_callable_type("solid-js", "Setter"));
-    assert!(!unambiguous_callable_type("user-module", "Accessor"));
-    assert!(!unambiguous_callable_type("solid-js", "Signal"));
+fn implementation_roles_follow_the_dialects_vocabulary() {
+    let two = &Solid2 as &dyn Dialect;
+    let callback_argument = |name: &str, argument: usize, argument_count: usize| {
+        two.primitive(name)
+            .filter(|primitive| two.name_of(*primitive) == Some(name))
+            .and_then(|primitive| two.callback_execution_at(primitive, argument, argument_count))
+            .is_some()
+    };
+    assert!(callback_argument("createMemo", 0, 1));
+    // `createEffect`'s second argument is the apply callback in 2.0.
+    assert!(callback_argument("createEffect", 1, 2));
+    assert!(!callback_argument("effect", 0, 1));
+    let callable_type = |origin_module: &str, name: &str| {
+        matches!(
+            two.type_role(origin_module, name),
+            Some(TypeRole::Accessor | TypeRole::Setter)
+        )
+    };
+    assert!(callable_type("solid-js", "Accessor"));
+    assert!(callable_type("solid-js", "Setter"));
+    assert!(!callable_type("user-module", "Accessor"));
+    assert!(!callable_type("solid-js", "Signal"));
 }
 
-// The reactive result table answers a *slot*, which is the whole reason it
-// exists: `unambiguous_callable_result_tuple_item` says both `createSignal`
-// slots are callable, and a proof that read it for reactivity would certify
-// the setter as an accessor.
+// The reactive result table answers a *slot*: a proof that read a whole-value
+// callability answer for reactivity would certify the setter as an accessor.
 #[test]
-fn reactive_result_slots_are_per_slot_and_need_cross_dialect_agreement() {
+fn reactive_result_slots_are_per_slot() {
+    let two = &Solid2 as &dyn Dialect;
+    let slot_role = |name: &str, slot: ResultSlot| {
+        two.primitive(name)
+            .filter(|primitive| two.name_of(*primitive) == Some(name))
+            .and_then(|primitive| two.reactive_result_slot(primitive, slot))
+    };
     assert_eq!(
-        unambiguous_reactive_result_slot("createSignal", ResultSlot::TupleItem(0)),
+        slot_role("createSignal", ResultSlot::TupleItem(0)),
         Some(ReactiveRole::Accessor)
     );
     assert_eq!(
-        unambiguous_reactive_result_slot("createSignal", ResultSlot::TupleItem(1)),
+        slot_role("createSignal", ResultSlot::TupleItem(1)),
         Some(ReactiveRole::Setter)
     );
     assert_eq!(
-        unambiguous_reactive_result_slot("createMemo", ResultSlot::Whole),
+        slot_role("createMemo", ResultSlot::Whole),
         Some(ReactiveRole::Accessor)
     );
 
     // Silence is not a role. A slot past the audited tuple, the whole of a
     // value whose slots are audited, a slot of a value whose whole is, a
-    // primitive with no row at all, and a name no dialect exports all
-    // answer `None` — and none of those answers may be read as "not
+    // primitive with no row at all, and a name the dialect does not export
+    // all answer `None` -- and none of those answers may be read as "not
     // reactive".
-    assert_eq!(
-        unambiguous_reactive_result_slot("createSignal", ResultSlot::TupleItem(2)),
-        None
-    );
-    assert_eq!(
-        unambiguous_reactive_result_slot("createSignal", ResultSlot::Whole),
-        None
-    );
-    assert_eq!(
-        unambiguous_reactive_result_slot("createMemo", ResultSlot::TupleItem(0)),
-        None
-    );
-    assert_eq!(
-        unambiguous_reactive_result_slot("createEffect", ResultSlot::Whole),
-        None
-    );
-    assert_eq!(
-        unambiguous_reactive_result_slot("createUnknown", ResultSlot::TupleItem(0)),
-        None
-    );
+    assert_eq!(slot_role("createSignal", ResultSlot::TupleItem(2)), None);
+    assert_eq!(slot_role("createSignal", ResultSlot::Whole), None);
+    assert_eq!(slot_role("createMemo", ResultSlot::TupleItem(0)), None);
+    assert_eq!(slot_role("createEffect", ResultSlot::Whole), None);
+    assert_eq!(slot_role("createUnknown", ResultSlot::TupleItem(0)), None);
 
-    // A name only one dialect canonically exports is answered by that
-    // dialect alone; a store result is not an accessor result in either.
-    assert_eq!(
-        unambiguous_reactive_result_slot("createMutable", ResultSlot::Whole),
-        None
-    );
-    assert_eq!(
-        unambiguous_reactive_result_slot("createProjection", ResultSlot::Whole),
-        None
-    );
+    // A store result is not an accessor result.
+    assert_eq!(slot_role("createMutable", ResultSlot::Whole), None);
+    assert_eq!(slot_role("createProjection", ResultSlot::Whole), None);
 }
 
 // The module premise replaces a `== "solid-js"` literal in the certifier.
@@ -697,6 +666,11 @@ fn reactive_result_slots_are_per_slot_and_need_cross_dialect_agreement() {
 // the dialect's.
 #[test]
 fn value_export_modules_answer_only_for_audited_dialect_modules() {
+    let two = &Solid2 as &dyn Dialect;
+    let exports_value_from = |origin_module: &str, name: &str| {
+        two.export_modules(name, ExportPosition::Value)
+            .contains(&origin_module)
+    };
     assert!(exports_value_from("solid-js", "createSignal"));
     assert!(exports_value_from("solid-js", "createMemo"));
     // 2.0 folded the store API into core, so `createStore` is exported

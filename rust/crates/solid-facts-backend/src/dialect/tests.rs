@@ -70,7 +70,6 @@ fn catalog_prose_program() -> Program {
     ];
     Program {
         reads: vec![ReactiveRead {
-            package_internal: false,
             summary_attributed: false,
             transported: false,
             kind: "signal".into(),

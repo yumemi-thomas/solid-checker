@@ -86,66 +86,14 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
             export,
             reexported,
             ..
-        } => {
-            if defect.analysis_context.starts_with("obsolete-policy1-receipt:") {
-                (
-                    format!(
-                        "the discovered reactivity contract for {module} was authorized only by obsolete proof policy 1; its claims cannot be used for {} export {export}",
-                        if *reexported { "re-exported" } else { "imported" }
-                    ),
-                    "Policy-1 receipts cannot be grandfathered. Reacquire the exact package artifact and run policy-2 certification; until every demanded witness and the mandatory probe gate verify, this import remains uncertifiable.".into(),
-                )
-            } else if let Some(claims) = defect
-                .analysis_context
-                .strip_prefix("unbound-contract-claims:")
-            {
-                (
-                    format!(
-                        "the reactivity contract for {module} states {claims} for {} export {export}, but this call site gives the claim nothing to bind to, so what the callback receives cannot be certified",
-                        if *reexported { "re-exported" } else { "imported" }
-                    ),
-                    format!(
-                        "Pass the callback to {export} as an inline function literal so the contract's argument claims land on its parameters. A callback passed by name, or a claim shape solid-checker does not model, keeps the call uncertifiable. See docs/package-contracts.md for the format."
-                    ),
-                )
-            } else if let Some(contexts) = defect
-                .analysis_context
-                .strip_prefix(crate::contracts::CONTEXT_PREMISE_UNMET_CONTEXT)
-            {
-                (
-                    format!(
-                        "the reactivity contract for {module} states its claims for {} export {export} only in a program where the context it exports as {contexts} receives no value from outside {module}, and this project provides it, passes it where solid-checker cannot follow, or installs another package that depends on {module}; none of the export's claims apply here",
-                        if *reexported { "re-exported" } else { "imported" }
-                    ),
-                    format!(
-                        "Read {contexts} only through useContext({contexts}). A value the project provides itself (<{contexts} value={{…}}>, createComponent({contexts}, …)) replaces the package's, so the certified claims about {export} cannot hold for it."
-                    ),
-                )
-            } else if let Some(claims) = defect
-                .analysis_context
-                .strip_prefix("unknown-contract-claims:")
-            {
-                (
-                    format!(
-                        "the reactivity contract for {module} leaves {claims} unknown for {} export {export}; code whose proof depends on those claims cannot be certified",
-                        if *reexported { "re-exported" } else { "imported" }
-                    ),
-                    format!(
-                        "Audit {module} export {export} against the exact selected runtime artifact. Prove the open semantic leaves, issue a receipt for the finalized stable-v1 document, and register that exact document/receipt pair in .solid-checker/accepted-contracts.json. An open leaf is not negative proof. See docs/package-contracts.md for the workflow."
-                    ),
-                )
-            } else {
-                (
-                    format!(
-                        "{module} is not analyzed from source here, so the behaviour of {} export {export} is unknown; solid-checker cannot tell whether it reads reactive values, takes tracked callbacks, or returns accessors, so code flowing through it cannot be certified",
-                        if *reexported { "re-exported" } else { "imported" }
-                    ),
-                    (terms.removed_export_hint)(module, export).unwrap_or_else(|| {
-                        PACKAGE_BEHAVIOUR_UNKNOWN_HINT.to_owned()
-                    }),
-                )
-            }
-        }
+        } => (
+            format!(
+                "{module} is not analyzed from source here, so the behaviour of {} export {export} is unknown; solid-checker cannot tell whether it reads reactive values, takes tracked callbacks, or returns accessors, so code flowing through it cannot be certified",
+                if *reexported { "re-exported" } else { "imported" }
+            ),
+            (terms.removed_export_hint)(module, export)
+                .unwrap_or_else(|| PACKAGE_BEHAVIOUR_UNKNOWN_HINT.to_owned()),
+        ),
         StaticDefectKind::MissingEffectFunction => {
             let mut message = terms.missing_effect_message.to_string();
             let mut hint = terms.missing_effect_hint.to_string();
@@ -374,27 +322,6 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         }
         StaticDefectKind::ComponentReturnsConditionally => {
             "a proven reactive read controls the component's return shape"
-        }
-        StaticDefectKind::PackageContractExportMissing { .. }
-            if defect
-                .analysis_context
-                .starts_with("unbound-contract-claims:") =>
-        {
-            "the imported package contract carries a claim about this callback that the call site does not let solid-checker bind"
-        }
-        StaticDefectKind::PackageContractExportMissing { .. }
-            if defect
-                .analysis_context
-                .starts_with("unknown-contract-claims:") =>
-        {
-            "the imported package contract explicitly marks a required effect claim as unknown"
-        }
-        StaticDefectKind::PackageContractExportMissing { .. }
-            if defect
-                .analysis_context
-                .starts_with(crate::contracts::CONTEXT_PREMISE_UNMET_CONTEXT) =>
-        {
-            "the imported package contract states its claims under a context premise this project does not meet"
         }
         // The acceptance gate and the missing-summary case shared this arm, and
         // its wording is only true of the second: at the acceptance gate there
@@ -781,81 +708,17 @@ const PACKAGE_BEHAVIOUR_UNKNOWN_HINT: &str = "Package contracts are no longer co
 /// Projects one seed. Used by the backend for package-contract issues that
 /// are discovered after the reactive [`Program`] has been built.
 #[must_use]
-/// The acceptance gate says one thing — "this project has no accepted contract
-/// for that package" — and it used to say it once per import site.
+/// The acceptance gate says one thing -- "this project has no accepted contract
+/// for that package" -- and it used to say it once per import site. The fix is
+/// one action per package, not per import, and nothing distinguishes the sites,
+/// so the defects of one package collapse to one finding, anchored at the first
+/// site and carrying every other site in `related_locations`. **Nothing is
+/// dropped**; the same locations reach the same consumers, grouped by the thing
+/// that would fix them. A group of one keeps its exact original wording.
 ///
-/// Measured on `solid-primitives-next/site`: 88 of the project's 191 findings
-/// were this, and they named **17 packages**. Sixty-four of them were the same
-/// sentence about `@solid-primitives/utils`. The per-site repetition carried no
-/// information a reader could act on separately: the fix is one `contract
-/// certify` per package, not per import, and nothing distinguishes the sites.
-///
-/// So they collapse to one finding per package, anchored at the first site and
-/// carrying every other site in `related_locations` — visible in JSON output
-/// and counted in the default renderer's help line. **Nothing is dropped**; the
-/// same locations reach the same consumers, grouped by the thing that would fix
-/// them.
-///
-/// The claim gates collapse too, one level finer, and for the same reason —
-/// but only where they were raised at an *import*.
-/// `unknown-contract-claims:` does say something specific about *that export* —
-/// which is why it is not folded into the package — but at an import binding it
-/// says nothing specific about the *site*: the message names the package, the
-/// export and the open domains, and nothing else. Repeating it at every import
-/// of that export is the same non-information the acceptance gate used to emit
-/// per site.
-///
-/// At an *argument* it is a different finding, and `analysis_context` cannot
-/// tell the two apart: `unknown-contract-claims:callbacks` is emitted both by
-/// `push_unknown_contract_claims` at a binding and by `interproc` at one exact
-/// call argument. So the producer records it — [`ContractDefectSite`] — and
-/// this reads it. Getting that wrong is not theoretical: grouping argument
-/// sites by export collapsed `package-callback-arguments-consumer` from four
-/// findings to two, merging a rest parameter that absorbs a descriptor with an
-/// `arguments` object that observes one, which is the distinction that fixture
-/// exists to pin.
-///
-/// Measured while bundling: a five-file project importing four `@kobalte/utils`
-/// exports produced 35 findings that were 7 distinct sentences, each repeated
-/// five times with an empty `related_locations`. The same project with no
-/// accepted contract produced 1. Delivering contracts must not cost a reader
-/// that trade.
-///
-/// So the rule is: defects whose projected finding would be identical except
-/// for its location become one finding. For the acceptance gate that is the
-/// whole package, because no export-specific claim has been read yet; for a
-/// claim gate it is the exact `(package, export, claims)`. A group of one keeps
-/// its exact original wording either way.
-///
-/// **Open claims at call arguments collapse too** — the one argument-site
-/// obligation that does. `unknown-contract-claims:callbacks` at an argument
-/// says "the accepted contract for M leaves callbacks unknown for export E",
-/// and nothing about that argument: the fix is closing E's domain in the
-/// contract, once, not anything at the call. Measured on kobalte core
-/// (`phase22/2026-09-26-project-side-certification-on-kobalte-core.md`, defect
-/// 7): admitting a partly closed contract for `@solid-primitives/form` turned
-/// its one acceptance-gate finding into 31 per-call warnings, so a project
-/// that got strictly better reported more. They now group per
-/// `(package, open domains)` for the project, anchored at the first site in
-/// `(path, start, end)` order, with the rest in `related_locations` and the
-/// count in the message.
-///
-/// **Open claims at imports group the same way** (ADR 0224). Accepting the
-/// Solid Primitives contracts turned one acceptance-gate notice per package
-/// into one per used export: the rc.13 corpus went from 675 to 741 `SC9005`
-/// rows while its answers only improved. The fix is still the package's
-/// contract, once, so every export with the same open domains shares one
-/// finding, and a group of several exports names them in its message.
-///
-/// What still keeps its own finding at an argument is everything whose fix is
-/// *at that call*: an unbound claim (`unbound-contract-claims:` — pass the
-/// callback inline there), the argument-object/rest-parameter distinction
-/// `package-callback-arguments-consumer` pins, and a runtime-identity
-/// conflict. Import-site and argument-site open-claims groups stay apart in
-/// the key because they count different things ("import sites", "call
-/// sites"); their domain sets are disjoint today anyway — an import raises
-/// `reactiveReads`/`returns`/`ownerRequirements`/`asyncBehavior`, an argument
-/// raises exactly `callbacks`.
+/// A defect raised at an exact call argument keeps its own finding, because
+/// there the site is the content. A defect with any other context is about its
+/// export, so it groups per `(package, export, context)`.
 ///
 /// Every grouped finding names its subject (`subject_kind` `package` or
 /// `package-export`), which is what tells a per-file reporter that its related
@@ -874,67 +737,10 @@ fn collapse_unaccepted_contract_defects(
         /// so no export-specific claim has been read yet and every site in the
         /// package has the same answer.
         Package(&'a str),
-        /// A claim gate: an accepted contract leaves these exact domains open
-        /// for this exact export. Different exports, and different open
-        /// domains, are different findings.
+        /// A claim gate: a contract speaks about this exact export in this
+        /// exact context. Different exports, and different contexts, are
+        /// different findings.
         Claim(&'a str, &'a str, &'a str),
-        /// Open claims at imports: an accepted contract leaves these exact
-        /// domains open, for one or more of the package's exports. The fix is
-        /// the package's contract, once, so the exports share one finding.
-        OpenClaims(&'a str, &'a str),
-        /// Open claims at call arguments: an accepted contract leaves these
-        /// exact domains open, for one or more exports, observed at calls.
-        CallClaim(&'a str, &'a str),
-    }
-
-    /// The exports a group names, sorted and distinct.
-    fn group_exports<'d>(group: &[&'d StaticDefect]) -> Vec<&'d str> {
-        let mut exports = group
-            .iter()
-            .filter_map(|defect| match &defect.kind {
-                StaticDefectKind::PackageContractExportMissing { export, .. } => {
-                    Some(export.as_str())
-                }
-                _ => None,
-            })
-            .collect::<Vec<_>>();
-        exports.sort_unstable();
-        exports.dedup();
-        exports
-    }
-
-    /// "A, B, C, and 2 more": at most six names.
-    fn listed(exports: &[&str]) -> String {
-        let named = exports.len().min(6);
-        let remainder = exports.len() - named;
-        let mut listed = exports[..named].join(", ");
-        if remainder > 0 {
-            listed.push_str(&format!(", and {remainder} more"));
-        }
-        listed
-    }
-
-    /// The sentence for open claims shared by several exports, in the single
-    /// export's wording with the exports listed instead of one name.
-    fn open_claims_message(
-        module: &str,
-        context: &str,
-        exports: &[&str],
-        sites: usize,
-        site_noun: &str,
-        domain_noun: &str,
-    ) -> String {
-        let domains = context
-            .strip_prefix("unknown-contract-claims:")
-            .unwrap_or(context);
-        format!(
-            "the reactivity contract for {module} leaves {domains} unknown for {} {domain_noun} \
-             exports: {}; code whose proof depends on those claims cannot be certified \
-             ({sites} {site_noun}{})",
-            exports.len(),
-            listed(exports),
-            if sites == 1 { "" } else { "s" },
-        )
     }
 
     fn interchangeable(defect: &StaticDefect) -> Option<Interchangeable<'_>> {
@@ -948,18 +754,9 @@ fn collapse_unaccepted_contract_defects(
             return None;
         };
         // An obligation raised at an exact argument of an exact call keeps its
-        // own finding when the site *is* the content: an unbound claim, whose
-        // fix is at that call. Open claims at an argument name the package,
-        // the export and the open domains and nothing about the call, so they
-        // group like the import-site sentence does.
+        // own finding: the site *is* the content.
         if *site == crate::ContractDefectSite::Argument {
-            return defect
-                .analysis_context
-                .starts_with("unknown-contract-claims:")
-                .then_some(Interchangeable::CallClaim(
-                    module.as_str(),
-                    defect.analysis_context.as_str(),
-                ));
+            return None;
         }
         // The exact context, not "not one of the specific prefixes": a defect
         // raised because an *accepted* contract has no summary for this export
@@ -968,13 +765,6 @@ fn collapse_unaccepted_contract_defects(
         Some(
             if defect.analysis_context == crate::contracts::UNACCEPTED_IMPORT_CONTEXT {
                 Interchangeable::Package(module.as_str())
-            } else if defect
-                .analysis_context
-                .starts_with("unknown-contract-claims:")
-            {
-                // The fix is the same for every export the contract leaves
-                // these domains open on: complete the package's contract.
-                Interchangeable::OpenClaims(module.as_str(), defect.analysis_context.as_str())
             } else {
                 Interchangeable::Claim(
                     module.as_str(),
@@ -1006,73 +796,7 @@ fn collapse_unaccepted_contract_defects(
     }
     for key in order {
         let group = &grouped[&key];
-        if let Interchangeable::CallClaim(..) = key {
-            // Anchored in a stable order rather than first-seen: call-site
-            // obligations are gathered per file by the interprocedural pass,
-            // and the anchor must not depend on the order files are visited.
-            // An exact duplicate site is one site.
-            let mut sites = group.clone();
-            sites.sort_by(|left, right| {
-                (
-                    &left.location.path,
-                    left.location.start_byte,
-                    left.location.end_byte,
-                )
-                    .cmp(&(
-                        &right.location.path,
-                        right.location.start_byte,
-                        right.location.end_byte,
-                    ))
-            });
-            sites.dedup_by(|left, right| left.location == right.location);
-            let mut finding = project_finding(FindingSeed::StaticDefect(sites[0]), catalog);
-            finding.subject_kind = "package-export".into();
-            let exports = group_exports(&sites);
-            if exports.len() > 1 {
-                let Interchangeable::CallClaim(module, context) = key else {
-                    unreachable!("matched above")
-                };
-                finding.subject_kind = "package".into();
-                finding.message = open_claims_message(
-                    module,
-                    context,
-                    &exports,
-                    sites.len(),
-                    "call site",
-                    "called",
-                );
-            } else if sites.len() > 1 {
-                finding.message = format!("{} ({} call sites)", finding.message, sites.len());
-            }
-            finding
-                .related_locations
-                .extend(sites[1..].iter().map(|defect| defect.location.clone()));
-            findings.push(finding);
-            continue;
-        }
         let mut finding = project_finding(FindingSeed::StaticDefect(group[0]), catalog);
-        if let Interchangeable::OpenClaims(module, context) = key {
-            let exports = group_exports(group);
-            finding.subject_kind = "package-export".into();
-            if exports.len() > 1 {
-                finding.subject_kind = "package".into();
-                finding.message = open_claims_message(
-                    module,
-                    context,
-                    &exports,
-                    group.len(),
-                    "import site",
-                    "imported",
-                );
-            } else if group.len() > 1 {
-                finding.message = format!("{} ({} import sites)", finding.message, group.len());
-            }
-            finding
-                .related_locations
-                .extend(group[1..].iter().map(|defect| defect.location.clone()));
-            findings.push(finding);
-            continue;
-        }
         let Interchangeable::Package(module) = key else {
             // A claim group keeps the message it already has -- it names the
             // package, the export and the open domains, which is the whole
@@ -1166,25 +890,13 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             if read.is_uncertifiable() {
                 finding.kind = "uncertifiable".into();
             }
-            // A package-owned read is an implementation obligation. Its
-            // compact row does not establish a strict-read warning: untracked
-            // tracking alone cannot distinguish a labelled strict window
-            // from a clearing. Explicitly cleared reads never reach this row.
             // A read attributed through another function's summary: whether
             // it runs while this call does is not established.
-            if read.summary_attributed && !read.package_internal && finding.kind != "uncertifiable"
-            {
+            if read.summary_attributed && finding.kind != "uncertifiable" {
                 finding.kind = "uncertifiable".into();
                 finding.message = format!(
                     "{}; this read happens inside {}'s body, and nothing proves it runs while this call does, rather than only on some of its paths or later (from a timer, listener, getter, returned accessor or effect), so it is not proven to be read untracked here",
                     finding.message, read.via
-                );
-            }
-            if read.package_internal {
-                finding.kind = "uncertifiable".into();
-                finding.message = format!(
-                    "{}'s package contract states a read of its own reactive state while it runs, but its strict-read execution context here is not established; whether Solid emits STRICT_READ_UNTRACKED remains uncertifiable, so this is a package-implementation obligation rather than proven misuse at this call",
-                    read.via
                 );
             }
         }
@@ -1221,24 +933,6 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             // obligation rather than a proven violation.
             if defect.uncertain {
                 finding.kind = "uncertifiable".into();
-            }
-            // ADR 0119: severity by gate. An accepted contract that leaves
-            // claims open is analysis over a stated partial premise, so its
-            // obligation is a warning; every other SC9005 gate -- no accepted
-            // contract, an obsolete policy, an export the contract omits, a
-            // claim the site cannot bind -- stays the rule's error. The kind
-            // stays `uncertifiable`, so the run still certifies nothing. This
-            // inverts the owner-requirement precedent
-            // (`Finding::for_owner_requirement`), which *raises* an uncertain
-            // requirement to error; the ADR says why.
-            if matches!(
-                defect.kind,
-                StaticDefectKind::PackageContractExportMissing { .. }
-            ) && defect
-                .analysis_context
-                .starts_with("unknown-contract-claims:")
-            {
-                finding.severity = "warning".into();
             }
             // The acceptance gate at an import whose package *has* an
             // acceptance -- a project catalog entry -- that was refused: say

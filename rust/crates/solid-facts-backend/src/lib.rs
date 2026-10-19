@@ -39,46 +39,6 @@ pub fn durable_sync(file: &std::fs::File) -> std::io::Result<()> {
     }
 }
 
-/// Creates `destination` as a private copy of `source`, refusing an existing
-/// destination. On APFS the copy is a `clonefile(2)` — a copy-on-write file
-/// with its own inode that shares no future with the source, so it is exactly
-/// as private as a byte copy and costs no data write; everywhere else, and
-/// whenever the clone is refused, the bytes are copied. Callers that need the
-/// copy's identity hash the destination afterwards, as they always did, so the
-/// guarantee ("this exact private file is what launches") is unchanged.
-/// Returns whether the destination was cloned rather than written.
-pub fn clone_or_copy_file(
-    source: &std::path::Path,
-    destination: &std::path::Path,
-) -> std::io::Result<bool> {
-    #[cfg(target_os = "macos")]
-    {
-        use std::os::unix::ffi::OsStrExt as _;
-        let source_c = std::ffi::CString::new(source.as_os_str().as_bytes())
-            .map_err(|_| std::io::Error::from(std::io::ErrorKind::InvalidInput))?;
-        let destination_c = std::ffi::CString::new(destination.as_os_str().as_bytes())
-            .map_err(|_| std::io::Error::from(std::io::ErrorKind::InvalidInput))?;
-        // SAFETY: both pointers are valid NUL-terminated paths for the call.
-        let status = unsafe { libc::clonefile(source_c.as_ptr(), destination_c.as_ptr(), 0) };
-        if status == 0 {
-            return Ok(true);
-        }
-        let error = std::io::Error::last_os_error();
-        if error.kind() == std::io::ErrorKind::AlreadyExists {
-            return Err(error);
-        }
-        // Not APFS, a cross-volume path, or a filesystem that refuses clones:
-        // fall through to the byte copy.
-    }
-    let mut input = std::fs::File::open(source)?;
-    let mut output = std::fs::OpenOptions::new()
-        .create_new(true)
-        .write(true)
-        .open(destination)?;
-    std::io::copy(&mut input, &mut output)?;
-    durable_sync(&output)?;
-    Ok(false)
-}
 mod demand_plan;
 pub mod dependency_program;
 pub mod dependency_sources;
@@ -1288,20 +1248,6 @@ pub fn build_project_native_measured_with_program_hashes(
     ))
 }
 
-pub fn build_project_native_cached(
-    dialect: &'static Dialect,
-    project_id: impl Into<String>,
-    generation: u64,
-    sources: Vec<SourceFile>,
-    typescript: &mut impl TypeFactsProvider,
-    cache: &mut FactsCache,
-) -> Result<ProjectFacts, BackendError> {
-    build_project_native_cached_measured(
-        dialect, project_id, generation, sources, typescript, cache,
-    )
-    .map(|(facts, _)| facts)
-}
-
 pub fn build_project_native_cached_measured(
     dialect: &'static Dialect,
     project_id: impl Into<String>,
@@ -1342,30 +1288,6 @@ pub fn build_project_native_cached_measured_with_demands(
         semantic_demand_options,
         &HashMap::new(),
     )
-}
-
-pub fn build_project_native_cached_cancellable(
-    dialect: &'static Dialect,
-    project_id: impl Into<String>,
-    generation: u64,
-    sources: Vec<SourceFile>,
-    typescript: &mut impl TypeFactsProvider,
-    cache: &mut FactsCache,
-    cancelled: &std::sync::atomic::AtomicBool,
-) -> Result<ProjectFacts, BackendError> {
-    build_project_native_cached_measured_inner(
-        dialect,
-        project_id,
-        generation,
-        sources,
-        typescript,
-        cache,
-        Some(cancelled),
-        None,
-        SemanticDemandOptions::NONE,
-        &HashMap::new(),
-    )
-    .map(|(facts, _)| facts)
 }
 
 struct RetainedFileFacts<'a> {

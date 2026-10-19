@@ -271,7 +271,6 @@ pub(crate) fn collect_project<'facts>(
         if !read.callee_callback_timing
             || !read.execution.reports_untracked_read()
             || read.summary_attributed
-            || read.package_internal
             || read.missing_jsx_census
             || read.host_callback_timing
             || read.callback_invocation_unproven

@@ -93,37 +93,14 @@ fn a_conflicting_identity_becomes_unknown_rather_than_either() {
 }
 
 #[test]
-fn an_explicit_none_override_is_an_answer_and_absence_is_not() {
-    let mut boundary = PackageBoundary::default();
-    boundary.override_refusal(ImportKey::new("/p/a.ts", "pkg"), None);
-    boundary.override_refusal(ImportKey::new("/p/a.ts", "pkg"), Some("later".into()));
-    boundary.override_refusal(ImportKey::new("/p/b.ts", "pkg"), Some("refused".into()));
-    assert_eq!(boundary.refusal_override("/p/a.ts", "pkg"), Some(None));
-    assert_eq!(
-        boundary.refusal_override("/p/b.ts", "pkg"),
-        Some(Some("refused"))
-    );
-    assert_eq!(boundary.refusal_override("/p/c.ts", "pkg"), None);
-    let mut other = PackageBoundary::default();
-    other.override_refusal(ImportKey::new("/p/a.ts", "pkg"), Some("x".into()));
-    assert_ne!(boundary.digest(), other.digest());
-}
-
-#[test]
-fn a_legacy_marker_answers_its_reason() {
+fn a_legacy_marker_answers_its_key() {
     let mut boundary = PackageBoundary::default();
     let keys = [("/p/a.ts", "pkg"), ("/p/b.ts", "@s/x/sub")];
     for (importer, specifier) in keys {
-        boundary.require_legacy(
-            ImportKey::new(importer, specifier),
-            UncertifiableImportReason::Unspecified,
-        );
+        boundary.require_legacy(ImportKey::new(importer, specifier));
     }
-    assert_eq!(
-        boundary.legacy_reason("/p/a.ts", "pkg"),
-        Some(UncertifiableImportReason::Unspecified)
-    );
-    assert_eq!(boundary.legacy_reason("/p/c.ts", "pkg"), None);
+    assert!(boundary.requires_legacy("/p/a.ts", "pkg"));
+    assert!(!boundary.requires_legacy("/p/c.ts", "pkg"));
     // A recorded cause alone is no requirement: it moves no finding.
     let mut explained = PackageBoundary::default();
     explained.record(
@@ -135,83 +112,57 @@ fn a_legacy_marker_answers_its_reason() {
             "x",
         ),
     );
-    assert_eq!(explained.legacy_reason("/p/a.ts", "pkg"), None);
-}
-
-#[test]
-fn export_causes_stay_apart_from_import_wide_ones() {
-    let key = ImportKey::new("/p/a.ts", "pkg");
-    let site = BoundarySite {
-        path: "/p/a.ts".into(),
-        start_byte: 9,
-        end_byte: 12,
-    };
-    let mut boundary = PackageBoundary::default();
-    boundary.record_export(
-        key.clone(),
-        ExportDemandKey {
-            export: "f".into(),
-            declaration: None,
-            use_site: site.clone(),
-        },
-        reason(
-            UnanalyzableReason::ExportJoinUnavailable(ExportJoinFailure::AmbiguousProvider),
-            "two star providers",
-        )
-        .at(site),
-    );
-    let import = boundary.import("/p/a.ts", "pkg").unwrap();
-    assert!(import.reasons().is_empty());
-    assert_eq!(import.exports().len(), 1);
-    let mut merged = PackageBoundary::default();
-    merged.extend(boundary.clone());
-    assert_eq!(merged, boundary);
+    assert!(!explained.requires_legacy("/p/a.ts", "pkg"));
 }
 
 fn hex(digest: [u8; 32]) -> String {
     digest.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
-/// Derived without this code: sha256 of the bytes `fingerprint` wrote at
-/// e340233ba, computed by an independent script that reads only the
-/// encoding (`legacy_pins.py` in the S report), for inputs specified here.
-/// A boundary with no source-edge records must keep every one of these.
+/// Derived without this code: sha256 of the bytes `fingerprint` writes
+/// (`package-boundary-v2`), computed by an independent script that reads only
+/// the encoding, for inputs specified here. The encoding changed from v1 when
+/// the never-populated export causes and refusal overrides, and the marker
+/// reason byte, left it; every vector below is a deliberate re-pin.
 #[test]
-fn a_boundary_with_no_source_edge_records_keeps_the_digest_it_had_before_they_existed() {
+fn the_digest_follows_the_documented_encoding() {
     assert_eq!(
         hex(PackageBoundary::default().digest()),
-        "0c4320bbd149c02aa47cb7aba0fb5d4ba7157523934b91952974f48f77c3f2bd"
+        "9ba38701148688c5be5f155deaeff9631a286ab53d1ae13c77d818b7fa33c6ce"
     );
     let mut legacy = PackageBoundary::default();
-    legacy.require_legacy(
-        ImportKey::new("/p/a.ts", "pkg"),
-        UncertifiableImportReason::Unspecified,
-    );
-    legacy.require_legacy(
-        ImportKey::new("/p/b.ts", "other/sub"),
-        UncertifiableImportReason::ObsoletePolicy1,
-    );
-    legacy.override_refusal(ImportKey::new("/p/a.ts", "pkg"), Some("because".into()));
-    legacy.override_refusal(ImportKey::new("/p/c.ts", "pkg"), None);
+    legacy.require_legacy(ImportKey::new("/p/a.ts", "pkg"));
+    legacy.require_legacy(ImportKey::new("/p/b.ts", "other/sub"));
     assert_eq!(
         hex(legacy.digest()),
-        "862e27b69d64dd5ab10a9d806a8efc213a840729def4c87602dcc68b325044c1"
+        "fe32e5f0ed7af717a307c1a611e72bf23155111c9725776d10a458c31953ab95"
     );
     let (recorded, _) = recorded_boundary();
     assert_eq!(
         hex(recorded.digest()),
-        "e0c08052518b2734066e4fad48587e465b6bf682f1d121a8fe1b8bd20f71e09d"
+        "fe44eb1034cae917296872e54d7c2273d76ad72b6f4040fb7e332c55cb60801f"
     );
     let mut mixed = recorded;
-    mixed.require_legacy(
-        ImportKey::new("/p/a.ts", "pkg"),
-        UncertifiableImportReason::Unspecified,
-    );
-    mixed.override_refusal(ImportKey::new("/p/a.ts", "pkg"), Some("because".into()));
+    mixed.require_legacy(ImportKey::new("/p/a.ts", "pkg"));
     assert_eq!(
         hex(mixed.digest()),
-        "77b26dc883d2aeebe5c16f24f3e1f73687e7223d34f287ec29637c451339c144"
+        "a19ca90975fda5380f708b74a3b3da9d1177613f1877ace21e6cd8d9a64994fb"
     );
+}
+
+#[test]
+fn extending_a_boundary_keeps_every_cause_and_marker_of_both() {
+    let (recorded, _) = recorded_boundary();
+    let mut marked = PackageBoundary::default();
+    marked.require_legacy(ImportKey::new("/p/a.ts", "pkg"));
+    let mut merged = PackageBoundary::default();
+    merged.extend(recorded.clone());
+    merged.extend(marked.clone());
+    let mut backward = marked;
+    backward.extend(recorded);
+    assert_eq!(merged, backward);
+    assert!(merged.requires_legacy("/p/a.ts", "pkg"));
+    assert_eq!(merged.import("/p/a.ts", "pkg").unwrap().reasons().len(), 1);
 }
 
 fn recorded_boundary() -> (PackageBoundary, ImportKey) {
@@ -231,23 +182,6 @@ fn recorded_boundary() -> (PackageBoundary, ImportKey) {
             end_byte: 9,
         }),
     );
-    boundary.record_export(
-        key.clone(),
-        ExportDemandKey {
-            export: "run".into(),
-            declaration: Some(BoundarySite {
-                path: "/p/node_modules/pkg/index.js".into(),
-                start_byte: 1,
-                end_byte: 2,
-            }),
-            use_site: BoundarySite {
-                path: "/p/a.ts".into(),
-                start_byte: 10,
-                end_byte: 20,
-            },
-        },
-        reason(UnanalyzableReason::ManifestUnavailable, "m"),
-    );
     boundary.record(
         ImportKey::new("/p/b.ts", "other"),
         None,
@@ -261,7 +195,7 @@ fn recorded_boundary() -> (PackageBoundary, ImportKey) {
 }
 
 #[test]
-fn the_analysis_identity_vectors_of_a_boundary_with_no_source_edges_are_unchanged() {
+fn the_analysis_identity_vector_of_a_populated_boundary_is_its_digest() {
     let inputs = |boundary: &PackageBoundary| {
         crate::AnalysisInputs {
             boundary,
@@ -280,7 +214,7 @@ fn the_analysis_identity_vectors_of_a_boundary_with_no_source_edges_are_unchange
     assert_eq!(populated.len(), 1);
     assert_eq!(
         hex(populated[0]),
-        "e0c08052518b2734066e4fad48587e465b6bf682f1d121a8fe1b8bd20f71e09d"
+        "fe44eb1034cae917296872e54d7c2273d76ad72b6f4040fb7e332c55cb60801f"
     );
 }
 

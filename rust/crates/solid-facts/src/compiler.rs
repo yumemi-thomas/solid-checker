@@ -108,31 +108,6 @@ pub enum CompilerProviderError {
     Facts(#[from] CompilerFactsError),
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct SidecarResponse {
-    pub ok: bool,
-    #[serde(default)]
-    pub execution_map: Option<ExecutionMap>,
-    #[serde(default)]
-    pub measurement: Option<Measurement>,
-    #[serde(default)]
-    pub error: Option<SidecarError>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct Measurement {
-    pub computation_ns: u64,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct SidecarError {
-    pub code: String,
-    pub message: String,
-}
-
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ExecutionMap {

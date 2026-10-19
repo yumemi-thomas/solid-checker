@@ -294,21 +294,6 @@ impl Dialect for Solid2 {
         &["@solidjs/"]
     }
 
-    /// Reviewed Solid 2 semantics in this module, not a package certificate.
-    /// Revision 2 (2026-09-26) models the three rc.9 callback forms: `until`,
-    /// `dynamic`'s option-selected call forms, and `omit`'s predicate.
-    /// Revision 3 (2026-09-26) answers the `omit` predicate per release
-    /// (rc.3 has none) and makes code inside an rc.9 predicate uncertifiable.
-    /// Revision 4 (2026-09-27) states that `createComponent` renders its first
-    /// argument (`Solid2::renders_component_argument`, ADR 0136).
-    /// Revision 5 (2026-09-28) states that `Dynamic` renders its `component`
-    /// prop and that a one-argument `createMemo` hands its compute's results
-    /// only to its accessor (`Solid2::component_prop_renderers`,
-    /// `Solid2::accessor_yields_only_its_compute`, ADR 0138).
-    fn runtime_model_identity(&self) -> &'static str {
-        "solid-v2/model-5"
-    }
-
     fn primitive(&self, name: &str) -> Option<Primitive> {
         static INDEX: crate::NameIndex = crate::NameIndex::new();
         lookup(&INDEX, &[TABLE], name).filter(|primitive| self.exports(*primitive))
@@ -978,24 +963,6 @@ impl Dialect for Solid2 {
         (primitive == Primitive::CreateRoot).then_some(0)
     }
 
-    fn captured_lookup_runtime_hazard(&self, path: &str, start: u64, end: u64) -> bool {
-        runtime_configuration::lookup_hazard(path, start, end)
-    }
-
-    // Conditional on ADR 0266; no NoThrow, history or listener authority.
-    // rc.13 dev.js:2346-2354; dev-shared.js:5660-5696,6333-6638:
-    // a nonfunction initializer builds a plain signal holding that exact value.
-    fn tuple_accessor_preserves_initial_value(
-        &self,
-        primitive: Primitive,
-        slot: ResultSlot,
-    ) -> bool {
-        matches!(
-            (primitive, slot),
-            (Primitive::CreateSignal, ResultSlot::TupleItem(0))
-        )
-    }
-
     /// Source: the published declarations, read from the exact package
     /// artifacts of the audited prerelease. In
     /// `solid-js@2.0.0-rc.3/types/server/signals.d.ts`:
@@ -1105,61 +1072,6 @@ impl Dialect for Solid2 {
         )
     }
 
-    /// Source: the checked Solid 2 RC.3 normalized authorities, held to the
-    /// receipt-issued bundles by
-    /// `the_callback_executions_agree_with_the_bundled_contract`.
-    ///
-    /// The four `createX(fn, …)` derived forms are not in that table and were
-    /// read from the runtime bundled by `solid-js@2.0.0-rc.0` instead:
-    /// `createSignal`,
-    /// `createOptimistic`, `createStore` and `createOptimisticStore` all branch
-    /// on `typeof first === "function"` and build a computed from it, so
-    /// argument 0 is a tracked compute exactly when a function is passed.
-    ///
-    /// `latest` and `isPending` are `Inline` and it is worth saying why, since
-    /// reads inside them do subscribe: they run immediately in the caller's
-    /// scope and never re-run on their own. `Tracked` here would mean "this
-    /// primitive re-runs it", which neither does.
-    ///
-    /// `flush` is `Inline` too, and since the engine's call graph follows
-    /// these execution contracts, a callback handed to `flush` is reachable.
-    /// `flushSync(fn)` does invoke `fn`, so the row is the truthful one; its
-    /// callbacks are deferred scopes, so that reachability changes no read
-    /// or owner diagnostic.
-    ///
-    /// The effect apply at argument 1 is `Deferred` for both effect
-    /// constructors, and for `createRenderEffect` that is an attribution
-    /// answer, not a schedule. Its first apply runs *during* the call
-    /// (see [`Solid2::callback_owners`]), with the caller's `tracking` still
-    /// set, so a read there does subscribe an enclosing tracked computation
-    /// (probed: a memo whose compute creates the render effect re-runs when a
-    /// signal read only in that apply changes). What `Deferred` keeps true is
-    /// the part the strict-read rule mirrors: `runEffect` opens the
-    /// `"an effect callback"` strict-read window on every run, the first
-    /// included, and a read in any later run subscribes nothing. The first
-    /// run's owner, and with it the fact that its reads are the caller's, is
-    /// stated by `callback_owners` (`CallbackOwner::InheritsFirstRun`, which
-    /// the engine reads to keep those reads in the caller's summary), and its
-    /// schedule by [`Solid2::contract_callback_execution_at`]; neither is read
-    /// off this word.
-    ///
-    /// This row now also decides contract bytes, through
-    /// [`Dialect::runs_callback_synchronously`], so the evidence is worth
-    /// stating exactly: `@solidjs/signals`' `flush(fn)` is
-    /// `syncDepth++; try { return fn() } finally { flush(); syncDepth-- }`
-    /// (2.0.0-rc dev bundle), so the callback is invoked and its value returned
-    /// **during** the call. Moving it to `Deferred` would publish
-    /// `execution: "deferred"` for every package export that forwards a
-    /// callback through `flush`, promising the callback has not run when the
-    /// export returns — which the runtime contradicts.
-    /// `onCleanup(fn)` only registers `fn` on the current owner, or returns it
-    /// when there is none (`@solidjs/signals@2.0.0-rc.9` `dist/dev.js:2174`
-    /// and `cleanup`, `dist/dev-shared.js:2855`; `dist/prod/signals.js:57`).
-    /// It never calls `fn` during the call.
-    fn callback_never_invoked_during_call(&self, primitive: Primitive, slot: usize) -> bool {
-        primitive == Primitive::OnCleanup && slot == 0
-    }
-
     /// `merge(...sources)` replaces each function source with
     /// `createMemo(source)` (`@solidjs/signals@2.0.0-rc.9` `dist/dev.js:4290`).
     fn wraps_function_arguments_in_memo(&self, primitive: Primitive) -> bool {
@@ -1251,6 +1163,48 @@ impl Dialect for Solid2 {
             || (count_zero && primitive == Primitive::Repeat)
     }
 
+    /// The four `createX(fn, ...)` derived forms were read from the runtime
+    /// bundled by `solid-js@2.0.0-rc.0`: `createSignal`, `createOptimistic`,
+    /// `createStore` and `createOptimisticStore` all branch on
+    /// `typeof first === "function"` and build a computed from it, so
+    /// argument 0 is a tracked compute exactly when a function is passed.
+    ///
+    /// `latest` and `isPending` are `Inline` and it is worth saying why, since
+    /// reads inside them do subscribe: they run immediately in the caller's
+    /// scope and never re-run on their own. `Tracked` here would mean "this
+    /// primitive re-runs it", which neither does.
+    ///
+    /// `flush` is `Inline` too, and since the engine's call graph follows
+    /// these execution rows, a callback handed to `flush` is reachable.
+    /// `flushSync(fn)` does invoke `fn`, so the row is the truthful one; its
+    /// callbacks are deferred scopes, so that reachability changes no read
+    /// or owner diagnostic.
+    ///
+    /// The effect apply at argument 1 is `Deferred` for both effect
+    /// constructors, and for `createRenderEffect` that is an attribution
+    /// answer, not a schedule. Its first apply runs *during* the call
+    /// (see [`Solid2::callback_owners`]), with the caller's `tracking` still
+    /// set, so a read there does subscribe an enclosing tracked computation
+    /// (probed: a memo whose compute creates the render effect re-runs when a
+    /// signal read only in that apply changes). What `Deferred` keeps true is
+    /// the part the strict-read rule mirrors: `runEffect` opens the
+    /// `"an effect callback"` strict-read window on every run, the first
+    /// included, and a read in any later run subscribes nothing. The first
+    /// run's owner, and with it the fact that its reads are the caller's, is
+    /// stated by `callback_owners` (`CallbackOwner::InheritsFirstRun`, which
+    /// the engine reads to keep those reads in the caller's summary); neither
+    /// is read off this word.
+    ///
+    /// This row also decides [`Dialect::runs_callback_synchronously`], so the
+    /// evidence is worth stating exactly: `@solidjs/signals`' `flush(fn)` is
+    /// `syncDepth++; try { return fn() } finally { flush(); syncDepth-- }`
+    /// (2.0.0-rc dev bundle), so the callback is invoked and its value returned
+    /// **during** the call; moving it to `Deferred` would claim the callback
+    /// has not run when the call returns, which the runtime contradicts.
+    /// `onCleanup(fn)` only registers `fn` on the current owner, or returns it
+    /// when there is none (`@solidjs/signals@2.0.0-rc.9` `dist/dev.js:2174`
+    /// and `cleanup`, `dist/dev-shared.js:2855`; `dist/prod/signals.js:57`).
+    /// It never calls `fn` during the call.
     fn callback_executions(&self, primitive: Primitive) -> &'static [(usize, Execution)] {
         match primitive {
             Primitive::CreateMemo
@@ -1648,14 +1602,6 @@ impl Dialect for Solid2 {
                 | Primitive::CreateOptimistic
                 | Primitive::CreateOptimisticStore
         )
-    }
-
-    /// The removal half of the same probe: a literal `false` removes the
-    /// attribute on the client and omits it in SSR (RFC 07 — "Boolean
-    /// literals add/remove the attribute"). 1.x stringifies instead, so
-    /// only this dialect answers true.
-    fn false_attribute_value_removes_attribute(&self) -> bool {
-        true
     }
 
     /// Source: `@solidjs/signals@2.0.0-rc.9` `enforceLoadingBoundary`, probed

@@ -3,45 +3,6 @@ use std::sync::Arc;
 use super::*;
 use crate::{ActionInvocation, AsyncRead, ExecutionRole};
 
-#[test]
-fn a_package_owned_read_never_promises_a_runtime_warning() {
-    let read = crate::ReactiveRead {
-        package_internal: true,
-        summary_attributed: false,
-        transported: false,
-        kind: "accessor".into(),
-        accessor: "package.read".into(),
-        location: location(20),
-        declaration: location(10),
-        execution: ExecutionRole::UntrackedRendering,
-        context: "Panel".into(),
-        via: "package.read".into(),
-        origin: None,
-        origin_context: "".into(),
-        uncertain: false,
-        missing_jsx_census: false,
-        host_callback_timing: false,
-        project_consumer_non_strict: false,
-        callback_invocation_unproven: false,
-        callee_callback_timing: false,
-    };
-    let finding = project_finding(
-        FindingSeed::StrictRead {
-            read: &read,
-            compute_reads_source: false,
-        },
-        &RecordingCatalog(CatalogCapabilities::SOLID_2),
-    );
-    assert_eq!(finding.kind, "uncertifiable");
-    assert!(
-        finding
-            .message
-            .contains("whether Solid emits STRICT_READ_UNTRACKED remains uncertifiable")
-    );
-    assert!(!finding.message.contains("for every use"));
-    assert!(!finding.message.contains("outside any tracking scope"));
-}
-
 struct RecordingCatalog(CatalogCapabilities);
 
 impl CatalogWording for RecordingCatalog {
@@ -210,187 +171,48 @@ fn a_refused_catalog_entry_adds_one_evidence_step_to_the_acceptance_gate() {
     assert_eq!(collapsed[0].related_locations.len(), 1);
 }
 
-/// Kobalte defect 7: open claims at call arguments were one warning per
-/// argument. Two exports, three call sites each, spread over two files and
-/// supplied out of order, become one warning for the package (ADR 0224),
-/// anchored at the first site in `(path, start)` order, with the other
-/// five in `related_locations`, the exports and the count in the message.
-/// An unbound claim at the same arguments keeps its own finding per call.
+/// The acceptance gate collapses to one finding per package whatever the
+/// export, and stays the rule's error; an obligation at an exact call argument
+/// keeps its own finding, because there the site is the content.
 #[test]
-fn open_claims_at_call_arguments_collapse_per_package_across_files() {
-    let at = |export: &str, path: &str, start: u64, context: &str| StaticDefect {
-        kind: StaticDefectKind::PackageContractExportMissing {
-            module: "pkg".into(),
-            export: export.into(),
-            reexported: false,
-            site: crate::ContractDefectSite::Argument,
-            admission_refusal: None,
-        },
-        location: Location {
-            path: path.into(),
-            start_byte: start,
-            end_byte: start + 1,
-        },
-        analysis_context: context.into(),
-        fixes: vec![],
-        uncertain: false,
-    };
-    let open = "unknown-contract-claims:callbacks";
+fn the_acceptance_gate_collapses_per_package_and_argument_sites_stay_apart() {
+    use crate::ContractDefectSite::{Argument, Import};
+    let gate = crate::contracts::UNACCEPTED_IMPORT_CONTEXT;
     let defects = vec![
-        at("second", "b.tsx", 30, open),
-        at("first", "b.tsx", 20, open),
-        at("first", "a.tsx", 40, open),
-        at("second", "a.tsx", 5, open),
-        at("first", "a.tsx", 10, open),
-        at("second", "b.tsx", 7, open),
-        // The same argument twice is one site.
-        at("second", "b.tsx", 7, open),
-        at(
-            "first",
-            "a.tsx",
-            10,
-            "unbound-contract-claims:callback arguments",
-        ),
-        at(
-            "first",
-            "b.tsx",
-            20,
-            "unbound-contract-claims:callback arguments",
-        ),
+        contract_defect(gate, Import, 1),
+        contract_defect("claim-gate", Argument, 2),
+        contract_defect(gate, Import, 3),
+        contract_defect("claim-gate", Argument, 4),
     ];
-    let sites = |finding: &Finding| {
-        std::iter::once(&finding.primary_location)
-            .chain(&finding.related_locations)
-            .map(|location| (location.path.to_string(), location.start_byte))
+    let reversed = defects.iter().cloned().rev().collect::<Vec<_>>();
+    let collapsed = collapse_unaccepted_contract_defects(&defects, &ErrorCatalog);
+    let starts = |findings: &[Finding]| {
+        findings
+            .iter()
+            .map(|finding| finding.primary_location.start_byte)
             .collect::<Vec<_>>()
     };
-    let site = |path: &str, start: u64| (path.to_owned(), start);
-    // Deterministic: every permutation of the input gives the same output.
-    let mut reversed = defects.clone();
-    reversed.reverse();
-    let collapsed = collapse_unaccepted_contract_defects(&defects, &ErrorCatalog);
-    let (mut forward, _) = finish_findings(collapsed, Instant::now(), Instant::now());
-    let (backward, _) = finish_findings(
-        collapse_unaccepted_contract_defects(&reversed, &ErrorCatalog),
-        Instant::now(),
-        Instant::now(),
+    // First-seen order: the package group is anchored at its first site.
+    assert_eq!(starts(&collapsed), [2, 4, 1]);
+    let package = &collapsed[2];
+    assert_eq!(package.subject_kind, "package");
+    assert_eq!(package.related_locations, [location(3)]);
+    assert_eq!(package.severity, "error");
+    assert_eq!(package.kind, "uncertifiable");
+    assert!(
+        collapsed[..2]
+            .iter()
+            .all(|finding| finding.subject_kind.is_empty() && finding.related_locations.is_empty())
     );
-    assert_eq!(forward, backward);
-
-    let (open_findings, unbound): (Vec<_>, Vec<_>) = forward
-        .drain(..)
-        .partition(|finding| finding.analysis_context == open);
-    assert_eq!(
-        open_findings.len(),
-        1,
-        "one finding per package and open domains, whatever the export"
-    );
-    let group = &open_findings[0];
-    assert_eq!(
-        sites(group),
-        [
-            site("a.tsx", 5),
-            site("a.tsx", 10),
-            site("a.tsx", 40),
-            site("b.tsx", 7),
-            site("b.tsx", 20),
-            site("b.tsx", 30)
-        ]
-    );
-    assert_eq!(
-        group.message,
-        "the reactivity contract for pkg leaves callbacks unknown for 2 called exports: \
-             first, second; code whose proof depends on those claims cannot be certified (6 call \
-             sites)"
-    );
-    assert_eq!(group.severity, "warning");
-    assert_eq!(group.kind, "uncertifiable");
-    assert_eq!(group.subject_kind, "package");
-    // An unbound claim is about its call: one finding per site, unchanged.
-    assert_eq!(
-        unbound.iter().map(sites).collect::<Vec<_>>(),
-        [vec![site("a.tsx", 10)], vec![site("b.tsx", 20)]]
-    );
-    assert!(unbound.iter().all(|finding| finding.message == "contract"
-        && finding.severity == "error"
-        && finding.subject_kind.is_empty()));
+    // The same defects in the opposite order group the same way.
+    let backward = collapse_unaccepted_contract_defects(&reversed, &ErrorCatalog);
+    assert_eq!(starts(&backward), [4, 2, 3]);
 
     // A group of one keeps its exact wording.
     let alone =
-        collapse_unaccepted_contract_defects(&[at("first", "a.tsx", 10, open)], &ErrorCatalog);
+        collapse_unaccepted_contract_defects(&[contract_defect(gate, Import, 9)], &ErrorCatalog);
     assert_eq!(alone[0].message, "contract");
     assert!(alone[0].related_locations.is_empty());
-}
-
-#[test]
-fn only_the_open_claims_gate_lowers_package_contract_severity_to_warning() {
-    // ADR 0119: an accepted contract's open claims warn; every other gate
-    // keeps the rule's error, and every one stays uncertifiable.
-    let cases = [
-        (
-            "unknown-contract-claims:returns",
-            crate::ContractDefectSite::Import,
-            "warning",
-        ),
-        (
-            "unknown-contract-claims:callbacks",
-            crate::ContractDefectSite::Argument,
-            "warning",
-        ),
-        (
-            crate::contracts::UNACCEPTED_IMPORT_CONTEXT,
-            crate::ContractDefectSite::Import,
-            "error",
-        ),
-        (
-            "obsolete-policy1-receipt: policy 1 cannot authorize analyzer semantics",
-            crate::ContractDefectSite::Import,
-            "error",
-        ),
-        (
-            "unbound-contract-claims:callback arguments",
-            crate::ContractDefectSite::Argument,
-            "error",
-        ),
-        ("", crate::ContractDefectSite::Import, "error"),
-    ];
-    for (index, (context, site, severity)) in cases.into_iter().enumerate() {
-        let defect = contract_defect(context, site, index as u64);
-        let finding = project_finding(FindingSeed::StaticDefect(&defect), &ErrorCatalog);
-        assert_eq!(finding.severity, severity, "{context:?}");
-        assert_eq!(finding.kind, "uncertifiable", "{context:?}");
-    }
-    // A claim group collapsed over its import sites keeps the lowered
-    // severity, and the acceptance gate collapsed over a package keeps
-    // the error.
-    let defects = vec![
-        contract_defect(
-            "unknown-contract-claims:returns",
-            crate::ContractDefectSite::Import,
-            1,
-        ),
-        contract_defect(
-            "unknown-contract-claims:returns",
-            crate::ContractDefectSite::Import,
-            2,
-        ),
-        contract_defect(
-            crate::contracts::UNACCEPTED_IMPORT_CONTEXT,
-            crate::ContractDefectSite::Import,
-            3,
-        ),
-        contract_defect(
-            crate::contracts::UNACCEPTED_IMPORT_CONTEXT,
-            crate::ContractDefectSite::Import,
-            4,
-        ),
-    ];
-    let collapsed = collapse_unaccepted_contract_defects(&defects, &ErrorCatalog);
-    let severities = collapsed
-        .iter()
-        .map(|finding| finding.severity.as_str())
-        .collect::<Vec<_>>();
-    assert_eq!(severities, ["warning", "error"]);
 }
 
 #[test]

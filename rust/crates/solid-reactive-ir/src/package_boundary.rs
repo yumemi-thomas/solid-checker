@@ -13,22 +13,14 @@
 //! for one installed copy or subpath is never read for another.
 //!
 //! Phase P3 of the contract-removal plan records reasons beside the existing
-//! contract requirements and moves no finding: the [`LegacyRequirements`]
-//! projection holds the exact keys that controlled the acceptance gate before
-//! the boundary existed, and only those keys reach it. The recorded reasons
+//! contract requirements and moves no finding: the legacy markers hold the
+//! exact keys that controlled the acceptance gate before the boundary existed,
+//! and only those keys reach it. The recorded reasons
 //! are explanation until the phase that rewords that gate.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use sha2::{Digest as _, Sha256};
-
-/// Why an import keeps an open requirement, as the requirement discovery
-/// recorded it.
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub enum UncertifiableImportReason {
-    Unspecified,
-    ObsoletePolicy1,
-}
 
 /// One import occurrence: the importing file, in the canonical project
 /// identity Type Facts uses, and the specifier as written, subpath and alias
@@ -56,16 +48,6 @@ pub struct BoundarySite {
     pub path: String,
     pub start_byte: u64,
     pub end_byte: u64,
-}
-
-/// One export demanded through a refused import: a named or namespace member
-/// use, or a re-export, at its exact occurrence.
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct ExportDemandKey {
-    pub export: String,
-    /// The export's exact declaration, when one is known.
-    pub declaration: Option<BoundarySite>,
-    pub use_site: BoundarySite,
 }
 
 /// One cause. `detail` is the producer's exact explanation; consumers never
@@ -234,19 +216,12 @@ pub struct UnanalyzableImport {
     installed_root_stated: bool,
     /// Import-wide causes, sorted and without exact duplicates.
     reasons: Vec<BoundaryReason>,
-    /// Causes that refuse one demanded export only.
-    exports: BTreeMap<ExportDemandKey, Vec<BoundaryReason>>,
 }
 
 impl UnanalyzableImport {
     #[must_use]
     pub fn reasons(&self) -> &[BoundaryReason] {
         &self.reasons
-    }
-
-    #[must_use]
-    pub const fn exports(&self) -> &BTreeMap<ExportDemandKey, Vec<BoundaryReason>> {
-        &self.exports
     }
 
     /// Keeps the first identity a producer stated; a second producer naming
@@ -280,31 +255,20 @@ fn insert_reason(reasons: &mut Vec<BoundaryReason>, reason: BoundaryReason) {
     }
 }
 
-/// The exact requirement keys the contract-era acceptance gate read, and the
-/// per-import explanation overrides contract admission replayed. Transitional:
-/// it exists so the boundary can be the producer of those keys without moving
-/// a finding, and goes with the contract tiers.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-struct LegacyRequirements {
-    markers: BTreeMap<ImportKey, UncertifiableImportReason>,
-    /// `None` is an answer: this importer's install refused nothing, so an
-    /// explanation replayed from another copy is not its explanation.
-    refusal_overrides: BTreeMap<ImportKey, Option<String>>,
-}
-
 /// See the module documentation.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct PackageBoundary {
     imports: BTreeMap<ImportKey, UnanalyzableImport>,
-    legacy: LegacyRequirements,
+    /// The exact requirement keys the contract-era acceptance gate read.
+    /// Transitional: it exists so the boundary can be the producer of those
+    /// keys without moving a finding, and goes with the contract tiers.
+    legacy_markers: BTreeSet<ImportKey>,
 }
 
 impl PackageBoundary {
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.imports.is_empty()
-            && self.legacy.markers.is_empty()
-            && self.legacy.refusal_overrides.is_empty()
+        self.imports.is_empty() && self.legacy_markers.is_empty()
     }
 
     /// Records one import-wide cause, with the identity the producer resolved.
@@ -320,17 +284,6 @@ impl PackageBoundary {
         insert_reason(&mut import.reasons, reason);
     }
 
-    /// Records one cause that refuses a single demanded export.
-    pub fn record_export(
-        &mut self,
-        key: ImportKey,
-        export: ExportDemandKey,
-        reason: BoundaryReason,
-    ) {
-        let import = self.imports.entry(key).or_default();
-        insert_reason(import.exports.entry(export).or_default(), reason);
-    }
-
     #[must_use]
     pub fn import(&self, importer: &str, specifier: &str) -> Option<&UnanalyzableImport> {
         self.imports.get(&ImportKey::new(importer, specifier))
@@ -340,51 +293,18 @@ impl PackageBoundary {
         self.imports.iter()
     }
 
-    /// Adds `key` to the contract-era requirement set. A later reason for the
-    /// same key replaces an earlier one, as the acceptance index's did.
-    pub fn require_legacy(&mut self, key: ImportKey, reason: UncertifiableImportReason) {
-        self.legacy.markers.insert(key, reason);
+    /// Adds `key` to the contract-era requirement set.
+    pub fn require_legacy(&mut self, key: ImportKey) {
+        self.legacy_markers.insert(key);
     }
 
     #[must_use]
-    pub fn legacy_reason(
-        &self,
-        importer: &str,
-        specifier: &str,
-    ) -> Option<UncertifiableImportReason> {
-        self.legacy
-            .markers
-            .get(&ImportKey::new(importer, specifier))
-            .copied()
+    pub fn requires_legacy(&self, importer: &str, specifier: &str) -> bool {
+        self.legacy_markers
+            .contains(&ImportKey::new(importer, specifier))
     }
 
-    pub fn legacy_requirements(
-        &self,
-    ) -> impl Iterator<Item = (&ImportKey, UncertifiableImportReason)> {
-        self.legacy
-            .markers
-            .iter()
-            .map(|(key, reason)| (key, *reason))
-    }
-
-    /// Records the explanation contract admission replayed for one importer's
-    /// own install. The first answer for a key stands.
-    pub fn override_refusal(&mut self, key: ImportKey, refusal: Option<String>) {
-        self.legacy.refusal_overrides.entry(key).or_insert(refusal);
-    }
-
-    /// `None`: no override for this importer. `Some(None)`: its install
-    /// refused nothing, which is itself the answer.
-    #[must_use]
-    pub fn refusal_override(&self, importer: &str, specifier: &str) -> Option<Option<&str>> {
-        self.legacy
-            .refusal_overrides
-            .get(&ImportKey::new(importer, specifier))
-            .map(Option::as_deref)
-    }
-
-    /// Folds `other` in: every cause of both, and `self`'s requirement and
-    /// override answers before `other`'s.
+    /// Folds `other` in: every cause of both, and every requirement.
     pub fn extend(&mut self, other: Self) {
         for (key, import) in other.imports {
             let entry = self.imports.entry(key).or_default();
@@ -395,19 +315,8 @@ impl PackageBoundary {
             for reason in import.reasons {
                 insert_reason(&mut entry.reasons, reason);
             }
-            for (export, reasons) in import.exports {
-                let slot = entry.exports.entry(export).or_default();
-                for reason in reasons {
-                    insert_reason(slot, reason);
-                }
-            }
         }
-        for (key, reason) in other.legacy.markers {
-            self.legacy.markers.entry(key).or_insert(reason);
-        }
-        for (key, refusal) in other.legacy.refusal_overrides {
-            self.legacy.refusal_overrides.entry(key).or_insert(refusal);
-        }
+        self.legacy_markers.extend(other.legacy_markers);
     }
 
     /// Everything a finding or cache entry can depend on, causes included: a
@@ -445,7 +354,7 @@ impl PackageBoundary {
                 text(hash, &reason.detail);
             }
         }
-        hash.update(b"package-boundary-v1");
+        hash.update(b"package-boundary-v2");
         hash.update((self.imports.len() as u64).to_be_bytes());
         for (key, import) in &self.imports {
             text(hash, &key.importer);
@@ -453,28 +362,11 @@ impl PackageBoundary {
             optional(hash, import.package_name.as_deref());
             optional(hash, import.installed_root.as_deref());
             reasons(hash, &import.reasons);
-            hash.update((import.exports.len() as u64).to_be_bytes());
-            for (export, causes) in &import.exports {
-                text(hash, &export.export);
-                site(hash, export.declaration.as_ref());
-                site(hash, Some(&export.use_site));
-                reasons(hash, causes);
-            }
         }
-        hash.update((self.legacy.markers.len() as u64).to_be_bytes());
-        for (key, reason) in &self.legacy.markers {
+        hash.update((self.legacy_markers.len() as u64).to_be_bytes());
+        for key in &self.legacy_markers {
             text(hash, &key.importer);
             text(hash, &key.specifier);
-            hash.update([match reason {
-                UncertifiableImportReason::Unspecified => 0,
-                UncertifiableImportReason::ObsoletePolicy1 => 1,
-            }]);
-        }
-        hash.update((self.legacy.refusal_overrides.len() as u64).to_be_bytes());
-        for (key, refusal) in &self.legacy.refusal_overrides {
-            text(hash, &key.importer);
-            text(hash, &key.specifier);
-            optional(hash, refusal.as_deref());
         }
     }
 

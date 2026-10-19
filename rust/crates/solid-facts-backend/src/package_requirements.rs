@@ -7,11 +7,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use solid_reactive_ir::{
-    UncertifiableImportReason,
-    package_boundary::{
-        BindingForm, BoundaryReason, ImportKey, PackageBoundary, UnanalyzableReason,
-    },
+use solid_reactive_ir::package_boundary::{
+    BindingForm, BoundaryReason, ImportKey, PackageBoundary, UnanalyzableReason,
 };
 
 /// Whether `importer` imports `specifier` as a namespace at run time.
@@ -146,7 +143,7 @@ pub fn unsupplied_package_boundary(facts: &solid_facts::ProjectFacts) -> Package
                     "the request supplies no package files or import resolution",
                 ),
             );
-            boundary.require_legacy(key, UncertifiableImportReason::Unspecified);
+            boundary.require_legacy(key);
         }
     }
     boundary
@@ -255,7 +252,7 @@ fn external_package_boundary_with(
                 }) {
                     record(refusal.kind, &refusal.detail);
                 }
-                boundary.require_legacy(key, UncertifiableImportReason::Unspecified);
+                boundary.require_legacy(key);
             }
         }
     }

@@ -47,9 +47,9 @@ pub enum Version {
 
 /// Every vocabulary this build carries, in ascending version order.
 ///
-/// The cross-dialect helpers below ask their question of each entry and answer
-/// only where the answers agree; the tests that loop it assert one property
-/// per vocabulary. Both iterate *this* rather than enumerating [`Version`]
+/// The cross-dialect helpers below ask their question of each entry, and the
+/// tests that loop it assert one property per vocabulary. Both iterate *this*
+/// rather than enumerating [`Version`]
 /// because the question is "what do the vocabularies I have say", which is not
 /// the same question as "which Solid versions exist" — [`Version::V1`] is
 /// retained for classification long after a build stops carrying its
@@ -450,99 +450,6 @@ pub enum OptionLiteral {
     Unknown,
 }
 
-/// Returns an owner-requirement role only when every dialect that recognizes
-/// the exact export name assigns the same role. An unrecognized or disputed
-/// name stays open rather than inheriting behavior from another dialect.
-#[must_use]
-pub fn unambiguous_owner_requirement_role(name: &str) -> Option<OwnerRequirementRole> {
-    let mut roles = DIALECTS
-        .iter()
-        .copied()
-        .filter_map(|dialect| {
-            let primitive = dialect.primitive(name)?;
-            (dialect.name_of(primitive) == Some(name)).then_some((dialect, primitive))
-        })
-        .filter_map(|(dialect, primitive)| dialect.owner_requirement_role(primitive));
-    let first = roles.next()?;
-    roles.all(|role| role == first).then_some(first)
-}
-
-/// Returns true only when every dialect that canonically exports `name`
-/// identifies `argument` as a callback for this exact call shape.
-#[must_use]
-pub fn unambiguous_callback_argument(name: &str, argument: usize, argument_count: usize) -> bool {
-    let answers = DIALECTS
-        .iter()
-        .copied()
-        .filter_map(|dialect| {
-            let primitive = dialect.primitive(name)?;
-            (dialect.name_of(primitive) == Some(name))
-                .then(|| dialect.callback_execution_at(primitive, argument, argument_count))
-        })
-        .collect::<Vec<_>>();
-    let Some(Some(first)) = answers.first().copied() else {
-        return false;
-    };
-    answers.into_iter().all(|answer| answer == Some(first))
-}
-
-/// Returns true only when the exact public type export is function-shaped in
-/// every dialect that recognizes it from this module.
-#[must_use]
-pub fn unambiguous_callable_type(origin_module: &str, name: &str) -> bool {
-    let roles = DIALECTS
-        .iter()
-        .filter_map(|dialect| dialect.type_role(origin_module, name))
-        .collect::<Vec<_>>();
-    !roles.is_empty()
-        && roles
-            .into_iter()
-            .all(|role| matches!(role, TypeRole::Accessor | TypeRole::Setter))
-}
-
-/// Returns true only for a tuple item whose callability is fixed by every
-/// dialect that canonically exports the exact primitive name.
-#[must_use]
-pub fn unambiguous_callable_result_tuple_item(name: &str, index: usize) -> bool {
-    let answers = DIALECTS
-        .iter()
-        .copied()
-        .filter_map(|dialect| {
-            let primitive = dialect.primitive(name)?;
-            (dialect.name_of(primitive) == Some(name)).then_some(match primitive {
-                Primitive::CreateSignal => matches!(index, 0 | 1),
-                _ => false,
-            })
-        })
-        .collect::<Vec<_>>();
-    !answers.is_empty() && answers.into_iter().all(|answer| answer)
-}
-
-/// Returns true only when the exact public name is a **props merge** —
-/// a call that yields an object carrying its arguments' reactivity — in every
-/// dialect that canonically exports it (ADR 0109).
-///
-/// The dialect-agnostic form of [`Dialect::merges_props_reactivity`], for the
-/// certifier: a census reads a producer fact naming a module specifier and an
-/// export, and nothing in a transcript says which dialect the artifact resolved.
-/// Answering only where the two agree is what lets it ask without choosing.
-/// Both dialects answer for their own spelling and are silent about the other's,
-/// so `mergeProps` is decided by 1.x alone and `merge` by 2.0 alone, and neither
-/// is decided by a dialect that does not export it.
-#[must_use]
-pub fn unambiguous_props_merge(name: &str) -> bool {
-    let answers = DIALECTS
-        .iter()
-        .copied()
-        .filter_map(|dialect| {
-            let primitive = dialect.primitive(name)?;
-            (dialect.name_of(primitive) == Some(name))
-                .then(|| dialect.merges_props_reactivity(primitive))
-        })
-        .collect::<Vec<_>>();
-    !answers.is_empty() && answers.into_iter().all(|answer| answer)
-}
-
 /// Which part of what a primitive call returns a question is about.
 ///
 /// `Whole` is the returned value itself; `TupleItem(n)` is slot `n` of a
@@ -567,41 +474,6 @@ pub enum ReactiveRole {
     Setter,
 }
 
-/// The reactive role of one slot of what `name` returns, when every dialect
-/// that canonically exports `name` agrees.
-///
-/// `None` means "no dialect answer" and is never "not reactive": a name no
-/// dialect exports, a slot no dialect has audited, and a slot the two dialects
-/// disagree about all answer `None`, and a caller may read none of them as a
-/// negative claim.
-///
-/// Disagreement includes silence. If one dialect that canonically exports the
-/// name answers a role and another answers nothing, the pair has not agreed,
-/// so the answer is `None` — the opposite reading would let 1.x's audited
-/// vocabulary speak for a 2.0 name whose owner has not reviewed it.
-///
-/// Kept separate from [`unambiguous_callable_result_tuple_item`] on purpose:
-/// that one answers *callability* for the return path, and widening it into a
-/// reactivity table would make one answer carry two claims.
-#[must_use]
-pub fn unambiguous_reactive_result_slot(name: &str, slot: ResultSlot) -> Option<ReactiveRole> {
-    let answers = DIALECTS
-        .iter()
-        .copied()
-        .filter_map(|dialect| {
-            let primitive = dialect.primitive(name)?;
-            (dialect.name_of(primitive) == Some(name))
-                .then(|| dialect.reactive_result_slot(primitive, slot))
-        })
-        .collect::<Vec<_>>();
-    let first = *answers.first()?;
-    answers
-        .into_iter()
-        .all(|answer| answer == first)
-        .then_some(first)
-        .flatten()
-}
-
 /// ADR 0153: the part an export plays in a dialect's context mechanism. See
 /// [`Dialect::context_role`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -615,108 +487,6 @@ pub enum ContextRole {
     /// `createComponent(Comp, props)`: runs `Comp(props)` once, on the
     /// caller's stack.
     Render,
-}
-
-/// The context role every dialect that states one gives `name`, when they all
-/// agree and at least one does ([`Dialect::context_role`]). Silence in one
-/// dialect while another answers is disagreement, and answers `None`.
-#[must_use]
-pub fn unambiguous_context_role(name: &str) -> Option<ContextRole> {
-    let answers = DIALECTS
-        .iter()
-        .map(|dialect| dialect.context_role(name))
-        .collect::<Vec<_>>();
-    let first = (*answers.first()?)?;
-    answers
-        .into_iter()
-        .all(|answer| answer == Some(first))
-        .then_some(first)
-}
-
-/// ADR 0183: whether every dialect that canonically exports `name` states the
-/// callback at `argument` of a call with `argument_count` arguments runs
-/// eagerly as the compute of a computation the call creates
-/// ([`Dialect::eager_owned_computation_slot`]).
-#[must_use]
-pub fn unambiguous_eager_owned_computation_slot(
-    name: &str,
-    argument: usize,
-    argument_count: usize,
-) -> bool {
-    let answers = DIALECTS
-        .iter()
-        .copied()
-        .filter_map(|dialect| {
-            let primitive = dialect.primitive(name)?;
-            (dialect.name_of(primitive) == Some(name))
-                .then(|| dialect.eager_owned_computation_slot(primitive, argument, argument_count))
-        })
-        .collect::<Vec<_>>();
-    !answers.is_empty() && answers.into_iter().all(|answer| answer)
-}
-
-/// ADR 0183: whether every dialect that canonically exports `name` states the
-/// callback at `argument` runs during the call, synchronously and inline
-/// ([`Dialect::runs_callback_synchronously`] for the primitive, and an
-/// [`Execution::Inline`] row at this slot): `createRoot`'s body, `untrack`'s
-/// function, `runWithOwner`'s function.
-#[must_use]
-pub fn unambiguous_synchronous_callback_slot(
-    name: &str,
-    argument: usize,
-    argument_count: usize,
-) -> bool {
-    let answers = DIALECTS
-        .iter()
-        .copied()
-        .filter_map(|dialect| {
-            let primitive = dialect.primitive(name)?;
-            (dialect.name_of(primitive) == Some(name))
-                .then(|| dialect.synchronous_callback_slot(primitive, argument, argument_count))
-        })
-        .collect::<Vec<_>>();
-    !answers.is_empty() && answers.into_iter().all(|answer| answer)
-}
-
-/// The argument position every dialect that canonically exports `name` agrees
-/// holds its options object ([`Dialect::options_argument`]), or `None` when one
-/// is silent or they disagree.
-#[must_use]
-pub fn unambiguous_options_argument(name: &str) -> Option<usize> {
-    let answers = DIALECTS
-        .iter()
-        .copied()
-        .filter_map(|dialect| {
-            let primitive = dialect.primitive(name)?;
-            (dialect.name_of(primitive) == Some(name)).then(|| dialect.options_argument(primitive))
-        })
-        .collect::<Vec<_>>();
-    let first = (*answers.first()?)?;
-    answers
-        .into_iter()
-        .all(|answer| answer == Some(first))
-        .then_some(first)
-}
-
-/// Whether some dialect exports `name` from `origin_module` in value position.
-///
-/// This is a dialect answer about *where a name can come from*, not a resolved
-/// package identity: the module string a producer states is the written import
-/// specifier, so this premise says "the specifier is one a Solid dialect
-/// exports this name from" and nothing more. An empty module — which is what a
-/// locally declared value reports — is `false`, which is the whole point: a
-/// package's own `function createSignal()` must never answer a question about
-/// the dialect's.
-#[must_use]
-pub fn exports_value_from(origin_module: &str, name: &str) -> bool {
-    if origin_module.is_empty() || name.is_empty() {
-        return false;
-    }
-    DIALECTS.iter().any(|dialect| {
-        dialect
-            .export_modules(name, ExportPosition::Value)
-            .contains(&origin_module)
-    })
 }
 
 /// Whether `package` is a package whose own published bytes define some
@@ -740,28 +510,6 @@ pub fn primitive_defining_package(package: &str) -> bool {
     DIALECTS
         .iter()
         .any(|dialect| dialect.primitive_defining_packages().contains(&package))
-}
-
-/// Whether a dependency name places a package inside some carried dialect's
-/// ecosystem: a package a dialect defines its primitives in, or anything under
-/// a scope that exists because the dialect does.
-///
-/// Unioned across dialects for the same reason [`primitive_defining_package`]
-/// is: the question is about the manifest under inspection, not about which
-/// vocabulary the analyzing project selected. Like that predicate it compares
-/// a *name*, so it may only widen what is examined, never establish a claim.
-#[must_use]
-pub fn ecosystem_dependency(name: &str) -> bool {
-    if name.is_empty() {
-        return false;
-    }
-    primitive_defining_package(name)
-        || DIALECTS.iter().any(|dialect| {
-            dialect
-                .ecosystem_scopes()
-                .iter()
-                .any(|scope| name.starts_with(scope))
-        })
 }
 
 /// Whether a *specifier* names the built-in runtime foundation — the package
@@ -846,20 +594,6 @@ impl HostTargetCondition {
     pub fn names(condition: &str) -> bool {
         Self::from_condition(condition).is_some()
     }
-}
-
-/// Whether `name` is a canonical primitive spelling of some dialect — the name
-/// the dialect's own table round-trips, not an alias and not a near miss.
-#[must_use]
-pub fn canonical_primitive_name(name: &str) -> bool {
-    if name.is_empty() {
-        return false;
-    }
-    DIALECTS.iter().any(|dialect| {
-        dialect
-            .primitive(name)
-            .is_some_and(|primitive| dialect.name_of(primitive) == Some(name))
-    })
 }
 
 /// The role a JSX tag plays as a boundary.
@@ -1319,12 +1053,6 @@ pub trait Dialect: Sync {
     /// where the question is "does this manifest depend on Solid at all",
     /// never to grant a package semantics.
     fn ecosystem_scopes(&self) -> &'static [&'static str];
-
-    /// Identity of the reviewed built-in runtime model. Facts cite
-    /// `builtin-solid://<identity>#<primitive>`, never a package receipt.
-    /// Increment the model revision when the authority or interpretation
-    /// changes; Solid 1 and Solid 2 have independent identities.
-    fn runtime_model_identity(&self) -> &'static str;
 
     /// Resolves an exported name to a primitive, or `None` when this dialect
     /// does not export it.
@@ -2066,31 +1794,6 @@ pub trait Dialect: Sync {
     /// Shared code carried one hardcoded list that was neither dialect's.
     fn returns_reactive_tuple(&self, primitive: Primitive) -> bool;
 
-    /// Whether the runtime serializes a literal `false` JSX attribute value
-    /// by *removing* the attribute on intrinsic elements.
-    ///
-    /// RFC 07 unified boolean handling — "Boolean literals add/remove the
-    /// attribute (no `="true"` string)" — and this is the half of that
-    /// sentence the checker still owns. The `true` half is real too (probed
-    /// on `@solidjs/web@2.0.0-rc.0`, 2026-08-15: `ssrAttribute("draggable",
-    /// true)` → ` draggable`, `setAttribute(el, "draggable", true)` →
-    /// `el.setAttribute("draggable", "")`, both selecting `auto`), but 2.0's
-    /// published `EnumeratedPseudoBoolean` type rejects `draggable={true}`
-    /// and the shorthand outright, so that spelling is TypeScript's to
-    /// report and needs no dialect question. From the same probe: the client
-    /// `setAttribute`/`assign` paths remove the attribute for `false` and
-    /// SSR omits it. For an *enumerated* attribute such as `draggable`,
-    /// removal selects the `auto` default rather than the `"false"` state —
-    /// on draggable-by-default elements (`img`, `a[href]`) that silently
-    /// re-enables dragging.
-    ///
-    /// 1.x's dom-expressions stringifies instead: `draggable={false}`
-    /// renders `draggable="false"` and behaves, so the default answer is
-    /// `false` and only the 2.0 dialect opts in.
-    fn false_attribute_value_removes_attribute(&self) -> bool {
-        false
-    }
-
     /// Whether a read of a pending async value inside this primitive's tracked
     /// computation is a *render* of that value, so that a missing async
     /// boundary above it is the read's own defect.
@@ -2201,34 +1904,11 @@ pub trait Dialect: Sync {
     /// for a slot would certify a setter as an accessor.
     ///
     /// `None` is not a negative claim. Every row is a per-version audited fact
-    /// and stays absent until this dialect's owner has one, which is why the
-    /// aggregate [`unambiguous_reactive_result_slot`] treats one dialect's
-    /// silence as disagreement rather than deferring to the other's row.
+    /// and stays absent until this dialect's owner has one, which is why a
+    /// dialect's silence is never filled in from another dialect's row.
     fn reactive_result_slot(&self, primitive: Primitive, slot: ResultSlot) -> Option<ReactiveRole> {
         let _ = (primitive, slot);
         None
-    }
-
-    /// Exact declaration identities whose runtime use withholds the bounded
-    /// captured-lookup proof (mode switches, node exposure, diagnostic footer).
-    /// This is a recipe refusal, not another runtime-configuration premise.
-    fn captured_lookup_runtime_hazard(&self, declaration_path: &str, start: u64, end: u64) -> bool {
-        let _ = (declaration_path, start, end);
-        false
-    }
-
-    /// Under the explicit standard runtime configuration and intact runtime
-    /// model, a noncallable initial value, no options and a discarded setter leave
-    /// this tuple accessor observing precisely the initial value. The consumer
-    /// must also prove no accessor/result escape can expose the source or value.
-    /// Silence is not preservation. This does not generalize to derived sources.
-    fn tuple_accessor_preserves_initial_value(
-        &self,
-        primitive: Primitive,
-        slot: ResultSlot,
-    ) -> bool {
-        let _ = (primitive, slot);
-        false
     }
 
     /// ADR 0183: whether a callback written at `argument` of a call of
@@ -2287,15 +1967,6 @@ pub trait Dialect: Sync {
     /// Hardcoding the 2.0 pair described a read in 1.x's *seed value* as being
     /// in an "apply callback" that version does not have.
     fn callback_executions(&self, primitive: Primitive) -> &'static [(usize, Execution)];
-
-    /// Whether the runtime never invokes callback `slot` of `primitive` while
-    /// the call runs, on every path: it only stores or returns the callable.
-    /// Stronger than [`Execution::Deferred`], which is a tracking attribution
-    /// and usually, but not always, means later than the call. A call's own
-    /// `reads` cannot depend on such a callback. Unknown is `false`.
-    fn callback_never_invoked_during_call(&self, _primitive: Primitive, _slot: usize) -> bool {
-        false
-    }
 
     /// Whether every function-valued argument of `primitive` is wrapped in a
     /// memo of its own, so code in it runs inside that computation and not in

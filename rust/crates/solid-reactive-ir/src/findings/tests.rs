@@ -12,7 +12,6 @@ fn location(start: u64) -> Location {
 
 fn read(missing_jsx_census: bool) -> ReactiveRead {
     ReactiveRead {
-        package_internal: false,
         summary_attributed: false,
         transported: false,
         kind: "accessor".into(),
@@ -52,12 +51,6 @@ fn a_paired_compute_read_changes_only_the_apply_message() {
         strict_read_message(&apply)
     );
     apply.summary_attributed = false;
-    apply.package_internal = true;
-    assert_eq!(
-        super::strict_read_message_with_compute(&apply, true),
-        strict_read_message(&apply)
-    );
-    apply.package_internal = false;
     apply.missing_jsx_census = true;
     assert_eq!(
         super::strict_read_message_with_compute(&apply, true),

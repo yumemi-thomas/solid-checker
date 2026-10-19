@@ -190,9 +190,7 @@ fn kinds(boundary: &PackageBoundary, fixture: &Fixture, row: usize) -> Vec<Unana
 }
 
 fn marker(boundary: &PackageBoundary, fixture: &Fixture, row: usize) -> bool {
-    boundary
-        .legacy_reason(fixture.importer(row), fixture.text(row))
-        .is_some()
+    boundary.requires_legacy(fixture.importer(row), fixture.text(row))
 }
 
 /// The import raised the contract-era marker and its explanation.
@@ -585,9 +583,7 @@ fn the_boundary_markers_are_exactly_the_kept_requirements() {
     let boundary = f.boundary();
     for (row, expect_kept) in rows {
         assert_eq!(
-            boundary
-                .legacy_reason(f.importer(row), f.text(row))
-                .is_some(),
+            boundary.requires_legacy(f.importer(row), f.text(row)),
             expect_kept
         );
     }
@@ -872,7 +868,7 @@ fn the_filesystem_root_manifest_is_queried_and_can_own() {
         .bytes("/package.json", "{}")
         .bytes("/m/package.json", solid);
     let boundary = boundary_of(&reader, row());
-    assert!(boundary.legacy_reason("/x/i.ts", "./j.ts").is_some());
+    assert!(boundary.requires_legacy("/x/i.ts", "./j.ts"));
     assert_eq!(
         counts(&reader),
         ["/m/package.json=1", "/package.json=1", "/x/package.json=1"]

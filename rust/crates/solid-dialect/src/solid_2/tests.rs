@@ -184,11 +184,6 @@ fn the_contract_words_are_stated_by_this_dialect_not_by_shared_code() {
         Some(Execution::Deferred)
     );
     assert_eq!(word(Primitive::OnCleanup, 0, 1), Some(Execution::Deferred));
-    // Deferred is an attribution; only onCleanup is also proven never to
-    // run its callback during the call.
-    assert!(two.callback_never_invoked_during_call(Primitive::OnCleanup, 0));
-    assert!(!two.callback_never_invoked_during_call(Primitive::OnSettled, 0));
-    assert!(!two.callback_never_invoked_during_call(Primitive::CreateEffect, 1));
     assert!(two.wraps_function_arguments_in_memo(Primitive::Merge));
     assert!(!two.wraps_function_arguments_in_memo(Primitive::Omit));
 
