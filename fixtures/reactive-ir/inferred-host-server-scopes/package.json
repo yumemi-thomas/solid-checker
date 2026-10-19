@@ -1,8 +1,0 @@
-{
-  "name": "inferred-host-server-scopes",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "build": "vite build"
-  }
-}

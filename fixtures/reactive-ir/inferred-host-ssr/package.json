@@ -1,8 +1,0 @@
-{
-  "name": "inferred-host-ssr",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "build": "vite build"
-  }
-}
