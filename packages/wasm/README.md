@@ -72,8 +72,8 @@ await checker.close()
 ```
 
 **What it answers.** A check answers exactly what the native ordinary check
-answers over the same files. No package contract is read from any tier, so an
-import a tier covers stays an open obligation. The request takes the native
+answers over the same files. No package document is read, so a package import
+stays an open obligation unless its source is analyzed. The request takes the native
 options: `runtime`, `dependencySources`, `windowRealm`, `dialect`, `presets`, `enableRules`. `projectId` must be
 absolute, and is canonicalized against the mount exactly as native
 `--project` is.

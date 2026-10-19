@@ -60,7 +60,7 @@ object (`kind`, `message`, `binary`, `timeoutMs`, `wallMs`, `exitStatus`,
 the message to stderr and exits 2. `phase.lastCompletedStage` is the last
 reactive-IR stage the child reported (the adapter always runs the child with
 `SOLID_CHECKER_TIMINGS=1` for this); `null` means the child never finished a
-stage, i.e. it was still in native setup (project contract admission, source and
+stage, i.e. it was still in native setup (project selection, source and
 Type Facts acquisition, compiler facts). A timeout is never a clean result.
 
 **Measured cost.** A release build analysed all 48 tsconfig projects of 38 real
@@ -137,7 +137,7 @@ Repeated equivalent observations retain all event IDs and an occurrence count.
 Untracked reads and observer queries have severity `info` and
 `reactiveIntent: "open"`. Recorded
 exceptions/assertion failures have severity `error` in their own channel. No
-observation becomes a static violation or a package contract. The exit status
+observation becomes a static violation. The exit status
 preserves native analysis status; supplied observations do not fail CI.
 
 Inputs are checked before and after native analysis. Changed source, resolved

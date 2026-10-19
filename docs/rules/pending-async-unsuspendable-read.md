@@ -34,7 +34,7 @@ strict-read window. These reads are uncertifiable; their wording does not
 assert a runtime exception. Retained local callbacks remain negative controls.
 
 The same uncertainty applies when a project or unknown external helper receives
-the callback. Unless its exact body or an accepted contract proves invocation
+the callback. Unless its exact body or dependency source proves invocation
 during the call, the checker cannot prove the callback runs in the lexical
 scope or leaves pending values unhandled. Such results are uncertifiable and
 their wording identifies the open callback context. Exact cross-file and

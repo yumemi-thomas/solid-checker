@@ -23,8 +23,8 @@ Physical colocation does not merge module interfaces:
   re-enters by (ADR 0110).
 - `rust/dialects/solid-v2` owns Solid 2 vocabulary and the adapter over the
   pinned `solidjs-compiler` fork.
-- `rust/crates/solid-facts-backend` owns package-contract acquisition and
-  normalization.
+- `rust/crates/solid-facts-backend` owns dependency-source selection, the
+  package boundary and fact normalization.
 - `rust/crates/solid-reactive-ir` composes facts and owns proof obligations.
 
 Oxc and compiler facts stay in-process. Type Facts stays behind its versioned

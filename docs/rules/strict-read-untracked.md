@@ -80,7 +80,7 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   from a timer callback, a closure it returns, or an `async` body, or that only
   stores it, is not proven to read it during the call, and nothing is reported
   (`fixtures/reactive-ir/accessor-passed-by-reference`).
-  An accepted package contract's exact ambient inline callback invocation exposes
+  A dependency-source summary's exact ambient inline callback invocation exposes
   the same read for `access(count)`. A call-scoped lower bound of at least one
   proves the read; an optional invocation is **uncertifiable**. Neither callback
   closure nor a possible invocation proves that this call invokes the accessor.
