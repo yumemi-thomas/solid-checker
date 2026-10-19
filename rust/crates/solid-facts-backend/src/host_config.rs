@@ -817,8 +817,171 @@ pub(super) fn jsonc(source: &str) -> Option<serde_json::Value> {
     serde_json::from_slice(&bytes).ok()
 }
 
+/// The files a tsconfig inherits from through `extends`, transitively, in
+/// order, the config itself excluded; `None` when an entry cannot be resolved
+/// exactly here (a package specifier, a missing file, a cycle, invalid JSONC),
+/// in which case a caller that must notice config edits cannot trust any
+/// retained answer for this program.
+///
+/// Relative entries resolve against the extending file's directory, with the
+/// `.json` suffix added when the exact path does not exist, as TypeScript
+/// does. A package specifier resolves in the nearest `node_modules` holding
+/// that package: a file at the subpath (with or without `.json`), else the
+/// package's `tsconfig` field, else its `tsconfig.json`. A package with an
+/// `exports` map refuses: that resolution is TypeScript's, not reproduced.
+pub fn tsconfig_extends_chain(config: &std::path::Path) -> Option<Vec<std::path::PathBuf>> {
+    fn walk(
+        config: &std::path::Path,
+        chain: &mut Vec<std::path::PathBuf>,
+        seen: &mut std::collections::BTreeSet<std::path::PathBuf>,
+    ) -> Option<()> {
+        let source = std::fs::read_to_string(config).ok()?;
+        let value = jsonc(&source)?;
+        let entries = match value.get("extends") {
+            None => return Some(()),
+            Some(serde_json::Value::String(entry)) => vec![entry.clone()],
+            Some(serde_json::Value::Array(entries)) => entries
+                .iter()
+                .map(|entry| entry.as_str().map(str::to_owned))
+                .collect::<Option<Vec<_>>>()?,
+            Some(_) => return None,
+        };
+        let directory = config.parent()?;
+        for entry in entries {
+            let path =
+                if entry.starts_with("./") || entry.starts_with("../") || entry.starts_with('/') {
+                    file_or_json(&directory.join(&entry))?
+                } else {
+                    package_config(directory, &entry)?
+                };
+            let path = path.canonicalize().ok()?;
+            if !seen.insert(path.clone()) {
+                return None;
+            }
+            chain.push(path.clone());
+            walk(&path, chain, seen)?;
+        }
+        Some(())
+    }
+    /// `path` itself, or `path` with `.json` appended, when that is a file.
+    fn file_or_json(path: &std::path::Path) -> Option<std::path::PathBuf> {
+        if path.is_file() {
+            return Some(path.to_path_buf());
+        }
+        let mut suffixed = path.as_os_str().to_owned();
+        suffixed.push(".json");
+        let suffixed = std::path::PathBuf::from(suffixed);
+        suffixed.is_file().then_some(suffixed)
+    }
+    fn package_config(directory: &std::path::Path, specifier: &str) -> Option<std::path::PathBuf> {
+        let mut parts = specifier.splitn(if specifier.starts_with('@') { 3 } else { 2 }, '/');
+        let name = if specifier.starts_with('@') {
+            format!("{}/{}", parts.next()?, parts.next()?)
+        } else {
+            parts.next()?.to_owned()
+        };
+        let subpath = parts.next();
+        let root = directory
+            .ancestors()
+            .map(|ancestor| ancestor.join("node_modules").join(&name))
+            .find(|candidate| candidate.is_dir())?;
+        let manifest = std::fs::read_to_string(root.join("package.json"))
+            .ok()
+            .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok());
+        if manifest
+            .as_ref()
+            .is_some_and(|manifest| manifest.get("exports").is_some())
+        {
+            return None;
+        }
+        match subpath {
+            Some(subpath) => file_or_json(&root.join(subpath)),
+            None => manifest
+                .as_ref()
+                .and_then(|manifest| manifest.get("tsconfig")?.as_str().map(str::to_owned))
+                .map_or_else(
+                    || file_or_json(&root.join("tsconfig.json")),
+                    |field| file_or_json(&root.join(field)),
+                ),
+        }
+    }
+    let mut chain = Vec::new();
+    let mut seen = std::collections::BTreeSet::new();
+    seen.insert(config.canonicalize().ok()?);
+    walk(config, &mut chain, &mut seen)?;
+    Some(chain)
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn extends_chain_follows_relative_and_package_configs_exactly() {
+        let root = std::env::temp_dir().join(format!(
+            "sc-extends-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let write = |path: &str, text: &str| {
+            let path = root.join(path);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        };
+        write(
+            "app/tsconfig.json",
+            r#"{ "extends": ["./base", "@cfg/strict"] }"#,
+        );
+        write(
+            "app/base.json",
+            "{ // comment\n \"extends\": \"shared/tsconfig.json\" }",
+        );
+        write("app/node_modules/shared/tsconfig.json", "{}");
+        write(
+            "node_modules/@cfg/strict/package.json",
+            r#"{ "tsconfig": "strict.json" }"#,
+        );
+        write("node_modules/@cfg/strict/strict.json", "{}");
+        let chain = super::tsconfig_extends_chain(&root.join("app/tsconfig.json")).unwrap();
+        let names = chain
+            .iter()
+            .map(|path| {
+                path.strip_prefix(root.canonicalize().unwrap())
+                    .unwrap()
+                    .display()
+                    .to_string()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            names,
+            [
+                "app/base.json",
+                "app/node_modules/shared/tsconfig.json",
+                "node_modules/@cfg/strict/strict.json"
+            ]
+        );
+        // An `exports` map is TypeScript's resolution: refused.
+        write(
+            "node_modules/@cfg/strict/package.json",
+            r#"{ "exports": { "./*": "./*" } }"#,
+        );
+        assert!(super::tsconfig_extends_chain(&root.join("app/tsconfig.json")).is_none());
+        // A cycle, and a missing file, refuse.
+        write("cycle/a.json", r#"{ "extends": "./b.json" }"#);
+        write("cycle/b.json", r#"{ "extends": "./a.json" }"#);
+        assert!(super::tsconfig_extends_chain(&root.join("cycle/a.json")).is_none());
+        write("missing/tsconfig.json", r#"{ "extends": "./gone" }"#);
+        assert!(super::tsconfig_extends_chain(&root.join("missing/tsconfig.json")).is_none());
+        // No `extends`: an empty chain.
+        write("plain/tsconfig.json", "{}");
+        assert_eq!(
+            super::tsconfig_extends_chain(&root.join("plain/tsconfig.json")),
+            Some(vec![])
+        );
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
     use super::*;
 
     #[test]

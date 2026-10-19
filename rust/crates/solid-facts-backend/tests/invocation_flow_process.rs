@@ -655,6 +655,65 @@ fn daemon_follows_the_boundary_manifest() {
     let _ = fs::remove_dir_all(&sockets);
 }
 
+const OTHER: &str = r#"import { createSignal } from "solid-js";
+export function Other() {
+  const [count] = createSignal(0);
+  console.log(count());
+  return <p />;
+}
+"#;
+
+/// A retained daemon check must follow an edit to a config the project's
+/// tsconfig `extends`: here the base config's `include` adds and drops a file
+/// holding a strict-read violation.
+#[test]
+fn daemon_follows_an_extended_tsconfig() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let (directory, _) = project(
+        "daemon-extends",
+        &[
+            ("App.tsx", RETAIN_APP),
+            ("lib.ts", RETAIN_LIB),
+            ("Other.tsx", OTHER),
+        ],
+    );
+    let directory = directory.canonicalize().unwrap();
+    let tsconfig = directory.join("tsconfig.json");
+    let base = directory.join("base.json");
+    let options = r#""compilerOptions": {"jsx": "preserve", "module": "ESNext", "moduleResolution": "Bundler", "strict": true, "target": "ES2022"}"#;
+    let narrow = format!(r#"{{ {options}, "include": ["App.tsx", "lib.ts", "*.d.ts"] }}"#);
+    let wide = format!(r#"{{ {options}, "include": ["*.ts", "*.tsx"] }}"#);
+    fs::write(&tsconfig, r#"{ "extends": "./base" }"#).unwrap();
+    fs::write(&base, &narrow).unwrap();
+    let sockets = PathBuf::from(format!("/tmp/sce-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&sockets);
+    fs::create_dir_all(&sockets).unwrap();
+    let violations = |findings: &serde_json::Value| {
+        findings
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|finding| finding["id"] == "SC1001" && finding["kind"] == "violation")
+            .count()
+    };
+    let (first, _) = cli_check(&typefacts, &tsconfig, &sockets, true);
+    let (repeat, hit) = cli_check(&typefacts, &tsconfig, &sockets, true);
+    assert_eq!(repeat, first);
+    assert_eq!(hit, Some(true), "the repeat is a cached answer");
+    assert_eq!(violations(&first), 0, "Other.tsx is outside the program");
+    for (text, inside) in [(&wide, true), (&narrow, false), (&wide, true)] {
+        fs::write(&base, text).unwrap();
+        let (retained, _) = cli_check(&typefacts, &tsconfig, &sockets, true);
+        let (fresh, _) = cli_check(&typefacts, &tsconfig, &sockets, false);
+        assert_eq!(retained, fresh, "base include wide={inside}");
+        assert_eq!(violations(&fresh) > 0, inside, "base include wide={inside}");
+    }
+    fs::remove_dir_all(&directory).unwrap();
+    let _ = fs::remove_dir_all(&sockets);
+}
+
 // ---- Module resolution under a retained daemon (review round 5).
 
 const WS_APP: &str = r#"import { createSignal } from "solid-js";

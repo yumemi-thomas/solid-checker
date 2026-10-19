@@ -1,5 +1,17 @@
 # Precision backlog
 
+## 2026-10-19 — The daemon follows a tsconfig's `extends` chain
+
+A retained daemon program now fingerprints every config its tsconfig
+`extends`, transitively (`tsconfig_extends_chain` in `host_config.rs`):
+relative entries with TypeScript's `.json` suffix rule, and package entries
+through the nearest `node_modules` (subpath file, the package's `tsconfig`
+field, or its `tsconfig.json`). A chain it cannot follow exactly (a package
+with an `exports` map, a missing file, a cycle, invalid JSONC) disables
+reuse of the retained program, so an edit there is never missed. Process test
+`daemon_follows_an_extended_tsconfig` (it fails without the change). Closes
+the gap recorded under ADR 0322 ("Not observed: an `extends`ed tsconfig").
+
 ## 2026-10-19 — Props and store reads in callbacks follow their consumer everywhere (ADR 0323 amendment)
 
 The owner decision recorded under ADR 0323 ("+811") is taken now that
