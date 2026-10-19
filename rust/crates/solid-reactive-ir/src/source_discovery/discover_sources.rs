@@ -2,6 +2,48 @@
 
 use super::*;
 
+/// The source tables discovery fills, owned together so the passes that read
+/// and extend them can each take just the tables they touch.
+#[derive(Default)]
+struct SourceTables {
+    accessors: HashMap<SymbolId, (SymbolId, Location)>,
+    accessor_origins: HashMap<SymbolId, (SymbolId, SymbolId, Location)>,
+    setters: HashMap<SymbolId, (SymbolId, Location, bool, ReactiveSourceKind)>,
+    actions: HashMap<SymbolId, (SymbolId, Location)>,
+    source_kinds: HashMap<SymbolId, ReactiveSourceKind>,
+    source_primitives: HashMap<SymbolId, SymbolId>,
+    source_phases: HashMap<SymbolId, u8>,
+    returned_source_symbols: HashSet<SymbolId>,
+    summary_source_symbols: HashSet<SymbolId>,
+    source_owned_write: HashMap<SymbolId, bool>,
+    async_sources: HashSet<SymbolId>,
+    source_async_options: HashMap<SymbolId, AsyncSourceOptions>,
+    value_form_stores: HashSet<SymbolId>,
+    typed_sources: HashMap<SymbolId, TypedSource>,
+    prop_sources: HashMap<SymbolId, (SymbolId, Location)>,
+    uncertain_prop_sources: HashSet<SymbolId>,
+}
+
+impl SourceTables {
+    fn merge_target(&mut self) -> SourceDiscoveryMergeTarget<'_> {
+        SourceDiscoveryMergeTarget {
+            accessors: &mut self.accessors,
+            accessor_origins: &mut self.accessor_origins,
+            setters: &mut self.setters,
+            actions: &mut self.actions,
+            source_kinds: &mut self.source_kinds,
+            source_primitives: &mut self.source_primitives,
+            source_phases: &mut self.source_phases,
+            returned_source_symbols: &mut self.returned_source_symbols,
+            summary_source_symbols: &mut self.summary_source_symbols,
+            source_owned_write: &mut self.source_owned_write,
+            async_sources: &mut self.async_sources,
+            source_async_options: &mut self.source_async_options,
+            value_form_stores: &mut self.value_form_stores,
+        }
+    }
+}
+
 pub(crate) fn discover_sources(
     ctx: &StageContext<'_>,
     source_discovery_cache: Option<&mut HashMap<SourcePath, CachedSourceDiscovery>>,
@@ -9,31 +51,125 @@ pub(crate) fn discover_sources(
     build_timings: &mut BuildTimings,
     emit_timings: bool,
 ) -> SourceDiscovery {
+    let mut clock = StageClock::new(emit_timings);
+    let mut tables = SourceTables::default();
+    let (retained_source_paths, changed_source_symbols) = merge_file_source_contributions(
+        ctx,
+        source_discovery_cache,
+        typescript_unchanged,
+        build_timings,
+        &mut tables,
+    );
+    clock.finish(build_timings, ReactiveIrStage::SourceDiscovery);
+    // Source construction/accepted-return facts collected above, before the
+    // type-only fallback. A published Accessor/Store annotation alone cannot
+    // witness a runtime reactive Get in an incoming prop expression.
+    let mut runtime_sources = tables.accessors.keys().cloned().collect::<HashSet<_>>();
+    let mut literal_member_slots =
+        crate::literal_member_slots::LiteralMemberSlots::new(ctx.facts, ctx.semantic_lookup);
+    discover_withdrawn_tuple_candidates(ctx, &runtime_sources, &mut tables.typed_sources);
+    discover_typed_sources(
+        ctx,
+        &mut tables,
+        &runtime_sources,
+        &mut literal_member_slots,
+    );
+    discover_children_accessors(ctx, &mut runtime_sources, &mut tables.accessors);
+    discover_effect_store_parameters(ctx, &mut tables);
+    resolve_setter_action_aliases(ctx, &mut tables);
+    resolve_store_view_aliases(ctx, &mut tables);
+    discover_prop_sources(ctx, &mut tables);
+    clock.finish(build_timings, ReactiveIrStage::TypedAccessorsAndPropRoots);
+    propagate_prop_sources(ctx, &mut tables);
+    let SourceTables {
+        accessors,
+        accessor_origins,
+        setters,
+        actions,
+        source_kinds,
+        source_primitives,
+        source_phases,
+        returned_source_symbols,
+        summary_source_symbols,
+        source_owned_write,
+        async_sources,
+        source_async_options,
+        value_form_stores,
+        typed_sources,
+        prop_sources,
+        uncertain_prop_sources,
+    } = tables;
+    let StageContext {
+        facts,
+        entities,
+        semantic_lookup,
+        runtime,
+        ..
+    } = *ctx;
+    runtime_sources.retain(|symbol| {
+        !facts.files.iter().any(|file| {
+            crate::value_identity::binding_has_write(file, entities, symbol)
+                || file.ast.iteration_targets.iter().any(|target| {
+                    file.ast.identifiers.iter().any(|identifier| {
+                        target.contains(identifier.span)
+                            && entities.at(file.path.as_str(), identifier.span) == Some(symbol)
+                    })
+                })
+        })
+    });
+    let props_reactivity = classify_component_props(
+        runtime,
+        facts,
+        semantic_lookup,
+        entities,
+        &accessors,
+        &source_kinds,
+        &prop_sources,
+        &runtime_sources,
+    );
+    clock.finish(
+        build_timings,
+        ReactiveIrStage::PropPropagationAndControlFlow,
+    );
+    SourceDiscovery {
+        accessors,
+        accessor_origins,
+        setters,
+        actions,
+        source_kinds,
+        source_primitives,
+        source_phases,
+        returned_source_symbols,
+        summary_source_symbols,
+        source_owned_write,
+        async_sources,
+        source_async_options,
+        value_form_stores,
+        typed_sources,
+        prop_sources,
+        uncertain_prop_sources,
+        props_reactivity,
+        retained_source_paths,
+        changed_source_symbols,
+    }
+}
+
+fn merge_file_source_contributions(
+    ctx: &StageContext<'_>,
+    source_discovery_cache: Option<&mut HashMap<SourcePath, CachedSourceDiscovery>>,
+    typescript_unchanged: bool,
+    build_timings: &mut BuildTimings,
+    tables: &mut SourceTables,
+) -> (HashSet<String>, HashSet<SymbolId>) {
     let StageContext {
         facts,
         project_indexes,
         typescript_indexes,
         entities,
-        source_declarations,
         symbol_names,
         semantic_lookup,
-        runtime,
+        ..
     } = *ctx;
-    let mut clock = StageClock::new(emit_timings);
-    let mut accessors = HashMap::<SymbolId, (SymbolId, Location)>::new();
-    let mut accessor_origins = HashMap::<SymbolId, (SymbolId, SymbolId, Location)>::new();
-    let mut setters = HashMap::<SymbolId, (SymbolId, Location, bool, ReactiveSourceKind)>::new();
-    let mut actions = HashMap::<SymbolId, (SymbolId, Location)>::new();
-    let mut source_kinds = HashMap::<SymbolId, ReactiveSourceKind>::new();
-    let mut source_primitives = HashMap::<SymbolId, SymbolId>::new();
-    let mut source_phases = HashMap::<SymbolId, u8>::new();
-    let mut returned_source_symbols = HashSet::<SymbolId>::new();
-    let mut summary_source_symbols = HashSet::<SymbolId>::new();
-    let mut source_owned_write = HashMap::<SymbolId, bool>::new();
-    let mut async_sources = HashSet::<SymbolId>::new();
-    let mut source_async_options = HashMap::<SymbolId, AsyncSourceOptions>::new();
-    let mut value_form_stores = HashSet::<SymbolId>::new();
-
     let mut retained_source_paths = HashSet::<String>::new();
     let mut changed_source_symbols = HashSet::<SymbolId>::new();
     match source_discovery_cache {
@@ -54,21 +190,7 @@ pub(crate) fn discover_sources(
             for contribution in &contributions {
                 aggregate.merge(contribution);
             }
-            aggregate.append_to(SourceDiscoveryMergeTarget {
-                accessors: &mut accessors,
-                accessor_origins: &mut accessor_origins,
-                setters: &mut setters,
-                actions: &mut actions,
-                source_kinds: &mut source_kinds,
-                source_primitives: &mut source_primitives,
-                source_phases: &mut source_phases,
-                returned_source_symbols: &mut returned_source_symbols,
-                summary_source_symbols: &mut summary_source_symbols,
-                source_owned_write: &mut source_owned_write,
-                async_sources: &mut async_sources,
-                source_async_options: &mut source_async_options,
-                value_form_stores: &mut value_form_stores,
-            });
+            aggregate.append_to(tables.merge_target());
         }
         Some(cache) => {
             let current_paths = facts
@@ -157,32 +279,26 @@ pub(crate) fn discover_sources(
                 }
                 aggregate
             }) {
-                aggregate.append_to(SourceDiscoveryMergeTarget {
-                    accessors: &mut accessors,
-                    accessor_origins: &mut accessor_origins,
-                    setters: &mut setters,
-                    actions: &mut actions,
-                    source_kinds: &mut source_kinds,
-                    source_primitives: &mut source_primitives,
-                    source_phases: &mut source_phases,
-                    returned_source_symbols: &mut returned_source_symbols,
-                    summary_source_symbols: &mut summary_source_symbols,
-                    source_owned_write: &mut source_owned_write,
-                    async_sources: &mut async_sources,
-                    source_async_options: &mut source_async_options,
-                    value_form_stores: &mut value_form_stores,
-                });
+                aggregate.append_to(tables.merge_target());
             }
         }
     }
-    clock.finish(build_timings, ReactiveIrStage::SourceDiscovery);
-    // Source construction/accepted-return facts collected above, before the
-    // type-only fallback. A published Accessor/Store annotation alone cannot
-    // witness a runtime reactive Get in an incoming prop expression.
-    let mut runtime_sources = accessors.keys().cloned().collect::<HashSet<_>>();
-    let mut literal_member_slots =
-        crate::literal_member_slots::LiteralMemberSlots::new(facts, semantic_lookup);
-    let mut typed_sources = HashMap::<SymbolId, TypedSource>::new();
+    (retained_source_paths, changed_source_symbols)
+}
+
+fn discover_withdrawn_tuple_candidates(
+    ctx: &StageContext<'_>,
+    runtime_sources: &HashSet<SymbolId>,
+    typed_sources: &mut HashMap<SymbolId, TypedSource>,
+) {
+    let StageContext {
+        facts,
+        project_indexes,
+        entities,
+        symbol_names,
+        semantic_lookup,
+        ..
+    } = *ctx;
     // A tuple type describes the factory's result, not the values a
     // replaced iterator hands the binding. Preserve those former source
     // candidates even when the package's declared type is a plain function
@@ -263,6 +379,29 @@ pub(crate) fn discover_sources(
             }
         }
     }
+}
+
+fn discover_typed_sources(
+    ctx: &StageContext<'_>,
+    tables: &mut SourceTables,
+    runtime_sources: &HashSet<SymbolId>,
+    literal_member_slots: &mut crate::literal_member_slots::LiteralMemberSlots<'_, '_>,
+) {
+    let StageContext {
+        facts,
+        entities,
+        source_declarations,
+        semantic_lookup,
+        ..
+    } = *ctx;
+    let SourceTables {
+        accessors,
+        setters,
+        source_kinds,
+        source_phases,
+        typed_sources,
+        ..
+    } = tables;
     for entity in facts.typescript.entities() {
         let Some(descriptor) = &entity.type_descriptor else {
             continue;
@@ -382,12 +521,12 @@ pub(crate) fn discover_sources(
             match typed_implementation(
                 semantic_lookup,
                 entities,
-                &mut literal_member_slots,
+                literal_member_slots,
                 &entity.location,
                 symbol,
                 kind,
-                &runtime_sources,
-                &source_kinds,
+                runtime_sources,
+                source_kinds,
             ) {
                 TypedImplementation::Source(source) => {
                     let (source_name, source_declaration) = accessors[&source].clone();
@@ -454,6 +593,20 @@ pub(crate) fn discover_sources(
             solid_dialect::TypeRole::Component | solid_dialect::TypeRole::Owner => unreachable!(),
         }
     }
+}
+
+fn discover_children_accessors(
+    ctx: &StageContext<'_>,
+    runtime_sources: &mut HashSet<SymbolId>,
+    accessors: &mut HashMap<SymbolId, (SymbolId, Location)>,
+) {
+    let StageContext {
+        facts,
+        entities,
+        symbol_names,
+        semantic_lookup,
+        ..
+    } = *ctx;
     for file in &facts.files {
         for element in &file.ast.jsx_elements {
             let dialect = semantic_lookup.dialect;
@@ -518,6 +671,22 @@ pub(crate) fn discover_sources(
             }
         }
     }
+}
+
+fn discover_effect_store_parameters(ctx: &StageContext<'_>, tables: &mut SourceTables) {
+    let StageContext {
+        facts,
+        entities,
+        source_declarations,
+        symbol_names,
+        semantic_lookup,
+        ..
+    } = *ctx;
+    let SourceTables {
+        accessors,
+        source_kinds,
+        ..
+    } = tables;
     for file in &facts.files {
         for call in &file.ast.calls {
             if !call_primitive_name(file, call, entities, symbol_names, semantic_lookup.dialect)
@@ -612,6 +781,15 @@ pub(crate) fn discover_sources(
             source_kinds.insert(parameter_symbol.clone(), ReactiveSourceKind::Store);
         }
     }
+}
+
+fn resolve_setter_action_aliases(ctx: &StageContext<'_>, tables: &mut SourceTables) {
+    let StageContext {
+        facts, entities, ..
+    } = *ctx;
+    let SourceTables {
+        setters, actions, ..
+    } = tables;
     loop {
         let mut setter_aliases = Vec::new();
         let mut action_aliases = Vec::new();
@@ -670,6 +848,20 @@ pub(crate) fn discover_sources(
         setters.extend(setter_aliases);
         actions.extend(action_aliases);
     }
+}
+
+fn resolve_store_view_aliases(ctx: &StageContext<'_>, tables: &mut SourceTables) {
+    let StageContext {
+        facts,
+        entities,
+        semantic_lookup,
+        ..
+    } = *ctx;
+    let SourceTables {
+        accessors,
+        source_kinds,
+        ..
+    } = tables;
     // ADR 0323 (review round 10): an `omit` or `merge` view over a store reads
     // through to it (`viewSource(e)[key]`, `@solidjs/signals@2.0.0-rc.13`
     // `dist/prod/store/utils.js`), so a binding of one is a store alias, like
@@ -720,8 +912,20 @@ pub(crate) fn discover_sources(
             source_kinds.insert(symbol, ReactiveSourceKind::Store);
         }
     }
-    let mut prop_sources = HashMap::<SymbolId, (SymbolId, Location)>::new();
-    let mut uncertain_prop_sources = HashSet::<SymbolId>::new();
+}
+
+fn discover_prop_sources(ctx: &StageContext<'_>, tables: &mut SourceTables) {
+    let StageContext {
+        facts,
+        entities,
+        semantic_lookup,
+        ..
+    } = *ctx;
+    let SourceTables {
+        prop_sources,
+        uncertain_prop_sources,
+        ..
+    } = tables;
     for file in &facts.files {
         for function in &file.ast.functions {
             let component_status = semantic_lookup.function_component_status(file, function);
@@ -751,7 +955,20 @@ pub(crate) fn discover_sources(
             }
         }
     }
-    clock.finish(build_timings, ReactiveIrStage::TypedAccessorsAndPropRoots);
+}
+
+fn propagate_prop_sources(ctx: &StageContext<'_>, tables: &mut SourceTables) {
+    let StageContext {
+        facts,
+        entities,
+        semantic_lookup,
+        ..
+    } = *ctx;
+    let SourceTables {
+        prop_sources,
+        uncertain_prop_sources,
+        ..
+    } = tables;
     loop {
         let mut changed = false;
         for file in &facts.files {
@@ -809,51 +1026,5 @@ pub(crate) fn discover_sources(
         if !changed {
             break;
         }
-    }
-    runtime_sources.retain(|symbol| {
-        !facts.files.iter().any(|file| {
-            crate::value_identity::binding_has_write(file, entities, symbol)
-                || file.ast.iteration_targets.iter().any(|target| {
-                    file.ast.identifiers.iter().any(|identifier| {
-                        target.contains(identifier.span)
-                            && entities.at(file.path.as_str(), identifier.span) == Some(symbol)
-                    })
-                })
-        })
-    });
-    let props_reactivity = classify_component_props(
-        runtime,
-        facts,
-        semantic_lookup,
-        entities,
-        &accessors,
-        &source_kinds,
-        &prop_sources,
-        &runtime_sources,
-    );
-    clock.finish(
-        build_timings,
-        ReactiveIrStage::PropPropagationAndControlFlow,
-    );
-    SourceDiscovery {
-        accessors,
-        accessor_origins,
-        setters,
-        actions,
-        source_kinds,
-        source_primitives,
-        source_phases,
-        returned_source_symbols,
-        summary_source_symbols,
-        source_owned_write,
-        async_sources,
-        source_async_options,
-        value_form_stores,
-        typed_sources,
-        prop_sources,
-        uncertain_prop_sources,
-        props_reactivity,
-        retained_source_paths,
-        changed_source_symbols,
     }
 }
