@@ -74,7 +74,7 @@ fn copies_and_subpaths_are_separate_imports() {
 fn a_conflicting_identity_becomes_unknown_rather_than_either() {
     let key = ImportKey::new("/p/src/a.ts", "alias");
     let mut boundary = PackageBoundary::default();
-    let cause = reason(UnanalyzableReason::LegacyContractFallback, "x");
+    let cause = reason(UnanalyzableReason::LegacyRequirementFallback, "x");
     boundary.record(key.clone(), Some("one"), Some("/r/one"), cause.clone());
     boundary.record(key.clone(), None, None, cause.clone());
     assert_eq!(

@@ -8,8 +8,8 @@ use std::{
     time::Instant,
 };
 
+use crate::boundary_defects::discover_boundary_defects;
 use crate::cache::{BuildCaches, ReusePlan, build_typescript_indexes};
-use crate::contracts::discover_boundary_defects;
 use crate::hosts::ProjectHostIndex;
 use crate::identity::{SymbolId, SymbolName};
 use crate::indexes::{CachedAstFileIndex, EntitySymbols, ProjectIndexes, SemanticLookup};
@@ -183,8 +183,8 @@ pub(crate) struct AnalysisContext<'a> {
 /// boundary, every import the analysis cannot answer from source, each with
 /// the cause recorded at the decision that found it.
 ///
-/// `hosts` is the inferred execution host (phase P4 of the contract-removal
-/// plan). The IR pipeline fingerprints it and never reads it.
+/// `hosts` is the inferred execution host. The IR pipeline fingerprints it
+/// and never reads it.
 #[derive(Clone, Copy, Debug)]
 pub struct AnalysisInputs<'a> {
     pub boundary: &'a PackageBoundary,
@@ -246,7 +246,7 @@ pub fn build(facts: &ProjectFacts, dialect: &dyn Dialect) -> Result<Program, Bui
 /// The staged incremental pipeline. One stage per clock span, in order:
 ///
 /// 1. Project indexes, the late-stage cache gate, TypeScript indexes,
-///    symbol names, contract resolution, and the semantic lookup.
+///    symbol names, boundary defects, and the semantic lookup.
 /// 2. Source discovery and reachability, in two parallel lanes.
 /// 3. The static prepass ([`static_rules::static_prepass`]).
 /// 4. Local accesses and the interprocedural fixed point, two lanes again.
@@ -395,8 +395,8 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     let substage_started = Instant::now();
     // An import the analysis cannot answer from source is the package
     // boundary's question.
-    let missing_contract_exports = discover_boundary_defects(facts, inputs, entities, dialect);
-    build_timings.contract_resolution = substage_started.elapsed();
+    let boundary_defects = discover_boundary_defects(facts, inputs, entities, dialect);
+    build_timings.boundary_defects = substage_started.elapsed();
     let semantic_lookup = SemanticLookup::new(
         facts,
         ast_indexes,
@@ -420,7 +420,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         } else {
             Vec::new()
         },
-        static_defects: missing_contract_exports,
+        static_defects: boundary_defects,
         ..ProgramDraft::default()
     };
     let mut owned_reachable_calls = None;

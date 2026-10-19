@@ -209,70 +209,6 @@ fn owned_write_wording(write: &solid_reactive_ir::ReactiveWrite) -> FindingWordi
     ])
 }
 
-/// ADR 0179: the wording for a registration a package export's accepted
-/// contract states it makes on its caller's owner on every call. It names the
-/// export and what the contract states, and not a runtime code: which
-/// forbidden-scope error the runtime raises first depends on the export's
-/// internals, of which the contract states only the guaranteed registration.
-fn leaf_contract_registration_wording(
-    operation: &solid_reactive_ir::LeafOwnerOperation,
-    export: &str,
-) -> FindingWording {
-    let registration = match operation.kind {
-        LeafOwnerOperationKind::Cleanup => "a cleanup",
-        _ => "a reactive computation",
-    };
-    let mut message = if operation.possible {
-        format!(
-            "{export}() may register {registration} on its caller's owner at this call, which is inside {}, a leaf owner that forbids it; its accepted contract states the registration on some calls, not every call, so where it happens Solid throws in dev and the finding is a proof obligation",
-            operation.owner
-        )
-    } else {
-        format!(
-            "{export}() registers {registration} on its caller's owner at this call, which is inside {}, a leaf owner that forbids it; Solid throws here in dev",
-            operation.owner
-        )
-    };
-    let hint = format!(
-        "Call {export}() in the component body (or another owning scope) instead of inside {}.",
-        operation.owner
-    );
-    let mut evidence = vec![
-        EvidenceStep {
-            message: format!(
-                "the accepted contract for {export} states {registration} on the caller's owner, at the call, {}",
-                if operation.possible {
-                    "on some calls (min 0)"
-                } else {
-                    "on every call"
-                }
-            ),
-            location: Some(operation.location.clone()),
-        },
-        EvidenceStep {
-            message: format!(
-                "the call is in the synchronous extent of the {} callback",
-                operation.owner
-            ),
-            location: Some(operation.location.clone()),
-        },
-    ];
-    if operation.uncertain {
-        message.push_str(
-            "; solid-checker cannot prove this call runs under a live children-capable owner (out-of-band the callback is a plain queued function and this does not throw), so the finding is a proof obligation",
-        );
-        evidence.push(EvidenceStep {
-            message: format!(
-                "the {} call site's owner context cannot be proven (exported helper or conditional owner)",
-                operation.owner
-            ),
-            location: operation.call_site_gate.clone(),
-        });
-    }
-    FindingWording::new(Rule::LeafOwnerForbiddenCall.metadata(), message, hint)
-        .with_evidence(evidence)
-}
-
 fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> FindingWording {
     if matches!(
         operation.kind,
@@ -283,14 +219,9 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
             format!("{member} performs observer-cache tracking inside {}; a missing per-key signal requires child creation and a retained signal requires cleanup registration, and this leaf owner forbids both paths, so Solid throws in dev", operation.owner),
             format!("Read the collection in JSX or a children-capable tracked computation instead of inside {}.", operation.owner))
             .with_evidence(vec![EvidenceStep {
-                message: "the exact new-instance contract states a getObserver-gated per-key cache recipe; the observer is present at this synchronous invocation".into(),
+                message: "the dialect's new-instance model states a getObserver-gated per-key cache recipe; the observer is present at this synchronous invocation".into(),
                 location: Some(operation.location.clone()),
             }]);
-    }
-    if operation.through_contract
-        && let Some(export) = &operation.via
-    {
-        return leaf_contract_registration_wording(operation, export);
     }
     let (rule, mut message, hint) = match &operation.kind {
         LeafOwnerOperationKind::Cleanup => (
@@ -615,7 +546,7 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         | Rule::AsyncOutsideLoadingBoundary
         | Rule::PrimitiveInDirectiveApplication
         | Rule::MissingEffectFunction
-        | Rule::PackageContractIncomplete
+        | Rule::PackageBehaviorUnavailable
         // Moved to the static-defect channel, where the analysis states which
         // of the four transport proofs it made and this catalog names the
         // serializer that fixes it.
@@ -651,7 +582,7 @@ fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
         StaticDefectFamily::ReactiveObjectDestructure => Rule::ComponentPropsDestructure,
         StaticDefectFamily::ReactiveReadAfterAwait => Rule::ReactiveReadAfterAwait,
         StaticDefectFamily::ComponentReturnsConditionally => Rule::ComponentReturnsConditionally,
-        StaticDefectFamily::PackageContractIncomplete => Rule::PackageContractIncomplete,
+        StaticDefectFamily::PackageBehaviorUnavailable => Rule::PackageBehaviorUnavailable,
         StaticDefectFamily::MissingEffectFunction => Rule::MissingEffectFunction,
         StaticDefectFamily::ReactiveSourceUncaptured => Rule::ReactiveSourceUncaptured,
         StaticDefectFamily::ReactiveDispatchUnresolved => Rule::ReactiveDispatchUnresolved,
@@ -724,10 +655,10 @@ fn v2_store_mutation_hint(name: &str) -> String {
 /// The Solid 1.x APIs removed or renamed in 2.0 that a project migrating to
 /// the v2 dialect is most likely to still import, mapped to their 2.0
 /// replacement. Derived from the official 2.0 migration guide's rename and
-/// removal tables; each name is verified absent from the bundled
-/// `solid-v2/solid-js.json` contract by
-/// `removed_exports_are_absent_from_the_bundled_contract` — anything the
-/// contract still exports is not removed and must not appear here.
+/// removal tables; each name is verified absent from the audited
+/// `solid-js` export table by
+/// `removed_exports_are_absent_from_the_export_table` — anything the
+/// table still exports is not removed and must not appear here.
 const V2_REMOVED_EXPORTS: &[(&str, &str)] = &[
     (
         "batch",
@@ -754,8 +685,8 @@ const V2_REMOVED_EXPORTS: &[(&str, &str)] = &[
         "use an async computation (createMemo(async ...) or createStore(fn)) read under a <Loading> boundary",
     ),
     // `createRenderEffect` and `untrack` are deliberately NOT here: both
-    // still exist in 2.0 (bundled contract exports them), so a missing
-    // summary for them is a real contract gap, not a removed API.
+    // still exist in 2.0 (the export table lists them), so unavailable
+    // behavior for them is a real source gap, not a removed API.
     (
         "createComputed",
         "use createEffect(compute, apply), a function-form createSignal/createStore, or createMemo",
@@ -810,10 +741,10 @@ const V2_REMOVED_EXPORTS: &[(&str, &str)] = &[
 ];
 
 /// Migration-oriented SC9005 hint for the removed 1.x APIs: telling the user
-/// to write a contract entry for `batch` would send them to document an
+/// to make the source of `batch` available would send them to chase an
 /// export that no longer exists. Applies to the packages the v2 dialect
-/// itself contracts (`solid-js`, `@solidjs/web`); a same-named export of a
-/// third-party package keeps the generic contract hint.
+/// itself models (`solid-js`, `@solidjs/web`); a same-named export of a
+/// third-party package keeps the generic hint.
 fn v2_removed_export_hint(module: &str, export: &str) -> Option<String> {
     if module != "solid-js" && module != "@solidjs/web" && !module.starts_with("@solidjs/web/") {
         return None;

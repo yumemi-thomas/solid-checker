@@ -9,9 +9,10 @@ const packageVersion = require("./package.json").version;
 const snapshotCache = new Map();
 /**
  * Subject kinds whose `relatedLocations` are further sites of the finding
- * itself: the checker collapses one package-contract obligation per package,
- * or per package export, over the whole project (`projection.rs`,
- * `collapse_unaccepted_contract_defects`).
+ * itself: the checker collapses one unavailable-package-behavior obligation
+ * per package over the whole project (`projection.rs`,
+ * `collapse_unanalyzed_package_defects`). `package-export` is retained for a
+ * finding that names one export.
  */
 const SITE_SUBJECTS = new Set(["package", "package-export"]);
 
@@ -19,8 +20,8 @@ const SITE_SUBJECTS = new Set(["package", "package-export"]);
  * The native analysis's `solid-checker: note:` stderr lines, per snapshot.
  *
  * A note is not a finding: it says something about the run itself -- today,
- * that a discovered project catalog was withheld because no receipt trust
- * configuration was supplied, so the contracts it carries were not admitted.
+ * that a package's source could not be analyzed, so its behaviour stays
+ * unknown.
  * The standalone CLI prints it to the terminal; the adapter captures the
  * child's stderr, so without this the note died in a pipe ESLint never shows
  * and the user saw uncertified imports with no reason given.
@@ -66,8 +67,8 @@ const ownedRules = new Map();
  * project that was never analyzed as stated would look clean. The native
  * `--format default` applies the same rule (`snapshot_emission::user_facing`).
  */
-/** The contract-gap rule no shipped config enables (ADR 0248). */
-const CONTRACT_GAP_RULE = "package-contract-incomplete";
+/** The unavailable-package-behavior rule no shipped config enables (ADR 0248). */
+const UNAVAILABLE_BEHAVIOR_RULE = "package-contract-incomplete";
 
 function userFacing(finding) {
   return finding.kind !== "uncertifiable" || finding.subjectKind === "project";
@@ -185,8 +186,7 @@ function configuredPath(config, name) {
 }
 
 /**
- * Settings retired with package-contract consumption (P7 of the
- * contract-removal plan). Each is refused rather than ignored, so a
+ * Settings retired with package-contract consumption (ADR 0312). Each is refused rather than ignored, so a
  * configuration that relied on it learns that it no longer applies.
  */
 const RETIRED_SETTINGS = ["acceptedContracts", "receiptTrustConfiguration", "dependencySource"];
@@ -668,7 +668,7 @@ const certification = {
  * keeps no state across passes, so a pass that ended in a thrown analysis
  * cannot cost a later pass its note.
  */
-const contractNote = {
+const packageNote = {
   meta: {
     type: "suggestion",
     docs: {
@@ -789,7 +789,7 @@ const manifestEntriesByRule = new Map(
 
 const plugin = {
   meta: { name: "solid-checker", version: packageVersion },
-  rules: { certification, "package-note": contractNote, "contract-note": contractNote },
+  rules: { certification, "package-note": packageNote, "contract-note": packageNote },
   configs: {}
 };
 
@@ -851,11 +851,11 @@ for (const catalog of Object.values(manifests)) {
       // Every shipped config enables the note rule at `warn`, so no listing
       // order can make a note fail a lint.
       "solid-checker/contract-note": "warn",
-      // ADR 0248: contract gaps are opt-in. They are not findings about the
+      // ADR 0248: unavailable package behavior is opt-in. They are not findings about the
       // user's code, so no shipped config enables them.
       ...Object.fromEntries(
         catalog.rules
-          .filter(entry => entry.defaultEnabled && entry.name !== CONTRACT_GAP_RULE)
+          .filter(entry => entry.defaultEnabled && entry.name !== UNAVAILABLE_BEHAVIOR_RULE)
           .map(entry => [
           `solid-checker/${entry.name}`,
           entry.severity === "error" ? "error" : "warn"

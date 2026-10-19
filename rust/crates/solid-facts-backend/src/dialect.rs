@@ -571,8 +571,8 @@ pub enum Detection {
 /// actually import: the nearest `node_modules/solid-js/package.json` above
 /// the project file, walked the way a bundler resolves.
 ///
-/// Deliberately **not** read from any loaded contract — a bundled contract
-/// carries the version the checker ships, not the one the project installed.
+/// Deliberately **not** read from the checker's own vocabulary — it carries
+/// the version the checker ships, not the one the project installed.
 ///
 /// A `detect` that collapsed [`Detection::Unsupported`] onto the default
 /// dialect used to sit in front of this. It was the hole ADR 0110 § 1 closed:

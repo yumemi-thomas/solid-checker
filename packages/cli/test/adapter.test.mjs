@@ -357,7 +357,7 @@ test("per-rule surface: every discovered catalog identity is an ESLint rule", ()
   }
   assert.equal(v2.namespace, "");
   // The dialect config enables exactly its default-enabled catalog, less the
-  // opt-in contract-gap rule (ADR 0248), plus the certification switch-off
+  // opt-in unavailable-package-behavior rule (ADR 0248), plus the certification switch-off
   // that keeps it composable with `recommended` and the note rule every
   // shipped config carries.
   assert.equal(
@@ -698,8 +698,8 @@ test("a project-scoped finding is reported on every linted file, not matched by 
 });
 
 test("a finding collapsed over a package export is reported in every file holding a site", () => {
-  // Open-claims SC9005 is one finding per (package, export, open domains) for
-  // the whole project: its related locations are further sites, not context.
+  // An SC9005 finding is collapsed over the whole project: its related
+  // locations are further sites, not context.
   // A per-file reporter must still see it in each file that has one, once, at
   // that file's first site.
   // A violation, because uncertifiable findings are internal and never
@@ -710,9 +710,9 @@ test("a finding collapsed over a package export is reported in every file holdin
     rule: "package-contract-incomplete",
     kind: "violation",
     severity: "warning",
-    message: "the reactivity contract for pkg leaves callbacks unknown for imported export run; " +
-      "code whose proof depends on those claims cannot be certified (3 call sites)",
-    analysisContext: "unknown-contract-claims:callbacks",
+    message: "pkg is not analyzed from source here, so the behaviour of imported export run is unknown; " +
+      "code flowing through it cannot be certified (3 call sites)",
+    analysisContext: "callbacks",
     subjectKind: "package-export",
     primaryLocation: { path: "/tmp/app/App.ts", startByte: 2, endByte: 4 },
     relatedLocations: [

@@ -45,30 +45,24 @@ pub fn core_runtime_specifier(specifier: &str) -> bool {
         })
 }
 
-/// Whether a contract reference must be withheld from ordinary analysis
+/// Whether a package reference must be kept out of the package boundary
 /// because it names the built-in runtime foundation. This is not a resolver
 /// or proof of runtime identity: even an untrusted spelling can only remove
-/// contract authority here, never grant built-in semantics.
+/// a boundary obligation here, never grant built-in semantics.
 #[must_use]
-pub fn core_runtime_contract_reference(package: &str, specifier: &str) -> bool {
+pub fn core_runtime_reference(package: &str, specifier: &str) -> bool {
     primitive_defining_package(package) || core_runtime_specifier(specifier)
 }
 
-/// A host-target export condition: the runtime a package is certified for and
-/// a consumer runs in, and the condition a [`HostTargetScope`] may name.
+/// A host-target export condition: the runtime a package is built for and a
+/// consumer runs in.
 ///
-/// The four are the resolver's mutually exclusive host axis
-/// (`MUTUALLY_EXCLUSIVE_CONDITION_AXES` in `packages/cli/scripts/
-/// artifact-resolution.mjs`). Package certification runs once per host it
-/// certifies for (ADR 0140: `browser` and `node`), and a case carrying one of
-/// these is a claim about that host's runtime bodies only.
+/// The four are the mutually exclusive host axis of package export
+/// conditions. A claim carrying one of these is about that host's runtime
+/// bodies only.
 ///
 /// An enum rather than a string so that adding a host is a compile error at
-/// every match, including the consumer's admission rule: a host that declared
-/// none of these never receives a case carrying one, and a host that declared
-/// one receives only cases certified under exactly its hosts
-/// (`contract_interface::admissible_cases`). Only [`Self::Browser`] scopes a
-/// negative row today; `node`, `deno` and `worker` carry none.
+/// every match.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub enum HostTargetCondition {
     Browser,

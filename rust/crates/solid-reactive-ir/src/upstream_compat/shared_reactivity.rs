@@ -27,7 +27,7 @@
 //!
 //! These rules ask the engine instead: [`UpstreamCompatContext::accessors`]
 //! and `setters` are the sources it *proved*, through TypeScript symbol
-//! resolution, package contracts and cross-file propagation. A local named
+//! resolution, dependency source and cross-file propagation. A local named
 //! `createSignal` that is not Solid's is not a source here, and a signal that
 //! arrives through three wrappers still is.
 
@@ -63,7 +63,7 @@ pub(super) fn check_file(
 ///
 /// A proven reactive source handed, uncalled, to a callee nothing in the
 /// analysis can describe: not one of the dialect's primitives, no body in the
-/// project, no package-contract summary. The callee may call it in a tracking
+/// project, no dependency-source summary. The callee may call it in a tracking
 /// scope, read it once and sever the reactivity, or store it for later — and
 /// which of those it does decides whether the surrounding code is correct.
 ///
@@ -173,7 +173,7 @@ fn reactive_source_uncaptured(
                     })
             });
         // Calling a callback parameter with an accessor does not read or lose
-        // that source inside this helper. Interprocedural contract generation
+        // that source inside this helper. The interprocedural summary
         // records the accessor at the callback argument position, so the
         // consumer can classify the callback parameter exactly.
         if callee_is_parameter {

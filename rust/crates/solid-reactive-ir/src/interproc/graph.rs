@@ -248,7 +248,7 @@ pub(super) fn discover_interprocedural_graph(
                     execution: "inline".into(),
                     schedule: None,
                     clears_tracking: false,
-                    arguments: callback_argument_contracts(file, call, symbols.entities, accessors),
+                    arguments: accessor_argument_summaries(file, call, symbols.entities, accessors),
                     owner: None,
                     protocol: crate::summary_semantics::InvokeProtocol::Call,
                     path: path.clone(),
@@ -449,7 +449,7 @@ pub(super) fn discover_interprocedural_graph(
             // containing function, but that function may itself be a returned
             // adapter or a timer/Promise callback. Classify the complete
             // execution context before falling back to inline; otherwise a
-            // debouncer contract incorrectly promises to invoke its callback
+            // debouncer summary incorrectly promises to invoke its callback
             // before the debouncer factory returns.
             let runtime_execution = file
                 .ast
@@ -588,7 +588,7 @@ pub(super) fn discover_interprocedural_graph(
             let execution = match (runtime_execution, chain_execution) {
                 (Some(execution), _) => Some(execution),
                 (None, Some(composed)) => composed,
-                (None, None) => contract_callback_execution(semantic)
+                (None, None) => callback_execution_word(semantic)
                     // A lexical role is an answer about where this call is
                     // written, not whether an intervening nested helper runs
                     // with that role relative to the exported call. This was
@@ -689,7 +689,7 @@ pub(super) fn discover_interprocedural_graph(
                                     .map(|(_, wrappers)| composed_tracked_schedule(wrappers))
                             })
                             .flatten(),
-                        arguments: callback_argument_contracts(
+                        arguments: accessor_argument_summaries(
                             file,
                             call,
                             symbols.entities,
@@ -709,7 +709,7 @@ pub(super) fn discover_interprocedural_graph(
                 contribution
                     .escaped_parameters
                     .push((nodes[callback_owner].span, parameter));
-                contribution.contract_generation_obligations.push((
+                contribution.unresolved_callback_obligations.push((
                     nodes[callback_owner].span,
                     unknown_callback_obligation(
                         file,
@@ -769,7 +769,7 @@ pub(super) fn discover_interprocedural_graph(
                     contribution
                         .escaped_parameters
                         .push((nodes[callback_owner].span, parameter));
-                    contribution.contract_generation_obligations.push((
+                    contribution.unresolved_callback_obligations.push((
                         nodes[callback_owner].span,
                         unknown_callback_obligation(
                             file,
@@ -950,7 +950,7 @@ pub(super) fn discover_interprocedural_graph(
                         },
                     ));
                 } else {
-                    contribution.contract_generation_obligations.push((
+                    contribution.unresolved_callback_obligations.push((
                         nodes[callback_owner].span,
                         unknown_callback_obligation(
                             file,
@@ -1054,7 +1054,7 @@ pub(super) fn discover_interprocedural_graph(
                         contribution
                             .escaped_parameters
                             .push((nodes[callback_owner].span, parameter));
-                        contribution.contract_generation_obligations.push((
+                        contribution.unresolved_callback_obligations.push((
                             nodes[callback_owner].span,
                             unknown_callback_obligation(
                                 file,
@@ -1081,7 +1081,7 @@ pub(super) fn discover_interprocedural_graph(
                 // nested use belongs to the caller-provided callback.
                 continue;
             }
-            contribution.contract_generation_obligations.push((
+            contribution.unresolved_callback_obligations.push((
                 nodes[callback_owner].span,
                 unknown_callback_obligation(
                     file,
@@ -1138,8 +1138,7 @@ pub(super) struct InterproceduralGraphAssembly<'a> {
     pub(super) callback_forwardings:
         &'a mut Vec<(usize, usize, usize, usize, ForwardedAmbientExecution)>,
     pub(super) dispatches: &'a mut Vec<(usize, Vec<usize>)>,
-    pub(super) contract_generation_obligations: &'a mut [Vec<ContractGenerationObligation>],
-    pub(super) contract_consumer_obligations: &'a mut Vec<StaticDefect>,
+    pub(super) unresolved_callback_obligations: &'a mut [Vec<UnresolvedCallbackObligation>],
     pub(super) edges: &'a mut [Vec<usize>],
     pub(super) guaranteed_edges: &'a mut HashSet<(usize, usize)>,
     pub(super) invoked_parameters: &'a mut [Vec<usize>],
@@ -1245,7 +1244,7 @@ impl InterproceduralGraphAssembly<'_> {
         }
         for (owner, callback) in &contribution.callbacks {
             if let Some(owner) = node_index(*owner) {
-                push_contract_callback(&mut self.callback_summaries[owner], callback.clone());
+                push_callback_summary(&mut self.callback_summaries[owner], callback.clone());
             }
         }
         for (owner, target, target_parameter, owner_parameter, ambient_execution) in
@@ -1289,15 +1288,13 @@ impl InterproceduralGraphAssembly<'_> {
                 self.dispatches.push((owner, resolved));
             }
         }
-        for (owner, obligation) in &contribution.contract_generation_obligations {
+        for (owner, obligation) in &contribution.unresolved_callback_obligations {
             if let Some(owner) = node_index(*owner)
-                && !self.contract_generation_obligations[owner].contains(obligation)
+                && !self.unresolved_callback_obligations[owner].contains(obligation)
             {
-                self.contract_generation_obligations[owner].push(obligation.clone());
+                self.unresolved_callback_obligations[owner].push(obligation.clone());
             }
         }
-        self.contract_consumer_obligations
-            .extend(contribution.contract_consumer_obligations.iter().cloned());
         self.returned_bindings
             .extend(contribution.returned_bindings.iter().cloned());
         for (owner, symbol) in &contribution.factory_calls {

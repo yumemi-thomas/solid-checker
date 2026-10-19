@@ -41,7 +41,7 @@ The Solid 2 vocabulary refuses one release line inside its own major:
 release candidate. It runs a different runtime, and analyzing it under the rc
 vocabulary would misread the argument positions the rules rely on. The review
 measured it on `2.0.0-experimental.1`
-(`docs/package-contract-v2/audits/2026-09-26-solid-2-rc9-vocabulary-review.md`
+(`docs/release-audits/2026-09-26-solid-2-rc9-vocabulary-review.md`
 § 8):
 
 - it depends on `@solidjs/signals@0.1.0`, not the `2.0.0-rc` signals;

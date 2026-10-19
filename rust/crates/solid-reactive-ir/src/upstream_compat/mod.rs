@@ -47,7 +47,7 @@ struct IndexedReactiveRead {
 /// grouped once by file for the preference rules that ask whether evaluating a
 /// governing expression subscribes. This is deliberately downstream of the
 /// engine's read analysis: aliases, caller-classified props, derived helpers,
-/// and package-contract reads must all receive the same answer here that they
+/// and dependency-source reads must all receive the same answer here that they
 /// receive everywhere else.
 #[derive(Default)]
 pub(super) struct ReactiveReadIndex {
@@ -71,7 +71,7 @@ impl ReactiveReadIndex {
                     span: Span::new(start, end),
                     // `uncertain` specifically means that a component prop's
                     // reactive backing is not established. Accessor, store,
-                    // and contract identities remain proven reactive even
+                    // and dependency-source identities remain proven reactive even
                     // when their surrounding function is only a possible
                     // component. A style preference cannot promote the 1.x
                     // catalog's historical all-props heuristic into proof.
@@ -628,7 +628,7 @@ pub(super) fn violation(
 /// The reactive maps are the reason the decomposed `reactivity` rules can be
 /// semantic rather than syntactic: upstream decides what is reactive from
 /// naming conventions and call shapes, while these are the sources the engine
-/// *proved*, through TypeScript symbol resolution, package contracts, and
+/// *proved*, through TypeScript symbol resolution, dependency source, and
 /// cross-file propagation.
 pub(super) struct UpstreamCompatContext<'a> {
     /// The vocabulary these rules are checking against. Consulted rather than
@@ -654,7 +654,7 @@ pub(super) struct UpstreamCompatContext<'a> {
     /// `Reactive` everywhere for dialects that keep the upstream
     /// over-approximation.
     pub(super) props_reactivity: &'a crate::source_discovery::PropsReactivityIndex,
-    /// Local, interprocedural, alias-propagated, and contract-derived reads,
+    /// Local, interprocedural, alias-propagated, and dependency-source-derived reads,
     /// indexed once for exact governing-expression queries.
     pub(super) reactive_reads: ReactiveReadIndex,
     /// The proven-source symbol at each exact TypeScript reference location,
@@ -667,7 +667,7 @@ pub(super) struct UpstreamCompatContext<'a> {
     /// size. Owned: the reference lists it is built from live shorter than
     /// this struct's borrows.
     pub(super) source_reference_index: HashMap<String, HashMap<(u64, u64), SymbolId>>,
-    /// The imported symbols a package contract describes.
+    /// The imported symbols a dependency-source summary describes.
     ///
     /// Read as the negative: a callee absent from here, absent from the
     /// dialect's primitives, and with no body in the project is one whose

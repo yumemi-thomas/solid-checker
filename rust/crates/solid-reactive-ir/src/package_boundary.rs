@@ -8,15 +8,12 @@
 //! input with no filesystem.
 //!
 //! **Absence is not evidence.** An import with no row here is one this input
-//! raises no objection to; source, dialect or contract facts still have to
-//! prove what it does. Nothing here certifies a package, and a reason recorded
+//! raises no objection to; source or dialect facts still have to prove
+//! what it does. Nothing here certifies a package, and a reason recorded
 //! for one installed copy or subpath is never read for another.
 //!
-//! Phase P3 of the contract-removal plan records reasons beside the existing
-//! contract requirements and moves no finding: the legacy markers hold the
-//! exact keys that controlled the acceptance gate before the boundary existed,
-//! and only those keys reach it. The recorded reasons
-//! are explanation until the phase that rewords that gate.
+//! The recorded reasons are explanation: the requirement markers hold the
+//! exact keys that raise a boundary defect, and only those keys reach it.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -104,9 +101,9 @@ pub enum UnanalyzableReason {
     ExportJoinUnavailable(ExportJoinFailure),
     /// The analyzed program could not be prepared.
     ProgramPreparationUnavailable,
-    /// The exact requirement the contract era raised, carrying no source
-    /// verdict. Retired with the contract tiers.
-    LegacyContractFallback,
+    /// The exact requirement marker that raised the defect, carrying no
+    /// source verdict.
+    LegacyRequirementFallback,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -200,7 +197,7 @@ impl UnanalyzableReason {
                 "export-join-unavailable:conflicting-targets"
             }
             Self::ProgramPreparationUnavailable => "program-preparation-unavailable",
-            Self::LegacyContractFallback => "legacy-contract-fallback",
+            Self::LegacyRequirementFallback => "legacy-requirement-fallback",
         }
     }
 }
@@ -209,7 +206,7 @@ impl UnanalyzableReason {
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct UnanalyzableImport {
     /// The resolved package name. Identity, never authority: it selects no
-    /// contract and blames no other copy.
+    /// behavior and blames no other copy.
     pub package_name: Option<String>,
     pub installed_root: Option<String>,
     package_name_stated: bool,
@@ -259,9 +256,7 @@ fn insert_reason(reasons: &mut Vec<BoundaryReason>, reason: BoundaryReason) {
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct PackageBoundary {
     imports: BTreeMap<ImportKey, UnanalyzableImport>,
-    /// The exact requirement keys the contract-era acceptance gate read.
-    /// Transitional: it exists so the boundary can be the producer of those
-    /// keys without moving a finding, and goes with the contract tiers.
+    /// The exact requirement keys that raise a boundary defect.
     legacy_markers: BTreeSet<ImportKey>,
 }
 
@@ -293,7 +288,7 @@ impl PackageBoundary {
         self.imports.iter()
     }
 
-    /// Adds `key` to the contract-era requirement set.
+    /// Adds `key` to the requirement set.
     pub fn require_legacy(&mut self, key: ImportKey) {
         self.legacy_markers.insert(key);
     }

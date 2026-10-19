@@ -457,7 +457,7 @@ fn rust_pipeline_breakdown(
             "aliasRoots": durations(|timing| timing.reactive_ir.alias_roots),
             "entitySymbols": durations(|timing| timing.reactive_ir.entity_symbols),
             "symbolNameIndexes": durations(|timing| timing.reactive_ir.symbol_name_indexes),
-            "contractResolution": durations(|timing| timing.reactive_ir.contract_resolution),
+            "boundaryDefects": durations(|timing| timing.reactive_ir.boundary_defects),
             "reachability": durations(|timing| timing.reactive_ir.reachability),
             "sourceDiscovery": durations(|timing| timing.reactive_ir.source_discovery),
             "typedAccessorsAndPropRoots": durations(|timing| timing.reactive_ir.typed_accessors_and_prop_roots),

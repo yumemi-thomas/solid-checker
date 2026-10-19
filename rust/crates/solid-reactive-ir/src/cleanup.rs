@@ -180,7 +180,6 @@ pub(super) fn leaf_owner_operations_for_file(
                     .to_owned();
                 for (kind, guaranteed) in kinds {
                     operations.push(LeafOwnerOperation {
-                        through_contract: false,
                         kind,
                         owner: owner.to_string(),
                         location: location(file.path.shared(), callback_span),
@@ -195,7 +194,6 @@ pub(super) fn leaf_owner_operations_for_file(
                     continue;
                 }
                 operations.push(LeafOwnerOperation {
-                    through_contract: false,
                     kind: crate::LeafOwnerOperationKind::UnresolvedCallback,
                     owner: owner.to_string(),
                     location: location(file.path.shared(), callback_span),
@@ -223,7 +221,6 @@ pub(super) fn leaf_owner_operations_for_file(
             }
             let callback_span = file.ast.peel_ts_sugar_span(region);
             operations.push(LeafOwnerOperation {
-                through_contract: false,
                 kind: crate::LeafOwnerOperationKind::UnresolvedCallback,
                 owner: owner.to_string(),
                 location: location(file.path.shared(), callback_span),
@@ -274,7 +271,6 @@ pub(super) fn leaf_owner_operations_for_file(
                     .to_owned();
                 for (kind, guaranteed) in kinds {
                     operations.push(LeafOwnerOperation {
-                        through_contract: false,
                         kind,
                         owner: owner.to_string(),
                         location: location(callback_file.path.shared(), call.callee),
@@ -287,7 +283,6 @@ pub(super) fn leaf_owner_operations_for_file(
                 }
                 if !complete {
                     operations.push(LeafOwnerOperation {
-                        through_contract: false,
                         kind: crate::LeafOwnerOperationKind::UnresolvedCallback,
                         owner: owner.to_string(),
                         location: location(callback_file.path.shared(), call.callee),
@@ -316,7 +311,6 @@ pub(super) fn leaf_owner_operations_for_file(
             .then(|| terminal_cleanup_fix(callback_file, leaf_callback.span, call))
             .flatten();
             operations.push(LeafOwnerOperation {
-                through_contract: false,
                 kind,
                 owner: owner.to_string(),
                 location: location(callback_file.path.shared(), call.callee),

@@ -1,6 +1,6 @@
-//! The ordinary check consumes no package contract. The requirement-only
+//! The ordinary check consumes no package document. The requirement-only
 //! index still raises every package boundary the project's own manifests
-//! establish, and every flag package contracts took is refused.
+//! establish, and every flag the removed package contracts took is refused.
 
 use std::{
     fs,
@@ -77,10 +77,9 @@ fn findings(snapshot: &serde_json::Value) -> Vec<(String, String, String)> {
 }
 
 /// A package whose own manifest names Solid stays an open obligation with no
-/// contract to answer it: the boundary is the requirement index's, not a
-/// tier's.
+/// source to answer it: the boundary is the requirement index's.
 #[test]
-fn the_requirement_boundary_survives_without_any_contract() {
+fn the_requirement_boundary_survives_without_any_package_source() {
     let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
         return;
     };
@@ -106,7 +105,7 @@ fn the_requirement_boundary_survives_without_any_contract() {
     );
 }
 
-/// Every flag package contracts took is refused with a message, never read
+/// Every flag the removed package contracts took is refused with a message, never read
 /// as an unknown argument and never silently ignored.
 #[test]
 fn removed_contract_flags_are_refused() {

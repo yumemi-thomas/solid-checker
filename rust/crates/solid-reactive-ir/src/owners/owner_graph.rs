@@ -170,10 +170,6 @@ pub(crate) struct OwnerRequirementCandidate {
     pub(crate) report_mask: u8,
     pub(crate) allow_uncertain: bool,
     pub(crate) runtime_uncertain: bool,
-    /// ADR 0161: the site is a call of a contract export, and whether that
-    /// export registers on every call.
-    pub(crate) through_contract: bool,
-    pub(crate) registration_uncertain: bool,
     pub(crate) settled_target: Option<OwnerTarget>,
     /// For call-site-gated leaf owners (2.0 `onSettled`): the owner call's
     /// span, published as a [`LeafGateDecision`] once the graph settles so
@@ -312,8 +308,6 @@ pub(super) fn apply_settled_requirement_gates(
 #[derive(Clone, Copy)]
 pub(crate) struct OwnerRequirementStatus {
     pub(crate) uncertain: bool,
-    /// ADR 0161: the site is a call of a contract export (`through_contract`).
-    pub(crate) through_contract: bool,
     pub(crate) runtime_uncertain: bool,
     pub(crate) caller_uncertain: bool,
     pub(crate) conditional_owner: bool,

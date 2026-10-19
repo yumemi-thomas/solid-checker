@@ -320,7 +320,7 @@ impl StaticApiContext<'_> {
             // can re-run. A value-form `createStore(obj)` store — or any
             // child record of one — is not refreshable, and refresh() on it
             // throws INVALID_REFRESH_TARGET in dev (probed, rc.0). A store
-            // whose construction form is unknown (contracts, unproven
+            // whose construction form is unknown (opaque packages, unproven
             // argument shapes) is never in this set, so acceptance is kept.
             // The value form's return type is not `Refreshable`: only
             // `createStore(fn, initial)`, `createProjection`, and the

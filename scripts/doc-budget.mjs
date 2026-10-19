@@ -53,7 +53,7 @@ export const DOCS_ALLOWED = [
   "docs/typefacts.md",
   "docs/rules/",
   "docs/typefacts/",
-  "docs/package-contract-v2/audits/",
+  "docs/release-audits/",
 ];
 
 /** Every violation for a `{ path: bytes }` map, as sentences. */

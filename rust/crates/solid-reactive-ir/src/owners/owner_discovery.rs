@@ -151,8 +151,6 @@ pub(crate) fn discover_owner_file(
                 report_mask,
                 allow_uncertain: true,
                 runtime_uncertain,
-                through_contract: false,
-                registration_uncertain: false,
                 settled_target,
                 settled_gate,
                 providing_region_chain,
@@ -188,8 +186,6 @@ pub(crate) fn discover_owner_file(
                 report_mask: OWNER_CONTEXT_UNOWNED,
                 allow_uncertain: false,
                 runtime_uncertain: false,
-                through_contract: false,
-                registration_uncertain: false,
                 settled_target: None,
                 settled_gate: None,
                 providing_region_chain: region_chain(element.span),
@@ -340,10 +336,9 @@ pub(crate) fn find_missing_owners_incremental(
                     .copied()
             });
             let context = owner_index.map_or(OWNER_CONTEXT_UNOWNED, |index| contexts[index]);
-            // As in the batch pass: effects, cleanups and contract calls, never
-            // a JSX boundary or `onSettled`'s returned cleanup.
-            let after_await = (candidate.through_contract
-                || matches!(candidate.operation, "effect" | "cleanup"))
+            // As in the batch pass: effects and cleanups, never a JSX boundary
+            // or `onSettled`'s returned cleanup.
+            let after_await = matches!(candidate.operation, "effect" | "cleanup")
                 && candidate.operation != "settled-cleanup"
                 && continuations.contains(file.path.as_str(), candidate.operation_span.start);
             let context = if after_await {
@@ -468,8 +463,7 @@ pub(crate) fn find_missing_owners_incremental(
                 || conditional_owner
                 || later_run_unowned
                 || caller_uncertain
-                || component_uncertain
-                || candidate.registration_uncertain;
+                || component_uncertain;
             push_owner_requirement(
                 &mut requirements,
                 &mut seen,
@@ -477,7 +471,6 @@ pub(crate) fn find_missing_owners_incremental(
                 file,
                 candidate.operation_span,
                 OwnerRequirementStatus {
-                    through_contract: candidate.through_contract,
                     uncertain,
                     runtime_uncertain,
                     caller_uncertain,

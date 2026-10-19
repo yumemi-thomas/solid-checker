@@ -280,7 +280,7 @@ impl<'a> SemanticLookup<'a> {
     ///
     /// Context providers are routinely declared in one module and rendered
     /// in another. Indexing canonical TypeScript symbols keeps that ordinary
-    /// import/re-export boundary from erasing the runtime contract while
+    /// import/re-export boundary from erasing the runtime identity while
     /// still rejecting objects that merely expose a property named
     /// `Provider`. Matching the reference that ends with the object span also
     /// supports `<contexts.ValueContext.Provider>` without confusing it with
@@ -613,7 +613,7 @@ impl<'a> SemanticLookup<'a> {
     /// `parsed.modifiers.includes(m)` answers `(parsed, ["modifiers",
     /// "includes"])` -- **not** `(parsed, ["includes"])`. Rooting a whole
     /// chain at its last segment names a property the receiver does not have,
-    /// and a consumer matches a contract's path as a *prefix* of the observed
+    /// and a consumer matches a recorded path as a *prefix* of the observed
     /// access (`type_facts::parameter_value_source_matches`), so a wrong first
     /// segment is a demand no runtime can witness.
     ///

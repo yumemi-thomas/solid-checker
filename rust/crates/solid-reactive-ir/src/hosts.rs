@@ -173,7 +173,7 @@ impl ProjectHostIndex {
         result
     }
 
-    /// Close exact callback edges after independent browser contract admission.
+    /// Close exact callback edges after independent browser host admission.
     /// Supplying a value and executing its exact invoker are conjunctive premises.
     pub fn with_callback_invocations(
         mut self,

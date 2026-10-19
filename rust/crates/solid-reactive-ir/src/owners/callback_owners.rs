@@ -217,7 +217,7 @@ pub(crate) fn returned_primitive_invocation(
     }
 }
 
-/// The execution contract of one callback argument accepted by a proven
+/// The execution semantics of one callback argument accepted by a proven
 /// returned function (including a specific destructured tuple slot).
 pub(crate) fn returned_callback_execution_at_call(
     file: &solid_facts::FileFacts,
@@ -225,7 +225,7 @@ pub(crate) fn returned_callback_execution_at_call(
     argument: usize,
     lookup: &SemanticLookup<'_>,
 ) -> Option<solid_dialect::Execution> {
-    // Solid 2.0 answers `None` for every returned-callback contract, so the
+    // Solid 2.0 answers `None` for every returned-callback question, so the
     // binding-chain resolution below cannot produce an answer there. Skip it
     // rather than walk it once per call and discard the result.
     if !lookup.models_returned_callbacks() {
@@ -251,7 +251,7 @@ pub(crate) fn returned_callback_result_is_invoked(
 /// TypeScript symbols establish that calls, JSX tags, and `.preload()` uses
 /// refer to the exact factory result. AST facts establish how the value is
 /// consumed. For values passed to another known callback-taking primitive,
-/// the invocation inherits that callback's owner contract; direct calls and
+/// the invocation inherits that callback's owner; direct calls and
 /// JSX uses inherit their containing function's owner.
 pub(crate) fn returned_callback_invocation_sites(
     file: &solid_facts::FileFacts,

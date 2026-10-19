@@ -38,7 +38,6 @@ fn plan_file(
     let mut type_descriptor_spans = HashSet::new();
     let mut runtime_value_domain_spans = HashSet::new();
     let mut primitive_value_domain_spans = HashSet::new();
-    let mut primitive_literal_candidate_spans = HashSet::new();
     let mut constant_value_spans = HashSet::new();
     let mut array_shape_spans = HashSet::new();
     let mut tuple_shape_spans = HashSet::new();
@@ -121,14 +120,6 @@ fn plan_file(
             .flat_map(|parameter| &parameter.names)
         {
             add_symbol(name.span, true);
-            if options.contract_probe_parameters {
-                type_descriptor_spans.insert(name.span);
-                runtime_value_domain_spans.insert(name.span);
-                primitive_value_domain_spans.insert(name.span);
-                primitive_literal_candidate_spans.insert(name.span);
-                array_shape_spans.insert(name.span);
-                library_type_spans.insert(name.span);
-            }
         }
     }
     // Object properties have no lexical binding. Demand each static key so
@@ -178,7 +169,7 @@ fn plan_file(
             let name = file.source_text(attribute.name).unwrap_or_default();
             // Context values are cross-file return-flow evidence. Demand an
             // identifier value even when it is not otherwise a handler or a
-            // literal-bearing attribute, so contract generation can connect
+            // literal-bearing attribute, so the return-flow summary can connect
             // `useContext(Context)` to the value supplied by its provider.
             if name == "value"
                 && file.ast.identifiers.iter().any(|identifier| {
@@ -231,7 +222,7 @@ fn plan_file(
     }
     // JSX compilation lowers a context provider to a component call whose
     // props object contains `value`. Preserve the value binding's identity so
-    // contract generation can connect the lowered form just as precisely as
+    // the return-flow summary can connect the lowered form just as precisely as
     // source JSX.
     for property in &file.ast.object_properties {
         let is_call_property = file.ast.calls.iter().any(|call| {
@@ -716,7 +707,6 @@ fn plan_file(
         planned.constructability = planned.callability;
         planned.runtime_value_domain = runtime_value_domain_spans.contains(&span);
         planned.primitive_value_domain = primitive_value_domain_spans.contains(&span);
-        planned.primitive_literal_candidates = primitive_literal_candidate_spans.contains(&span);
         planned.constant_value = constant_value_spans.contains(&span);
         planned.array_shape = array_shape_spans.contains(&span);
         planned.tuple_shape = tuple_shape_spans.contains(&span);
@@ -823,7 +813,7 @@ fn plan_file(
             && local_nested_function_callee(file, call.callee);
         // A returned graph's capture replay needs call validity even when
         // its invocation supplies no arguments. This only requests a fact:
-        // a call initializer is no proof of a returned callable or a contract.
+        // a call initializer is no proof of a returned callable.
         let argumentless_factory_result = call.arguments.is_empty()
             && call.direct_callee
             && file

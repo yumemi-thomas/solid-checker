@@ -27,10 +27,8 @@ struct CheckRequest {
     sources: Vec<SourceFile>,
     type_facts: TypeScriptTable,
     /// What the host resolved each imported specifier to, in its own installed
-    /// tree. Accepted and unused: only the compiled-in accepted contracts read
-    /// it, and that tier is retired (ADR 0228). The authored tier is not served
-    /// here: it admits on a Solid runtime environment, and this adapter, with
-    /// no filesystem, can show only an empty one.
+    /// tree. Accepted and unused: package behavior comes from dependency
+    /// source, and this adapter, with no filesystem, can supply none.
     #[serde(default)]
     #[expect(dead_code, reason = "accepted for compatibility (ADR 0228)")]
     installed_packages: Vec<HostInstalledPackage>,
@@ -39,9 +37,9 @@ struct CheckRequest {
     #[serde(default)]
     #[expect(dead_code, reason = "accepted for compatibility (ADR 0228)")]
     export_conditions: Vec<String>,
-    /// Whether the contracts compiled into this build may be applied. Accepted
-    /// and without effect: no compiled-in contract reaches this adapter since
-    /// the certified tier retired (ADR 0228).
+    /// Retired option of the removed package-contract tier (wire name kept so
+    /// an older host's request still parses). Accepted and without effect
+    /// (ADR 0228).
     #[serde(default)]
     #[expect(dead_code, reason = "accepted for compatibility (ADR 0228)")]
     bundled_contracts: bool,
@@ -210,8 +208,8 @@ pub fn check(request_json: &str) -> Result<String, Box<dyn std::error::Error>> {
         &mut typescript,
         SemanticDemandOptions::PREFERENCES,
     )?;
-    // P5 of the contract-removal plan: this request supplies no package files
-    // and no import attestation, so source analysis cannot run here. Every
+    // This request supplies no package files and no import attestation, so
+    // source analysis cannot run here. Every
     // package import keeps an open requirement (SC9005) rather than reading as
     // plain code.
     let boundary = solid_facts_backend::unsupplied_package_boundary(&facts);
@@ -233,10 +231,10 @@ pub fn check(request_json: &str) -> Result<String, Box<dyn std::error::Error>> {
 mod tests {
     use super::CheckRequest;
 
-    /// The adapter's answer through the shared input is the contracts-only
+    /// The adapter's answer through the shared input is the project-only
     /// answer: an empty boundary moves nothing.
     #[test]
-    fn the_shared_input_with_an_empty_boundary_answers_as_contracts_alone() {
+    fn the_shared_input_with_an_empty_boundary_answers_as_the_project_alone() {
         let request = r#"{"projectId":"/p/tsconfig.json","generation":1,"sources":[],
                 "typeFacts":{"schema":2,"generation":1,"projectId":"/p/tsconfig.json",
                 "sources":[],"entities":[],"symbols":[],"files":[]}}"#;
@@ -355,8 +353,8 @@ pub extern "C" fn run_check() -> u32 {
 
 /// Check a project from its files alone: the shared ordinary check, with the
 /// canonical producer reached through the host's owned reactor and both
-/// modules reading the same mounted project tree. No package contract is
-/// consumed from any tier.
+/// modules reading the same mounted project tree. No package document is
+/// consumed.
 #[cfg(all(feature = "reactor", target_family = "wasm"))]
 #[unsafe(no_mangle)]
 pub extern "C" fn run_owned_check() -> u32 {

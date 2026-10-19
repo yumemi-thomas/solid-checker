@@ -362,7 +362,7 @@ no per-instance computation is created, and the resolved component renders in
 
 **What the dialect claims.** The dialect answers for `Dynamic` without looking
 at options: `callback_executions` `(0, Tracked)`, `callback_owners`
-`(0, Creates)`, and `contract_callback_execution_at` `Tracked`
+`(0, Creates)`, and `callback_execution_word_at` `Tracked`
 (`solid_2.rs:2811, 2584, 2904`) [M]. Three consequences:
 
 - **Missed read.** A reactive read in a static source is a one-shot read the

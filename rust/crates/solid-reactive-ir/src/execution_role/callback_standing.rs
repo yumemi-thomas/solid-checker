@@ -782,7 +782,7 @@ pub(super) fn returned_factory_callback_execution_role(
 /// The one execution role the proven invocations of a returned function give
 /// the callbacks it runs on its invoker's stack, or `None` when there is no
 /// proven invocation. Shared by the dialect's returned-callback composition and
-/// ADR 0152's contract composition, so the two cannot read the same sites
+/// ADR 0152's summary composition, so the two cannot read the same sites
 /// differently.
 pub(super) fn role_at_returned_invocations(
     sites: Vec<crate::owners::ReturnedCallbackInvocationSite>,

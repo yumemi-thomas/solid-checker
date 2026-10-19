@@ -388,7 +388,7 @@ pub(crate) enum SolidUse {
     /// answer the vocabulary gives about that runtime.
     Jsx,
     /// A package whose installed dependency closure names a runtime package:
-    /// its answers (a contract, a typing) can depend on the release.
+    /// its answers (a summary, a typing) can depend on the release.
     RuntimeDependency,
     /// A package reference whose resolution the facts do not carry, that
     /// resolved nowhere, or whose installed dependency closure could not be

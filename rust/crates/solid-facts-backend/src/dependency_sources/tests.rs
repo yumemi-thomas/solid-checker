@@ -16,7 +16,7 @@ fn host(conditions: &[&str]) -> Host {
 }
 
 #[test]
-fn unsupported_runtime_bindings_keep_contracts_but_type_only_edges_do_not() {
+fn unsupported_runtime_bindings_stay_off_source_but_type_only_edges_do_not() {
     for source in [
         "export * as ns from 'pkg';",
         "import x = require('pkg'); export = x;",

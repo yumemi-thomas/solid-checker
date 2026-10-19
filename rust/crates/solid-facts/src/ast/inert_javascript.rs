@@ -67,7 +67,7 @@ pub fn inert_javascript_module(
 /// Recognizes the same inert source grammar while optionally admitting bare
 /// `export * from "…"` statements. The latter is only a source-shape proof:
 /// evaluating a reexport still evaluates its target, so callers must establish
-/// the target's exact inert contract before treating the returned proof as an
+/// the target's exact inertness before treating the returned proof as an
 /// initialization claim. Namespace reexports and import attributes stay
 /// refused here and relative targets remain the caller's responsibility.
 pub fn inert_javascript_module_with_export_all(

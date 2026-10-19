@@ -34,9 +34,9 @@ pub struct ProjectFacts {
     /// the compiler.
     ///
     /// `None` is not "nothing resolved": it says this analysis carries no
-    /// resolution facts at all, so a package contract can only be matched by
+    /// resolution facts at all, so a package can only be matched by
     /// specifier name — the pre-attestation behavior, kept for an adapter with
-    /// no Type Facts session of its own. `Some` binds contracts by installed
+    /// no Type Facts session of its own. `Some` binds packages by installed
     /// package identity and fails closed per specifier. See
     /// [`crate::resolution`].
     #[serde(skip)]
@@ -49,9 +49,9 @@ pub struct ProjectFacts {
     /// the package-local runtime implementation selected for that same static
     /// specifier.
     ///
-    /// Empty for ordinary project analysis. Package-contract generation fills
-    /// it only from the generator's resolved importer/specifier/target map,
-    /// after joining both ends to compiler entities. Reactive IR then treats
+    /// Empty for ordinary project analysis. Dependency-source analysis fills
+    /// it only from the resolved importer/specifier/target map, after joining
+    /// both ends to compiler entities. Reactive IR then treats
     /// the runtime implementation as the alias root; missing or ambiguous
     /// joins add no redirect and preserve the existing fail-closed result.
     #[serde(skip)]

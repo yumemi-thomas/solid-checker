@@ -122,7 +122,7 @@ pub(crate) fn async_source_options(
 /// runtime error on the server path. Named imports prove that path; their
 /// absence leaves the rendering mode unresolved because the server entry may
 /// live outside the analyzed project. The export names come from the
-/// historical `@solidjs/web` audit; no contract is read during analysis.
+/// historical `@solidjs/web` audit; no package document is read during analysis.
 ///
 /// **Not asked of the dialect, and it could not answer.** Five of these six
 /// are not primitives — only `hydrate` is in the vocabulary — so

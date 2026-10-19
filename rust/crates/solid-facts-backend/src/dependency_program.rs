@@ -124,7 +124,7 @@ pub struct FoldedSources {
 }
 
 /// ADR 0284: under a declared host, a selected package's own host constants
-/// (`isServer`) fold as they do for contract emission, matching the browser
+/// (`isServer`) fold as they do for the host's own constants, matching the browser
 /// entry the mode selected. The project's files are analyzed as before.
 pub fn fold_sources(
     sources: &[SourceFile],

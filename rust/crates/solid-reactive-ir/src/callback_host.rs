@@ -1110,7 +1110,6 @@ mod tests {
             BrowserCallbackTrigger::DomEvent,
             BrowserCallbackTrigger::OwnerDisposal,
             BrowserCallbackTrigger::RenderSelection,
-            BrowserCallbackTrigger::ContractTrigger,
         ] {
             assert!(!CallbackDelivery::Pending(trigger).is_feasible());
         }

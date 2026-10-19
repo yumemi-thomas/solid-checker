@@ -1,23 +1,23 @@
 //! Which project functions can reach an unresolved proof obligation.
 //!
-//! Contract emission has to say *which exports* an open claim belongs to.
-//! An obligation that sits inside an exported function answers that question
-//! lexically, and emission resolves that case itself from the AST. An
-//! obligation inside a private helper does not: the only thing that can say
-//! whether a consumer of export `A` — and not of export `B` — can trigger it
-//! is the call graph.
+//! A consumer that reports obligations per export has to say *which exports*
+//! an open obligation belongs to. An obligation that sits inside an exported
+//! function answers that question lexically, and the consumer resolves that
+//! case itself from the AST. An obligation inside a private helper does not:
+//! the only thing that can say whether a consumer of export `A` — and not of
+//! export `B` — can trigger it is the call graph.
 //!
 //! The call graph lives here, beside the interprocedural analysis that owns
-//! it, and emission consumes only the answer ([`Program::obligation_reach`]).
-//! The alternative — handing the raw graph across the process boundary and
-//! walking it in the emitter — would put two independently drifting notions of
-//! "calls" in the codebase, and the emitter's copy would be the one nobody
-//! tests against real reactive code.
+//! it, and a consumer takes only the answer ([`Program::obligation_reach`]).
+//! The alternative — handing the raw graph across a boundary and walking it in
+//! the consumer — would put two independently drifting notions of "calls" in
+//! the codebase, and the consumer's copy would be the one nobody tests
+//! against real reactive code.
 //!
 //! The answer is deliberately shaped as *fail closed or exact*: either
 //! [`ObligationReach::complete`] is true and `reaching` enumerates every
 //! project function that can enter the obligation's own function, or it is
-//! false and emission must fall back to marking every export. There is no
+//! false and the consumer must fall back to marking every export. There is no
 //! third "probably these" state, because a partial enumeration read as a
 //! complete one silently certifies an export that can reach the obligation.
 

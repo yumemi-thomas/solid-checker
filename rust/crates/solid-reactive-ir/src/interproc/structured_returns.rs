@@ -427,7 +427,7 @@ impl StructuredReturnDiscovery<'_, '_> {
         self.returned[*index]
             .iter()
             .find(|read| !read.undecided)
-            .map(|read| self.contract_return_from_read(read, fallback_label))
+            .map(|read| self.return_summary_from_read(read, fallback_label))
     }
 
     /// The initializer a reference is bound to *in its entirety*.
@@ -1131,7 +1131,7 @@ impl StructuredReturnDiscovery<'_, '_> {
         None
     }
 
-    fn contract_return_from_read(&self, read: &SummaryRead, fallback_label: &str) -> ReturnSummary {
+    fn return_summary_from_read(&self, read: &SummaryRead, fallback_label: &str) -> ReturnSummary {
         ReturnSummary {
             kind: if self.source_kinds.get(&read.symbol) == Some(&ReactiveSourceKind::Store) {
                 "store-path".into()
@@ -1223,7 +1223,7 @@ pub(super) fn discover_structured_returns(
             // one branch once returned a parameter. Every explicit return path
             // must prove the same relation, including its parameter index.
             // Otherwise predicates (`isObject`), comparators and fallback
-            // helpers become false identity contracts merely because one
+            // helpers become false identity returns merely because one
             // branch contains `return value`.
             returned
                 .iter()

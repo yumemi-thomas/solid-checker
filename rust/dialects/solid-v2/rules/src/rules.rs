@@ -38,7 +38,7 @@ pub enum Rule {
     HttpResponseAfterFlush,
     ServerFunctionModuleDirective,
     ServerFunctionRichArgument,
-    PackageContractIncomplete,
+    PackageBehaviorUnavailable,
     /// The only identity in this catalog the rules engine never produces.
     ///
     /// Analysis decides whether every other rule applies; this one is decided
@@ -96,7 +96,7 @@ impl Rule {
         Self::HttpResponseAfterFlush,
         Self::ServerFunctionModuleDirective,
         Self::ServerFunctionRichArgument,
-        Self::PackageContractIncomplete,
+        Self::PackageBehaviorUnavailable,
         Self::UnsupportedSolidRuntime,
         Self::UnauditedSolidRelease,
         Self::JsxNoDuplicateProps,
@@ -203,7 +203,7 @@ impl Rule {
             Self::ServerFunctionRichArgument => {
                 ("SC7007", "server-function-rich-argument", "error", false)
             }
-            Self::PackageContractIncomplete => {
+            Self::PackageBehaviorUnavailable => {
                 ("SC9005", "package-contract-incomplete", "error", true)
             }
             // Uncertifiable, not a violation: the project's own code is not

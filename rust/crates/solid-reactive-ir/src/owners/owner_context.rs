@@ -54,7 +54,7 @@ pub(crate) fn providing_region_chain<K>(
 ///   which runs with no owner: a [`solid_dialect::CallbackOwner::None`]
 ///   position (a `createEffect` apply, a `createReaction` invalidation, a
 ///   `runWithOwner(null, fn)` callback), a compiler event-handler or
-///   directive-apply role, or an `unowned` contract row. Probed on
+///   directive-apply role, or an `unowned` summary row. Probed on
 ///   `solid-js`/`@solidjs/signals`/`@solidjs/web` 2.0.0-rc.3 and rc.9, dev and
 ///   prod client builds, each written inside a `createRoot` (the delegated
 ///   handler inside a `render` callback): `getOwner()` is `null` in every one
@@ -319,7 +319,6 @@ pub(crate) fn push_owner_requirement(
             component_uncertain: status.component_uncertain,
             after_await: status.after_await,
             missing_jsx_census,
-            through_contract: status.through_contract,
             through_dependency: None,
             report: status.report,
         });

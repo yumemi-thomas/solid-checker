@@ -541,7 +541,7 @@ pub(crate) struct SourceDiscovery {
 }
 
 /// The stable, read-mostly environment threaded through every pipeline stage:
-/// project facts, prebuilt indexes, resolved contracts, and the semantic lookup.
+/// project facts, prebuilt indexes, the package boundary, and the semantic lookup.
 #[derive(Clone, Copy)]
 pub(crate) struct StageContext<'a> {
     pub(crate) facts: &'a ProjectFacts,

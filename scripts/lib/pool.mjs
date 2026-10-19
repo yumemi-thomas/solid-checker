@@ -1,7 +1,7 @@
 // Bounded concurrency for the verification gates.
 //
 // The gates fan out over independent units -- 83 fixture projects, 161 oracle
-// cases, 27 contract fixtures -- and ran them one at a time. Nothing about a
+// cases, 27 package fixtures -- and ran them one at a time. Nothing about a
 // unit depends on another, so the cost was pure serialization. What a gate
 // cannot afford to lose in exchange is determinism: a failure list whose order
 // depends on which unit finished first is a failure list nobody can diff.

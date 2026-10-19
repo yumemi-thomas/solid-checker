@@ -128,7 +128,7 @@ struct DiagnosticIdentity {
     dialect: &'static str,
     project_id: String,
     generation: u64,
-    contracts: Vec<[u8; 32]>,
+    boundary_fingerprints: Vec<[u8; 32]>,
     /// Per-rule options are re-read from disk on every analysis, so an
     /// edited `.solid-checker/rule-options.json` invalidates a retained
     /// diagnostic even within one generation.
@@ -335,7 +335,7 @@ impl DiagnosticSession {
         enablement
             .runtime
             .validate()
-            .map_err(BackendError::Contract)?;
+            .map_err(BackendError::RuntimePremise)?;
         rule_options.runtime = enablement.runtime;
         if rule_options.runtime.program_boundary.is_none() {
             rule_options.runtime.program_boundary = Some(default_program_boundary(project));
@@ -366,7 +366,7 @@ impl DiagnosticSession {
             dialect: self.dialect.id,
             project_id: facts.project_id.clone(),
             generation: facts.generation.get(),
-            contracts: inputs.cache_fingerprints(),
+            boundary_fingerprints: inputs.cache_fingerprints(),
             rule_options: rule_options.clone(),
             release_notice: release_notice.clone(),
             router_params: router_params.clone(),
@@ -1038,7 +1038,7 @@ fn package_root(module: &str) -> &str {
 }
 
 /// The sorted package roots of non-relative, non-builtin imports across the
-/// project's facts — the module set contract discovery probes.
+/// project's facts — the module set package discovery reads.
 pub fn imported_package_roots(facts: &ProjectFacts) -> Vec<String> {
     let mut modules = facts
         .files
@@ -1056,10 +1056,9 @@ pub fn imported_package_roots(facts: &ProjectFacts) -> Vec<String> {
     modules
 }
 
-/// The installed package manifests that influence first-party bundle selection
-/// and accepted-contract coverage for the given imported modules. The retained
-/// daemon hashes the accepted catalog and its members separately.
-pub fn discovered_contract_paths(
+/// The installed package manifests of the given imported modules, which the
+/// package boundary reads.
+pub fn imported_package_manifest_paths(
     project_directory: &Path,
     modules: &[String],
 ) -> Result<Vec<PathBuf>, BackendError> {
@@ -1152,8 +1151,7 @@ pub(crate) fn default_program_boundary(project: &Path) -> solid_reactive_ir::Pro
 }
 
 /// Loads the project's per-rule options from the nearest
-/// `.solid-checker/rule-options.json`, walking ancestors exactly as local
-/// contract discovery does. A project without one gets upstream's defaults;
+/// `.solid-checker/rule-options.json`, walking ancestors. A project without one gets upstream's defaults;
 /// a file that fails to parse fails the analysis rather than silently
 /// meaning "defaults".
 pub fn discover_rule_options(project: &Path) -> Result<RuleOptions, BackendError> {
@@ -1185,7 +1183,6 @@ pub fn semantic_demand_options_for_enablement(
         array_map_receiver_types: metadata.is_some_and(|metadata| {
             options.is_enabled(rule, metadata.default_enabled, metadata.presets)
         }),
-        contract_probe_parameters: false,
     })
 }
 
@@ -1220,7 +1217,7 @@ fn discover_rule_options_with(
 /// The retained check daemon folds this into its cached-snapshot input set:
 /// per-rule options are part of every diagnostic identity, so editing,
 /// creating, or deleting `.solid-checker/rule-options.json` must invalidate
-/// a cached answer exactly like an edited contract does.
+/// a cached answer exactly like an edited package manifest does.
 pub fn discovered_rule_options_path(project_directory: &Path) -> Option<PathBuf> {
     for ancestor in project_directory.ancestors() {
         let candidate = ancestor.join(".solid-checker").join("rule-options.json");

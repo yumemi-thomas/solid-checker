@@ -768,7 +768,7 @@ pub(super) fn forwarded_component_prop(
 /// slot one identifier, and every reference to that parameter a direct call
 /// `p()` written directly in one function literal `compute`. `compute` must be
 /// written directly in `wrapper`'s body, as the whole argument at a slot that
-/// tracks the reads of the callback it runs: an accepted contract's
+/// tracks the reads of the callback it runs: a callee summary's
 /// guaranteed tracked-compute slot (ADR 0183) or a primitive's tracked
 /// callback (`createMemo`'s compute). Then the literal runs only inside that
 /// tracked compute, as it would written there itself. A parameter referenced
@@ -1048,7 +1048,7 @@ pub(crate) fn host_callback_timing(
 ///
 /// A callee with no body in the project -- a package export seen through its
 /// declarations, or a callee nothing resolves -- proves the invocation only
-/// through an accepted contract's `inline` row for that parameter; without one
+/// through a callee summary's `inline` row for that parameter; without one
 /// the read is a proof obligation too. Primitive and standard-library calls
 /// are other arms' business (their dialect and runtime models). This withholds
 /// a claim; it never makes one.

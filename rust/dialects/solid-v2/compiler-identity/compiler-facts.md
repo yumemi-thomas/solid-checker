@@ -122,7 +122,7 @@ results.
   set remains open because wrapper emissions do not yet have an independent
   completeness census.
 - Server-function transformation facts are emitted but are not yet composed
-  into package-contract proof receipts.
+  into package-source proofs.
 - Compiler facts do not prove runtime transport, async iteration, cleanup,
   transition semantics, request/response lifetime, or package artifact
   selection.

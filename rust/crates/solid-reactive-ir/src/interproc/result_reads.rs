@@ -695,8 +695,7 @@ pub(super) fn interprocedural_result_reads_for_file(
                                 member: None,
                             },
                             location: argument_location,
-                            analysis_context: "contract-parameter-member-argument-unresolved"
-                                .into(),
+                            analysis_context: "parameter-member-argument-unresolved".into(),
                             fixes: vec![],
                             uncertain: true,
                         });

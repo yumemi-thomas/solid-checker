@@ -11,7 +11,7 @@
 //! # Where options come from
 //!
 //! One project-level document, `.solid-checker/rule-options.json`, discovered
-//! by the same ancestor walk as `.solid-checker/contracts/`. There is
+//! by an ancestor walk from the project. There is
 //! deliberately no per-file or per-ESLint-config channel: the npm adapter
 //! spawns one analysis per project, and ESLint hands each rule its options
 //! lazily per file, so options arriving through ESLint could never be

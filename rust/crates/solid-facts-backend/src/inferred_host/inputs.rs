@@ -131,7 +131,7 @@ pub(super) fn inferred_host_graph_input_paths(
         );
     }
     // Static package linking consumes manifests and selected client files even
-    // when no behavior contract exists. Observe the same candidates before a
+    // when no behavior summary exists. Observe the same candidates before a
     // daemon shortcut, including absent/shadowing installs and store symlinks.
     let mut resolved_requests = BTreeSet::new();
     let mut package_loads = crate::host_loadable::PackageLoads::default();
@@ -458,7 +458,7 @@ pub(crate) fn validate_inputs(index: &ProjectHostIndex) -> Result<(), BackendErr
         .collect::<Vec<_>>();
     for ((_, expected), actual) in index.manifest.inputs.iter().zip(identities(&paths)) {
         if actual.as_ref() != Some(expected) {
-            return Err(BackendError::Contract(
+            return Err(BackendError::RuntimePremise(
                 "inferred browser inputs changed; retry analysis".into(),
             ));
         }

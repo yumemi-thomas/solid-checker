@@ -2,7 +2,7 @@
 //!
 //! Builds the cross-function summary graph, propagates reactive reads through
 //! calls/returns/factories, resolves typed accessors, and emits the per-call
-//! reactive reads plus the export contract summaries. The orchestrator populates
+//! reactive reads plus the export summaries. The orchestrator populates
 //! an `InterproceduralContext` parameter object and calls `build` to obtain an
 //! `InterproceduralResult`; every stage function here is module-private.
 
@@ -23,14 +23,14 @@ use super::runtime_semantics::{
     retains_argument_value,
 };
 use super::{
-    CallbackSchedule, CallbackSummary, ContractGenerationObligation, EntitySymbols, ExecutionRole,
-    FunctionBoundary, FunctionLookup, ProjectIndexes, ReactiveRead, ReactiveSourceKind,
-    ReturnSummary, SemanticLookup, StaticDefect, StaticDefectKind, SymbolId,
+    CallbackSchedule, CallbackSummary, EntitySymbols, ExecutionRole, FunctionBoundary,
+    FunctionLookup, ProjectIndexes, ReactiveRead, ReactiveSourceKind, ReturnSummary,
+    SemanticLookup, StaticDefect, StaticDefectKind, SymbolId, UnresolvedCallbackObligation,
     allowed_callback_spans, assigned_member_function_contains, call_primitive_name,
-    containing_summary_function_indexed, contract_callback_execution, function_indices_by_path,
+    callback_execution_word, containing_summary_function_indexed, function_indices_by_path,
     function_lookup_for_path, functions_for_path, items_by_containing_function, location,
     location_order, propagate_returned_summary_deltas, propagate_summary_deltas,
-    push_contract_callback, push_unique_summary_read, semantic_execution_role,
+    push_callback_summary, push_unique_summary_read, semantic_execution_role,
 };
 use crate::cache::{
     CachedInterproceduralGraph, CachedInterproceduralResultFile, CachedInterproceduralResults,
@@ -94,9 +94,9 @@ pub(super) struct SummaryRead {
     /// in a private helper names the helper, and two nodes may share a name.
     /// `propagate_summary_deltas` copies a row verbatim, so a read that
     /// reached a node through a call still names the node it was discovered
-    /// in, and `contract_export_function` compares this against the node it is
-    /// projecting to tell "this export performs the read" from "this export
-    /// performs it through its call to that one".
+    /// in, and a consumer compares this against the node it is projecting to tell
+    /// "this export performs the read" from "this export performs it through
+    /// its call to that one".
     ///
     /// `None` is "no provenance to state", never "the projecting node's own":
     /// it is the row's fail-closed value, and the projection publishes nothing
@@ -114,7 +114,7 @@ pub(super) struct SummaryRead {
     /// reactive state, but nothing proves it does: a store Get whose key is
     /// undecided, or an exempt `then` whose backing may run code, or a call of
     /// a typed candidate whose held body no summary follows. At a caller it is
-    /// an uncertifiable read, never a proven one, and no contract publishes it.
+    /// an uncertifiable read, never a proven one, and no summary publishes it.
     pub(super) undecided: bool,
 }
 
@@ -232,7 +232,7 @@ fn equivalent_callbacks(left: &[CallbackSummary], right: &[CallbackSummary]) -> 
                     callback.execution.as_str(),
                     callback.owner.as_deref(),
                     serde_json::to_string(&callback.arguments)
-                        .expect("contract callback arguments are JSON-safe"),
+                        .expect("callback arguments are JSON-safe"),
                 )
             })
             .collect()
@@ -265,7 +265,7 @@ pub(super) struct SummaryNode {
 }
 
 /// A parameter-member invocation and the execution provenance retained for
-/// contract generation. A nested callable needs more than its access path to
+/// summaries. A nested callable needs more than its access path to
 /// establish a direct call operation (ADR 0013).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct ParameterMemberInvocation {

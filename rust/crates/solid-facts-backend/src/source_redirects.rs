@@ -1,5 +1,5 @@
 //! Runtime symbol redirects for analyzed dependency source (ADRs 0284, 0291),
-//! shared by the one-shot check, the retained daemon and contract emission.
+//! shared by the one-shot check and the retained daemon.
 //! Moved here from the checker binary unchanged so the library's shared check
 //! operation binds a selection exactly as the binary always has.
 
@@ -571,7 +571,7 @@ pub fn validate_module_export_precedence(
     };
     if explicit_count > 1 {
         return Err(format!(
-            "emit package contract: module {} contains {explicit_count} explicit runtime export entries for {name:?}",
+            "dependency-source redirects: module {} contains {explicit_count} explicit runtime export entries for {name:?}",
             path.display()
         )
         .into());
@@ -672,7 +672,7 @@ pub fn resolve_relative_export(
         solid_facts::resolve_relative_module_path(&source.to_string_lossy(), module, project_paths)
     else {
         return Err(format!(
-            "emit package contract: cannot resolve export-all {module:?} from {}",
+            "dependency-source redirects: cannot resolve export-all {module:?} from {}",
             source.display()
         )
         .into());

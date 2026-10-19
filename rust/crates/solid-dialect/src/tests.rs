@@ -80,9 +80,9 @@ fn synchronous_clearing_names(dialect: &'static dyn Dialect) -> Vec<&'static str
 
 /// `runs_callback_synchronously` is derived, so this test is not checking
 /// an enumeration against itself: it pins the *concrete* set the derivation
-/// produces, which is what package contracts publish as `inline`. A row
+/// produces, which is what callback summaries record as `inline`. A row
 /// moving into or out of `callback_executions`, or a primitive joining
-/// `runs_callback_deferred`, changes contract bytes for every package that
+/// `runs_callback_deferred`, changes the summary of every package that
 /// forwards a callback through it, and has to be a deliberate edit here.
 #[test]
 fn the_synchronous_clearing_set_is_the_inline_half_of_the_deferred_set() {
@@ -149,7 +149,7 @@ fn tracked_schedule_names(
 /// The eager/deferring/unestablished partition, pinned per dialect.
 ///
 /// These sets decide what a clearing wrapper *inside* a tracked one
-/// publishes, so a name entering or leaving one changes contract bytes for
+/// records, so a name entering or leaving one changes the summary of
 /// every package with that shape. The unestablished side is pinned too: it
 /// is the fail-closed arm, and silently promoting a member out of it is how
 /// a guessed schedule would ship.
@@ -421,7 +421,7 @@ fn the_generated_export_index_is_sorted() {
 }
 
 #[test]
-fn concrete_callback_contracts_cover_overloads_and_both_dialects() {
+fn concrete_callback_semantics_cover_overloads_and_both_dialects() {
     let two = &Solid2 as &dyn Dialect;
 
     assert_eq!(
@@ -444,7 +444,7 @@ fn concrete_callback_contracts_cover_overloads_and_both_dialects() {
         assert_eq!(
             two.callback_execution_at(primitive, argument, 2),
             Some(execution),
-            "missing 2.0 callback contract for {primitive:?}[{argument}]"
+            "missing 2.0 callback semantics for {primitive:?}[{argument}]"
         );
     }
 }
@@ -462,8 +462,8 @@ fn each_dialect_knows_its_own_reactive_source_factories() {
     }
 
     // 1.x-only factories. `createResource` is the one that matters most:
-    // it returns a tuple, so the bundled contract's single-value `returns`
-    // column cannot describe it and only this answer finds it.
+    // it returns a tuple, so a single-value `returns` summary cannot
+    // describe it and only this answer finds it.
     for primitive in [
         Primitive::CreateResource,
         Primitive::CreateMutable,

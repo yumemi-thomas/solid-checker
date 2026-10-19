@@ -1,5 +1,5 @@
 //! The source-discovery stage: finds reactive sources, accessors,
-//! setters, and contract-backed facts per file, with per-file reuse.
+//! setters, and dependency-source-backed facts per file, with per-file reuse.
 
 use crate::cache::{
     CachedSourceDiscovery, CachedTypeScriptIndexes, SourceDiscoveryContribution,

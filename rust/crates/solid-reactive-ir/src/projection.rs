@@ -21,11 +21,11 @@ pub struct StaticDefectTerms {
     pub missing_effect_message: &'static str,
     pub missing_effect_hint: &'static str,
     pub store_mutation_hint: fn(&str) -> String,
-    /// A dialect-owned override for the missing-contract-export hint: when
-    /// the dialect knows the export was removed or renamed upstream (the
+    /// A dialect-owned override for the unavailable-package-behavior hint:
+    /// when the dialect knows the export was removed or renamed upstream (the
     /// Solid 2.0 catalog's removed-1.x-API map), the hint should point at
-    /// the migration, not at writing a contract entry for an export that no
-    /// longer exists. Returning `None` keeps the generic contract hint.
+    /// the migration, not at making the source of an export that no longer
+    /// exists available. Returning `None` keeps the generic hint.
     pub removed_export_hint: fn(module: &str, export: &str) -> Option<String>,
     /// What the runtime throws when a value that is not JSON-serializable
     /// reaches the default server-function transport, quoted so the message
@@ -81,7 +81,7 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
             "this component's return value depends on a reactive condition, but a component body runs once; whichever branch is taken at setup renders forever, and the condition is never re-evaluated".into(),
             "Return a single JSX tree and move the branch into it: wrap the alternatives in <Show when={...} fallback={...}> (or <Switch>/<Match> for multiple cases), or use a ternary inside JSX where it stays tracked.".into(),
         ),
-        StaticDefectKind::PackageContractExportMissing {
+        StaticDefectKind::PackageBehaviorUnavailable {
             module,
             export,
             reexported,
@@ -146,7 +146,7 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
                 format!(
                     "{callee} may run a getter that a package analyzed as source defines and that reads reactive state, but no proof carries the object, its member and this read's execution from the package to this Get; whether the read is untracked can be neither proven nor ruled out"
                 ),
-                "Read the member inside JSX or a memo, or analyze the package through an accepted contract, whose getter rows state this Get (ADR 0272).".into(),
+                "Read the member inside JSX or a memo (ADR 0272).".into(),
             )
         }
         StaticDefectKind::ReactiveDispatchUnresolved {
@@ -169,7 +169,7 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
             member: None,
         } if defect.analysis_context == crate::TYPE_ONLY_SOURCE => (
             format!(
-                "{callee} runs where a reactive read would not be tracked, but its only evidence of reading reactive state is its declared type, a Solid source alias that a plain function or object also satisfies; no implementation, contract or source flow proves what it reads, so whether this is an untracked reactive read can be neither proven nor ruled out"
+                "{callee} runs where a reactive read would not be tracked, but its only evidence of reading reactive state is its declared type, a Solid source alias that a plain function or object also satisfies; no implementation or source flow proves what it reads, so whether this is an untracked reactive read can be neither proven nor ruled out"
             ),
             "Read it inside JSX, a createMemo, or an effect's compute function, or make its source visible to solid-checker: create it with a Solid primitive in the project, or pass one through a path the analysis follows (ADR 0294).".into(),
         ),
@@ -216,7 +216,7 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
             format!(
                 "exported function {function} returns shorthand property {property:?}, but its runtime value cannot be resolved exactly ({reason}); whether that property is a reactive accessor or store path cannot be certified"
             ),
-            "Use an exact project-relative named/default import, return an explicitly resolved local binding, or provide an audited package contract for the external value.".into(),
+            "Use an exact project-relative named/default import, return an explicitly resolved local binding, or make the external value's source available to the analysis.".into(),
         ),
         StaticDefectKind::ReactiveHandlerRead {
             attribute,
@@ -323,18 +323,8 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         StaticDefectKind::ComponentReturnsConditionally => {
             "a proven reactive read controls the component's return shape"
         }
-        // The acceptance gate and the missing-summary case shared this arm, and
-        // its wording is only true of the second: at the acceptance gate there
-        // is no contract to have a summary in. Split, because a reader acts on
-        // the difference — one is `contract certify`, the other is an audit of
-        // a contract that already exists.
-        StaticDefectKind::PackageContractExportMissing { .. }
-            if defect.analysis_context == crate::contracts::UNACCEPTED_IMPORT_CONTEXT =>
-        {
-            "this project accepted no contract for the imported package"
-        }
-        StaticDefectKind::PackageContractExportMissing { .. } => {
-            "the imported package has a contract, but this export has no effect summary"
+        StaticDefectKind::PackageBehaviorUnavailable { .. } => {
+            "the imported package's behavior is not available from analyzed source"
         }
         StaticDefectKind::ReactiveDispatchUnresolved { .. } => {
             "the call is type-correct, but exact runtime dispatch or equivalent reactive summaries are not proven"
@@ -540,7 +530,7 @@ pub fn project_findings(
                 .map(|operation| project_finding(FindingSeed::LeafOperation(operation), catalog)),
         );
     }
-    findings.extend(collapse_unaccepted_contract_defects(
+    findings.extend(collapse_unanalyzed_package_defects(
         &program.static_defects,
         catalog,
     ));
@@ -701,91 +691,49 @@ pub fn suppress_findings_owned_by_enabled_rules(
 /// stated where a package's behaviour is reported unknown.
 const PACKAGE_SOURCE_PREMISE: &str = "installed Solid packages are analyzed from their runtime source when the run declares a runtime target and build (--runtime-target, --runtime-build) and a Solid Vite plugin resolves from the project, or when --dependency-source names them.";
 
-/// The hint of the package-behaviour-unknown form of `SC9005` (P7 of the
-/// contract-removal plan): no package contract is consumed.
-const PACKAGE_BEHAVIOUR_UNKNOWN_HINT: &str = "Package contracts are no longer consumed: installed Solid packages are analyzed from their runtime source when the run declares a runtime target and build (--runtime-target, --runtime-build) and a Solid Vite plugin resolves from the project, or when --dependency-source names them. A package source analysis cannot read stays uncertifiable.";
+/// The hint of the package-behaviour-unknown form of `SC9005`.
+const PACKAGE_BEHAVIOUR_UNKNOWN_HINT: &str = "Installed Solid packages are analyzed from their runtime source when the run declares a runtime target and build (--runtime-target, --runtime-build) and a Solid Vite plugin resolves from the project, or when --dependency-source names them. A package source analysis cannot read stays uncertifiable.";
 
-/// Projects one seed. Used by the backend for package-contract issues that
-/// are discovered after the reactive [`Program`] has been built.
-#[must_use]
-/// The acceptance gate says one thing -- "this project has no accepted contract
-/// for that package" -- and it used to say it once per import site. The fix is
-/// one action per package, not per import, and nothing distinguishes the sites,
-/// so the defects of one package collapse to one finding, anchored at the first
-/// site and carrying every other site in `related_locations`. **Nothing is
-/// dropped**; the same locations reach the same consumers, grouped by the thing
-/// that would fix them. A group of one keeps its exact original wording.
+/// An unavailable-package-behavior obligation says one thing -- "this
+/// package's behavior is not available from analyzed source" -- and it would
+/// say it once per import site. The remedy is one action per package, not per
+/// import, and nothing distinguishes the sites, so the defects of one package
+/// collapse to one finding, anchored at the first site and carrying every
+/// other site in `related_locations`. **Nothing is dropped**; the same
+/// locations reach the same consumers, grouped by the thing that would fix
+/// them. A group of one keeps its exact original wording.
 ///
-/// A defect raised at an exact call argument keeps its own finding, because
-/// there the site is the content. A defect with any other context is about its
-/// export, so it groups per `(package, export, context)`.
-///
-/// Every grouped finding names its subject (`subject_kind` `package` or
-/// `package-export`), which is what tells a per-file reporter that its related
-/// locations are further sites of the same finding rather than supporting
-/// context. The ESLint adapter reports such a finding in each file holding one
-/// of its sites, so collapsing across a project never hides a file's sites
-/// from a per-file consumer.
-fn collapse_unaccepted_contract_defects(
+/// Every grouped finding names its subject (`subject_kind` `package`), which
+/// is what tells a per-file reporter that its related locations are further
+/// sites of the same finding rather than supporting context. The ESLint
+/// adapter reports such a finding in each file holding one of its sites, so
+/// collapsing across a project never hides a file's sites from a per-file
+/// consumer.
+fn collapse_unanalyzed_package_defects(
     defects: &[StaticDefect],
     catalog: &impl CatalogWording,
 ) -> Vec<Finding> {
-    /// What makes two of these defects interchangeable.
-    #[derive(Clone, Copy, Eq, Hash, PartialEq)]
-    enum Interchangeable<'a> {
-        /// The acceptance gate: the import matched no accepted contract at all,
-        /// so no export-specific claim has been read yet and every site in the
-        /// package has the same answer.
-        Package(&'a str),
-        /// A claim gate: a contract speaks about this exact export in this
-        /// exact context. Different exports, and different contexts, are
-        /// different findings.
-        Claim(&'a str, &'a str, &'a str),
-    }
-
-    fn interchangeable(defect: &StaticDefect) -> Option<Interchangeable<'_>> {
-        let StaticDefectKind::PackageContractExportMissing {
-            module,
-            export,
-            site,
-            ..
-        } = &defect.kind
-        else {
-            return None;
-        };
-        // An obligation raised at an exact argument of an exact call keeps its
-        // own finding: the site *is* the content.
-        if *site == crate::ContractDefectSite::Argument {
-            return None;
+    /// The package an unavailable-behavior defect is about. Every site in one
+    /// package has the same answer, so the package is what makes two of these
+    /// defects interchangeable.
+    fn package_of(defect: &StaticDefect) -> Option<&str> {
+        match &defect.kind {
+            StaticDefectKind::PackageBehaviorUnavailable { module, .. } => Some(module.as_str()),
+            _ => None,
         }
-        // The exact context, not "not one of the specific prefixes": a defect
-        // raised because an *accepted* contract has no summary for this export
-        // is about that export, and collapsing it under the package would say
-        // the package has no contract when it does.
-        Some(
-            if defect.analysis_context == crate::contracts::UNACCEPTED_IMPORT_CONTEXT {
-                Interchangeable::Package(module.as_str())
-            } else {
-                Interchangeable::Claim(
-                    module.as_str(),
-                    export.as_str(),
-                    defect.analysis_context.as_str(),
-                )
-            },
-        )
     }
 
     // First-seen order, so the anchor of each group is the first site the
     // analysis reached and the output order does not depend on a hash.
-    let mut order: Vec<Interchangeable<'_>> = Vec::new();
-    let mut grouped: std::collections::HashMap<Interchangeable<'_>, Vec<&StaticDefect>> =
+    let mut order: Vec<&str> = Vec::new();
+    let mut grouped: std::collections::HashMap<&str, Vec<&StaticDefect>> =
         std::collections::HashMap::new();
     let mut findings = Vec::new();
     for defect in defects {
-        match interchangeable(defect) {
-            Some(key) => {
-                let group = grouped.entry(key).or_insert_with(|| {
-                    order.push(key);
+        match package_of(defect) {
+            Some(module) => {
+                let group = grouped.entry(module).or_insert_with(|| {
+                    order.push(module);
                     Vec::new()
                 });
                 group.push(defect);
@@ -794,29 +742,15 @@ fn collapse_unaccepted_contract_defects(
             None => findings.push(project_finding(FindingSeed::StaticDefect(defect), catalog)),
         }
     }
-    for key in order {
-        let group = &grouped[&key];
+    for module in order {
+        let group = &grouped[module];
         let mut finding = project_finding(FindingSeed::StaticDefect(group[0]), catalog);
-        let Interchangeable::Package(module) = key else {
-            // A claim group keeps the message it already has -- it names the
-            // package, the export and the open domains, which is the whole
-            // content -- and gains the other sites and their count.
-            finding.subject_kind = "package-export".into();
-            if group.len() > 1 {
-                finding.message = format!("{} ({} import sites)", finding.message, group.len());
-                finding
-                    .related_locations
-                    .extend(group[1..].iter().map(|defect| defect.location.clone()));
-            }
-            findings.push(finding);
-            continue;
-        };
         finding.subject_kind = "package".into();
         if group.len() > 1 {
             let mut exports = group
                 .iter()
                 .filter_map(|defect| match &defect.kind {
-                    StaticDefectKind::PackageContractExportMissing { export, .. } => {
+                    StaticDefectKind::PackageBehaviorUnavailable { export, .. } => {
                         Some(export.as_str())
                     }
                     _ => None,
@@ -852,6 +786,9 @@ fn collapse_unaccepted_contract_defects(
     findings
 }
 
+/// Projects one seed. Used by the backend for package-behavior issues that
+/// are discovered after the reactive [`Program`] has been built.
+#[must_use]
 pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> Finding {
     let wording = catalog.wording(seed);
     let location = primary_location(seed);
@@ -934,20 +871,6 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             if defect.uncertain {
                 finding.kind = "uncertifiable".into();
             }
-            // The acceptance gate at an import whose package *has* an
-            // acceptance -- a project catalog entry -- that was refused: say
-            // so, and why, as one more evidence step. The message stays the
-            // gate's own, so a project with no catalog reads exactly as before.
-            if let StaticDefectKind::PackageContractExportMissing {
-                admission_refusal: Some(refusal),
-                ..
-            } = &defect.kind
-            {
-                finding.evidence.push(EvidenceStep {
-                    message: refusal.clone(),
-                    location: None,
-                });
-            }
         }
         FindingSeed::AsyncRead(read) => {
             finding.related_locations = vec![read.declaration.clone()];
@@ -1008,14 +931,13 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
 fn coverage_group(seed: FindingSeed<'_>) -> Option<(&'static str, String)> {
     match seed {
         FindingSeed::StaticDefect(defect) => match &defect.kind {
-            StaticDefectKind::PackageContractExportMissing { module, .. } => {
+            StaticDefectKind::PackageBehaviorUnavailable { module, .. } => {
                 Some(("package-contract", package_of_specifier(module).to_owned()))
             }
             StaticDefectKind::ReactiveDispatchUnresolved { callee, .. } => {
                 let context = defect.analysis_context.as_str();
                 Some((
                     if context.starts_with("parameter-member")
-                        || context.starts_with("contract-parameter-member")
                         || context == crate::EXPORTED_PARAMETER_MEMBER_DISPATCH
                     {
                         "caller-supplied-member"

@@ -138,11 +138,11 @@ export const dialectBase = (dialect) => {
   const base = join(CASE_ROOT, dialect);
   mkdirSync(base, { recursive: true });
   ensureDirectoryLink(join(base, "node_modules"), join(root, "node_modules"));
-  // Package contracts require independently acquired registry integrity. The
+  // Package identity requires independently acquired registry integrity. The
   // audited oracle install uses Bun, so its lockfile must be visible from each
   // isolated checker project just as its node_modules tree is. Linking only
-  // node_modules made the consumer correctly refuse every exact first-party
-  // bundle even though TypeScript resolved the same package.
+  // node_modules made the checker correctly refuse every exact first-party
+  // package even though TypeScript resolved the same package.
   ensureFileLink(join(base, "bun.lock"), join(root, "bun.lock"));
   const entry = { base };
   prepared.set(dialect, entry);

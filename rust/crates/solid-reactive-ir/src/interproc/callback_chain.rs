@@ -5,10 +5,10 @@ use super::*;
 /// How one callback position schedules the code written inside it, relative to
 /// the call that owns that position.
 ///
-/// Four answers rather than the contract's three, because "runs during the
-/// call" and "reads inside it subscribe the caller" are separate facts and the
-/// composition in [`compose_callback_chain`] needs both. The contract
-/// vocabulary collapses them: `untrack` and `batch` are both `inline` there,
+/// Four answers rather than the execution word's three, because "runs during
+/// the call" and "reads inside it subscribe the caller" are separate facts and
+/// the composition in [`compose_callback_chain`] needs both. The execution
+/// word collapses them: `untrack` and `batch` are both `inline` there,
 /// and only one of them stops an enclosing computation from tracking what runs
 /// inside.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -27,7 +27,7 @@ pub(crate) enum CallbackWrapper {
     /// and `createRenderEffect` run it during the call while `createEffect`
     /// queues it, and 2.0 disagrees with 1.x on `createEffect`. `None` is the
     /// dialect refusing to say ([`solid_dialect::Dialect::tracked_callback_timing`]),
-    /// or a package contract row, whose `execution` word carries no schedule
+    /// or a summary row, whose `execution` word carries no schedule
     /// column at all.
     Tracked(Option<TrackedCallbackTiming>),
     /// The wrapping call schedules the code to run after it returns.
@@ -35,14 +35,14 @@ pub(crate) enum CallbackWrapper {
     /// `clears_tracking` is whether the code, when it does run, is proven to
     /// run with no caller's listener current: a dialect deferred slot the
     /// dialect states untracked ([`solid_dialect::Dialect::reports_untracked_reads_at`]),
-    /// or a package contract row that states `untracked` for a deferred
+    /// or a summary row that states `untracked` for a deferred
     /// invocation. "Runs later" alone is not that proof -- a returned closure
     /// runs inside whatever computation its caller is in -- so `false` is the
     /// default and publishes `ambient-at-execution`.
     Deferred { clears_tracking: bool },
 }
 
-/// The wrapper a callback position is, for contract emission.
+/// The wrapper a callback position is, for callback summaries.
 ///
 /// `None` is not "transparent": it is "this analysis cannot say what the
 /// wrapping call does with the function it was handed", which is why
@@ -268,7 +268,7 @@ pub(super) fn callback_chain_reaches_owner_body(
         .is_some_and(|innermost| innermost.body == owner.body)
 }
 
-/// The contract execution a callback carries when it runs synchronously at the
+/// The execution word a callback carries when it runs synchronously at the
 /// innermost end of `wrappers`.
 ///
 /// Read innermost outward, because the order is the whole answer:
@@ -293,7 +293,7 @@ pub(super) fn callback_chain_reaches_owner_body(
 /// The composed word, and whether the chain clears the caller's listener.
 ///
 /// `detached` was computed here and thrown away, which is why every package
-/// contract row published `tracking: "untracked"` whatever the export did: the
+/// summary row recorded `tracking: "untracked"` whatever the export did: the
 /// one place that knows a `Detaching` wrapper stood in the chain did not say
 /// so. It is the difference between `untrack(fn)` and a bare `fn()`, and
 /// without it a consumer reading the row cannot tell them apart.
@@ -515,7 +515,7 @@ impl ForwardedAmbientExecution {
 }
 
 /// The execution recorded for a callback forwarded into a primitive, in the
-/// package contracts' vocabulary.
+/// execution-word vocabulary.
 ///
 /// The effect pair derives from the dialect, because its phases are the
 /// headline dialect difference: 2.0 has a deferred apply argument, 1.x has a
@@ -523,18 +523,17 @@ impl ForwardedAmbientExecution {
 ///
 /// `untrack` and 2.0's `flush` sit in the `"inline"` arm beside `createRoot`
 /// and `runWithOwner` (only `flush` leaves the caller's listener current),
-/// which is what the contract vocabulary means by the word:
+/// which is what the execution-word vocabulary means by the word:
 /// `inline` and `deferred` are the *schedule* axis and describe only callbacks
 /// the export does not subscribe, while the clearing fact travels separately
 /// through [`solid_dialect::Dialect::runs_callback_synchronously`]
-/// (docs/package-contracts.md, "one word over two axes"). This module used to
-/// answer `"deferred"` for the pair on the grounds that a consumer reads
+/// ("one word over two axes"). This module used to answer `"deferred"` for the pair on the grounds that a consumer reads
 /// `"deferred"` as "not tracked here" -- but `"deferred"` is also a promise
 /// that the callback does *not* run before the export returns, and every one of
-/// these runs it during the call. `contract probe` measures the timing, so the
-/// divergence published claims the runtime contradicts. The "not tracked"
-/// half is now carried by [`callback_wrapper_at`], which reads the clearing
-/// fact from the dialect instead of encoding it in the word.
+/// these runs it during the call, so the divergence recorded claims the
+/// runtime contradicts. The "not tracked" half is now carried by
+/// [`callback_wrapper_at`], which reads the clearing fact from the dialect
+/// instead of encoding it in the word.
 ///
 /// This table is also the *reach* of the wrapper-chain fold: a primitive with no
 /// row here cannot be classified as a wrapper at all, so a chain containing one
@@ -545,23 +544,19 @@ impl ForwardedAmbientExecution {
 /// avoid. `batch`, `createComputed`, `onMount`, `catchError`, `children` and the
 /// rest are absent because nobody has established their schedule here yet.
 ///
-/// **A row here is not permission to publish a callback claim.** This table has
+/// **A row here is not permission to record a callback claim.** This table has
 /// two consumers whose polarity is opposite. The wrapper-chain fold needs a row
 /// to classify the position at all, and a *missing* row makes the chain refuse
 /// so the inner slot's own answer stands -- a stronger claim, not a weaker one.
-/// `fixtures/package-contracts/callback-deferred-untracked-chain`'s
-/// `unestablishedScheduleShape` pinned exactly that under Solid 1.x, where
-/// `createSignal(fn)` *stored* the function. **2.0 has no such shape**: it
-/// models `createSignal`'s compute slot with a `Tracked` row, so the chain
-/// answers rather than refusing, and the re-authored 2.0 fixture pins the
-/// resolved reading instead (`derivedSignalShape`). Pinning a genuine refusal
-/// again needs a primitive this dialect states no timing for --
+/// Under Solid 1.x that was the case for `createSignal(fn)`, which *stored* the
+/// function. **2.0 has no such shape**: it models `createSignal`'s compute slot
+/// with a `Tracked` row, so the chain answers rather than refusing. A genuine
+/// refusal needs a primitive this dialect states no timing for --
 /// `createStore` and `createOptimisticStore` are the documented candidates.
-/// The contract inventory in
-/// [`interprocedural_contributions`] wants the opposite reading, so the premises
-/// it needs before rooting an `invoke` claim on a forwarded parameter live
-/// there, in [`primitive_slot_roots_parameter_invoke`], and never by deleting a
-/// row from here.
+/// The callback-summary pass in the interprocedural graph wants the opposite
+/// reading, so the premises it needs before rooting an `invoke` claim on a
+/// forwarded parameter live there, in [`primitive_slot_roots_parameter_invoke`],
+/// and never by deleting a row from here.
 pub(super) fn primitive_callback_execution(
     primitive: Option<Primitive>,
     parameter: usize,
@@ -570,7 +565,7 @@ pub(super) fn primitive_callback_execution(
 ) -> Option<&'static str> {
     let primitive = primitive?;
     dialect
-        .contract_callback_execution_at(primitive, parameter, argument_count)
+        .callback_execution_word_at(primitive, parameter, argument_count)
         .map(|execution| match execution {
             solid_dialect::Execution::Tracked => "tracked",
             solid_dialect::Execution::Deferred => "deferred",
@@ -583,18 +578,17 @@ pub(super) fn primitive_callback_execution(
 ///
 /// [`primitive_callback_execution`] answers "how would a callback at this slot
 /// run relative to the export", which presupposes there is a callback there. The
-/// contract inventory needs that presupposition established, and it used to
-/// publish the row without it. Two shapes in the measured ecosystem produced an
+/// callback summary needs that presupposition established, and it used to
+/// record the row without it. Two shapes in the measured ecosystem produced an
 /// `invoke` claim about a value the shipped code never invokes -- a demand no
-/// evidence can ever discharge, so the certification census refuses it forever
-/// and correctly:
+/// evidence can ever discharge, so it stays open forever and correctly:
 ///
 /// - `@solid-primitives/flux-store`'s
 ///   `createFluxStore(initialState, createMethods)` claimed to invoke
 ///   `initialState`, because `createStore(initialState)` sits at
 ///   `(CreateStore, 0)`. Its real callbacks are `createMethods.getters` and
-///   `createMethods.actions` -- argument 1 behind a property path, which the
-///   generator's [`CallbackSummary`] cannot spell at all.
+///   `createMethods.actions` -- argument 1 behind a property path, which a
+///   [`CallbackSummary`] cannot spell at all.
 /// - `@solidjs/meta`'s
 ///   `Stylesheet = props => createComponent(Link, mergeProps({rel}, props))`,
 ///   declared `Component<Omit<JSX.LinkHTMLAttributes<HTMLLinkElement>, "rel">>`,
@@ -618,7 +612,7 @@ pub(super) fn primitive_callback_execution(
 /// plain form whose first parameter is declared to exclude functions
 /// (`Exclude<T, Function>`, `NoFn<T>`) beside a derived form that takes a
 /// compute. For those, an unproven callability is the *missing* premise, and
-/// publishing the row anyway is manufacturing a positive claim out of absent
+/// recording the row anyway is manufacturing a positive claim out of absent
 /// knowledge. `createMemo`, `createProjection`, `createTrackedEffect` and
 /// `dynamic` are unconditional -- argument 0 is the compute in every overload --
 /// so they keep the weak premise and keep working on untyped artifacts.

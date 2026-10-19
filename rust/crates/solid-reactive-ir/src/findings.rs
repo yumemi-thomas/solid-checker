@@ -299,7 +299,7 @@ impl Finding {
                 "; this function is exported, so solid-checker cannot prove its callers provide an owner",
             );
             hint.push_str(
-                " If every caller runs this exported function under an owner, document that in the package's reactivity contract.",
+                " If every caller runs this exported function under an owner, make that ownership visible to solid-checker, for example by calling it from a component or computation in the project.",
             );
         }
         Self {
@@ -395,7 +395,7 @@ pub fn strict_read_message_with_compute(read: &ReactiveRead, compute_reads_sourc
             "the call is outside a tracking scope"
         };
         return format!(
-            "{} {:?} may be read through {} at a call written in {context}; the accepted contract states an inline invocation but does not prove this call invokes the accessor; {tracking}, so the untracked read is uncertifiable",
+            "{} {:?} may be read through {} at a call written in {context}; the callee's summary states an inline invocation but does not prove this call invokes the accessor; {tracking}, so the untracked read is uncertifiable",
             reactive_value_label(&read.kind),
             read.accessor,
             read.via,

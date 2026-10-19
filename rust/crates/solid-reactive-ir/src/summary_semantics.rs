@@ -1,7 +1,7 @@
 //! Source-analysis summary vocabulary for callbacks, returns and scheduling.
 //!
 //! Local and dependency-source analysis produce these shared rows. They carry
-//! no accepted-contract view, receipt or wire-document representation.
+//! no package-document view, receipt or wire-document representation.
 
 use std::collections::BTreeMap;
 
@@ -118,8 +118,8 @@ pub enum CallbackSchedule {
     /// only in the value it returns (for a construction, the instance), and
     /// it runs later, on the stack of code that invokes it through that value.
     /// The row is a deferred invocation in every pass that models one; the
-    /// variant exists so an accepted contract's `result-access` item projects
-    /// back, and is re-emitted, as exactly that item.
+    /// variant exists so a `result-access` summary row stays distinct from an
+    /// ordinary deferred invocation.
     ResultAccess,
 }
 
@@ -140,7 +140,7 @@ pub struct CallbackSummary {
     /// as exported returns.
     pub arguments: Vec<Option<ReturnSummary>>,
     /// The owner context in which the runtime invokes this callback. Missing
-    /// means the package contract describes timing only; consumers must keep
+    /// means the row describes timing only; consumers must keep
     /// the existing fail-closed owner behavior for that callback.
     pub owner: Option<String>,
     /// Whether the callback is proven to run with no listener of the caller's
@@ -171,11 +171,10 @@ pub struct CallbackSummary {
     /// [`CallbackSummary::clears_tracking_from`].
     pub clears_tracking: bool,
     /// Which protocol of the caller's value this row invokes. `Call` is every
-    /// row an analysis pass writes; the others arrive only from an accepted
-    /// contract's non-call `invoke` items (a property read, iteration,
-    /// coercion or `hasInstance` of the argument), and the generator's own
-    /// derivation of them, and they are **not** inline invocations of a
-    /// callable: no consumer pass may read one as a call of the argument. See
+    /// row an analysis pass writes; the others are non-call invocations (a
+    /// property read, iteration, coercion or `hasInstance` of the argument),
+    /// and they are **not** inline invocations of a callable: no consumer
+    /// pass may read one as a call of the argument. See
     /// [`CallbackSummary::is_invocation`].
     pub protocol: InvokeProtocol,
     /// The member of the argument at [`Self::parameter`] this row invokes,

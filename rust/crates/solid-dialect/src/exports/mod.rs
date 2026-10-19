@@ -8,8 +8,8 @@
 //! leave every name the checker models no obligation for unanswerable.
 //!
 //! These frozen declaration indices are audited against the same exact
-//! published package authorities as the receipt-issued bundles. They contain
-//! no contract semantics; behavior stays in normalized contracts.
+//! published package authorities. They contain no behavior semantics;
+//! behavior stays in the dialect vocabulary and dependency source.
 
 pub mod solid_v2_solid_js;
 pub mod solid_v2_solidjs_web;

@@ -48,8 +48,8 @@ struct Request {
     #[serde(default)]
     runtime_resolution: bool,
     /// ADR 0284, experimental: installed packages, by bare specifier, whose
-    /// runtime source is analyzed as project code instead of being bound
-    /// through a package contract.
+    /// runtime source is analyzed as project code instead of its behaviour
+    /// staying unknown.
     #[serde(default)]
     dependency_sources: Vec<String>,
     /// ADR 0295: the declared premise that the selected dependency-source
@@ -262,7 +262,6 @@ fn run_ordinary_check(
                 "importIdentityModules": import_identity.modules,
                 "irNs": outcome.diagnostic_timings.reactive_ir.as_nanos(),
                 "solveAndSnapshotNs": outcome.diagnostic_timings.solve_and_snapshot.as_nanos(),
-                "contractEmissionNs": 0,
                 "moduleInventoryNs": 0,
                 "totalNs": started.elapsed().as_nanos(),
             })
@@ -276,12 +275,9 @@ fn run_ordinary_check(
 /// '*'` does, unless an explicit selection says otherwise. A package `*` does
 /// not select or refuses stays uncertifiable.
 ///
-/// Every other mode keeps the selection it was given. Contract emission and
-/// its batch, the module inventory and resolutions it reads, probe and
-/// certification planning, contract inspection and validation, feedback
-/// facts, bundler runtime resolution, caller-supplied sources and the daemon
-/// server (which serves its client's selection verbatim) are not ordinary
-/// analyses, and none of them has been shown to mean the same thing under a
+/// Every other mode keeps the selection it was given. Feedback facts,
+/// bundler runtime resolution, caller-supplied sources and the daemon server
+/// (which serves its client's selection verbatim) are not ordinary analyses, and none of them has been shown to mean the same thing under a
 /// source selection.
 fn defaults_to_dependency_sources(request: &Request) -> bool {
     let declared_host = request.runtime.target.is_some() && request.runtime.build.is_some();
@@ -563,7 +559,8 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
                     .framework_transforms
                     .insert(args.next().ok_or("--framework-transform needs a value")?);
             }
-            // Accepted for compatibility: no check consumes a package contract.
+            // Accepted for compatibility: no check consumes a package contract,
+            // so the flag changes nothing.
             "--no-package-contracts" => {}
             removed
                 if REMOVED_CONTRACT_FLAGS

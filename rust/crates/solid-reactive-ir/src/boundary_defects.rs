@@ -1,4 +1,4 @@
-//! Explicit package-source boundary obligations. No package contracts are read.
+//! Explicit package-source boundary obligations.
 
 use solid_dialect::Dialect;
 use solid_facts::ProjectFacts;
@@ -6,10 +6,10 @@ use typefacts::Location;
 
 use super::{EntitySymbols, StaticDefect, StaticDefectKind, location};
 
-/// A missing external-contract obligation must not invent a receipt
-/// requirement for a primitive already modeled by the selected dialect.
-/// Core contracts themselves are excluded at the analysis boundary.
-fn native_vocabulary_outranks_contract(
+/// A boundary obligation must not be raised for a primitive already modeled
+/// by the selected dialect. Core runtime references themselves are excluded
+/// at the analysis boundary.
+fn native_vocabulary_outranks_package_boundary(
     dialect: &dyn Dialect,
     module: &str,
     imported: &str,
@@ -29,9 +29,7 @@ pub(super) fn discover_boundary_defects(
     let mut defects = Vec::new();
     for file in &facts.files {
         for import in &file.ast.imports {
-            if import.type_only
-                || solid_dialect::core_runtime_contract_reference("", &import.module)
-            {
+            if import.type_only || solid_dialect::core_runtime_reference("", &import.module) {
                 continue;
             }
             if !inputs
@@ -40,13 +38,13 @@ pub(super) fn discover_boundary_defects(
             {
                 continue;
             }
-            push_missing_accepted_import(&mut defects, file, import, entities, dialect);
+            push_unavailable_import(&mut defects, file, import, entities, dialect);
         }
     }
     defects
 }
 
-fn push_missing_accepted_import(
+fn push_unavailable_import(
     missing: &mut Vec<StaticDefect>,
     file: &solid_facts::FileFacts,
     import: &solid_facts::ast::ImportFact,
@@ -71,8 +69,8 @@ fn push_missing_accepted_import(
                         == Some(namespace_symbol)
             }) {
                 let export = file.source_text(member.property).unwrap_or_default();
-                if !native_vocabulary_outranks_contract(dialect, &import.module, export) {
-                    push_missing_accepted_export(
+                if !native_vocabulary_outranks_package_boundary(dialect, &import.module, export) {
+                    push_unavailable_export(
                         missing,
                         &import.module,
                         export,
@@ -87,8 +85,8 @@ fn push_missing_accepted_import(
         }) else {
             continue;
         };
-        if !native_vocabulary_outranks_contract(dialect, &import.module, export) {
-            push_missing_accepted_export(
+        if !native_vocabulary_outranks_package_boundary(dialect, &import.module, export) {
+            push_unavailable_export(
                 missing,
                 &import.module,
                 export,
@@ -98,34 +96,24 @@ fn push_missing_accepted_import(
     }
 }
 
-/// The analysis context of the **acceptance** gate: this project accepted no
-/// contract for the import at all, so nothing export-specific has been read
-/// yet.
-///
-/// Named rather than spelled twice because three places have to agree on it —
-/// the producer below, the evidence wording, and the per-package collapse in
-/// `projection` — and two of them are deciding whether a finding is about the
-/// package or about one of its exports. A drift between them would silently
-/// re-scatter the collapse or mislabel the evidence.
-pub(crate) const UNACCEPTED_IMPORT_CONTEXT: &str =
-    "no receipt-accepted contract matches this exact import";
+/// The analysis context of a boundary obligation: no analyzed source covers
+/// the import, so nothing export-specific has been read.
+pub(crate) const UNANALYZED_IMPORT_CONTEXT: &str = "no analyzed source covers this exact import";
 
-fn push_missing_accepted_export(
+fn push_unavailable_export(
     missing: &mut Vec<StaticDefect>,
     module: &str,
     export: &str,
     location: Location,
 ) {
     missing.push(StaticDefect {
-        kind: StaticDefectKind::PackageContractExportMissing {
+        kind: StaticDefectKind::PackageBehaviorUnavailable {
             module: module.into(),
             export: export.into(),
             reexported: false,
-            site: crate::ContractDefectSite::Import,
-            admission_refusal: None,
         },
         location,
-        analysis_context: UNACCEPTED_IMPORT_CONTEXT.into(),
+        analysis_context: UNANALYZED_IMPORT_CONTEXT.into(),
         fixes: vec![],
         uncertain: false,
     });

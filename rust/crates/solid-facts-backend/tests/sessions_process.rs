@@ -2036,7 +2036,7 @@ fn edit_recovers_when_the_service_dies_between_update_and_analyze() {
 ///
 /// The measurement is per generation, and a retained session keeps the last
 /// one. An edit that removes the program's only bare specifier asks for nothing
-/// -- there is no specifier a contract could describe -- so leaving the previous
+/// -- there is no specifier a package could be matched by -- so leaving the previous
 /// generation's counts in place would make `SOLID_CHECKER_TIMINGS` attribute
 /// them to a generation that never issued the operation.
 #[test]

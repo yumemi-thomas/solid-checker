@@ -82,23 +82,21 @@ impl CatalogWording for ErrorCatalog {
                 default_enabled: true,
                 presets: &[],
             },
-            "contract",
+            "unavailable",
             "",
         )
     }
 }
 
-fn contract_defect(context: &str, site: crate::ContractDefectSite, at: u64) -> StaticDefect {
+fn unavailable_defect(at: u64) -> StaticDefect {
     StaticDefect {
-        kind: StaticDefectKind::PackageContractExportMissing {
+        kind: StaticDefectKind::PackageBehaviorUnavailable {
             module: "pkg".into(),
             export: "access".into(),
             reexported: false,
-            site,
-            admission_refusal: None,
         },
         location: location(at),
-        analysis_context: context.into(),
+        analysis_context: crate::boundary_defects::UNANALYZED_IMPORT_CONTEXT.into(),
         fixes: vec![],
         uncertain: false,
     }
@@ -115,103 +113,50 @@ fn a_coverage_subject_names_the_package_not_the_subpath() {
     assert_eq!(super::package_of_specifier("name"), "name");
 }
 
+/// Unavailable package behavior collapses to one finding per package whatever
+/// the export, and stays the rule's error.
 #[test]
-fn a_refused_catalog_entry_adds_one_evidence_step_to_the_acceptance_gate() {
-    let note = "a project catalog entry exists for this package and was not admitted: \
-                    its receipt states no dependency environment, so it is admitted nowhere";
-    let refused = |at: u64| {
-        let mut defect = contract_defect(
-            crate::contracts::UNACCEPTED_IMPORT_CONTEXT,
-            crate::ContractDefectSite::Import,
-            at,
-        );
-        let StaticDefectKind::PackageContractExportMissing {
-            admission_refusal, ..
-        } = &mut defect.kind
-        else {
+fn unavailable_package_behavior_collapses_per_package() {
+    let other_package = {
+        let mut defect = unavailable_defect(2);
+        let StaticDefectKind::PackageBehaviorUnavailable { module, .. } = &mut defect.kind else {
             unreachable!()
         };
-        *admission_refusal = Some(note.into());
+        *module = "other".into();
         defect
     };
-    let plain = contract_defect(
-        crate::contracts::UNACCEPTED_IMPORT_CONTEXT,
-        crate::ContractDefectSite::Import,
-        1,
-    );
-    let without = project_finding(FindingSeed::StaticDefect(&plain), &ErrorCatalog);
-    let with = project_finding(FindingSeed::StaticDefect(&refused(1)), &ErrorCatalog);
-    assert_eq!(
-        with.message, without.message,
-        "the message is the gate's own"
-    );
-    assert_eq!(with.severity, without.severity);
-    assert_eq!(
-        with.evidence[..without.evidence.len()],
-        without.evidence[..]
-    );
-    assert_eq!(
-        with.evidence[without.evidence.len()..]
-            .iter()
-            .map(|step| step.message.as_str())
-            .collect::<Vec<_>>(),
-        [note]
-    );
-    // Collapsed over a package's import sites, the note is stated once.
-    let collapsed = collapse_unaccepted_contract_defects(&[refused(1), refused(2)], &ErrorCatalog);
-    assert_eq!(collapsed.len(), 1);
-    assert_eq!(
-        collapsed[0]
-            .evidence
-            .iter()
-            .filter(|step| step.message == note)
-            .count(),
-        1
-    );
-    assert_eq!(collapsed[0].related_locations.len(), 1);
-}
-
-/// The acceptance gate collapses to one finding per package whatever the
-/// export, and stays the rule's error; an obligation at an exact call argument
-/// keeps its own finding, because there the site is the content.
-#[test]
-fn the_acceptance_gate_collapses_per_package_and_argument_sites_stay_apart() {
-    use crate::ContractDefectSite::{Argument, Import};
-    let gate = crate::contracts::UNACCEPTED_IMPORT_CONTEXT;
     let defects = vec![
-        contract_defect(gate, Import, 1),
-        contract_defect("claim-gate", Argument, 2),
-        contract_defect(gate, Import, 3),
-        contract_defect("claim-gate", Argument, 4),
+        unavailable_defect(1),
+        other_package.clone(),
+        unavailable_defect(3),
+        {
+            let mut defect = other_package;
+            defect.location = location(4);
+            defect
+        },
     ];
     let reversed = defects.iter().cloned().rev().collect::<Vec<_>>();
-    let collapsed = collapse_unaccepted_contract_defects(&defects, &ErrorCatalog);
+    let collapsed = collapse_unanalyzed_package_defects(&defects, &ErrorCatalog);
     let starts = |findings: &[Finding]| {
         findings
             .iter()
             .map(|finding| finding.primary_location.start_byte)
             .collect::<Vec<_>>()
     };
-    // First-seen order: the package group is anchored at its first site.
-    assert_eq!(starts(&collapsed), [2, 4, 1]);
-    let package = &collapsed[2];
+    // First-seen order: each package group is anchored at its first site.
+    assert_eq!(starts(&collapsed), [1, 2]);
+    let package = &collapsed[0];
     assert_eq!(package.subject_kind, "package");
     assert_eq!(package.related_locations, [location(3)]);
     assert_eq!(package.severity, "error");
     assert_eq!(package.kind, "uncertifiable");
-    assert!(
-        collapsed[..2]
-            .iter()
-            .all(|finding| finding.subject_kind.is_empty() && finding.related_locations.is_empty())
-    );
     // The same defects in the opposite order group the same way.
-    let backward = collapse_unaccepted_contract_defects(&reversed, &ErrorCatalog);
-    assert_eq!(starts(&backward), [4, 2, 3]);
+    let backward = collapse_unanalyzed_package_defects(&reversed, &ErrorCatalog);
+    assert_eq!(starts(&backward), [4, 3]);
 
     // A group of one keeps its exact wording.
-    let alone =
-        collapse_unaccepted_contract_defects(&[contract_defect(gate, Import, 9)], &ErrorCatalog);
-    assert_eq!(alone[0].message, "contract");
+    let alone = collapse_unanalyzed_package_defects(&[unavailable_defect(9)], &ErrorCatalog);
+    assert_eq!(alone[0].message, "unavailable");
     assert!(alone[0].related_locations.is_empty());
 }
 
@@ -432,28 +377,18 @@ fn a_source_argument_evidence_is_conditional_and_leaves_other_kinds_alone() {
 }
 
 #[test]
-fn the_acceptance_gate_sites_collapse_into_one_finding() {
-    let gate = |at| {
-        contract_defect(
-            crate::contracts::UNACCEPTED_IMPORT_CONTEXT,
-            crate::ContractDefectSite::Import,
-            at,
-        )
-    };
+fn the_import_sites_of_one_package_collapse_into_one_finding() {
     assert_eq!(
-        collapse_unaccepted_contract_defects(&[gate(1), gate(2)], &ErrorCatalog).len(),
+        collapse_unanalyzed_package_defects(
+            &[unavailable_defect(1), unavailable_defect(2)],
+            &ErrorCatalog
+        )
+        .len(),
         1
     );
 }
 
 #[test]
-fn an_unaccepted_import_is_filed_under_a_coverage_family() {
-    assert!(
-        super::coverage_group(FindingSeed::StaticDefect(&contract_defect(
-            crate::contracts::UNACCEPTED_IMPORT_CONTEXT,
-            crate::ContractDefectSite::Import,
-            3
-        )))
-        .is_some()
-    );
+fn an_unanalyzed_import_is_filed_under_a_coverage_family() {
+    assert!(super::coverage_group(FindingSeed::StaticDefect(&unavailable_defect(3))).is_some());
 }

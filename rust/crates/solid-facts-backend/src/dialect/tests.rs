@@ -31,12 +31,10 @@ fn catalog_prose_program() -> Program {
             accessor: "sampleAccessor".into(),
         },
         StaticDefectKind::ComponentReturnsConditionally,
-        StaticDefectKind::PackageContractExportMissing {
+        StaticDefectKind::PackageBehaviorUnavailable {
             module: "sample-package".into(),
             export: "sampleExport".into(),
             reexported: false,
-            site: solid_reactive_ir::ContractDefectSite::Import,
-            admission_refusal: None,
         },
         StaticDefectKind::MissingEffectFunction,
         StaticDefectKind::ReactiveSourceUncaptured {
@@ -109,7 +107,6 @@ fn catalog_prose_program() -> Program {
             component_uncertain: false,
             after_await: false,
             missing_jsx_census: false,
-            through_contract: false,
             through_dependency: None,
             report: true,
         }],
@@ -1004,14 +1001,14 @@ fn the_notice_identity_is_the_one_the_catalog_publishes() {
         finding.hint
     );
     assert!(
-            // signals rc.9 carries no gap of its own any more; the mixed
-            // triple's is the rc.1-rc.8 review's.
-            finding
-                .hint
-                .contains("The review is docs/package-contract-v2/audits/2026-09-26-solid-2-rc1-rc8-release-review.md."),
-            "the notice points at the reviews: {}",
-            finding.hint
-        );
+        // signals rc.9 carries no gap of its own any more; the mixed
+        // triple's is the rc.1-rc.8 review's.
+        finding.hint.contains(
+            "The review is docs/release-audits/2026-09-26-solid-2-rc1-rc8-release-review.md."
+        ),
+        "the notice points at the reviews: {}",
+        finding.hint
+    );
     let gaps = finding
         .evidence
         .iter()

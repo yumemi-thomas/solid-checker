@@ -168,12 +168,8 @@ pub trait Dialect: Sync {
     /// package — and wrong inside these archives, where every local
     /// `createSignal`/`createTrackedEffect` becomes a "primitive call".
     ///
-    /// Contract *generation* consults this to withhold the domains that
-    /// recognition would otherwise fabricate. The `--check-contracts` report
-    /// also reads it, for the adjacent question of which packages a dialect
-    /// ships itself; that is the same set by construction, and a build where
-    /// the two disagreed would be describing an archive it does not model. No
-    /// diagnostic reads it.
+    /// Callback summaries consult this to withhold the domains that
+    /// recognition would otherwise fabricate. No diagnostic reads it.
     fn primitive_defining_packages(&self) -> &'static [&'static str];
 
     /// The npm scopes whose packages belong to this dialect's ecosystem, each
@@ -260,12 +256,11 @@ pub trait Dialect: Sync {
     /// [`Dialect::runs_callback_deferred`] answers one boolean for two
     /// independent questions — "the listener is cleared" and "it runs later" —
     /// because its attribution consumer, `callback_runs_outside_tracking`, asks
-    /// only the first. Package contracts ask the second: an `execution` row is
-    /// a promise about *when* the
-    /// export invokes a caller-supplied callback, and the contract vocabulary
-    /// keeps `untrack`, `createRoot` and `runWithOwner` at `inline` while the
-    /// listener-clearing fact travels separately
-    /// (docs/package-contracts.md, "callback execution").
+    /// only the first. A callback summary's `execution` word asks the second:
+    /// it is a statement about *when* the export invokes a caller-supplied
+    /// callback, and the execution-word vocabulary keeps `untrack`,
+    /// `createRoot` and `runWithOwner` at `inline` while the listener-clearing
+    /// fact travels separately.
     ///
     /// This is the "detached, not later" half, and it is **derived rather than
     /// enumerated** so the two answers cannot drift: exactly the members of
@@ -362,7 +357,7 @@ pub trait Dialect: Sync {
     /// The second half of the schedule split described above
     /// ([`Dialect::runs_callback_synchronously`] is the first), and the fact
     /// that decides what a *clearing wrapper nested inside a tracked one*
-    /// composes to for package-contract emission. Reading `Tracked` as "runs
+    /// composes to in a callback summary. Reading `Tracked` as "runs
     /// later" is false for most of 1.x's own tracked primitives: `createMemo`
     /// and `createRenderEffect` run the computation during the call, and only
     /// `createEffect` queues it.
@@ -371,7 +366,7 @@ pub trait Dialect: Sync {
     /// established no schedule for that callback — because the audited runtime
     /// was not read for it, because the primitive never invokes the argument at
     /// all (1.x `createSignal(fn)` stores it), or because the shape resisted
-    /// measurement. Contract emission leaves that exact callback leaf open rather
+    /// measurement. A callback summary leaves that exact callback leaf open rather
     /// than guessing, so a missing answer costs precision and never
     /// correctness. It is the direction to fail in, and *not* a licence to
     /// leave a member out because its name looks like a neighbour's: the two
@@ -664,12 +659,12 @@ pub trait Dialect: Sync {
     /// accessor, a store, or a tuple containing one.
     ///
     /// Source *discovery* is where a rule's chain starts: a read the engine
-    /// cannot trace to a source is not a read it can report on. The bundled
-    /// contract answers this for single-value returns through its `returns`
-    /// column, and that path works; what it cannot express is a tuple, so
-    /// `createSignal` and friends have always been answered here instead.
+    /// cannot trace to a source is not a read it can report on. A single-value
+    /// `returns` summary answers this for single-value returns; what it cannot
+    /// express is a tuple, so `createSignal` and friends have always been
+    /// answered here instead.
     ///
-    /// 1.x has five the contract's column cannot reach — `createResource`
+    /// 1.x has five a single-value summary cannot reach — `createResource`
     /// returns `[accessor, { mutate, refetch }]` — and until this was a
     /// dialect question the engine used 2.0's list for both, so a read through
     /// a 1.x resource was traced to nothing and reported nowhere.
@@ -975,7 +970,7 @@ pub trait Dialect: Sync {
     /// [`Dialect::children_accessor_parameters`]. Solid 1.x `mapArray` hands
     /// its mapper `(item, index: Accessor<number>)`, while `indexArray` hands
     /// it `(item: Accessor<T>, index)`. Those sources come from runtime
-    /// contracts, not TypeScript return types, so source discovery must ask
+    /// runtime semantics, not TypeScript return types, so source discovery must ask
     /// the dialect explicitly.
     fn callback_accessor_parameters(
         &self,
@@ -992,8 +987,7 @@ pub trait Dialect: Sync {
     /// *whether* a call produces a source; this says *which kind*, and the
     /// engine branches on it to pick a `ReactiveSourceKind`.
     ///
-    /// Core return classification is owned here, without a package-contract
-    /// overlay. For tuple positions use [`Dialect::reactive_result_slot`];
+    /// Core return classification is owned here, without a package overlay. For tuple positions use [`Dialect::reactive_result_slot`];
     /// this answer alone cannot distinguish a store from its setter.
     fn returns_store(&self, primitive: Primitive) -> bool;
 
@@ -1077,11 +1071,11 @@ pub trait Dialect: Sync {
     /// worse than saying nothing.
     fn options_argument(&self, primitive: Primitive) -> Option<usize>;
 
-    /// Whether this primitive's options contract includes `sync`.
+    /// Whether this primitive's options include `sync`.
     ///
     /// An options slot alone is not evidence for a particular option key:
     /// Solid 1.x has options objects for memos, signals, and stores but no
-    /// synchronous-node contract. Keeping the key in the dialect prevents a
+    /// synchronous-node option. Keeping the key in the dialect prevents a
     /// 2.0-only diagnostic identity from reaching the 1.x rule catalog.
     fn supports_sync_option(&self, primitive: Primitive) -> bool {
         let _ = primitive;
@@ -1090,8 +1084,7 @@ pub trait Dialect: Sync {
 
     /// When each callback argument of `primitive` runs.
     ///
-    /// Empty means the dialect models no callback for it — the same answer the
-    /// bundled contract gives by omitting a `callbacks` column, and not a
+    /// Empty means the dialect models no callback for it — not a
     /// claim that no function can be passed.
     ///
     /// The 1.x/2.0 split this exists for: `createEffect` has one tracked
@@ -1128,8 +1121,8 @@ pub trait Dialect: Sync {
     /// in Solid 1.x `createReaction(onInvalidate)` receives one deferred
     /// callback now, then returns a tracker that receives a different, tracked
     /// callback later. Flattening those two call signatures loses a runtime
-    /// boundary that neither TypeScript overloads nor the package contract's
-    /// first-order callback list can express.
+    /// boundary that neither TypeScript overloads nor a first-order callback
+    /// list can express.
     fn returned_callback_execution_at(
         &self,
         primitive: Primitive,
@@ -1186,10 +1179,9 @@ pub trait Dialect: Sync {
     /// How one argument of one concrete call executes.
     ///
     /// This is the call-site form of [`Dialect::callback_executions`]. The
-    /// table is the default and remains checkable against the bundled package
-    /// contract; dialects override this method only for overloads whose roles
-    /// depend on call shape and therefore cannot be represented by the
-    /// contract schema's flat parameter list. Solid 1.x `createResource` is
+    /// table is the default; dialects override this method only for overloads
+    /// whose roles depend on call shape and therefore cannot be represented by
+    /// a flat parameter list. Solid 1.x `createResource` is
     /// the motivating case: `(fetcher)` defers argument 0, while
     /// `(source, fetcher)` tracks argument 0 and defers argument 1.
     fn callback_execution_at(
@@ -1205,28 +1197,27 @@ pub trait Dialect: Sync {
             .map(|(_, execution)| *execution)
     }
 
-    /// The **package-contract** word for a callback at this slot, which is a
+    /// The **execution word** for a callback at this slot, which is a
     /// different question from [`Dialect::callback_execution_at`].
     ///
     /// That one answers attribution for the checker's own analysis: whose reads
-    /// a callback subscribes. This one answers what a published contract
-    /// promises a consumer about *observable scheduling relative to the
-    /// exported call*. The two agree for most primitives and deliberately
+    /// a callback subscribes. This one answers what a callback summary states
+    /// about *observable scheduling relative to the exported call*. The two agree for most primitives and deliberately
     /// diverge for some — Solid 1.x's `createResource` fetcher is `Deferred`
     /// for attribution (it runs outside the source computation) and `Inline`
-    /// for a contract (both overloads invoke it before `createResource`
+    /// for the word (both overloads invoke it before `createResource`
     /// returns), and 1.x's `on` returns an adapter whose callbacks run at the
     /// eventual invocation rather than during the creating call.
     ///
-    /// `None` means this dialect states no contract word for the slot, which
-    /// contract emission must treat as "unknown" rather than as any of the
-    /// three answers.
+    /// `None` means this dialect states no execution word for the slot, which
+    /// a summary must treat as "unknown" rather than as any of the three
+    /// answers.
     ///
     /// This lived as a hardcoded `match` in `solid-reactive-ir`'s
     /// `interproc.rs` until ADR 0111. It belongs here: it is per-version
     /// behaviour, and shared code holding it meant a new dialect could not
     /// state a different answer.
-    fn contract_callback_execution_at(
+    fn callback_execution_word_at(
         &self,
         primitive: Primitive,
         argument: usize,
@@ -1279,7 +1270,7 @@ pub trait Dialect: Sync {
     /// Outside the compute is not the same as after the call. 2.0's
     /// `createEffect` queues its apply, while `createRenderEffect` runs its
     /// first apply before the call returns; [`Dialect::callback_owners`] and
-    /// [`Dialect::contract_callback_execution_at`] carry that difference.
+    /// [`Dialect::callback_execution_word_at`] carry that difference.
     ///
     /// Not the same question as "is this callback deferred". Several
     /// primitives defer a callback the caller supplies — an executor, a
@@ -1396,7 +1387,7 @@ pub trait Dialect: Sync {
         false
     }
 
-    /// Whether this dialect's compiler contract includes server functions —
+    /// Whether this dialect's compiler includes server functions —
     /// the `"use server"` directive, `@solidjs/web/server-functions`, and the
     /// plain-JSON argument transport. Gates the server-function rules
     /// (`server-function-module-directive`, `server-function-rich-argument`)

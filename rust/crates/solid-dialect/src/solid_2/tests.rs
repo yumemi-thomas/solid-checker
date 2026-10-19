@@ -92,23 +92,23 @@ fn browser_callback_triggers_keep_registration_separate_from_delivery() {
     assert!(dialect.browser_children_dead(Primitive::Repeat, false, false, true));
 }
 
-/// The package-contract words this dialect states, pinned exactly.
+/// The execution words this dialect states, pinned exactly.
 ///
 /// These lived in `solid-reactive-ir`'s `interproc.rs` as a hardcoded
 /// `match` until ADR 0111, where shared code decided per-version
 /// behaviour and a new dialect could not state a different answer. Moving
-/// them here changed no contract in the corpus; this test is what keeps
+/// them here changed no summary in the corpus; this test is what keeps
 /// the move honest.
 ///
-/// The contract word is **not** derivable from
+/// The execution word is **not** derivable from
 /// [`Dialect::callback_execution_at`], which is why the two are asserted
 /// apart: `createRenderEffect`'s apply is attributed `Deferred` and
-/// promises no contract word at all.
+/// promises no execution word at all.
 #[test]
-fn the_contract_words_are_stated_by_this_dialect_not_by_shared_code() {
+fn the_execution_words_are_stated_by_this_dialect_not_by_shared_code() {
     let two = &Solid2 as &dyn Dialect;
     let word =
-        |primitive, argument, count| two.contract_callback_execution_at(primitive, argument, count);
+        |primitive, argument, count| two.callback_execution_word_at(primitive, argument, count);
 
     for primitive in [
         Primitive::CreateMemo,
@@ -167,7 +167,7 @@ fn the_contract_words_are_stated_by_this_dialect_not_by_shared_code() {
     // plain path and after it under `defer`/`schedule`, an async or
     // pending compute, or (rc.9) a staged transaction, so neither `inline`
     // nor `deferred` is a true promise at any arity. The attribution word
-    // stays `Deferred`; only the contract refuses to restate it.
+    // stays `Deferred`; only the execution word refuses to restate it.
     for count in 2..=3 {
         assert_eq!(word(Primitive::CreateRenderEffect, 1, count), None);
     }
@@ -187,8 +187,8 @@ fn the_contract_words_are_stated_by_this_dialect_not_by_shared_code() {
     assert!(two.wraps_function_arguments_in_memo(Primitive::Merge));
     assert!(!two.wraps_function_arguments_in_memo(Primitive::Omit));
 
-    // Silence is an answer contract emission must keep as "unknown": the
-    // *contract* word for `children` stays unstated. ADR 0323 gives it an
+    // Silence is an answer a summary must keep as "unknown": the
+    // execution *word* for `children` stays unstated. ADR 0323 gives it an
     // *attribution* answer, which is a different question: its callback is
     // a lazy memo's computation, so reads in it are tracked.
     assert_eq!(word(Primitive::Children, 0, 1), None);
@@ -450,7 +450,7 @@ fn dynamic_forms_answer_their_own_runtime() {
             Some(CallbackOwner::Inherits)
         );
         assert_eq!(
-            two.contract_callback_execution_at(primitive, 0, 2),
+            two.callback_execution_word_at(primitive, 0, 2),
             Some(Execution::Inline)
         );
     }
@@ -463,18 +463,18 @@ fn dynamic_forms_answer_their_own_runtime() {
         Some(CallbackOwner::Creates)
     );
     assert_eq!(
-        two.contract_callback_execution_at(Primitive::Dynamic, 0, 1),
+        two.callback_execution_word_at(Primitive::Dynamic, 0, 1),
         Some(Execution::Tracked)
     );
     let unknown = Primitive::DynamicUnknownForm;
     assert_eq!(two.callback_execution_at(unknown, 0, 2), None);
     assert_eq!(two.callback_owner_at(unknown, 0, 2), None);
-    assert_eq!(two.contract_callback_execution_at(unknown, 0, 2), None);
+    assert_eq!(two.callback_execution_word_at(unknown, 0, 2), None);
     assert!(!two.runs_callback_deferred(unknown));
 }
 
 /// rc.9's `until` is `resolve`'s shape (`dist/dev.js:2717-2785`), so it
-/// answers `resolve`'s rows, contract silence included -- on an
+/// answers `resolve`'s rows, execution-word silence included -- on an
 /// installation that exports it. On the audited rc.3 triple the name is
 /// not an export at all (TS2305), so the vocabulary does not know it.
 #[test]
@@ -501,7 +501,7 @@ fn until_answers_as_resolve_does() {
             two.callback_owner_at(primitive, 0, 2),
             Some(CallbackOwner::Creates)
         );
-        assert_eq!(two.contract_callback_execution_at(primitive, 0, 2), None);
+        assert_eq!(two.callback_execution_word_at(primitive, 0, 2), None);
     }
     assert_eq!(
         two.export_modules("until", crate::ExportPosition::Value),

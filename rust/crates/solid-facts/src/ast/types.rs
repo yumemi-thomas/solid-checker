@@ -30,14 +30,13 @@ pub struct AstFacts {
     /// body is absent. [`FunctionFact`] deliberately models executable
     /// functions and therefore cannot distinguish a TypeScript overload
     /// signature from some unrelated exported declaration with the same name.
-    /// Contract emission needs that exact distinction when counting runtime
-    /// export entries.
+    /// Counting runtime export entries needs that exact distinction.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub function_declarations: Vec<FunctionDeclarationFact>,
     /// Class declarations and expressions. See [`ClassFact`]: a class is
     /// `typeof === "function"` at runtime but carries no call signature, so
-    /// this is the only fact domain that can tell a contract generator the
-    /// runtime kind of an exported class.
+    /// this is the only fact domain that can tell a consumer the runtime kind
+    /// of an exported class.
     #[serde(default)]
     pub classes: Vec<ClassFact>,
     /// Runtime `namespace`/`module` declarations by their exact binding-name
@@ -110,8 +109,8 @@ pub struct AstFacts {
     /// and a compiler entity exists only at a span some demand asked for.
     /// Neither limitation applies to Oxc's scope tree, and a reference to a
     /// parameter is always resolvable inside the function that declares it —
-    /// which is what a contract generator proving "what does this export do
-    /// with the value its caller passed" has to be able to ask.
+    /// which is what a proof of "what does this export do with the value its
+    /// caller passed" has to be able to ask.
     ///
     /// A reference that is absent resolves to no declaration in this file — a
     /// global, or an unresolved name. That is the absence of a fact, never
@@ -233,8 +232,8 @@ pub struct AstFacts {
     /// operand, so it omits binary arithmetic, and it includes `!` (ToBoolean,
     /// which runs no user code). This one is about the runtime protocol --
     /// which operands can reach a value's `Symbol.toPrimitive`, `valueOf` or
-    /// `toString` -- and is read by the contract generator to describe a
-    /// coercion of a caller's argument, never by a rule.
+    /// `toString` -- and is read to describe a coercion of a caller's
+    /// argument, never by a rule.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub coercing_operands: Vec<Span>,
     /// Every operator expression whose value is a primitive whatever its
@@ -251,10 +250,9 @@ pub struct AstFacts {
     /// iteration, and is absent), of `yield*`, and the initializer of an array
     /// binding pattern or the right side of an array assignment pattern.
     ///
-    /// Read by the contract generator only, to decline describing a
-    /// `callbacks` enumeration it could not describe whole: it derives no
-    /// `iterate` item, so an iteration of a caller's value leaves the
-    /// enumeration undescribable.
+    /// Read only to decline describing a callback enumeration it could not
+    /// describe whole: no summary derives an `iterate` item, so an iteration
+    /// of a caller's value leaves the enumeration undescribable.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub iterated_operands: Vec<Span>,
     #[serde(default)]
@@ -522,7 +520,7 @@ pub struct ArgumentFact {
     /// Declaration this argument's identifier refers to, as resolved by the
     /// binder for that exact reference.
     ///
-    /// The same contract as [`ObjectPropertyFact::shorthand_binding`]: Oxc's
+    /// The same guarantee as [`ObjectPropertyFact::shorthand_binding`]: Oxc's
     /// scope tree resolved the reference, so the declaration it chose is
     /// recorded rather than left to be re-derived from the spelling. It exists
     /// so a *demand* can follow `save(payload)` to the literal `payload` was
@@ -722,7 +720,7 @@ pub enum FunctionKind {
 /// `Callability` is derived from `GetSignaturesOfType(…, SignatureKindCall)`
 /// alone, so `typeof C` for a class answers `nonCallable` — it has construct
 /// signatures and no call signature. At runtime `typeof C === "function"` for
-/// every class, which is exactly what a package contract's `kind` describes
+/// every class, which is exactly what a package export's `kind` describes
 /// and exactly what a runtime probe measures. Nothing in the type facts can
 /// close that gap, so the syntactic fact is the one that has to.
 ///

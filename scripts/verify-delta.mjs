@@ -98,7 +98,7 @@ export const CHECKS = {
     ],
     env: { SOLID_TYPEFACTS_BIN: join(ROOT, TYPEFACTS) },
   },
-  "contract-process": {
+  "dialects-process": {
     command: [
       "cargo", TOOLCHAIN, "test", "--manifest-path", MANIFEST, "-p", "solid-facts-backend",
       "--test", "dialects_process",
@@ -182,7 +182,7 @@ export const ROWS = [
   {
     prefix: "rust/dialects/",
     owner: "dialects at the process boundary",
-    checks: ["contract-process"],
+    checks: ["dialects-process"],
   },
   {
     prefix: "fixtures/",
@@ -255,7 +255,7 @@ export function planFor(paths) {
     ...(needsChecker ? ["build-debug"] : []),
     // Before the process tests: it rebuilds with the harness pins recomputed,
     // and everything after it should run against that binary.
-    ...["facts-lib", "ir-lib", "backend-process", "contract-process"].filter((id) => selected.has(id)),
+    ...["facts-lib", "ir-lib", "backend-process", "dialects-process"].filter((id) => selected.has(id)),
     ...["coverage", "ownership-gate"].filter((id) => selected.has(id)),
     // Before the WASM package's own tests: its Make target builds the package
     // (owned artifacts included) that those tests load on a fresh tree.

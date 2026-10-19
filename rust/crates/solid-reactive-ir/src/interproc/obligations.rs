@@ -11,7 +11,7 @@ pub(super) fn unknown_callback_execution_message(
     let target = file.source_text(callee).unwrap_or("<unknown>");
     let Some(resolved) = lookup.resolved_callee_call(file, callee) else {
         return format!(
-            "parameter {parameter} is passed to {target}, but no resolved call fact or package contract proves when it executes"
+            "parameter {parameter} is passed to {target}, but no resolved call fact or dependency source proves when it executes"
         );
     };
     let declaration = resolved.declaration.as_ref();
@@ -41,7 +41,7 @@ pub(super) fn unknown_callback_execution_message(
         })
         .unwrap_or("the current project");
     format!(
-        "parameter {parameter} ({callable_type}) is passed to resolved {qualified} from {package}, but no package contract proves when it executes"
+        "parameter {parameter} ({callable_type}) is passed to resolved {qualified} from {package}, but no dependency source proves when it executes"
     )
 }
 
@@ -74,7 +74,7 @@ pub(super) fn unknown_callback_obligation(
     parameter: usize,
     location: Location,
     lookup: &SemanticLookup<'_>,
-) -> ContractGenerationObligation {
+) -> UnresolvedCallbackObligation {
     let resolved = lookup.resolved_callee_call(file, callee);
     let declaration = resolved.and_then(|call| call.declaration.as_ref());
     let module = declaration
@@ -90,27 +90,7 @@ pub(super) fn unknown_callback_obligation(
         .filter(|text| !text.is_empty())
         .unwrap_or_else(|| "callable value".into());
     let function = node.name.clone().unwrap_or_else(|| "<anonymous>".into());
-    let claim_context = serde_json::json!({
-        "format": "solid-checker-open-contract-claim",
-        "semanticModelVersion": 1,
-        "artifactCase": {
-            "package": package,
-            "entrypoint": entrypoint,
-            "export": function,
-        },
-        "path": {
-            "domain": "callbacks",
-            "parameter": parameter,
-        },
-        "requiredAxes": {
-            "schedule": "<prove exact schedule>",
-            "tracking": "<prove tracked or untracked>",
-            "ownership": "<prove requirements and production independently>",
-            "cardinality": "<prove possible and guaranteed bounds independently>",
-        }
-    })
-    .to_string();
-    ContractGenerationObligation {
+    UnresolvedCallbackObligation {
         function,
         function_symbol: node
             .symbol
@@ -122,17 +102,15 @@ pub(super) fn unknown_callback_obligation(
         package,
         entrypoint,
         parameter_type,
-        required_execution: "choose exactly one audited mode: inline, tracked, or deferred".into(),
-        claim_context,
         location,
         message: format!(
-            "{}; generate or add the exact package entrypoint/export contract before this callback can be certified",
+            "{}; this callback cannot be certified until its callee's source is available to the analysis",
             unknown_callback_execution_message(file, callee, parameter, lookup)
         ),
     }
 }
 
-pub(super) fn callback_argument_contracts(
+pub(super) fn accessor_argument_summaries(
     file: &solid_facts::FileFacts,
     call: &solid_facts::ast::CallFact,
     entities: &EntitySymbols,
@@ -174,11 +152,10 @@ pub(super) fn callback_argument_contracts(
 /// `createComputation` invokes nothing, so its callback summary is empty, so
 /// every export that forwards a callback into it — `createMemo`,
 /// `createEffect`, `children`, `createSelector`, `createDeferred`,
-/// `createRenderEffect`, `createComputed` — published *no* callbacks row. An
-/// omitted `callbacks` list is a **negative** claim, so those contracts
-/// certified "invokes no caller-supplied function" for the seven primitives
-/// whose whole purpose is to invoke one, and `contract probe`'s discovery pass
-/// contradicted every one of them.
+/// `createRenderEffect`, `createComputed` — recorded *no* callback summary. An
+/// omitted callback summary is a **negative** claim, so those summaries
+/// would certify "invokes no caller-supplied function" for the seven
+/// primitives whose whole purpose is to invoke one.
 ///
 /// Retention is stated as a closed list of positions, never as "everything the
 /// analysis did not recognize". The difference is the whole precision budget:
@@ -413,7 +390,7 @@ pub(super) fn parameter_declaration_owners(
 ///
 /// The obligation is only meaningful for an argument that is a parameter of
 /// an enclosing analyzed function: that is the value the *caller* supplies,
-/// and therefore the one a package contract has to describe. A local value or
+/// and therefore the one an export's summary has to describe. A local value or
 /// an inline literal invoked by an unresolved callee is the callee's business,
 /// not the exported surface's.
 pub(super) fn push_unresolved_callee_callback_obligations(
@@ -444,7 +421,7 @@ pub(super) fn push_unresolved_callee_callback_obligations(
         else {
             continue;
         };
-        contribution.contract_generation_obligations.push((
+        contribution.unresolved_callback_obligations.push((
             nodes[callback_owner].span,
             unknown_callback_obligation(
                 file,

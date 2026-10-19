@@ -38,8 +38,8 @@ use sha2::{Digest, Sha256};
 use solid_facts::core::SourceHash;
 use solid_facts_backend::{
     BackendError, DiagnosticSession, NativeIncrementalSession, RequestedRuleEnablement,
-    SourceChange, SourceFile, TypeFactsSession, discovered_contract_paths, imported_package_roots,
-    semantic_demand_options_for_enablement,
+    SourceChange, SourceFile, TypeFactsSession, imported_package_manifest_paths,
+    imported_package_roots, semantic_demand_options_for_enablement,
 };
 use solid_reactive_ir::CacheRetention;
 use solid_reactive_ir::RuntimeEnvironment;
@@ -1574,7 +1574,7 @@ fn input_files(
         .project
         .parent()
         .ok_or("tsconfig has no parent directory")?;
-    let mut paths = discovered_contract_paths(directory, modules)?;
+    let mut paths = imported_package_manifest_paths(directory, modules)?;
     // Rule options are part of every diagnostic identity, and
     // `DiagnosticSession::analyze` re-reads them from disk on every run. The
     // cached-answer short-circuit returns before analyze does, so the file

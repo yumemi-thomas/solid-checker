@@ -383,7 +383,7 @@ fn component_identity_comes_from_type_facts() {
 }
 
 #[test]
-fn retired_policy1_async_contract_no_longer_supplies_behavior() {
+fn retired_policy1_async_summary_no_longer_supplies_behavior() {
     if env::var("SOLID_TYPEFACTS_BIN").is_err() {
         return;
     }
@@ -806,9 +806,8 @@ fn a_reviewed_release_is_analyzed_with_one_notice_beside_the_findings() {
     assert!(message.contains("2.0.0-rc.8"), "{message}");
     let hint = notice["hint"].as_str().unwrap();
     assert!(
-        hint.contains(
-            "docs/package-contract-v2/audits/2026-09-26-solid-2-rc1-rc8-release-review.md"
-        ) && hint.contains("to 2.0.0-rc.13, the audited release of each"),
+        hint.contains("docs/release-audits/2026-09-26-solid-2-rc1-rc8-release-review.md")
+            && hint.contains("to 2.0.0-rc.13, the audited release of each"),
         "the notice points at the review and the audited release: {hint}"
     );
     let gaps = notice["evidence"]

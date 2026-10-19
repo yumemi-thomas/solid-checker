@@ -21,7 +21,7 @@
       "jsxImportSource": "@solidjs/web",
       "audit": [
         "benchmarks/package-contract-v2/phase0/rc13",
-        "docs/package-contract-v2/audits/2026-10-05-solid-2-rc13-vocabulary-review.md"
+        "docs/release-audits/2026-10-05-solid-2-rc13-vocabulary-review.md"
       ]
     }
   }

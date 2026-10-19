@@ -7,9 +7,9 @@ use crate::owners::{
 };
 use crate::pipeline::available_analysis_workers;
 use crate::{
-    ActionInvocation, AsyncRead, CacheRetention, CallbackSummary, ContractGenerationObligation,
-    FunctionNode, OwnerRequirement, Program, ReactiveRead, ReactiveSourceKind, ReactiveWrite,
-    RuleOptions, StaticDefect,
+    ActionInvocation, AsyncRead, CacheRetention, CallbackSummary, FunctionNode, OwnerRequirement,
+    Program, ReactiveRead, ReactiveSourceKind, ReactiveWrite, RuleOptions, StaticDefect,
+    UnresolvedCallbackObligation,
 };
 
 use std::{
@@ -38,7 +38,7 @@ pub(crate) struct BuildIdentity {
     pub(crate) dialect: solid_dialect::Version,
     pub(crate) project_id: String,
     pub(crate) generation: u64,
-    pub(crate) contracts: Vec<[u8; 32]>,
+    pub(crate) boundary_fingerprints: Vec<[u8; 32]>,
     /// Per-rule options change what the static pass emits, so two runs with
     /// different options never share a retained program.
     pub(crate) rule_options: RuleOptions,
@@ -53,7 +53,7 @@ pub(crate) struct RetainedBuild {
 struct SourceDiscoveryDomain {
     dialect: solid_dialect::Version,
     project_id: String,
-    contracts: Vec<[u8; 32]>,
+    boundary_fingerprints: Vec<[u8; 32]>,
 }
 
 /// Owns every derived cache retained across Reactive IR generations.
@@ -92,12 +92,12 @@ impl IncrementalCacheState {
         &mut self,
         dialect: solid_dialect::Version,
         project_id: &str,
-        contracts: &[[u8; 32]],
+        boundary_fingerprints: &[[u8; 32]],
     ) -> bool {
         let next = SourceDiscoveryDomain {
             dialect,
             project_id: project_id.to_owned(),
-            contracts: contracts.to_vec(),
+            boundary_fingerprints: boundary_fingerprints.to_vec(),
         };
         if self.domain.as_ref() == Some(&next) {
             return false;
@@ -247,8 +247,7 @@ pub(crate) struct InterproceduralGraphContribution {
         usize,
         crate::interproc::ForwardedAmbientExecution,
     )>,
-    pub(crate) contract_generation_obligations: Vec<(Span, ContractGenerationObligation)>,
-    pub(crate) contract_consumer_obligations: Vec<StaticDefect>,
+    pub(crate) unresolved_callback_obligations: Vec<(Span, UnresolvedCallbackObligation)>,
     pub(crate) returned_bindings: Vec<(SymbolId, SymbolId)>,
     pub(crate) factory_calls: Vec<(Span, SymbolId)>,
 }

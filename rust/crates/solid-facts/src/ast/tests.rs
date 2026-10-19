@@ -810,7 +810,7 @@ fn certifies_static_callee_spans_without_retaining_their_text() {
     assert!(callees.contains(&None));
 }
 
-/// `declares_class_at` is the span-addressing rule a contract's `kind`
+/// `declares_class_at` is the span-addressing rule a package export's `kind`
 /// decision consults before it reads any type fact: at these spans the
 /// compiler answers about the class's *instance*, not about the constructor
 /// the export publishes. Every span that must answer, and the spans that
@@ -2562,7 +2562,7 @@ fn a_tagged_template_is_not_also_an_untagged_one() {
     assert_eq!(
         facts.template_literals.len(),
         0,
-        "a tag's quasi is filtered at collection; the table's untagged-only contract holds"
+        "a tag's quasi is filtered at collection; the table's untagged-only invariant holds"
     );
     // An untagged template nested inside a tagged interpolation is still
     // an untagged template — the manual visit must reach it.

@@ -9,7 +9,7 @@ use super::*;
 use solid_facts::ast::{BindingShape, ObjectGetPropertyFact, ObjectGetShapeFact};
 
 /// The call a receiver's getters are instantiated at, and what reading them
-/// there needs. Shared by the contract rows and a project function's own
+/// there needs. Shared by the summary rows and a project function's own
 /// parameter Gets.
 pub(super) struct ReadContext<'a, 'b> {
     pub file: &'a solid_facts::FileFacts,
@@ -359,7 +359,7 @@ pub(super) fn parameter_reads(
             .filter(|(property, _)| keys.binary_search(&property.key.as_str()).is_ok())
         {
             // Anything a getter leaves open is already the getter's own
-            // uncertifiable read; there is no contract to owe it to.
+            // uncertifiable read; there is nothing further to owe it.
             let _ = getter_reads(
                 context,
                 property,

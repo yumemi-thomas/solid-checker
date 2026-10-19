@@ -112,10 +112,9 @@ pub struct ImportResolution {
 }
 
 /// One source-selection decision that left a package off the analyzed
-/// program, recorded where it was made, beside the note that says so (phase
-/// P3 of the contract-removal plan). `detail` is the note's own reason text.
-/// Explanation only: the selection, the notes and every contract binding are
-/// exactly what they were without it.
+/// program, recorded where it was made, beside the note that says so.
+/// `detail` is the note's own reason text. Explanation only: the selection and
+/// the notes are exactly what they were without it.
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct SourceRefusal {
     /// The package name the decision was about.
@@ -160,7 +159,7 @@ impl SelectionNotes {
 pub struct DependencySelection {
     /// Canonical package directories.
     pub roots: Vec<PathBuf>,
-    /// The selected packages' names, whose contracts are not bound.
+    /// The selected packages' names.
     pub package_names: BTreeSet<String>,
     /// Canonical closure files.
     pub files: Vec<PathBuf>,
@@ -170,7 +169,7 @@ pub struct DependencySelection {
 /// Everything a dependency-source program is, before it is written (ADR
 /// 0296): the selection, the project half of its root files, the host it was
 /// selected for, and the sibling tsconfig's exact bytes. Two equal values
-/// describe the same program, the same redirects and the same contract
+/// describe the same program, the same redirects and the same unredirected
 /// removal; anything that differs is a different program.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PreparedDependencyProgram {
@@ -393,9 +392,10 @@ pub fn prepare_program(
             (path.clone(), bare, unredirected)
         })
         .collect::<Vec<_>>();
-    // ADR 0297 review rounds 1 and 2: retain contracts for runtime binding
-    // forms that symbol_redirects does not join to the selected source, in
-    // project files and selected package closures alike.
+    // ADR 0297 review rounds 1 and 2: keep off source every package reached
+    // through a runtime binding form that symbol_redirects does not join to
+    // the selected source, in project files and selected package closures
+    // alike.
     let mut unredirected = project_imports.iter().fold(
         UnsupportedBindings::default(),
         |mut all, (_, _, bindings)| {
@@ -542,7 +542,7 @@ pub fn prepare(
 /// cannot be analyzed (an
 /// `exports` form this does not read, a `browser` map, an entry or relative
 /// import that is not a source file, an oversized closure) is skipped with a
-/// note and keeps its contract: nothing of it enters the program, and its
+/// note and stays off source: nothing of it enters the program, and its
 /// other copies are judged on their own.
 pub fn prepare_all(
     requests: Vec<(PathBuf, String)>,
@@ -615,7 +615,7 @@ pub fn prepare_all(
             not_solid.insert(root);
             continue;
         }
-        // A package reached through an unredirected binding keeps its contract
+        // A package reached through an unredirected binding stays off source
         // (`without_unredirected_packages`): one known to be is not walked.
         if unredirected.contains(&name) {
             unredirected.refuse(notes, &name, Some(&root));
@@ -625,7 +625,7 @@ pub fn prepare_all(
             Ok(entry) => entry,
             Err((kind, reason)) => {
                 notes.lines.push(format!(
-                    "solid-checker: note: dependency source {name} ({}): {reason}; its contract stays; {}",
+                    "solid-checker: note: dependency source {name} ({}): {reason}; it stays off source; {}",
                     root.display(), request_edge(&importer, &specifier)
                 ));
                 notes.refuse(&name, Some(&root), kind, reason);
@@ -658,7 +658,7 @@ pub fn prepare_all(
                 }
                 Err((kind, reason)) => {
                     notes.lines.push(format!(
-                        "solid-checker: note: dependency source {} ({}): {reason}; its contract stays; {}",
+                        "solid-checker: note: dependency source {} ({}): {reason}; it stays off source; {}",
                         names_by_root[&root],
                         root.display(), request_edge(&importer, &specifier)
                     ));
@@ -686,9 +686,9 @@ pub fn prepare_all(
     if names_by_root.is_empty() {
         return Ok(None);
     }
-    // A contract is unbound by package name, so a name with any copy that is
-    // not analyzed (unsupported, not a Solid package, a workspace link) keeps
-    // its contract for every copy (review round 1 of ADR 0290, Sol).
+    // Source is selected by package name, so a name with any copy that is
+    // not analyzed (unsupported, not a Solid package, a workspace link) stays
+    // off source for every copy (review round 1 of ADR 0290, Sol).
     let unsupported_names = unsupported
         .iter()
         .chain(&not_solid)
@@ -700,7 +700,7 @@ pub fn prepare_all(
                 name,
                 Some(root),
                 UnanalyzableReason::NotSelected(SelectionFailure::RetainedCopy),
-                "another installed copy of this name is not analyzed, so its contract stays for every copy",
+                "another installed copy of this name is not analyzed, so it stays off source for every copy",
             );
         }
     }
@@ -873,8 +873,8 @@ fn runtime_bare_imports(facts: &solid_facts::ast::AstFacts) -> BTreeSet<String> 
 }
 
 /// Binding forms that `symbol_redirects` does not join to runtime exports.
-/// Contracts are removed by package name, so one such edge keeps every copy
-/// of that package on contracts, including otherwise redirectable imports.
+/// Source is selected by package name, so one such edge keeps every copy of
+/// that package off source, including otherwise redirectable imports.
 #[derive(Clone, Debug, Default)]
 pub struct UnsupportedBindings {
     packages: std::collections::BTreeMap<String, (UnanalyzableReason, String)>,
@@ -924,7 +924,7 @@ impl UnsupportedBindings {
         let (_, reason) = self.reason(name);
         format!(
             "solid-checker: note: dependency source {name}: {reason}, \
-             which source analysis does not redirect; its contract stays"
+             which source analysis does not redirect; it stays off source"
         )
     }
 }
@@ -933,9 +933,10 @@ impl UnsupportedBindings {
 /// which stays off source whole.
 ///
 /// A runtime namespace *import* is not one of them any more (ADR 0313). It
-/// retained its package so the namespace kept the contract ADR 0297 promised
-/// it; ADR 0312 removed contracts, so retention bought that import nothing and
-/// took source away from every named import of the same package. The import
+/// kept its package off source for the sake of ADR 0297's namespace binding;
+/// ADR 0312 removed that binding, so keeping the package off source bought
+/// that import nothing and took source away from every named import of the
+/// same package. The import
 /// itself stays explicitly uncertifiable: the package boundary records a
 /// `NamespaceValue` obligation for a namespace import of selected source
 /// (`package_requirements`, review round 1 of ADR 0290).
@@ -1079,9 +1080,9 @@ fn runtime_reexport(export: &solid_facts::ast::ExportFact) -> bool {
 }
 
 /// `selection` without the packages named in `unredirected`, every copy of
-/// each: none of its files, redirects or names, so each keeps its contract
-/// exactly as without this mode (review rounds 1 and 2 of ADR 0297). A contract
-/// binds by package name, so a name is taken out whole. `None` when nothing
+/// each: none of its files, redirects or names, so each stays off source
+/// exactly as without this mode (review rounds 1 and 2 of ADR 0297). Source is
+/// selected by package name, so a name is taken out whole. `None` when nothing
 /// is left.
 pub fn without_unredirected_packages(
     mut selection: DependencySelection,
@@ -1094,7 +1095,8 @@ pub fn without_unredirected_packages(
         }
         return None;
     }
-    // Contract removal and source-root admission must disappear together.
+    // Removal from the selection and source-root admission must disappear
+    // together.
     // A root can overlap another installed root, or be loaded under an npm
     // alias. Use the selector's exact targets beside manifest names, and close
     // removal over overlapping roots and every copy sharing a removal name.

@@ -316,7 +316,6 @@ pub(crate) fn find_missing_owners(
                     file,
                     operation_span,
                     OwnerRequirementStatus {
-                        through_contract: false,
                         uncertain,
                         runtime_uncertain,
                         caller_uncertain,
@@ -374,7 +373,6 @@ pub(crate) fn find_missing_owners(
                 file,
                 Span::new(element.span.start, element.name.span.end),
                 OwnerRequirementStatus {
-                    through_contract: false,
                     uncertain: conditional_owner || later_run_unowned || component_uncertain,
                     runtime_uncertain: false,
                     caller_uncertain: false,
@@ -753,7 +751,6 @@ pub(crate) fn attribute_dependency_requirements(
             file,
             span,
             OwnerRequirementStatus {
-                through_contract: false,
                 uncertain: !proven,
                 runtime_uncertain: requirement.runtime_uncertain,
                 caller_uncertain: requirement.caller_uncertain,

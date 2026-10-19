@@ -226,7 +226,7 @@
       "start": 5568,
       "end": 5579,
       "fixes": 0,
-      "message": "applySource runs where a reactive read would not be tracked, but its only evidence of reading reactive state is its declared type, a Solid source alias that a plain function or object also satisfies; no implementation, contract or source flow proves what it reads, so whether this is an untracked reactive read can be neither proven nor ruled out",
+      "message": "applySource runs where a reactive read would not be tracked, but its only evidence of reading reactive state is its declared type, a Solid source alias that a plain function or object also satisfies; no implementation or source flow proves what it reads, so whether this is an untracked reactive read can be neither proven nor ruled out",
       "hint": "Read it inside JSX, a createMemo, or an effect's compute function, or make its source visible to solid-checker: create it with a Solid primitive in the project, or pass one through a path the analysis follows (ADR 0294)."
     },
     {

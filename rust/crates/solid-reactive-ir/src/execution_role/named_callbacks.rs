@@ -222,7 +222,7 @@ pub(crate) fn named_callback_roles(
                     returned_callback_execution_at_call(file, call, argument_index, lookup);
                 let tracked = execution == Some(Execution::Tracked);
                 let deferred = execution == Some(Execution::Deferred);
-                // Returned-function contracts describe the argument itself,
+                // Returned-function summaries describe the argument itself,
                 // never a callback named inside an options object. Require
                 // exact TypeScript identity for the admitted function. Inline
                 // returned callbacks inherit the individual call site's role

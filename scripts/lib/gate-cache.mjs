@@ -24,8 +24,8 @@
 //   (f) a format-version constant, so a change to what an entry *means*
 //       invalidates every entry rather than being misread;
 //   (g) `options.trees` -- directory trees the gate *executes* but does not
-//       own, the CLI it spawns being the case that matters. The contract
-//       corpus's whole soundness argument is this class: its generator lives in
+//       own, the CLI it spawns being the case that matters. The adapter
+//       gates' whole soundness argument is this class: the CLI lives in
 //       `packages/cli`, which no unit tree and no traced import covers;
 //   (h) per unit, whatever ancestor chain the unit's *own* answer depends on --
 //       `ancestorChainDigest` exists because dialect selection walks upward out

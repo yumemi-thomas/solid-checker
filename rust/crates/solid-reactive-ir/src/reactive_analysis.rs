@@ -242,10 +242,8 @@ pub(crate) fn collect_project<'facts>(
         .collect();
     draft.strict_read_obligations = strict_read_obligations;
     draft.write_action_obligations = write_action_obligations;
-    // Unresolved-dispatch obligations and contract-incomplete consumer
-    // obligations travel in one vector because the same interprocedural walk
-    // discovers both, but they are two different finding kinds: `SC9012`
-    // versus `SC9005`. Under one dedup identity two findings that merely start
+    // Unresolved-dispatch obligations and unavailable-package-behavior
+    // obligations are two different finding kinds: `SC9012` versus `SC9005`. Under one dedup identity two findings that merely start
     // at the same byte suppressed one another, and which survived depended on
     // push order. `push_defect` therefore derives the identity from the defect
     // kind's family and never from the vector it arrived in.
@@ -317,28 +315,26 @@ mod tests {
     use crate::pipeline::ProgramDraft;
     use crate::{StaticDefect, StaticDefectFamily, StaticDefectKind};
 
-    /// Contract-incomplete consumer obligations ride the same vector as
-    /// unresolved-dispatch obligations, but they are two finding kinds
-    /// (`SC9005` and `SC9012`). Under one dedup identity the pair that a
-    /// contract-driven call site naturally produces at one start byte
-    /// suppressed each other, and which one survived depended on push order.
+    /// Unavailable-package-behavior obligations and unresolved-dispatch
+    /// obligations are two finding kinds (`SC9005` and `SC9012`). Under one
+    /// dedup identity the pair that a call site into an unanalyzed package
+    /// naturally produces at one start byte suppressed each other, and which
+    /// one survived depended on push order.
     #[test]
-    fn contract_and_dispatch_obligations_do_not_deduplicate_each_other() {
+    fn unavailable_behavior_and_dispatch_obligations_do_not_deduplicate_each_other() {
         let location = Location {
             path: "App.tsx".into(),
             start_byte: 12,
             end_byte: 20,
         };
-        let contract = StaticDefect {
-            kind: StaticDefectKind::PackageContractExportMissing {
+        let unavailable = StaticDefect {
+            kind: StaticDefectKind::PackageBehaviorUnavailable {
                 module: "reactive-package".into(),
                 export: "mapValue".into(),
                 reexported: false,
-                site: crate::ContractDefectSite::Argument,
-                admission_refusal: None,
             },
             location: location.clone(),
-            analysis_context: "unbound-contract-claims:callback arguments".into(),
+            analysis_context: "callback arguments".into(),
             fixes: vec![],
             uncertain: false,
         };
@@ -348,20 +344,20 @@ mod tests {
                 member: None,
             },
             location,
-            analysis_context: "contract-parameter-member-argument-unresolved".into(),
+            analysis_context: "parameter-member-argument-unresolved".into(),
             fixes: vec![],
             uncertain: true,
         };
         assert_ne!(
-            contract.kind.dedup_identity(),
+            unavailable.kind.dedup_identity(),
             dispatch.kind.dedup_identity()
         );
         let mut draft = ProgramDraft::default();
-        draft.push_defect(contract.clone());
+        draft.push_defect(unavailable.clone());
         draft.push_defect(dispatch);
         assert_eq!(draft.static_defects.len(), 2);
         // The identity still deduplicates its own kind at the same byte.
-        draft.push_defect(contract);
+        draft.push_defect(unavailable);
         assert_eq!(draft.static_defects.len(), 2);
     }
 
@@ -372,7 +368,7 @@ mod tests {
     #[test]
     fn dedup_identities_are_pinned_per_finding_family() {
         assert_eq!(
-            StaticDefectFamily::PackageContractIncomplete.dedup_identity(),
+            StaticDefectFamily::PackageBehaviorUnavailable.dedup_identity(),
             "package-contract-incomplete"
         );
         assert_eq!(

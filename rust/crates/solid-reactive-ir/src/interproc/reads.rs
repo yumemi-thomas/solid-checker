@@ -182,7 +182,7 @@ pub(super) fn direct_reference_contributions(
                     // ADR 0293: only a head Get whose key warns is a read. An
                     // exempt Get whose backing runs nothing is no row; an
                     // undecided one is an undecided row (review round 1),
-                    // uncertifiable at every caller and never a contract read.
+                    // uncertifiable at every caller and never a proven read.
                     .filter_map(|member| {
                         match crate::local_access::store_get_decision(
                             file,
@@ -537,8 +537,8 @@ pub(super) fn interprocedural_reads(
     let mut callback_summaries = vec![Vec::<CallbackSummary>::new(); nodes.len()];
     let mut callback_forwardings = Vec::new();
     let mut dispatches = Vec::<(usize, Vec<usize>)>::new();
-    let mut contract_generation_obligations =
-        vec![Vec::<ContractGenerationObligation>::new(); nodes.len()];
+    let mut unresolved_callback_obligations =
+        vec![Vec::<UnresolvedCallbackObligation>::new(); nodes.len()];
     let mut dispatch_obligations = Vec::new();
     let mut edges = vec![Vec::<usize>::new(); nodes.len()];
     let mut guaranteed_edges = HashSet::<(usize, usize)>::new();
@@ -564,8 +564,7 @@ pub(super) fn interprocedural_reads(
             callback_summaries: &mut callback_summaries,
             callback_forwardings: &mut callback_forwardings,
             dispatches: &mut dispatches,
-            contract_generation_obligations: &mut contract_generation_obligations,
-            contract_consumer_obligations: &mut dispatch_obligations,
+            unresolved_callback_obligations: &mut unresolved_callback_obligations,
             edges: &mut edges,
             guaranteed_edges: &mut guaranteed_edges,
             invoked_parameters: &mut invoked_parameters,
@@ -804,7 +803,7 @@ pub(super) fn interprocedural_reads(
             }
         }
     }
-    let mut contract_generation_obligation_keys = contract_generation_obligations
+    let mut unresolved_callback_obligation_keys = unresolved_callback_obligations
         .iter()
         .map(|obligations| {
             obligations
@@ -895,13 +894,13 @@ pub(super) fn interprocedural_reads(
                     changed = true;
                 }
             }
-            for obligation in contract_generation_obligations[*target]
+            for obligation in unresolved_callback_obligations[*target]
                 .iter()
                 .filter(|obligation| obligation.parameter == *target_parameter)
                 .cloned()
                 .collect::<Vec<_>>()
             {
-                let forwarded = ContractGenerationObligation {
+                let forwarded = UnresolvedCallbackObligation {
                     function: nodes[*owner]
                         .name
                         .clone()
@@ -916,8 +915,6 @@ pub(super) fn interprocedural_reads(
                     package: obligation.package.clone(),
                     entrypoint: obligation.entrypoint.clone(),
                     parameter_type: obligation.parameter_type.clone(),
-                    required_execution: obligation.required_execution.clone(),
-                    claim_context: obligation.claim_context.clone(),
                     location: obligation.location,
                     message: format!(
                         "parameter {owner_parameter} reaches unresolved behavior through {}; {}",
@@ -926,8 +923,8 @@ pub(super) fn interprocedural_reads(
                     ),
                 };
                 let key = (forwarded.parameter, forwarded.location.clone());
-                if contract_generation_obligation_keys[*owner].insert(key) {
-                    contract_generation_obligations[*owner].push(forwarded);
+                if unresolved_callback_obligation_keys[*owner].insert(key) {
+                    unresolved_callback_obligations[*owner].push(forwarded);
                     changed = true;
                 }
             }
@@ -1145,7 +1142,7 @@ pub(super) fn interprocedural_reads(
             continue;
         };
         let equivalent = candidates.iter().all(|candidate| {
-            contract_generation_obligations[*candidate].is_empty()
+            unresolved_callback_obligations[*candidate].is_empty()
                 && equivalent_summary_reads(&summaries[*candidate], &summaries[first])
                 && equivalent_callbacks(&callback_summaries[*candidate], &callback_summaries[first])
                 && invoked_parameters[*candidate] == invoked_parameters[first]
@@ -1467,10 +1464,8 @@ pub(super) fn interprocedural_reads(
     // unresolved; a projected origin is not an exhaustive invocation census.
     // An exported helper that invokes a member supplied by a parameter has
     // callers outside the analyzed project. Normal project analysis must keep
-    // that boundary explicit. Contract emission can discharge this specific
-    // obligation because `contract_export_function` serializes the same exact
-    // parameter provenance as a `parameter-member` read. A closed program has
-    // no outside caller, and the pipeline discharges it there for a helper
+    // that boundary explicit. A closed program has no outside caller, and
+    // the pipeline discharges it there for a helper
     // entered only through call expressions
     // (`attribution::discharge_closed_program_export_dispatch`, ADR 0203).
     let mut allowed_by_path: HashMap<&str, Vec<Span>> = HashMap::new();

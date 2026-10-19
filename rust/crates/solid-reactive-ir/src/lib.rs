@@ -30,17 +30,17 @@
 //! | `cleanup`, `directives`, `effect_api`, `effect_execution` | Leaf-owner diagnostics, directive discovery, `createEffect` semantics. |
 //! | `argument_values`, `callback_return`, `literal_member_slots`, `object_members`, `value_flow`, `value_identity` | What arguments, returns, members and values prove. |
 //! | `summary_semantics`, `runtime_semantics`, `runtime_configuration` | Summary vocabulary, audited runtime behaviour, assumed runtime conditions. |
-//! | `package_boundary`, `contracts`, `router_params` | Package-source boundary obligations and the router-parameters premise. |
+//! | `package_boundary`, `boundary_defects`, `router_params` | Package-source boundary obligations and the router-parameters premise. |
 //! | `findings`, `projection` | The finding model and its projection onto dialect rule catalogs. |
 //! | `upstream_compat` | Retained eslint-plugin-solid 0.14.5 heuristics (see AGENTS.md before editing). |
 //! | `development_feedback`, `timings` | Executed-feedback models and the stage-timing contract. |
 
 mod argument_values;
 mod attribution;
+mod boundary_defects;
 mod cache;
 mod callback_return;
 mod cleanup;
-mod contracts;
 mod development_feedback;
 mod directives;
 pub use development_feedback::{
@@ -303,7 +303,7 @@ impl RuntimeEnvironment {
     }
 
     /// Exact runtime premises used by native rules and passed to the backend
-    /// artifact/guard resolver. Contract branch mechanics never reach the IR.
+    /// artifact/guard resolver. Condition-resolution mechanics never reach the IR.
     #[must_use]
     pub fn selected_conditions(&self) -> BTreeSet<String> {
         let mut conditions = self.conditions.clone();
@@ -528,10 +528,6 @@ pub struct Fix {
 pub struct LeafOwnerOperation {
     pub kind: LeafOwnerOperationKind,
     pub owner: String,
-    /// ADR 0179: the operation is a registration a package export's accepted
-    /// contract states it makes on every call; [`Self::via`] names the export.
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub through_contract: bool,
     pub location: Location,
     pub fix: Option<Fix>,
     /// When set, this leaf owner only materializes if the owner call at this
@@ -546,9 +542,9 @@ pub struct LeafOwnerOperation {
     /// violation.
     #[serde(default)]
     pub uncertain: bool,
-    /// The registration may not happen at this call: the accepted contract
-    /// states it with `min: 0` (an early return the contract cannot express
-    /// as a guard). Projected as uncertifiable, like [`Self::uncertain`].
+    /// The operation may not happen at this call: the helper performs it on
+    /// some completions only (ADR 0275). Projected as uncertifiable, like
+    /// [`Self::uncertain`].
     #[serde(default, skip_serializing_if = "is_false")]
     pub possible: bool,
     /// The exactly-resolved helper the operation is reached through: the
@@ -602,12 +598,10 @@ pub struct StaticViolation {
 /// [`StaticDefect::analysis_context`] of the obligation an exported helper
 /// raises when it invokes a member supplied by one of its own parameters.
 ///
-/// Named here rather than spelled twice because contract emission has to
-/// recognize the class in order to ask whether the published
-/// `parameter-member` reactive-read row already carries the same uncertainty
-/// — a question only that class raises. Producer:
-/// `solid-reactive-ir/src/interproc.rs`; consumer:
-/// `solid-facts-backend/src/main.rs`.
+/// Named here rather than spelled twice because the projection and the
+/// obligation attribution have to recognize the class. Producer:
+/// `solid-reactive-ir/src/interproc/reads.rs`; consumers: `projection.rs` and
+/// `attribution.rs`.
 pub const EXPORTED_PARAMETER_MEMBER_DISPATCH: &str = "exported-parameter-member-dispatch";
 
 /// ADR 0289: the `analysis_context` prefix of a dispatch obligation at a
@@ -649,22 +643,6 @@ pub struct StaticDefect {
     pub uncertain: bool,
 }
 
-/// Where a package-contract obligation was raised.
-///
-/// [`ContractDefectSite::Import`] messages name the package, the export and the
-/// open claims and nothing else, so two of them differ only in which file did
-/// the importing -- repetition a reader cannot act on separately.
-/// [`ContractDefectSite::Argument`] messages are about one exact argument of one
-/// exact call, where the site *is* the content: a descriptor absorbed by a rest
-/// parameter and one observed through an `arguments` object are different facts
-/// about different code, and must stay separate findings.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum ContractDefectSite {
-    Import,
-    Argument,
-}
-
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", tag = "kind")]
 pub enum StaticDefectKind {
@@ -676,22 +654,10 @@ pub enum StaticDefectKind {
         accessor: String,
     },
     ComponentReturnsConditionally,
-    PackageContractExportMissing {
+    PackageBehaviorUnavailable {
         module: String,
         export: String,
         reexported: bool,
-        /// Where this was raised, which is what decides whether two of them are
-        /// interchangeable. The producer knows; the projection must not have to
-        /// infer it, because one `analysis_context` -- `unknown-contract-claims:
-        /// callbacks` -- is emitted from both kinds of site.
-        site: ContractDefectSite,
-        /// The acceptance gate only: why an acceptance that exists for this
-        /// package -- a project catalog entry -- was not admitted, as the
-        /// backend's admission rule states it. Projected as one extra evidence
-        /// step; it never changes the message, the severity or the collapse,
-        /// and it is `None` wherever no such acceptance exists.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        admission_refusal: Option<String>,
     },
     MissingEffectFunction,
     ReactiveSourceUncaptured {
@@ -709,7 +675,7 @@ pub enum StaticDefectKind {
     /// An exact synchronous callback position is known, but the callback
     /// value's body is not an inspectable synchronous function literal. The
     /// enclosing operation is type-correct, so silence would certify behavior
-    /// that neither the AST nor a contract proves.
+    /// that neither the AST nor dependency source proves.
     ReactiveCallbackUnresolved {
         callee: String,
     },
@@ -821,9 +787,9 @@ pub enum StaticDefectFamily {
     ReactiveObjectDestructure,
     ReactiveReadAfterAwait,
     ComponentReturnsConditionally,
-    /// The contract-incomplete family: an import whose package contract does
-    /// not describe the surface the project uses.
-    PackageContractIncomplete,
+    /// The package-behavior-unavailable family (`SC9005`): an import whose
+    /// package behavior is not available from analyzed source.
+    PackageBehaviorUnavailable,
     MissingEffectFunction,
     ReactiveSourceUncaptured,
     ReactiveDispatchUnresolved,
@@ -833,8 +799,7 @@ pub enum StaticDefectFamily {
     /// A value crossing the default server-function transport. Deliberately
     /// absent from [`StaticDefectKind::is_unresolved_obligation`]: the open
     /// transport proof is reported as uncertifiable, but it was never part of
-    /// the `SC9xxx` obligation census the metrics and contract emission read,
-    /// and moving this rule off the static-violation channel did not change
+    /// the `SC9xxx` obligation census the metrics read, and moving this rule off the static-violation channel did not change
     /// what it counts.
     ServerFunctionRichArgument,
 }
@@ -848,7 +813,7 @@ impl StaticDefectFamily {
             Self::ReactiveObjectDestructure => "no-destructure",
             Self::ReactiveReadAfterAwait => "reactive-read-after-await",
             Self::ComponentReturnsConditionally => "components-return-once",
-            Self::PackageContractIncomplete => "package-contract-incomplete",
+            Self::PackageBehaviorUnavailable => "package-contract-incomplete",
             Self::MissingEffectFunction => "missing-effect-function",
             Self::ReactiveSourceUncaptured => "reactive-source-uncaptured",
             Self::ReactiveDispatchUnresolved => "reactive-dispatch-unresolved",
@@ -874,8 +839,8 @@ impl StaticDefectKind {
             Self::ComponentReturnsConditionally => {
                 StaticDefectFamily::ComponentReturnsConditionally
             }
-            Self::PackageContractExportMissing { .. } => {
-                StaticDefectFamily::PackageContractIncomplete
+            Self::PackageBehaviorUnavailable { .. } => {
+                StaticDefectFamily::PackageBehaviorUnavailable
             }
             Self::MissingEffectFunction => StaticDefectFamily::MissingEffectFunction,
             Self::ReactiveSourceUncaptured { .. } => StaticDefectFamily::ReactiveSourceUncaptured,
@@ -907,7 +872,7 @@ impl StaticDefectKind {
             Self::ReactiveObjectDestructure { .. } => "ReactiveObjectDestructure",
             Self::ReactiveReadAfterAwait { .. } => "ReactiveReadAfterAwait",
             Self::ComponentReturnsConditionally => "ComponentReturnsConditionally",
-            Self::PackageContractExportMissing { .. } => "PackageContractExportMissing",
+            Self::PackageBehaviorUnavailable { .. } => "PackageBehaviorUnavailable",
             Self::MissingEffectFunction => "MissingEffectFunction",
             Self::ReactiveSourceUncaptured { .. } => "ReactiveSourceUncaptured",
             Self::ReactiveDispatchUnresolved { .. } => "ReactiveDispatchUnresolved",
@@ -931,15 +896,14 @@ impl StaticDefectKind {
     }
 
     /// Whether this defect is an unresolved proof obligation — the `SC9xxx`
-    /// uncertifiable class — rather than a proven violation. Contract
-    /// emission refuses to describe a surface these are open against, and
-    /// the metrics count them as unresolved; both consult this so the
-    /// answer cannot drift between them.
+    /// uncertifiable class — rather than a proven violation. The metrics
+    /// count them as unresolved; every consumer consults this so the answer
+    /// cannot drift between them.
     #[must_use]
     pub fn is_unresolved_obligation(&self) -> bool {
         matches!(
             self,
-            Self::PackageContractExportMissing { .. }
+            Self::PackageBehaviorUnavailable { .. }
                 | Self::ReactiveSourceUncaptured { .. }
                 | Self::ReactiveDispatchUnresolved { .. }
                 | Self::ReactiveCallbackUnresolved { .. }
@@ -1008,11 +972,6 @@ pub struct OwnerRequirement {
     /// reports an uncertifiable proof obligation rather than a violation.
     #[serde(default, skip_serializing_if = "is_false")]
     pub missing_jsx_census: bool,
-    /// ADR 0161: the requirement stands for a call of an accepted contract's
-    /// export rather than for a dialect primitive the code calls itself. The
-    /// generator never states such a site's registration as guaranteed.
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub through_contract: bool,
     /// ADR 0290: the operation is inside a package analyzed as source
     /// (ADR 0284), at this location, and this requirement stands at the
     /// project's call that runs it there, under the call's owner context.
@@ -1150,7 +1109,7 @@ pub struct Program {
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ContractGenerationObligation {
+pub struct UnresolvedCallbackObligation {
     pub function: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub function_symbol: String,
@@ -1163,10 +1122,6 @@ pub struct ContractGenerationObligation {
     pub entrypoint: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub parameter_type: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub required_execution: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub claim_context: String,
     pub location: Location,
     pub message: String,
 }
@@ -1199,7 +1154,7 @@ pub struct BuildTimings {
     pub alias_roots: Duration,
     pub entity_symbols: Duration,
     pub symbol_name_indexes: Duration,
-    pub contract_resolution: Duration,
+    pub boundary_defects: Duration,
     pub reachability: Duration,
     pub source_discovery: Duration,
     pub typed_accessors_and_prop_roots: Duration,
@@ -1325,13 +1280,14 @@ impl IncrementalBuilder {
             dialect: dialect.version(),
             project_id: facts.project_id.clone(),
             generation: facts.generation.get(),
-            contracts: inputs.cache_fingerprints(),
+            boundary_fingerprints: inputs.cache_fingerprints(),
             rule_options: rule_options.clone(),
         };
-        if self
-            .caches
-            .ensure_domain(identity.dialect, &identity.project_id, &identity.contracts)
-        {
+        if self.caches.ensure_domain(
+            identity.dialect,
+            &identity.project_id,
+            &identity.boundary_fingerprints,
+        ) {
             self.retained = None;
         }
         let cache_lookup = lookup_started.elapsed();
@@ -1494,17 +1450,16 @@ fn propagate_summary_deltas(
     }
 }
 
-fn contract_callback_execution(execution: ExecutionRole) -> Option<&'static str> {
+fn callback_execution_word(execution: ExecutionRole) -> Option<&'static str> {
     match execution {
-        // Unknown timing is a contract-generation obligation, never an inline
-        // promise. A consumer must not execute user code eagerly because the
+        // Unknown timing is an open obligation, never an inline promise. A consumer must not execute user code eagerly because the
         // producer lacked an execution proof.
         ExecutionRole::Unknown => None,
         // A callback the compiler deleted has no execution timing to publish.
         // "inline" would be a promise that a consumer may run the callback
         // eagerly, and this role is evidence that nothing runs it at all — a
-        // positive claim dead code cannot support. The contract carries no
-        // execution for it, exactly as for unproven timing.
+        // positive claim dead code cannot support. The summary carries no
+        // execution word for it, exactly as for unproven timing.
         ExecutionRole::DiscardedRendering => None,
         ExecutionRole::ModuleInitialization => Some("inline"),
         ExecutionRole::TrackedJsx => Some("tracked"),
@@ -1516,7 +1471,7 @@ fn contract_callback_execution(execution: ExecutionRole) -> Option<&'static str>
     }
 }
 
-fn push_contract_callback(callbacks: &mut Vec<CallbackSummary>, callback: CallbackSummary) {
+fn push_callback_summary(callbacks: &mut Vec<CallbackSummary>, callback: CallbackSummary) {
     if !callbacks.contains(&callback) {
         callbacks.push(callback);
     }

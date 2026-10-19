@@ -478,17 +478,14 @@ pub(super) static OTHER_VARIANTS: LazyLock<Vec<&'static dyn Dialect>> = LazyLock
 });
 
 /// The review of the rc.9 triple.
-const RC9_REVIEW: &str =
-    "docs/package-contract-v2/audits/2026-09-26-solid-2-rc9-vocabulary-review.md";
+const RC9_REVIEW: &str = "docs/release-audits/2026-09-26-solid-2-rc9-vocabulary-review.md";
 /// The review of rc.1, rc.2 and rc.4-rc.8, and of mixed installs (§ 5).
-const RC1_RC8_REVIEW: &str =
-    "docs/package-contract-v2/audits/2026-09-26-solid-2-rc1-rc8-release-review.md";
+const RC1_RC8_REVIEW: &str = "docs/release-audits/2026-09-26-solid-2-rc1-rc8-release-review.md";
 
 /// The review of the rc.13 triple. It names no gap, so no table cites it;
 /// only the test that every review exists does (ADR 0194).
 #[cfg(test)]
-const RC13_REVIEW: &str =
-    "docs/package-contract-v2/audits/2026-10-05-solid-2-rc13-vocabulary-review.md";
+const RC13_REVIEW: &str = "docs/release-audits/2026-10-05-solid-2-rc13-vocabulary-review.md";
 
 /// Every `2.0.0-rc.N` some review read. rc.10 and rc.11 were published and
 /// never read; rc.12 was never published.

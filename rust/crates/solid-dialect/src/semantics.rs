@@ -127,9 +127,9 @@ pub enum KeyForm {
 /// and `createRoot(fn)` share a position and differ in owner; `untrack(fn)` and
 /// `createMemo(fn)` share a position and differ here.
 ///
-/// These three analyzer roles are projections of the normalized contract's
-/// independent tracking, event, and schedule axes. The checked bundle
-/// authorities hold the tables below to the exact published package behavior.
+/// These three analyzer roles are projections of independent tracking,
+/// event, and schedule axes. The checked export authorities hold the tables
+/// below to the exact published package behavior.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Execution {
     /// The callback creates its own observer: reads inside it subscribe *it*,
@@ -174,24 +174,24 @@ pub enum Execution {
 // timing would move `startTransition` to Deferred and tell the engine that
 // reads inside it escape the caller's scope, which the runtime contradicts.
 //
-// **Package-contract emission is the second consumer, and it does ask when the
+// **Callback summaries are the second consumer, and they do ask when the
 // callback ran.** `callback_wrapper_at` (solid-reactive-ir/src/interproc.rs)
-// reads these same rows to compose an `execution` row for an export, and a
-// contract row is a promise a probe measures against the clock: `inline`
-// promises the export invoked the callback before returning, `deferred`
-// promises it did not. So emission never reads the schedule *out of* this word.
-// It reads the word for attribution and takes the schedule from separate
-// dialect facts — [`Dialect::runs_callback_synchronously`] for the
-// listener-clearing primitives that nonetheless run during the call, and
+// reads these same rows to compose an `execution` word for an export, and
+// that word is a statement about the clock: `inline` states the export
+// invoked the callback before returning, `deferred` states it did not. So a
+// summary never reads the schedule *out of* this word. It reads the word for
+// attribution and takes the schedule from separate dialect facts —
+// [`Dialect::runs_callback_synchronously`] for the listener-clearing
+// primitives that nonetheless run during the call, and
 // [`Dialect::tracked_callback_timing`] for when a tracked computation runs
 // relative to the call that creates it. Where a dialect states no schedule
-// fact, emission publishes no row rather than reading one off the word.
+// fact, the summary records no word rather than reading one off this one.
 //
 // The two divergences above are exactly where the readings differ, and both are
 // closed by that split rather than papered over: `startTransition` and
 // `createResource` are absent from `primitive_callback_execution`'s schedule
-// table, so contract emission refuses them instead of restating their
-// attribution as a schedule.
+// table, so a summary refuses them instead of restating their attribution as
+// a schedule.
 
 /// When a primitive's [`Execution::Tracked`] callback runs, relative to the
 /// primitive's own call returning.
@@ -199,7 +199,7 @@ pub enum Execution {
 /// Orthogonal to [`Execution`], which says who owns the reads. A tracked
 /// computation is tracked either way; this says whether the export that created
 /// it has already run it by the time it returns, which is the only thing a
-/// package-contract `execution` row can promise about a callback the package
+/// summary `execution` word can state about a callback the package
 /// detached from tracking. There is deliberately no third member for "never
 /// runs": that is the absence of an answer, spelled `None` by
 /// [`Dialect::tracked_callback_timing`].
@@ -229,7 +229,6 @@ pub enum BrowserCallbackTrigger {
     TimerTask,
     AnimationFrame,
     IdleTask,
-    ContractTrigger,
 }
 
 /// The complete callback contract for one argument of one concrete primitive

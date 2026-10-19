@@ -26,7 +26,7 @@ esac
 # "bun: command not found" that says nothing about what wanted it. Fail fast
 # with a sentence instead.
 if ! command -v bun >/dev/null 2>&1; then
-  echo "make verify: bun is required (the per-step clock, the coverage/oracle/contract gates," >&2
+  echo "make verify: bun is required (the per-step clock, the coverage/oracle gates," >&2
   echo "  and the Bun steps all run under it). Install Bun and re-run." >&2
   exit 127
 fi
@@ -47,7 +47,7 @@ fi
 # steps finish in tens of milliseconds.
 #
 # `SOLID_CHECKER_GATE_CACHE=0` in the environment forces the content-addressed
-# gate caches (coverage, contract corpus, registry pins) to recompute
+# gate caches (coverage, registry pins) to recompute
 # everything; `SOLID_CHECKER_GATE_CONCURRENCY=<N>` overrides the gates' default
 # fan-out of min(cores, 8).
 # ---------------------------------------------------------------------------

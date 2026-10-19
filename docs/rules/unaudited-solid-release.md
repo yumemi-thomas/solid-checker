@@ -142,11 +142,11 @@ Matching is exact. A range or build-metadata spelling (`^2.0.0-rc.3`,
 A vocabulary answers some questions by name: which argument is a callback,
 which export takes one, what TypeScript already rejects. A release nobody has
 compared against it can change those answers without the checker noticing. The
-rc.9 review (`docs/package-contract-v2/audits/2026-09-26-solid-2-rc9-vocabulary-review.md`)
+rc.9 review (`docs/release-audits/2026-09-26-solid-2-rc9-vocabulary-review.md`)
 found four such changes, and before this notice existed `--certify` reported
 `certified` for an rc.9 project that wrote a store root property outside a
 setter, a write rc.9 drops. The rc.1-rc.8 review
-(`docs/package-contract-v2/audits/2026-09-26-solid-2-rc1-rc8-release-review.md`)
+(`docs/release-audits/2026-09-26-solid-2-rc1-rc8-release-review.md`)
 placed the releases between, and found that the store typing follows
 `@solidjs/signals`, not `solid-js`.
 

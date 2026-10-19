@@ -64,7 +64,7 @@ pub(super) enum RuntimeArgumentBehavior {
 ///   `takeRecords()` returns records without invoking the callback.
 ///
 /// This is the list [`RuntimeArgumentBehavior::FreshStackCallback`] answers
-/// for, and the only host evidence that lets a package contract say a
+/// for, and the only host evidence that lets a summary row say a
 /// `deferred` callback runs `untracked`. `PromiseLike.then`, `addEventListener`,
 /// `Function.prototype.bind` and Geolocation are deliberately absent; see
 /// [`RuntimeArgumentBehavior::DeferredCallback`].
@@ -177,7 +177,7 @@ pub(super) fn dispatches_through_receiver_then(call: &ResolvedCall) -> bool {
 
 impl RuntimeArgumentBehavior {
     /// Whether the callback, when it runs, is proven to run with no caller's
-    /// listener current -- the one fact a `deferred` contract row needs before
+    /// listener current -- the one fact a `deferred` summary row needs before
     /// it may say `untracked`.
     pub(super) const fn runs_on_fresh_stack(self) -> bool {
         matches!(self, Self::FreshStackCallback)
@@ -271,7 +271,7 @@ fn runtime_declaration(call: &ResolvedCall) -> Option<&typefacts::ResolvedDeclar
 /// bundled default library is the same `EventTarget` registration whose
 /// argument 1 is the listener. That fact is used here for one purpose only,
 /// to withhold a claim about *when* the listener runs; it does not widen the
-/// timing table, whose rows also feed package contracts.
+/// timing table, whose rows also feed callback summaries.
 pub(super) fn runs_on_invoker_stack(
     call: &ResolvedCall,
     actual_callability: Option<Callability>,

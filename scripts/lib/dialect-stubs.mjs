@@ -33,7 +33,6 @@ import { loadDialectManifests } from "../dialect-manifests.mjs";
 export const STUB_GROUPS = [
   "reactive-ir",
   "engine",
-  "package-contracts",
   "ownership-cases",
   "partial-audit",
 ];

@@ -324,8 +324,8 @@ impl Dialect for Solid2 {
     ///   as rc.3 builds it;
     /// - anything the syntax does not prove is
     ///   [`Primitive::DynamicUnknownForm`], which states nothing. Keeping the
-    ///   default model there instead would publish `tracked` in a package
-    ///   contract, and claim a created owner, for a source the runtime may run
+    ///   default model there instead would record `tracked` in a callback
+    ///   summary, and claim a created owner, for a source the runtime may run
     ///   once, untracked, under the caller's owner.
     ///
     /// Answered from the resolved `@solidjs/web` (`Solid2::dynamic_options`),
@@ -946,8 +946,8 @@ impl Dialect for Solid2 {
     }
 
     /// `createStore` and `createOptimisticStore` return `[store, setStore]`;
-    /// `createProjection` returns the store itself, which the contract also
-    /// describes.
+    /// `createProjection` returns the store itself, which the result-slot
+    /// table also describes.
     fn returns_store(&self, primitive: Primitive) -> bool {
         matches!(
             primitive,
@@ -978,12 +978,9 @@ impl Dialect for Solid2 {
     /// [`Dialect::type_role`] already classifies as an accessor, so these rows
     /// restate an audited 2.0 declaration.
     ///
-    /// The bundled 2.0 contract is *not* the authority for this question and
-    /// disagrees in a way a row must not follow: `solidjs-signals.json`'s
-    /// `createMemo` summary carries `output: "plain"` and its `createSignal`
-    /// has no summary at all, because the generated single-value `returns`
-    /// column cannot express either shape. That is the generator's silence,
-    /// not the 2.0 vocabulary's negative claim.
+    /// A single-value `returns` summary is *not* the authority for this
+    /// question: it cannot express a tuple, so its silence for `createSignal`
+    /// is not the 2.0 vocabulary's negative claim.
     ///
     /// `createOptimistic` also returns a `Signal<T>` and `createProjection` a
     /// store; both stay absent until a proof needs them and their own review
@@ -1237,8 +1234,8 @@ impl Dialect for Solid2 {
             // never inside the strict-read window of the body that registered
             // it (probed on 2.0.0-rc.9, dev, from a component body: a read in
             // the callback raises no `STRICT_READ_UNTRACKED`). It is attributed
-            // `Deferred`, as `onSettled` is. The *contract* word is stated
-            // separately (`contract_callback_execution_at`) and is unchanged.
+            // `Deferred`, as `onSettled` is. The execution *word* is stated
+            // separately (`callback_execution_word_at`) and is unchanged.
             Primitive::OnCleanup
             | Primitive::CreateReaction
             | Primitive::OnSettled
@@ -1307,18 +1304,18 @@ impl Dialect for Solid2 {
     /// Deliberately unestablished: `createStore` and `createOptimisticStore`
     /// (their derived overloads did not accept the probe's call shape, so no
     /// measurement backs a claim), `dynamic`, `useHead`, the two boundary
-    /// primitives and `mapArray`/`repeat`. Contract emission answers the
+    /// primitives and `mapArray`/`repeat`. The callback summary leaves the
     /// exact callback leaf open for those rather than assuming they follow `computed`.
-    /// 2.0's package-contract words, moved off `interproc.rs`'s hardcoded
+    /// 2.0's execution words, moved off `interproc.rs`'s hardcoded
     /// table by ADR 0111.
     ///
     /// `createEffect` defers to the attribution answer: argument 0 is the
     /// tracked compute and argument 1 the effect function, which `effect()`
     /// always enqueues (`options.user` selects `EFFECT_USER`), so `deferred`
     /// is a true promise about it. Everything else is stated directly,
-    /// because the contract word is not derivable from the attribution one --
+    /// because the execution word is not derivable from the attribution one --
     /// `createRenderEffect`'s apply is attributed `Deferred` and has no
-    /// contract word.
+    /// execution word.
     ///
     /// `createRenderEffect`'s apply has **no** word, and that is the answer
     /// the bytes support rather than a gap. `deferred` promises the callback
@@ -1333,12 +1330,12 @@ impl Dialect for Solid2 {
     /// still pending (probed: the apply runs after the source settles), and
     /// on rc.9 when the first pass was staged into a live transaction
     /// (`dist/dev.js:1617`); and every later run comes from the flush. A
-    /// contract leaf left open is the fail-closed reading of both.
+    /// callback leaf left open is the fail-closed reading of both.
     ///
     /// Three arms of the old shared table are absent rather than ported:
     /// `createResource`, `on` and `mergeProps` are Solid 1.x names this
     /// dialect does not carry.
-    fn contract_callback_execution_at(
+    fn callback_execution_word_at(
         &self,
         primitive: Primitive,
         argument: usize,
@@ -1424,7 +1421,7 @@ impl Dialect for Solid2 {
     /// `@solidjs/signals` sets `tracking = false` around the call (see
     /// [`Solid2::runs_callback_deferred`]), so reads inside it register
     /// nothing either. `mapArray`/`repeat` are deliberately absent: unlike
-    /// 1.x, their map callbacks run tracked (see the bundled contract rows).
+    /// 1.x, their map callbacks run tracked.
     /// `createEffect(compute, apply)` and `createRenderEffect(compute, apply)`
     /// are the two with an apply slot; `createTrackedEffect(compute, options?)`
     /// has none. Matches the `(1, Execution::Deferred)` row in
@@ -1590,8 +1587,8 @@ impl Dialect for Solid2 {
     }
 
     /// Source: the source-discovery gate in `solid-reactive-ir/src/lib.rs`,
-    /// extracted unchanged. Every one returns a tuple or a store the contract's
-    /// `returns` column cannot describe.
+    /// extracted unchanged. Every one returns a tuple or a store a single-value
+    /// `returns` summary cannot describe.
     fn creates_reactive_source(&self, primitive: Primitive) -> bool {
         matches!(
             primitive,

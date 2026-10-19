@@ -50,7 +50,7 @@ fn return_summary_serializes_with_a_fixed_key_order() {
 }
 
 // T2: declaration order is derived `Ord`; the wire and canonical encodings
-// do not depend on it, but `contracts.rs` and the `BTreeSet`s of protocols do.
+// do not depend on it, but the dependency-source summaries and the `BTreeSet`s of protocols do.
 #[test]
 fn invoke_protocol_orders_by_declaration_and_is_copy() {
     fn assert_copy<T: Copy>() {}

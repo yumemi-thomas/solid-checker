@@ -1023,8 +1023,7 @@ fn jsx_structure_within(file: &solid_facts::FileFacts, span: Span) -> bool {
 /// `omit(props, "a")`). Two shapes are left to other passes and say so:
 ///
 /// - a **parameter** forwarded into the position: its body is the caller's,
-///   and contract generation already opens the export's `callbacks` for it
-///   through the unknown-callback sentinel;
+///   and the unknown-callback obligation already stays open for it;
 /// - a **spread** argument, which TypeScript types as the key-list form.
 ///
 /// [`RESULT_ACCESS_REACTIVE_OPERATION`]: crate::RESULT_ACCESS_REACTIVE_OPERATION

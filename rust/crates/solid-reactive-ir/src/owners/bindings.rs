@@ -238,7 +238,7 @@ pub(crate) fn returned_binding_reference(
 /// `function.name` covers `function X() {}` and `method_name` covers a class
 /// or object method; neither exists for `const X = () => {}`, whose only name
 /// is the binding that initializes it. Exported to the backend because
-/// contract emission's attribution ladder must answer "which export is this
+/// an export-attribution consumer must answer "which export is this
 /// function" for exactly the same set of declarations the IR does — reading
 /// only `name`/`method_name` there made every arrow-bound export unnameable,
 /// and an unnameable export silently became "not an export".
@@ -614,7 +614,7 @@ pub(crate) fn analysis_context(
             let semantics = dialect.callback_semantics_at(resolved, argument, call.arguments.len());
             semantics.execution.and_then(|execution| match execution {
                 // "compute" only where reads actually subscribe: an
-                // `onSettled` callback is contract-tracked (the graph
+                // `onSettled` callback is tracked by the dialect (the graph
                 // schedules it) but imperative to its reads, and calling
                 // it a compute would describe the wrong phase.
                 solid_dialect::Execution::Tracked if semantics.tracks_reads => Some("compute"),

@@ -333,7 +333,7 @@ pub(super) fn follows_await_in_async_function(file: &solid_facts::FileFacts, spa
 ///   [`semantic_execution_role_within`] already classified;
 /// - a literal handed to a project function that invokes that parameter
 ///   during the call, a standard-library inline callback, or a package
-///   callback an accepted contract states inline -- exactly the invocations
+///   callback a callee summary states inline -- exactly the invocations
 ///   [`callee_callback_timing`] proves for a read.
 ///
 /// An IIFE runs where it is written, and a control-flow component's render

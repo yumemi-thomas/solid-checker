@@ -10,9 +10,8 @@
 //! programs differ between callers: a [`ProducerSessions`] opens them, as
 //! child processes natively or as owned reactor programs in WASM.
 //!
-//! Formatting, stdout and exit codes, the daemon's retained sessions, and
-//! every contract-generation, inspection and certification mode stay with
-//! their callers.
+//! Formatting, stdout and exit codes, and the daemon's retained sessions stay
+//! with their callers.
 
 use std::{
     collections::HashMap,
@@ -27,9 +26,10 @@ use solid_reactive_ir::RuntimeEnvironment;
 use crate::{
     DiagnosticAnalysis, DiagnosticTimings, ImportIdentityMeasurement, NativeBuildTimings,
     RequestedRuleEnablement, SourceFile, TypeFactsSession, attest_import_identities,
-    build_project_native_measured_with_program_hashes, contract_identity_scope, dependency_program,
+    build_project_native_measured_with_program_hashes, dependency_program,
     dependency_sources::{PreparedDependencyProgram, SourceRefusal},
     dialect::Dialect,
+    import_identity_scope,
 };
 
 /// Everything an ordinary check reads besides its producer programs.
@@ -146,8 +146,8 @@ pub fn open_program(
             source_refusals,
             project_id,
         }),
-        // Review round 1 of ADR 0297: the default adds no write requirement a
-        // contract-mode run did not have.
+        // Review round 1 of ADR 0297: the default adds no write requirement an
+        // analysis without dependency sources did not have.
         Err(error) if options.implicit_dependency_sources => {
             note(&format!(
                 "solid-checker: note: packages are not analyzed from source by \
@@ -225,7 +225,7 @@ pub fn run(
     }
     let facts_complete = started.elapsed();
     let mut import_identity = ImportIdentityMeasurement::default();
-    let scope = contract_identity_scope(&facts);
+    let scope = import_identity_scope(&facts);
     if !scope.is_empty() {
         let (index, measurement) = attest_import_identities(&mut typescript, &scope)?;
         facts.resolved_imports = Some(index);
@@ -288,7 +288,7 @@ pub fn run(
 /// The package inputs of an ordinary check, one-shot or retained: the package
 /// boundary and the requirement-only index host inference runs over.
 ///
-/// No package contract exists to consume. Every import the boundary refuses
+/// Every import the boundary refuses
 /// keeps an open requirement (`SC9005`).
 pub fn package_inputs(
     directory: &Path,

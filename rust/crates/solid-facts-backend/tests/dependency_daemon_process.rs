@@ -545,7 +545,7 @@ fn a_declared_host_analyzes_every_solid_package_from_source_by_default() {
         assert!(source_notes(&run).is_empty(), "{partial:?}: {}", run.stderr);
     }
 
-    // The contract opt-out is retired, and refused rather than ignored.
+    // The dependency-source opt-out is retired, and refused rather than ignored.
     let (success, refused) = invoke(
         &typefacts,
         &scratch.project,
@@ -890,7 +890,7 @@ const NO_PLUGIN: &str = "no Solid Vite plugin";
 
 /// Review round 1 of ADR 0297: a target and a build do not establish the
 /// Vite + Solid plugin resolver source selection reads, so without the
-/// plugin the default is contract mode, with a note. An explicit selection
+/// plugin the default is no source analysis, with a note. An explicit selection
 /// states the premise and is unchanged.
 #[test]
 fn the_default_needs_a_solid_vite_plugin() {

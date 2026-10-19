@@ -193,10 +193,10 @@ fn marker(boundary: &PackageBoundary, fixture: &Fixture, row: usize) -> bool {
     boundary.requires_legacy(fixture.importer(row), fixture.text(row))
 }
 
-/// The import raised the contract-era marker and its explanation.
+/// The import raised the legacy requirement marker and its explanation.
 fn kept(boundary: &PackageBoundary, fixture: &Fixture, row: usize) -> bool {
     marker(boundary, fixture, row)
-        && kinds(boundary, fixture, row).contains(&UnanalyzableReason::LegacyContractFallback)
+        && kinds(boundary, fixture, row).contains(&UnanalyzableReason::LegacyRequirementFallback)
 }
 
 /// The import left no trace in the boundary at all.

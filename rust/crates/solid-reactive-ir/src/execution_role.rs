@@ -93,7 +93,7 @@ fn callback_runs_outside_tracking(
     match semantics.execution {
         None => false,
         // A tracked callback creates its own observer unless the primitive's
-        // exact runtime contract explicitly overrides that classification.
+        // exact runtime semantics explicitly override that classification.
         Some(Execution::Tracked) => !semantics.tracks_reads,
         // Deferred callbacks execute after/outside the current tracking pass.
         Some(Execution::Deferred) => true,

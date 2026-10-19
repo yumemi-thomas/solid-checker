@@ -124,7 +124,7 @@ pub(crate) fn emit(
 }
 
 /// The rules whose uncertifiable findings describe what the analysis could not
-/// see (a package without a contract, a dispatch it could not resolve), not a
+/// see (a package whose behavior is unavailable, a dispatch it could not resolve), not a
 /// claim about code the user wrote. ADR 0202 groups them in the default output.
 const COVERAGE_RULES: &[&str] = &[
     "package-contract-incomplete",
@@ -254,7 +254,7 @@ const COVERAGE_SUBJECTS_SHOWN: usize = 5;
 fn coverage_family_heading(family: &str) -> Option<(&'static str, &'static str, &'static str)> {
     Some(match family {
         "package-contract" => (
-            "imports from packages without a complete reactivity contract",
+            "imports from packages whose behavior is unavailable from source",
             "package",
             "packages",
         ),

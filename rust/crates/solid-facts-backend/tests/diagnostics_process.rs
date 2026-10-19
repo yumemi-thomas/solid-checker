@@ -9,9 +9,10 @@ mod dependency_daemon_process;
 #[path = "dependency_fresh_native_process.rs"]
 mod dependency_fresh_native_process;
 
-// P5 S1: the ordinary check consuming no package contract.
-#[path = "no_package_contracts_process.rs"]
-mod no_package_contracts_process;
+// The ordinary check consumes no package document, and the flags that once
+// supplied one are refused.
+#[path = "removed_package_flags_process.rs"]
+mod removed_package_flags_process;
 
 use support::{assert_rule_findings, diagnostic_fixture, findings_for_rule};
 
@@ -2225,7 +2226,7 @@ fn rc9_call_forms_follow_the_runtime_they_select() {
         );
         // The control and the eight predicates, and the SC9014 notice: rc.9
         // is older than the audited rc.13 (ADR 0194). The exported wrapper
-        // owes no contract-generation obligation: no contract is generated.
+        // owes no package obligation: nothing is generated.
         assert!(
             findings_for_rule(&findings, "package-contract-incomplete").is_empty(),
             "{findings:#?}"
@@ -2377,7 +2378,7 @@ fn control_flow_and_effect_phases_classify_strict_reads() {
 
 /// ADR 0202: the default output lists findings about the user's code in full
 /// and folds the analysis-coverage gaps into one grouped section; a closed
-/// program reports no contract-generation obligation for its own exports.
+/// program reports no package obligation for its own exports.
 #[test]
 fn default_output_groups_coverage_gaps_after_findings_to_review() {
     let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
@@ -2429,7 +2430,7 @@ fn default_output_groups_coverage_gaps_after_findings_to_review() {
     );
     assert!(open.contains("      ageOf (1)\n"), "{open}");
     assert!(open.contains("first at App.tsx:18:21"), "{open}");
-    // No package contract is generated, so an export owes none (D2).
+    // Nothing is generated for a package, so an export owes none (D2).
     assert!(!open.contains("SC9005"), "{open}");
     assert!(!open[coverage..].contains(",-["), "{open}");
     // `--format full` keeps every finding in place.
@@ -2437,7 +2438,7 @@ fn default_output_groups_coverage_gaps_after_findings_to_review() {
     assert!(!full.contains("Analysis coverage"), "{full}");
     assert!(!full.contains("SC9005"), "{full}");
 
-    // The same source in a closed program: no contract-generation obligation.
+    // The same source in a closed program: no package obligation.
     let closed = run("feedback-tiers", "default");
     assert!(
         closed.contains("Analysis coverage: 1 site in 1 group"),

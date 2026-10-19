@@ -183,10 +183,10 @@ pub(crate) fn discover_sources(
     let mut literal_member_slots =
         crate::literal_member_slots::LiteralMemberSlots::new(facts, semantic_lookup);
     let mut typed_sources = HashMap::<SymbolId, TypedSource>::new();
-    // A tuple contract describes the factory's result, not the values a
+    // A tuple type describes the factory's result, not the values a
     // replaced iterator hands the binding. Preserve those former source
     // candidates even when the package's declared type is a plain function
-    // or object, so withdrawing the contract proof cannot certify silence.
+    // or object, so a withdrawn proof cannot certify silence.
     if semantic_lookup.tuple_iteration_may_be_mutated() {
         for file in &facts.files {
             let ast_index = &project_indexes.ast_files_by_path[file.path.as_str()];

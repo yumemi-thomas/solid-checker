@@ -284,7 +284,7 @@ function phaseReached(stages) {
   const last = stages.at(-1)?.stage ?? null;
   return { lastCompletedStage: last, completedStages: stages.length,
     description: last ? `after reactive-IR stage "${last}"`
-      : "before the first reactive-IR stage (native setup: project contract admission, source and Type Facts "
+      : "before the first reactive-IR stage (native setup: project selection, source and Type Facts "
         + "acquisition, compiler facts); no stage line was emitted" };
 }
 

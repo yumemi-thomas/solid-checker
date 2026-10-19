@@ -1,5 +1,5 @@
-//! Contract requirements for ordinary analysis. Solid core is supplied by the
-//! dialect model; this module reads no core contract or receipt documents.
+//! Package requirements for ordinary analysis. Solid core is supplied by the
+//! dialect model; this module reads no core package documents.
 
 use std::{
     collections::{HashMap, HashSet},
@@ -90,13 +90,12 @@ fn namespace_import_redirected(
         })
 }
 
-/// The package boundary of `facts` (phase P3 of the contract-removal plan):
-/// every import the requirement discovery below refuses, with each cause
-/// recorded at the decision that found it, and `refusals` -- the source
-/// selector's own decisions -- attached to the imports of the copy or name
-/// they were about. Its legacy keys are exactly the requirement markers this
-/// discovery always raised, and nothing else reaches the acceptance gate:
-/// a recorded cause is explanation.
+/// The package boundary of `facts`: every import the requirement discovery
+/// below refuses, with each cause recorded at the decision that found it, and
+/// `refusals` -- the source selector's own decisions -- attached to the
+/// imports of the copy or name they were about. Its legacy keys are exactly
+/// the requirement markers this discovery always raised, and nothing else
+/// reaches the boundary defects: a recorded cause is explanation.
 pub fn external_package_boundary(
     facts: &solid_facts::ProjectFacts,
     refusals: &[crate::dependency_sources::SourceRefusal],
@@ -105,8 +104,8 @@ pub fn external_package_boundary(
 }
 
 /// The package boundary of a request that supplies no package files and no
-/// import attestation -- the WASM `checkSync` host protocol (P5 of the
-/// contract-removal plan). Nothing in such a request shows what a package
+/// import attestation -- the WASM `checkSync` host protocol. Nothing in such a
+/// request shows what a package
 /// does or which installation a specifier names, so every runtime import or
 /// re-export of a bare specifier, Solid core excepted, keeps an open
 /// requirement. `node:` built-ins are not packages.
@@ -239,7 +238,7 @@ fn external_package_boundary_with(
                     .is_some_and(|manifest| manifest_uses_solid(reader, manifest))
             {
                 record(
-                    UnanalyzableReason::LegacyContractFallback,
+                    UnanalyzableReason::LegacyRequirementFallback,
                     "an installed package whose manifest names a Solid package",
                 );
                 let name = crate::dependency_sources::package_name(&import.text);
@@ -261,17 +260,17 @@ fn external_package_boundary_with(
 
 /// Whether `import` is a relative edge between two modules of one package
 /// installation, which is no package boundary and so needs no package
-/// contract (ADR 0132).
+/// requirement (ADR 0132).
 ///
 /// The resolver reports a relative specifier as `NodeModules` whenever the
 /// path it lands on lies under a `node_modules` directory. That is true of
 /// every module of an installed package, so without this test each relative
 /// import *inside* the package under analysis reads as an import of an
-/// external Solid-using package with no accepted contract. The obligation it
+/// external Solid-using package with no analyzed source. The obligation it
 /// raises sits at module level, outside every function, and attribution marks
-/// every export of the entrypoint with it. A package generated from
+/// every export of the entrypoint with it. A package analyzed from
 /// `node_modules` therefore lost every domain on every export, and the same
-/// bytes generated from anywhere else did not.
+/// bytes analyzed from anywhere else did not.
 ///
 /// Exact, not path-shaped: the specifier must be relative, and the importer
 /// and the resolved file must have the *same* owning manifest -- the nearest

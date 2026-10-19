@@ -51,10 +51,6 @@ mod host_invocation;
 mod host_loadable;
 mod host_plugins;
 mod inferred_host;
-/// Authorizing a fixture-supplied contract, so a corpus can analyze a
-/// consumer against an accepted one. Never reached by an ordinary
-/// analysis: the trust it mints is returned to the caller, not written
-/// into the project.
 pub mod installed_bytes;
 mod package_requirements;
 mod release_scope;
@@ -66,9 +62,9 @@ pub use cache::{CacheStats, FactsCache};
 pub use diagnostics::{
     DiagnosticAnalysis, DiagnosticSession, DiagnosticTimings, Metrics, RequestedRuleEnablement,
     Snapshot, SnapshotEvidence, SnapshotFinding, SnapshotFix, SnapshotTextEdit, SourceLocation,
-    analysis_metrics, analyze_project_inputs_measured_with_enablement, discovered_contract_paths,
-    discovered_rule_options_path, imported_package_roots, semantic_demand_options_for_enablement,
-    source_location, unsupported_runtime_snapshot,
+    analysis_metrics, analyze_project_inputs_measured_with_enablement,
+    discovered_rule_options_path, imported_package_manifest_paths, imported_package_roots,
+    semantic_demand_options_for_enablement, source_location, unsupported_runtime_snapshot,
 };
 pub use host_config::{tsconfig_extends_chain, tsconfig_extends_witness};
 pub use inferred_host::{
@@ -78,7 +74,7 @@ pub use inferred_host::{
 };
 pub use package_requirements::{external_package_boundary, unsupplied_package_boundary};
 /// The shared analysis input an in-memory adapter builds without the
-/// filesystem (phase P3 of the contract-removal plan).
+/// filesystem.
 pub use solid_reactive_ir::{
     AnalysisInputs, RuntimeEnvironment, package_boundary::PackageBoundary,
 };
@@ -114,20 +110,15 @@ pub fn default_typefacts_executable() -> String {
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct SemanticDemandOptions {
     pub array_map_receiver_types: bool,
-    /// Package generation only: retain exact parameter value domains for the
-    /// hash-bound runtime probe construction sidecar.
-    pub contract_probe_parameters: bool,
 }
 
 impl SemanticDemandOptions {
     pub const NONE: Self = Self {
         array_map_receiver_types: false,
-        contract_probe_parameters: false,
     };
 
     pub const PREFERENCES: Self = Self {
         array_map_receiver_types: true,
-        contract_probe_parameters: false,
     };
 }
 
@@ -189,8 +180,8 @@ pub enum BackendError {
     TypeFactsService { code: String, message: String },
     #[error("reactive IR error: {0}")]
     ReactiveIr(#[from] solid_reactive_ir::BuildError),
-    #[error("package contract error: {0}")]
-    Contract(String),
+    #[error("runtime premise error: {0}")]
+    RuntimePremise(String),
     #[error("TypeFacts compatibility handshake failed: {0}")]
     Handshake(String),
     #[error("rule options error: {0}")]
@@ -428,9 +419,8 @@ pub type FactsTransform =
 /// the program.
 ///
 /// Two consumers read the answer:
-/// - A package contract is applied by installed identity, which needs the
-///   compiler's own resolution of the specifier
-///   ([`solid_reactive_ir::PackageContract::for_import`]).
+/// - A package is matched by installed identity, which needs the compiler's
+///   own resolution of the specifier.
 /// - The IR asks which module each specifier loads before it trusts that no
 ///   namespace object, barrel or dynamic import reaches a module (ADR 0219).
 ///   That includes relative specifiers, since only the compiler maps
@@ -440,17 +430,17 @@ pub type FactsTransform =
 /// with a bare specifier. It is one request per program generation, and its
 /// import half is proportional to the files asked about.
 ///
-/// The scope deliberately does **not** consult contract discovery. The
+/// The scope deliberately does **not** consult package discovery. The
 /// attestation is computed once per program generation and a retained session
-/// reuses it across checks, while contracts are re-discovered on every check.
-/// A scope keyed on today's contracts would answer for a contract that
+/// reuses it across checks, while packages are re-discovered on every check.
+/// A scope keyed on today's packages would answer for a package that
 /// appeared afterwards by *silently omitting* its files, which is name-only
 /// binding restored by accident.
 ///
 /// An empty answer means the program has no files, and the caller then asks
 /// for nothing.
 #[must_use]
-pub fn contract_identity_scope(facts: &ProjectFacts) -> Vec<String> {
+pub fn import_identity_scope(facts: &ProjectFacts) -> Vec<String> {
     facts
         .files
         .iter()
@@ -486,11 +476,11 @@ pub struct ImportIdentityMeasurement {
 /// inventory (unconditional — it is the operation's reason to exist) and the
 /// import provenance of the requested files only. `packages: true` adds the
 /// owning manifest and the resolver's own recorded identity to each row, which
-/// is the fact a contract is bound by.
+/// is the fact a package is bound by.
 ///
 /// A requested file the program does not hold is reported by the producer
-/// rather than dropped, and it is recorded here as *not covered*: a contract
-/// then refuses every specifier in it. Presenting an unanswered file as "this
+/// rather than dropped, and it is recorded here as *not covered*: the
+/// boundary then refuses every specifier in it. Presenting an unanswered file as "this
 /// file imports nothing" would silently restore name-only binding for it.
 pub fn attest_import_identities(
     typescript: &mut TypeFactsSession,
@@ -934,19 +924,19 @@ impl NativeIncrementalSession {
     }
 
     /// Attaches this program's attested import identities to the facts it
-    /// produced, so a package contract reaching them is bound to the install
+    /// produced, so a package reaching them is bound to the install
     /// each specifier resolves to rather than to its name.
     ///
     /// Every path that produces `ProjectFacts` from this session passes through
     /// here. A retained session reuses one generation's facts across many
     /// checks, so the attestation is computed once per generation with it — and
     /// it must not be conditional on anything that can change between checks
-    /// (see [`contract_identity_scope`]).
+    /// (see [`import_identity_scope`]).
     fn attested(&mut self, mut facts: ProjectFacts) -> Result<ProjectFacts, BackendError> {
         if let Some(transform) = &mut self.facts_transform {
             transform(&mut facts, &mut self.typescript)?;
         }
-        let scope = contract_identity_scope(&facts);
+        let scope = import_identity_scope(&facts);
         if scope.is_empty() {
             // This generation asked for nothing, and the measurement must say
             // so rather than leave the previous generation's counts standing.

@@ -79,8 +79,8 @@ function fixtureProjects() {
         directory,
         tsconfig
       });
-      // P7 of the contract-removal plan: no package contract is consumed, so a
-      // fixture asking for an authorized one would silently test nothing.
+      // No package contract is consumed any more, so a fixture asking for an
+      // authorized one would silently test nothing.
       if (existsSync(join(directory, ".solid-checker", "authorize-contract.json"))) {
         throw new Error(`${group}/${entry.name}: authorize-contract.json is retired`);
       }
@@ -262,7 +262,7 @@ function runtimeArguments(tsconfig) {
     args.push("--dependency-source", specifier);
   }
   // ADR 0297: a declared target and build analyze every Solid package from
-  // source by default. The contract opt-out is retired (P7).
+  // source by default. The opt-out is retired.
   if (runtime.dependencySource !== undefined) {
     throw new Error(`${metadata}: dependencySource is retired with package contracts`);
   }

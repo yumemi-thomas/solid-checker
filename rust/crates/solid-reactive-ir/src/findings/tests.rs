@@ -130,14 +130,14 @@ fn an_optional_inline_accessor_invocation_is_not_a_proven_read() {
 }
 
 #[test]
-fn deferred_apply_does_not_claim_an_inline_contract_or_a_completed_read() {
+fn deferred_apply_does_not_claim_an_inline_invocation_or_a_completed_read() {
     let mut deferred = read(false);
     deferred.execution = crate::ExecutionRole::EffectApply;
     deferred.callee_callback_timing = true;
     assert!(deferred.is_uncertifiable());
     let message = strict_read_message(&deferred);
     assert!(message.contains("options and compute dependencies"));
-    assert!(!message.contains("accepted contract") && !message.contains("never updates"));
+    assert!(!message.contains("states an inline invocation") && !message.contains("never updates"));
     let evidence = strict_read_evidence(&deferred);
     assert!(
         evidence
@@ -247,7 +247,6 @@ fn a_census_gap_makes_an_owner_requirement_uncertifiable_not_a_violation() {
         component_uncertain: false,
         after_await: false,
         missing_jsx_census: false,
-        through_contract: false,
         through_dependency: None,
         report: true,
     };

@@ -417,8 +417,7 @@ fn non_effect_callback_executions_use_the_module_classification() {
         Some("tracked")
     );
     // `untrack` and `flush` run their callback before returning, so the
-    // contract word for both is `inline` -- the same word the reviewed
-    // bundled contract for solid-js@2.0.0-rc.0 uses for them. The
+    // execution word for both is `inline`. The
     // listener-clearing half is a separate dialect fact, not this word
     // (`untrack` clears the listener, `flush` does not).
     assert_eq!(
@@ -462,7 +461,7 @@ fn a_callback_chain_composes_detachment_and_schedule_in_order() {
     // The tracked wrapper's schedule, which decides what a *detached*
     // callback under it composes to. 1.x `createEffect` is the deferring
     // one; 1.x `createMemo`/`createRenderEffect`/`mergeProps` and every
-    // 2.0 effect are eager; a package-contract row has neither.
+    // 2.0 effect are eager; a summary row has neither.
     const EAGER: CallbackWrapper = Tracked(Some(TrackedCallbackTiming::DuringCall));
     const LATER: CallbackWrapper = Tracked(Some(TrackedCallbackTiming::AfterCall));
     const UNKNOWN: CallbackWrapper = Tracked(None);

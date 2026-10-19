@@ -693,7 +693,7 @@ pub(super) struct SemanticLookup<'a> {
     effect_apply_calls: OnceLock<crate::effect_execution::ApplyCalls<'a>>,
 }
 
-/// Which parts of the returned-adapter contract this build's dialect can
+/// Which parts of the returned-adapter interface this build's dialect can
 /// actually answer, for the primitives this project names.
 ///
 /// Solid 2.0 leaves every method behind these flags at its `false`/`None`

@@ -78,7 +78,7 @@ pub enum Primitive {
     /// so a call made after the shell flush is a silent no-op.
     HttpStatus,
     /// `httpHeader(name, value, options?)` from `@solidjs/web`; the same
-    /// committed-gate contract as [`Primitive::HttpStatus`].
+    /// committed-gate premise as [`Primitive::HttpStatus`].
     HttpHeader,
     /// `dynamic(source, { static: true })`: the *call form* of
     /// [`Primitive::Dynamic`] whose options object is an exact literal setting
@@ -195,8 +195,8 @@ pub enum ResultSlot {
     TupleItem(usize),
 }
 
-/// The reactive role of a value: the two roles the normalized contract's shape
-/// model represents, and no others.
+/// The reactive role of a value: the two roles the summary shape model
+/// represents, and no others.
 ///
 /// Deliberately narrower than [`TypeRole`], which answers what a public *type*
 /// export means. This answers what a *call result slot* is, which is the

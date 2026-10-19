@@ -1251,7 +1251,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         // Not the default walk: that would visit the quasi through
         // `visit_template_literal` and record every tagged template's quasi
         // in `template_literals`, violating that table's untagged-only
-        // contract. The tag and the interpolated expressions are visited
+        // invariant. The tag and the interpolated expressions are visited
         // directly so their own nested nodes — including genuinely untagged
         // templates inside an interpolation — are still collected.
         self.tagged_template_tags.push(span(expression.tag.span()));
