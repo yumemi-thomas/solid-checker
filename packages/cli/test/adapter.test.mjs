@@ -145,7 +145,7 @@ test("exports an Oxlint-compatible certification plugin", () => {
   // Every shipped config carries the note rule, at warn, so a note never
   // fails a lint by itself.
   for (const [name, config] of Object.entries(exported.configs)) {
-    assert.equal(config.rules["solid-checker/package-note"], "warn", name);
+    assert.equal(config.rules["solid-checker/contract-note"], "warn", name);
   }
 });
 
@@ -367,7 +367,7 @@ test("per-rule surface: every discovered catalog identity is an ESLint rule", ()
   );
   assert.equal(plugin.configs.v2.rules["solid-checker/package-behavior-unavailable"], undefined);
   assert.equal(plugin.configs.v2.rules["solid-checker/certification"], "off");
-  assert.equal(plugin.configs.v2.rules["solid-checker/package-note"], "warn");
+  assert.equal(plugin.configs.v2.rules["solid-checker/contract-note"], "warn");
 });
 
 test("browser configs are the dialect config with the browser runtime target", () => {
@@ -387,7 +387,7 @@ test("preference configs and recommendation metadata follow generated catalogs",
     assert.deepEqual(
       Object.keys(config.rules).sort(),
       [
-        "solid-checker/package-note",
+        "solid-checker/contract-note",
         ...preferences.map(entry => `solid-checker/${entry.name}`)
       ].sort()
     );
@@ -879,7 +879,7 @@ test("a note reaches ESLint once per linted file, as a warning", () => {
   for (const name of ["App.js", "Other.js"]) {
     const messages = lint(plugin.configs.recommended.rules, name);
     assert.equal(messages.length, 1, `${name} carries the note`);
-    assert.equal(messages[0].ruleId, "solid-checker/package-note");
+    assert.equal(messages[0].ruleId, "solid-checker/contract-note");
     // A note never fails CI by itself, even under `recommended`, whose
     // certification rule is an error.
     assert.equal(messages[0].severity, 1);
@@ -900,23 +900,23 @@ test("a note reaches ESLint once per linted file, as a warning", () => {
   ]) {
     const messages = lint(rules, "App.js");
     assert.equal(messages.length, 1);
-    assert.equal(messages[0].ruleId, "solid-checker/package-note");
+    assert.equal(messages[0].ruleId, "solid-checker/contract-note");
     assert.equal(messages[0].severity, 1);
   }
   // Certification alone, and the per-rule rules alone, report findings only.
   assert.deepEqual(lint({ "solid-checker/certification": "error" }, "App.js"), []);
   assert.deepEqual(
-    lint({ ...plugin.configs.v2.rules, "solid-checker/package-note": "off" }, "App.js"),
+    lint({ ...plugin.configs.v2.rules, "solid-checker/contract-note": "off" }, "App.js"),
     []
   );
   // Disabling the note rule is the user's choice to hide notes.
   assert.deepEqual(
-    lint({ ...plugin.configs.recommended.rules, "solid-checker/package-note": "off" }, "App.js"),
+    lint({ ...plugin.configs.recommended.rules, "solid-checker/contract-note": "off" }, "App.js"),
     []
   );
   // A severity the user raises is theirs too.
   const raised = lint(
-    { ...plugin.configs.recommended.rules, "solid-checker/package-note": "error" },
+    { ...plugin.configs.recommended.rules, "solid-checker/contract-note": "error" },
     "App.js"
   );
   assert.equal(raised.length, 1);
@@ -942,7 +942,7 @@ test("a note reaches ESLint once per linted file, as a warning", () => {
   for (const rules of [plugin.configs.v2.rules, plugin.configs.recommended.rules]) {
     const after = lint(rules, "Third.js");
     assert.equal(after.length, 1, "the note survives a pass that aborted");
-    assert.equal(after[0].ruleId, "solid-checker/package-note");
+    assert.equal(after[0].ruleId, "solid-checker/contract-note");
     assert.match(after[0].message, /^\[solid-checker note\]/);
   }
   plugin._testing.snapshotCache.clear();

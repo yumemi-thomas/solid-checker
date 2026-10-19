@@ -838,7 +838,7 @@ plugin.configs.recommended = {
   plugins: { "solid-checker": plugin },
   rules: {
     "solid-checker/certification": "error",
-    "solid-checker/package-note": "warn"
+    "solid-checker/contract-note": "warn"
   }
 };
 for (const catalog of Object.values(manifests)) {
@@ -852,7 +852,9 @@ for (const catalog of Object.values(manifests)) {
       "solid-checker/certification": "off",
       // Every shipped config enables the note rule at `warn`, so no listing
       // order can make a note fail a lint.
-      "solid-checker/package-note": "warn",
+      // Shipped configs keep the historical key: a user config that turned
+      // `contract-note` off must keep silencing the note.
+      "solid-checker/contract-note": "warn",
       // ADR 0248: unavailable package behavior is opt-in. They are not findings about the
       // user's code, so no shipped config enables them.
       ...Object.fromEntries(
@@ -879,7 +881,7 @@ for (const catalog of Object.values(manifests)) {
     plugins: { "solid-checker": plugin },
     settings: { solidChecker: { preset: ["preferences"] } },
     rules: {
-      "solid-checker/package-note": "warn",
+      "solid-checker/contract-note": "warn",
       ...Object.fromEntries(
         preferenceRules.map(entry => [
           `solid-checker/${entry.name}`,
