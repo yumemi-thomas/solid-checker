@@ -598,8 +598,8 @@
           "rule": "package-behavior-unavailable",
           "kind": "uncertifiable",
           "path": "<root>/App.tsx",
-          "startByte": 563,
-          "endByte": 612
+          "startByte": 415,
+          "endByte": 464
         }
       ],
       "metrics": {
