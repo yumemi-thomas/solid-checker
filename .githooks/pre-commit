@@ -16,15 +16,10 @@ set -eu
 limit_mb=5
 limit=$((limit_mb * 1024 * 1024))
 
-# Files this repository knowingly tracks above the limit. Each one is a
-# checked-in benchmark artifact whose history is intentional; adding to this
-# list is a decision, which is why it is a list and not a bigger threshold.
+# Files this repository knowingly tracks above the limit. None today; adding a
+# path is a decision, which is why this is a list and not a bigger threshold.
 allowed() {
     case "$1" in
-        benchmarks/ecosystem/report.json) return 0 ;;
-        benchmarks/ecosystem/report-sentinel.json) return 0 ;;
-        benchmarks/package-contract-v2/phase20/row-ledger.json) return 0 ;;
-        benchmarks/package-contract-v2/phase21/row-ledger.json) return 0 ;;
         *) return 1 ;;
     esac
 }
