@@ -1,3 +1,3 @@
-# A consumer of a `plain` return
+# A consumer of a plain return
 
-ADR 0113: an accepted contract closing `returns` over one `plain` return leaves nothing open at the import (a plain value carries no reactive capability, so it projects to "no reactive return described"); the same export with `returns` open raises `SC9005`. `Status`/`isReady` clean, `StatusOpen`/`isReadyOpen` `SC9005`. Ships `.solid-checker/authorize-contract.json` (as `../package-merged-props-consumer`); manifest byte-identical to that fixture's; `node_modules/solid-js` required for the authorized copy.
+Written (ADR 0113) to pin that a contract closing `returns` over one `plain` return leaves nothing open at the import, while the `StatusOpen`/`isReadyOpen` control raises `SC9005`. Package contracts are removed (ADR 0312). Today the snapshot holds only the SC9014 notice for the rc.0 stub: the stub package declares no `solid-js` peer dependency, no SC9005 is raised for either export, and the control no longer differs from the closed case, so the fixture pins nothing about plain returns. The `solid-reactivity.json` beside the stub is inert.

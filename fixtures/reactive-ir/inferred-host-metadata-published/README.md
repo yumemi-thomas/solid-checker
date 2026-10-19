@@ -1,3 +1,3 @@
 # Inferred host: metadata-published
 
-Copy of `inferred-host-spa` (`metadata-published`): admission is refused and the contract claim stays uncertifiable (explicit browser is the control). `startClosed(): void` states an ownership requirement TypeScript cannot express; no published signature is loosened.
+Copy of `inferred-host-spa` (`metadata-published`): browser admission is refused and the browser upgrade of `startClosed()` stays withheld (explicit browser is the control; `expected-claims.json` is hand-stated and unrun). Package contracts are removed (ADR 0312), so `startClosed(): void` carries no ownership requirement and the snapshot is certified with no findings either way: the fixture no longer pins the admission outcome through a finding. No published signature is loosened. The `solid-reactivity.json` beside the stub is inert.

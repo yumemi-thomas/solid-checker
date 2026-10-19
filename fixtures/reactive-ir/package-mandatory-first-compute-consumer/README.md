@@ -1,7 +1,3 @@
 # Mandatory versus optional first compute
 
-Pins the distinction ADR 0244 relies on for `createBodyCursor` and `capitalize`. A tracked compute stated `min: 1`
-runs during the call, so a write in it is a proven `reactive-write-in-owned-scope` violation. A `min: 0` compute
-(`possibleTracked`, `lazyTracked`) is not upgraded: its write stays unproven, and its reads are clean under ADR 0244
-(when it runs, it runs tracked under its created owner). The contract is accepted out of band through
-`.solid-checker/authorize-contract.json`; `tsc --noEmit` is clean.
+Written (ADR 0244) to pin that a tracked compute stated `min: 1` runs during the call, so a write in it is a proven `reactive-write-in-owned-scope` violation, while `min: 0` computes (`possibleTracked`, `lazyTracked`) stay unproven and clean for reads. That statement came from a package contract, which is removed (ADR 0312), so the three exports are no longer told apart. Today every `source()` read inside a callback given to `eagerTracked`, `possibleTracked` or `lazyTracked` is an `SC1001` `strict-read-untracked` uncertifiable result (`Correct`, `Misuse`, and both calls in `ZeroIsStillZero`), plus the SC9014 notice for the rc.0 stub; no violation is proven. `tsc --noEmit` is clean. The `solid-reactivity.json` beside the stub is inert.

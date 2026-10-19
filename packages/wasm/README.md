@@ -34,7 +34,7 @@ the request. This request carries no package
 files and no import attestation, so source analysis cannot run here: every
 runtime import or re-export of a bare specifier (Solid core and `node:`
 built-ins excepted) keeps an open requirement, reported as
-`package-contract-incomplete` (`SC9005`) where it matters. For package
+`package-behavior-unavailable` (`SC9005`) where it matters. For package
 behaviour from source, use the [owned check](#owned-check). `installedPackages`,
 `exportConditions` and `bundledContracts` are still accepted, so an older
 host's request decodes, and have no effect.
