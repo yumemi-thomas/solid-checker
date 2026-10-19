@@ -5,6 +5,7 @@ set -eu
 # the end must name exactly this commit, on a tree that was clean throughout.
 verify_start_head=$(git rev-parse HEAD)
 verify_start_status=$(git status --porcelain)
+verify_tree_moved=0
 
 rust_manifest=rust/Cargo.toml
 cargo_profile=verify
@@ -65,6 +66,12 @@ run_start=$(epoch_ms)
 step_start=$run_start
 
 step() {
+  # A tree that differs from the start at any step boundary (an edit, even one
+  # reverted before the end) means some step may have checked other bytes than
+  # the commit, so the run must not stamp it green.
+  if [ "$(git status --porcelain)" != "$verify_start_status" ]; then
+    verify_tree_moved=1
+  fi
   if [ -n "$step_name" ]; then
     step_now=$(epoch_ms)
     step_ms=$((step_now - step_start))
@@ -260,9 +267,11 @@ summarize
 # A clean tree that passed every step is the default base for the next
 # `make verify-delta` (scripts/verify-delta.mjs): the fast loop then plans only
 # what changed since the last full green run. Stamp only when the run started
-# clean and neither HEAD nor the tree moved while it ran; a commit made
-# mid-run was not verified.
-if [ -z "$verify_start_status" ] && [ -z "$(git status --porcelain)" ] &&
-  [ "$(git rev-parse HEAD)" = "$verify_start_head" ]; then
+# clean, HEAD never moved, and the tree matched the start at every step
+# boundary. An edit made and reverted inside a single step is not observable
+# here; parallel agents work in their own worktrees, which keeps that window
+# to a deliberate act.
+if [ -z "$verify_start_status" ] && [ "$verify_tree_moved" = 0 ] &&
+  [ -z "$(git status --porcelain)" ] && [ "$(git rev-parse HEAD)" = "$verify_start_head" ]; then
   printf '%s\n' "$verify_start_head" > rust/target/verify-green-commit
 fi
