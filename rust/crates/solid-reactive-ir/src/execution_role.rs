@@ -875,39 +875,6 @@ fn prop_literal_invoked_during_render(
     component_invokes_prop_in_body(component_file, component, prop, lookup)
 }
 
-/// [`prop_literal_invoked_during_render`] for a function written as a
-/// component's sole child, which the component receives as `children`. A
-/// `children` attribute competes with it and a spread may be merged around
-/// it, so both refuse.
-fn child_literal_invoked_during_render(
-    file: &solid_facts::FileFacts,
-    literal: Span,
-    lookup: &SemanticLookup<'_>,
-) -> bool {
-    let Some(element) = file.ast.jsx_containing(literal).find(|element| {
-        !intrinsic_element(file, element)
-            && element
-                .children
-                .iter()
-                .any(|child| jsx_child_expression(file, *child) == Some(literal))
-    }) else {
-        return false;
-    };
-    if !element.spreads.is_empty()
-        || jsx_children(file, element).len() != 1
-        || element
-            .attributes
-            .iter()
-            .any(|attribute| file.source_text(attribute.name) == Some("children"))
-    {
-        return false;
-    }
-    let Some((component_file, component)) = rendered_component(file, element, lookup) else {
-        return false;
-    };
-    component_invokes_prop_in_body(component_file, component, "children", lookup)
-}
-
 /// The project component `element`'s tag runs: its binding is current (no
 /// `Kids = Later` reassignment), and a member tag (`Menu.Item`) reaches
 /// exactly the declared member, as [`InvocationFlow::component_props_uses`]
@@ -3427,14 +3394,6 @@ fn callee_callback_timing_within(
                 // ADR 0204: unless the consumer is proven to call it while it
                 // renders.
                 return !prop_literal_invoked_during_render(file, literal.span, lookup);
-            }
-            // A component's function child is its `children` prop, under the
-            // same proof. Only the proof answers here: a control-flow
-            // component's children callback is placed below.
-            if component_child_function(file, literal.span)
-                && child_literal_invoked_during_render(file, literal.span, lookup)
-            {
-                return false;
             }
             // An IIFE runs where it is written, so its timing is its
             // surroundings'.

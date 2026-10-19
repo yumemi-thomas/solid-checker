@@ -43,18 +43,19 @@ element (`component_child_function`) is the component's `children` prop.
    element (`{shown() && <Kids>{…}</Kids>}`) does not place it either: that
    region lowers the element, it does not run the child. Inside such a
    function, only compiler facts strictly inside it place code.
-2. It runs during the receiving component's render when that component's own
-   body calls `props.children` directly: ADR 0204's
-   `component_invokes_prop_in_body`, with `children` as the prop. The element
-   must have exactly one child, no spread and no `children` attribute. This is
-   a positive proof only. When it does not hold, the existing timing logic
-   answers, and a control-flow component's callback keeps its proof.
+2. *(Withdrawn 2026-10-19.)* A first version also proved a violation when the
+   component's own body called `props.children(...)` (ADR 0204's body proof).
+   Six adversarial review rounds each found a way to replace the child before
+   that call, and the proof moved no finding on the corpus, so children no
+   longer use it. The guard those rounds built stays on ADR 0204's attribute
+   proof, where it removed seven false violations that predate this ADR
+   (fixture `prop-body-call-guard`).
 3. ADR 0319's walk follows a component's sole child into the `children` prop,
    under the same conditions, so a child the component calls in tracked JSX
    or an event handler takes that role.
 
-Anything else keeps the lexical rendering role with unproven timing:
-`SC1001` uncertifiable ("passed to a consumer that is not proven to invoke
+Anything else, a body call included, keeps the lexical rendering role with
+unproven timing: `SC1001` uncertifiable ("passed to a consumer that is not proven to invoke
 it").
 
 ## Proof obligations
@@ -86,3 +87,13 @@ and `prop-head-get` each gain one uncertifiable for their local `For`, which
 was silent for the same reason.
 
 The runtime oracle now covers both children reads with proven violations.
+
+## Amendment (2026-10-19): the body proof is withdrawn for children
+
+After ADR 0328 made uncertifiable results internal, a function child the
+component's body calls reports nothing to users either way. The rows above
+about the body proof (`props` does not escape, every write form, no other
+name, the call runs in the body, the tag runs the declaration) now describe
+ADR 0204's attribute proof only. `component-function-child`'s `BodyChild` and
+`BodyChildInRegion` are uncertifiable; the oracle case
+`oracle-children-body` is covered by that uncertifiable result.

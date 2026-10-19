@@ -14,7 +14,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/component-function-child/App.tsx",
       "start": 426,
@@ -34,7 +34,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/component-function-child/App.tsx",
       "start": 849,
