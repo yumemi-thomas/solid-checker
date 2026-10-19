@@ -89,5 +89,6 @@ and the remaining uncertifiable cases. Do not claim more than was verified.
 When precision status changes, update the rule page, and add or remove the
 item in docs/open-work.md (known misses, decisions not to build, accepted
 trades). A slice report goes in the commit message, not a file. A design
-decision gets a short entry in docs/decisions.md.
+decision gets a short entry in docs/decisions.md. `make verify` enforces
+these sizes (`scripts/doc-budget.mjs`).
 Other procedures: `.claude/skills/verify-handoff`, `green-commits`.

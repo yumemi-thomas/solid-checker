@@ -254,6 +254,7 @@ jq empty schema/*.json
 jq empty fixtures/tsc-oracle/*.json
 jq empty fixtures/obligation-cases/*.json
 bun scripts/dialect-manifests.mjs validate
+bun scripts/doc-budget.mjs
 
 step ""
 summarize
