@@ -5,6 +5,7 @@
 use std::collections::{HashMap, HashSet};
 
 use solid_facts::FileFacts;
+use solid_facts::core::Span;
 use typefacts::v3::EntityDemand;
 
 use crate::dialect::Dialect;
@@ -26,6 +27,29 @@ pub(crate) fn plan(
     Ok(demands)
 }
 
+/// The spans one file's demands are planned over, collected by the passes of
+/// `plan_file` and read back when the demands are emitted.
+#[derive(Default)]
+struct DemandSpans {
+    symbol_spans: HashMap<Span, bool>,
+    type_descriptor_spans: HashSet<Span>,
+    runtime_value_domain_spans: HashSet<Span>,
+    primitive_value_domain_spans: HashSet<Span>,
+    constant_value_spans: HashSet<Span>,
+    array_shape_spans: HashSet<Span>,
+    tuple_shape_spans: HashSet<Span>,
+    library_type_spans: HashSet<Span>,
+    async_symbol_spans: HashSet<Span>,
+    async_value_spans: Vec<Span>,
+}
+
+fn add_symbol_span(symbol_spans: &mut HashMap<Span, bool>, span: Span, references: bool) {
+    symbol_spans
+        .entry(span)
+        .and_modify(|current| *current |= references)
+        .or_insert(references);
+}
+
 fn plan_file(
     dialect: &'static Dialect,
     file: &FileFacts,
@@ -34,16 +58,7 @@ fn plan_file(
 ) -> Result<(), BackendError> {
     let path = file.path.to_string();
     let structural_accessors = structural_accessor_spans(dialect, file);
-    let mut symbol_spans = HashMap::new();
-    let mut type_descriptor_spans = HashSet::new();
-    let mut runtime_value_domain_spans = HashSet::new();
-    let mut primitive_value_domain_spans = HashSet::new();
-    let mut constant_value_spans = HashSet::new();
-    let mut array_shape_spans = HashSet::new();
-    let mut tuple_shape_spans = HashSet::new();
-    let mut library_type_spans = HashSet::new();
-    let mut async_symbol_spans = HashSet::new();
-    let mut async_value_spans = Vec::new();
+    let mut spans = DemandSpans::default();
     // An expression-bodied arrow's return lives on its function fact, so both
     // spellings of a returned call have to reach the callee's resolved-call
     // demand and the call-result demand below; cleanup classification treats
@@ -60,12 +75,33 @@ fn plan_file(
         )
         .filter_map(|returned| returned.callee)
         .collect::<HashSet<_>>();
-    let mut add_symbol = |span, references| {
-        symbol_spans
-            .entry(span)
-            .and_modify(|current| *current |= references)
-            .or_insert(references);
-    };
+    let (import_bindings, import_references) = collect_symbol_spans(file, &mut spans);
+    collect_jsx_spans(file, &mut spans);
+    collect_coercion_spans(dialect, options, file, &mut spans);
+    collect_return_spans(file, &mut spans, demands, (&path, &returned_callees));
+    collect_argument_spans(dialect, file, &mut spans);
+    collect_member_spans(file, &mut spans);
+    emit_span_demands(
+        file,
+        spans,
+        demands,
+        (&path, &structural_accessors),
+        (&import_bindings, &import_references),
+    )?;
+    plan_call_demands(dialect, file, demands, (&path, &returned_callees));
+    Ok(())
+}
+
+fn collect_symbol_spans(
+    file: &FileFacts,
+    spans: &mut DemandSpans,
+) -> (HashSet<Span>, HashSet<Span>) {
+    let DemandSpans {
+        symbol_spans,
+        type_descriptor_spans,
+        ..
+    } = spans;
+    let mut add_symbol = |span, references| add_symbol_span(symbol_spans, span, references);
 
     for import in &file.ast.imports {
         for binding in import
@@ -154,6 +190,18 @@ fn plan_file(
             type_descriptor_spans.insert(item.local.span);
         }
     }
+    (import_bindings, import_references)
+}
+
+fn collect_jsx_spans(file: &FileFacts, spans: &mut DemandSpans) {
+    let DemandSpans {
+        symbol_spans,
+        type_descriptor_spans,
+        runtime_value_domain_spans,
+        array_shape_spans,
+        ..
+    } = spans;
+    let mut add_symbol = |span, references| add_symbol_span(symbol_spans, span, references);
     for element in &file.ast.jsx_elements {
         add_symbol(element.name.span, false);
         // This is intrinsic-element syntax, not component identity. The case
@@ -240,6 +288,21 @@ fn plan_file(
             add_symbol(property.value, false);
         }
     }
+}
+
+fn collect_coercion_spans(
+    dialect: &'static Dialect,
+    options: SemanticDemandOptions,
+    file: &FileFacts,
+    spans: &mut DemandSpans,
+) {
+    let DemandSpans {
+        symbol_spans,
+        type_descriptor_spans,
+        array_shape_spans,
+        ..
+    } = spans;
+    let mut add_symbol = |span, references| add_symbol_span(symbol_spans, span, references);
     // Value positions that coerce whatever they receive: an untagged template
     // interpolation stringifies it, a computed member key stringifies it as a
     // property name. Both are positions where handing over an accessor
@@ -292,6 +355,20 @@ fn plan_file(
             }
         }
     }
+}
+
+fn collect_return_spans(
+    file: &FileFacts,
+    spans: &mut DemandSpans,
+    demands: &mut Vec<EntityDemand>,
+    (path, returned_callees): (&str, &HashSet<Span>),
+) {
+    let DemandSpans {
+        symbol_spans,
+        runtime_value_domain_spans,
+        ..
+    } = spans;
+    let mut add_symbol = |span, references| add_symbol_span(symbol_spans, span, references);
     // Cleanup classification asks what a returned call *produces*. That is the
     // `callResultDomain` demand, not `runtimeValueDomain`: a call and its callee
     // share a start byte, so a value-domain fact at a call span describes the
@@ -312,7 +389,7 @@ fn plan_file(
         if !returned_callees.contains(&call.callee) {
             continue;
         }
-        let mut planned = demand(typefacts_location(&path, call.span));
+        let mut planned = demand(typefacts_location(path, call.span));
         planned.call_result_domain = true;
         demands.push(planned);
     }
@@ -469,6 +546,22 @@ fn plan_file(
             }
         }
     }
+}
+
+fn collect_argument_spans(dialect: &'static Dialect, file: &FileFacts, spans: &mut DemandSpans) {
+    let DemandSpans {
+        symbol_spans,
+        type_descriptor_spans,
+        runtime_value_domain_spans,
+        primitive_value_domain_spans,
+        constant_value_spans,
+        tuple_shape_spans,
+        library_type_spans,
+        async_symbol_spans,
+        async_value_spans,
+        ..
+    } = spans;
+    let mut add_symbol = |span, references| add_symbol_span(symbol_spans, span, references);
     for call in &file.ast.calls {
         for argument in &call.arguments {
             match argument.value {
@@ -637,7 +730,11 @@ fn plan_file(
             }
         }
     }
+}
 
+fn collect_member_spans(file: &FileFacts, spans: &mut DemandSpans) {
+    let symbol_spans = &mut spans.symbol_spans;
+    let mut add_symbol = |span, references| add_symbol_span(symbol_spans, span, references);
     // Member objects are needed to connect reads such as `props.title` and
     // `state.value` to their declarations. Querying only the property token
     // loses that provenance.
@@ -683,16 +780,37 @@ fn plan_file(
             add_symbol(*slot, true);
         }
     }
+}
+
+fn emit_span_demands(
+    file: &FileFacts,
+    spans: DemandSpans,
+    demands: &mut Vec<EntityDemand>,
+    (path, structural_accessors): (&str, &HashSet<Span>),
+    (import_bindings, import_references): (&HashSet<Span>, &HashSet<Span>),
+) -> Result<(), BackendError> {
+    let DemandSpans {
+        symbol_spans,
+        type_descriptor_spans,
+        runtime_value_domain_spans,
+        primitive_value_domain_spans,
+        constant_value_spans,
+        array_shape_spans,
+        tuple_shape_spans,
+        library_type_spans,
+        async_symbol_spans,
+        async_value_spans,
+    } = spans;
     // Reference-space discovery must not introduce symbol observations at
     // otherwise undemanded uses (for example a typeof constructor wrapper).
     // Those observations can alter independent baseline dispatch findings.
-    for reference in &import_references {
-        let mut planned = demand(typefacts_location(&path, *reference));
+    for reference in import_references {
+        let mut planned = demand(typefacts_location(path, *reference));
         planned.reference_space = true;
         demands.push(planned);
     }
     for (span, references) in symbol_spans {
-        let mut planned = demand(typefacts_location(&path, span)).symbol(references);
+        let mut planned = demand(typefacts_location(path, span)).symbol(references);
         planned.structural_accessor = structural_accessors.contains(&span);
         planned.r#async = async_symbol_spans.contains(&span);
         planned.type_descriptor = type_descriptor_spans.contains(&span);
@@ -732,15 +850,24 @@ fn plan_file(
         demands.push(demand(location).symbol(false));
     }
     for span in &file.ast.awaits {
-        demands.push(demand(typefacts_location(&path, *span)).async_context());
+        demands.push(demand(typefacts_location(path, *span)).async_context());
     }
 
     // Async facts are consumed only for function-valued call arguments and
     // functions containing await. Query those exact locations instead of
     // using one call as a whole-file discovery trigger.
     for span in async_value_spans {
-        demands.push(demand(typefacts_location(&path, span)).async_context());
+        demands.push(demand(typefacts_location(path, span)).async_context());
     }
+    Ok(())
+}
+
+fn plan_call_demands(
+    dialect: &'static Dialect,
+    file: &FileFacts,
+    demands: &mut Vec<EntityDemand>,
+    (path, returned_callees): (&str, &HashSet<Span>),
+) {
     let primitive_imports = PrimitiveImports::new(dialect, file);
     // The callbacks a leaf owner (`onSettled`, `createTrackedEffect`) runs,
     // as the dialect answers per argument. Matched by spelling, so an import
@@ -771,7 +898,7 @@ fn plan_file(
         .collect::<Vec<_>>();
     extend_leaf_demand_regions(file, &mut leaf_callbacks);
     for call in &file.ast.calls {
-        let callee = typefacts_location(&path, call.callee);
+        let callee = typefacts_location(path, call.callee);
         let property = callee_property_location(&file.source, &callee);
         let mut planned = demand(callee.clone()).symbol(false);
         // Signature-to-argument mapping is consumed when a call has an
@@ -851,7 +978,6 @@ fn plan_file(
             demands.push(member);
         }
     }
-    Ok(())
 }
 
 /// Extend leaf demand regions through exact local function references. This
