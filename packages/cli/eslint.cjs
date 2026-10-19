@@ -270,66 +270,14 @@ const NATIVE_VALUE_OPTIONS = new Set([
 const NATIVE_FLAGS = new Set([
   "--certify", "--internal", "--feedback-facts", "--serve", "--help", "-h", "--no-package-contracts"
 ]);
-/** Options whose presence may select package source under the native default. */
-const SOURCE_OPTIONS = new Set([
-  "--dependency-source", "--runtime-target", "--runtime-build", "--daemon-runtime"
-]);
-
 /**
- * What `commandArgs` say about package source, read at the positions native
- * reads options: `source` for a host or selection option, `contractsOff` for `--no-package-contracts`
- * as an option, and `opaque` for an option this table does not know, whose
- * arity -- and so whether a later token is an option at all -- is unknown. A
- * token that is no option is a wrapper's own argument (a script path); native
- * refuses one.
- */
-function commandArgsSource(userArgs) {
-  const read = { source: false, opaque: false, contractsOff: false };
-  for (let index = 0; index < userArgs.length; index++) {
-    const argument = String(userArgs[index]);
-    if (!argument.startsWith("-")) continue;
-    if (NATIVE_VALUE_OPTIONS.has(argument)) {
-      if (SOURCE_OPTIONS.has(argument)) read.source = true;
-      index++;
-    } else if (argument === "--no-package-contracts") {
-      read.contractsOff = true;
-    } else if (!NATIVE_FLAGS.has(argument)) {
-      read.opaque = true;
-    }
-  }
-  return read;
-}
-
-/**
- * Whether the native run may analyze installed package source (ADR 0297):
- * under a declared target and build it does, and a host or selection in
- * `commandArgs` may make it so. An option the adapter cannot
- * read makes the answer unknown, and unknown is taken as source.
- * Over-answering is the safe side; it only costs the cross-pass cache.
- */
-function readsPackageSource(userArgs, runtime) {
-  const read = commandArgsSource(userArgs);
-  if (read.opaque) return true;
-  return Boolean(runtime?.target && runtime?.build) || read.source;
-}
-
-/**
- * Whether a run is reused within one file's pass only. A run that reads
- * package source is (see `readsPackageSource`), and so is one checking with
- * `--no-package-contracts`: its result depends on the project's catalog files
- * and on installed package entries, none of which the cross-pass key follows,
- * so it is analyzed afresh every pass.
- */
-function passOnly(userArgs, runtime) {
-  return commandArgsSource(userArgs).contractsOff || readsPackageSource(userArgs, runtime);
-}
-
-/**
- * One analysis per lint pass over a file, for a run that reads package source.
+ * One analysis per lint pass over a file.
  *
- * The cross-pass cache keys on settings alone, and nothing in that key moves
- * when an installed package's file does, so a persistent editor session would
- * serve a snapshot of package bytes that are gone. The pass is ESLint's
+ * A cache across passes would key on settings alone, and nothing in that key
+ * moves when a source, a manifest, a config or an installed package does, so
+ * a persistent editor session would serve a snapshot of bytes that are gone.
+ * Repeat checks are fast because native answers them from its daemon, which
+ * validates every input. The pass is ESLint's
  * per-pass file context: `runRules` (lib/linter/linter.js) builds one
  * `FileContext` per pass and every rule's context of that pass is
  * `fileContext.extend(...)`, an object whose prototype it is. It is found as
@@ -369,6 +317,41 @@ function endPass(context) {
   if (pass != null) passSnapshots.delete(pass);
 }
 
+/**
+ * The native executable the launcher would run, resolved once per process
+ * through the launcher's own search (override, packaged binding, repository
+ * `bin/`), so each lint pass spawns native directly instead of a Node
+ * launcher. Resolution failures surface as an analysis failure.
+ */
+let resolvedNative;
+function defaultNative() {
+  if (resolvedNative) return resolvedNative;
+  const launcher = require("node:url").pathToFileURL(join(__dirname, "bin", "launcher.mjs")).href;
+  const result = spawnSync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      `import { nativeInvocationFor } from ${JSON.stringify(launcher)};\n` +
+        `process.stdout.write(JSON.stringify(nativeInvocationFor("solid-checker")));`
+    ],
+    { encoding: "utf8", env: process.env }
+  );
+  if (result.status !== 0 || result.error) {
+    throw new Error(
+      `solid-checker adapter could not resolve the native binary: ${
+        result.error?.message ?? result.stderr.trim()
+      }`
+    );
+  }
+  const invocation = JSON.parse(result.stdout);
+  const env = Object.fromEntries(
+    Object.entries(invocation.env).filter(([, value]) => typeof value === "string")
+  );
+  resolvedNative = { executable: invocation.executable, env };
+  return resolvedNative;
+}
+
 function loadSnapshot(context) {
   const config = configuration(context);
   if (config.snapshot != null) return config.snapshot;
@@ -382,13 +365,11 @@ function loadSnapshot(context) {
   }
 
   const project = configuredProject(context, config);
-  const command = config.command ?? process.env.SOLID_CHECKER_BIN ?? process.execPath;
-  const userArgs = config.command || process.env.SOLID_CHECKER_BIN
-    ? [...(config.commandArgs ?? [])]
-    : [];
-  const commandArgs = config.command || process.env.SOLID_CHECKER_BIN
-    ? userArgs
-    : [join(__dirname, "bin", "solid-checker.mjs")];
+  const custom = Boolean(config.command || process.env.SOLID_CHECKER_BIN);
+  const native = custom ? null : defaultNative();
+  const command = config.command ?? process.env.SOLID_CHECKER_BIN ?? native.executable;
+  const userArgs = custom ? [...(config.commandArgs ?? [])] : [];
+  const commandArgs = userArgs;
   refuseRetiredSettings(config);
   const dialect = config.dialect ?? null;
   const presets = [...new Set(Array.isArray(config.preset) ? config.preset : [])].sort();
@@ -414,31 +395,23 @@ function loadSnapshot(context) {
     runtimeResolution,
     inferredHostInputs
   });
-  // ADR 0297: a run that reads installed package source is reused within one
-  // file's pass only (`passCache`). An observed runtime is never reused.
-  const pass = !observesRuntime && passOnly(userArgs, runtime)
-    ? passCache(context) ?? new Map()
-    : null;
-  const store = (value) => (pass ?? snapshotCache).set(key, value);
-  if (pass?.has(key)) {
+  // A snapshot is reused within one file's pass only (`passCache`); every
+  // pass asks native again. The adapter does not know the analyzed inputs
+  // (sources, manifests, configs, installed packages), so a cross-pass cache
+  // keyed on settings served a long-lived ESLint process (an editor server)
+  // the first snapshot through every later edit. Native answers a repeat
+  // check from its daemon, which validates those inputs, in milliseconds.
+  // An observed runtime is never reused, not even within a pass.
+  const pass = observesRuntime ? new Map() : passCache(context) ?? new Map();
+  const store = (value) => pass.set(key, value);
+  if (pass.has(key)) {
     const cached = pass.get(key);
     if (cached instanceof Error) throw cached;
     return cached;
   }
-  // Inference now depends on installed transitive plugin bytes. Let native
-  // validate that closure on every request instead of duplicating its resolver
-  // and allowlist in this adapter's in-process cache.
-  if (pass === null && !observesRuntime && inferredHostInputs === null && snapshotCache.has(key)) {
-    const cached = snapshotCache.get(key);
-    if (cached instanceof Error) throw cached;
-    return cached;
-  }
 
-  // Failures share the snapshot cache and its process lifetime: a persistent
-  // editor session with a broken binary reports the cached error to every
-  // rule of every lint pass instead of re-spawning the checker each time. A
-  // run reading package source keeps its failure for the pass alone, so an
-  // install that fixes it recovers on the next pass.
+  // A failure is kept for the pass alone, so a fixed binary or install
+  // recovers on the next pass.
   const failure = message => {
     const error = new Error(message);
     store(error);
@@ -473,8 +446,11 @@ function loadSnapshot(context) {
     encoding: "utf8",
     env: {
       ...process.env,
+      ...(native?.env ?? {}),
       SOLID_CHECKER_RUNTIME_RESOLVER: process.env.SOLID_CHECKER_RUNTIME_RESOLVER
-        ?? join(__dirname, "scripts", "runtime-resolver.mjs")
+        ?? native?.env.SOLID_CHECKER_RUNTIME_RESOLVER
+        ?? join(__dirname, "scripts", "runtime-resolver.mjs"),
+      ...(process.env.SOLID_TYPEFACTS_BIN ? { SOLID_TYPEFACTS_BIN: process.env.SOLID_TYPEFACTS_BIN } : {})
     }
   });
   if (result.error) {

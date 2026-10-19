@@ -111,6 +111,20 @@ export function nativeExecutable(command) {
   return nativeInvocation(command).executable;
 }
 
+// The executable and the environment it is spawned with, for a host that
+// spawns it itself (the ESLint adapter, which is CommonJS and runs in a
+// long-lived process): only the variables the launcher sets.
+export function nativeInvocationFor(command) {
+  const { executable, env } = nativeInvocation(command);
+  return {
+    executable,
+    env: {
+      SOLID_TYPEFACTS_BIN: env.SOLID_TYPEFACTS_BIN,
+      SOLID_CHECKER_RUNTIME_RESOLVER: env.SOLID_CHECKER_RUNTIME_RESOLVER
+    }
+  };
+}
+
 export function runNative(command, args, options = {}) {
   const { executable, env } = nativeInvocation(command);
   return spawnSync(executable, args, {

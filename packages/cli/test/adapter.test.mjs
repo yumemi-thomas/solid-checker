@@ -46,7 +46,7 @@ process.stdout.write(JSON.stringify({status:'certified',findings:[]}));`);
     plugin._testing.loadSnapshot(context({ target: "browser" }));
     writeFileSync(filename, "export const changed = true;");
     plugin._testing.loadSnapshot(context({ target: "browser" }));
-    assert.equal(readFileSync(counter, "utf8"), "5", "explicit target bypasses inference identity");
+    assert.equal(readFileSync(counter, "utf8"), "6", "every pass asks native again, explicit target or not");
   } finally {
     plugin._testing.snapshotCache.clear();
     rmSync(root, { recursive: true, force: true });
@@ -253,7 +253,7 @@ test("projects safe same-file fixes and UTF-8 byte ranges", () => {
   assert.equal(plugin._testing.byteOffsetToIndex("😀value", 4), 2);
 });
 
-test("discovers tsconfig and runs native analysis once per project", () => {
+test("discovers tsconfig and asks native once per lint pass", () => {
   const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-"));
   const sourceRoot = join(root, "src");
   mkdirSync(sourceRoot);
@@ -290,10 +290,11 @@ process.stdout.write(JSON.stringify({ status: "certified", findings: [] }));
     assert.equal(snapshot.status, "certified");
     assert.equal(plugin._testing.configuredProject(context, config), join(root, "tsconfig.json"));
   }
-  assert.equal(readFileSync(counter, "utf8"), "1");
+  // Two files are two passes; native's daemon makes the repeat cheap.
+  assert.equal(readFileSync(counter, "utf8"), "2");
 });
 
-test("caches a failed analysis instead of re-spawning every lint pass", () => {
+test("keeps a failed analysis for its lint pass only", () => {
   const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-"));
   writeFileSync(join(root, "tsconfig.json"), "{}\n");
   const counter = join(root, "runs.txt");
@@ -309,16 +310,20 @@ process.exit(2);
   plugin._testing.snapshotCache.clear();
   const filename = join(root, "App.tsx");
   writeFileSync(filename, "export {};\n");
-  const context = {
+  const context = () => ({
     filename,
     physicalFilename: filename,
+    sourceCode: sourceCode("export {};\n"),
     settings: { solidChecker: { command: process.execPath, commandArgs: [analyzer, counter] } },
     options: []
-  };
+  });
   const expected = /analysis failed \(2\): analysis exploded/;
-  assert.throws(() => plugin._testing.loadSnapshot(context), expected);
-  assert.throws(() => plugin._testing.loadSnapshot(context), expected);
-  assert.equal(readFileSync(counter, "utf8"), "1");
+  const pass = context();
+  assert.throws(() => plugin._testing.loadSnapshot(pass), expected);
+  assert.throws(() => plugin._testing.loadSnapshot(Object.create(pass)), expected);
+  assert.equal(readFileSync(counter, "utf8"), "1", "the rules of one pass share the failure");
+  assert.throws(() => plugin._testing.loadSnapshot(context()), expected);
+  assert.equal(readFileSync(counter, "utf8"), "2", "a later pass tries again");
   plugin._testing.snapshotCache.clear();
 });
 
@@ -410,7 +415,10 @@ test("adapter presets and enabled rules are normalized into argv and cache ident
 appendFileSync(process.argv[2], JSON.stringify(process.argv.slice(3)) + "\\n");
 process.stdout.write(JSON.stringify({ status: "certified", findings: [] }));
 `);
-  const context = (preset, enableRule) => ({
+  // One pass: its rules share an analysis when their settings normalize to
+  // the same identity.
+  const pass = { sourceCode: sourceCode("") };
+  const context = (preset, enableRule) => Object.assign(Object.create(pass), {
     filename: join(root, "App.tsx"),
     physicalFilename: join(root, "App.tsx"),
     settings: { solidChecker: {
@@ -447,7 +455,8 @@ test("adapter forwards explicit runtime conditions and includes them in cache id
 appendFileSync(process.argv[2], JSON.stringify(process.argv.slice(3)) + "\\n");
 process.stdout.write(JSON.stringify({ status: "certified", findings: [] }));
 `);
-  const context = runtime => ({
+  const pass = { sourceCode: sourceCode("") };
+  const context = runtime => Object.assign(Object.create(pass), {
     filename: join(root, "App.tsx"),
     physicalFilename: join(root, "App.tsx"),
     settings: { solidChecker: {
@@ -866,7 +875,7 @@ test("a note reaches ESLint once per linted file, as a warning", () => {
     assert.match(messages[0].message, /^\[solid-checker note\] packages are not analyzed/);
     assert.ok(!messages[0].message.includes("timing noise"), "only note lines surface");
   }
-  assert.equal(invocations().length, 1, "the note rides the cached snapshot");
+  assert.equal(invocations().length, 2, "each linted file's pass asks native once");
 
   // Every shipped config and both listing orders: exactly one note, from the
   // note rule, at warn -- certification, re-enabled or not, never repeats it.
@@ -899,7 +908,9 @@ test("a note reaches ESLint once per linted file, as a warning", () => {
   );
   assert.equal(raised.length, 1);
   assert.equal(raised[0].severity, 2);
-  assert.equal(invocations().length, 1, "the note rule shares the pass's analysis");
+  // Ten passes so far (2 files, 4 configs, 4 single lints): one analysis each,
+  // shared by the note rule and every other rule of the pass.
+  assert.equal(invocations().length, 10, "the note rule shares the pass's analysis");
 
   // A pass that ends in a thrown analysis never reaches Program:exit; a later
   // pass over the same file must still carry the note.
@@ -924,7 +935,7 @@ test("a note reaches ESLint once per linted file, as a warning", () => {
   plugin._testing.snapshotCache.clear();
 });
 
-test("a run that reads package source is reused within one file's pass only (ADR 0297)", () => {
+test("every run is reused within one file's pass only", () => {
   const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-source-"));
   try {
     const project = join(root, "tsconfig.json");
@@ -952,17 +963,11 @@ test("a run that reads package source is reused within one file's pass only (ADR
     assert.equal(invocations().length, 2, "a later pass analyzes again");
     assert.equal(plugin._testing.snapshotCache.size, 0, "nothing enters the cross-pass cache");
 
-    // A target alone selects nothing, so the cross-pass cache stands.
+    // So is every other run: no cross-pass cache follows the inputs.
     plugin._testing.loadSnapshot(context({ runtime: { target: "browser" } }));
     plugin._testing.loadSnapshot(context({ runtime: { target: "browser" } }));
-    assert.equal(invocations().length, 3);
-
-    // A host or selection spelled in commandArgs counts as reading source.
-    for (const extra of [["--runtime-build", "development"], ["--dependency-source", "*"]]) {
-      plugin._testing.loadSnapshot(context({ runtime: { target: "browser" } }, extra));
-      plugin._testing.loadSnapshot(context({ runtime: { target: "browser" } }, extra));
-    }
-    assert.equal(invocations().length, 7);
+    assert.equal(invocations().length, 4);
+    assert.equal(plugin._testing.snapshotCache.size, 0);
   } finally {
     plugin._testing.snapshotCache.clear();
     rmSync(root, { recursive: true, force: true });
@@ -1042,14 +1047,13 @@ test("a run with --no-package-contracts is reused within one pass only", () => {
     assert.equal(plugin._testing.snapshotCache.size, 0, "nothing enters the cross-pass cache");
     assert.equal(runs(), 3);
 
-    // The control: the same token as `--runtime-condition`'s value is a value.
-    // That run is cached across passes as before, so a later edit is not seen.
+    // Any other run, too: a later edit is seen on the next pass.
     const valued = ["--runtime-condition", "--no-package-contracts"];
     assert.deepEqual(messages(valued), ["after-edit 4", "after-edit 4"]);
     writeFileSync(join(root, "epoch.txt"), "later-edit");
-    assert.deepEqual(messages(valued), ["after-edit 4", "after-edit 4"],
-      "a value is not the flag: the cross-pass cache stands");
-    assert.equal(runs(), 4);
+    assert.deepEqual(messages(valued), ["later-edit 5", "later-edit 5"],
+      "no cross-pass cache serves a stale snapshot");
+    assert.equal(runs(), 5);
   } finally {
     plugin._testing.snapshotCache.clear();
     rmSync(root, { recursive: true, force: true });
@@ -1130,7 +1134,7 @@ test("a SourceCode linted again is a new pass and analyzes again (ADR 0297 revie
   }
 });
 
-test("commandArgs are read at native's option positions (ADR 0297 review)", () => {
+test("no commandArgs make a pass reuse another's analysis", () => {
   const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-argv-"));
   try {
     const project = join(root, "tsconfig.json");
@@ -1157,15 +1161,12 @@ test("commandArgs are read at native's option positions (ADR 0297 review)", () =
     assert.equal(runs(), 2);
     assert.equal(plugin._testing.snapshotCache.size, 0);
 
-    // An option the adapter cannot read leaves arity unknown: taken as source.
     lint({}, ["--some-future-option", "--certify"]);
     lint({}, ["--some-future-option", "--certify"]);
     assert.equal(runs(), 4);
-
-    // Without a host or an unknown option, the cross-pass cache stands.
     lint({}, ["--certify"]);
     lint({}, ["--certify"]);
-    assert.equal(runs(), 5);
+    assert.equal(runs(), 6);
   } finally {
     plugin._testing.snapshotCache.clear();
     rmSync(root, { recursive: true, force: true });

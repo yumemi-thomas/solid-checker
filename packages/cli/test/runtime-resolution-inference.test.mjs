@@ -19,7 +19,9 @@ const state = process.argv[2];
 const previous = existsSync(state) ? JSON.parse(readFileSync(state, "utf8")) : { count: 0 };
 writeFileSync(state, JSON.stringify({ count: previous.count + 1, args: process.argv.slice(3), resolver: process.env.SOLID_CHECKER_RUNTIME_RESOLVER }));
 process.stdout.write(JSON.stringify({ status: "certified", findings: [] }));`);
-    const context = runtimeResolution => ({
+    // One lint pass: its rules share an analysis by settings identity.
+    const pass = { sourceCode: { text: "" } };
+    const context = runtimeResolution => Object.assign(Object.create(pass), {
       filename: join(root, "main.ts"),
       settings: { solidChecker: {
         project, command: process.execPath, commandArgs: [analyzer, state],

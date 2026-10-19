@@ -1,5 +1,20 @@
 # Precision backlog
 
+## 2026-10-19 — The ESLint adapter no longer serves stale snapshots across passes
+
+`packages/cli/eslint.cjs` kept one in-process `snapshotCache` keyed on
+settings alone, so a long-lived ESLint process (an editor server) served the
+first analysis through every later edit (recorded under ADR 0322, confirmed
+by the adapter's own test). Every lint pass now asks native again, and the
+rules of one pass share its analysis (`passCache`). Native answers a repeat
+from its daemon, which validates sources, manifests, configs and installed
+packages: 2–4 ms per pass on a fixture after a 64 ms first pass. The adapter
+resolves the native binary once per process through the launcher's own search
+(`nativeInvocationFor`), so a pass no longer spawns a Node launcher (about
+0.3 s). The `snapshotPath` setting still caches its file, which is a fixed
+input. Ten adapter tests that pinned the cross-pass reuse now pin per-pass
+reuse.
+
 ## 2026-10-19 — The daemon follows a tsconfig's `extends` chain
 
 A retained daemon program now fingerprints every config its tsconfig
