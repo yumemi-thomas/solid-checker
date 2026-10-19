@@ -388,27 +388,372 @@ pub(super) fn interprocedural_reads(
 ) -> InterproceduralResult {
     let InterproceduralContext {
         facts,
-        project_indexes,
         accessors,
-        returned_source_symbols,
-        summary_source_symbols,
-        source_phases,
         source_kinds,
         entities,
-        references_by_source: _,
         symbol_names,
-        retained_source_paths,
-        typed_sources,
         lookup,
+        ..
     } = context;
     let InterproceduralCaches {
         graph: mut interprocedural_graph_cache,
         results: mut interprocedural_result_cache,
     } = caches;
     let mut phase_started = Instant::now();
+    let (nodes, graph_node_reused_paths) =
+        discover_summary_graph_nodes(context, interprocedural_graph_cache.as_deref_mut());
+    let provenance = accessor_provenance::Resolver::new(
+        facts,
+        lookup,
+        accessors,
+        source_kinds,
+        symbol_names,
+        nodes
+            .iter()
+            .map(|node| (node.path.clone(), node.span))
+            .collect(),
+    );
+    let (transported_calls, unavailable_calls, array_source_origins) =
+        transported_call_targets(context, &provenance);
+    let transport_identity_matches = interprocedural_result_cache.as_ref().is_none_or(|cache| {
+        cache.transported_calls == transported_calls
+            && cache.unavailable_calls == unavailable_calls
+            && cache.array_source_origins == array_source_origins
+    });
+    let (transported_bodies, array_member_bodies) = transported_body_sets(&transported_calls);
+    let nodes_by_path = function_indices_by_path(&nodes);
+    let (indexes, by_symbol) = summary_node_indexes(&nodes);
+    let mut summaries = vec![SummaryReads::default(); nodes.len()];
+    let mut callback_summaries = vec![Vec::<CallbackSummary>::new(); nodes.len()];
+    let mut callback_forwardings = Vec::new();
+    let mut dispatches = Vec::<(usize, Vec<usize>)>::new();
+    let mut unresolved_callback_obligations =
+        vec![Vec::<UnresolvedCallbackObligation>::new(); nodes.len()];
+    let mut dispatch_obligations = Vec::new();
+    let mut edges = vec![Vec::<usize>::new(); nodes.len()];
+    let mut guaranteed_edges = HashSet::<(usize, usize)>::new();
+    let mut invoked_parameters = vec![Vec::<usize>::new(); nodes.len()];
+    let mut direct_callback_parameters = vec![Vec::<usize>::new(); nodes.len()];
+    let mut guaranteed_callback_parameters = vec![Vec::<usize>::new(); nodes.len()];
+    let mut direct_protocol_parameters =
+        vec![Vec::<(crate::summary_semantics::InvokeProtocol, usize)>::new(); nodes.len()];
+    let mut direct_member_callback_parameters =
+        vec![Vec::<(usize, Vec<String>)>::new(); nodes.len()];
+    let mut escaped_parameters = vec![Vec::<usize>::new(); nodes.len()];
+    let mut invoked_parameter_members = vec![Vec::<ParameterMemberInvocation>::new(); nodes.len()];
+    let mut returned_binding_candidates = Vec::new();
+    let mut factory_call_candidates = Vec::new();
+    let (graph_reused_files, graph_recomputed_files) = {
+        let mut graph = InterproceduralGraphAssembly {
+            nodes: &nodes,
+            nodes_by_path: &nodes_by_path,
+            by_symbol: &by_symbol,
+            summaries: &mut summaries,
+            callback_summaries: &mut callback_summaries,
+            callback_forwardings: &mut callback_forwardings,
+            dispatches: &mut dispatches,
+            unresolved_callback_obligations: &mut unresolved_callback_obligations,
+            edges: &mut edges,
+            guaranteed_edges: &mut guaranteed_edges,
+            invoked_parameters: &mut invoked_parameters,
+            direct_callback_parameters: &mut direct_callback_parameters,
+            guaranteed_callback_parameters: &mut guaranteed_callback_parameters,
+            direct_protocol_parameters: &mut direct_protocol_parameters,
+            direct_member_callback_parameters: &mut direct_member_callback_parameters,
+            escaped_parameters: &mut escaped_parameters,
+            invoked_parameter_members: &mut invoked_parameter_members,
+            returned_bindings: &mut returned_binding_candidates,
+            factory_calls: &mut factory_call_candidates,
+        };
+        merge_graph_contributions(
+            context,
+            &nodes,
+            &nodes_by_path,
+            &graph_node_reused_paths,
+            interprocedural_graph_cache,
+            &mut graph,
+        )
+    };
+    refresh_member_invocation_contexts(
+        context,
+        &nodes,
+        &nodes_by_path,
+        &mut invoked_parameter_members,
+    );
+    let transported_edges = add_transported_call_summaries(
+        &TransportedCallInputs {
+            context,
+            provenance: &provenance,
+            transported_calls: &transported_calls,
+            transported_bodies: &transported_bodies,
+            nodes: &nodes,
+            nodes_by_path: &nodes_by_path,
+            indexes: &indexes,
+        },
+        &mut summaries,
+        &mut edges,
+        &mut guaranteed_edges,
+    );
+    // Extra memo-wrapper source origins also enter through ordinary discovery.
+    // Tag those rows before any normal summary hop can copy them.
+    tag_extra_source_origins(&provenance, &mut summaries);
+    propagate_callback_forwardings(
+        &callback_forwardings,
+        &nodes,
+        &mut escaped_parameters,
+        &mut callback_summaries,
+        &mut unresolved_callback_obligations,
+    );
+    let graph = phase_started.elapsed();
+    phase_started = Instant::now();
+    let (direct_index, direct_references, direct_summaries) = add_direct_reference_summaries(
+        context,
+        interprocedural_result_cache.as_deref_mut(),
+        &nodes,
+        &nodes_by_path,
+        &mut summaries,
+        phase_started,
+    );
+    phase_started = Instant::now();
+    let ReturnedSummaries {
+        mut returned,
+        returned_edges,
+        returns_by_ast_owner,
+    } = collect_returned_summaries(
+        context,
+        &nodes,
+        &nodes_by_path,
+        &indexes,
+        &by_symbol,
+        &mut summaries,
+    );
+    let returned_direct = phase_started.elapsed();
+    let returned_delta_started = Instant::now();
+    propagate_returned_summary_deltas(&mut returned, &returned_edges);
+    let returned_delta = returned_delta_started.elapsed();
+    let call_summary_delta_started = Instant::now();
+    let mut summary_propagation = SummaryPropagation {
+        reverse_edges: reverse_summary_edges(&mut edges),
+        propagated_lengths: vec![0; summaries.len()],
+        transported_edges,
+        guaranteed_edges,
+    };
+    summary_propagation.run(&mut summaries);
+
+    attach_dispatch_edges(
+        &DispatchGraph {
+            dispatches: &dispatches,
+            nodes: &nodes,
+            callback_summaries: &callback_summaries,
+            unresolved_callback_obligations: &unresolved_callback_obligations,
+            invoked_parameters: &invoked_parameters,
+            direct_callback_parameters: &direct_callback_parameters,
+            guaranteed_callback_parameters: &guaranteed_callback_parameters,
+            direct_protocol_parameters: &direct_protocol_parameters,
+            direct_member_callback_parameters: &direct_member_callback_parameters,
+            invoked_parameter_members: &invoked_parameter_members,
+        },
+        &mut summaries,
+        &mut edges,
+        &mut summary_propagation,
+    );
+
+    add_returned_function_reads(
+        context,
+        &nodes,
+        &indexes,
+        &summaries,
+        &returns_by_ast_owner,
+        &mut returned,
+    );
+    let call_summary_delta = call_summary_delta_started.elapsed();
+    let factory_propagation_started = Instant::now();
+    let returned_bindings = propagate_factory_reads(
+        context,
+        &nodes,
+        &by_symbol,
+        &returned,
+        &FactoryCandidates {
+            returned_bindings: &returned_binding_candidates,
+            factory_calls: &factory_call_candidates,
+        },
+        &mut summaries,
+        &mut summary_propagation,
+    );
+
+    let factory_propagation = factory_propagation_started.elapsed();
+    let propagation = phase_started.elapsed();
+    phase_started = Instant::now();
+    let result_view = InterproceduralResultView {
+        nodes: &nodes,
+        indexes: &indexes,
+        by_symbol: &by_symbol,
+        summaries: &summaries,
+        invoked_parameters: &invoked_parameters,
+        invoked_parameter_members: &invoked_parameter_members,
+        returned_bindings: &returned_bindings,
+    };
+    let result_read_context = InterproceduralResultReadContext {
+        result: result_view,
+        source_kinds,
+        accessors,
+        entities,
+        symbol_names,
+        lookup: context.lookup,
+        transported_calls: &transported_calls,
+        unavailable_calls: &unavailable_calls,
+        array_member_bodies: &array_member_bodies,
+        provenance: &provenance,
+    };
+    let ResultReads {
+        mut result,
+        result_reused_files,
+        result_recomputed_files,
+    } = collect_result_reads(
+        context,
+        interprocedural_result_cache,
+        transport_identity_matches,
+        &result_read_context,
+        &array_source_origins,
+        &mut dispatch_obligations,
+    );
+    // ADR 0289: computed fresh on every analysis, never retained per file:
+    // the derivation reads other files' literals and the provider census.
+    if !facts.dependency_source_roots.is_empty() {
+        let (getter_reads, getter_obligations) = dependency_getter_obligations(
+            facts,
+            context.lookup,
+            &provenance,
+            entities,
+            symbol_names,
+        );
+        result.extend(getter_reads);
+        dispatch_obligations.extend(getter_obligations);
+    }
+    export_parameter_member_dispatch_obligations(context, &nodes, &mut dispatch_obligations);
+    let factory_instances = returned_bindings
+        .values()
+        .filter(|summary| !summary.is_empty())
+        .count();
+    let result_reads = phase_started.elapsed();
+    let export_summaries = export_structured_return_obligations(
+        context,
+        &StructuredReturnInputs {
+            nodes: &nodes,
+            indexes: &indexes,
+            by_symbol: &by_symbol,
+            summaries: &summaries,
+            returned: &returned,
+        },
+        &mut dispatch_obligations,
+    );
+    let results_and_exports = phase_started.elapsed();
+    InterproceduralResult {
+        reads: result.into(),
+        source_call_targets: Arc::new(transported_calls),
+        dispatch_obligations: dispatch_obligations.into(),
+        factory_instances,
+        timings: InterproceduralTimings {
+            graph,
+            direct_summaries,
+            direct_index,
+            direct_references,
+            propagation,
+            returned_direct,
+            returned_delta,
+            call_summary_delta,
+            factory_propagation,
+            results_and_exports,
+            result_reads,
+            export_summaries,
+            graph_reused_files,
+            graph_recomputed_files,
+            result_reused_files,
+            result_recomputed_files,
+        },
+    }
+}
+
+type TransportedBodies<'a> = HashSet<(&'a str, Span)>;
+type SummaryNodeIndexes = (HashMap<(String, Span), usize>, HashMap<SymbolId, usize>);
+
+fn transported_body_sets(
+    transported_calls: &HashMap<Location, accessor_provenance::Callable>,
+) -> (TransportedBodies<'_>, HashSet<(String, Span)>) {
+    let mut transported_bodies = HashSet::new();
+    let mut array_member_bodies = HashSet::new();
+    for target in transported_calls.values() {
+        match target {
+            accessor_provenance::Callable::Function { path, span } => {
+                transported_bodies.insert((path.as_str(), *span));
+            }
+            accessor_provenance::Callable::ArrayMembers(targets) => {
+                array_member_bodies.extend(targets.iter().cloned());
+                transported_bodies
+                    .extend(targets.iter().map(|(path, span)| (path.as_str(), *span)));
+            }
+            accessor_provenance::Callable::Accessor(_) => {}
+        }
+    }
+    (transported_bodies, array_member_bodies)
+}
+
+fn summary_node_indexes(nodes: &[SummaryNode]) -> SummaryNodeIndexes {
+    let indexes = nodes
+        .iter()
+        .enumerate()
+        .map(|(index, node)| ((node.path.clone(), node.span), index))
+        .collect::<HashMap<_, _>>();
+    let by_symbol = nodes
+        .iter()
+        .enumerate()
+        .filter_map(|(index, node)| node.symbol.clone().map(|symbol| (symbol, index)))
+        .collect::<HashMap<_, _>>();
+    (indexes, by_symbol)
+}
+
+fn tag_extra_source_origins(
+    provenance: &accessor_provenance::Resolver<'_, '_>,
+    summaries: &mut [SummaryReads],
+) {
+    if provenance.has_extra_source_origins() {
+        for summary in summaries {
+            for read in &mut summary.ordered {
+                read.transported |= provenance.has_source_origin(&read.symbol);
+            }
+        }
+    }
+}
+
+fn reverse_summary_edges(edges: &mut [Vec<usize>]) -> Vec<Vec<usize>> {
+    let mut reverse_edges = vec![Vec::new(); edges.len()];
+    for (owner, targets) in edges.iter_mut().enumerate() {
+        targets.sort_unstable();
+        targets.dedup();
+        for target in targets.iter().copied() {
+            reverse_edges[target].push(owner);
+        }
+    }
+    reverse_edges
+}
+
+fn discover_summary_graph_nodes<'a>(
+    context: &InterproceduralContext<'a, '_>,
+    interprocedural_graph_cache: Option<
+        &mut HashMap<solid_facts::core::SourcePath, CachedInterproceduralGraph>,
+    >,
+) -> (Vec<SummaryNode>, HashSet<&'a str>) {
+    let InterproceduralContext {
+        facts,
+        project_indexes,
+        entities,
+        retained_source_paths,
+        lookup,
+        ..
+    } = context;
     let mut nodes = Vec::new();
     let mut graph_node_reused_paths = HashSet::new();
-    if let Some(cache) = interprocedural_graph_cache.as_deref_mut() {
+    if let Some(cache) = interprocedural_graph_cache {
         let current_paths = facts
             .files
             .iter()
@@ -459,17 +804,18 @@ pub(super) fn interprocedural_reads(
             nodes.extend(file_nodes);
         }
     }
-    let provenance = accessor_provenance::Resolver::new(
-        facts,
-        lookup,
-        accessors,
-        source_kinds,
-        symbol_names,
-        nodes
-            .iter()
-            .map(|node| (node.path.clone(), node.span))
-            .collect(),
-    );
+    (nodes, graph_node_reused_paths)
+}
+
+fn transported_call_targets(
+    context: &InterproceduralContext<'_, '_>,
+    provenance: &accessor_provenance::Resolver<'_, '_>,
+) -> (
+    HashMap<Location, accessor_provenance::Callable>,
+    HashSet<Location>,
+    HashSet<SymbolId>,
+) {
+    let lookup = context.lookup;
     let (mut transported_calls, unavailable_calls) = provenance.calls();
     // ADR 0299 review: accessor transport predates the shared exact object
     // target map. An escaped or uninitialized literal must not regain its
@@ -502,88 +848,56 @@ pub(super) fn interprocedural_reads(
     } else {
         HashSet::new()
     };
-    let transport_identity_matches = interprocedural_result_cache.as_ref().is_none_or(|cache| {
-        cache.transported_calls == transported_calls
-            && cache.unavailable_calls == unavailable_calls
-            && cache.array_source_origins == array_source_origins
-    });
-    let mut transported_bodies = HashSet::new();
-    let mut array_member_bodies = HashSet::new();
-    for target in transported_calls.values() {
-        match target {
-            accessor_provenance::Callable::Function { path, span } => {
-                transported_bodies.insert((path.as_str(), *span));
-            }
-            accessor_provenance::Callable::ArrayMembers(targets) => {
-                array_member_bodies.extend(targets.iter().cloned());
-                transported_bodies
-                    .extend(targets.iter().map(|(path, span)| (path.as_str(), *span)));
-            }
-            accessor_provenance::Callable::Accessor(_) => {}
-        }
-    }
-    let nodes_by_path = function_indices_by_path(&nodes);
-    let indexes = nodes
-        .iter()
-        .enumerate()
-        .map(|(index, node)| ((node.path.clone(), node.span), index))
-        .collect::<HashMap<_, _>>();
-    let by_symbol = nodes
-        .iter()
-        .enumerate()
-        .filter_map(|(index, node)| node.symbol.clone().map(|symbol| (symbol, index)))
-        .collect::<HashMap<_, _>>();
-    let mut summaries = vec![SummaryReads::default(); nodes.len()];
-    let mut callback_summaries = vec![Vec::<CallbackSummary>::new(); nodes.len()];
-    let mut callback_forwardings = Vec::new();
-    let mut dispatches = Vec::<(usize, Vec<usize>)>::new();
-    let mut unresolved_callback_obligations =
-        vec![Vec::<UnresolvedCallbackObligation>::new(); nodes.len()];
-    let mut dispatch_obligations = Vec::new();
-    let mut edges = vec![Vec::<usize>::new(); nodes.len()];
-    let mut guaranteed_edges = HashSet::<(usize, usize)>::new();
-    let mut invoked_parameters = vec![Vec::<usize>::new(); nodes.len()];
-    let mut direct_callback_parameters = vec![Vec::<usize>::new(); nodes.len()];
-    let mut guaranteed_callback_parameters = vec![Vec::<usize>::new(); nodes.len()];
-    let mut direct_protocol_parameters =
-        vec![Vec::<(crate::summary_semantics::InvokeProtocol, usize)>::new(); nodes.len()];
-    let mut direct_member_callback_parameters =
-        vec![Vec::<(usize, Vec<String>)>::new(); nodes.len()];
-    let mut escaped_parameters = vec![Vec::<usize>::new(); nodes.len()];
-    let mut invoked_parameter_members = vec![Vec::<ParameterMemberInvocation>::new(); nodes.len()];
-    let mut returned_binding_candidates = Vec::new();
-    let mut factory_call_candidates = Vec::new();
+    (transported_calls, unavailable_calls, array_source_origins)
+}
+
+fn merge_graph_contributions(
+    context: &InterproceduralContext<'_, '_>,
+    nodes: &[SummaryNode],
+    nodes_by_path: &HashMap<String, Vec<usize>>,
+    graph_node_reused_paths: &HashSet<&str>,
+    interprocedural_graph_cache: Option<
+        &mut HashMap<solid_facts::core::SourcePath, CachedInterproceduralGraph>,
+    >,
+    graph: &mut InterproceduralGraphAssembly<'_>,
+) -> (u64, u64) {
+    let InterproceduralContext {
+        facts,
+        accessors,
+        entities,
+        symbol_names,
+        lookup,
+        ..
+    } = context;
     let mut graph_reused_files = 0;
     let mut graph_recomputed_files = 0;
-    {
-        let mut graph = InterproceduralGraphAssembly {
-            nodes: &nodes,
-            nodes_by_path: &nodes_by_path,
-            by_symbol: &by_symbol,
-            summaries: &mut summaries,
-            callback_summaries: &mut callback_summaries,
-            callback_forwardings: &mut callback_forwardings,
-            dispatches: &mut dispatches,
-            unresolved_callback_obligations: &mut unresolved_callback_obligations,
-            edges: &mut edges,
-            guaranteed_edges: &mut guaranteed_edges,
-            invoked_parameters: &mut invoked_parameters,
-            direct_callback_parameters: &mut direct_callback_parameters,
-            guaranteed_callback_parameters: &mut guaranteed_callback_parameters,
-            direct_protocol_parameters: &mut direct_protocol_parameters,
-            direct_member_callback_parameters: &mut direct_member_callback_parameters,
-            escaped_parameters: &mut escaped_parameters,
-            invoked_parameter_members: &mut invoked_parameter_members,
-            returned_bindings: &mut returned_binding_candidates,
-            factory_calls: &mut factory_call_candidates,
-        };
-        match interprocedural_graph_cache {
-            None => {
-                let contributions = parallel_file_results(&facts.files, |file| {
+    match interprocedural_graph_cache {
+        None => {
+            let contributions = parallel_file_results(&facts.files, |file| {
+                discover_interprocedural_graph(
+                    file,
+                    nodes,
+                    nodes_by_path,
+                    InterproceduralGraphSymbols {
+                        entities,
+                        names: symbol_names,
+                    },
+                    lookup,
+                    accessors,
+                )
+            });
+            for (file, contribution) in facts.files.iter().zip(contributions) {
+                graph_recomputed_files += 1;
+                graph.merge(file.path.as_str(), &contribution);
+            }
+        }
+        Some(cache) => {
+            let contributions = parallel_file_results(&facts.files, |file| {
+                (!graph_node_reused_paths.contains(file.path.as_str())).then(|| {
                     discover_interprocedural_graph(
                         file,
-                        &nodes,
-                        &nodes_by_path,
+                        nodes,
+                        nodes_by_path,
                         InterproceduralGraphSymbols {
                             entities,
                             names: symbol_names,
@@ -591,58 +905,53 @@ pub(super) fn interprocedural_reads(
                         lookup,
                         accessors,
                     )
-                });
-                for (file, contribution) in facts.files.iter().zip(contributions) {
-                    graph_recomputed_files += 1;
-                    graph.merge(file.path.as_str(), &contribution);
+                })
+            });
+            for (file, contribution) in facts.files.iter().zip(contributions) {
+                if graph_node_reused_paths.contains(file.path.as_str())
+                    && let Some(cached) = cache.get(file.path.as_str())
+                {
+                    graph_reused_files += 1;
+                    graph.merge(file.path.as_str(), &cached.contribution);
+                    continue;
                 }
-            }
-            Some(cache) => {
-                let contributions = parallel_file_results(&facts.files, |file| {
-                    (!graph_node_reused_paths.contains(file.path.as_str())).then(|| {
-                        discover_interprocedural_graph(
-                            file,
-                            &nodes,
-                            &nodes_by_path,
-                            InterproceduralGraphSymbols {
-                                entities,
-                                names: symbol_names,
-                            },
-                            lookup,
-                            accessors,
-                        )
-                    })
-                });
-                for (file, contribution) in facts.files.iter().zip(contributions) {
-                    if graph_node_reused_paths.contains(file.path.as_str())
-                        && let Some(cached) = cache.get(file.path.as_str())
-                    {
-                        graph_reused_files += 1;
-                        graph.merge(file.path.as_str(), &cached.contribution);
-                        continue;
-                    }
-                    graph_recomputed_files += 1;
-                    let contribution =
-                        contribution.expect("recomputed graph path has a fresh contribution");
-                    graph.merge(file.path.as_str(), &contribution);
-                    cache.insert(
-                        file.path.clone(),
-                        CachedInterproceduralGraph {
-                            nodes: nodes_by_path
-                                .get(file.path.as_str())
-                                .into_iter()
-                                .flatten()
-                                .map(|index| nodes[*index].clone())
-                                .collect(),
-                            contribution,
-                            compiler: file.compiler.clone(),
-                            member_resolution: lookup.member_resolution_digest(),
-                        },
-                    );
-                }
+                graph_recomputed_files += 1;
+                let contribution =
+                    contribution.expect("recomputed graph path has a fresh contribution");
+                graph.merge(file.path.as_str(), &contribution);
+                cache.insert(
+                    file.path.clone(),
+                    CachedInterproceduralGraph {
+                        nodes: nodes_by_path
+                            .get(file.path.as_str())
+                            .into_iter()
+                            .flatten()
+                            .map(|index| nodes[*index].clone())
+                            .collect(),
+                        contribution,
+                        compiler: file.compiler.clone(),
+                        member_resolution: lookup.member_resolution_digest(),
+                    },
+                );
             }
         }
     }
+    (graph_reused_files, graph_recomputed_files)
+}
+
+fn refresh_member_invocation_contexts(
+    context: &InterproceduralContext<'_, '_>,
+    nodes: &[SummaryNode],
+    nodes_by_path: &HashMap<String, Vec<usize>>,
+    invoked_parameter_members: &mut [Vec<ParameterMemberInvocation>],
+) {
+    let InterproceduralContext {
+        facts,
+        entities,
+        symbol_names,
+        lookup,
+        ..
+    } = context;
     // A callback consumer can change in another file while its forwarding
     // helper's cached graph contribution remains reusable. Refresh invocation
     // context from the current source census before dependency states are read.
@@ -688,18 +997,18 @@ pub(super) fn interprocedural_reads(
     };
     unmodeled_parameter_uses(
         facts,
-        &nodes,
-        &nodes_by_path,
+        nodes,
+        nodes_by_path,
         lookup,
-        &mut invoked_parameter_members,
+        invoked_parameter_members,
         &mut site_excluded,
     );
     forward_parameter_member_invocations(
         facts,
-        &nodes,
-        &nodes_by_path,
+        nodes,
+        nodes_by_path,
         lookup,
-        &mut invoked_parameter_members,
+        invoked_parameter_members,
         |file, site| {
             let allowed = allowed_callback_spans(file, lookup);
             let default = file
@@ -717,15 +1026,47 @@ pub(super) fn interprocedural_reads(
                     ))
         },
     );
-    // These edges depend on other files' returned literals and the entire
-    // provider census. Recompute them after merging file-local cached graph
-    // contributions, so a provider/factory edit cannot retain a stale edge.
+}
+
+/// The read-only inputs of [`add_transported_call_summaries`].
+struct TransportedCallInputs<'a, 'f> {
+    context: &'a InterproceduralContext<'a, 'f>,
+    provenance: &'a accessor_provenance::Resolver<'a, 'f>,
+    transported_calls: &'a HashMap<Location, accessor_provenance::Callable>,
+    transported_bodies: &'a HashSet<(&'a str, Span)>,
+    nodes: &'a [SummaryNode],
+    nodes_by_path: &'a HashMap<String, Vec<usize>>,
+    indexes: &'a HashMap<(String, Span), usize>,
+}
+
+fn add_transported_call_summaries(
+    inputs: &TransportedCallInputs<'_, '_>,
+    summaries: &mut [SummaryReads],
+    edges: &mut [Vec<usize>],
+    guaranteed_edges: &mut HashSet<(usize, usize)>,
+) -> HashSet<(usize, usize)> {
+    let TransportedCallInputs {
+        context,
+        provenance,
+        transported_calls,
+        transported_bodies,
+        nodes,
+        nodes_by_path,
+        indexes,
+    } = inputs;
+    let InterproceduralContext {
+        facts,
+        entities,
+        symbol_names,
+        lookup,
+        ..
+    } = context;
     let mut transported_edges = HashSet::new();
     for file in &facts.files {
         for call in &file.ast.calls {
             let Some(owner) = containing_summary_function_indexed(
-                &nodes,
-                &nodes_by_path,
+                nodes,
+                nodes_by_path,
                 file.path.as_str(),
                 call.span,
             ) else {
@@ -794,15 +1135,16 @@ pub(super) fn interprocedural_reads(
             }
         }
     }
-    // Extra memo-wrapper source origins also enter through ordinary discovery.
-    // Tag those rows before any normal summary hop can copy them.
-    if provenance.has_extra_source_origins() {
-        for summary in &mut summaries {
-            for read in &mut summary.ordered {
-                read.transported |= provenance.has_source_origin(&read.symbol);
-            }
-        }
-    }
+    transported_edges
+}
+
+fn propagate_callback_forwardings(
+    callback_forwardings: &[(usize, usize, usize, usize, ForwardedAmbientExecution)],
+    nodes: &[SummaryNode],
+    escaped_parameters: &mut [Vec<usize>],
+    callback_summaries: &mut [Vec<CallbackSummary>],
+    unresolved_callback_obligations: &mut [Vec<UnresolvedCallbackObligation>],
+) {
     let mut unresolved_callback_obligation_keys = unresolved_callback_obligations
         .iter()
         .map(|obligations| {
@@ -815,7 +1157,7 @@ pub(super) fn interprocedural_reads(
     loop {
         let mut changed = false;
         for (owner, target, target_parameter, owner_parameter, ambient_execution) in
-            &callback_forwardings
+            callback_forwardings
         {
             // Forwarding a callback into a local callee inherits that callee's
             // *whole* answer for the slot, and "the callee never accounted for
@@ -933,10 +1275,26 @@ pub(super) fn interprocedural_reads(
             break;
         }
     }
-    let graph = phase_started.elapsed();
-    phase_started = Instant::now();
+}
+
+fn add_direct_reference_summaries(
+    context: &InterproceduralContext<'_, '_>,
+    interprocedural_result_cache: Option<&mut CachedInterproceduralResults>,
+    nodes: &[SummaryNode],
+    nodes_by_path: &HashMap<String, Vec<usize>>,
+    summaries: &mut [SummaryReads],
+    phase_started: Instant,
+) -> (Duration, Duration, Duration) {
+    let InterproceduralContext {
+        facts,
+        accessors,
+        summary_source_symbols,
+        source_phases,
+        typed_sources,
+        ..
+    } = context;
     let owned_reactive_sources;
-    let reactive_sources = if let Some(cache) = interprocedural_result_cache.as_deref_mut() {
+    let reactive_sources = if let Some(cache) = interprocedural_result_cache {
         owned_reactive_sources = retained_reactive_sources(
             &mut cache.reactive_sources,
             accessors,
@@ -961,7 +1319,7 @@ pub(super) fn interprocedural_reads(
     let direct_index = phase_started.elapsed();
     let direct_references_started = Instant::now();
     for contributions in parallel_slice_results(reactive_sources, |source| {
-        direct_reference_contributions(source, context, &nodes, &nodes_by_path)
+        direct_reference_contributions(source, context, nodes, nodes_by_path)
     }) {
         for contribution in contributions {
             if contribution.unique {
@@ -976,20 +1334,44 @@ pub(super) fn interprocedural_reads(
         .any(|typed| typed.held_body_unfollowed)
     {
         for file in &facts.files {
-            for contribution in typed_candidate_contributions(file, context, &nodes, &nodes_by_path)
-            {
+            for contribution in typed_candidate_contributions(file, context, nodes, nodes_by_path) {
                 summaries[contribution.owner].push(contribution.read);
             }
         }
     }
     let direct_references = direct_references_started.elapsed();
     let direct_summaries = phase_started.elapsed();
-    phase_started = Instant::now();
+    (direct_index, direct_references, direct_summaries)
+}
+
+struct ReturnedSummaries<'a> {
+    returned: Vec<SummaryReads>,
+    returned_edges: Vec<(usize, usize)>,
+    returns_by_ast_owner: HashMap<(&'a str, Span), Vec<&'a solid_facts::ast::ReturnFact>>,
+}
+
+fn collect_returned_summaries<'a>(
+    context: &InterproceduralContext<'a, '_>,
+    nodes: &[SummaryNode],
+    nodes_by_path: &HashMap<String, Vec<usize>>,
+    indexes: &HashMap<(String, Span), usize>,
+    by_symbol: &HashMap<SymbolId, usize>,
+    summaries: &mut [SummaryReads],
+) -> ReturnedSummaries<'a> {
+    let InterproceduralContext {
+        facts,
+        project_indexes,
+        accessors,
+        returned_source_symbols,
+        source_kinds,
+        entities,
+        ..
+    } = context;
     let mut returned = vec![SummaryReads::default(); nodes.len()];
     let mut returned_edges = Vec::<(usize, usize)>::new();
     let returns_by_owner = items_by_containing_function(
-        &nodes,
-        &nodes_by_path,
+        nodes,
+        nodes_by_path,
         facts.files.iter().flat_map(|file| {
             file.ast
                 .returns
@@ -1109,35 +1491,73 @@ pub(super) fn interprocedural_reads(
         }
         summaries[index].replace(direct);
     }
-    let returned_direct = phase_started.elapsed();
-    let returned_delta_started = Instant::now();
-    propagate_returned_summary_deltas(&mut returned, &returned_edges);
-    let returned_delta = returned_delta_started.elapsed();
-    let call_summary_delta_started = Instant::now();
-    let mut reverse_edges = vec![Vec::new(); nodes.len()];
-    for (owner, targets) in edges.iter_mut().enumerate() {
-        targets.sort_unstable();
-        targets.dedup();
-        for target in targets.iter().copied() {
-            reverse_edges[target].push(owner);
-        }
+    ReturnedSummaries {
+        returned,
+        returned_edges,
+        returns_by_ast_owner,
     }
-    let mut propagated_lengths = vec![0; summaries.len()];
-    propagate_summary_deltas(
-        &mut summaries,
-        &reverse_edges,
-        &mut propagated_lengths,
-        &transported_edges,
-        &guaranteed_edges,
-    );
+}
 
+/// Reverse call edges and the bookkeeping `propagate_summary_deltas` threads
+/// through its successive runs over one set of summaries.
+struct SummaryPropagation {
+    reverse_edges: Vec<Vec<usize>>,
+    propagated_lengths: Vec<usize>,
+    transported_edges: HashSet<(usize, usize)>,
+    guaranteed_edges: HashSet<(usize, usize)>,
+}
+
+impl SummaryPropagation {
+    fn run(&mut self, summaries: &mut [SummaryReads]) {
+        propagate_summary_deltas(
+            summaries,
+            &self.reverse_edges,
+            &mut self.propagated_lengths,
+            &self.transported_edges,
+            &self.guaranteed_edges,
+        );
+    }
+}
+
+/// The per-function facts a composite structural dispatch compares.
+struct DispatchGraph<'a> {
+    dispatches: &'a [(usize, Vec<usize>)],
+    nodes: &'a [SummaryNode],
+    callback_summaries: &'a [Vec<CallbackSummary>],
+    unresolved_callback_obligations: &'a [Vec<UnresolvedCallbackObligation>],
+    invoked_parameters: &'a [Vec<usize>],
+    direct_callback_parameters: &'a [Vec<usize>],
+    guaranteed_callback_parameters: &'a [Vec<usize>],
+    direct_protocol_parameters: &'a [Vec<(crate::summary_semantics::InvokeProtocol, usize)>],
+    direct_member_callback_parameters: &'a [Vec<(usize, Vec<String>)>],
+    invoked_parameter_members: &'a [Vec<ParameterMemberInvocation>],
+}
+
+fn attach_dispatch_edges(
+    graph: &DispatchGraph<'_>,
+    summaries: &mut [SummaryReads],
+    edges: &mut [Vec<usize>],
+    summary_propagation: &mut SummaryPropagation,
+) {
+    let DispatchGraph {
+        dispatches,
+        nodes,
+        callback_summaries,
+        unresolved_callback_obligations,
+        invoked_parameters,
+        direct_callback_parameters,
+        guaranteed_callback_parameters,
+        direct_protocol_parameters,
+        direct_member_callback_parameters,
+        invoked_parameter_members,
+    } = graph;
     // Composite structural dispatch is intentionally a second phase. The
     // first propagation computes each exact implementation's own summary;
     // only an equal set of summaries may then be attached to the caller. If
     // one candidate is missing or differs in reads, callbacks, or async
     // shape, the call remains uncertifiable and contributes no edge.
     let mut dispatch_edges_added = false;
-    for (owner, candidates) in &dispatches {
+    for (owner, candidates) in dispatches.iter() {
         let Some(first) = candidates.first().copied() else {
             continue;
         };
@@ -1164,7 +1584,7 @@ pub(super) fn interprocedural_reads(
         for target in candidates.iter().copied() {
             if !edges[*owner].contains(&target) {
                 edges[*owner].push(target);
-                reverse_edges[target].push(*owner);
+                summary_propagation.reverse_edges[target].push(*owner);
                 let target_reads = summaries[target].to_vec();
                 for read in target_reads {
                     if summaries[*owner].push_unique(read) {
@@ -1175,15 +1595,19 @@ pub(super) fn interprocedural_reads(
         }
     }
     if dispatch_edges_added {
-        propagate_summary_deltas(
-            &mut summaries,
-            &reverse_edges,
-            &mut propagated_lengths,
-            &transported_edges,
-            &guaranteed_edges,
-        );
+        summary_propagation.run(summaries);
     }
+}
 
+fn add_returned_function_reads<'a>(
+    context: &InterproceduralContext<'a, '_>,
+    nodes: &[SummaryNode],
+    indexes: &HashMap<(String, Span), usize>,
+    summaries: &[SummaryReads],
+    returns_by_ast_owner: &HashMap<(&'a str, Span), Vec<&'a solid_facts::ast::ReturnFact>>,
+    returned: &mut [SummaryReads],
+) {
+    let project_indexes = context.project_indexes;
     for (index, node) in nodes.iter().enumerate() {
         let Some(&file) = project_indexes.files_by_path.get(node.path.as_str()) else {
             continue;
@@ -1211,11 +1635,28 @@ pub(super) fn interprocedural_reads(
             }
         }
     }
-    let call_summary_delta = call_summary_delta_started.elapsed();
-    let factory_propagation_started = Instant::now();
+}
+
+struct FactoryCandidates<'a> {
+    returned_bindings: &'a [(SymbolId, SymbolId)],
+    factory_calls: &'a [(usize, SymbolId)],
+}
+
+fn propagate_factory_reads(
+    context: &InterproceduralContext<'_, '_>,
+    nodes: &[SummaryNode],
+    by_symbol: &HashMap<SymbolId, usize>,
+    returned: &[SummaryReads],
+    candidates: &FactoryCandidates<'_>,
+    summaries: &mut [SummaryReads],
+    summary_propagation: &mut SummaryPropagation,
+) -> HashMap<SymbolId, Vec<SummaryRead>> {
+    let accessors = context.accessors;
+    let returned_binding_candidates = candidates.returned_bindings;
+    let factory_call_candidates = candidates.factory_calls;
     let mut returned_bindings = HashMap::<SymbolId, Vec<SummaryRead>>::new();
     if returned.iter().any(|summary| !summary.is_empty()) {
-        for (binding_symbol, target_symbol) in &returned_binding_candidates {
+        for (binding_symbol, target_symbol) in returned_binding_candidates {
             let Some(target) = by_symbol.get(target_symbol).copied() else {
                 continue;
             };
@@ -1229,7 +1670,7 @@ pub(super) fn interprocedural_reads(
         }
         let mut factory_reads_added = false;
         if !returned_bindings.is_empty() {
-            for (owner, symbol) in &factory_call_candidates {
+            for (owner, symbol) in factory_call_candidates {
                 if accessors.contains_key(symbol) {
                     continue;
                 }
@@ -1244,50 +1685,44 @@ pub(super) fn interprocedural_reads(
             }
         }
         if factory_reads_added {
-            propagate_summary_deltas(
-                &mut summaries,
-                &reverse_edges,
-                &mut propagated_lengths,
-                &transported_edges,
-                &guaranteed_edges,
-            );
+            summary_propagation.run(summaries);
         }
     }
+    returned_bindings
+}
 
-    let factory_propagation = factory_propagation_started.elapsed();
-    let propagation = phase_started.elapsed();
-    phase_started = Instant::now();
+struct ResultReads {
+    result: Vec<ReactiveRead>,
+    result_reused_files: u64,
+    result_recomputed_files: u64,
+}
+
+fn collect_result_reads(
+    context: &InterproceduralContext<'_, '_>,
+    interprocedural_result_cache: Option<&mut CachedInterproceduralResults>,
+    transport_identity_matches: bool,
+    result_read_context: &InterproceduralResultReadContext<'_, '_>,
+    array_source_origins: &HashSet<SymbolId>,
+    dispatch_obligations: &mut Vec<StaticDefect>,
+) -> ResultReads {
+    let InterproceduralContext {
+        facts,
+        retained_source_paths,
+        ..
+    } = context;
+    let result_view = result_read_context.result;
+    let transported_calls = result_read_context.transported_calls;
+    let unavailable_calls = result_read_context.unavailable_calls;
     let result_capacity = interprocedural_result_cache.as_ref().map_or(0, |cache| {
         cache.files.values().map(|file| file.reads.len()).sum()
     });
     let mut result = Vec::with_capacity(result_capacity);
     let mut result_reused_files = 0;
     let mut result_recomputed_files = 0;
-    let result_view = InterproceduralResultView {
-        nodes: &nodes,
-        indexes: &indexes,
-        by_symbol: &by_symbol,
-        summaries: &summaries,
-        invoked_parameters: &invoked_parameters,
-        invoked_parameter_members: &invoked_parameter_members,
-        returned_bindings: &returned_bindings,
-    };
-    let result_read_context = InterproceduralResultReadContext {
-        result: result_view,
-        source_kinds,
-        accessors,
-        entities,
-        symbol_names,
-        lookup: context.lookup,
-        transported_calls: &transported_calls,
-        unavailable_calls: &unavailable_calls,
-        array_member_bodies: &array_member_bodies,
-        provenance: &provenance,
-    };
     if let Some(cache) = interprocedural_result_cache {
-        cache.transported_calls.clone_from(&transported_calls);
-        cache.unavailable_calls.clone_from(&unavailable_calls);
-        cache.array_source_origins.clone_from(&array_source_origins);
+        cache.transported_calls.clone_from(transported_calls);
+        cache.unavailable_calls.clone_from(unavailable_calls);
+        cache.array_source_origins.clone_from(array_source_origins);
         // Call-role proofs inspect callee syntax beyond its read summary:
         // moving an await/default/edge can preserve that summary byte for
         // byte. Until syntax dependencies are retained per hop, a changed,
@@ -1316,7 +1751,7 @@ pub(super) fn interprocedural_reads(
             && cache.dependency_users.is_empty()
         {
             let per_file = parallel_file_results(&facts.files, |file| {
-                interprocedural_result_reads_for_file(file, &result_read_context)
+                interprocedural_result_reads_for_file(file, result_read_context)
             });
             for (file, (reads, obligations, dependencies)) in facts.files.iter().zip(per_file) {
                 result_recomputed_files += 1;
@@ -1384,7 +1819,7 @@ pub(super) fn interprocedural_reads(
                 }
                 result_recomputed_files += 1;
                 let (reads, obligations, dependencies) =
-                    interprocedural_result_reads_for_file(file, &result_read_context);
+                    interprocedural_result_reads_for_file(file, result_read_context);
                 result.extend(reads.iter().cloned());
                 dispatch_obligations.extend(obligations.iter().cloned());
                 if let Some(previous) = cache.files.remove(file.path.as_str()) {
@@ -1441,24 +1876,29 @@ pub(super) fn interprocedural_reads(
         for file in &facts.files {
             result_recomputed_files += 1;
             let (reads, obligations, _) =
-                interprocedural_result_reads_for_file(file, &result_read_context);
+                interprocedural_result_reads_for_file(file, result_read_context);
             result.extend(reads);
             dispatch_obligations.extend(obligations);
         }
     }
-    // ADR 0289: computed fresh on every analysis, never retained per file:
-    // the derivation reads other files' literals and the provider census.
-    if !facts.dependency_source_roots.is_empty() {
-        let (getter_reads, getter_obligations) = dependency_getter_obligations(
-            facts,
-            context.lookup,
-            &provenance,
-            entities,
-            symbol_names,
-        );
-        result.extend(getter_reads);
-        dispatch_obligations.extend(getter_obligations);
+    ResultReads {
+        result,
+        result_reused_files,
+        result_recomputed_files,
     }
+}
+
+fn export_parameter_member_dispatch_obligations(
+    context: &InterproceduralContext<'_, '_>,
+    nodes: &[SummaryNode],
+    dispatch_obligations: &mut Vec<StaticDefect>,
+) {
+    let InterproceduralContext {
+        project_indexes,
+        entities,
+        symbol_names,
+        ..
+    } = context;
     // Keep definition-site obligations even when one consumer is proven.
     // Another instance or opaque consumer of the same callable can remain
     // unresolved; a projected origin is not an exhaustive invocation census.
@@ -1535,11 +1975,38 @@ pub(super) fn interprocedural_reads(
             });
         }
     }
-    let factory_instances = returned_bindings
-        .values()
-        .filter(|summary| !summary.is_empty())
-        .count();
-    let result_reads = phase_started.elapsed();
+}
+
+/// The settled summaries structured-return discovery reads.
+struct StructuredReturnInputs<'a> {
+    nodes: &'a [SummaryNode],
+    indexes: &'a HashMap<(String, Span), usize>,
+    by_symbol: &'a HashMap<SymbolId, usize>,
+    summaries: &'a [SummaryReads],
+    returned: &'a [SummaryReads],
+}
+
+fn export_structured_return_obligations(
+    context: &InterproceduralContext<'_, '_>,
+    inputs: &StructuredReturnInputs<'_>,
+    dispatch_obligations: &mut Vec<StaticDefect>,
+) -> Duration {
+    let InterproceduralContext {
+        facts,
+        accessors,
+        source_kinds,
+        entities,
+        symbol_names,
+        lookup,
+        ..
+    } = context;
+    let StructuredReturnInputs {
+        nodes,
+        indexes,
+        by_symbol,
+        summaries,
+        returned,
+    } = inputs;
     let export_started = Instant::now();
     let mut structured_returns = vec![None; nodes.len()];
     let has_structured_return_seed = facts.files.iter().any(|file| {
@@ -1558,11 +2025,11 @@ pub(super) fn interprocedural_reads(
         for _ in 0..=nodes.len() {
             let discovered = discover_structured_returns(&StructuredReturnDiscovery {
                 facts,
-                nodes: &nodes,
-                indexes: &indexes,
-                by_symbol: &by_symbol,
-                summaries: &summaries,
-                returned: &returned,
+                nodes,
+                indexes,
+                by_symbol,
+                summaries,
+                returned,
                 structured_returns: &structured_returns,
                 accessors,
                 source_kinds,
@@ -1584,11 +2051,11 @@ pub(super) fn interprocedural_reads(
     }
     let structured_discovery = StructuredReturnDiscovery {
         facts,
-        nodes: &nodes,
-        indexes: &indexes,
-        by_symbol: &by_symbol,
-        summaries: &summaries,
-        returned: &returned,
+        nodes,
+        indexes,
+        by_symbol,
+        summaries,
+        returned,
         structured_returns: &structured_returns,
         accessors,
         source_kinds,
@@ -1638,30 +2105,5 @@ pub(super) fn interprocedural_reads(
             });
         }
     }
-    let export_summaries = export_started.elapsed();
-    let results_and_exports = phase_started.elapsed();
-    InterproceduralResult {
-        reads: result.into(),
-        source_call_targets: Arc::new(transported_calls),
-        dispatch_obligations: dispatch_obligations.into(),
-        factory_instances,
-        timings: InterproceduralTimings {
-            graph,
-            direct_summaries,
-            direct_index,
-            direct_references,
-            propagation,
-            returned_direct,
-            returned_delta,
-            call_summary_delta,
-            factory_propagation,
-            results_and_exports,
-            result_reads,
-            export_summaries,
-            graph_reused_files,
-            graph_recomputed_files,
-            result_reused_files,
-            result_recomputed_files,
-        },
-    }
+    export_started.elapsed()
 }
