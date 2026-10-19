@@ -4196,8 +4196,7 @@ impl ForwardedAmbientExecution {
 /// absent for that reason -- their dialect `Execution` states attribution and
 /// not a schedule, and restating it as one is the mistake the fold exists to
 /// avoid. `batch`, `createComputed`, `onMount`, `catchError`, `children` and the
-/// rest are absent because nobody has established their schedule here yet,
-/// which is a precision residue recorded in docs/precision-backlog.md.
+/// rest are absent because nobody has established their schedule here yet.
 ///
 /// **A row here is not permission to publish a callback claim.** This table has
 /// two consumers whose polarity is opposite. The wrapper-chain fold needs a row
@@ -4248,8 +4247,7 @@ fn primitive_callback_execution(
 ///   `initialState`, because `createStore(initialState)` sits at
 ///   `(CreateStore, 0)`. Its real callbacks are `createMethods.getters` and
 ///   `createMethods.actions` -- argument 1 behind a property path, which the
-///   generator's [`CallbackSummary`] cannot spell at all (recorded in
-///   docs/precision-backlog.md).
+///   generator's [`CallbackSummary`] cannot spell at all.
 /// - `@solidjs/meta`'s
 ///   `Stylesheet = props => createComponent(Link, mergeProps({rel}, props))`,
 ///   declared `Component<Omit<JSX.LinkHTMLAttributes<HTMLLinkElement>, "rel">>`,
@@ -5132,9 +5130,8 @@ impl StructuredReturnDiscovery<'_, '_> {
     /// The suffixes are tried in the usual priority order, but when more than
     /// one distinct project file matches the specifier the answer is **not**
     /// the first one enumerated — file order is not evidence — and the
-    /// resolution fails closed with `None`. A contract that would have been
-    /// generated from the wrong module is a wrong proven claim; no claim is
-    /// the correct one. Recorded in `docs/precision-backlog.md`.
+    /// resolution fails closed with `None`. A summary built from the wrong
+    /// module is a wrong proven claim; no claim is the correct one.
     fn relative_module_file(
         &self,
         from: &solid_facts::FileFacts,

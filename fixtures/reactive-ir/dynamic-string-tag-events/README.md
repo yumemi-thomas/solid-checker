@@ -48,5 +48,4 @@ depends on `Dynamic` being declared in that package under that name.
 pass `tsc --noEmit` against the published rc.13 `solid-js`, `@solidjs/web` and
 `@solidjs/signals` typings without the fixture stubs.
 
-Not covered here: Kobalte's own published source. The corpus measurement in
-`docs/precision-backlog.md` exercises that chain.
+Not covered here: Kobalte's own published source.

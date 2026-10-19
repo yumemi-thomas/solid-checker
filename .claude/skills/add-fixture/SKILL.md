@@ -88,7 +88,7 @@ per fixture project, holding rule, code, kind, severity, path, and span
 3. Only then rerun with `--update`. Update only the snapshots your change
    owns; do not rewrite unrelated ones to make the run green.
 4. If precision status changed (new proof, new approximation, new fail-closed
-   path), record it in `docs/precision-backlog.md`.
+   path, known miss), record it in `docs/open-work.md` and the commit message.
 5. Commit the snapshot update in the same commit as the code that moved the
    findings, not a thematically nearby one.
 

@@ -19,8 +19,7 @@ make ownership-gate
 
 The gate uses a fresh debug checker, real published typings, exact UTF-8 spans,
 and the cases in `fixtures/ownership-cases/cases.json`. A behavior change must
-update its focused case and, when relevant, `docs/precision-backlog.md` in the
-same semantic commit. There is no deviation allowlist to update.
+update its focused case in the same semantic commit. There is no deviation allowlist to update.
 
 ## The upstream-faithfulness rule
 

@@ -3,7 +3,8 @@
 A Rust engine that proves Solid 2.0 reactivity defects, with Node (packages/cli)
 and WASM (packages/wasm) adapters. Solid 2 is the only dialect: a project whose
 `solid-js` resolves to another major is refused with SC9013 (ADR 0110). Use the
-vocabulary in CONTEXT.md. Rule pages: docs/rules/. Design: rust/ARCHITECTURE.md.
+vocabulary in CONTEXT.md. Rule pages: docs/rules/. Design: rust/ARCHITECTURE.md
+and docs/decisions.md (live decisions by ADR number).
 
 ## Invariants
 
@@ -15,7 +16,7 @@ vocabulary in CONTEXT.md. Rule pages: docs/rules/. Design: rust/ARCHITECTURE.md.
    a defect no project can have, and every gate stays green. Check a rule's
    case against the published types before adding or keeping it. A rule found
    duplicating `tsc` is deleted, not demoted, and the removal is recorded in
-   docs/precision-backlog.md with the `tsc` output. A different claim about the
+   fixtures/tsc-oracle (a `removed-because-redundant` case and a ledger row). A different claim about the
    same code (ownership, timing) is allowed.
 2. **Fail closed; zero false positives.** Report a violation only when facts and
    the execution model prove it. A missing fact, symbol, call target, compiler
@@ -59,9 +60,8 @@ vocabulary in CONTEXT.md. Rule pages: docs/rules/. Design: rust/ARCHITECTURE.md.
   Authoring fixtures: `.claude/skills/add-fixture/SKILL.md` (read it first; a
   fixture's `node_modules/solid-js` stub needs `.gitignore` exception lines or
   it silently becomes a no-op).
-- Search code first: `rg SYMBOL rust packages scripts`. `.ignore` hides the
-  precision backlog, contract audits, snapshots, and fixture node_modules; use
-  `rg --no-ignore` when you need them.
+- Search code first: `rg SYMBOL rust packages scripts`. `.ignore` hides
+  snapshots and fixture node_modules; use `rg --no-ignore` when you need them.
 
 ## Checks
 
@@ -85,6 +85,8 @@ vocabulary in CONTEXT.md. Rule pages: docs/rules/. Design: rust/ARCHITECTURE.md.
 
 State what changed, which checks ran with their results, which were deferred,
 and the remaining uncertifiable cases. Do not claim more than was verified.
-When precision status changes, update the rule page or add a short entry at
-the top of docs/precision-backlog.md (2 MB: read only the first lines).
+When precision status changes, update the rule page, and add or remove the
+item in docs/open-work.md (known misses, decisions not to build, accepted
+trades). A slice report goes in the commit message, not a file. A design
+decision gets a short entry in docs/decisions.md.
 Other procedures: `.claude/skills/verify-handoff`, `green-commits`.

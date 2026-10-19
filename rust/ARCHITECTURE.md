@@ -28,7 +28,7 @@ rust/
 ## Version ownership at a glance
 
 **This build carries one dialect, Solid 2.0.** Solid 1.x was retired in 2026-09
-([ADR 0110](../docs/adr/0110-the-checker-analyzes-solid-2-only.md)); the seams
+([ADR 0110](../docs/decisions.md#adr-0110)); the seams
 below are unchanged, because they are what a *future* dialect re-enters through
 and what keeps shared code from switching on an API spelling itself. “Shared”
 means the algorithm is common, not that it is version-agnostic: shared code asks
@@ -172,7 +172,7 @@ unsupported namespace/member paths keep their relevant obligations open.
 ## How the Solid 1.x dialect landed
 
 **Historical, and kept deliberately.** Solid 1.x was retired in 2026-09
-([ADR 0110](../docs/adr/0110-the-checker-analyzes-solid-2-only.md)) and the
+([ADR 0110](../docs/decisions.md#adr-0110)) and the
 crates named below no longer exist. The record stays because it is the only
 worked account of what adding a *second* dialect actually costs, seam by seam —
 `../docs/adding-a-dialect.md` is the forward checklist; this is the evidence

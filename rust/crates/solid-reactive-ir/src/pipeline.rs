@@ -257,8 +257,7 @@ pub fn build(facts: &ProjectFacts, dialect: &dyn Dialect) -> Result<Program, Bui
 ///
 /// Stages read the shared [`AnalysisContext`], write the [`ProgramDraft`],
 /// and end their span on the [`StageClock`]; each late-stage cache sub-slot
-/// is handed to exactly one stage. See
-/// `docs/pipeline-orchestrator-redesign.md`.
+/// is handed to exactly one stage.
 pub fn build_with_analysis_inputs_measured(
     facts: &ProjectFacts,
     dialect: &dyn Dialect,

@@ -44,12 +44,12 @@ the evidence that proves it, and a fix hint:
 Code the analyzer could neither prove correct nor prove wrong is not reported:
 those *uncertifiable* results are an internal measure of what the analysis
 cannot decide yet (`--format json` and `--internal` show them;
-[ADR 0328](docs/adr/0328-uncertifiable-results-are-internal.md)).
+[ADR 0328](docs/decisions.md#adr-0328)).
 
 Reports state their runtime premises. The [standard runtime configuration
-premise](docs/adr/0266-standard-runtime-configuration-premise.md), amended by
+premise](docs/decisions.md#adr-0266), amended by
 ADR 0268, assumes Solid's standard configuration and hydration host. Dependency
-source mode also uses the [package integrity premise](docs/adr/0300-the-package-integrity-premise.md):
+source mode also uses the [package integrity premise](docs/decisions.md#adr-0300):
 code outside the analyzed program neither provides selected packages' exported
 contexts nor rewrites objects those packages create. Visible providers and
 member or descriptor writes still withhold a proof. These assumptions are
@@ -103,7 +103,7 @@ downloads only the binary matching your platform.
 | Directives | `ref` directive factories |
 | Props helpers | `merge` / `omit` |
 
-Solid 1.x was retired in 2026-09 ([ADR 0110](docs/adr/0110-the-checker-analyzes-solid-2-only.md)).
+Solid 1.x was retired in 2026-09 ([ADR 0110](docs/decisions.md#adr-0110)).
 A project whose resolved `solid-js` is a major this build has no vocabulary for
 is **refused outright** — one `SC9013 unsupported-solid-runtime` result naming
 the `package.json` that decided it, and no other findings — rather than analyzed
@@ -207,7 +207,7 @@ Package behavior is analyzed from installed runtime source under the declared
 host and source-selection premises. An unavailable or unsupported package
 boundary stays explicitly uncertifiable (SC9005). Contract generation,
 certification, catalogs and receipts have been removed; see
-[ADR 0312](docs/adr/0312-package-contracts-are-removed.md).
+[ADR 0312](docs/decisions.md#adr-0312).
 
 ## WASM
 
@@ -221,7 +221,5 @@ import { checkSync } from "solid-checker";
 ## Documentation
 
 - [Rule index](docs/rules/README.md) — every diagnostic, with examples and fixes
-- [Rule catalog migration](docs/rule-catalog-migration.md) — renamed, merged,
-  retired, and default-policy changes
-- [Documentation index](docs/README.md) — architecture, protocols, glossary
+- [Documentation index](docs/README.md) — decisions, open work, protocols
 - [Contributing](CONTRIBUTING.md) — building and developing solid-checker

@@ -10,8 +10,8 @@
 //! (`EffectFunction` in `@solidjs/signals`), so every illegal return is
 //! already a TypeScript error and AGENTS.md's absolute rule puts it out of
 //! scope; the classification below survives because ownership and disposal are
-//! not expressible as a type. See `docs/precision-backlog.md` for the ledger
-//! entry and the `tsc` evidence.
+//! not expressible as a type. The ledger entry and the `tsc` evidence are in
+//! `fixtures/tsc-oracle/README.md`.
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};

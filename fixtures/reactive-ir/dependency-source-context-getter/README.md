@@ -27,7 +27,7 @@ beside it, so the compiler binds `./routing.js` to `routing.d.ts` and ADR
   the package's; exact identity decides, not the name.
 - `ProjectGetter` (scope control): a getter object the project itself
   creates is outside this change. Its Get stays silent, as before; the gap is
-  recorded in docs/precision-backlog.md.
+  recorded in docs/open-work.md.
 
 None of these is a violation. The checker carries no getter through a
 package's source: it projects only callable members, one level deep, of

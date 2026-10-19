@@ -8,7 +8,7 @@ analyzing it under the wrong language; `--dialect solid-v2` is available for
 unusual layouts. A Solid 2 installation the vocabulary was not audited on is
 analyzed with a notice
 ([`unaudited-solid-release`](unaudited-solid-release.md)). The Solid 1.x catalog was retired on 2026-09-16 — see
-[ADR 0110](../adr/0110-the-checker-analyzes-solid-2-only.md), and
+[ADR 0110](../decisions.md#adr-0110), and
 [the catalog migration note](../rule-catalog-migration.md) for mapping a `v1/`
 suppression onto its 2.0 identity.
 
@@ -110,7 +110,7 @@ the missing evidence and remediation.
 
 SC9005 retains the compatibility name `package-contract-incomplete`; it now
 means required package behavior is unavailable from source. Package contracts
-and receipts are no longer consumed; see [ADR 0312](../adr/0312-package-contracts-are-removed.md).
+and receipts are no longer consumed; see [ADR 0312](../decisions.md#adr-0312).
 
 `unsupported-solid-runtime` and `unaudited-solid-release` are the two
 identities here the rules engine never produces. Dialect detection decides

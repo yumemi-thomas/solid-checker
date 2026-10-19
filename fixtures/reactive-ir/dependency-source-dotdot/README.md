@@ -3,8 +3,7 @@
 Claim: a dependency source module that imports a sibling directory's module as
 `../lib/read.js` is analyzed through that module exactly as one importing
 `./read.js` is. The owned WASM check resolved such imports to no source file
-until its WASI layer resolved `..` physically (docs/precision-backlog.md, P5
-S3a); this fixture pins the native answer both sides must give.
+until its WASI layer resolved `..` physically; this fixture pins the native answer both sides must give.
 
 - `App.tsx` `LabelNow` (positive): SC1001 at `useLabel(name)`. The selected
   package's `solid` source (`src/hooks/index.jsx`) reads `name` during the call

@@ -15,7 +15,7 @@ object-retention refusal stays.
 | --- | --- | --- |
 | `LoopCube` `start()` | SC1001 uncertifiable | no witness on rc.9 |
 | `NestedCube` `kick()` | SC1001 uncertifiable | no witness on rc.9 |
-| `LoopCube` `local()` | SC1001 violation | pre-existing, not this proof (precision backlog) |
+| `LoopCube` `local()` | SC1001 violation | pre-existing, not this proof (pre-existing) |
 | `package.json` | SC9014 uncertifiable | the mixed triple (`solid-js` rc.9, `@solidjs/signals` and `@solidjs/web` rc.13) no review read |
 
 Everything but `node_modules/solid-js/package.json` (its `version`) and the

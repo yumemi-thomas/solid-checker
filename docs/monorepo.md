@@ -77,7 +77,7 @@ The detailed transition is in
 
 Each dialect crate depends on exactly one compiler fork, and a dialect's exact
 `rev` and its notice move together. Solid 1.x was retired in 2026-09
-([ADR 0110](adr/0110-the-checker-analyzes-solid-2-only.md)) and its
+([ADR 0110](decisions.md#adr-0110)) and its
 `solid-1x-compiler` dependency went with it, so `solidjs-compiler` is the only
 fork this workspace pins today. The arrangement is kept rather than inlined: it
 is how a second dialect is added back without rediscovering the boundary.

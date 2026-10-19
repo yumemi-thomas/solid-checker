@@ -25,7 +25,7 @@
 //! Every judgment is fail-closed: anything not provably non-emitting is
 //! reported as the exact statement that emits, and bytes that do not parse are
 //! an error rather than an answer. Neither premise is a proof that the module
-//! is *useful* — see the deliberate trade recorded in `docs/precision-backlog.md`.
+//! is *useful*; that trade is deliberate.
 
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{

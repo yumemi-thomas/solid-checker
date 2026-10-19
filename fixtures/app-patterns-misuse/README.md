@@ -16,7 +16,7 @@ dev diagnostic its rule implies and the correct twin raises none. Its static
 verdict is the checker's finding for that rule on the misuse twin;
 `false-positive-on-correct` would mean a violation on the correct twin.
 
-Measured 2026-10-06 on rc.13 with ADR 0204 (`docs/precision-backlog.md`):
+Measured 2026-10-06 on rc.13 with ADR 0204:
 
 - Runtime: 31 of 33 misuse twins raise their diagnostic in Chrome.
 - Static, on those 31:

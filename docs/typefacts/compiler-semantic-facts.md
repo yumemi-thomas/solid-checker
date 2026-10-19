@@ -470,7 +470,7 @@ at all. Apparent members are excluded from the template set that reconciliation
 answers for, while still serving as prefixes there. A union reached below the root
 keeps the compiler's own answer — the members common to every constituent — for
 the reason recorded in the ADR. See
-[ADR 0023](adr/0023-v1-apparent-callable-path-members.md).
+Type Facts ADR 0023 (archived).
 
 The implementation call census also traces *value provenance*. Each call
 carries `argumentSources`: one entry per written argument slot, holding the
@@ -498,7 +498,7 @@ narrowing applies to a return site's `sources`, which had followed a symbol's
 first declaration since it existed. `targetModule` remains the written import
 specifier text and is empty for a locally declared callee, so dialect identity
 is the consumer's question to ask of the dialect, not a fact the producer
-states. See [ADR 0024](adr/0024-v1-argument-value-provenance.md).
+states. See Type Facts ADR 0024 (archived).
 
 An optional census classifies every formal-binding reference in the current
 implementation by symbol identity and separately enumerates return, throw, and
@@ -525,7 +525,7 @@ The normative model and closure obligations are in
 
 The `modules` operation answers for the module graph of the accepted program,
 independently of any demand set. See
-[ADR 0019](adr/0019-v1-attested-resolved-module-graph.md) for the full decision;
+Type Facts ADR 0019 (archived) for the full decision;
 the shape is:
 
 - The **module inventory** is unconditional: every file the program included,

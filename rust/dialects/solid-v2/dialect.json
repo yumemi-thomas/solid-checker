@@ -3,10 +3,10 @@
   "id": "solid-v2",
   "ruleManifest": "packages/cli/lib/rules-solid-v2.json",
   "compilerIdentity": {
-    "document": "docs/package-contract-v2/compiler-bootstrap/compiler-identity.json",
+    "document": "rust/dialects/solid-v2/compiler-identity/compiler-identity.json",
     "adapter": "rust/dialects/solid-v2/compiler/src/lib.rs",
-    "conformance": "docs/package-contract-v2/compiler-bootstrap/2026-08-27-conformance.json",
-    "report": "docs/package-contract-v2/compiler-bootstrap/2026-08-27-compiler-facts.md",
+    "conformance": "rust/dialects/solid-v2/compiler-identity/conformance.json",
+    "report": "rust/dialects/solid-v2/compiler-identity/compiler-facts.md",
     "cargoPackage": "solidjs-compiler",
     "cargoSourcePrefix": "git+https://github.com/yumemi-thomas/solid?"
   }

@@ -20,7 +20,7 @@ The open counterpart is `context-member-identity-open`: an open program closes n
 context's provider census.
 
 Remaining approximation: a withheld context member is silent rather than an
-SC9012 obligation (docs/precision-backlog.md).
+SC9012 obligation.
 
 `solid-js.d.ts` is the `accessor-provenance` stub plus `button.disabled`; the
 claim-bearing signatures are copied from published 2.0.0-rc.13. The sources

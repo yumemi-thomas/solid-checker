@@ -379,11 +379,10 @@ pub struct AstFacts {
     /// with `reach: unknown` and classifies the enclosing construct, so the
     /// census reads the row instead — a producer fact in place of a syntactic
     /// approximation that could see the jump but never which rows it touched
-    /// (`docs/typefacts/adr/0026-…` amendment).
+    /// (Type Facts ADR 0026 amendment).
     ///
     /// Retained rather than removed because it is a faithful syntactic fact and
-    /// its extraction is two pushes; its removal is recorded as a candidate in
-    /// `docs/precision-backlog.md`. Any new consumer must state its own premise:
+    /// its extraction is two pushes; it is a removal candidate. Any new consumer must state its own premise:
     /// a jump in a span says nothing about what any other fact domain withheld.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub jump_statements: Vec<Span>,

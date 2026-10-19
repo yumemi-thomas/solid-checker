@@ -189,7 +189,7 @@ Re-run on the current checker: **7 static-only cases**, each accounted for.
   `r9-d3-ifawait`, `r9-d3-loopawait` (a path that skips the await reads in the
   window). `r9-d3-tryawait` is the one shape where no realistic path skips the
   await; it is recorded as a known false-positive shape in
-  `docs/precision-backlog.md`.
+  `docs/open-work.md`.
 - Kept by ADR 0327's inherited event-owner premise: `review-r7-sync-scroll`,
   `review-r7-sync-child-scroll` (a synchronous `dispatchEvent` from an owned
   scope).

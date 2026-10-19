@@ -132,7 +132,7 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
                         if *reexported { "re-exported" } else { "imported" }
                     ),
                     format!(
-                        "Read {contexts} only through useContext({contexts}). A value the project provides itself (<{contexts} value={{…}}>, createComponent({contexts}, …)) replaces the package's, so the certified claims about {export} cannot hold for it. See docs/adr/0153-a-member-of-a-package-owned-context-value.md."
+                        "Read {contexts} only through useContext({contexts}). A value the project provides itself (<{contexts} value={{…}}>, createComponent({contexts}, …)) replaces the package's, so the certified claims about {export} cannot hold for it."
                     ),
                 )
             } else if let Some(claims) = defect

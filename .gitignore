@@ -160,7 +160,6 @@ packages/wasm/owned/
 # index on 2026-09-17. The files stay on disk; regenerate rather than commit.
 # Documents citing one by relative link are citing a local artifact, not a
 # repository file.
-docs/package-contract-v2/phase21/*measurement.json
 !fixtures/reactive-ir/fixed-structural-return-consumer/node_modules/
 !fixtures/reactive-ir/fixed-structural-return-consumer/node_modules/**
 !fixtures/reactive-ir/partial-structural-return-consumer/node_modules/

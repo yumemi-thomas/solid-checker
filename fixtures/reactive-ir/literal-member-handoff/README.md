@@ -32,7 +32,7 @@ of the type-only fallback is (a written binding, a receiver that is the member
 itself): the fallback is the only evidence the read is reactive, and withholding
 it leaves no claim to obligate.
 
-Remaining approximations (docs/precision-backlog.md): the verdict is per
+Remaining approximations: the verdict is per
 property symbol, so one escaped read withholds every read of that symbol; a
 hand-off to project code that provably writes nothing (a JSX prop, a reader) is
 still a hand-off; an interface-declared member read through an Unknown receiver

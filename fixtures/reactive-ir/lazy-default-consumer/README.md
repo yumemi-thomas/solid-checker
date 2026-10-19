@@ -44,7 +44,7 @@ which contract mode reported and `--dependency-source` left uncertifiable.
 | `Refused.tsx` `UnusedCube` | uncertifiable | the wrapper is never rendered |
 | `Refused.tsx` `ExportedCube` | uncertifiable | an exported wrapper: another module may preload it |
 | `Refused.tsx` `makeCube()` | SC1001 violation | unchanged: the loader's own synchronous prefix calls a helper (ADR 0292 claims nothing here; the default is a call, not a component) |
-| `Conditional.tsx` `ConditionalCube` | SC1001 violation | unchanged and **not** this proof: `flag ? ConditionalCube : Plain` is no exact property value, so the retention guard never refused it (precision backlog) |
+| `Conditional.tsx` `ConditionalCube` | SC1001 violation | unchanged and **not** this proof: `flag ? ConditionalCube : Plain` is no exact property value, so the retention guard never refused it (pre-existing) |
 | `Shadow.tsx` module `ShadowCube` | uncertifiable | held by an exported registry; the loader's own `ShadowCube` shadows it |
 | `LocalLazy.tsx` `LocalCube` | uncertifiable | a project function spelled `lazy` |
 | `FakeLazy.tsx` `PackageCube` | uncertifiable | another package's `lazy` |

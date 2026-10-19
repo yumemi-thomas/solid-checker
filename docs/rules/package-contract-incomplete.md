@@ -12,4 +12,4 @@ package obligation open. Missing module/type errors belong to TypeScript.
 Provide analyzable runtime source and the correct host configuration where
 supported. There is no contract, catalog or receipt workflow that can discharge
 this obligation. Do not silence an unknown boundary by assuming package
-behavior from a name. See [ADR 0312](../adr/0312-package-contracts-are-removed.md).
+behavior from a name. See [ADR 0312](../decisions.md#adr-0312).

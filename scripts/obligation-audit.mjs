@@ -132,7 +132,7 @@ ledger.cases.forEach((testCase, index) => {
           obligation.map((finding) => finding.kind).join(", ") || "none"
         }).` +
         ` If the checker now settles this on its own, that is a real change: move the case to a` +
-        ` closure with the evidence it now uses, and say so in docs/precision-backlog.md.`
+        ` closure with the evidence it now uses, and say so in the commit message.`
     );
     return;
   }

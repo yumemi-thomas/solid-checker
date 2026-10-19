@@ -118,8 +118,7 @@ const ledger = JSON.parse(readFileSync(LEDGER_PATH, "utf8"));
 // fail: nothing can ever emit it, so the clause is satisfied by any
 // implementation, including one that emits nothing at all. Eleven cases were
 // written that way -- each naming an upstream rule the checker deliberately
-// does not carry -- and every one of them asserted nothing. Recorded in
-// docs/precision-backlog.md, 2026-09-16.
+// does not carry -- and every one of them asserted nothing (2026-09-16).
 //
 // Discovered rather than named, so retiring or adding a dialect is a change to
 // the shipped manifests and not to this gate. Naming them cost a `make verify`

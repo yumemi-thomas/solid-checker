@@ -6,7 +6,7 @@ A reactive value (signal accessor, store path, or component prop) is read in a s
 that does not track dependencies.
 
 Like every projected violation, this finding assumes
-[standard runtime configuration](../adr/0266-standard-runtime-configuration-premise.md).
+[standard runtime configuration](../decisions.md#adr-0266).
 A positively identified visible configuration use makes it uncertifiable,
 with the veto site related. Missing reference evidence does not veto this
 conditional premise.

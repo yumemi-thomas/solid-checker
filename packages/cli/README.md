@@ -25,7 +25,7 @@ checker does not invent package behavior.
 Package contracts, catalogs, receipts, generation and certification commands
 have been removed. ESLint’s `acceptedContracts`, `receiptTrustConfiguration`
 and `dependencySource` settings are refused. `--no-package-contracts` remains
-a compatibility no-op. See [ADR 0312](../../docs/adr/0312-package-contracts-are-removed.md).
+a compatibility no-op. See [ADR 0312](../../docs/decisions.md#adr-0312).
 
 ## Development feedback
 

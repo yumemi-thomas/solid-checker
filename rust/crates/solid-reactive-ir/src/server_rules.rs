@@ -756,7 +756,7 @@ struct RichMember {
 /// presence half alone: it witnesses that a rich value *is* in the graph and
 /// never concludes that a graph is JSON-safe. Proving safety needs the whole
 /// property set closed against getters, which the AST facts cannot express
-/// today (see docs/precision-backlog.md).
+/// today.
 ///
 /// Every condition below is a soundness requirement, not a convenience:
 ///

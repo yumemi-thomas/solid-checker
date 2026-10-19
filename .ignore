@@ -1,6 +1,4 @@
 # Search noise for ripgrep and fd (git ignores this file). These trees are
 # large and rarely the answer; target them explicitly or pass --no-ignore.
-docs/precision-backlog.md
-docs/package-contract-v2/audits/
 fixtures/findings-snapshots/
 fixtures/**/node_modules/

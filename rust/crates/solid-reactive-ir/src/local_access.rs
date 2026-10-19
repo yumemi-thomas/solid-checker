@@ -134,7 +134,7 @@ pub(crate) struct LocalAccessContext<'a, 'facts> {
 ///   pass below owns that read and reports it in its own execution role;
 ///   claiming the callee's parameter read as well would report one dependency
 ///   twice. What stays uncovered is a *nested* proxy surviving the shallow
-///   copy — see docs/precision-backlog.md; and
+///   copy; and
 /// * an analyzed local binding initialized by a resolved standard-library
 ///   call, such as `document.createElement("button")`. That value's origin is
 ///   platform code, which cannot return a Solid store.

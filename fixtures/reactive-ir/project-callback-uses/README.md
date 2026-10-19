@@ -26,7 +26,7 @@ stack. The closed uses are:
 | SiblingAbsentRead: an absent sibling is read, which runs any getter project code installed on `Object.prototype` | uncertifiable |
 | FunctionSubject: the callback is a `function` expression, which can hand its receiver to code that calls it again | uncertifiable |
 | UnnamedRows, NamedRows (`mapArray` with `name` wraps the map function in a labelled window), Caught (`Promise.catch` calls its receiver's `then`) | uncertifiable |
-| DirectLabelledUntrack | nothing reported; a known missed detection (docs/precision-backlog.md) |
+| DirectLabelledUntrack | nothing reported; a known missed detection |
 | StoredCallback, ReturnedCallback, ReturnedUntrackCapture, UnknownPackage, SynchronousDomDispatch, StoredCallbackProp, WholePropsEscape, NamespaceTarget, ComputedTarget, Cycle, AsyncConsumer, DefaultedConsumer, SpreadOverride | uncertifiable |
 
 The strict-read proof also composes exact options-field callback carriers,
