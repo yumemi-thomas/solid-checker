@@ -72,6 +72,86 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/PrimitiveValue.tsx",
+      "start": 203,
+      "end": 215,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/PrimitiveValue.tsx",
+      "start": 448,
+      "end": 460,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/PrimitiveValue.tsx",
+      "start": 498,
+      "end": 510,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/PrimitiveValue.tsx",
+      "start": 643,
+      "end": 655,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/PrimitiveValue.tsx",
+      "start": 706,
+      "end": 718,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/PrimitiveValue.tsx",
+      "start": 844,
+      "end": 856,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/PrimitiveValue.tsx",
+      "start": 882,
+      "end": 894,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/unplaced-site-obligations/PrimitiveValue.tsx",
+      "start": 955,
+      "end": 967,
+      "fixes": 0
+    },
+    {
       "rule": "until-in-tracked-scope",
       "code": "SC2005",
       "kind": "uncertifiable",

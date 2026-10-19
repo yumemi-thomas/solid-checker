@@ -179,6 +179,15 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
             ),
             "Read it inside JSX, a createMemo, or an effect's compute function, or make its source visible to solid-checker: create it with a Solid primitive in the project, or pass one through a path the analysis follows (ADR 0294).".into(),
         ),
+        StaticDefectKind::ReactiveDispatchUnresolved {
+            callee,
+            member: None,
+        } if defect.analysis_context == crate::PRIMITIVE_VALUE => (
+            format!(
+                "Solid primitive {callee} is used as a value here, so the calls that reach it are not followed; the owner, tracking and write rules that apply where it runs are not checked"
+            ),
+            "Call the primitive directly by its imported name, so solid-checker can see each call.".into(),
+        ),
         StaticDefectKind::ReactiveDispatchUnresolved { callee, member } => (
             if let Some(member) = member {
                 format!(

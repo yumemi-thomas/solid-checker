@@ -662,6 +662,12 @@ pub const STORE_KEY_UNDECIDED: &str = "store-key-undecided:";
 /// `static_rules.rs`; consumer: `projection.rs`.
 pub const TYPE_ONLY_SOURCE: &str = "type-only-source";
 
+/// The `analysis_context` of a dispatch obligation at a dialect primitive
+/// used as a value (`const eff = createEffect`, `Reflect.apply(createEffect,
+/// …)`): the calls it reaches are not followed. Its `callee` is the
+/// reference's text. Producer: `static_rules.rs`; consumer: `projection.rs`.
+pub const PRIMITIVE_VALUE: &str = "primitive-value";
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StaticDefect {
@@ -1784,6 +1790,62 @@ fn primitive_name(
     }
 }
 
+/// The dialect primitive a reference names, resolved through the binder: an
+/// identifier whose declaration is a named import binding of a primitive, or a
+/// non-computed member (`Solid.createEffect`, given by its own span or its
+/// property's) of a namespace import binding. The answer is the symbol's at
+/// the import binding, which the demand plan always resolves; an entity that
+/// merely happens to sit at the reference proves nothing.
+fn referenced_primitive(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    dialect: &dyn Dialect,
+) -> Option<PrimitiveName> {
+    use solid_facts::ast::ImportKind;
+    let ast = &file.ast;
+    let import_binding = |declaration: Span| {
+        ast.imports
+            .iter()
+            .flat_map(|import| &import.bindings)
+            .find(|binding| binding.local.span == declaration)
+    };
+    let known = |name: Option<PrimitiveName>| name.filter(|name| name.primitive().is_some());
+    if let Some(declaration) = ast.reference_declaration(span) {
+        let binding = import_binding(declaration)?;
+        if binding.kind == ImportKind::Namespace {
+            return None;
+        }
+        return known(primitive_name(
+            file.path.as_str(),
+            declaration,
+            None,
+            entities,
+            symbol_names,
+            dialect,
+        ));
+    }
+    let member = ast
+        .members
+        .iter()
+        .find(|member| member.span == span || member.property == span)?;
+    if ast.computed_members.contains(&member.span) {
+        return None;
+    }
+    let declaration = ast.reference_declaration(ast.peel_ts_sugar_span(member.object))?;
+    if import_binding(declaration)?.kind != ImportKind::Namespace {
+        return None;
+    }
+    let namespace = entities.at(file.path.as_str(), declaration)?;
+    let property = file.source_text(member.property)?;
+    known(
+        symbol_names
+            .get(format!("{namespace}::{property}").as_str())
+            .map(|name| PrimitiveName::new(name, dialect)),
+    )
+}
+
 /// The primitive one concrete call denotes: [`primitive_name`] for its callee,
 /// then the dialect's [`solid_dialect::Dialect::call_form`] for its options.
 ///
@@ -1819,6 +1881,25 @@ fn call_primitive_name(
         symbol_names,
         dialect,
     )?;
+    // A whole member span may carry its receiver's symbol, so
+    // `createEffect.bind(x)` and `createEffect.call(this, …)` resolve to the
+    // primitive while calling a method of it, with other arguments in other
+    // slots. When the member's object is itself the primitive, the call is
+    // that method's, not the primitive's. A namespace member
+    // (`Solid.createEffect`), whose object is the namespace, keeps its answer.
+    let callee = file.ast.peel_ts_sugar_span(call.callee);
+    if let Some(member) = file.ast.members.iter().find(|member| member.span == callee)
+        && referenced_primitive(
+            file,
+            file.ast.peel_ts_sugar_span(member.object),
+            entities,
+            symbol_names,
+            dialect,
+        )
+        .is_some()
+    {
+        return None;
+    }
     let PrimitiveName::Known(primitive, spelling) = name else {
         return Some(name);
     };

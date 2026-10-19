@@ -24,6 +24,16 @@ fn twin(
         return;
     };
     let (directory, paths) = project(label, files);
+    // The copied stub declares no `createRoot`; an import of it would be
+    // TS2305 and resolve to no declaration, which names no primitive. The
+    // declaration is published rc.13's (`@solidjs/signals`
+    // `dist/types/core/owner.d.ts:133`).
+    let stub = directory.join("solid-js.d.ts");
+    let mut declarations = fs::read_to_string(&stub).unwrap();
+    declarations.push_str(
+        "\ndeclare module \"solid-js\" {\n  export function createRoot<T>(init: ((dispose: () => void) => T) | (() => T), options?: {\n    id?: string;\n    transparent?: boolean;\n  }): T;\n}\n",
+    );
+    fs::write(&stub, declarations).unwrap();
     let tsconfig = directory
         .join("tsconfig.json")
         .canonicalize()

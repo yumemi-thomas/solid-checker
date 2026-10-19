@@ -36,6 +36,10 @@ Missing owner (`missing-owner`, SC4001):
 - `review-opus5-t6-rest-timer-owner` (App.tsx:8): an effect created in a timer inside a `Show` callback.
 - `review-opus2-o15-settled-class-field-new-in-timeout` (App.tsx:5): a class constructed in a timer. The field stays an uncertifiable SC3001.
 
+Primitive used as a value (`reactive-dispatch-unresolved`, SC9012):
+
+- Found only through a named or namespace import of the primitive. Not followed: a stored or aliased namespace object (`const NS = Solid; NS.createEffect(…)`), a namespace import of a project barrel, a computed member (`S["createEffect"]`), an `import S = require(…)` member (review round 3, probes `r3-ns-escape-defect`, `r3-barrel-escape-only`, `r3-computed`). The exact fix is a reference census: every TypeFacts reference of a primitive's symbol that is not a primitive callee is an obligation. None of these shapes is in the corpus.
+
 Other:
 
 - Synchronous DOM calls that dispatch (`focus`, `blur`, `click`, `dispatchEvent`, form `reset`/`requestSubmit`, popover and dialog toggles) are refused. Not modeled and still trusted: custom-element reactions on tree mutation and attribute writes, and focus loss when a focused element is removed (ADR 0329).
@@ -67,7 +71,7 @@ A violation withheld, or turned uncertifiable, to keep zero false positives. Eac
 - A signal read inside a JSX element passed as a prop does not make that prop reactive; reads of it are uncertifiable.
 - A generator body is never placed where it is written. A call to a generator runs none of its body.
 - A function returning JSX with no rendering tag is a proven component only when every reference to it is its declaration, module surface, a dialect callback, a dialect renderer prop or a `lazy` default; otherwise (alias, object storage, a call argument, a router config not read from source, a method, an anonymous default export) its body reads and writes are uncertifiable. Solid makes a function a component only where `createComponent` calls it (`precision-map-renderer`, `precision-method-renderer`).
-- A read, write or action no fact places (`ExecutionRole::Unknown`: a JSX attribute function, a closure stored in a tracked scope, a write after an `await` not proven to dominate it, a helper with no resolved caller) is an uncertifiable finding of its rule, never silent; `Unreported` (several non-reporting roles, or past the strict-read window) stays silent. The same holds for `resolve`/`until` in such code (SC2004/SC2005), a read in a helper called after an `await` (SC1002), and options the syntax cannot read beside an async computation (SC7002). A coverage rule disabled by options still keeps the result from certifying.
+- A read, write or action no fact places (`ExecutionRole::Unknown`: a JSX attribute function, a closure stored in a tracked scope, a write after an `await` not proven to dominate it, a helper with no resolved caller) is an uncertifiable finding of its rule, never silent; `Unreported` (several non-reporting roles, or past the strict-read window) stays silent. The same holds for `resolve`/`until` in such code (SC2004/SC2005), a read in a helper called after an `await` (SC1002), options the syntax cannot read beside an async computation (SC7002), and a primitive used as a value (SC9012; the shapes not yet followed are in section 1). A coverage rule disabled by options still keeps the result from certifying.
 - Mixed invocation of one callback (owned setup and event dispatch) refuses the owner proof as a whole (ADR 0327). A callback run only by events is proven unowned.
 
 Known false-positive shapes left open (fire today, wanted gone):

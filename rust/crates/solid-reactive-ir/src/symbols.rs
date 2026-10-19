@@ -41,6 +41,9 @@ pub(super) fn add_solid_import_names(
                 let Some(symbol) = entities.get(&location) else {
                     continue;
                 };
+                if undeclared(facts, symbol) {
+                    continue;
+                }
                 if binding.kind == solid_facts::ast::ImportKind::Namespace {
                     for primitive in primitives {
                         names.insert(
@@ -74,12 +77,26 @@ pub(super) fn add_solid_import_names(
                     continue;
                 }
                 let location = location(file.path.shared(), specifier.local.span);
-                if let Some(symbol) = entities.get(&location) {
+                if let Some(symbol) = entities.get(&location)
+                    && !undeclared(facts, symbol)
+                {
                     names.insert(symbol.clone(), primitive.into());
                 }
             }
         }
     }
+}
+
+/// Whether `symbol` is no declaration's identity: the fact table has no
+/// declaration for it. Every import of a missing package resolves to the
+/// checker's one unknown symbol, which declares nothing; naming it after a
+/// primitive would make every unresolved import in the project that
+/// primitive.
+fn undeclared(facts: &ProjectFacts, symbol: &SymbolId) -> bool {
+    facts
+        .typescript
+        .symbol(symbol.as_str())
+        .is_none_or(|fact| fact.declarations().is_empty())
 }
 
 pub(super) fn alias_roots_and_source_declarations(

@@ -24,6 +24,87 @@ use typefacts::Location;
 pub(crate) fn static_prepass(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
     component_props_destructure(ctx, draft);
     reactive_read_after_await(ctx, draft);
+    primitive_value_references(ctx, draft);
+}
+
+/// A dialect primitive referenced as a value rather than called by name
+/// (`const effect = createEffect; effect(…)`, `Reflect.apply(createEffect,
+/// …)`, `afterEach(cleanup)`, `[Solid.createEffect]`). Every rule finds a
+/// primitive at a call whose callee resolves to it, so the calls such a value
+/// reaches are invisible to all of them: an obligation at the reference, never
+/// a silent clean.
+///
+/// Every reference counts except the ones a rule already reads or that are
+/// not values: the callee and its plain member chain, a JSX tag, a type query
+/// or type name (annotations, `implements`, interface heritage), an import or
+/// export specifier and the declaration. Listing value positions instead
+/// missed class fields, `yield` and JSX attribute values.
+fn primitive_value_references(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
+    for file in &ctx.facts.files {
+        let ast = &file.ast;
+        // The callee of a call that resolves to a primitive, and the plain
+        // member chain it is (`createEffect`, `Solid.createEffect`): the rules
+        // read these. Anything else is a value the call reaches: a method of
+        // the primitive (`createEffect.call(…)`, `.bind(…)`) or a choice
+        // (`(flag ? a : b)(…)`).
+        let mut callees = HashSet::new();
+        for call in ast.calls.iter().filter(|call| {
+            call_primitive_name(file, call, ctx.entities, ctx.symbol_names, ctx.dialect).is_some()
+        }) {
+            let mut span = ast.peel_ts_sugar_span(call.callee);
+            callees.insert(span);
+            while let Some(member) = ast.members.iter().find(|member| member.span == span) {
+                callees.insert(member.property);
+                span = ast.peel_ts_sugar_span(member.object);
+                callees.insert(span);
+            }
+        }
+        let candidates = ast
+            .identifiers
+            .iter()
+            .filter(|identifier| identifier.role == solid_facts::ast::IdentifierRole::Reference)
+            .map(|identifier| identifier.span)
+            .chain(
+                ast.members
+                    .iter()
+                    .filter(|member| !ast.computed_members.contains(&member.span))
+                    .map(|member| member.property),
+            );
+        let mut seen = HashSet::new();
+        for span in candidates {
+            if callees.contains(&span)
+                || ast.jsx_elements.iter().any(|element| {
+                    element.name.span.contains(span)
+                        || element.closing_name.is_some_and(|name| name.contains(span))
+                })
+                || ast.type_queries.iter().any(|query| query.contains(span))
+                || ast.type_names.iter().any(|name| name.contains(span))
+                || crate::indexes::reference_is_declaration_or_module_surface(file, span)
+                || !seen.insert(span)
+            {
+                continue;
+            }
+            let Some(primitive) = crate::referenced_primitive(
+                file,
+                span,
+                ctx.entities,
+                ctx.symbol_names,
+                ctx.dialect,
+            ) else {
+                continue;
+            };
+            draft.push_defect(StaticDefect {
+                kind: StaticDefectKind::ReactiveDispatchUnresolved {
+                    callee: primitive.to_string(),
+                    member: None,
+                },
+                location: location(file.path.shared(), span),
+                analysis_context: crate::PRIMITIVE_VALUE.to_owned(),
+                fixes: vec![],
+                uncertain: true,
+            });
+        }
+    }
 }
 
 /// SC1003: a reactive object destructured outside tracking. Component
