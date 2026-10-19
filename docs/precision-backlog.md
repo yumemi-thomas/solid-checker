@@ -1,5 +1,31 @@
 # Precision backlog
 
+## 2026-10-19 — Opus review round 1 of the day's slices
+
+No false positive introduced by the day's commits. Fixed from the review:
+
+- **Generators** (pre-existing, user-facing): a generator literal invoked in
+  place or handed to an inline standard-library callback (`map`) was placed
+  where it is written, so a props or store read in its body was a proven
+  `SC1001` though calling a generator runs none of its body. Every literal
+  walk now stops at a generator (`execution_role.rs`, `interproc.rs`).
+- **Class field initializers** (pre-existing, user-facing): no function fact
+  covers them, so a read there was placed in the enclosing component body. A
+  site in a class written inside its enclosing function now has no placement.
+- **Daemon `extends` staleness**: the tracking fingerprinted the resolved
+  files only. It now compares a witness of everything resolution consulted
+  (`tsconfig_extends_witness`: config and manifest bytes, and the state of
+  every probed path, symlink targets and absent nearer candidates included).
+  Process test `daemon_follows_a_package_extends_resolution` (relink, moved
+  `tsconfig` field, nearer copy; it fails without the change).
+- **ADR 0329 table**: see its amendment.
+
+Oracle: 577 cases (16 from this review), exit 0, 0 unproven clean. Corpus: no
+movement. Left as noted by the review, unconfirmed or older: a `ref` callback
+reading props is silent (runtime warns); the ESLint adapter maps findings by
+on-disk byte offsets onto in-memory text (unsaved editor buffers, later
+`--fix` passes).
+
 ## 2026-10-19 — Recall measurements and what was not built
 
 Two recall instruments now exist; neither shows a miss with real-code yield.

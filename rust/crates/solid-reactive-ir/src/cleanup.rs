@@ -1018,34 +1018,37 @@ fn dispatches_dom_event(resolved: &typefacts::ResolvedCall) -> bool {
 /// ADR 0329: `lib.dom` members that dispatch an event synchronously, before
 /// they return, and so run listeners the program registered: focus moves
 /// (`focus`, `blur`), synthetic activation and dispatch (`click`,
-/// `dispatchEvent`), form `reset`, `requestSubmit` and constraint validation
-/// (`invalid`), and popover and dialog toggles (`beforetoggle`). Matched by
-/// member name on any `lib.dom` interface, which redeclares them, and on the
-/// global functions `lib.dom` declares for `window` (`dispatchEvent`,
-/// `focus`, `blur`).
+/// `dispatchEvent`), and constraint validation (`invalid`) by member name on
+/// any interface (every one that declares them dispatches); and, by exact
+/// owner, the members whose name is shared with non-dispatching ones: form
+/// `reset`/`requestSubmit`, popover toggles (`beforetoggle`), dialog
+/// `show`/`showModal`/`close`/`requestClose`, `AbortController.abort`
+/// (`abort` on its signal), `XMLHttpRequest.open`/`abort`
+/// (`readystatechange`, `abort`) and `Document.execCommand` (`input`).
+/// `lib.dom` also declares `dispatchEvent`, `focus` and `blur` as globals for
+/// `window`.
 fn synchronously_dispatching_dom_member(qualified_name: &str) -> bool {
-    let member = qualified_name
+    let (owner, member) = qualified_name
         .rsplit_once('.')
-        .map_or(qualified_name, |(_, member)| member);
-    {
-        matches!(
-            member,
-            "focus"
-                | "blur"
-                | "click"
-                | "dispatchEvent"
-                | "reset"
-                | "requestSubmit"
-                | "checkValidity"
-                | "reportValidity"
-                | "showPopover"
-                | "hidePopover"
-                | "togglePopover"
-                | "show"
-                | "showModal"
-                | "close"
-        )
-    }
+        .unwrap_or(("", qualified_name));
+    matches!(
+        member,
+        "focus" | "blur" | "click" | "dispatchEvent" | "checkValidity" | "reportValidity"
+    ) || matches!(
+        (owner, member),
+        ("HTMLFormElement", "reset" | "requestSubmit")
+            | (
+                "HTMLElement",
+                "showPopover" | "hidePopover" | "togglePopover"
+            )
+            | (
+                "HTMLDialogElement",
+                "show" | "showModal" | "close" | "requestClose"
+            )
+            | ("AbortController", "abort")
+            | ("XMLHttpRequest", "open" | "abort")
+            | ("Document", "execCommand")
+    )
 }
 
 /// Whether the exact `lib.dom` declaration `qualified_name` names a member of

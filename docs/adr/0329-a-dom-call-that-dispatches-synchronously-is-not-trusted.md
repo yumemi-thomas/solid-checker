@@ -46,3 +46,17 @@ Corpus: 0 removed, +20 `SC9012` uncertifiable (kui 10, ai-memory-ui 4, app-game
 no change. Not modeled and recorded open: custom-element reactions on tree
 mutation and attribute writes, and focus loss when a focused element is
 removed.
+
+## Amendment (2026-10-19, review round 1)
+
+The member table is now `focus`, `blur`, `click`, `dispatchEvent`,
+`checkValidity`, `reportValidity` by name on any `lib.dom` interface (and the
+window globals), and by exact owner `HTMLFormElement.reset`/`requestSubmit`,
+`HTMLElement.showPopover`/`hidePopover`/`togglePopover`,
+`HTMLDialogElement.show`/`showModal`/`close`/`requestClose`,
+`AbortController.abort`, `XMLHttpRequest.open`/`abort` and
+`Document.execCommand`. The review found the last four dispatching listeners
+that called `onCleanup` (runtime `CLEANUP_IN_FORBIDDEN_SCOPE`, checker silent),
+and that matching `close`, `reset` and `show` by name refused
+`WebSocket.close` and `CanvasRenderingContext2D.reset`, which do not dispatch.
+Oracle cases `review-opus-l01`..`l07`. Corpus: no movement.

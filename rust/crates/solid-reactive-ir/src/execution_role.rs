@@ -2081,6 +2081,11 @@ pub(super) fn nested_literal_runs_during_body(
         if lookup.function_component_status(file, literal) != ComponentStatus::No {
             return true;
         }
+        // Calling a generator function runs none of its body: it runs on
+        // the returned iterator's `next()`, wherever that is.
+        if literal.generator {
+            return false;
+        }
         let Some((call, index)) = file
             .ast
             .arguments_containing(literal.span)
@@ -2318,6 +2323,15 @@ fn semantic_role_before_awaits(
     // either way.
     if discarded_region_contains(file, span) {
         return ExecutionRole::DiscardedRendering;
+    }
+    // A class field initializer or static block written in a function is no
+    // function fact, so every path below would place it in that function. It
+    // runs at construction or class evaluation instead, which no path here
+    // places.
+    if containing_ast_function(&file.ast, span)
+        .is_some_and(|function| class_within(file, function.span, span))
+    {
+        return ExecutionRole::Unknown;
     }
     // Also ahead of every semantic path, for the mirror-image reason: code
     // inside a callback that runs on reads of a returned view (rc.9's `omit`
@@ -3396,6 +3410,11 @@ fn callee_callback_timing_within(
         let Some(literal) = containing_ast_function(&file.ast, span) else {
             return false;
         };
+        // Calling a generator function runs none of its body: it runs on
+        // the returned iterator's `next()`, wherever that is.
+        if literal.generator {
+            return true;
+        }
         // The call the literal is written in: an argument in which the literal
         // is the outermost function (directly, or inside an array or object
         // literal), the innermost such call.
@@ -3549,6 +3568,11 @@ pub(crate) fn unclassified_callback_reaches_modelled_consumer(
         // A function bound to a name is the interprocedural summary's
         // business, not an anonymous callback.
         if literal.method_name.is_some() || function_binding_name(file, literal).is_some() {
+            return false;
+        }
+        // Calling a generator function runs none of its body: it runs on
+        // the returned iterator's `next()`, wherever that is.
+        if literal.generator {
             return false;
         }
         let Some((call, index)) = file

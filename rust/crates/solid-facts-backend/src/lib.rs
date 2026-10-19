@@ -110,7 +110,7 @@ pub use diagnostics::{
     discovered_rule_options_path, imported_package_roots, semantic_demand_options_for_enablement,
     source_location, unsupported_runtime_snapshot,
 };
-pub use host_config::tsconfig_extends_chain;
+pub use host_config::{tsconfig_extends_chain, tsconfig_extends_witness};
 pub use inferred_host::{
     InferredHost, inferred_host_directory_digest, inferred_host_input_digest,
     inferred_host_input_paths, inferred_host_input_paths_for_project,

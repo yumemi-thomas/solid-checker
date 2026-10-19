@@ -819,9 +819,9 @@ pub(super) fn jsonc(source: &str) -> Option<serde_json::Value> {
 
 /// The files a tsconfig inherits from through `extends`, transitively, in
 /// order, the config itself excluded; `None` when an entry cannot be resolved
-/// exactly here (a package specifier, a missing file, a cycle, invalid JSONC),
-/// in which case a caller that must notice config edits cannot trust any
-/// retained answer for this program.
+/// exactly here (a missing file, a cycle, invalid JSONC, a package with an
+/// `exports` map), in which case a caller that must notice config edits cannot
+/// trust any retained answer for this program.
 ///
 /// Relative entries resolve against the extending file's directory, with the
 /// `.json` suffix added when the exact path does not exist, as TypeScript
@@ -830,86 +830,143 @@ pub(super) fn jsonc(source: &str) -> Option<serde_json::Value> {
 /// package's `tsconfig` field, else its `tsconfig.json`. A package with an
 /// `exports` map refuses: that resolution is TypeScript's, not reproduced.
 pub fn tsconfig_extends_chain(config: &std::path::Path) -> Option<Vec<std::path::PathBuf>> {
-    fn walk(
-        config: &std::path::Path,
-        chain: &mut Vec<std::path::PathBuf>,
-        seen: &mut std::collections::BTreeSet<std::path::PathBuf>,
-    ) -> Option<()> {
-        let source = std::fs::read_to_string(config).ok()?;
-        let value = jsonc(&source)?;
-        let entries = match value.get("extends") {
-            None => return Some(()),
-            Some(serde_json::Value::String(entry)) => vec![entry.clone()],
-            Some(serde_json::Value::Array(entries)) => entries
-                .iter()
-                .map(|entry| entry.as_str().map(str::to_owned))
-                .collect::<Option<Vec<_>>>()?,
-            Some(_) => return None,
-        };
-        let directory = config.parent()?;
-        for entry in entries {
-            let path =
-                if entry.starts_with("./") || entry.starts_with("../") || entry.starts_with('/') {
-                    file_or_json(&directory.join(&entry))?
-                } else {
-                    package_config(directory, &entry)?
-                };
-            let path = path.canonicalize().ok()?;
-            if !seen.insert(path.clone()) {
+    tsconfig_extends_witness(config).map(|(chain, _)| chain)
+}
+
+/// A resolved `extends` chain, and each consulted path with its observed state.
+pub type ExtendsWitness = (Vec<std::path::PathBuf>, Vec<(std::path::PathBuf, String)>);
+
+/// [`tsconfig_extends_chain`] plus everything the resolution consulted: the
+/// bytes of every config and package manifest read, and the state (absent,
+/// directory, file, or symlink target) of every path probed on the way,
+/// including the `node_modules` candidates searched past and the nearer ones
+/// found missing. Two equal witnesses resolve the same chain to the same
+/// bytes; a retained answer is current only while its witness is (review
+/// round 1: a relinked package, an edited `tsconfig` field, a nearer copy).
+pub fn tsconfig_extends_witness(config: &std::path::Path) -> Option<ExtendsWitness> {
+    use sha2::{Digest, Sha256};
+    use std::path::{Path, PathBuf};
+    struct Walk {
+        chain: Vec<PathBuf>,
+        seen: std::collections::BTreeSet<PathBuf>,
+        witness: Vec<(PathBuf, String)>,
+    }
+    impl Walk {
+        fn observe(&mut self, path: &Path) {
+            let state = match std::fs::symlink_metadata(path) {
+                Err(_) => "absent".to_owned(),
+                Ok(metadata) if metadata.file_type().is_symlink() => std::fs::read_link(path)
+                    .map_or_else(
+                        |_| "link?".to_owned(),
+                        |target| format!("link:{}", target.display()),
+                    ),
+                Ok(metadata) if metadata.is_dir() => "dir".to_owned(),
+                Ok(_) => std::fs::read(path).map_or_else(
+                    |_| "file?".to_owned(),
+                    |bytes| format!("file:{:x}", Sha256::digest(&bytes)),
+                ),
+            };
+            self.witness.push((path.to_path_buf(), state));
+        }
+        /// `path` itself, or `path` with `.json` appended, when that is a file.
+        fn file_or_json(&mut self, path: &Path) -> Option<PathBuf> {
+            self.observe(path);
+            if path.is_file() {
+                return Some(path.to_path_buf());
+            }
+            let mut suffixed = path.as_os_str().to_owned();
+            suffixed.push(".json");
+            let suffixed = PathBuf::from(suffixed);
+            self.observe(&suffixed);
+            suffixed.is_file().then_some(suffixed)
+        }
+        fn package_config(&mut self, directory: &Path, specifier: &str) -> Option<PathBuf> {
+            let mut parts = specifier.splitn(if specifier.starts_with('@') { 3 } else { 2 }, '/');
+            let name = if specifier.starts_with('@') {
+                format!("{}/{}", parts.next()?, parts.next()?)
+            } else {
+                parts.next()?.to_owned()
+            };
+            let subpath = parts.next();
+            let mut root = None;
+            for ancestor in directory.ancestors() {
+                let candidate = ancestor.join("node_modules").join(&name);
+                // Every symlink on the way in (a scoped package's scope
+                // directory, the package itself) and the absence of every
+                // nearer candidate are inputs of the resolution.
+                if name.contains('/') {
+                    self.observe(&ancestor.join("node_modules").join(name.split('/').next()?));
+                }
+                self.observe(&candidate);
+                if candidate.is_dir() {
+                    root = Some(candidate);
+                    break;
+                }
+            }
+            let root = root?;
+            let manifest_path = root.join("package.json");
+            self.observe(&manifest_path);
+            let manifest = std::fs::read_to_string(&manifest_path)
+                .ok()
+                .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok());
+            if manifest
+                .as_ref()
+                .is_some_and(|manifest| manifest.get("exports").is_some())
+            {
                 return None;
             }
-            chain.push(path.clone());
-            walk(&path, chain, seen)?;
+            match subpath {
+                Some(subpath) => self.file_or_json(&root.join(subpath)),
+                None => match manifest
+                    .as_ref()
+                    .and_then(|manifest| manifest.get("tsconfig")?.as_str().map(str::to_owned))
+                {
+                    Some(field) => self.file_or_json(&root.join(field)),
+                    None => self.file_or_json(&root.join("tsconfig.json")),
+                },
+            }
         }
-        Some(())
-    }
-    /// `path` itself, or `path` with `.json` appended, when that is a file.
-    fn file_or_json(path: &std::path::Path) -> Option<std::path::PathBuf> {
-        if path.is_file() {
-            return Some(path.to_path_buf());
-        }
-        let mut suffixed = path.as_os_str().to_owned();
-        suffixed.push(".json");
-        let suffixed = std::path::PathBuf::from(suffixed);
-        suffixed.is_file().then_some(suffixed)
-    }
-    fn package_config(directory: &std::path::Path, specifier: &str) -> Option<std::path::PathBuf> {
-        let mut parts = specifier.splitn(if specifier.starts_with('@') { 3 } else { 2 }, '/');
-        let name = if specifier.starts_with('@') {
-            format!("{}/{}", parts.next()?, parts.next()?)
-        } else {
-            parts.next()?.to_owned()
-        };
-        let subpath = parts.next();
-        let root = directory
-            .ancestors()
-            .map(|ancestor| ancestor.join("node_modules").join(&name))
-            .find(|candidate| candidate.is_dir())?;
-        let manifest = std::fs::read_to_string(root.join("package.json"))
-            .ok()
-            .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok());
-        if manifest
-            .as_ref()
-            .is_some_and(|manifest| manifest.get("exports").is_some())
-        {
-            return None;
-        }
-        match subpath {
-            Some(subpath) => file_or_json(&root.join(subpath)),
-            None => manifest
-                .as_ref()
-                .and_then(|manifest| manifest.get("tsconfig")?.as_str().map(str::to_owned))
-                .map_or_else(
-                    || file_or_json(&root.join("tsconfig.json")),
-                    |field| file_or_json(&root.join(field)),
-                ),
+        fn walk(&mut self, config: &Path) -> Option<()> {
+            self.observe(config);
+            let source = std::fs::read_to_string(config).ok()?;
+            let value = jsonc(&source)?;
+            let entries = match value.get("extends") {
+                None => return Some(()),
+                Some(serde_json::Value::String(entry)) => vec![entry.clone()],
+                Some(serde_json::Value::Array(entries)) => entries
+                    .iter()
+                    .map(|entry| entry.as_str().map(str::to_owned))
+                    .collect::<Option<Vec<_>>>()?,
+                Some(_) => return None,
+            };
+            let directory = config.parent()?;
+            for entry in entries {
+                let path = if entry.starts_with("./")
+                    || entry.starts_with("../")
+                    || entry.starts_with('/')
+                {
+                    self.file_or_json(&directory.join(&entry))?
+                } else {
+                    self.package_config(directory, &entry)?
+                };
+                let path = path.canonicalize().ok()?;
+                if !self.seen.insert(path.clone()) {
+                    return None;
+                }
+                self.chain.push(path.clone());
+                self.walk(&path)?;
+            }
+            Some(())
         }
     }
-    let mut chain = Vec::new();
-    let mut seen = std::collections::BTreeSet::new();
-    seen.insert(config.canonicalize().ok()?);
-    walk(config, &mut chain, &mut seen)?;
-    Some(chain)
+    let mut walk = Walk {
+        chain: Vec::new(),
+        seen: std::collections::BTreeSet::new(),
+        witness: Vec::new(),
+    };
+    walk.seen.insert(config.canonicalize().ok()?);
+    walk.walk(config)?;
+    Some((walk.chain, walk.witness))
 }
 
 #[cfg(test)]

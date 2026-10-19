@@ -1100,6 +1100,10 @@ fn runs_in_unproven_stored_literal(
         if lookup.function_component_status(file, literal) != ComponentStatus::No {
             return false;
         }
+        // Calling a generator function runs none of its body.
+        if literal.generator {
+            return false;
+        }
         if file
             .ast
             .arguments_containing(literal.span)

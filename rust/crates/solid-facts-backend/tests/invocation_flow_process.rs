@@ -714,6 +714,102 @@ fn daemon_follows_an_extended_tsconfig() {
     let _ = fs::remove_dir_all(&sockets);
 }
 
+/// Review round 1 of the extends tracking: a package config's resolution
+/// changes with no change to any file the chain names. A pnpm-style symlink
+/// is retargeted, the package's `tsconfig` field moves, and a nearer copy of
+/// the package appears; each time the retained answer must be the fresh one.
+#[test]
+fn daemon_follows_a_package_extends_resolution() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let (root, _) = project("daemon-extends-package", &[]);
+    let root = root.canonicalize().unwrap();
+    let app = root.join("app");
+    fs::create_dir_all(&app).unwrap();
+    for (name, text) in [
+        ("App.tsx", RETAIN_APP),
+        ("lib.ts", RETAIN_LIB),
+        ("Other.tsx", OTHER),
+    ] {
+        fs::write(app.join(name), text).unwrap();
+    }
+    fs::copy(root.join("solid-js.d.ts"), app.join("solid-js.d.ts")).unwrap();
+    fs::copy(root.join("package.json"), app.join("package.json")).unwrap();
+    let options = r#""compilerOptions": {"jsx": "preserve", "module": "ESNext", "moduleResolution": "Bundler", "strict": true, "target": "ES2022"}"#;
+    let narrow = format!(
+        r#"{{ {options}, "include": ["${{configDir}}/App.tsx", "${{configDir}}/lib.ts", "${{configDir}}/*.d.ts"] }}"#
+    );
+    let wide =
+        format!(r#"{{ {options}, "include": ["${{configDir}}/*.ts", "${{configDir}}/*.tsx"] }}"#);
+    let store = root.join("store");
+    for (version, text) in [("v1", &narrow), ("v2", &wide)] {
+        fs::create_dir_all(store.join(version)).unwrap();
+        fs::write(store.join(version).join("tsconfig.json"), text).unwrap();
+        fs::write(store.join(version).join("narrow.json"), &narrow).unwrap();
+        fs::write(store.join(version).join("wide.json"), &wide).unwrap();
+        fs::write(
+            store.join(version).join("package.json"),
+            r#"{"name":"@cfg/base"}"#,
+        )
+        .unwrap();
+    }
+    let scope = root.join("node_modules").join("@cfg");
+    fs::create_dir_all(&scope).unwrap();
+    let link = scope.join("base");
+    std::os::unix::fs::symlink(store.join("v1"), &link).unwrap();
+    let tsconfig = app.join("tsconfig.json");
+    fs::write(&tsconfig, r#"{ "extends": "@cfg/base" }"#).unwrap();
+    let sockets = PathBuf::from(format!("/tmp/scp-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&sockets);
+    fs::create_dir_all(&sockets).unwrap();
+    let violations = |findings: &serde_json::Value| {
+        findings
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|finding| finding["id"] == "SC1001" && finding["kind"] == "violation")
+            .count()
+    };
+    let check = |label: &str, inside: bool| {
+        let (retained, _) = cli_check(&typefacts, &tsconfig, &sockets, true);
+        let (fresh, _) = cli_check(&typefacts, &tsconfig, &sockets, false);
+        assert_eq!(retained, fresh, "{label}");
+        assert_eq!(violations(&fresh) > 0, inside, "{label}");
+    };
+    check("narrow v1", false);
+    let (repeat, hit) = cli_check(&typefacts, &tsconfig, &sockets, true);
+    assert_eq!(hit, Some(true), "the repeat is a cached answer");
+    assert_eq!(violations(&repeat), 0);
+    // A retargeted symlink, both ways.
+    fs::remove_file(&link).unwrap();
+    std::os::unix::fs::symlink(store.join("v2"), &link).unwrap();
+    check("relinked to v2", true);
+    fs::remove_file(&link).unwrap();
+    std::os::unix::fs::symlink(store.join("v1"), &link).unwrap();
+    check("relinked to v1", false);
+    // The package's `tsconfig` field moves, both ways.
+    let manifest = store.join("v1").join("package.json");
+    fs::write(&manifest, r#"{"name":"@cfg/base","tsconfig":"wide.json"}"#).unwrap();
+    check("tsconfig field wide", true);
+    fs::write(
+        &manifest,
+        r#"{"name":"@cfg/base","tsconfig":"narrow.json"}"#,
+    )
+    .unwrap();
+    check("tsconfig field narrow", false);
+    // A nearer copy appears, and goes away.
+    let nearer = app.join("node_modules").join("@cfg").join("base");
+    fs::create_dir_all(&nearer).unwrap();
+    fs::write(nearer.join("tsconfig.json"), &wide).unwrap();
+    fs::write(nearer.join("package.json"), r#"{"name":"@cfg/base"}"#).unwrap();
+    check("nearer copy", true);
+    fs::remove_dir_all(app.join("node_modules")).unwrap();
+    check("nearer copy removed", false);
+    fs::remove_dir_all(&root).unwrap();
+    let _ = fs::remove_dir_all(&sockets);
+}
+
 // ---- Module resolution under a retained daemon (review round 5).
 
 const WS_APP: &str = r#"import { createSignal } from "solid-js";

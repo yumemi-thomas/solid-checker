@@ -565,21 +565,18 @@ struct Tracking {
     /// or the scratch file a dependency-source program is opened from.
     config: PathBuf,
     tsconfig: FileFingerprint,
-    /// The files the configuration inherits from through `extends`, each
-    /// fingerprinted; `None` when the chain cannot be resolved exactly, and
-    /// then no retained program is reused (an edit there could not be seen).
-    extended: Option<Vec<(PathBuf, FileFingerprint)>>,
+    /// What resolving the configuration's `extends` chain consulted
+    /// (`tsconfig_extends_witness`): every config and manifest read and every
+    /// path probed. `None` when the chain cannot be resolved exactly, and then
+    /// no retained program is reused (an edit there could not be seen).
+    extended: Option<Vec<(PathBuf, String)>>,
 }
 
 impl Tracking {
     fn new(project: &Path, config: &Path, sources: &[SourceFile]) -> Result<Self, Box<dyn Error>> {
         let tsconfig = fingerprint_file(config)?;
-        let extended = solid_facts_backend::tsconfig_extends_chain(config).and_then(|chain| {
-            chain
-                .into_iter()
-                .map(|path| fingerprint_file(&path).ok().map(|print| (path, print)))
-                .collect::<Option<Vec<_>>>()
-        });
+        let extended =
+            solid_facts_backend::tsconfig_extends_witness(config).map(|(_, witness)| witness);
         let mut fingerprints = BTreeMap::new();
         let mut dirs = BTreeMap::new();
         if let Some(parent) = project.parent() {
@@ -670,15 +667,13 @@ fn resync_tracked(
     }
     // So is a change anywhere in its `extends` chain, or a chain this
     // daemon cannot follow exactly.
-    let Some(extended) = tracking.extended.as_mut() else {
+    let Some(extended) = tracking.extended.as_ref() else {
         return Ok(Sync::Rebuild);
     };
-    for (path, recorded) in extended.iter_mut() {
-        match refresh_file_with(path, recorded, |path| fs::read(path)) {
-            Ok(FileRefresh::Unchanged) => {}
-            Ok(FileRefresh::MetadataOnly(fingerprint)) => *recorded = fingerprint,
-            Ok(FileRefresh::Content { .. }) | Err(_) => return Ok(Sync::Rebuild),
-        }
+    if solid_facts_backend::tsconfig_extends_witness(&config).map(|(_, witness)| witness)
+        != Some(extended.clone())
+    {
+        return Ok(Sync::Rebuild);
     }
     for (dir, recorded) in &tracking.dirs {
         if directory_stamp(dir) != *recorded {
