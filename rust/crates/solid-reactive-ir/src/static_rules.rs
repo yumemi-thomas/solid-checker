@@ -24,6 +24,88 @@ pub(crate) fn static_prepass(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
     component_props_destructure(ctx, draft);
     reactive_read_after_await(ctx, draft);
     primitive_value_references(ctx, draft);
+    primitive_result_methods(ctx, draft);
+}
+
+/// ADR 0338: a member call on the result of a primitive whose result holds an
+/// audited getter (`createSignal(1).slice(0)`, `createMemo(fn).bind(null)`,
+/// `.reverse().reverse()`) is that value's own method, so the call is not the
+/// primitive and the value it returns has no provenance the analysis can
+/// state: `.slice(0)` copies the tuple and keeps the getter, `.slice(1)` holds
+/// the setter, `.toString()` is a string. Silence would certify a read through
+/// a helper (`access(value)`) the engine never saw as a getter, so the call is
+/// an obligation, never a violation and never a silent clean.
+fn primitive_result_methods(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
+    use solid_dialect::ResultSlot;
+    let audited = |file: &solid_facts::FileFacts, call: &solid_facts::ast::CallFact| {
+        crate::call_primitive_name_cached(
+            ctx.semantic_lookup,
+            file,
+            call,
+            ctx.entities,
+            ctx.symbol_names,
+            ctx.dialect,
+        )
+        .and_then(|name| name.primitive())
+        .filter(|primitive| {
+            [ResultSlot::Whole, ResultSlot::TupleItem(0)]
+                .into_iter()
+                .any(|slot| {
+                    ctx.dialect
+                        .accessor_getter_length(*primitive, slot)
+                        .is_some()
+                })
+        })
+        .and_then(|primitive| Some((primitive, ctx.dialect.name_of(primitive)?)))
+    };
+    for file in &ctx.facts.files {
+        let ast = &file.ast;
+        for call in &ast.calls {
+            let Some(member) = ast.member_at(ast.peel_ts_sugar_span(call.callee)) else {
+                continue;
+            };
+            // Walk down the receiver chain to the call that roots it.
+            let mut receiver = ast.peel_ts_sugar_span(member.object);
+            let mut root = None;
+            loop {
+                // A receiver held in a `const pair = createSignal(1)` binding
+                // is the primitive's result as well.
+                let held = ast.reference_declaration(receiver).and_then(|declaration| {
+                    ast.bindings
+                        .iter()
+                        .find(|binding| {
+                            binding.shape == solid_facts::ast::BindingShape::Identifier
+                                && binding.names.iter().any(|name| name.span == declaration)
+                        })
+                        .and_then(|binding| ast.call_at(binding.call_initializer?))
+                });
+                let Some(inner) = ast.call_at(receiver).or(held) else {
+                    break;
+                };
+                if let Some(found) = audited(file, inner) {
+                    root = Some(found);
+                    break;
+                }
+                let Some(next) = ast.member_at(ast.peel_ts_sugar_span(inner.callee)) else {
+                    break;
+                };
+                receiver = ast.peel_ts_sugar_span(next.object);
+            }
+            let Some((_, spelling)) = root else {
+                continue;
+            };
+            draft.push_defect(StaticDefect {
+                kind: StaticDefectKind::ReactiveDispatchUnresolved {
+                    callee: spelling.to_owned(),
+                    member: file.source_text(member.property).map(str::to_owned),
+                },
+                location: location(file.path.shared(), call.span),
+                analysis_context: crate::PRIMITIVE_RESULT_METHOD.to_owned(),
+                fixes: vec![],
+                uncertain: true,
+            });
+        }
+    }
 }
 
 /// A dialect primitive referenced as a value rather than called by name

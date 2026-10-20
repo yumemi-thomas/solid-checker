@@ -52,13 +52,73 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/package-access-helper/App.tsx",
-      "start": 4074,
-      "end": 4087,
+      "start": 3517,
+      "end": 3547,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-access-helper/App.tsx",
+      "start": 3682,
+      "end": 3706,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-access-helper/App.tsx",
+      "start": 3844,
+      "end": 3869,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-access-helper/App.tsx",
+      "start": 4115,
+      "end": 4139,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-access-helper/App.tsx",
+      "start": 4276,
+      "end": 4306,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-access-helper/App.tsx",
+      "start": 4449,
+      "end": 4474,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-access-helper/App.tsx",
+      "start": 4712,
+      "end": 4725,
       "fixes": 0
     },
     {
@@ -67,8 +127,18 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/package-access-helper/App.tsx",
-      "start": 4358,
-      "end": 4371,
+      "start": 5352,
+      "end": 5365,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-access-helper/App.tsx",
+      "start": 5636,
+      "end": 5649,
       "fixes": 0
     },
     {
@@ -77,8 +147,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/package-access-helper/App.tsx",
-      "start": 4602,
-      "end": 4615,
+      "start": 5880,
+      "end": 5893,
       "fixes": 0
     },
     {
@@ -87,8 +157,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/package-access-helper/App.tsx",
-      "start": 4634,
-      "end": 4647,
+      "start": 5912,
+      "end": 5925,
       "fixes": 0
     },
     {
@@ -97,8 +167,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/package-access-helper/App.tsx",
-      "start": 4997,
-      "end": 5013,
+      "start": 6275,
+      "end": 6291,
       "fixes": 0
     },
     {

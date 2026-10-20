@@ -677,6 +677,13 @@ pub const TYPE_ONLY_SOURCE: &str = "type-only-source";
 /// reference's text. Producer: `static_rules.rs`; consumer: `projection.rs`.
 pub const PRIMITIVE_VALUE: &str = "primitive-value";
 
+/// The `analysis_context` of a dispatch obligation at a member call on the
+/// result of a primitive that returns a getter (`createSignal(1).slice(0)`,
+/// ADR 0338): the value it returns has no provenance the analysis can state.
+/// Its `callee` is the primitive and its `member` the method. Producer:
+/// `static_rules.rs`; consumer: `projection.rs`.
+pub const PRIMITIVE_RESULT_METHOD: &str = "primitive-result-method";
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StaticDefect {

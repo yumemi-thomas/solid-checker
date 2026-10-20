@@ -89,10 +89,12 @@ export function UncertifiableAlias() {
   return <span>{initial}</span>;
 }
 
-// Negative: a member call on a primitive's result is that value's own method,
-// never the primitive. `createMemo(...).toString()` is a string, and
-// `createSignal(1).slice(1)` and `.reverse()` are arrays whose first item is
-// the setter; none is a getter, so nothing is read and nothing is reported.
+// Uncertifiable: a member call on a primitive's result is that value's own
+// method, never the primitive, and what it returns has no provenance the
+// analysis can state: `.slice(0)` keeps the getter in the first slot (a read
+// through `access` the engine never saw as a getter), `.slice(1)` and
+// `.reverse()` hold the setter there, `.toString()` is a string. Silence would
+// certify the first; every one is an obligation (`primitive_result_methods`).
 export function UncertifiableMemoToString() {
   const text = createMemo(() => 2).toString();
   const initial = access(text);
@@ -108,6 +110,42 @@ export function UncertifiableSlice() {
 export function UncertifiableReverse() {
   const [value] = createSignal(1).reverse();
   const initial = access(value);
+  return <span>{String(initial)}</span>;
+}
+
+// Uncertifiable (rc.13 reads the getter untracked: STRICT_READ_UNTRACKED):
+// the copy keeps the getter.
+export function UncertifiableSliceZero() {
+  const [value] = createSignal(1).slice(0);
+  const initial = access(value);
+  return <span>{String(initial)}</span>;
+}
+
+export function UncertifiableMemoBind() {
+  const value = createMemo(() => 1).bind(null);
+  const initial = access(value);
+  return <span>{String(initial)}</span>;
+}
+
+export function UncertifiableReverseTwice() {
+  const [value] = createSignal(1).reverse().reverse();
+  const initial = access(value);
+  return <span>{String(initial)}</span>;
+}
+
+// Uncertifiable: the tuple is held in a binding first.
+export function UncertifiableHeldTuple() {
+  const pair = createSignal(1);
+  const [value] = pair.slice(0);
+  const initial = access(value);
+  return <span>{String(initial)}</span>;
+}
+
+// Negative: a member call on a value that is not a primitive's result is
+// neither a getter nor an obligation.
+export function GoodMemberCallElsewhere() {
+  const text = String(1).slice(0);
+  const initial = access(text);
   return <span>{String(initial)}</span>;
 }
 
