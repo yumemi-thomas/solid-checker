@@ -328,14 +328,35 @@ impl ModuleCensus {
                     result.unknown_load = true;
                 }
             }
+            // A `require` runs the module it loads in place, so it is an
+            // edge of the evaluation order, and one the census cannot resolve
+            // (a nonliteral specifier, an unresolved project module) leaves
+            // the importer possibly on a cycle. A dynamic `import()` evaluates
+            // its module in a later job, after the importer's own synchronous
+            // evaluation, and a module still being evaluated is awaited, so it
+            // orders nothing: it only exposes the module as a namespace.
             for load in &file.ast.module_loads {
+                let in_place = load.kind == ast::ModuleLoadKind::Require;
                 if let Some(targets) = load
                     .specifier
                     .as_deref()
                     .and_then(|module| landing(file, load.span, module))
                 {
+                    if in_place {
+                        graph
+                            .entry(path.clone())
+                            .or_default()
+                            .extend(targets.iter().cloned());
+                    }
                     result.exposed.extend(targets);
                 } else {
+                    let project_module = load
+                        .specifier
+                        .as_deref()
+                        .is_some_and(|module| module.starts_with('.') || module.starts_with('/'));
+                    if in_place && (load.specifier.is_none() || project_module) {
+                        result.cyclic.insert(path.clone());
+                    }
                     result.unknown_load = true;
                 }
             }
@@ -346,16 +367,42 @@ impl ModuleCensus {
                 .filter(|import| !import.type_only)
             {
                 if let Some(targets) = landing(file, import.span, &import.module) {
+                    graph
+                        .entry(path.clone())
+                        .or_default()
+                        .extend(targets.iter().cloned());
                     result.exposed.extend(targets);
                 } else {
+                    if import.module.starts_with('.') || import.module.starts_with('/') {
+                        result.cyclic.insert(path.clone());
+                    }
                     result.unknown_load = true;
                 }
             }
-            result.unknown_load |= file
+            // A call of a bare `require` the facts did not record as a load
+            // (a `declare function require` shim shadows the global in the
+            // binder, though the host `require` is what runs): an unmodeled
+            // load, so the importer may be on a cycle.
+            if file.ast.calls.iter().any(|call| {
+                !call.construct
+                    && file.source_text(call.callee) == Some("require")
+                    && !file
+                        .ast
+                        .module_loads
+                        .iter()
+                        .any(|load| load.span == call.span)
+            }) {
+                result.unknown_load = true;
+                result.cyclic.insert(path.clone());
+            }
+            if file
                 .ast
                 .module_hazards
                 .iter()
-                .any(|hazard| hazard.kind == ast::ModuleHazardKind::NonliteralDynamicLoading);
+                .any(|hazard| hazard.kind == ast::ModuleHazardKind::NonliteralDynamicLoading)
+            {
+                result.unknown_load = true;
+            }
         }
         loop {
             let mut changed = false;

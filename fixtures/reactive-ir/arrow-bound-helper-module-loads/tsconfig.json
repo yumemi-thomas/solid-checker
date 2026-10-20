@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "jsx": "preserve",
+    "module": "preserve",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "target": "ES2022",
+    "baseUrl": ".",
+    "paths": { "@/*": ["./*"] }
+  },
+  "include": ["*.ts", "*.tsx"]
+}

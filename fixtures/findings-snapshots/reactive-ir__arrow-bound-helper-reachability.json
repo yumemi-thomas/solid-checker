@@ -86,6 +86,16 @@
       "code": "SC2001",
       "kind": "uncertifiable",
       "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/barrel-d.ts",
+      "start": 113,
+      "end": 124,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
       "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/cycle-a.ts",
       "start": 155,
       "end": 167,
@@ -109,6 +119,46 @@
       "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/provider.ts",
       "start": 120,
       "end": 131,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/SwitchScope.tsx",
+      "start": 454,
+      "end": 464,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/SwitchScope.tsx",
+      "start": 556,
+      "end": 567,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/SwitchScope.tsx",
+      "start": 810,
+      "end": 820,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/SwitchScope.tsx",
+      "start": 873,
+      "end": 884,
       "fixes": 0
     },
     {

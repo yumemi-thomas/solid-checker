@@ -721,6 +721,22 @@ fn runtime_let_facts_do_not_turn_ambient_bindings_into_undefined() {
 }
 
 #[test]
+fn switch_case_facts_mark_only_declarators_written_directly_in_a_clause() {
+    let source = "switch (m) { /* } */ case 0: const direct = 1, second = 2; break; case 1: { const blocked = 3; } default: let tail = 4; } const outside = 5; const f = () => { switch (m) { case 0: const nested = 6; } const inner = 7; };";
+    let facts = extract("switch.ts", source).unwrap();
+    let marked = facts
+        .bindings
+        .iter()
+        .filter(|binding| binding.in_switch_case)
+        .map(|binding| {
+            let name = binding.names[0].span;
+            &source[name.start as usize..name.end as usize]
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(marked, ["direct", "second", "tail", "nested"]);
+}
+
+#[test]
 fn literal_keys_peel_wrappers_without_closing_computed_object_shapes() {
     for key in [
         "'state' as const",

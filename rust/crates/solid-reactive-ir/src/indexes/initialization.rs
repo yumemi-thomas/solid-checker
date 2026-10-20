@@ -36,6 +36,9 @@ struct FileFunctionRefs {
     top_level: Vec<(Span, bool)>,
     /// `(mention, outermost function containing it, declaration mentioned)`.
     mentions: Vec<(Span, Option<Span>, Span)>,
+    /// Hoisted declarations whose mentions the compiler's reference index
+    /// does not list: they may run anywhere.
+    unknown: Vec<Span>,
 }
 
 #[derive(Clone, Copy)]
@@ -46,9 +49,6 @@ struct Declarator {
     start: u32,
     /// The function whose body holds the declarator, `None` at module level.
     container: Option<Span>,
-    /// The declarator is written directly in a `switch` case, whose scope a
-    /// jump to a later case enters without running it.
-    in_switch: bool,
 }
 
 /// Per-build working tables of the proof.
@@ -93,57 +93,22 @@ fn creating_function<'f>(
         .min_by_key(|outer| outer.span.end - outer.span.start)
 }
 
-/// Whether `source[..start]` ends inside a block opened by `switch (…) {`,
-/// looking only at the innermost unclosed `{` before `start` and no further
-/// back than `floor`. Braces are counted as characters, so a string holding an
-/// unbalanced brace can mislead it; the one thing it must not do is miss a
-/// `switch` header, and it misses one only after such a string.
-fn directly_in_switch(source: &str, floor: usize, start: usize) -> bool {
-    let bytes = source.as_bytes();
-    let mut depth = 0_usize;
-    let mut index = start.min(bytes.len());
-    while index > floor {
-        index -= 1;
-        match bytes[index] {
-            b'}' => depth += 1,
-            b'{' if depth == 0 => {
-                let Some(header) = source.get(floor..index) else {
-                    return true;
-                };
-                let header = header.trim_end();
-                let Some(header) = header.strip_suffix(')') else {
-                    return false;
-                };
-                let mut parens = 1_usize;
-                let mut at = header.len();
-                while at > 0 && parens > 0 {
-                    at -= 1;
-                    match header.as_bytes()[at] {
-                        b')' => parens += 1,
-                        b'(' => parens -= 1,
-                        _ => {}
-                    }
-                }
-                let before = header[..at].trim_end();
-                return before.ends_with("switch")
-                    && !before[..before.len() - "switch".len()]
-                        .ends_with(|c: char| c.is_alphanumeric() || c == '_' || c == '$');
-            }
-            b'{' => depth -= 1,
-            _ => {}
-        }
-    }
-    false
-}
-
 impl<'a> SemanticLookup<'a> {
     /// Whether the code at `span` in `path` mentions a function-valued
     /// binding at a point not proven to follow its declarator. Such a mention
     /// supplies no call site and no reachability edge.
     pub(crate) fn may_precede_initialization(&self, path: &str, span: Span) -> bool {
-        self.uninitialized_references()
-            .get(path)
-            .is_some_and(|spans| spans.contains(&span))
+        let Some(spans) = self.uninitialized_references().get(path) else {
+            return false;
+        };
+        if spans.contains(&span) {
+            return true;
+        }
+        // `helper!()`, `(helper as F)()`: the mention is the wrapped identifier.
+        self.file_by_path(path).is_some_and(|file| {
+            let peeled = file.ast.peel_ts_sugar_span(span);
+            peeled != span && spans.contains(&peeled)
+        })
     }
 
     /// Every withheld mention, by path. Bound into the cross-file proof
@@ -210,17 +175,10 @@ impl<'a> SemanticLookup<'a> {
 
     fn declarator(file: &FileFacts, binding: &BindingFact) -> Option<Declarator> {
         let initializer = binding.initializer?;
-        let container =
-            executing_function(&file.ast, binding.pattern).map(|function| function.span);
-        let floor = container
-            .and_then(|span| file.ast.function_at(span))
-            .map_or(0, |function| function.body.start as usize);
-        let source: &str = &file.source;
         Some(Declarator {
             initialized: initializer.end,
             start: binding.declaration.start,
-            container,
-            in_switch: directly_in_switch(source, floor, binding.declaration.start as usize),
+            container: executing_function(&file.ast, binding.pattern).map(|function| function.span),
         })
     }
 
@@ -248,14 +206,23 @@ impl<'a> SemanticLookup<'a> {
         let Some(initializer) = binding_fact.initializer else {
             return false;
         };
+        if binding_fact.in_switch_case {
+            // A jump to a later clause enters the shared scope without
+            // running the declarator, whoever mentions it.
+            return caller == declaring
+                && initializer.contains(span)
+                && binding_fact.initializer_function;
+        }
         if caller != declaring {
             // ES modules evaluate a module's static imports before its body
-            // (ADR 0339): a module the declaring one cannot import back, and
-            // which imports it, runs strictly after the declaring module's
-            // body finished. A cycle through the declaring module can run
-            // the importer first, with its `const`s still uninitialized.
+            // (ADR 0339), except a module already being evaluated: an
+            // importer that no import cycle reaches has none of its imports
+            // (and so not the declaring module) being evaluated, so every
+            // module it imports, transitively, finished first. An importer on
+            // or below a cycle can run before the declaring module did
+            // (`b` imports `c` then re-exports `d`; `c` imports `b`).
             let census = self.module_census();
-            return !census.is_cyclic(declaring_file.path.as_str())
+            return !census.is_cyclic(caller_file.path.as_str())
                 && census
                     .statically_imports(caller_file.path.as_str(), declaring_file.path.as_str());
         }
@@ -284,7 +251,7 @@ impl<'a> SemanticLookup<'a> {
         loop {
             if executor.map(|function| function.span) == declarator.container {
                 if position >= declarator.initialized {
-                    return !declarator.in_switch;
+                    return true;
                 }
                 // Written before the declarator, so it may run before it,
                 // unless every mention of the arrow follows the declarator:
@@ -432,6 +399,16 @@ impl<'a> SemanticLookup<'a> {
         let Some(own) = own else {
             return false;
         };
+        // The mention table is the compiler's reference list plus demanded
+        // entities; without the list it may be incomplete.
+        let listed = facts.ast.bindings[own]
+            .names
+            .first()
+            .and_then(|name| self.entities.at(facts.path.as_str(), name.span))
+            .is_some_and(|symbol| self.symbol_references_if_present(symbol.as_str()).is_some());
+        if !listed {
+            return false;
+        }
         if declarator.container.is_none() && self.module_census().is_cyclic(facts.path.as_str()) {
             return false;
         }
@@ -484,7 +461,7 @@ impl<'a> SemanticLookup<'a> {
             return Arc::clone(running);
         }
         let refs = self.function_refs(file);
-        let mut running = HashSet::<Span>::default();
+        let mut running = refs.unknown.iter().copied().collect::<HashSet<Span>>();
         for (span, declaration) in &refs.top_level {
             if !declaration && span.end <= declarator.start {
                 running.insert(*span);
@@ -540,31 +517,45 @@ impl<'a> SemanticLookup<'a> {
                 .map(|(function, _)| *function)
         };
         let mut mentions = Vec::new();
-        let mut mention = |span: Span| {
-            let Some(symbol) = self.entities.at(file.path.as_str(), span) else {
-                return;
+        let mut unknown = Vec::new();
+        for function in ast.functions.iter().filter(|function| {
+            function.kind == FunctionKind::Declaration && creating_function(ast, function).is_none()
+        }) {
+            // The compiler's reference index, not the identifiers that
+            // happened to get an entity: `go!()`, `(go as F)()`, `void go` and
+            // `new (go as any)()` are mentions too. A missing list is missing
+            // evidence, so the declaration may run anywhere.
+            let references = function
+                .name
+                .as_ref()
+                .and_then(|name| self.entities.at(file.path.as_str(), name.span))
+                .and_then(|symbol| self.symbol_references_if_present(symbol.as_str()));
+            let Some(references) = references else {
+                unknown.push(function.span);
+                continue;
             };
-            let Some((target_file, target)) = self.function_for_symbol(symbol.as_str()) else {
-                return;
-            };
-            if target_file.path == file.path
-                && target.kind == FunctionKind::Declaration
-                && creating_function(ast, target).is_none()
+            let name = function.name.as_ref().map(|name| name.span);
+            for reference in references
+                .iter()
+                .filter(|reference| reference.path.as_ref() == file.path.as_str())
             {
-                mentions.push((span, outermost(span), target.span));
+                let (Ok(start), Ok(end)) = (
+                    u32::try_from(reference.start_byte),
+                    u32::try_from(reference.end_byte),
+                ) else {
+                    unknown.push(function.span);
+                    continue;
+                };
+                let mention = Span::new(start, end);
+                if Some(mention) != name {
+                    mentions.push((mention, outermost(mention), function.span));
+                }
             }
-        };
-        for identifier in &ast.identifiers {
-            if identifier.role == solid_facts::ast::IdentifierRole::Reference {
-                mention(identifier.span);
-            }
-        }
-        for element in &ast.jsx_elements {
-            mention(element.name.span);
         }
         let refs = Arc::new(FileFunctionRefs {
             top_level,
             mentions,
+            unknown,
         });
         self.initialization
             .file_refs
@@ -572,25 +563,5 @@ impl<'a> SemanticLookup<'a> {
             .expect("initialization memo")
             .insert(file.path.to_string(), Arc::clone(&refs));
         refs
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::directly_in_switch;
-
-    fn at(source: &str, marker: &str) -> bool {
-        directly_in_switch(source, 0, source.find(marker).expect("marker"))
-    }
-
-    #[test]
-    fn only_the_innermost_block_being_a_switch_counts() {
-        let source = "switch (x) { case 1: const a = 1; { const b = 2; } if (y) { const c = 3; } }";
-        assert!(at(source, "const a"));
-        assert!(!at(source, "const b"));
-        assert!(!at(source, "const c"));
-        assert!(!at("function f() { const a = 1; }", "const a"));
-        assert!(!at("myswitch (x) { const a = 1; }", "const a"));
-        assert!(at("switch (f(x)) { default: const a = 1; }", "const a"));
     }
 }

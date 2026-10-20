@@ -88,6 +88,9 @@ pub(super) struct Collector<'s, 'semantic> {
     pub(super) exported_import_equals: Vec<Span>,
     pub(super) module_hazards: Vec<ModuleHazardFact>,
     pub(super) module_blocks: Vec<Span>,
+    /// The declarator spans of every variable declaration written directly
+    /// in a `switch` case clause (facts schema 67).
+    pub(super) switch_case_declarators: Vec<Span>,
     pub(super) ambient_module_depth: usize,
     pub(super) ambient_variable: bool,
     pub(super) identifiers: Vec<IdentifierFact>,
@@ -251,6 +254,7 @@ pub(super) struct BindingMetadata {
     pub(super) initializer_value_kind: RuntimeValueKind,
     pub(super) immutable: bool,
     pub(super) runtime_let: bool,
+    pub(super) in_switch_case: bool,
 }
 
 impl<'s, 'semantic> Collector<'s, 'semantic> {
@@ -308,6 +312,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             exported_import_equals: Vec::new(),
             module_hazards: Vec::new(),
             module_blocks: Vec::new(),
+            switch_case_declarators: Vec::new(),
             ambient_module_depth: 0,
             ambient_variable: false,
             identifiers: Vec::new(),
@@ -606,6 +611,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             },
             immutable: metadata.immutable,
             runtime_let: metadata.runtime_let,
+            in_switch_case: metadata.in_switch_case,
             initializer: metadata.initializer.map(span),
             call_initializer: metadata.call_initializer.map(span),
             initializer_function: metadata.initializer_function,

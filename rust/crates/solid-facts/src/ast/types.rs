@@ -699,6 +699,13 @@ pub struct BindingFact {
     /// Missing ambient initializers never establish an undefined value.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub runtime_let: bool,
+    /// Whether this declarator is written directly in a `switch` case clause
+    /// (facts schema 67). All clauses share one lexical scope, so a jump to a
+    /// later clause enters it without running the declarator, and a read
+    /// there throws `ReferenceError`. A declaration in a block inside a
+    /// clause (`case 1: { const x }`) is not this.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub in_switch_case: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub initializer: Option<Span>,
     #[serde(skip_serializing_if = "Option::is_none")]

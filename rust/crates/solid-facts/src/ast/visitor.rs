@@ -273,6 +273,9 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                         .map(|expression| self.runtime_value_kind(expression))
                         .unwrap_or_default(),
                     immutable: declaration.kind == oxc_ast::ast::VariableDeclarationKind::Const,
+                    in_switch_case: self
+                        .switch_case_declarators
+                        .contains(&span(declaration.span)),
                     runtime_let: declaration.kind == oxc_ast::ast::VariableDeclarationKind::Let
                         && !self.ambient_variable
                         && self.ambient_module_depth == 0
@@ -863,6 +866,20 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         walk::walk_switch_statement(self, statement);
         self.conditional_flow_depth -= 1;
         self.conditional_control_stack.pop();
+    }
+
+    fn visit_switch_case(&mut self, case: &oxc_ast::ast::SwitchCase<'a>) {
+        for statement in &case.consequent {
+            if let oxc_ast::ast::Statement::VariableDeclaration(declaration) = statement {
+                self.switch_case_declarators.extend(
+                    declaration
+                        .declarations
+                        .iter()
+                        .map(|declarator| span(declarator.span)),
+                );
+            }
+        }
+        walk::walk_switch_case(self, case);
     }
 
     fn visit_assignment_expression(&mut self, expression: &AssignmentExpression<'a>) {
