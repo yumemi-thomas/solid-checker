@@ -737,6 +737,38 @@ fn switch_case_facts_mark_only_declarators_written_directly_in_a_clause() {
 }
 
 #[test]
+fn import_globs_are_in_place_unless_provably_lazy() {
+    let lazy = [
+        "import.meta.glob('./a')",
+        "import.meta.glob('./a', { eager: false })",
+        "import.meta.glob(['./a'], { import: 'x', 'query': '?raw' })",
+        "(import.meta).glob('./a', { eager: false })",
+    ];
+    for source in lazy {
+        let facts = extract("lazy.ts", source).unwrap();
+        assert!(facts.in_place_import_globs.is_empty(), "{source}");
+    }
+    let in_place = [
+        "import.meta.glob('./a', { eager: true })",
+        "import.meta.glob('./a', { eager })",
+        "import.meta.glob('./a', { ...options })",
+        "import.meta.glob('./a', { ['eager']: false })",
+        "import.meta.glob('./a', options)",
+        "import.meta.glob(...args)",
+        "import.meta.globEager('./a')",
+        "const g = import.meta.glob; g('./a')",
+        "import.meta['glob']('./a')",
+        "import.meta?.glob('./a')",
+    ];
+    for source in in_place {
+        let facts = extract("eager.ts", source).unwrap();
+        assert_eq!(facts.in_place_import_globs.len(), 1, "{source}");
+    }
+    let env = extract("env.ts", "import.meta.env.MODE; import.meta['env']").unwrap();
+    assert!(env.in_place_import_globs.is_empty());
+}
+
+#[test]
 fn literal_keys_peel_wrappers_without_closing_computed_object_shapes() {
     for key in [
         "'state' as const",

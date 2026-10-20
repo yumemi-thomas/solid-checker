@@ -1,6 +1,46 @@
 {
-  "status": "uncertifiable",
+  "status": "violation",
   "findings": [
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-module-loads/ambient-a.ts",
+      "start": 262,
+      "end": 273,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-module-loads/bridge-a.ts",
+      "start": 288,
+      "end": 299,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-module-loads/glob-a.ts",
+      "start": 339,
+      "end": 350,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-module-loads/glob2-a.ts",
+      "start": 172,
+      "end": 183,
+      "fixes": 0
+    },
     {
       "rule": "reactive-write-in-owned-scope",
       "code": "SC2001",
@@ -9,6 +49,16 @@
       "path": "fixtures/reactive-ir/arrow-bound-helper-module-loads/impeq-a.ts",
       "start": 146,
       "end": 157,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-module-loads/lazy-a.ts",
+      "start": 260,
+      "end": 271,
       "fixes": 0
     },
     {

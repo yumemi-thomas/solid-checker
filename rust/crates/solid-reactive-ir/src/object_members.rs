@@ -184,6 +184,18 @@ pub(crate) fn namespace_exposed_modules(
     (!census.unknown_load).then_some(census.exposed)
 }
 
+/// Where one specifier loads.
+enum Landing {
+    /// Analyzed project modules (and the runtime modules a declaration
+    /// redirects to).
+    Modules(HashSet<String>),
+    /// A real installed package (ADR 0339's premise).
+    Installed,
+    /// Code no analyzed file carries: an unresolved or ambient module, a
+    /// declaration file with no runtime redirect, a workspace link.
+    Unknown,
+}
+
 /// Namespace bindings and module loads are separate export channels: their
 /// references need not contain a receiver identifier at all. Until those uses
 /// can be censused exactly, refuse the entire exposed module (and its barrels).
@@ -238,34 +250,77 @@ impl ModuleCensus {
                 }
             }
         }
-        let landing = |file: &FileFacts, span, module: &str| -> Option<HashSet<String>> {
-            let path = if let Some(imports) = lookup.resolved_imports() {
-                let solid_facts::SpecifierAttestation::Attested(row) =
-                    imports.specifier(file.path.as_str(), span, module)
-                else {
-                    return None;
-                };
-                if row.resolved_path.is_empty() {
-                    return None;
-                }
-                if row.included_path.is_empty() {
-                    row.resolved_path.to_string()
-                } else {
-                    row.included_path.to_string()
-                }
+        let unresolved = |relative: bool, module: &str| {
+            let package = module
+                .split('/')
+                .take(if module.starts_with('@') { 2 } else { 1 })
+                .collect::<Vec<_>>()
+                .join("/");
+            if relative
+                || !(module.starts_with("node:")
+                    || lookup.dialect.owns_module(module)
+                    || lookup.dialect.owns_module(&package))
+            {
+                // A project module, an ambient or virtual module, or a
+                // specifier with no attested resolution: no followed source.
+                // The runtime's own `node:` modules and the dialect's own
+                // packages are installed code, as ADR 0339 assumes.
+                Landing::Unknown
             } else {
-                solid_facts::resolve_relative_module_path(
-                    file.path.as_str(),
-                    module,
-                    lookup.files().iter().map(|file| file.path.as_str()),
-                )?
-                .to_string()
-            };
+                Landing::Installed
+            }
+        };
+        // Where a specifier loads: analyzed project modules (graph edges), an
+        // installed dependency, or code the census cannot see.
+        let landing = |file: &FileFacts, span, module: &str| -> Landing {
+            let relative = module.starts_with('.') || module.starts_with('/');
+            let (path, declaration_only, installed) =
+                if let Some(imports) = lookup.resolved_imports() {
+                    let solid_facts::SpecifierAttestation::Attested(row) =
+                        imports.specifier(file.path.as_str(), span, module)
+                    else {
+                        return unresolved(relative, module);
+                    };
+                    if row.resolved_path.is_empty() {
+                        return unresolved(relative, module);
+                    }
+                    let path = if row.included_path.is_empty() {
+                        row.resolved_path.to_string()
+                    } else {
+                        row.included_path.to_string()
+                    };
+                    // The resolver landed in a real installed package: realpath
+                    // keeps a workspace symlink out of `node_modules`.
+                    let installed = row.resolution == solid_facts::ImportResolution::NodeModules
+                        && path.contains("/node_modules/");
+                    let declaration_only = [".d.ts", ".d.mts", ".d.cts"]
+                        .iter()
+                        .any(|suffix| path.ends_with(suffix));
+                    (path, declaration_only, installed)
+                } else {
+                    match solid_facts::resolve_relative_module_path(
+                        file.path.as_str(),
+                        module,
+                        lookup.files().iter().map(|file| file.path.as_str()),
+                    ) {
+                        Some(path) => (path.to_string(), false, false),
+                        None => return unresolved(relative, module),
+                    }
+                };
+            if installed {
+                // ADR 0339's premise: an installed dependency's runtime code
+                // does not import the project's own modules.
+                return Landing::Installed;
+            }
             let mut paths = HashSet::from_iter([path.clone()]);
             if let Some(runtime) = redirects.get(&path) {
                 paths.extend(runtime.iter().cloned());
+            } else if declaration_only {
+                // Types only: the runtime module beside them is project code
+                // no analyzed file carries.
+                return Landing::Unknown;
             }
-            Some(paths)
+            Landing::Modules(paths)
         };
         let mut result = Self::default();
         let mut graph = HashMap::<String, HashSet<String>>::default();
@@ -276,7 +331,12 @@ impl ModuleCensus {
                 let namespace = import.bindings.iter().any(|binding| {
                     !binding.type_only && binding.kind == ast::ImportKind::Namespace
                 });
-                if let Some(targets) = landing(file, import.span, &import.module) {
+                let landed = landing(file, import.span, &import.module);
+                if matches!(landed, Landing::Unknown) {
+                    result.cyclic.insert(path.clone());
+                    result.unknown_load |= namespace;
+                }
+                if let Landing::Modules(targets) = landed {
                     graph
                         .entry(path.clone())
                         .or_default()
@@ -292,15 +352,6 @@ impl ModuleCensus {
                     if namespace {
                         result.exposed.extend(targets);
                     }
-                } else {
-                    // A missing project-module edge cannot prove absence of
-                    // a cycle in the analyzed source graph. External modules
-                    // without followed source remain outside that graph, as
-                    // they do for the other source-owned proofs here.
-                    if import.module.starts_with('.') || import.module.starts_with('/') {
-                        result.cyclic.insert(path.clone());
-                    }
-                    result.unknown_load |= namespace;
                 }
             }
             for export in file
@@ -311,21 +362,25 @@ impl ModuleCensus {
                 let Some(module) = export.module.as_deref() else {
                     continue;
                 };
-                if let Some(targets) = landing(file, export.span, module) {
-                    graph
-                        .entry(path.clone())
-                        .or_default()
-                        .extend(targets.iter().cloned());
-                    barrels
-                        .entry(path.clone())
-                        .or_default()
-                        .extend(targets.iter().cloned());
-                    if export.namespace.is_some() {
-                        result.exposed.extend(targets);
+                match landing(file, export.span, module) {
+                    Landing::Modules(targets) => {
+                        graph
+                            .entry(path.clone())
+                            .or_default()
+                            .extend(targets.iter().cloned());
+                        barrels
+                            .entry(path.clone())
+                            .or_default()
+                            .extend(targets.iter().cloned());
+                        if export.namespace.is_some() {
+                            result.exposed.extend(targets);
+                        }
                     }
-                } else {
-                    result.cyclic.insert(path.clone());
-                    result.unknown_load = true;
+                    Landing::Installed => {}
+                    Landing::Unknown => {
+                        result.cyclic.insert(path.clone());
+                        result.unknown_load = true;
+                    }
                 }
             }
             // A `require` runs the module it loads in place, so it is an
@@ -337,27 +392,27 @@ impl ModuleCensus {
             // orders nothing: it only exposes the module as a namespace.
             for load in &file.ast.module_loads {
                 let in_place = load.kind == ast::ModuleLoadKind::Require;
-                if let Some(targets) = load
-                    .specifier
-                    .as_deref()
-                    .and_then(|module| landing(file, load.span, module))
-                {
-                    if in_place {
-                        graph
-                            .entry(path.clone())
-                            .or_default()
-                            .extend(targets.iter().cloned());
+                let landed = match load.specifier.as_deref() {
+                    Some(module) => landing(file, load.span, module),
+                    None => Landing::Unknown,
+                };
+                match landed {
+                    Landing::Modules(targets) => {
+                        if in_place {
+                            graph
+                                .entry(path.clone())
+                                .or_default()
+                                .extend(targets.iter().cloned());
+                        }
+                        result.exposed.extend(targets);
                     }
-                    result.exposed.extend(targets);
-                } else {
-                    let project_module = load
-                        .specifier
-                        .as_deref()
-                        .is_some_and(|module| module.starts_with('.') || module.starts_with('/'));
-                    if in_place && (load.specifier.is_none() || project_module) {
-                        result.cyclic.insert(path.clone());
+                    Landing::Installed => {}
+                    Landing::Unknown => {
+                        if in_place {
+                            result.cyclic.insert(path.clone());
+                        }
+                        result.unknown_load = true;
                     }
-                    result.unknown_load = true;
                 }
             }
             for import in file
@@ -366,18 +421,27 @@ impl ModuleCensus {
                 .iter()
                 .filter(|import| !import.type_only)
             {
-                if let Some(targets) = landing(file, import.span, &import.module) {
-                    graph
-                        .entry(path.clone())
-                        .or_default()
-                        .extend(targets.iter().cloned());
-                    result.exposed.extend(targets);
-                } else {
-                    if import.module.starts_with('.') || import.module.starts_with('/') {
-                        result.cyclic.insert(path.clone());
+                match landing(file, import.span, &import.module) {
+                    Landing::Modules(targets) => {
+                        graph
+                            .entry(path.clone())
+                            .or_default()
+                            .extend(targets.iter().cloned());
+                        result.exposed.extend(targets);
                     }
-                    result.unknown_load = true;
+                    Landing::Installed => {}
+                    Landing::Unknown => {
+                        result.cyclic.insert(path.clone());
+                        result.unknown_load = true;
+                    }
                 }
+            }
+            // A bundler turns an `import.meta.glob(…, { eager: true })` into
+            // static imports of modules no specifier names: unknown loads in
+            // place. A lazy glob is a dynamic import and orders nothing.
+            if !file.ast.in_place_import_globs.is_empty() {
+                result.unknown_load = true;
+                result.cyclic.insert(path.clone());
             }
             // A call of a bare `require` the facts did not record as a load
             // (a `declare function require` shim shadows the global in the

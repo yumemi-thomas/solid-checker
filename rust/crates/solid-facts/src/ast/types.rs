@@ -146,6 +146,15 @@ pub struct AstFacts {
     /// Whether the operand can throw is the consumer's question.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub try_head_awaits: Vec<TryHeadAwaitFact>,
+    /// The `import.meta.glob(…)` and `import.meta.globEager(…)` calls that the
+    /// bundler may turn into static imports run in place (facts schema 68):
+    /// every call except `glob` with no options, or with an options object
+    /// literal (no spread, no computed key) that has no `eager` key or has
+    /// `eager: false`. The matched modules are unknown, so the module holding
+    /// one may sit on an import cycle. A lazy glob is a dynamic import and
+    /// is not recorded.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub in_place_import_globs: Vec<Span>,
     /// The call expressions written in their innermost enclosing function's
     /// straight-line flow, as [`Self::unconditional_awaits`] are, and outside
     /// any optional chain (`a?.b(c())` evaluates `c()` only when `a` is not
@@ -1721,6 +1730,7 @@ impl AstFacts {
             unconditional_awaits: Vec::new(),
             dominating_awaits: Vec::new(),
             try_head_awaits: Vec::new(),
+            in_place_import_globs: Vec::new(),
             straight_line_calls: Vec::new(),
             straight_line_constructs: Vec::new(),
             completion_sites: Vec::new(),

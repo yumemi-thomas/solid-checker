@@ -99,6 +99,10 @@ pub(super) struct Collector<'s, 'semantic> {
     pub(super) unconditional_awaits: Vec<Span>,
     pub(super) dominating_awaits: Vec<(Span, Span)>,
     pub(super) try_head_awaits: Vec<TryHeadAwaitFact>,
+    pub(super) in_place_import_globs: Vec<Span>,
+    /// `import.meta.glob` member spans that are the callee of a call whose
+    /// options are provably lazy.
+    pub(super) lazy_import_glob_callees: Vec<Span>,
     /// Open blocks: span, conditional depth at entry, function nesting level.
     pub(super) open_blocks: Vec<(Span, usize, usize)>,
     pub(super) straight_line_calls: Vec<Span>,
@@ -321,6 +325,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             unconditional_awaits: Vec::new(),
             dominating_awaits: Vec::new(),
             try_head_awaits: Vec::new(),
+            in_place_import_globs: Vec::new(),
+            lazy_import_glob_callees: Vec::new(),
             open_blocks: Vec::new(),
             straight_line_calls: Vec::new(),
             straight_line_constructs: Vec::new(),
@@ -404,6 +410,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.dominating_awaits.sort_unstable();
         self.try_head_awaits
             .sort_unstable_by_key(|fact| fact.awaited);
+        self.in_place_import_globs.sort_unstable();
         self.straight_line_calls.sort_unstable();
         self.straight_line_constructs.sort_unstable();
         self.completion_sites.sort_unstable();
@@ -480,6 +487,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             unconditional_awaits: self.unconditional_awaits,
             dominating_awaits: self.dominating_awaits,
             try_head_awaits: self.try_head_awaits,
+            in_place_import_globs: self.in_place_import_globs,
             straight_line_calls: self.straight_line_calls,
             straight_line_constructs: self.straight_line_constructs,
             completion_sites: self.completion_sites,
@@ -1012,6 +1020,53 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             span: span(at),
             kind: ModuleHazardKind::RuntimeAccessorInstallation,
         });
+    }
+
+    pub(super) fn is_import_meta(expression: &Expression<'_>) -> bool {
+        matches!(
+            expression.get_inner_expression(),
+            Expression::MetaProperty(meta)
+                if meta.meta.name == "import" && meta.property.name == "meta"
+        )
+    }
+
+    /// Whether `import.meta.glob(arguments)` is provably lazy: one or two
+    /// plain arguments, the second absent or an object literal of plain keys
+    /// whose `eager`, if written, is the literal `false`.
+    pub(super) fn import_glob_is_lazy(arguments: &[Argument<'_>]) -> bool {
+        use oxc_ast::ast::ObjectPropertyKind;
+        if arguments.is_empty()
+            || arguments.len() > 2
+            || arguments
+                .iter()
+                .any(|argument| matches!(argument, Argument::SpreadElement(_)))
+        {
+            return false;
+        }
+        let Some(options) = arguments.get(1) else {
+            return true;
+        };
+        let Argument::ObjectExpression(options) = options else {
+            return false;
+        };
+        options.properties.iter().all(|property| {
+            let ObjectPropertyKind::ObjectProperty(property) = property else {
+                return false;
+            };
+            if property.computed {
+                return false;
+            }
+            let eager = match &property.key {
+                PropertyKey::StaticIdentifier(key) => key.name == "eager",
+                PropertyKey::StringLiteral(key) => key.value == "eager",
+                _ => return false,
+            };
+            !eager
+                || matches!(
+                    property.value.get_inner_expression(),
+                    Expression::BooleanLiteral(value) if !value.value
+                )
+        })
     }
 
     pub(super) fn is_unresolved_named(

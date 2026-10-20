@@ -143,6 +143,14 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         {
             self.record_accessor_installation(call.span);
         }
+        if let Expression::StaticMemberExpression(member) = call.callee.get_inner_expression()
+            && !member.optional
+            && member.property.name == "glob"
+            && Self::is_import_meta(&member.object)
+            && Self::import_glob_is_lazy(&call.arguments)
+        {
+            self.lazy_import_glob_callees.push(span(member.span));
+        }
         let callee_span = call.callee.span();
         self.calls.push(CallFact {
             span: span(call.span),
@@ -1715,6 +1723,12 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 kind: ModuleHazardKind::OpaqueWasm,
             });
         }
+        if Self::is_import_meta(&member.object)
+            && matches!(member.property.name.as_str(), "glob" | "globEager")
+            && !self.lazy_import_glob_callees.contains(&span(member.span))
+        {
+            self.in_place_import_globs.push(span(member.span));
+        }
         self.members.push(MemberFact {
             span: span(member.span),
             object: span(member.object.span()),
@@ -1735,6 +1749,13 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 || self.is_unresolved_named(object, "Reflect"))
         {
             self.record_accessor_installation(member.span);
+        }
+        // `import.meta["glob"]`, or a computed key that may spell it.
+        if Self::is_import_meta(&member.object)
+            && literal_property_key(&member.expression)
+                .is_none_or(|key| matches!(key.as_str(), "glob" | "globEager"))
+        {
+            self.in_place_import_globs.push(span(member.span));
         }
         let property = member.expression.span();
         let member_span = span(member.span);

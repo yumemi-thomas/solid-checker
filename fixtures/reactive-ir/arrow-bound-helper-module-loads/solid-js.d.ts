@@ -47,3 +47,8 @@ declare module "solid-js" {
 
 // The host `require` (what @types/node declares globally).
 declare function require(id: string): unknown;
+
+// Vite's `import.meta.glob` typing (vite/types/importGlob.d.ts, reduced).
+interface ImportMeta {
+  glob(pattern: string, options?: { eager?: boolean }): Record<string, unknown>;
+}
