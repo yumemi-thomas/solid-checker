@@ -147,7 +147,30 @@ const codeRules = {
   PRIMITIVE_IN_FORBIDDEN_SCOPE: ["leaf-owner-forbidden-call"],
   ASYNC_OUTSIDE_LOADING_BOUNDARY: ["async-outside-loading-boundary"],
   PENDING_ASYNC_UNTRACKED_READ: ["pending-async-unsuspendable-read"],
+  SYNC_NODE_RECEIVED_ASYNC: ["sync-computation-received-async"],
+  UNTRACKED_READ_AFTER_AWAIT: ["reactive-read-after-await"],
+  MISSING_EFFECT_FN: ["missing-effect-function"],
+  ACTION_CALLED_IN_OWNED_SCOPE: ["action-called-in-owned-scope"],
+  // Thrown, not reported: see `thrownCodes`.
+  RESOLVE_IN_REACTIVE_SCOPE: ["resolve-in-tracked-scope"],
+  UNTIL_IN_REACTIVE_SCOPE: ["until-in-tracked-scope"],
+  FLUSH_IN_ACTION: ["flush-in-action"],
+  FLUSH_IN_TRACKED_QUEUE_CALLBACK: ["leaf-owner-forbidden-call"],
+  DYNAMIC_STATIC_PROMISE: ["static-dynamic-async-source"],
 };
+// Dev-build errors that are thrown with no diagnostic code (rc.13
+// `@solidjs/signals/dist/dev.js`, `dev-shared.js`; `@solidjs/web/dist/web.dev.js`),
+// named here by their message so the uncaught error, which the feedback run
+// maps to its throwing site (`runtime-exception` observations), is classified
+// like a coded diagnostic. A thrown `[CODE] ...` that is also reported as a
+// diagnostic (SYNC_NODE_RECEIVED_ASYNC) is not listed: it would count twice.
+const thrownCodes = [
+  [/^Cannot call resolve inside a reactive scope/, "RESOLVE_IN_REACTIVE_SCOPE"],
+  [/^Cannot call until inside a reactive scope/, "UNTIL_IN_REACTIVE_SCOPE"],
+  [/^\[FLUSH_IN_ACTION\]/, "FLUSH_IN_ACTION"],
+  [/^Cannot call flush\(\) from inside onSettled or createTrackedEffect/, "FLUSH_IN_TRACKED_QUEUE_CALLBACK"],
+  [/^dynamic\(\): a static source must resolve synchronously/, "DYNAMIC_STATIC_PROMISE"],
+];
 // Withholdings that cover any rule at their site.
 const withholdingRules = ["reactive-dispatch-unresolved"];
 const settle = { action: "wait-for-text", selector: "#ready", text: "settled" };
@@ -214,7 +237,19 @@ async function runCase(id) {
       line: finding.primaryLocation.line, endLine: finding.primaryLocation.endLine ?? finding.primaryLocation.line,
     }));
   const seen = new Set();
-  const diagnostics = (report.execution?.diagnostics ?? [])
+  // An uncaught error a coded rule claims, as a diagnostic row at its mapped
+  // throwing site (the observation carries a byte offset, no line).
+  const thrown = (report.observations ?? []).flatMap((observation) => {
+    const code = observation.kind === "runtime-exception"
+      && thrownCodes.find(([pattern]) => pattern.test(observation.message ?? ""))?.[1];
+    const path = observation.location?.path;
+    if (!code || !caseFile(path)) return [];
+    const before = readFileSync(path).subarray(0, observation.location.startByte).toString();
+    const line = before.split("\n").length;
+    const column = before.length - before.lastIndexOf("\n");
+    return [{ code, message: observation.message, site: { location: { path }, line, column }, stack: [] }];
+  });
+  const diagnostics = [...(report.execution?.diagnostics ?? []), ...thrown]
     .filter((row) => caseFile(row.site?.location?.path))
     // The two event passes repeat a diagnostic; one row per code and site.
     .filter((row) => {

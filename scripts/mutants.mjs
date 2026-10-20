@@ -23,10 +23,43 @@ import { fileURLToPath } from "node:url";
 
 const script = fileURLToPath(import.meta.url);
 const repo = resolve(dirname(script), "..");
+// Each pattern: the rule that must report it, the dev-runtime code its
+// template must raise (runtime-oracle.mjs `codeRules`), where it is inserted
+// (a component body, or an inline intrinsic event handler), the `solid-js`
+// imports it binds under reserved names, and its statements. A template must
+// type-check against the real typings (a one-argument `createEffect` does
+// not, so missing-effect-function has none).
 const patterns = {
-  P1: { rule: "strict-read-untracked", code: "STRICT_READ_UNTRACKED" },
-  P2: { rule: "missing-owner", code: "NO_OWNER_CLEANUP" },
-  P3: { rule: "reactive-write-in-owned-scope", code: "REACTIVE_WRITE_IN_OWNED_SCOPE" },
+  P1: { rule: "strict-read-untracked", code: "STRICT_READ_UNTRACKED", family: "component",
+    imports: ["createSignal as __scMutantSignal"],
+    body: id => `const [${id}Read] = __scMutantSignal(0);\nconsole.log(${id}Read());` },
+  P2: { rule: "missing-owner", code: "NO_OWNER_CLEANUP", family: "handler",
+    imports: ["onCleanup as __scMutantCleanup"],
+    body: () => "__scMutantCleanup(() => {});" },
+  P3: { rule: "reactive-write-in-owned-scope", code: "REACTIVE_WRITE_IN_OWNED_SCOPE", family: "component",
+    imports: ["createSignal as __scMutantSignal", "createMemo as __scMutantMemo"],
+    body: id => `const [, ${id}Set] = __scMutantSignal(0);\nconst ${id}Memo = __scMutantMemo(() => { ${id}Set(1); return 0; });\nconsole.log(${id}Memo());` },
+  // Read from a JSX child: the render effect's throw escapes as an uncaught
+  // error, which the feedback run maps to its site (a throw in the component
+  // body is the harness's render failure, and one in an effect is logged).
+  P4: { rule: "resolve-in-tracked-scope", code: "RESOLVE_IN_REACTIVE_SCOPE", family: "component",
+    imports: ["createMemo as __scMutantMemo", "resolve as __scMutantResolve"],
+    body: id => `const ${id}Memo = __scMutantMemo(() => __scMutantResolve(() => 1));\nvoid (<div>{String(${id}Memo())}</div>);` },
+  P5: { rule: "until-in-tracked-scope", code: "UNTIL_IN_REACTIVE_SCOPE", family: "component",
+    imports: ["createMemo as __scMutantMemo", "until as __scMutantUntil"],
+    body: id => `const ${id}Memo = __scMutantMemo(() => { void __scMutantUntil(() => true); return 0; });\nvoid (<div>{${id}Memo()}</div>);` },
+  P6: { rule: "sync-computation-received-async", code: "SYNC_NODE_RECEIVED_ASYNC", family: "component",
+    imports: ["createMemo as __scMutantMemo"],
+    body: id => `const ${id}Memo = __scMutantMemo(async () => 1, { sync: true });\nvoid ${id}Memo;` },
+  P7: { rule: "reactive-read-after-await", code: "UNTRACKED_READ_AFTER_AWAIT", family: "component",
+    imports: ["createSignal as __scMutantSignal", "createMemo as __scMutantMemo"],
+    body: id => `const [${id}Read] = __scMutantSignal(0);\nconst ${id}Memo = __scMutantMemo(async () => { await Promise.resolve(); return ${id}Read(); });\nvoid ${id}Memo;` },
+  P8: { rule: "action-called-in-owned-scope", code: "ACTION_CALLED_IN_OWNED_SCOPE", family: "component",
+    imports: ["action as __scMutantAction"],
+    body: id => `const ${id}Action = __scMutantAction(function* () {});\nvoid ${id}Action();` },
+  P9: { rule: "flush-in-action", code: "FLUSH_IN_ACTION", family: "handler",
+    imports: ["action as __scMutantAction", "flush as __scMutantFlush"],
+    body: () => "void __scMutantAction(function* () { __scMutantFlush(); })();" },
 };
 const sha = value => createHash("sha256").update(value).digest("hex");
 const json = path => JSON.parse(readFileSync(path, "utf8"));
@@ -57,17 +90,13 @@ function classify(findings, rule) {
     : findings.length ? "other" : "missed";
 }
 function mutationBody(pattern, id) {
-  return pattern === "P1" ? `const [${id}Read] = __scMutantSignal(0);\nconsole.log(${id}Read());`
-    : pattern === "P2" ? "__scMutantCleanup(() => {});"
-    : `const [, ${id}Set] = __scMutantSignal(0);\nconst ${id}Memo = __scMutantMemo(() => { ${id}Set(1); return 0; });\nconsole.log(${id}Memo());`;
+  return patterns[pattern].body(id);
 }
 function patternSource(pattern) {
-  const imports = pattern === "P2" ? "onCleanup as __scMutantCleanup"
-    : pattern === "P1" ? "createSignal as __scMutantSignal"
-      : "createSignal as __scMutantSignal, createMemo as __scMutantMemo";
+  const imports = patterns[pattern].imports.join(", ");
   const body = mutationBody(pattern, "__scMutant0");
-  return `import { ${imports} } from "solid-js";\nexport function App() {\n${pattern === "P2"
-    ? `return <button onClick={() => {\n${body}\n}}>cleanup</button>;`
+  return `import { ${imports} } from "solid-js";\nexport function App() {\n${patterns[pattern].family === "handler"
+    ? `return <button onClick={() => {\n${body}\n}}>probe</button>;`
     : `${body}\nreturn <div>probe</div>;`}\n}\n`;
 }
 if (process.argv[2] === "--write-patterns") {
@@ -199,14 +228,15 @@ if (process.argv[2] === "--prepare") {
   const sites = [], used = new Set();
   // Round-robin component patterns so a small app can contribute to both.
   for (let i = 0; i < spec.limit; i++) {
-    for (const pattern of ["P1", "P3", "P2"]) {
+    for (const pattern of Object.keys(patterns)) {
       if (sites.filter(s => s.pattern === pattern).length >= (spec.remaining?.[pattern] ?? spec.limit)) continue;
-      const candidate = ranked.find(c => c.family === (pattern === "P2" ? "handler" : "component") && !used.has(c.owner));
+      const candidate = ranked.find(c => c.family === patterns[pattern].family && !used.has(c.owner));
       if (!candidate) continue;
       used.add(candidate.owner);
       const id = `__scMutant${sites.length}`;
       const body = mutationBody(pattern, id);
-      sites.push({ ...candidate, id, pattern, text: `\n/* ${id} ${pattern} */\n${body}\n`, ...patterns[pattern] });
+      sites.push({ ...candidate, id, pattern, text: `\n/* ${id} ${pattern} */\n${body}\n`,
+        rule: patterns[pattern].rule, code: patterns[pattern].code });
     }
   }
   const resolution = [];
@@ -229,10 +259,7 @@ if (process.argv[2] === "--prepare") {
       if (ts.isExpressionStatement(statement) && ts.isStringLiteral(statement.expression)) importPos = statement.end + bomOffset(path);
       else break;
     }
-    const imports = [];
-    if (sites.some(s => s.file === file && s.pattern !== "P2")) imports.push("createSignal as __scMutantSignal");
-    if (sites.some(s => s.file === file && s.pattern === "P2")) imports.push("onCleanup as __scMutantCleanup");
-    if (sites.some(s => s.file === file && s.pattern === "P3")) imports.push("createMemo as __scMutantMemo");
+    const imports = [...new Set(sites.filter(s => s.file === file).flatMap(s => patterns[s.pattern].imports))];
     list.push({ pos: importPos, text: `\nimport { ${imports.join(", ")} } from "solid-js";\n` });
     list.sort((a, b) => a.pos - b.pos);
     let result = "", cursor = 0;
