@@ -101,6 +101,93 @@ function DeletingOuter(props: { count: number }) {
   );
 }
 
+// A second spread is a `mergeProps` view only when some source is provably
+// never falsy. `extra` is a bare identifier that may be `undefined`, so
+// `mergeProps(props, extra)` can hand the callee the parent's props object
+// itself (rc.13 `merge` returns its one non-falsy source), and the callee may
+// delete or redefine the getter before a sibling reads it.
+type Wide = { count?: number; label?: string; extra?: { tag?: string } };
+const extra: { tag?: string } | undefined = undefined;
+function WipeByDelete(props: Wide) {
+  delete props.count;
+  return <span />;
+}
+function WipeByDefine(props: Wide) {
+  Object.defineProperty(props, "count", { value: 0 });
+  return <span />;
+}
+function ExtraDeleteReader(props: Wide) {
+  const count = props.count;
+  return <span>{count}</span>;
+}
+function ExtraDefineReader(props: Wide) {
+  const count = props.count;
+  return <span>{count}</span>;
+}
+// Uncertifiable: the bare-identifier second spread may be `undefined`.
+function ExtraDeleteOuter(props: Wide) {
+  return (
+    <div>
+      <WipeByDelete {...props} {...extra} />
+      <ExtraDeleteReader {...props} />
+    </div>
+  );
+}
+// Uncertifiable: the same through `Object.defineProperty`.
+function ExtraDefineOuter(props: Wide) {
+  return (
+    <div>
+      <WipeByDefine {...props} {...extra} />
+      <ExtraDefineReader {...props} />
+    </div>
+  );
+}
+
+// Violation: a member spread is dynamic, compiled to the function source
+// `() => props.extra`, which `merge` never drops: the callee gets a view.
+function MemberSpreadReader(props: Wide) {
+  const count = props.count;
+  return <span>{count}</span>;
+}
+function MemberSpreadOuter(props: Wide) {
+  return (
+    <div>
+      <WipeByDelete {...props} {...props.extra} />
+      <MemberSpreadReader {...props} />
+    </div>
+  );
+}
+
+// Violation: an attribute is an object-literal source, never falsy.
+function AttributeSpreadReader(props: Wide) {
+  const count = props.count;
+  return <span>{count}</span>;
+}
+function AttributeSpreadOuter(props: Wide) {
+  return (
+    <div>
+      <WipeByDelete {...props} {...extra} label="x" />
+      <AttributeSpreadReader {...props} />
+    </div>
+  );
+}
+
+// Violation: a rendered child is an object-literal source too.
+function ChildSpreadReader(props: Wide) {
+  const count = props.count;
+  return <span>{count}</span>;
+}
+function ChildSpreadOuter(props: Wide) {
+  return (
+    <div>
+      <WipeByDelete {...props} {...extra}>
+        <span />
+      </WipeByDelete>
+      <ChildSpreadReader {...props} />
+    </div>
+  );
+}
+
 export function App() {
   const [count] = createSignal(1);
   return (
@@ -114,6 +201,11 @@ export function App() {
       <StaticOuter count={1} />
       <ChainOuter count={count()} />
       <DeletingOuter count={count()} />
+      <ExtraDeleteOuter count={count()} />
+      <ExtraDefineOuter count={count()} />
+      <MemberSpreadOuter count={count()} />
+      <AttributeSpreadOuter count={count()} />
+      <ChildSpreadOuter count={count()} />
     </div>
   );
 }

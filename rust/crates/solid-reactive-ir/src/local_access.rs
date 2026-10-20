@@ -164,6 +164,61 @@ pub(super) fn call_builds_view(
         })
 }
 
+/// Whether a component element hands its callee a `merge` *view* rather than
+/// possibly the object it spreads. The compiler (`shared/component.rs`) builds
+/// one source per run of attributes or children (an object literal) and one per
+/// spread, and wraps several sources in `mergeProps`; a lone source is passed
+/// as is. rc.13 `merge` returns its one non-falsy source itself, so the same
+/// never-falsy test as [`call_builds_view`] applies: the call is a view when
+/// some source is provably never falsy, here
+///
+/// * a non-`ref` attribute or a child that renders (an object literal source;
+///   `ref` may lower to no property, and whitespace or a `{/* */}` child is
+///   dropped), or
+/// * a spread of a member expression (`{...props.extra}`): dynamic, so lowered
+///   to a function source (`() => props.extra`), unless the object is an import
+///   binding (a namespace member is static and passes through unwrapped).
+///
+/// A spread of a bare identifier is not: it may be `undefined`, leaving the
+/// spread props object as the receiver's own.
+pub(super) fn component_element_builds_view(
+    file: &solid_facts::FileFacts,
+    element: &solid_facts::ast::JsxElementFact,
+) -> bool {
+    if element.attributes.iter().any(|attribute| {
+        attribute.namespace.is_some() || file.source_text(attribute.name) != Some("ref")
+    }) {
+        return true;
+    }
+    if element.children.iter().any(|child| {
+        file.source_text(*child).is_some_and(|text| {
+            let text = text.trim();
+            match text.strip_prefix('{') {
+                Some(inner) => {
+                    let inner = inner.trim_start();
+                    !inner.starts_with('}') && !inner.starts_with("/*") && !inner.starts_with("//")
+                }
+                None => !text.is_empty(),
+            }
+        })
+    }) {
+        return true;
+    }
+    element.spreads.iter().any(|spread| {
+        let argument = file.ast.peel_ts_sugar_span(spread.argument);
+        file.ast.member_at(argument).is_some_and(|member| {
+            let object = file.ast.peel_ts_sugar_span(member.object);
+            let object_text = file.source_text(object);
+            !file.ast.imports.iter().any(|import| {
+                import
+                    .bindings
+                    .iter()
+                    .any(|binding| file.source_text(binding.local.span) == object_text)
+            })
+        })
+    })
+}
+
 /// Whether the identifier at `span` is passed to a call that builds a view
 /// of it (`omit(props, ..)` as the first argument, `merge(.., props, ..)`),
 /// so the call neither writes it nor hands out an alias that can.

@@ -703,11 +703,13 @@ const SPREAD_RECEIVER_DEPTH: usize = 4;
 
 /// Whether a props root still holds the getters its callers wrote, allowing
 /// one more kind of whole-object use than [`crate::local_access::props_root_is_current`]:
-/// a JSX spread into a component. With any other attribute, spread or child,
-/// the compiler passes `mergeProps(...)`, a view whose `set` and
-/// `deleteProperty` are no-ops on rc.13. A lone spread passes the object
-/// itself (`createComponent(Child, props)`), so the receiver's own props root
-/// must be proven inert the same way.
+/// a JSX spread into a component. When a source other than the props is
+/// provably never falsy, the compiler's `mergeProps(...)` is a view whose `set`
+/// and `deleteProperty` are no-ops on rc.13
+/// ([`crate::local_access::component_element_builds_view`]). Otherwise the
+/// callee may get the object itself (`createComponent(Child, props)`, or a
+/// `mergeProps` of an `undefined` second spread), so the receiver's own props
+/// root must be proven inert the same way.
 fn props_root_is_current_through_spreads(
     lookup: &SemanticLookup<'_>,
     entities: &EntitySymbols,
@@ -734,10 +736,11 @@ fn props_root_is_current_through_spreads(
         }) else {
             return false;
         };
-        let lone = element.spreads.len() == 1
-            && element.attributes.is_empty()
-            && element.children.is_empty();
-        !lone
+        // Several sources are a `mergeProps` view only when one is provably
+        // never falsy; otherwise `merge` can return the spread props object
+        // itself (a second spread of an `undefined` identifier), exactly as
+        // a lone spread does, and the receiver must be proven inert.
+        crate::local_access::component_element_builds_view(file, element)
             || (depth > 0
                 && lone_spread_receiver_is_inert(lookup, entities, file, element, depth - 1))
     })
