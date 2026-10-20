@@ -82,6 +82,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/cycle-a.ts",
+      "start": 155,
+      "end": 167,
+      "fixes": 0
+    },
+    {
       "rule": "unaudited-solid-release",
       "code": "SC9014",
       "kind": "uncertifiable",
@@ -89,6 +99,106 @@
       "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/node_modules/solid-js/package.json",
       "start": 0,
       "end": 0,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/provider.ts",
+      "start": 120,
+      "end": 131,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/Tdz.tsx",
+      "start": 727,
+      "end": 738,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/Tdz.tsx",
+      "start": 1016,
+      "end": 1021,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/Tdz.tsx",
+      "start": 1283,
+      "end": 1294,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/Tdz.tsx",
+      "start": 1491,
+      "end": 1502,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/Tdz.tsx",
+      "start": 1844,
+      "end": 1856,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/Tdz.tsx",
+      "start": 2168,
+      "end": 2180,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/Tdz.tsx",
+      "start": 2436,
+      "end": 2448,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/Tdz.tsx",
+      "start": 2729,
+      "end": 2740,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-reachability/Tdz.tsx",
+      "start": 3846,
+      "end": 3857,
       "fixes": 0
     }
   ]

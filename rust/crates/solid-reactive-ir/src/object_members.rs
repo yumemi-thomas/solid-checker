@@ -188,14 +188,39 @@ pub(crate) fn namespace_exposed_modules(
 /// references need not contain a receiver identifier at all. Until those uses
 /// can be censused exactly, refuse the entire exposed module (and its barrels).
 #[derive(Default)]
-struct ModuleCensus {
+pub(crate) struct ModuleCensus {
     exposed: HashSet<String>,
     cyclic: HashSet<String>,
     unknown_load: bool,
+    /// Static import and re-export edges between analyzed modules.
+    graph: HashMap<String, HashSet<String>>,
 }
 
 impl ModuleCensus {
-    fn new(facts: &ProjectFacts, lookup: &SemanticLookup<'_>) -> Self {
+    /// Whether the module is on an import cycle, or imports (transitively) a
+    /// module on one, or has a relative import the census could not resolve.
+    pub(crate) fn is_cyclic(&self, path: &str) -> bool {
+        self.cyclic.contains(path)
+    }
+
+    /// Whether `from` statically imports `to`, directly or through re-exports.
+    pub(crate) fn statically_imports(&self, from: &str, to: &str) -> bool {
+        let mut seen = HashSet::<&str>::default();
+        let mut stack = vec![from];
+        while let Some(module) = stack.pop() {
+            for target in self.graph.get(module).into_iter().flatten() {
+                if target == to {
+                    return true;
+                }
+                if seen.insert(target.as_str()) {
+                    stack.push(target.as_str());
+                }
+            }
+        }
+        false
+    }
+
+    pub(crate) fn new(facts: &ProjectFacts, lookup: &SemanticLookup<'_>) -> Self {
         let mut redirects = HashMap::<String, HashSet<String>>::default();
         for (declaration, runtime) in &facts.runtime_symbol_redirects {
             let (Some(declarations), Some(implementations)) = (
@@ -357,6 +382,7 @@ impl ModuleCensus {
                 break;
             }
         }
+        result.graph = graph;
         result
     }
 }

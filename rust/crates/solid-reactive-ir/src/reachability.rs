@@ -264,7 +264,13 @@ fn discover_reachability_file(
     for (call_index, call) in file.ast.calls.iter().enumerate() {
         let owner = call_owners[call_index];
         let callee = location(file.path.shared(), call.callee);
-        if let Some(symbol) = entities.get(&callee) {
+        // ADR 0339: a mention that may run before its function-valued
+        // binding's declarator reaches nothing; the same holds for each edge
+        // below that names a function by a mention.
+        let withheld = |span: Span| lookup.may_precede_initialization(file.path.as_str(), span);
+        if let Some(symbol) = entities.get(&callee)
+            && !withheld(call.callee)
+        {
             edges.push(ReachabilityEdge {
                 owner,
                 target: ReachabilityTarget::Symbol(symbol.clone()),
@@ -330,6 +336,9 @@ fn discover_reachability_file(
                     else {
                         continue;
                     };
+                    if withheld(argument.span) {
+                        continue;
+                    }
                     for function in &file.ast.functions {
                         if function_symbol(file, function, entities) == Some(symbol) {
                             edges.push(ReachabilityEdge {
@@ -345,6 +354,9 @@ fn discover_reachability_file(
                 .iter()
                 .flat_map(|argument| &argument.identifier_properties)
             {
+                if withheld(property.span) {
+                    continue;
+                }
                 if let Some(symbol) = entities.get(&location(file.path.shared(), property.span)) {
                     edges.push(ReachabilityEdge {
                         owner,
@@ -376,7 +388,9 @@ fn discover_reachability_file(
             .filter(|function| callback.span.contains(function.span))
             .map(|function| ReachabilityTarget::LocalSpan(function.span))
             .collect::<Vec<_>>();
-        if let Some(symbol) = entities.get(&location(file.path.shared(), callback.span)) {
+        if let Some(symbol) = entities.get(&location(file.path.shared(), callback.span))
+            && !lookup.may_precede_initialization(file.path.as_str(), callback.span)
+        {
             targets.push(ReachabilityTarget::Symbol(symbol.clone()));
         }
         callback_edges.push((owner, targets));

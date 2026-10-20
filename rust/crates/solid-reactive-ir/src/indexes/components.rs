@@ -924,6 +924,11 @@ impl<'a> SemanticLookup<'a> {
             let mut map = HashMap::<(&str, Span), Vec<FunctionCallSite>>::default();
             for (file_index, caller_file) in self.facts.files.iter().enumerate() {
                 for call in &caller_file.ast.calls {
+                    // ADR 0339: a call that may run before its callee's
+                    // declarator is no call site.
+                    if self.may_precede_initialization(caller_file.path.as_str(), call.callee) {
+                        continue;
+                    }
                     let Some(symbol) = self.callee_symbol(caller_file, call.callee) else {
                         continue;
                     };
@@ -939,7 +944,12 @@ impl<'a> SemanticLookup<'a> {
                         });
                 }
             }
-            for (file_index, _, element, target_file, target) in self.jsx_rendered_functions() {
+            for (file_index, caller_file, element, target_file, target) in
+                self.jsx_rendered_functions()
+            {
+                if self.may_precede_initialization(caller_file.path.as_str(), element.name.span) {
+                    continue;
+                }
                 map.entry((target_file.path.as_str(), target.span))
                     .or_default()
                     .push(FunctionCallSite {
