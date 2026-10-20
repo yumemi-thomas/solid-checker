@@ -635,8 +635,8 @@ pub(super) type SpreadForward = (Location, BTreeSet<String>);
 
 /// The forward a spread call site makes when its last spread is exactly the
 /// props parameter of a component (the props object itself, still current,
-/// with no `merge` result or destructured view attached to its declaration —
-/// the same identity `props.x` forwarding requires). Any other spread, or an
+/// with nothing but proven views and const aliases attached to its
+/// declaration — the same identity `props.x` forwarding requires). Any other spread, or an
 /// attribute whose name cannot be read, forwards nothing.
 fn spread_of_own_props(
     lookup: &SemanticLookup<'_>,
@@ -674,9 +674,14 @@ fn spread_of_own_props(
             &symbol,
             SPREAD_RECEIVER_DEPTH,
         )
-        || prop_sources
-            .iter()
-            .any(|(other, (_, attached))| other != &symbol && attached == declaration)
+        || !crate::local_access::props_root_attachments_are_views(
+            file,
+            prop_sources,
+            declaration,
+            &symbol,
+            entities,
+            lookup,
+        )
     {
         return None;
     }
@@ -711,9 +716,13 @@ fn props_root_is_current_through_spreads(
     symbol: &SymbolId,
     depth: usize,
 ) -> bool {
-    let Some(uses) =
-        crate::local_access::props_root_unaccounted_uses(file, declaration, symbol, entities)
-    else {
+    let Some(uses) = crate::local_access::props_root_unaccounted_uses(
+        file,
+        declaration,
+        symbol,
+        entities,
+        lookup,
+    ) else {
         return false;
     };
     uses.iter().all(|span| {
@@ -956,19 +965,26 @@ pub(super) fn classify_passed_expression(
             // in the parent: decided once every component is classified.
             Some(symbol) if prop_sources.contains_key(&symbol) => {
                 let (_, declaration) = &prop_sources[&symbol];
-                // Only the props parameter itself: a `merge` result or a
-                // destructured binding attached to it is a view whose keys
-                // this does not map back to the parent's props.
+                // Only the props parameter itself: a view or alias attached
+                // to it never certifies a read of its own (its keys are not
+                // mapped back to the parent's props), and a destructured
+                // binding attached to it still blocks the forward.
                 if entities.get(declaration) != Some(&symbol)
                     || !crate::local_access::props_root_is_current(
                         file,
                         declaration,
                         &symbol,
                         entities,
+                        lookup,
                     )
-                    || prop_sources
-                        .iter()
-                        .any(|(other, (_, attached))| other != &symbol && attached == declaration)
+                    || !crate::local_access::props_root_attachments_are_views(
+                        file,
+                        prop_sources,
+                        declaration,
+                        &symbol,
+                        entities,
+                        lookup,
+                    )
                 {
                     result = PropUse::Unknown;
                     continue;

@@ -40,19 +40,200 @@ pub(super) fn props_root_is_current(
     declaration: &Location,
     symbol: &SymbolId,
     entities: &EntitySymbols,
+    lookup: &SemanticLookup<'_>,
 ) -> bool {
-    props_root_unaccounted_uses(file, declaration, symbol, entities)
+    props_root_unaccounted_uses(file, declaration, symbol, entities, lookup)
         .is_some_and(|uses| uses.is_empty())
 }
 
+/// The `const` identifier bindings that are exactly the props root, directly
+/// or through other such aliases, each with the span of the root identifier in
+/// its initializer.
+fn props_root_aliases(
+    file: &solid_facts::FileFacts,
+    symbol: &SymbolId,
+    entities: &EntitySymbols,
+) -> Vec<(SymbolId, solid_facts::core::Span)> {
+    let mut aliases: Vec<(SymbolId, solid_facts::core::Span)> = Vec::new();
+    loop {
+        let before = aliases.len();
+        for binding in &file.ast.bindings {
+            let (Some(initializer), [name]) =
+                (&binding.initializer_identifier, binding.names.as_slice())
+            else {
+                continue;
+            };
+            if !binding.immutable || binding.shape != solid_facts::ast::BindingShape::Identifier {
+                continue;
+            }
+            let (Some(alias), Some(source)) = (
+                entities.at(file.path.as_str(), name.span),
+                entities.at(file.path.as_str(), initializer.span),
+            ) else {
+                continue;
+            };
+            if alias == symbol || aliases.iter().any(|(known, _)| known == alias) {
+                continue;
+            }
+            if source == symbol || aliases.iter().any(|(known, _)| known == source) {
+                aliases.push((alias.clone(), initializer.span));
+            }
+        }
+        if aliases.len() == before {
+            return aliases;
+        }
+    }
+}
+
+/// Whether the identifier at `span` is a spread attribute of an intrinsic
+/// (DOM) element. `@solidjs/web` `spread` (client) and `ssrElement` (server),
+/// `2.0.0-rc.13`, only read the object: they enumerate its keys, read each
+/// value, and write into their own `newProps`/`prevProps` and the node. A
+/// `ref` or `on*` value is called with the node or an event, never the props.
+/// A multi-attribute spread compiles to a `merge(..)` view first. Neither
+/// path writes, deletes or retains-and-mutates the props object.
+fn is_intrinsic_spread_argument(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+) -> bool {
+    file.ast.jsx_containing(span).any(|element| {
+        crate::execution_role::intrinsic_element(file, element)
+            && element
+                .spreads
+                .iter()
+                .any(|spread| file.ast.peel_ts_sugar_span(spread.argument) == span)
+    })
+}
+
+/// The depth a view call's nested view arguments are followed to.
+const VIEW_CALL_DEPTH: usize = 8;
+
+/// Whether the call at `call` provably builds a *view*: a new object whose
+/// writes and deletes never reach its sources. This is the one owner of the
+/// "inert whole-object use" decision for `omit` and `merge`.
+///
+/// Both are exact dialect primitives (`SemanticLookup::primitive_at_call`,
+/// never a name). On `@solidjs/signals@2.0.0-rc.13` (`dist/dev.js`):
+///
+/// * `omit(props, ...keys)` always returns `new Proxy(new OmitView(..),
+///   omitTraps)` whatever the keys (zero keys, a predicate), and the traps
+///   have `set: trueFn, deleteProperty: trueFn`. The first argument must not
+///   be a spread, which could supply no source at all.
+/// * `merge(...sources)` returns the one non-falsy source *itself* ("The one
+///   non-falsy source ... IS the merge"), so `merge(props)` and
+///   `merge(props, maybeUndefined)` are aliases. It is a view
+///   (`mergeTraps`: `set: trueFn, deleteProperty: trueFn`) only when two
+///   sources are non-falsy. A props object always is, so the call is a view
+///   when no argument is a spread and some argument is syntactically never
+///   falsy: an object or function literal (a function becomes a memo source)
+///   or a call that itself builds a view. Anything else could be `undefined`
+///   at run time and stays an alias.
+///
+/// Both premises assume `Proxy` exists (`SUPPORTS_PROXY`); the no-Proxy
+/// branch copies descriptors and can return its last source itself.
+pub(super) fn call_builds_view(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    lookup: &SemanticLookup<'_>,
+    depth: usize,
+) -> bool {
+    if call.construct {
+        return false;
+    }
+    let Some(primitive) = lookup.primitive_at_call(file, call.span) else {
+        return false;
+    };
+    if lookup.dialect.splits_props(primitive) {
+        return call.arguments.first().is_some_and(|first| !first.spread);
+    }
+    if !lookup.dialect.merges_props_reactivity(primitive) {
+        return false;
+    }
+    call.arguments.len() >= 2
+        && call.arguments.iter().all(|argument| !argument.spread)
+        && call.arguments.iter().any(|argument| {
+            use solid_facts::ast::RuntimeValueKind;
+            matches!(
+                argument.runtime_value_kind,
+                RuntimeValueKind::Object | RuntimeValueKind::Function
+            ) || (depth < VIEW_CALL_DEPTH
+                && file
+                    .ast
+                    .call_at(file.ast.peel_ts_sugar_span(argument.span))
+                    .is_some_and(|inner| call_builds_view(file, inner, lookup, depth + 1)))
+        })
+}
+
+/// Whether the identifier at `span` is passed to a call that builds a view
+/// of it (`omit(props, ..)` as the first argument, `merge(.., props, ..)`),
+/// so the call neither writes it nor hands out an alias that can.
+fn is_view_argument(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    file.ast.calls.iter().any(|call| {
+        call.arguments
+            .iter()
+            .position(|argument| {
+                !argument.spread && file.ast.peel_ts_sugar_span(argument.span) == span
+            })
+            .is_some_and(|index| {
+                call_builds_view(file, call, lookup, 0)
+                    && (index == 0
+                        || lookup
+                            .primitive_at_call(file, call.span)
+                            .is_some_and(|primitive| {
+                                lookup.dialect.merges_props_reactivity(primitive)
+                            }))
+            })
+    })
+}
+
+/// Whether every other prop source attached to the props declaration is a
+/// `const` alias of the root (see [`props_root_aliases`]) or a `const`
+/// identifier bound directly to a call that builds a view. Writes through a view are no-ops;
+/// writes through an alias or a destructured rest reach the object, so those
+/// still block.
+pub(super) fn props_root_attachments_are_views(
+    file: &solid_facts::FileFacts,
+    prop_sources: &HashMap<SymbolId, (SymbolId, Location)>,
+    declaration: &Location,
+    symbol: &SymbolId,
+    entities: &EntitySymbols,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let aliases = props_root_aliases(file, symbol, entities);
+    prop_sources
+        .iter()
+        .filter(|(other, (_, attached))| *other != symbol && attached == declaration)
+        .all(|(other, _)| {
+            aliases.iter().any(|(alias, _)| alias == other)
+                || file.ast.bindings.iter().any(|binding| {
+                    binding.immutable
+                        && binding.shape == solid_facts::ast::BindingShape::Identifier
+                        && binding.names.len() == 1
+                        && binding.names.first().is_some_and(|name| {
+                            entities.at(file.path.as_str(), name.span) == Some(other)
+                        })
+                        && binding
+                            .call_initializer
+                            .and_then(|initializer| file.ast.call_at(initializer))
+                            .is_some_and(|call| call_builds_view(file, call, lookup, 0))
+                })
+        })
+}
+
 /// The uses of a props root that may alias or escape it (every use that is
-/// not a member access or erased TypeScript syntax), or `None` when the
+/// not a member access, erased TypeScript syntax, or an argument of a call
+/// that builds a view of it, see [`call_builds_view`]), or `None` when the
 /// binding or a member through it is written in its file.
 pub(super) fn props_root_unaccounted_uses(
     file: &solid_facts::FileFacts,
     declaration: &Location,
     symbol: &SymbolId,
     entities: &EntitySymbols,
+    lookup: &SemanticLookup<'_>,
 ) -> Option<Vec<solid_facts::core::Span>> {
     use solid_facts::core::Span;
     if declaration.path.as_ref() != file.path.as_str() {
@@ -67,12 +248,18 @@ pub(super) fn props_root_unaccounted_uses(
     if crate::indexes::binding_written(file, Span::new(start, end)) {
         return None;
     }
+    // A `const` alias (`const local = props`) is the same root: its own uses
+    // are judged exactly like the parameter's, and it is never a separate
+    // witness (the read rule only certifies the parameter's own reads).
+    let aliases = props_root_aliases(file, symbol, entities);
     let names_root = |span| {
         let span = file.ast.peel_ts_sugar_span(span);
         file.ast.identifiers.iter().any(|identifier| {
             identifier.span == span
                 && identifier.role == solid_facts::ast::IdentifierRole::Reference
-        }) && entities.at(file.path.as_str(), span) == Some(symbol)
+        }) && entities
+            .at(file.path.as_str(), span)
+            .is_some_and(|named| named == symbol || aliases.iter().any(|(alias, _)| alias == named))
     };
     let member_written = file
         .ast
@@ -108,6 +295,11 @@ pub(super) fn props_root_unaccounted_uses(
                     .members
                     .iter()
                     .any(|member| file.ast.peel_ts_sugar_span(member.object) == identifier.span)
+                && !is_view_argument(file, identifier.span, lookup)
+                && !aliases
+                    .iter()
+                    .any(|(_, initializer)| *initializer == identifier.span)
+                && !is_intrinsic_spread_argument(file, identifier.span)
         })
         .map(|identifier| identifier.span)
         .collect();
@@ -1502,10 +1694,21 @@ impl LocalAccessContext<'_, '_> {
             // not permission to certify a merge view's local head Get.
             let exact_root = inline_root.is_none()
                 && self.entities.get(prop_declaration) == Some(symbol)
-                && props_root_is_current(file, prop_declaration, symbol, self.entities)
-                && !self.prop_sources.iter().any(|(other, (_, declaration))| {
-                    other != symbol && declaration == prop_declaration
-                });
+                && props_root_is_current(
+                    file,
+                    prop_declaration,
+                    symbol,
+                    self.entities,
+                    self.lookup,
+                )
+                && props_root_attachments_are_views(
+                    file,
+                    self.prop_sources,
+                    prop_declaration,
+                    symbol,
+                    self.entities,
+                    self.lookup,
+                );
             let backing = if exact_root {
                 property.map_or(PropUse::Unknown, |property| {
                     self.props_reactivity.prop_use(prop_declaration, property)
@@ -1776,7 +1979,13 @@ impl LocalAccessContext<'_, '_> {
                     PropUse::Reactive => {
                         if inline_root.is_some()
                             || self.entities.get(declaration) != Some(symbol)
-                            || !props_root_is_current(file, declaration, symbol, self.entities)
+                            || !props_root_is_current(
+                                file,
+                                declaration,
+                                symbol,
+                                self.entities,
+                                self.lookup,
+                            )
                         {
                             uncertain = true;
                         }
