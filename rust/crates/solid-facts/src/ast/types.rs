@@ -1162,6 +1162,11 @@ pub struct JsxElementFact {
     pub self_closing: bool,
     #[serde(default)]
     pub children: Vec<Span>,
+    /// Children that are an expression container holding no expression
+    /// (`{}`, `{/* c */}`, or one the parser reads as whitespace only, such
+    /// as `{\u{200B}}`). No lowering builds a value from them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub empty_children: Vec<Span>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

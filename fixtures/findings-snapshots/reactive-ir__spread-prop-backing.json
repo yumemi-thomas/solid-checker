@@ -180,6 +180,16 @@
       "start": 7611,
       "end": 7622,
       "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/spread-prop-backing/App.tsx",
+      "start": 8048,
+      "end": 8059,
+      "fixes": 0
     }
   ]
 }

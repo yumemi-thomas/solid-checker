@@ -254,6 +254,22 @@ function BomOuter(props: Wide) {
   );
 }
 
+// The native parser reads `{\u200B}` as an empty expression container, which
+// no lowering turns into a children source, so the callee gets the props
+// object. Uncertifiable.
+function ZwspReader(props: Wide) {
+  const count = props.count;
+  return <span>{count}</span>;
+}
+function ZwspOuter(props: Wide) {
+  return (
+    <div>
+      <WipeByDelete {...props}>{​}</WipeByDelete>
+      <ZwspReader {...props} />
+    </div>
+  );
+}
+
 export function App() {
   const [count] = createSignal(1);
   return (
@@ -276,6 +292,7 @@ export function App() {
       <ChildrenAttrSelfOuter count={count()} />
       <StaticMemberOuter count={count()} />
       <BomOuter count={count()} />
+      <ZwspOuter count={count()} />
     </div>
   );
 }

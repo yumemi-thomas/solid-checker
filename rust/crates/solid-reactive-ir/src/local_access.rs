@@ -204,19 +204,21 @@ pub(super) fn component_element_builds_view(
         return true;
     }
     if element.children.iter().any(|child| {
+        // An empty container (`{}`, `{/* c */}`, or one the parser reads as
+        // whitespace, e.g. `{\u{200B}}`) is dropped by both lowerings; the
+        // parser decides that, not the text.
+        if element.empty_children.contains(child) {
+            return false;
+        }
         file.source_text(*child).is_some_and(|text| {
             // JavaScript's `\s` (Babel's `filterChildren`) also counts U+FEFF
             // as whitespace; Rust's `trim` does not.
             let js_space = |c: char| c.is_whitespace() || c == '\u{FEFF}';
             let text = text.trim_matches(js_space);
             match text.strip_prefix('{') {
-                Some(inner) => {
-                    let inner = inner.trim_start_matches(js_space);
-                    !inner.starts_with('}')
-                        && !inner.starts_with("...")
-                        && !inner.starts_with("/*")
-                        && !inner.starts_with("//")
-                }
+                // A container with an expression is an object-literal source,
+                // except a spread child, which is passed through raw.
+                Some(inner) => !inner.trim_start_matches(js_space).starts_with("..."),
                 None => !text.is_empty(),
             }
         })
