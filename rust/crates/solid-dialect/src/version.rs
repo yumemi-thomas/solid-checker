@@ -130,6 +130,18 @@ pub struct ReleaseOwner {
     pub resolved_from: Option<&'static str>,
 }
 
+/// ADR 0334: one audited `@tanstack/solid-router` release and the bytes the
+/// audit read: the router's own install and the `@tanstack/router-core` that
+/// Node resolves from its real directory. Both digests are
+/// `scripts/router-digest.mjs` values.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AuditedRouteRelease {
+    pub version: &'static str,
+    pub router_digest: &'static str,
+    pub core_version: &'static str,
+    pub core_digest: &'static str,
+}
+
 /// One [`ReleaseOwner`] as resolved for a project.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct InstalledRelease<'a> {

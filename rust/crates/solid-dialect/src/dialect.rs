@@ -71,6 +71,16 @@ pub trait Dialect: Sync {
         &[]
     }
 
+    /// ADR 0334: the audited `@tanstack/solid-router` release `version`, whose
+    /// installed code only renders the `component`, `pendingComponent`,
+    /// `errorComponent` and `notFoundComponent` values of a route's options
+    /// (or reads a member such as `preload` of them) and never calls one, or
+    /// `None` for a release nobody read. The default is `None`.
+    fn audited_route_components(&self, version: &str) -> Option<AuditedRouteRelease> {
+        let _ = version;
+        None
+    }
+
     /// The installation this vocabulary was audited on, as `(package,
     /// version)` in [`Dialect::release_owners`] order: what a user pins to
     /// certify. Empty for a dialect audited on none.

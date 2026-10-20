@@ -114,6 +114,13 @@ pub struct RouterInstallEvidence {
     /// Digest of each resolved router install's bytes
     /// (`scripts/router-digest.mjs`), by the path of its `package.json`.
     pub digests: std::collections::BTreeMap<String, String>,
+    /// ADR 0334: what was read of each resolved `@tanstack/solid-router`
+    /// install, by the path of its `package.json`.
+    pub route_installs: std::collections::BTreeMap<String, crate::route_components::RouteInstall>,
+    /// ADR 0334: a manifest, lockfile or patch directory above the project
+    /// records a replacement of `@tanstack/solid-router` or
+    /// `@tanstack/router-core`.
+    pub route_replacement_recorded: bool,
 }
 
 /// One runtime import of the router and what it resolved to.
@@ -159,63 +166,66 @@ pub fn router_params_status(
             });
             uses_params |= reads_params;
             let mut bytes_differ = false;
-            let version =
-                facts.resolved_imports.as_ref().and_then(|imports| {
-                    match imports.specifier(file.path.as_str(), import.span, ROUTER_PACKAGE) {
-                        // A `paths` mapping (or any other resolution outside
-                        // `node_modules`): the specifier names a project file
-                        // here, and no release of the router is in question.
-                        SpecifierAttestation::Attested(row)
-                            if matches!(
-                                row.resolution,
-                                solid_facts::ImportResolution::NonRelative
-                                    | solid_facts::ImportResolution::Relative
-                            ) =>
-                        {
-                            replaced =
-                                Some("a router specifier that does not load the installed package");
-                            None
-                        }
-                        SpecifierAttestation::Attested(row)
-                            if row.resolution == solid_facts::ImportResolution::NodeModules
-                                && row.resolved_path.contains("patch_hash=") =>
-                        {
-                            replaced = Some("a patched install of the router");
-                            None
-                        }
-                        // The version the check consults is the one in the
-                        // manifest nearest the resolved file (`package_version`).
-                        // The resolver's own record of the package
-                        // (`resolver_package_version`) must not disagree with it:
-                        // two answers about which package was loaded is no
-                        // answer.
-                        SpecifierAttestation::Attested(row)
-                            if row.resolution == solid_facts::ImportResolution::NodeModules
-                                && row.package_name.as_deref() == Some(ROUTER_PACKAGE)
-                                && row.resolver_package_name.as_deref() == Some(ROUTER_PACKAGE)
-                                && row.resolver_package_version.as_deref().is_none_or(
-                                    |version| row.package_version.as_deref() == Some(version),
-                                ) =>
-                        {
-                            if !runtime_agrees(facts, file, import, &row.resolved_path) {
-                                replaced = Some(
-                                    "a bundler resolution that does not load the installed package",
-                                );
-                                return None;
-                            }
-                            let version = row.package_version.as_deref()?;
-                            let digest = dialect.audited_router_digest(version);
-                            // Only an audited release has bytes to differ from.
-                            bytes_differ = digest.is_some_and(|audited| {
-                                row.package_manifest.as_deref().and_then(|manifest| {
-                                    install.digests.get(manifest).map(String::as_str)
-                                }) != Some(audited)
-                            });
-                            Some(version.to_owned())
-                        }
-                        _ => None,
+            let version = facts.resolved_imports.as_ref().and_then(|imports| {
+                match imports.specifier(file.path.as_str(), import.span, ROUTER_PACKAGE) {
+                    // A `paths` mapping (or any other resolution outside
+                    // `node_modules`): the specifier names a project file
+                    // here, and no release of the router is in question.
+                    SpecifierAttestation::Attested(row)
+                        if matches!(
+                            row.resolution,
+                            solid_facts::ImportResolution::NonRelative
+                                | solid_facts::ImportResolution::Relative
+                        ) =>
+                    {
+                        replaced =
+                            Some("a router specifier that does not load the installed package");
+                        None
                     }
-                });
+                    SpecifierAttestation::Attested(row)
+                        if row.resolution == solid_facts::ImportResolution::NodeModules
+                            && row.resolved_path.contains("patch_hash=") =>
+                    {
+                        replaced = Some("a patched install of the router");
+                        None
+                    }
+                    // The version the check consults is the one in the
+                    // manifest nearest the resolved file (`package_version`).
+                    // The resolver's own record of the package
+                    // (`resolver_package_version`) must not disagree with it:
+                    // two answers about which package was loaded is no
+                    // answer.
+                    SpecifierAttestation::Attested(row)
+                        if row.resolution == solid_facts::ImportResolution::NodeModules
+                            && row.package_name.as_deref() == Some(ROUTER_PACKAGE)
+                            && row.resolver_package_name.as_deref() == Some(ROUTER_PACKAGE)
+                            && row
+                                .resolver_package_version
+                                .as_deref()
+                                .is_none_or(|version| {
+                                    row.package_version.as_deref() == Some(version)
+                                }) =>
+                    {
+                        if !runtime_agrees(facts, file, import, &row.resolved_path, ROUTER_PACKAGE)
+                        {
+                            replaced = Some(
+                                "a bundler resolution that does not load the installed package",
+                            );
+                            return None;
+                        }
+                        let version = row.package_version.as_deref()?;
+                        let digest = dialect.audited_router_digest(version);
+                        // Only an audited release has bytes to differ from.
+                        bytes_differ = digest.is_some_and(|audited| {
+                            row.package_manifest.as_deref().and_then(|manifest| {
+                                install.digests.get(manifest).map(String::as_str)
+                            }) != Some(audited)
+                        });
+                        Some(version.to_owned())
+                    }
+                    _ => None,
+                }
+            });
             reached.push(Reached {
                 version,
                 bytes_differ,
@@ -291,11 +301,12 @@ pub fn router_params_status(
 /// a project file or another package makes the audited bytes irrelevant.
 /// Without the bundler's answer the compiler's is the premise: the standard
 /// Vite configuration of AGENTS.md "Dependency source and pins".
-fn runtime_agrees(
+pub(crate) fn runtime_agrees(
     facts: &ProjectFacts,
     file: &FileFacts,
     import: &solid_facts::ast::ImportFact,
     attested: &str,
+    package: &str,
 ) -> bool {
     let Some(runtime) = &facts.runtime_resolutions else {
         return true;
@@ -303,15 +314,13 @@ fn runtime_agrees(
     let Some(specifier) = import.specifier_span else {
         return false;
     };
-    match runtime.outcome(file.path.as_str(), specifier, ROUTER_PACKAGE) {
+    match runtime.outcome(file.path.as_str(), specifier, package) {
         solid_facts::runtime_resolution::RuntimeOutcome::File {
             path,
             physical_path,
         } => {
-            let root = |text: &str| {
-                text.rfind("/node_modules/@solidjs/router/")
-                    .map(|at| text[..at].to_owned())
-            };
+            let installed = format!("/node_modules/{package}/");
+            let root = |text: &str| text.rfind(&installed).map(|at| text[..at].to_owned());
             let attested_root = root(attested);
             attested_root.is_some()
                 && (root(physical_path) == attested_root || root(path) == attested_root)

@@ -16,6 +16,7 @@ use std::{
 
 use sha2::{Digest, Sha256};
 use solid_facts::ProjectFacts;
+use solid_reactive_ir::route_components::{ROUTE_CORE_PACKAGE, ROUTE_PACKAGE, RouteInstall};
 use solid_reactive_ir::router_params::{ROUTER_PACKAGE, RouterInstallEvidence};
 
 /// The manifest and lockfile names whose lines can record a patch of an
@@ -39,11 +40,63 @@ const MANIFEST_FIELDS: [&str; 6] = ["name", "version", "main", "module", "export
 /// the `package.json` each router import's resolution consulted.
 #[must_use]
 pub fn router_install_roots(facts: &ProjectFacts) -> Vec<PathBuf> {
+    package_install_roots(facts, ROUTER_PACKAGE)
+}
+
+/// ADR 0334: the directories of the `@tanstack/solid-router` installs
+/// `facts` resolves to, and of the `@tanstack/router-core` each loads.
+#[must_use]
+pub fn route_install_roots(facts: &ProjectFacts) -> Vec<PathBuf> {
+    let mut roots = package_install_roots(facts, ROUTE_PACKAGE);
+    let cores = roots
+        .iter()
+        .filter_map(|root| route_core_root(root))
+        .collect::<Vec<_>>();
+    roots.extend(cores);
+    roots.sort();
+    roots.dedup();
+    roots
+}
+
+/// The `@tanstack/router-core` Node loads from the router installed at
+/// `router`: the nearest `node_modules/@tanstack/router-core` above the
+/// router's *real* directory (pnpm places a package's dependencies beside
+/// its link target, not beside the link).
+fn route_core_root(router: &Path) -> Option<PathBuf> {
+    // The first candidate that exists at all is the one Node loads; without
+    // a readable manifest it is no install this premise can vouch for.
+    let core = route_core_candidates(router)
+        .into_iter()
+        .find(|candidate| fs::symlink_metadata(candidate).is_ok())?;
+    core.join("package.json").is_file().then_some(core)
+}
+
+/// Every `node_modules/@tanstack/router-core` directory Node's lookup
+/// consults from the router's real directory, nearest first (an ancestor
+/// itself named `node_modules` is skipped, as Node skips it). Each is an
+/// input of a cached answer, present or absent: a nearer install appearing
+/// changes which core Node loads (ADR 0334).
+#[must_use]
+pub fn route_core_candidates(router: &Path) -> Vec<PathBuf> {
+    let Ok(real) = fs::canonicalize(router) else {
+        return Vec::new();
+    };
+    real.ancestors()
+        .filter(|directory| {
+            directory
+                .file_name()
+                .is_none_or(|name| name != "node_modules")
+        })
+        .map(|directory| directory.join("node_modules").join(ROUTE_CORE_PACKAGE))
+        .collect()
+}
+
+fn package_install_roots(facts: &ProjectFacts, package: &str) -> Vec<PathBuf> {
     let mut roots = facts
         .resolved_imports
         .iter()
         .flat_map(solid_facts::AttestedImportIndex::iter)
-        .filter(|(_, row)| row.package_name.as_deref() == Some(ROUTER_PACKAGE))
+        .filter(|(_, row)| row.package_name.as_deref() == Some(package))
         .filter_map(|(_, row)| row.package_manifest.as_deref())
         .filter_map(|manifest| Path::new(manifest).parent().map(Path::to_path_buf))
         .collect::<Vec<_>>();
@@ -64,9 +117,29 @@ pub fn router_install_evidence(project: &Path, facts: &ProjectFacts) -> RouterIn
             );
         }
     }
+    let mut route_installs = BTreeMap::new();
+    for root in package_install_roots(facts, ROUTE_PACKAGE) {
+        let core_root = route_core_root(&root);
+        let core = core_root.as_ref().and_then(|core| {
+            let manifest: serde_json::Value =
+                serde_json::from_slice(&fs::read(core.join("package.json")).ok()?).ok()?;
+            let version = manifest.get("version")?.as_str()?.to_owned();
+            Some((version, package_digest(core)?))
+        });
+        route_installs.insert(
+            root.join("package.json").to_string_lossy().into_owned(),
+            RouteInstall {
+                router_digest: package_digest(&root),
+                core_directory: core_root.map(|core| core.to_string_lossy().into_owned()),
+                core,
+            },
+        );
+    }
     RouterInstallEvidence {
         replacement_recorded: replacement_recorded(project),
         digests,
+        route_replacement_recorded: route_replacement_recorded(project),
+        route_installs,
     }
 }
 
@@ -178,33 +251,51 @@ fn canonical_json(value: &serde_json::Value) -> String {
 /// be read is no record.
 #[must_use]
 pub fn replacement_recorded(project: &Path) -> bool {
+    replacement_recorded_for(project, &[ROUTER_PACKAGE], &["solidjs", "router"])
+}
+
+/// ADR 0334: [`replacement_recorded`] for `@tanstack/solid-router` and the
+/// `@tanstack/router-core` the premise also reads.
+#[must_use]
+pub fn route_replacement_recorded(project: &Path) -> bool {
+    replacement_recorded_for(
+        project,
+        &[ROUTE_PACKAGE, ROUTE_CORE_PACKAGE],
+        &["tanstack", "router"],
+    )
+}
+
+/// Whether a record above `project` replaces one of `packages`; a patch file
+/// whose lowercased name holds every one of `patch_words` counts.
+fn replacement_recorded_for(project: &Path, packages: &[&str], patch_words: &[&str]) -> bool {
     let start = if project.is_dir() {
         project
     } else {
         project.parent().unwrap_or(project)
     };
     start.ancestors().any(|directory| {
-        PATCH_RECORD_FILES
-            .iter()
-            .any(|name| record_names_router(&directory.join(name)))
-            || PATCH_DIRECTORIES.iter().any(|patches| {
-                fs::read_dir(directory.join(patches)).is_ok_and(|entries| {
-                    entries.flatten().any(|entry| {
-                        let name = entry.file_name().to_string_lossy().to_lowercase();
-                        name.contains("solidjs") && name.contains("router")
-                    })
+        PATCH_RECORD_FILES.iter().any(|name| {
+            packages
+                .iter()
+                .any(|package| record_names_package(&directory.join(name), package))
+        }) || PATCH_DIRECTORIES.iter().any(|patches| {
+            fs::read_dir(directory.join(patches)).is_ok_and(|entries| {
+                entries.flatten().any(|entry| {
+                    let name = entry.file_name().to_string_lossy().to_lowercase();
+                    patch_words.iter().all(|word| name.contains(word))
                 })
             })
+        })
     })
 }
 
-fn record_names_router(path: &Path) -> bool {
+fn record_names_package(path: &Path, package: &str) -> bool {
     let Ok(text) = fs::read_to_string(path) else {
         return false;
     };
     let lines = text.lines().collect::<Vec<_>>();
     let patched = lines.iter().enumerate().any(|(at, line)| {
-        line.contains(ROUTER_PACKAGE)
+        line.contains(package)
             && lines[at..lines.len().min(at + 4)].iter().any(|nearby| {
                 nearby.contains("patch:")
                     || nearby.contains("patch_hash")
@@ -215,10 +306,10 @@ fn record_names_router(path: &Path) -> bool {
     patched
         || (path.file_name().is_some_and(|name| name == "package.json")
             && serde_json::from_str::<serde_json::Value>(&text)
-                .is_ok_and(|manifest| manifest_replaces_router(&manifest)))
+                .is_ok_and(|manifest| manifest_replaces_package(&manifest, package)))
 }
 
-fn manifest_replaces_router(manifest: &serde_json::Value) -> bool {
+fn manifest_replaces_package(manifest: &serde_json::Value, package: &str) -> bool {
     let not_plain =
         |value: &serde_json::Value| value.as_str().is_none_or(|spec| !plain_registry_spec(spec));
     let overrides = |table: Option<&serde_json::Value>| {
@@ -227,13 +318,13 @@ fn manifest_replaces_router(manifest: &serde_json::Value) -> bool {
             .is_some_and(|table| {
                 table
                     .iter()
-                    .any(|(key, value)| key.contains(ROUTER_PACKAGE) && not_plain(value))
+                    .any(|(key, value)| key.contains(package) && not_plain(value))
             })
     };
     let dependencies = |table: Option<&serde_json::Value>| {
         table
             .and_then(serde_json::Value::as_object)
-            .and_then(|table| table.get(ROUTER_PACKAGE))
+            .and_then(|table| table.get(package))
             .is_some_and(not_plain)
     };
     overrides(manifest.get("overrides"))
@@ -288,6 +379,35 @@ mod tests {
         assert_eq!(
             package_digest(&fixture("router-params-no-such-fixture")),
             None
+        );
+    }
+
+    /// ADR 0334: the fixture's TanStack router and the router-core Node loads
+    /// from it hash to the digests the dialect records for the audited
+    /// release; a changed router-core byte does not.
+    #[test]
+    fn the_published_tanstack_router_and_its_core_hash_to_the_audited_digests() {
+        let audited = crate::dialect::default_dialect()
+            .vocabulary
+            .audited_route_components("2.0.0-rc.6")
+            .expect("audited release");
+        let tanstack = |name: &str| {
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../../fixtures/reactive-ir")
+                .join(name)
+                .join("node_modules/@tanstack/solid-router")
+        };
+        let router = tanstack("route-components");
+        assert_eq!(
+            package_digest(&router).as_deref(),
+            Some(audited.router_digest)
+        );
+        let core = route_core_root(&router).expect("router-core beside the router");
+        assert_eq!(package_digest(&core).as_deref(), Some(audited.core_digest));
+        let modified = route_core_root(&tanstack("route-components-core-modified")).unwrap();
+        assert_ne!(
+            package_digest(&modified).as_deref(),
+            Some(audited.core_digest)
         );
     }
 

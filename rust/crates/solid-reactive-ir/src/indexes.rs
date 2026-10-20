@@ -688,6 +688,8 @@ pub(super) struct SemanticLookup<'a> {
     /// ADR 0320: whether some call may copy keys into an existing object.
     objects_assigned_into: OnceLock<bool>,
     router_params: OnceLock<crate::router_params::RouterParamsStatus>,
+    /// ADR 0334: the route option values the audited router renders.
+    route_component_values: OnceLock<HashSet<(String, Span)>>,
     /// ADR 0209: the property names some assignment in the project writes
     /// (`x.name = …`), and which prototypes it writes through (ADR 0314).
     assigned_member_names: OnceLock<AssignedMembers>,
@@ -864,6 +866,7 @@ impl<'a> SemanticLookup<'a> {
             unowned_event_literals: OnceLock::new(),
             objects_assigned_into: OnceLock::new(),
             router_params: OnceLock::new(),
+            route_component_values: OnceLock::new(),
             assigned_member_names: OnceLock::new(),
             reflective_property_definition: OnceLock::new(),
             entities_by_location: OnceLock::new(),
@@ -1563,6 +1566,20 @@ impl<'a> SemanticLookup<'a> {
                 &self.router_install,
             )
         })
+    }
+
+    /// ADR 0334: whether `span` in `path` is a component value of a route's
+    /// options that the audited `@tanstack/solid-router` only renders.
+    pub(super) fn route_component_value(&self, path: &str, span: Span) -> bool {
+        self.route_component_values
+            .get_or_init(|| {
+                crate::route_components::route_component_values(
+                    self.facts,
+                    self.dialect,
+                    &self.router_install,
+                )
+            })
+            .contains(&(path.to_owned(), span))
     }
 
     /// The compiler's attested resolution of the project's import specifiers,

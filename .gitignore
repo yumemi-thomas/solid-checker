@@ -449,3 +449,15 @@ packages/wasm/owned/
 !fixtures/reactive-ir/write-legality-proofs/node_modules/**
 !fixtures/reactive-ir/rule-negatives/node_modules/
 !fixtures/reactive-ir/rule-negatives/node_modules/**
+!fixtures/reactive-ir/route-components/node_modules/
+!fixtures/reactive-ir/route-components/node_modules/**
+!fixtures/reactive-ir/route-components-modified-bytes/node_modules/
+!fixtures/reactive-ir/route-components-modified-bytes/node_modules/**
+!fixtures/reactive-ir/route-components-core-modified/node_modules/
+!fixtures/reactive-ir/route-components-core-modified/node_modules/**
+!fixtures/reactive-ir/route-components-key-read/node_modules/
+!fixtures/reactive-ir/route-components-key-read/node_modules/**
+!fixtures/reactive-ir/route-components-patched/node_modules/
+!fixtures/reactive-ir/route-components-patched/node_modules/**
+!fixtures/reactive-ir/route-components-destructured/node_modules/
+!fixtures/reactive-ir/route-components-destructured/node_modules/**

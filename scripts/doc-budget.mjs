@@ -87,7 +87,8 @@ export function measuredSizes(root = ROOT) {
   const listed = execFileSync(
     "git",
     ["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "AGENTS.md", "CLAUDE.md", "docs", "fixtures", ".claude/skills"],
-    { cwd: root, encoding: "utf8" },
+    // Package-source fixtures ship whole published packages.
+    { cwd: root, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 },
   );
   const sizes = {};
   for (const path of listed.split("\0").filter(Boolean)) {

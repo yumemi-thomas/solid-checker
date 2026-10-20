@@ -135,6 +135,8 @@ const trackedUnderFixtures = (projectRoot) =>
     execFileSync("git", ["ls-files", "-z", "fixtures"], {
       cwd: projectRoot,
       encoding: "utf8",
+      // Package-source fixtures ship whole published packages.
+      maxBuffer: 256 * 1024 * 1024,
     })
       .split("\0")
       .filter(Boolean)

@@ -108,6 +108,37 @@ pub(super) const AUDITED_ROUTER_DIGESTS: &[(&str, &str)] = &[(
     "e67af5395e06b46fba92846736c3efa5f2076281e05e864dda248d96689204d6",
 )];
 
+/// ADR 0334: the `@tanstack/solid-router` releases audited for route
+/// components, each with the `@tanstack/router-core` it was read with, by
+/// exact `package.json` version. Digests are of the registry tarballs
+/// (`npm pack`), equal to the corpus installs the audit read.
+pub(super) const AUDITED_ROUTE_RELEASES: &[crate::AuditedRouteRelease] = &[
+    crate::AuditedRouteRelease {
+        version: "2.0.0-beta.29",
+        router_digest: "99f7ecf8f61465f690d8039a32f6679aa2f883610f5eba7a48561f9b66e12668",
+        core_version: "1.171.15",
+        core_digest: "9e6db7ee14ec551db890508f19b93349c575a6713b22045b5f84aeb2430d0ffc",
+    },
+    crate::AuditedRouteRelease {
+        version: "2.0.0-rc.0",
+        router_digest: "982669b9efa6d2f1026a59d7a93da1e100f28a2e270f11610c6fae653074fe71",
+        core_version: "1.171.16",
+        core_digest: "de1f1c0cb4c5e96270e249ca4edca2714dafc825619f6792b05623dced8b9c7c",
+    },
+    crate::AuditedRouteRelease {
+        version: "2.0.0-rc.4",
+        router_digest: "53d3d0bcf5a1b5142c5078ca717fa529bcd3fddae9ad73ad119444a2379f73db",
+        core_version: "1.171.22",
+        core_digest: "f021f4ec652071a558534f6260030d2eed88333e59ad2cf7dbfda6017b7ae1c2",
+    },
+    crate::AuditedRouteRelease {
+        version: "2.0.0-rc.6",
+        router_digest: "a5eb41bad71108ceb0ce64ed93517bfea43b07890bce3a1ebbcc02711c199d63",
+        core_version: "1.171.22",
+        core_digest: "f021f4ec652071a558534f6260030d2eed88333e59ad2cf7dbfda6017b7ae1c2",
+    },
+];
+
 /// The three owners, in the order [`Solid2`]'s answers are read from them.
 pub(super) const OWNERS: &[ReleaseOwner] = &[
     ReleaseOwner {

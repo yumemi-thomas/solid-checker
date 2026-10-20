@@ -1458,7 +1458,12 @@ fn answer(
     .into();
     let status: Arc<str> = analysis.snapshot.status.as_str().into();
     let modules = imported_package_roots(&facts);
-    let router_roots = solid_facts_backend::installed_bytes::router_install_roots(&facts);
+    // ADR 0334: the route-components premise reads the TanStack router's and
+    // its router-core's bytes the same way.
+    let mut router_roots = solid_facts_backend::installed_bytes::router_install_roots(&facts);
+    router_roots.extend(solid_facts_backend::installed_bytes::route_install_roots(
+        &facts,
+    ));
     // An unreadable witness, or a change while discovery/analysis ran, prevents
     // caching. The ordinary answer still follows the existing refusal path.
     state.last = match inference_inputs.filter(|inputs| inference_inputs_current(inputs)) {
@@ -1592,6 +1597,14 @@ fn input_files(
     paths.extend(solid_facts_backend::dialect::release_manifests(
         &state.project,
     ));
+    // ADR 0334: which router-core a TanStack router loads is the nearest
+    // install on a walk from the router's real directory; a nearer one
+    // appearing moves the answer, so every candidate is an input.
+    paths.extend(
+        router_roots
+            .iter()
+            .flat_map(|root| solid_facts_backend::installed_bytes::route_core_candidates(root)),
+    );
     // ADR 0193: an undeclared program boundary is read from the nearest
     // `package.json` above the project (`default_program_boundary`), which
     // `DiagnosticSession::analyze` re-reads on every run and which decides,

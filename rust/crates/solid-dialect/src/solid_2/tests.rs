@@ -229,6 +229,26 @@ fn only_the_audited_router_release_hands_out_url_strings() {
     assert_eq!(two.audited_router_digest("2.0.0-next.18"), None);
 }
 
+/// ADR 0334: the audited route-component release table is exact-version, and
+/// each release carries both digests.
+#[test]
+fn only_audited_tanstack_releases_render_route_components() {
+    let two: &dyn Dialect = &Solid2::RC9;
+    let hex =
+        |digest: &str| digest.len() == 64 && digest.bytes().all(|byte| byte.is_ascii_hexdigit());
+    for version in ["2.0.0-beta.29", "2.0.0-rc.0", "2.0.0-rc.4", "2.0.0-rc.6"] {
+        let release = two.audited_route_components(version).expect(version);
+        assert_eq!(release.version, version);
+        assert!(
+            hex(release.router_digest) && hex(release.core_digest),
+            "{version}"
+        );
+    }
+    for version in ["2.0.0-rc.5", "2.0.0", "1.120.0", "2.0.0-rc.6-x", ""] {
+        assert_eq!(two.audited_route_components(version), None, "{version}");
+    }
+}
+
 /// ADR 0323 (review round 10): which callbacks run in their call's own
 /// strict-read window. `untrack` clears it, and the rest are queued, tracked
 /// or reporting slots.

@@ -1,0 +1,273 @@
+//! ADR 0334: the route-components premise.
+//!
+//! An audited `@tanstack/solid-router` release only renders the `component`,
+//! `pendingComponent`, `errorComponent` and `notFoundComponent` values of a
+//! route's options (`<Dynamic component={…}/>`, `<X/>`) and never calls one
+//! (`Dialect::audited_route_components`). A function written as one of those
+//! values of the options literal handed to an exact router factory import is
+//! therefore rendered there, which accounts for that reference in the
+//! component census (`indexes/components.rs`, ADR 0331).
+//!
+//! The premise applies to a project only when every runtime import of the
+//! router resolves, through the compiler's attested resolution, to an audited
+//! release whose installed bytes and whose `@tanstack/router-core` are the
+//! audited ones, no manifest records a replacement of either, and no project
+//! file reads one of the four keys back (a member `.component`, a
+//! `['component']` element, a destructured `component`): read back, the value
+//! can be called by the project, which the census does not see.
+
+use std::collections::HashSet;
+
+use solid_dialect::Dialect;
+use solid_facts::ast::ImportKind;
+use solid_facts::core::Span;
+use solid_facts::{FileFacts, ProjectFacts, SpecifierAttestation};
+
+use crate::router_params::RouterInstallEvidence;
+
+/// The specifier of the audited package.
+pub const ROUTE_PACKAGE: &str = "@tanstack/solid-router";
+
+/// The package the router stores and loads route options with.
+pub const ROUTE_CORE_PACKAGE: &str = "@tanstack/router-core";
+
+/// The route option keys whose values the audited releases only render.
+const COMPONENT_KEYS: [&str; 4] = [
+    "component",
+    "pendingComponent",
+    "errorComponent",
+    "notFoundComponent",
+];
+
+/// Factories called with the options directly: `createRoute(options)`.
+const DIRECT_FACTORIES: [&str; 2] = ["createRoute", "createRootRoute"];
+
+/// Factories whose call returns the function taking the options:
+/// `createFileRoute(path)(options)`.
+const CURRIED_FACTORIES: [&str; 4] = [
+    "createFileRoute",
+    "createLazyFileRoute",
+    "createLazyRoute",
+    "createRootRouteWithContext",
+];
+
+/// What the backend read of one resolved `@tanstack/solid-router` install.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct RouteInstall {
+    /// Digest of the router's installed bytes (`scripts/router-digest.mjs`).
+    pub router_digest: Option<String>,
+    /// The directory of the router-core install, as the analysis paths
+    /// spell it: its files are audited code, not project reads.
+    pub core_directory: Option<String>,
+    /// The `@tanstack/router-core` Node resolves from the router's real
+    /// directory: its version and the digest of its bytes.
+    pub core: Option<(String, String)>,
+}
+
+/// The option values the premise accounts for, as `(file path, value span)`:
+/// empty when it does not apply.
+#[must_use]
+pub fn route_component_values(
+    facts: &ProjectFacts,
+    dialect: &dyn Dialect,
+    install: &RouterInstallEvidence,
+) -> HashSet<(String, Span)> {
+    let mut values = HashSet::new();
+    let Some(audited) = audited_directories(facts, dialect, install) else {
+        return values;
+    };
+    for file in unaudited_files(facts, &audited) {
+        let factories = factory_locals(file);
+        if factories.direct.is_empty() && factories.curried.is_empty() {
+            continue;
+        }
+        let ast = &*file.ast;
+        let resolves_to = |reference: Span, locals: &[Span]| {
+            ast.reference_declarations
+                .binary_search_by_key(&reference, |(span, _)| *span)
+                .ok()
+                .is_some_and(|at| locals.contains(&ast.reference_declarations[at].1))
+        };
+        let factory_call = |call: &solid_facts::ast::CallFact, locals: &[Span]| {
+            call.direct_callee && !call.construct && resolves_to(call.callee, locals)
+        };
+        for call in &ast.calls {
+            let direct = factory_call(call, &factories.direct);
+            let curried = !call.construct
+                && ast.calls.iter().any(|inner| {
+                    inner.span == ast.peel_ts_sugar_span(call.callee)
+                        && factory_call(inner, &factories.curried)
+                });
+            if !direct && !curried {
+                continue;
+            }
+            let [options] = call.arguments.as_slice() else {
+                continue;
+            };
+            if options.spread || !options.exact_object_literal {
+                continue;
+            }
+            for member in &options.literal_members {
+                if COMPONENT_KEYS.contains(&member.key.as_str()) {
+                    values.insert((file.path.to_string(), member.value));
+                    values.insert((file.path.to_string(), ast.peel_ts_sugar_span(member.value)));
+                }
+            }
+        }
+    }
+    values
+}
+
+/// The directories of the audited installs, when the premise applies to
+/// `facts`: every runtime import of the router reaches audited bytes, nothing
+/// records a replacement, and no other analyzed file (the project's own or
+/// another package's) reads a component key back.
+fn audited_directories(
+    facts: &ProjectFacts,
+    dialect: &dyn Dialect,
+    install: &RouterInstallEvidence,
+) -> Option<Vec<String>> {
+    if install.route_replacement_recorded {
+        return None;
+    }
+    let mut directories = Vec::new();
+    for file in &facts.files {
+        for import in &file.ast.imports {
+            if import.module.as_str() != ROUTE_PACKAGE
+                || import.type_only
+                || import.bindings.iter().all(|binding| binding.type_only)
+            {
+                continue;
+            }
+            directories.extend(reaches_audited_bytes(
+                facts, file, import, dialect, install,
+            )?);
+        }
+    }
+    directories.sort();
+    directories.dedup();
+    (!directories.is_empty() && !unaudited_files(facts, &directories).any(reads_component_key))
+        .then_some(directories)
+}
+
+fn reaches_audited_bytes(
+    facts: &ProjectFacts,
+    file: &FileFacts,
+    import: &solid_facts::ast::ImportFact,
+    dialect: &dyn Dialect,
+    install: &RouterInstallEvidence,
+) -> Option<[String; 2]> {
+    let imports = facts.resolved_imports.as_ref()?;
+    let SpecifierAttestation::Attested(row) =
+        imports.specifier(file.path.as_str(), import.span, ROUTE_PACKAGE)
+    else {
+        return None;
+    };
+    // One package by both the nearest manifest and the resolver's own record,
+    // loaded from `node_modules` unpatched, as the bundler loads it.
+    if row.resolution != solid_facts::ImportResolution::NodeModules
+        || row.resolved_path.contains("patch_hash=")
+        || row.package_name.as_deref() != Some(ROUTE_PACKAGE)
+        || row.resolver_package_name.as_deref() != Some(ROUTE_PACKAGE)
+        || row
+            .resolver_package_version
+            .as_deref()
+            .is_some_and(|version| row.package_version.as_deref() != Some(version))
+        || !crate::router_params::runtime_agrees(
+            facts,
+            file,
+            import,
+            &row.resolved_path,
+            ROUTE_PACKAGE,
+        )
+    {
+        return None;
+    }
+    let audited = dialect.audited_route_components(row.package_version.as_deref()?)?;
+    let manifest = row.package_manifest.as_deref()?;
+    let installed = install.route_installs.get(manifest)?;
+    let core_matches = installed.core.as_ref().is_some_and(|(version, digest)| {
+        version == audited.core_version && digest == audited.core_digest
+    });
+    if installed.router_digest.as_deref() != Some(audited.router_digest) || !core_matches {
+        return None;
+    }
+    let router = manifest.strip_suffix("package.json")?.to_owned();
+    let core = format!(
+        "{}/",
+        installed.core_directory.as_deref()?.trim_end_matches('/')
+    );
+    Some([router, core])
+}
+
+/// Every analyzed file outside the audited installs: the project's own and
+/// any other package's.
+fn unaudited_files<'a>(
+    facts: &'a ProjectFacts,
+    audited: &'a [String],
+) -> impl Iterator<Item = &'a FileFacts> {
+    facts.files.iter().filter(move |file| {
+        !audited
+            .iter()
+            .any(|directory| file.path.as_str().starts_with(directory.as_str()))
+    })
+}
+
+/// Whether `file` reads one of the component keys off some object: a member
+/// `.component`, an element `['component']`, or a destructured `component`
+/// in any binding or assignment pattern, nested or defaulted. Keys compare
+/// decoded; a member name spelled with an escape counts as a read.
+fn reads_component_key(file: &FileFacts) -> bool {
+    let ast = &*file.ast;
+    let is_key = |text: &str| COMPONENT_KEYS.contains(&text);
+    ast.members.iter().any(|member| {
+        file.source
+            .get(member.property.start as usize..member.property.end as usize)
+            .is_none_or(|text| text.contains('\\') || is_key(text))
+    }) || ast
+        .literal_computed_members
+        .iter()
+        .any(|member| is_key(member.key.as_str()))
+        || ast
+            .bindings
+            .iter()
+            .chain(ast.functions.iter().flat_map(|function| &function.parameters))
+            .flat_map(|binding| &binding.object_slots)
+            .any(|slot| is_key(slot.property.as_str()))
+        || ast.pattern_elements.iter().any(|element| {
+            matches!(&element.slot, solid_facts::ast::PatternSlot::Key(key) if is_key(key.as_str()))
+        })
+}
+
+/// The local names a file gives the router's factories.
+struct FactoryLocals {
+    direct: Vec<Span>,
+    curried: Vec<Span>,
+}
+
+fn factory_locals(file: &FileFacts) -> FactoryLocals {
+    let mut locals = FactoryLocals {
+        direct: Vec::new(),
+        curried: Vec::new(),
+    };
+    for import in &file.ast.imports {
+        if import.module.as_str() != ROUTE_PACKAGE || import.type_only {
+            continue;
+        }
+        for binding in import.bindings.iter().filter(|binding| !binding.type_only) {
+            if binding.kind != ImportKind::Named {
+                continue;
+            }
+            match binding.imported.as_deref() {
+                Some(name) if DIRECT_FACTORIES.contains(&name) => {
+                    locals.direct.push(binding.local.span);
+                }
+                Some(name) if CURRIED_FACTORIES.contains(&name) => {
+                    locals.curried.push(binding.local.span);
+                }
+                _ => {}
+            }
+        }
+    }
+    locals
+}

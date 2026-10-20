@@ -693,6 +693,37 @@ impl Dialect for Solid2 {
             .find_map(|(audited, digest)| (*audited == version).then_some(*digest))
     }
 
+    /// ADR 0334. The audited `@tanstack/solid-router` releases, read on all
+    /// three builds (`dist/source` for the `solid` condition, `dist/esm`,
+    /// `dist/cjs` by call pattern) and the `@tanstack/router-core` each loads:
+    ///
+    /// | release | router-core |
+    /// | --- | --- |
+    /// | `2.0.0-beta.29` | `1.171.15` |
+    /// | `2.0.0-rc.0` | `1.171.16` |
+    /// | `2.0.0-rc.4` | `1.171.22` |
+    /// | `2.0.0-rc.6` | `1.171.22` |
+    ///
+    /// What was read: every factory (`createFileRoute`, `createRoute`,
+    /// `createRootRoute`, `createRootRouteWithContext`, `createLazyRoute`,
+    /// `createLazyFileRoute`; `route.jsx`, `fileRoute.js`) stores its options
+    /// as `route.options` and reads none of the four keys. `Match.jsx` reads
+    /// `options.component` into a memo rendered as
+    /// `<Dynamic component={OutComponent()}/>`; `pendingComponent`,
+    /// `errorComponent` and `notFoundComponent` are rendered as `<X/>` or
+    /// through `Dynamic` (`CatchBoundary.jsx` renders its `errorComponent`
+    /// prop through `Dynamic`; `renderRouteNotFound.jsx` as `<X {...data}/>`),
+    /// or tested for truth. router-core reads them only for
+    /// `route.options[type]?.preload?.()`, truth tests, and
+    /// `Object.assign(route.options, lazyRoute.options)`. None of the four
+    /// values is called.
+    fn audited_route_components(&self, version: &str) -> Option<crate::AuditedRouteRelease> {
+        releases::AUDITED_ROUTE_RELEASES
+            .iter()
+            .find(|release| release.version == version)
+            .copied()
+    }
+
     fn audited_installation(&self) -> &'static [(&'static str, &'static str)] {
         releases::AUDITED_INSTALLATION
     }

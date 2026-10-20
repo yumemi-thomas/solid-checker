@@ -61,6 +61,7 @@ mod pipeline;
 mod projection;
 mod reachability;
 mod reactive_analysis;
+pub mod route_components;
 pub mod router_params;
 mod runtime_configuration;
 mod runtime_semantics;
