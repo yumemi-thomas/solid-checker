@@ -20,6 +20,7 @@ mod callees;
 mod class_prototype;
 mod completion;
 mod components;
+mod compound;
 mod initialization;
 mod member_values;
 mod primitive_proof;
@@ -707,6 +708,8 @@ pub(super) struct SemanticLookup<'a> {
     /// ADR 0339: references to function-valued bindings not proven to follow
     /// their declarators.
     initialization: initialization::State,
+    /// ADR 0342: the member values of compound components that tags render.
+    compound: compound::State<'a>,
     prop_render_sites: OnceLock<PropRenderSites<'a>>,
     direct_value_aliases: OnceLock<HashSet<SymbolId>>,
     bindings_by_symbol: OnceLock<HashMap<SymbolId, BindingResolution>>,
@@ -881,6 +884,7 @@ impl<'a> SemanticLookup<'a> {
             declaration_symbols: OnceLock::new(),
             function_call_sites: OnceLock::new(),
             initialization: initialization::State::default(),
+            compound: compound::State::default(),
             prop_render_sites: OnceLock::new(),
             direct_value_aliases: OnceLock::new(),
             bindings_by_symbol: OnceLock::new(),

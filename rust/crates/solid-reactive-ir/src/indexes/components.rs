@@ -136,6 +136,11 @@ impl<'a> SemanticLookup<'a> {
         {
             return ComponentStatus::Proven;
         }
+        // ADR 0342: an anonymous function stored in a compound component that
+        // some JSX member tag renders has no other reference.
+        if function.name.is_none() && self.compound_value(file.path.as_str(), function.span) {
+            return ComponentStatus::Proven;
+        }
         let binding_name = crate::owners::component_binding_name(file, function);
         let directly_contains_jsx = |span: Span| {
             file.ast.jsx_within(span).any(|element| {
@@ -289,8 +294,9 @@ impl<'a> SemanticLookup<'a> {
         // return therefore proves identity only when every reference to the
         // function is accounted for: its declaration, its module surface, a
         // dialect callback value, a dialect renderer's prop (ADR 0138), a
-        // dialect loader's `default` (ADR 0292) or an audited router's route
-        // option (ADR 0334). Any other use hands it to
+        // dialect loader's `default` (ADR 0292), an audited router's route
+        // option (ADR 0334) or a member of a compound component that only JSX
+        // member tags reach (ADR 0342). Any other use hands it to
         // code that may call it plainly: `items().map(Row)`, `{ badge: Row }`,
         // an alias, a router config the analysis does not read. So does a
         // function with no resolvable binding, a reference in a file not
@@ -331,7 +337,8 @@ impl<'a> SemanticLookup<'a> {
                     && !rendered_by_dialect_prop(candidate, span)
                     && !reference_is_declaration_or_module_surface(candidate, span)
                     && !self.lazy_default_value(candidate, function, span)
-                    && !self.route_component_value(candidate.path.as_str(), span);
+                    && !self.route_component_value(candidate.path.as_str(), span)
+                    && !self.compound_value(candidate.path.as_str(), span);
             }
         }
         let hoc_bound = binding_name.is_some()

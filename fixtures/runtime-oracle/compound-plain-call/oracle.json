@@ -1,0 +1,3 @@
+{
+  "note": "ADR 0342 control: a member called plainly inside tracked JSX runs in the caller's tracked scope (no strict-read warning), so the holder is not a census and the member's body read must stay uncertifiable, never a violation."
+}
