@@ -46,6 +46,7 @@ Primitive used as a value (`reactive-dispatch-unresolved`, SC9012):
 Other:
 
 - Synchronous DOM calls that dispatch (`focus`, `blur`, `click`, `dispatchEvent`, form `reset`/`requestSubmit`, popover and dialog toggles) are refused. Not modeled and still trusted: custom-element reactions on tree mutation and attribute writes, and focus loss when a focused element is removed (ADR 0329).
+- Patching the array iterator's `next` (`Object.getPrototypeOf([][Symbol.iterator]()).next = …`) changes how Solid tuples destructure (`const [value] = createSignal(1)`), which every tuple proof reads as slot order. ADR 0282's iteration veto covers project tuples only; a patch of a builtin iterator is not seen. Out of scope for the access slice, which shares the premise (ADR 0338).
 - A context-provided value read through a package hook (kui `TopicsRoute.tsx:425`) stays an uncertifiable SC9012. The router source proves its own provider only; a project provider or an `Object.defineProperty` replacement of the location getter both type-check (ADR 0289, ADR 0312).
 - `typeof window` in solid-query source blocks the proxy proof unless a Window realm is declared; two spotify-desk-thing `prefer-show` rows were lost that way (ADR 0295, ADR 0312).
 

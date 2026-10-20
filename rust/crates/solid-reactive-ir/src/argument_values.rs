@@ -355,6 +355,11 @@ fn solid_getter_length(
         _ => return None,
     };
     let length = lookup.dialect.accessor_getter_length(primitive, slot)?;
+    // Every getter is `read.bind(null, node)`: a project that replaces
+    // `Function.prototype.bind` can give it any `length`.
+    if lookup.function_bind_may_be_patched() {
+        return None;
+    }
     // An exported getter is reachable with no static reference: through the
     // module namespace (`import * as m`, `Object.values(m)`, `m[key]`,
     // `import()`), where other code can redefine its `length` first.

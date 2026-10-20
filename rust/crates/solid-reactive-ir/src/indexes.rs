@@ -732,6 +732,8 @@ pub(super) struct SemanticLookup<'a> {
     /// of its own parameters in a condition or a logical operand, the only
     /// functions a call's arguments can decide anything in.
     parameter_testing_functions: OnceLock<HashSet<(&'a str, Span)>>,
+    /// ADR 0338: whether some analysed file may patch `Function.prototype.bind`.
+    function_bind_patched: OnceLock<bool>,
     /// ADR 0292: `(path, function span, property span)` for each object
     /// property that is a proven component's one route, the `default` of the
     /// module a dialect component loader renders.
@@ -895,6 +897,7 @@ impl<'a> SemanticLookup<'a> {
             parameter_completion_calls: OnceLock::new(),
             never_returning_calls: OnceLock::new(),
             parameter_testing_functions: OnceLock::new(),
+            function_bind_patched: OnceLock::new(),
             lazy_default_render_witnesses: OnceLock::new(),
             effect_apply_regions: OnceLock::new(),
             effect_apply_calls: OnceLock::new(),
