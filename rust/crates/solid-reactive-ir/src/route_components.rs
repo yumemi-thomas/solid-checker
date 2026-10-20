@@ -23,7 +23,7 @@ use solid_facts::ast::ImportKind;
 use solid_facts::core::Span;
 use solid_facts::{FileFacts, ProjectFacts, SpecifierAttestation};
 
-use crate::router_params::RouterInstallEvidence;
+use crate::router_params::{ROUTER_PACKAGE, RouterInstallEvidence};
 
 /// The specifier of the audited package.
 pub const ROUTE_PACKAGE: &str = "@tanstack/solid-router";
@@ -64,10 +64,21 @@ pub struct RouteInstall {
     pub core: Option<(String, String)>,
 }
 
-/// The option values the premise accounts for, as `(file path, value span)`:
-/// empty when it does not apply.
+/// The option values the premises account for, as `(file path, value span)`:
+/// TanStack route options, and `@solidjs/router` route definitions
+/// ([`router_config_values`]). Empty where neither applies.
 #[must_use]
 pub fn route_component_values(
+    facts: &ProjectFacts,
+    dialect: &dyn Dialect,
+    install: &RouterInstallEvidence,
+) -> HashSet<(String, Span)> {
+    let mut values = tanstack_values(facts, dialect, install);
+    values.extend(router_config_values(facts, dialect, install));
+    values
+}
+
+fn tanstack_values(
     facts: &ProjectFacts,
     dialect: &dyn Dialect,
     install: &RouterInstallEvidence,
@@ -270,4 +281,196 @@ fn factory_locals(file: &FileFacts) -> FactoryLocals {
         }
     }
     locals
+}
+
+/// ADR 0335: the `component` values of the route definitions written in the
+/// `routes` of a `createRouter({ routes: [...] })` call, an exact named import
+/// of an audited `@solidjs/router` release, recursively through each
+/// definition's `children` array. The audited releases render a definition's
+/// `component` with `createComponent` and never call it
+/// (`Dialect::audited_route_config_digest`). Only literals count: a definition
+/// that is not an object literal written in the array, or an array that is
+/// not written at its key, is not followed.
+fn router_config_values(
+    facts: &ProjectFacts,
+    dialect: &dyn Dialect,
+    install: &RouterInstallEvidence,
+) -> HashSet<(String, Span)> {
+    let mut values = HashSet::new();
+    let Some(audited) = router_directories(facts, dialect, install) else {
+        return values;
+    };
+    for file in unaudited_files(facts, &audited) {
+        let locals = router_creation_locals(file);
+        if locals.is_empty() {
+            continue;
+        }
+        let ast = &*file.ast;
+        for call in &ast.calls {
+            let creates = call.direct_callee
+                && !call.construct
+                && ast
+                    .reference_declarations
+                    .binary_search_by_key(&call.callee, |(span, _)| *span)
+                    .ok()
+                    .is_some_and(|at| locals.contains(&ast.reference_declarations[at].1));
+            let [config] = call.arguments.as_slice() else {
+                continue;
+            };
+            if !creates || config.spread || !config.exact_object_literal {
+                continue;
+            }
+            for member in config.literal_members.iter().filter(|m| m.key == "routes") {
+                definitions(file, ast.peel_ts_sugar_span(member.value), 0, &mut values);
+            }
+        }
+    }
+    values
+}
+
+/// Collect the `component` values of the object-literal definitions written
+/// in the array literal at `array`, and of their `children` arrays. A
+/// definition counts only when it is itself a closed object literal (its span
+/// is a literal's: no spread, computed key, duplicate, setter or prototype
+/// member), so its `component` data property is the final value the router
+/// reads; with static keys only, a property inside another property's value
+/// is that value's, not the definition's.
+fn definitions(file: &FileFacts, array: Span, depth: u32, values: &mut HashSet<(String, Span)>) {
+    let ast = &*file.ast;
+    let Some(literal) = ast
+        .array_literal_elements
+        .iter()
+        .find(|literal| literal.span == array)
+    else {
+        return;
+    };
+    if depth > 32 {
+        return;
+    }
+    let text = |span: Span| file.source.get(span.start as usize..span.end as usize);
+    for element in &literal.elements {
+        if element.kind != solid_facts::ast::ArrayElementKind::Value {
+            continue;
+        }
+        let definition = ast.peel_ts_sugar_span(element.span);
+        let Some(shape) = ast
+            .object_get_shapes
+            .iter()
+            .find(|shape| shape.span == definition && shape.closed)
+        else {
+            continue;
+        };
+        let data_key = |key: &str| {
+            shape
+                .properties
+                .iter()
+                .any(|property| property.key == key && property.getter.is_none())
+        };
+        let inside = |span: Span| definition.contains(span) && span != definition;
+        let own = ast
+            .object_properties
+            .iter()
+            .filter(|property| inside(property.span))
+            .filter(|property| {
+                !ast.object_properties
+                    .iter()
+                    .any(|outer| inside(outer.span) && outer.value.contains(property.span))
+            })
+            .filter(|property| property.data && !property.method && !property.computed);
+        for property in own {
+            match text(property.key) {
+                Some("component") if data_key("component") => {
+                    values.insert((file.path.to_string(), property.value));
+                    values.insert((
+                        file.path.to_string(),
+                        ast.peel_ts_sugar_span(property.value),
+                    ));
+                }
+                Some("children") if data_key("children") => {
+                    definitions(
+                        file,
+                        ast.peel_ts_sugar_span(property.value),
+                        depth + 1,
+                        values,
+                    );
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
+/// The directory of every audited `@solidjs/router` install, when the
+/// premise applies: every runtime import of the router reaches an audited
+/// release's bytes, nothing records a replacement, and no analyzed file
+/// outside those installs reads a component key back.
+fn router_directories(
+    facts: &ProjectFacts,
+    dialect: &dyn Dialect,
+    install: &RouterInstallEvidence,
+) -> Option<Vec<String>> {
+    if install.replacement_recorded {
+        return None;
+    }
+    let imports = facts.resolved_imports.as_ref()?;
+    let mut directories = Vec::new();
+    for file in &facts.files {
+        for import in &file.ast.imports {
+            if import.module.as_str() != ROUTER_PACKAGE
+                || import.type_only
+                || import.bindings.iter().all(|binding| binding.type_only)
+            {
+                continue;
+            }
+            let SpecifierAttestation::Attested(row) =
+                imports.specifier(file.path.as_str(), import.span, ROUTER_PACKAGE)
+            else {
+                return None;
+            };
+            if row.resolution != solid_facts::ImportResolution::NodeModules
+                || row.resolved_path.contains("patch_hash=")
+                || row.package_name.as_deref() != Some(ROUTER_PACKAGE)
+                || row.resolver_package_name.as_deref() != Some(ROUTER_PACKAGE)
+                || row
+                    .resolver_package_version
+                    .as_deref()
+                    .is_some_and(|version| row.package_version.as_deref() != Some(version))
+                || !crate::router_params::runtime_agrees(
+                    facts,
+                    file,
+                    import,
+                    &row.resolved_path,
+                    ROUTER_PACKAGE,
+                )
+            {
+                return None;
+            }
+            let audited = dialect.audited_route_config_digest(row.package_version.as_deref()?)?;
+            let manifest = row.package_manifest.as_deref()?;
+            if install.digests.get(manifest).map(String::as_str) != Some(audited) {
+                return None;
+            }
+            directories.push(manifest.strip_suffix("package.json")?.to_owned());
+        }
+    }
+    directories.sort();
+    directories.dedup();
+    (!directories.is_empty() && !unaudited_files(facts, &directories).any(reads_component_key))
+        .then_some(directories)
+}
+
+/// The local names a file gives the router's `createRouter`.
+fn router_creation_locals(file: &FileFacts) -> Vec<Span> {
+    file.ast
+        .imports
+        .iter()
+        .filter(|import| import.module.as_str() == ROUTER_PACKAGE && !import.type_only)
+        .flat_map(|import| &import.bindings)
+        .filter(|binding| {
+            !binding.type_only
+                && binding.kind == ImportKind::Named
+                && binding.imported.as_deref() == Some("createRouter")
+        })
+        .map(|binding| binding.local.span)
+        .collect()
 }

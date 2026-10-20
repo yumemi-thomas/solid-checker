@@ -108,6 +108,24 @@ pub(super) const AUDITED_ROUTER_DIGESTS: &[(&str, &str)] = &[(
     "e67af5395e06b46fba92846736c3efa5f2076281e05e864dda248d96689204d6",
 )];
 
+/// ADR 0335: the `@solidjs/router` releases audited for route definitions
+/// (`createRouter({ routes })`), with the digest of each one's registry
+/// tarball, equal to the corpus installs the audit read.
+pub(super) const AUDITED_ROUTE_CONFIG_DIGESTS: &[(&str, &str)] = &[
+    (
+        "2.0.0-next.16",
+        "3b9abdc97ab13327110ef5d2ca02e5eab95090dfaf30d5de02e3afe5242208e6",
+    ),
+    (
+        "2.0.0-next.18",
+        "6782f7db03be82972c82fb546e1ebb3f0d5c399913c5efa343308531d204a97a",
+    ),
+    (
+        "2.0.0-next.26",
+        "e67af5395e06b46fba92846736c3efa5f2076281e05e864dda248d96689204d6",
+    ),
+];
+
 /// ADR 0334: the `@tanstack/solid-router` releases audited for route
 /// components, each with the `@tanstack/router-core` it was read with, by
 /// exact `package.json` version. Digests are of the registry tarballs

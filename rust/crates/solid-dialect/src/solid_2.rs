@@ -693,6 +693,24 @@ impl Dialect for Solid2 {
             .find_map(|(audited, digest)| (*audited == version).then_some(*digest))
     }
 
+    /// ADR 0335. The audited `@solidjs/router` releases for route
+    /// definitions: `2.0.0-next.16`, `next.18` and `next.26`, each read on
+    /// `dist/` (the `solid` condition's `index.jsx` and its modules, and the
+    /// `dist/index.js` bundle). `createRoutes` copies a definition's
+    /// `component` into the route record (`routing.js:328-332` next.16,
+    /// `363-367` next.18, `381-385` next.26); its only render is
+    /// `createComponent(component, …)` in the outlet (`routing.js:810-811`,
+    /// `882-883`, `968-969`); `preloadRoute` and `createRouteContext` read
+    /// `component.preload` only. `createBranches` recurses into `children`
+    /// arrays the same way. Nothing else reads `component`, and nothing calls
+    /// it. Project code can reach it as a value (`useRouteMatches()()[i].route`,
+    /// `instance.routes`), which the premise's key-read veto closes.
+    fn audited_route_config_digest(&self, version: &str) -> Option<&'static str> {
+        releases::AUDITED_ROUTE_CONFIG_DIGESTS
+            .iter()
+            .find_map(|(audited, digest)| (*audited == version).then_some(*digest))
+    }
+
     /// ADR 0334. The audited `@tanstack/solid-router` releases, read on all
     /// three builds (`dist/source` for the `solid` condition, `dist/esm`,
     /// `dist/cjs` by call pattern) and the `@tanstack/router-core` each loads:

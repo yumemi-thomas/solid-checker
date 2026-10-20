@@ -229,6 +229,26 @@ fn only_the_audited_router_release_hands_out_url_strings() {
     assert_eq!(two.audited_router_digest("2.0.0-next.18"), None);
 }
 
+/// ADR 0335: route definitions are audited by exact version, each with a
+/// digest; next.26's equals ADR 0324's (the same registry bytes).
+#[test]
+fn only_audited_router_releases_render_route_definitions() {
+    let two: &dyn Dialect = &Solid2::RC9;
+    for version in ["2.0.0-next.16", "2.0.0-next.18", "2.0.0-next.26"] {
+        assert!(
+            two.audited_route_config_digest(version).is_some(),
+            "{version}"
+        );
+    }
+    assert_eq!(
+        two.audited_route_config_digest("2.0.0-next.26"),
+        two.audited_router_digest("2.0.0-next.26")
+    );
+    for version in ["2.0.0-next.21", "2.0.0-next.17", "0.15.3", "2.0.0", ""] {
+        assert_eq!(two.audited_route_config_digest(version), None, "{version}");
+    }
+}
+
 /// ADR 0334: the audited route-component release table is exact-version, and
 /// each release carries both digests.
 #[test]

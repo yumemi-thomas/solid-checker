@@ -81,6 +81,15 @@ pub trait Dialect: Sync {
         None
     }
 
+    /// ADR 0335: the digest of the installed bytes of `@solidjs/router`
+    /// release `version` (`scripts/router-digest.mjs`) when that release was
+    /// audited to render the `component` of each route definition handed to
+    /// `createRouter` with `createComponent` and never call it, or `None`.
+    fn audited_route_config_digest(&self, version: &str) -> Option<&'static str> {
+        let _ = version;
+        None
+    }
+
     /// The installation this vocabulary was audited on, as `(package,
     /// version)` in [`Dialect::release_owners`] order: what a user pins to
     /// certify. Empty for a dialect audited on none.
