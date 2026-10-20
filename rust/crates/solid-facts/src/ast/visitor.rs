@@ -1173,6 +1173,64 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_try_statement(&mut self, statement: &oxc_ast::ast::TryStatement<'a>) {
+        let head = statement.block.body.first().and_then(|first| match first {
+            oxc_ast::ast::Statement::ExpressionStatement(expression) => {
+                match &expression.expression {
+                    Expression::AwaitExpression(awaited) => Some(awaited),
+                    _ => None,
+                }
+            }
+            oxc_ast::ast::Statement::VariableDeclaration(declaration) => {
+                match declaration.declarations.as_slice() {
+                    [declarator] => match &declarator.init {
+                        Some(Expression::AwaitExpression(awaited)) => Some(awaited),
+                        _ => None,
+                    },
+                    _ => None,
+                }
+            }
+            oxc_ast::ast::Statement::ReturnStatement(returned) => match &returned.argument {
+                Some(Expression::AwaitExpression(awaited)) => Some(awaited),
+                _ => None,
+            },
+            _ => None,
+        });
+        if let Some(awaited) = head {
+            let literal_arguments = match &awaited.argument {
+                Expression::CallExpression(call) => call
+                    .arguments
+                    .iter()
+                    .filter(|argument| {
+                        matches!(
+                            argument,
+                            oxc_ast::ast::Argument::StringLiteral(_)
+                                | oxc_ast::ast::Argument::NumericLiteral(_)
+                                | oxc_ast::ast::Argument::BigIntLiteral(_)
+                                | oxc_ast::ast::Argument::BooleanLiteral(_)
+                                | oxc_ast::ast::Argument::NullLiteral(_)
+                        )
+                    })
+                    .map(|argument| span(argument.span()))
+                    .collect(),
+                _ => Vec::new(),
+            };
+            self.try_head_awaits.push(TryHeadAwaitFact {
+                literal_arguments,
+                awaited: span(awaited.span),
+                operand: span(awaited.argument.span()),
+                regions: statement
+                    .handler
+                    .iter()
+                    .map(|handler| span(handler.body.span))
+                    .chain(
+                        statement
+                            .finalizer
+                            .iter()
+                            .map(|finalizer| span(finalizer.span)),
+                    )
+                    .collect(),
+            });
+        }
         self.conditional_flow_depth += 1;
         // The `try` block runs to its end under the normal-completion premise:
         // discount it for completion sites only (straight-line calls and

@@ -95,6 +95,7 @@ pub(super) struct Collector<'s, 'semantic> {
     pub(super) awaits: Vec<Span>,
     pub(super) unconditional_awaits: Vec<Span>,
     pub(super) dominating_awaits: Vec<(Span, Span)>,
+    pub(super) try_head_awaits: Vec<TryHeadAwaitFact>,
     /// Open blocks: span, conditional depth at entry, function nesting level.
     pub(super) open_blocks: Vec<(Span, usize, usize)>,
     pub(super) straight_line_calls: Vec<Span>,
@@ -314,6 +315,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             awaits: Vec::new(),
             unconditional_awaits: Vec::new(),
             dominating_awaits: Vec::new(),
+            try_head_awaits: Vec::new(),
             open_blocks: Vec::new(),
             straight_line_calls: Vec::new(),
             straight_line_constructs: Vec::new(),
@@ -395,6 +397,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.awaits.sort_unstable();
         self.unconditional_awaits.sort_unstable();
         self.dominating_awaits.sort_unstable();
+        self.try_head_awaits
+            .sort_unstable_by_key(|fact| fact.awaited);
         self.straight_line_calls.sort_unstable();
         self.straight_line_constructs.sort_unstable();
         self.completion_sites.sort_unstable();
@@ -470,6 +474,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             awaits: self.awaits,
             unconditional_awaits: self.unconditional_awaits,
             dominating_awaits: self.dominating_awaits,
+            try_head_awaits: self.try_head_awaits,
             straight_line_calls: self.straight_line_calls,
             straight_line_constructs: self.straight_line_constructs,
             completion_sites: self.completion_sites,

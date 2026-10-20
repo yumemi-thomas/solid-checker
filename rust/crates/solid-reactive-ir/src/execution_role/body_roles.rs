@@ -129,35 +129,125 @@ pub(crate) fn follows_unconditional_await(file: &solid_facts::FileFacts, span: S
 /// constructed or rendered, which may be under an owner again, so they are
 /// not included.
 pub(crate) fn follows_dominating_await(file: &solid_facts::FileFacts, span: Span) -> bool {
-    // An instance field initializer is written in the function but runs when
-    // an instance is constructed, which may be later and under an owner.
-    if inside_instance_field(file, span) {
+    let Some(function) = continuation_function(file, span) else {
         return false;
-    }
-    // A JSX expression written there runs inside a render effect the
-    // compiler creates, under an owner, not on the await's continuation
-    // (review round 2).
-    if file.ast.jsx_containing(span).next().is_some()
+    };
+    file.ast.dominating_awaits.iter().any(|(awaited, region)| {
+        region.contains(span)
+            && containing_ast_function(&file.ast, *awaited)
+                .is_some_and(|owner| owner.span == function.span)
+    })
+}
+
+/// The async, non-generator function whose continuation `span` would run in,
+/// when nothing at `span` runs later under an owner instead: an instance
+/// field initializer (it runs at construction), a JSX expression or a
+/// compiler tracked region (a render effect the compiler creates runs it,
+/// review round 2). An async generator suspends again at each `yield`, and
+/// its caller may resume it under an owner (review round 3).
+fn continuation_function(
+    file: &solid_facts::FileFacts,
+    span: Span,
+) -> Option<&solid_facts::ast::FunctionFact> {
+    if inside_instance_field(file, span)
+        || file.ast.jsx_containing(span).next().is_some()
         || file
             .compiler
             .tracked_regions
             .iter()
             .any(|region| region.span.contains(span))
     {
-        return false;
+        return None;
     }
-    let Some(function) = containing_ast_function(&file.ast, span) else {
+    containing_ast_function(&file.ast, span)
+        .filter(|function| function.r#async && !function.generator)
+}
+
+/// Whether `span` sits in the `catch` or `finally` of a `try` whose block
+/// starts with an await of an operand that cannot throw synchronously: then
+/// nothing in the block runs before the await suspends, so those blocks run
+/// only after it did, on a later task with no owner.
+///
+/// The operand must be a call of a plain identifier naming an async,
+/// non-generator function *declaration* (hoisted, so initialized before any
+/// code of its scope runs, even across an import cycle), with only literals
+/// and the parameters of an enclosing function as arguments (initialized when
+/// that function's body starts). Calling an async function never throws, even
+/// from its parameter defaults, and it returns a native promise, which the
+/// await adopts without running project code (review round 1: a `let`/`const`
+/// argument may still be in its temporal dead zone, and awaiting an arbitrary
+/// value reads its `constructor`, which a getter can make throw).
+pub(crate) fn follows_try_head_await(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let Some(function) = continuation_function(file, span) else {
         return false;
     };
-    // An async generator suspends again at each `yield`, and its caller may
-    // resume it under an owner (`runWithOwner(owner, () => it.next())`), so
-    // an await clears the owner only until the next yield (review round 3).
-    function.r#async
-        && !function.generator
-        && file.ast.dominating_awaits.iter().any(|(awaited, region)| {
-            region.contains(span)
-                && containing_ast_function(&file.ast, *awaited)
-                    .is_some_and(|owner| owner.span == function.span)
+    file.ast.try_head_awaits.iter().any(|head| {
+        head.regions.iter().any(|region| region.contains(span))
+            && containing_ast_function(&file.ast, head.awaited)
+                .is_some_and(|owner| owner.span == function.span)
+            && operand_cannot_throw(file, head, lookup)
+    })
+}
+
+fn operand_cannot_throw(
+    file: &solid_facts::FileFacts,
+    head: &solid_facts::ast::TryHeadAwaitFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let ast = &file.ast;
+    let awaited = head.awaited;
+    // Literal nodes by their syntax (review rounds 2-3: source text matched
+    // `NaN`, an identifier, and `1+box.value`, which may throw).
+    let literal_arguments = &head.literal_arguments;
+    let operand = ast.peel_ts_sugar_span(head.operand);
+    let Some(call) = ast.calls.iter().find(|call| call.span == operand) else {
+        return false;
+    };
+    let reference = |span: Span| {
+        ast.identifiers.iter().any(|identifier| {
+            identifier.span == span
+                && identifier.role == solid_facts::ast::IdentifierRole::Reference
+        })
+    };
+    let parameter = |span: Span| {
+        reference(span)
+            && ast.reference_declaration(span).is_some_and(|declaration| {
+                ast.functions.iter().any(|enclosing| {
+                    enclosing.body.contains(awaited)
+                        && enclosing
+                            .parameters
+                            .iter()
+                            .flat_map(|parameter| &parameter.names)
+                            .chain(&enclosing.rest_parameter_names)
+                            .any(|name| name.span == declaration)
+                })
+            })
+    };
+    let callee = ast.peel_ts_sugar_span(call.callee);
+    if !reference(callee)
+        || !call.arguments.iter().all(|argument| {
+            !argument.spread
+                && (parameter(argument.span) || literal_arguments.contains(&argument.span))
+        })
+    {
+        return false;
+    }
+    let Some((declared_file, declared)) = lookup.function_called_at(file.path.as_str(), callee)
+    else {
+        return false;
+    };
+    let Some(called) = lookup.entities().at(file.path.as_str(), callee) else {
+        return false;
+    };
+    declared.kind == solid_facts::ast::FunctionKind::Declaration
+        && declared.r#async
+        && !declared.generator
+        && declared.name.as_ref().is_some_and(|name| {
+            lookup.entities().at(declared_file.path.as_str(), name.span) == Some(called)
         })
 }
 
@@ -602,7 +692,9 @@ pub(super) fn semantic_execution_role_within(
     // is placed by position alone, which does not prove it runs (a loop under
     // a branch), so there the read is unplaced, not proven silent.
     if role.reports_untracked_read()
-        && (follows_unconditional_await(file, span) || follows_dominating_await(file, span))
+        && (follows_unconditional_await(file, span)
+            || follows_dominating_await(file, span)
+            || follows_try_head_await(file, span, lookup))
     {
         return ExecutionRole::Unreported;
     }

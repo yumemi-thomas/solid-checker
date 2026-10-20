@@ -89,6 +89,43 @@ fn dominating_awaits_cover_the_rest_of_their_block() {
     assert!(!dominated(8) && !dominated(10) && !dominated(12) && !dominated(17) && !dominated(19));
 }
 
+/// Facts schema 66: a `try` whose first statement awaits records the await,
+/// its operand and its `catch`/`finally` blocks; a `try` that starts with
+/// anything else records nothing.
+#[test]
+fn try_head_awaits_record_their_handlers() {
+    let source = concat!(
+        "declare function f(): Promise<number>; declare function g(): void;\n",
+        "async function h() {\n",
+        "  try { const v = await f(); g(); } catch { g(); } finally { g(); }\n",
+        "  try { g(); await f(); } catch { g(); }\n",
+        "  try { return await f(); } finally { g(); }\n",
+        "  try { await k(1, 'a', null, true, 2n, NaN, 1 + 2, n); } catch { g(); }\n",
+        "}\n",
+        "declare function k(...values: unknown[]): Promise<void>; declare const n: number;\n",
+    );
+    let facts = super::extract("try-head.ts", source).unwrap();
+    let operands = facts
+        .try_head_awaits
+        .iter()
+        .map(|head| {
+            (
+                &source[head.operand.start as usize..head.operand.end as usize],
+                head.regions.len(),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(operands.len(), 3, "{operands:?}");
+    assert_eq!(operands[..2], [("f()", 2), ("f()", 1)], "{operands:?}");
+    // Literal nodes only: not `NaN` (an identifier), `1 + 2` or `n`.
+    let literals = facts.try_head_awaits[2]
+        .literal_arguments
+        .iter()
+        .map(|span| &source[span.start as usize..span.end as usize])
+        .collect::<Vec<_>>();
+    assert_eq!(literals, ["1", "'a'", "null", "true", "2n"], "{literals:?}");
+}
+
 /// ADR 0320 (facts schema 64): an await is unconditional only when no
 /// construct that can skip it lies between the function entry and it:
 /// logical assignments, optional chains, destructuring defaults and

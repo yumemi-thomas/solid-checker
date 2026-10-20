@@ -133,3 +133,92 @@ export function AsyncGeneratorTopLevel() {
   void steps().next();
   return <div>{x()}</div>;
 }
+
+// ---- A `try` that starts by awaiting a call of an async function: calling
+// one never throws synchronously, so `catch` and `finally` run only after
+// the await suspended (no finding).
+
+async function fetchCount(): Promise<number> {
+  return load();
+}
+async function fetchOther(base: number): Promise<number> {
+  return base + (await load());
+}
+
+export function CatchAfterAsyncCall() {
+  const [x, setX] = createSignal(0);
+  const run = async () => {
+    try {
+      const value = await fetchCount();
+      setX(value);
+    } catch {
+      setX(-1);
+    } finally {
+      setX(0);
+    }
+  };
+  const other = async (base: number) => {
+    try {
+      await fetchOther(base);
+    } catch {
+      setX(-2);
+    }
+  };
+  void run();
+  void other(1);
+  return <div>{x()}</div>;
+}
+
+// Not proven: an argument that may throw, a `let`-bound function that may be
+// reassigned, a member call (`api.load` may throw while evaluated), a local
+// `const` argument (it may be in its temporal dead zone), a bare awaited
+// value (awaiting it reads its `constructor`, which may throw), `NaN` (an
+// identifier a binding may shadow), an expression that is no literal node.
+declare function compute(): number;
+declare const api: { load(): Promise<number> };
+export function CatchAfterUnprovenHead() {
+  const [x, setX] = createSignal(0);
+  let reassigned = async () => 1;
+  const run = async () => {
+    try {
+      await fetchOther(compute());
+    } catch {
+      setX(-3);
+    }
+    try {
+      await reassigned();
+    } catch {
+      setX(-4);
+    }
+    try {
+      await api.load();
+    } catch {
+      setX(-5);
+    }
+    const local = 1;
+    try {
+      await fetchOther(local);
+    } catch {
+      setX(-6);
+    }
+    const pending = load();
+    try {
+      await pending;
+    } catch {
+      setX(-7);
+    }
+    try {
+      await fetchOther(NaN);
+    } catch {
+      setX(-8);
+    }
+    try {
+      await fetchOther(1 + compute());
+    } catch {
+      setX(-9);
+    }
+  };
+  reassigned = async () => 2;
+  void run();
+  return <div>{x()}</div>;
+}

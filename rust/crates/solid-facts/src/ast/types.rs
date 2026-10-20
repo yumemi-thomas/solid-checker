@@ -138,6 +138,14 @@ pub struct AstFacts {
     /// a synchronous throw of the operand reaches it unsuspended.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dominating_awaits: Vec<(Span, Span)>,
+    /// A `try` statement whose block's first statement is an await
+    /// (`await e;`, `const x = await e;`, `return await e;`): the await, its
+    /// operand, and the `catch` and `finally` blocks. If evaluating the
+    /// operand cannot throw synchronously, nothing in the `try` block can run
+    /// before the await suspends, so those blocks run only after it did.
+    /// Whether the operand can throw is the consumer's question.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub try_head_awaits: Vec<TryHeadAwaitFact>,
     /// The call expressions written in their innermost enclosing function's
     /// straight-line flow, as [`Self::unconditional_awaits`] are, and outside
     /// any optional chain (`a?.b(c())` evaluates `c()` only when `a` is not
@@ -1040,6 +1048,18 @@ pub enum IdentifierRole {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct TryHeadAwaitFact {
+    pub awaited: Span,
+    pub operand: Span,
+    pub regions: Vec<Span>,
+    /// The arguments of an operand call that are literal nodes (string,
+    /// number, bigint, boolean, null): evaluating one cannot throw.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub literal_arguments: Vec<Span>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct IdentifierFact {
     pub span: Span,
     pub role: IdentifierRole,
@@ -1649,6 +1669,7 @@ impl AstFacts {
             awaits: Vec::new(),
             unconditional_awaits: Vec::new(),
             dominating_awaits: Vec::new(),
+            try_head_awaits: Vec::new(),
             straight_line_calls: Vec::new(),
             straight_line_constructs: Vec::new(),
             completion_sites: Vec::new(),
