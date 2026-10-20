@@ -1,5 +1,10 @@
+// The daemon's own modules: the daemon (below) is Unix-only, and its
+// resolution witness stamps files with Unix metadata.
+#[cfg(unix)]
 mod daemon_cache;
+#[cfg(unix)]
 mod daemon_resolution;
+#[cfg(unix)]
 mod idle_memory;
 mod json_output;
 mod snapshot_emission;
