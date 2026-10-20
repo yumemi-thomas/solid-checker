@@ -93,6 +93,10 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/store-root-write-rc13/node_modules/**
 !fixtures/reactive-ir/rc13-flush-in-effect-callback/node_modules/
 !fixtures/reactive-ir/rc13-flush-in-effect-callback/node_modules/**
+!fixtures/reactive-ir/rc13-flush-in-effect-server/node_modules/
+!fixtures/reactive-ir/rc13-flush-in-effect-server/node_modules/**
+!fixtures/reactive-ir/rc13-flush-in-effect-two-copies/node_modules/
+!fixtures/reactive-ir/rc13-flush-in-effect-two-copies/node_modules/**
 !fixtures/reactive-ir/setter-in-root-rc3/node_modules/
 !fixtures/reactive-ir/setter-in-root-rc3/node_modules/**
 !fixtures/reactive-ir/setter-in-root-rc9/node_modules/

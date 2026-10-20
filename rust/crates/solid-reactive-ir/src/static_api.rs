@@ -37,6 +37,7 @@ pub(crate) fn check_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft)
         value_form_stores: ctx.value_form_stores,
         accessors: ctx.accessors,
         reachable_calls: ctx.reachable_calls,
+        client_build: !ctx.rule_options.runtime.selects_server_build(),
     };
     for result in parallel_file_results(&ctx.facts.files, |file| checker.check_file(file)) {
         draft.static_defects.extend(result.defects);
@@ -57,6 +58,8 @@ pub(super) struct StaticApiContext<'a> {
     pub(super) value_form_stores: &'a HashSet<SymbolId>,
     pub(super) accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
     pub(super) reachable_calls: &'a HashMap<Location, usize>,
+    /// No server build of the Solid packages is selected.
+    pub(super) client_build: bool,
 }
 
 impl StaticApiContext<'_> {
@@ -299,20 +302,32 @@ impl StaticApiContext<'_> {
                 });
             }
             // SC2008: flush() run synchronously by a user effect's apply
-            // callback. The flush that runs effects is already in progress, so
-            // the nested call returns without draining in every build, and the
-            // dev build of `@solidjs/signals` (from rc.1) reports it:
-            // `flush`'s running-flush branch tests `inEffectCallback`, which
-            // `runEffect` raises around exactly `_effectFn(...)`, and warns
-            // `FLUSH_IN_EFFECT_CALLBACK` (rc.13 `dist/dev-shared.js:2680-2698`,
-            // `dist/dev.js:1876-1906`). Which primitive reports, on which
-            // release, and which callback is the effect phase are the
-            // dialect's; the proof that the call runs on that callback's own
-            // stack is `effect_phase`'s.
+            // callback. The claim is the no-op: the flush that runs effects is
+            // already in progress (`globalQueue._running`), so the nested call
+            // returns without draining in every client build. The dev build
+            // of `@solidjs/signals` (from rc.1) usually also warns
+            // `FLUSH_IN_EFFECT_CALLBACK`, but only while its global
+            // `inEffectCallback` marker is still up: a nested synchronous
+            // `runEffect` (a `createRenderEffect` run at creation, JSX) lowers
+            // it in its `finally` (rc.13 `dist/dev.js:1906`), so the warning
+            // is not part of the claim (`dist/dev-shared.js:2680-2698`).
+            // Which primitive, on which release, and which callback is the
+            // effect phase are the dialect's; the proof that the call runs on
+            // that callback's own stack, on the same package instance's queue,
+            // is `effect_phase`'s. A server build selects neither (the apply
+            // never runs there and `flush` is empty).
             if let Some(kind) = kind
+                && self.client_build
                 && dialect.warns_inside_effect_phase(kind)
+                && let Some(root) = self
+                    .lookup
+                    .resolved_callee_call(file, call.callee)
+                    .and_then(|resolved| resolved.declaration.as_ref())
+                    .and_then(|declaration| {
+                        crate::effect_phase::package_root(declaration.location.path.as_ref())
+                    })
                 && let Some(origin) =
-                    crate::effect_phase::effect_phase_origin(file, call.span, self.lookup)
+                    crate::effect_phase::effect_phase_origin(file, call.span, &root, self.lookup)
             {
                 let reached = match origin.helper_calls {
                     0 => "directly in the apply callback of a createEffect".to_owned(),
@@ -329,7 +344,7 @@ impl StaticApiContext<'_> {
                     id: "SC2008".into(),
                     rule: "flush-in-effect-callback".into(),
                     message: format!(
-                        "{primitive}() is called {reached}, which runs inside the flush that drains effects; the nested flush is a no-op that drains nothing, and the dev build warns FLUSH_IN_EFFECT_CALLBACK, so the writes it was meant to reveal are processed in that flush's continuation, not at this call"
+                        "{primitive}() is called {reached}, which runs inside the flush that drains effects; the queue is already running, so this flush drains nothing (the dev build usually also warns FLUSH_IN_EFFECT_CALLBACK), and the writes it was meant to reveal are processed in that flush's continuation, not at this call"
                     ),
                     hint: "Remove the flush(): writes made in an effect are processed by the flush that is already running. To force a drain afterwards, defer it (`queueMicrotask(() => flush())`) or call it from an event handler or other code that runs outside the effect.".into(),
                     location: location(file.path.shared(), call.callee),

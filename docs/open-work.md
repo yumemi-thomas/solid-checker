@@ -41,6 +41,7 @@ Missing owner (`missing-owner`, SC4001):
 - `review-r5-owner-class-control`, `review-r6-owner-default-control`, `review-r6-owner-jsx-getter-control`: the call sits inside a class field, a default parameter, or a JSX getter; the owner walk refuses those containers.
 - `review-r7-event-array`: the typed `[handler, data]` event tuple is not followed by owner seeding.
 - `review-opus5-t6-rest-timer-owner` (App.tsx:8): an effect created in a timer inside a `Show` callback.
+- JSX written in a `createEffect` apply (`createRoot`-less) creates a render effect with no owner: the runtime reports `NO_OWNER_EFFECT` and the owner walk places nothing there; the same for a helper that creates a render effect and is called from an apply (found by the SC2008 review; probe: the first revision of `flush-in-effect-callback`'s oracle case).
 - `review-opus2-o15-settled-class-field-new-in-timeout` (App.tsx:5): a class constructed in a timer. The field stays an uncertifiable SC3001.
 
 Primitive used as a value (`reactive-dispatch-unresolved`, SC9012):

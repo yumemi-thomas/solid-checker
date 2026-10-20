@@ -1,4 +1,4 @@
-import { createEffect, createRenderEffect, createSignal, flush, untrack } from "solid-js";
+import { createEffect, createRenderEffect, createRoot, createSignal, flush, untrack } from "solid-js";
 import { commitFromOtherFile } from "./helper";
 
 // rc.13 dev raises FLUSH_IN_EFFECT_CALLBACK (a warning) when `flush` runs on
@@ -68,7 +68,101 @@ export function AsyncHelper() {
   return <span>async-helper</span>;
 }
 
+// Documented static-only: the checker claims the no-op (the queue is already
+// running), and the dev warning is absent because a synchronous nested
+// `runEffect` lowers the global `inEffectCallback` marker in its `finally`
+// (rc.13 `dist/dev.js:1906`) before the flush; the conditional never runs.
+
+export function RenderThenFlush() {
+  const [value] = createSignal(1);
+  createEffect(value, () => {
+    createRenderEffect(
+      () => 1,
+      () => {},
+    );
+    flush();
+  });
+  return <span>render-then-flush</span>;
+}
+
+export function JsxThenFlush() {
+  const [value] = createSignal(1);
+  createEffect(value, () => {
+    const el = createRoot(() => <div>{value()}</div>);
+    void el;
+    flush();
+  });
+  return <span>jsx-then-flush</span>;
+}
+
+function mount() {
+  createRoot(() => {
+    createRenderEffect(
+      () => 2,
+      () => {},
+    );
+  });
+}
+export function HelperThenFlush() {
+  const [value] = createSignal(1);
+  createEffect(value, () => {
+    mount();
+    flush();
+  });
+  return <span>helper-then-flush</span>;
+}
+
+export function FlushFnRender() {
+  const [value] = createSignal(1);
+  createEffect(value, () => {
+    flush(() => {
+      createRenderEffect(
+        () => 3,
+        () => {},
+      );
+    });
+  });
+  return <span>flush-fn-render</span>;
+}
+
+export function Conditional() {
+  const [value] = createSignal(1);
+  createEffect(value, (next) => {
+    if (next > 100) flush();
+  });
+  return <span>conditional</span>;
+}
+
 // Controls: no FLUSH_IN_EFFECT_CALLBACK.
+
+export function AfterReturn() {
+  const [value] = createSignal(1);
+  createEffect(value, () => {
+    return;
+    flush();
+  });
+  return <span>after-return</span>;
+}
+
+export function EmptyLiteral() {
+  const [value] = createSignal(1);
+  createEffect(value, () => {
+    ([] as number[]).forEach(() => flush());
+  });
+  return <span>empty-literal</span>;
+}
+
+export function ThrowingCompute() {
+  createEffect(
+    (): number => {
+      throw new Error("x");
+    },
+    () => {
+      flush();
+    },
+  );
+  return <span>throwing-compute</span>;
+}
 
 export function InHandler() {
   return <button onClick={() => flush()}>handler</button>;

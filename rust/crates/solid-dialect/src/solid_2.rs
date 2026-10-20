@@ -1952,12 +1952,14 @@ impl Dialect for Solid2 {
         primitive == Primitive::CreateEffect && argument == 1
     }
 
-    /// `flush` opens, once a flush is running, with `if (inEffectCallback)`
-    /// report `FLUSH_IN_EFFECT_CALLBACK` and `return` (rc.13
+    /// Once a flush is running, `flush` returns without draining, after
+    /// reporting `FLUSH_IN_EFFECT_CALLBACK` if `inEffectCallback` is up (rc.13
     /// `dist/dev-shared.js:2680-2698`); the production build returns at the
     /// same branch without the report (`dist/prod/core/scheduler.js`). The
-    /// marker and the report are in every read release from rc.1; rc.0 has
-    /// neither (`Solid2::flush_in_effect_callback`).
+    /// marker is one global boolean that a nested synchronous `runEffect`
+    /// lowers (`dist/dev.js:1906`), so the no-op is the claim and the report
+    /// is not. The marker and the report are in every read release from rc.1;
+    /// rc.0 has neither (`Solid2::flush_in_effect_callback`).
     fn warns_inside_effect_phase(&self, primitive: Primitive) -> bool {
         self.flush_in_effect_callback && primitive == Primitive::Flush
     }

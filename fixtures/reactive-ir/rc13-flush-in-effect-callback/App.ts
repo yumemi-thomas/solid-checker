@@ -45,16 +45,55 @@ createRoot(() => {
     { name: "write-then-flush" },
   );
 
-  // Positive: an alias, a namespace member and signals' own export are the same
-  // export.
+  // Positive: an alias and a namespace member are the same export.
   createEffect(value, () => {
     drain();
   });
   createEffect(value, () => {
     Solid.flush();
   });
+
+  // Negative: `flush` imported from `@solidjs/signals` itself resolves to a
+  // declaration this proof cannot tie to the instance `createEffect` runs on
+  // (a second installed copy has its own queue): not claimed.
   createEffect(value, () => {
     signalsFlush();
+  });
+
+  // Positive: the claim is that the nested flush drains nothing (the queue is
+  // already running). A synchronous render effect inside the apply lowers the
+  // dev warning's marker before the flush, so the dev warning may be absent;
+  // the no-op is not.
+  createEffect(value, () => {
+    createRenderEffect(
+      () => 1,
+      () => {},
+    );
+    flush();
+  });
+  function mountRenderEffect(): void {
+    createRenderEffect(
+      () => 2,
+      () => {},
+    );
+  }
+  createEffect(value, () => {
+    mountRenderEffect();
+    flush();
+  });
+  createEffect(value, () => {
+    flush(() => {
+      createRenderEffect(
+        () => 3,
+        () => {},
+      );
+    });
+  });
+
+  // Positive: a conditional call is claimed on the engine's feasible-path
+  // premise: nothing here decides the condition.
+  createEffect(value, (next) => {
+    if (next > 100) flush();
   });
 
   // Positive: a function declaration the apply calls.
@@ -235,6 +274,35 @@ createRoot(() => {
   createEffect(value, () => {
     api.commitMember();
   });
+
+  // Negative: code after an unconditional return or throw never runs.
+  createEffect(value, () => {
+    return;
+    flush();
+  });
+  createEffect(value, () => {
+    throw new Error("boom");
+    flush();
+  });
+
+  // Negative: a callback of an array literal written empty is never invoked.
+  createEffect(value, () => {
+    ([] as number[]).forEach(() => flush());
+    [].filter(() => {
+      flush();
+      return true;
+    });
+  });
+
+  // Negative: a compute that always throws leaves the apply unrun.
+  createEffect(
+    (): number => {
+      throw new Error("x");
+    },
+    () => {
+      flush();
+    },
+  );
 
   // Negative: a cleanup the apply returns runs at the next run (inside the
   // marker) and at disposal (outside it): no single answer, so none is claimed.

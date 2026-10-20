@@ -244,6 +244,22 @@ impl RuntimeEnvironment {
     pub const fn program_is_closed(&self) -> bool {
         matches!(self.program_boundary, Some(ProgramBoundary::Closed))
     }
+
+    /// Whether the selection names a server build of the Solid packages: a
+    /// Node-family target, or server rendering. There an effect's apply never
+    /// runs and `flush` is empty, so a rule about what the *client* runtime
+    /// does with them claims nothing. No selection is the client default, as
+    /// everywhere else the audited release is assumed.
+    #[must_use]
+    pub fn selects_server_build(&self) -> bool {
+        matches!(
+            self.rendering,
+            Some(RuntimeRendering::StringSsr | RuntimeRendering::StreamingSsr)
+        ) || self
+            .selected_conditions()
+            .iter()
+            .any(|condition| matches!(condition.as_str(), "node" | "deno" | "worker"))
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

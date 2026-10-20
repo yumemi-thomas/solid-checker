@@ -937,13 +937,17 @@ pub trait Dialect: Sync {
     }
 
     /// Whether calling `primitive` synchronously from an effect phase
-    /// ([`Dialect::callback_runs_in_effect_phase`]) is a **no-op the
-    /// development build reports** (`FLUSH_IN_EFFECT_CALLBACK`, a warning).
+    /// ([`Dialect::callback_runs_in_effect_phase`]) is a **no-op**, one the
+    /// development build usually reports (`FLUSH_IN_EFFECT_CALLBACK`, a
+    /// warning).
     ///
     /// A release's answer: the flush that runs effects is already in progress,
-    /// so a nested `flush` returns without draining in every build, and the
-    /// development build of `@solidjs/signals` from rc.1 says so. An unread or
-    /// unresolved release states nothing. The default is `false`.
+    /// so a nested `flush` returns without draining in every client build.
+    /// Only the no-op is the claim: the development build of
+    /// `@solidjs/signals` from rc.1 warns through a global marker that a
+    /// nested synchronous effect run lowers, so the warning is not
+    /// guaranteed. An unread or unresolved release states nothing. The
+    /// default is `false`.
     fn warns_inside_effect_phase(&self, primitive: Primitive) -> bool {
         let _ = primitive;
         false

@@ -150,10 +150,11 @@ impl Rule {
             // runtime-mirrored throws in the family.
             Self::FlushInAction => ("SC2006", "flush-in-action", "error", false),
             // `flush()` run by an effect's apply callback is a no-op in every
-            // build, and the dev build only *warns* (`@solidjs/signals`
-            // `FLUSH_IN_EFFECT_CALLBACK`, severity "warn", rc.13
-            // `dist/dev-shared.js:2687-2698`): nothing throws, the writes land
-            // in the running flush's continuation. A proven defect at the
+            // client build, and the dev build usually also *warns*
+            // (`@solidjs/signals` `FLUSH_IN_EFFECT_CALLBACK`, severity "warn",
+            // rc.13 `dist/dev-shared.js:2687-2698`; not after a nested
+            // synchronous render effect): nothing throws, the writes land in
+            // the running flush's continuation. A proven defect at the
             // runtime's own severity, hence a warning.
             Self::FlushInEffectCallback => ("SC2008", "flush-in-effect-callback", "warning", false),
             // rc.9's static `dynamic` form refuses a promise-valued source:

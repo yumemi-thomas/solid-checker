@@ -548,7 +548,7 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
             "the flush() call runs directly in an action body, inside a step, where the installed @solidjs/signals throws FLUSH_IN_ACTION in dev"
         }
         Rule::FlushInEffectCallback => {
-            "the flush() call runs on the stack of a createEffect apply callback, inside the flush that is draining effects, where it is a no-op that the installed @solidjs/signals reports as FLUSH_IN_EFFECT_CALLBACK in dev"
+            "the flush() call runs on the stack of a createEffect apply callback, inside the flush that is draining effects, so the queue is already running and the call drains nothing (the installed @solidjs/signals usually also warns FLUSH_IN_EFFECT_CALLBACK in dev)"
         }
         Rule::StaticDynamicAsyncSource => {
             "the static-form dynamic() source is proven to return a Promise, which the dev builds reject at the call and the production builds render as nothing"

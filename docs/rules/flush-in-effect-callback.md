@@ -3,14 +3,18 @@
 `SC2008` · **warning** · violation
 
 `flush()` (or `flush(fn)`) runs on the stack of a `createEffect` apply callback,
-inside the flush that is draining effects, where it cannot drain anything.
+inside the flush that is draining effects, where it cannot drain anything. The
+dev build usually also warns.
 
 ## What it does
 
 Flags calls to `flush` (imported from `solid-js` or `@solidjs/signals`) that
 provably run synchronously inside the apply (second) argument of a
-`createEffect(compute, apply)` call, on an installation whose
-`@solidjs/signals` reports it: `2.0.0-rc.1` and later reviewed releases.
+`createEffect(compute, apply)` call, in a client build, on an installation
+whose `@solidjs/signals` has the marker below: `2.0.0-rc.1` and later reviewed
+releases. The claim is the **no-op**: the queue is already running, so the call
+drains nothing and the writes are processed in that flush's continuation. The
+dev warning is the usual symptom, not the claim.
 
 **Premise: read from the published bytes and probed.** An effect's apply is
 queued, and `runEffect` runs it between two marker writes (rc.13
@@ -37,9 +41,14 @@ if (globalQueue._running) {
 }
 ```
 
-So the call is a **no-op in every build** (production returns at the same
-branch, `dist/prod/core/scheduler.js`), and the development build **warns**; it
-does not throw. `flush(fn)` runs `fn` and then ends with a plain `flush()`,
+So the call is a **no-op in every client build** (production returns at the same
+branch, `dist/prod/core/scheduler.js`), and the development build **usually
+warns**; it does not throw. The marker `inEffectCallback` is one global boolean:
+a nested synchronous `runEffect` (a `createRenderEffect` created in the apply
+runs its first pass at creation, so does JSX there) sets it to `false` in its
+`finally` (`dist/dev.js:1906`) without restoring it, and a `flush()` later in
+the same apply is still a no-op but raises no warning. Such calls are reported
+anyway, because the no-op is provable from source. `flush(fn)` runs `fn` and then ends with a plain `flush()`,
 which reports. The marker is in `@solidjs/signals` rc.1 through rc.13 (probed on
 the published bytes of rc.1-rc.9 and rc.13); rc.0 has neither the marker nor the
 report.
@@ -116,12 +125,36 @@ effect.
   (calling one runs none of its body), methods, parameter initializers, a
   `let` helper, a callback handed to a timer, listener or promise, and an async
   function's code after its first `await` are not claimed.
+- **Unreachable code.** A call after an unconditional `return` or `throw` in
+  its own function, a callback of an array literal written empty
+  (`([] as T[]).forEach(...)`), and an effect whose compute function written
+  inline contains a `throw` statement (it may always throw, which skips the
+  apply) are not claimed.
+- **Server builds.** With a Node-family target (`node`, `deno`, `worker`) or
+  `string-ssr`/`streaming-ssr` selected, `solid-js`'s server entry never runs an
+  apply (`createEffect` is `serverEffect(compute, undefined, options)`) and its
+  `flush` is empty, so nothing is claimed. With no selection the client build is
+  the default.
+- **Two copies of `@solidjs/signals`.** The `flush` call and the `createEffect`
+  call must resolve to declarations of the same installed package directory; a
+  `flush` of another copy has a queue that is not the one running. A `flush`
+  imported from `@solidjs/signals` itself, which Type Facts do not resolve to a
+  declaration, is not claimed.
 - **Positions it does not place.** An apply passed by name
   (`createEffect(v, applyFn)`), the `{ effect, error }` bundle form, and an
   apply of a `defer: true` effect whose compute never changes. `createRenderEffect`
   is never claimed (see the table).
 - **Returned cleanups.** A cleanup function the apply returns reports only on
   the run that replaces it, so no single answer holds.
+
+## Premises
+
+- **Conditional calls.** `if (next > 100) flush()` is reported: like every rule
+  here, the engine assumes a branch it cannot decide may be taken (the
+  feasible-path premise). Only code that provably cannot run (the unreachable
+  cases above) is withheld.
+- **The apply runs.** `defer: true` effects whose compute never changes, or
+  whose options the syntax cannot read, are not claimed.
 
 ## Related
 
