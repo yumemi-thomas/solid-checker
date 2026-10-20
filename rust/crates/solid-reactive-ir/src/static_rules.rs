@@ -587,6 +587,96 @@ fn tracked_before_first_suspension(
     })
 }
 
+/// The store paths a function reads in its own straight-line flow before its
+/// first suspension, as `(root, "a.b")` (ADR 0195 for store paths). The read
+/// ran inside the tracking window, so every key along the path is a dependency
+/// of the computation, and `checkPostAwaitRead` stays silent for a later read
+/// of a key that is already among the dependencies (`dev-shared.js`,
+/// `el._deps`). Only plain, non-optional, non-computed paths count.
+pub(super) fn tracked_store_paths_before_first_suspension(
+    ctx: &AnalysisContext<'_>,
+    files_by_path: &std::collections::HashMap<&str, &solid_facts::FileFacts>,
+    function: &typefacts::AsyncFunctionFact,
+) -> Vec<(SymbolId, String)> {
+    let Some(file) = files_by_path.get(&*function.expression.path) else {
+        return Vec::new();
+    };
+    let (Ok(start), Ok(end)) = (
+        u32::try_from(function.expression.start_byte),
+        u32::try_from(function.expression.end_byte),
+    ) else {
+        return Vec::new();
+    };
+    let expression = file.ast.peel_ts_sugar_span(Span::new(start, end));
+    let Some(ast_function) = file.ast.function_at(expression) else {
+        return Vec::new();
+    };
+    let own = |span: Span| {
+        ast_function.body.contains(span)
+            && containing_ast_function(&file.ast, span)
+                .is_some_and(|owner| owner.span == ast_function.span)
+    };
+    let first_suspension = file
+        .ast
+        .awaits
+        .iter()
+        .chain(&file.ast.implicit_suspensions)
+        .filter(|suspension| own(**suspension))
+        .map(|suspension| suspension.start)
+        .min()
+        .unwrap_or(u32::MAX);
+    let mut paths = Vec::new();
+    for member in &file.ast.members {
+        if member.span.end > first_suspension
+            || !own(member.span)
+            || file
+                .ast
+                .completion_sites
+                .binary_search(&member.span)
+                .is_err()
+            || file.ast.is_plain_assignment_target(member.span)
+        {
+            continue;
+        }
+        let Some(symbol) = ctx
+            .entities
+            .get(&location(file.path.shared(), member.object))
+        else {
+            continue;
+        };
+        if ctx.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store)
+            || !ctx.accessors.contains_key(symbol)
+        {
+            continue;
+        }
+        if let Some(path) = store_path_text(file, member.span) {
+            paths.push((symbol.clone(), path));
+        }
+    }
+    paths
+}
+
+/// `a.b.c` of a member chain written with plain dots and identifiers.
+fn store_path_text(file: &solid_facts::FileFacts, span: Span) -> Option<String> {
+    let text = file.source_text(span)?;
+    let path: String = text.chars().filter(|c| !c.is_whitespace()).collect();
+    let plain = path
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '_' || c == '$' || c == '.');
+    (plain && path.contains('.') && !path.starts_with('.') && !path.ends_with('.')).then_some(path)
+}
+
+/// Whether the path `read` is already a dependency given the paths `tracked`
+/// read before the first suspension: the same root and a tracked path that is
+/// `read` or extends it (reading `a.b` tracks the key of `a` too).
+fn store_path_tracked(tracked: &[(SymbolId, String)], symbol: &SymbolId, read: &str) -> bool {
+    tracked.iter().any(|(root, path)| {
+        root == symbol
+            && path.starts_with(read)
+            && (path.len() == read.len() || path[read.len()..].starts_with('.'))
+    })
+}
+
 fn member_read_site<'f>(
     files_by_path: &std::collections::HashMap<&str, &'f solid_facts::FileFacts>,
     function: &typefacts::AsyncFunctionFact,
@@ -744,6 +834,7 @@ fn member_reads_after_await(
         u32,
     ),
     analysis_context: &str,
+    tracked_store_paths: &[(SymbolId, String)],
 ) {
     let (file, ast_function, boundary) = site;
     for member in &file.ast.members {
@@ -779,6 +870,13 @@ fn member_reads_after_await(
             let Some((name, _)) = ctx.accessors.get(symbol) else {
                 continue;
             };
+            // A key read on every run before the first suspension is a
+            // dependency already.
+            if store_path_text(file, member.span)
+                .is_some_and(|path| store_path_tracked(tracked_store_paths, symbol, &path))
+            {
+                continue;
+            }
             (name, false)
         } else if let Some((name, declaration)) = ctx.prop_sources.get(symbol) {
             let property = file.source_text(member.property).unwrap_or_default();

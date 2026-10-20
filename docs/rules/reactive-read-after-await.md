@@ -38,9 +38,10 @@ there, and the reads in it are then reported with the same two proofs:
   called from, nested ones too. It needs a call after a dominating await (a
   `try` around the await is enough). An empty receiver never invokes its
   callback: the read is reported as where the callback would run. A `sort`
-  comparator and a `replace`/`replaceAll` replacer are the exception: whether
-  they run depends on the contents (no comparator call under two elements) or
-  on a match, so a read in one is **uncertifiable**.
+  comparator, a `reduce`/`reduceRight` reducer with no initial value (not
+  called under two elements) and a `replace`/`replaceAll` replacer are the
+  exception: whether they run depends on the contents or on a match, so a read
+  in one is **uncertifiable**.
 - **A promise handler.** The callback of `.then`/`.catch`/`.finally` on a
   proven native `Promise` runs from a microtask with no owner. It is in the
   continuation when the call's result is the promise the computation returns
@@ -63,16 +64,35 @@ there, and the reads in it are then reported with the same two proofs:
     element, a project function returning one of these, or a handler call on
     one. A synchronous computation that returns the chain is not adopted: the
     handler is a violation there.
-  - *A rejection handler* (`.catch`'s callback, `.then`'s second argument) runs
-    only if the receiver rejects, and a fulfillment handler on
-    `Promise.reject(...)` never runs: a read in one is **uncertifiable**.
-    `.finally` runs on both paths.
+  - *A handler that runs only on one outcome.* A rejection handler (`.catch`'s
+    callback, `.then`'s second argument) runs only if the receiver rejects,
+    and a fulfillment handler (`.then`'s first argument) only if it fulfills:
+    a read in a rejection handler is **uncertifiable**, and a fulfillment
+    handler counts only when the receiver is proven to fulfill. Fulfillment is
+    proven for `Promise.resolve` of a plain literal, `Promise.allSettled` and
+    `Promise.all`/`race` of proven elements of an array literal, `Promise.any`
+    with one proven element, a `new Promise` whose executor is one timer call
+    passing its *first* parameter (`(done) => setTimeout(done, 20)`), a
+    project function returning one of these, and `then`/`catch`/`finally` of
+    one (a rejection recovered by `catch` fulfills; a handler is assumed to
+    return normally). A receiver that rejects (`Promise.reject`, an executor
+    passing its second parameter, `Promise.all` of one, `then`/`finally` of
+    one), or whose outcome is unknown (any other executor, an `async` helper's
+    promise), leaves the handler uncertifiable. `.finally` runs on both paths.
 - **An `async` helper the computation awaits.** An exactly resolved `async`
   project function whose promise the computation returns or awaits, directly
   or through `Promise.all`/`allSettled` (of calls, or of `items.map(async ...)`
   or `items.map(helper)`), reads after its own first await in the computation's
   continuation, and it is reported with the computation's primitive. A helper
-  whose promise is dropped, or called from an event handler, is not.
+  whose promise is dropped, or called from an event handler, is not. A helper
+  an `async` function returns without `await` is adopted one job after the
+  call returns (as for a handler chain above), so it counts only when every
+  `await` it makes is on a promise proven still pending (`await pause()`); a
+  first `await 0`, `await Promise.resolve()` or an unknown value resumes it
+  before the adoption, the runtime raises nothing, and its reads are
+  **uncertifiable**, as are the reads of every helper it continues into.
+  `return await load()`, `await Promise.all([load()])` and a synchronous
+  computation returning `load()` are not adopted and stay violations.
 - **A synchronous helper's straight-line read.** A call after the await to an
   exactly resolved synchronous project function runs its body on the
   continuation's stack: an accessor call the body makes on every normal
@@ -95,6 +115,13 @@ Each of these keeps it from applying:
 - a read after `for await` is not claimed even though the runtime warns (a
   known miss, `docs/open-work.md`).
 
+**The feasible-path premise.** A read is reported where the code is written to
+run it, not where one input makes it dead: a `catch` that only an await
+rejecting would reach (`try { await rejecting(); return value() } catch {}`), a
+branch on a condition the analysis cannot decide (`if (tick() > 100)`), an empty
+receiver of `map`. The runtime stays silent on a run that does not take the
+path; the rule does not.
+
 **A source already tracked is exempt** (ADR 0195). A read after the await of
 an accessor that the same function already called *on every run, before its
 first suspension* is not reported: that earlier call ran inside the tracking
@@ -102,8 +129,11 @@ window, so the source is a dependency and the computation re-runs when it
 changes. The earlier call must be in the function's own straight-line flow
 (not under a branch, logical operator, loop, switch, `try` or optional chain,
 and not in a nested function) and must precede every suspension, a
-conditional `await` included. Only accessor calls are exempted this way;
-store-path and props member reads are not.
+conditional `await` included. Accessor calls are exempted this way, and so are
+store-path member reads: a path read in the same straight-line flow before the
+first suspension tracked every key along it, so a later read of that path, or of
+a prefix of it, is silent (`store.a; await pause(); return store.a`), while
+another key or a deeper key is not. Props member reads are not exempt.
 
 **The runtime agrees from rc.13.** `@solidjs/signals@2.0.0-rc.13` warns
 `UNTRACKED_READ_AFTER_AWAIT` in dev for a read after the first `await` of an

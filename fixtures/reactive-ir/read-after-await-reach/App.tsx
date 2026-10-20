@@ -684,3 +684,272 @@ export function SyncHelperInHandler() {
   }
   return <div onClick={() => void read()} />;
 }
+
+// ---- An async helper the computation returns without `await` is adopted one
+// job after the call returns. A first await on a settled value resumes the
+// helper before then, with no frame of the computation below it, and the
+// runtime raises nothing: uncertifiable. A first await on a proven pending
+// promise, or an awaited call, is on the flight.
+
+export function AdoptedHelperAwaitZero() {
+  const [value] = createSignal(1);
+  async function load() {
+    await 0;
+    return value();
+  }
+  const data = createMemo(async () => {
+    return load();
+  });
+  return <div>{data()}</div>;
+}
+
+export function AdoptedHelperAwaitSettledInAll() {
+  const [value] = createSignal(1);
+  async function load() {
+    await Promise.resolve();
+    return value();
+  }
+  const data = createMemo(async () => Promise.all([load()]));
+  return <div>{String(data())}</div>;
+}
+
+export function AdoptedHelperBehindAdoptedHelper() {
+  const [value] = createSignal(1);
+  async function inner() {
+    await 0;
+    return value();
+  }
+  async function outer() {
+    return inner();
+  }
+  const data = createMemo(async () => await outer());
+  return <div>{data()}</div>;
+}
+
+export function AdoptedHelperAfterAwait() {
+  const [value] = createSignal(1);
+  async function load() {
+    await 0;
+    return value();
+  }
+  const data = createMemo(async () => {
+    await pause();
+    return load();
+  });
+  return <div>{data()}</div>;
+}
+
+// Positives.
+export function AdoptedHelperAwaitsTimer() {
+  const [value] = createSignal(1);
+  async function load() {
+    await pause();
+    return value();
+  }
+  const data = createMemo(async () => {
+    return load();
+  });
+  return <div>{data()}</div>;
+}
+
+export function AwaitedHelperAwaitZero() {
+  const [value] = createSignal(1);
+  async function load() {
+    await 0;
+    return value();
+  }
+  const data = createMemo(async () => {
+    return await load();
+  });
+  return <div>{data()}</div>;
+}
+
+export function AwaitedAllOfHelperAwaitZero() {
+  const [value] = createSignal(1);
+  async function load() {
+    await 0;
+    return value();
+  }
+  const data = createMemo(async () => (await Promise.all([load()]))[0]);
+  return <div>{data()}</div>;
+}
+
+export function SyncComputationReturnsHelperAwaitZero() {
+  const [value] = createSignal(1);
+  async function load() {
+    await 0;
+    return value();
+  }
+  const data = createMemo(() => load());
+  return <div>{data()}</div>;
+}
+
+// ---- A fulfillment handler counts only on a receiver proven to fulfill. A
+// timer executor fulfills through the parameter the timer passes.
+
+export function TimerRejectReturned() {
+  const [value] = createSignal(1);
+  const data = createMemo(async () => {
+    return new Promise<number>((_, reject) => setTimeout(reject, 10)).then(() => value());
+  });
+  return <div>{data()}</div>;
+}
+
+export function TimerRejectAwaited() {
+  const [value] = createSignal(1);
+  const data = createMemo(async () => {
+    return await new Promise<number>((_, reject) => setTimeout(reject, 10)).then(() => value());
+  });
+  return <div>{data()}</div>;
+}
+
+export function AllOfRejected() {
+  const [value] = createSignal(1);
+  const data = createMemo(async () => {
+    await pause();
+    return await Promise.all([Promise.reject(new Error("x"))]).then(() => value());
+  });
+  return <div>{data()}</div>;
+}
+
+export function RaceOfRejected() {
+  const [value] = createSignal(1);
+  const data = createMemo(async () => {
+    return await Promise.race([Promise.reject(new Error("x"))]).then(() => value());
+  });
+  return <div>{data()}</div>;
+}
+
+export function AnyOfRejected() {
+  const [value] = createSignal(1);
+  const data = createMemo(async () => {
+    return await Promise.any([Promise.reject(new Error("x"))]).then(() => value());
+  });
+  return <div>{data()}</div>;
+}
+
+export function FinallyOfRejectedThen() {
+  const [value] = createSignal(1);
+  const data = createMemo(async () => {
+    return await Promise.reject(new Error("x"))
+      .finally(() => {})
+      .then(() => value());
+  });
+  return <div>{data()}</div>;
+}
+
+export function ThenOfRejectedThen() {
+  const [value] = createSignal(1);
+  const data = createMemo(async () => {
+    return await Promise.reject<number>(new Error("x"))
+      .then((x) => x)
+      .then(() => value());
+  });
+  return <div>{data()}</div>;
+}
+
+// Unknown settlement: the executor decides, so the handler is an obligation.
+export function UnknownExecutorThen() {
+  const [value] = createSignal(1);
+  const data = createMemo(() => new Promise<void>((done) => queueMicrotask(done)).then(() => value()));
+  return <div>{data()}</div>;
+}
+
+// Positives: a rejection recovered by `catch` fulfills; `allSettled` and a
+// literal `Promise.all` fulfill; a timer passing the resolve parameter.
+export function RecoveredThen() {
+  const [value] = createSignal(1);
+  const data = createMemo(() =>
+    Promise.reject(new Error("x"))
+      .catch(() => 0)
+      .then(() => value()),
+  );
+  return <div>{data()}</div>;
+}
+
+export function AllSettledThen() {
+  const [value] = createSignal(1);
+  const data = createMemo(() => Promise.allSettled([Promise.reject(new Error("x"))]).then(() => value()));
+  return <div>{String(data())}</div>;
+}
+
+export function TimerResolveWithTwoParameters() {
+  const [value] = createSignal(1);
+  const data = createMemo(() => new Promise<void>((done, _fail) => setTimeout(done, 10)).then(() => value()));
+  return <div>{data()}</div>;
+}
+
+// ---- A reducer without an initial value is never called for fewer than two
+// elements.
+
+export function ReduceWithoutInitial() {
+  const [value] = createSignal(1);
+  const data = createMemo(async () => {
+    await pause();
+    return [1].reduce((a, b) => a + b + value());
+  });
+  return <div>{data()}</div>;
+}
+
+export function ReduceRightWithoutInitial() {
+  const [value] = createSignal(1);
+  const data = createMemo(async () => {
+    await pause();
+    return [1].reduceRight((a, b) => a + b + value());
+  });
+  return <div>{data()}</div>;
+}
+
+// ---- A store key read on every run before the first suspension is a
+// dependency already (ADR 0195, `el._deps` in `checkPostAwaitRead`). Only the
+// same key, or a key on the way to one read before, is exempt.
+
+export function StoreTrackedBefore() {
+  const [store] = createStore({ a: 1, b: 2 });
+  const data = createMemo(async () => {
+    store.a;
+    await pause();
+    return store.a;
+  });
+  return <div>{data()}</div>;
+}
+
+export function StoreTrackedDeeperBefore() {
+  const [store] = createStore({ a: { x: 1, y: 2 }, b: 2 });
+  const data = createMemo(async () => {
+    store.a.x;
+    await pause();
+    return store.a;
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function StoreOtherKeyAfter() {
+  const [store] = createStore({ a: 1, b: 2 });
+  const data = createMemo(async () => {
+    store.a;
+    await pause();
+    return store.b;
+  });
+  return <div>{data()}</div>;
+}
+
+export function StoreDeeperKeyAfter() {
+  const [store] = createStore({ a: { x: 1, y: 2 }, b: 2 });
+  const data = createMemo(async () => {
+    store.a.x;
+    await pause();
+    return store.a.y;
+  });
+  return <div>{data()}</div>;
+}
+
+export function StoreReadBeforeConditionalAwait(props: { flag: boolean }) {
+  const [store] = createStore({ a: 1 });
+  const data = createMemo(async () => {
+    if (props.flag) store.a;
+    await pause();
+    return store.a;
+  });
+  return <div>{data()}</div>;
+}
