@@ -1,6 +1,6 @@
 # Rules
 
-solid-checker ships one dialect-owned catalog: 31 rules for Solid 2.0, with
+solid-checker ships one dialect-owned catalog: 32 rules for Solid 2.0, with
 unprefixed rule names. The checker detects the installed `solid-js` major and
 **refuses** a project whose runtime it has no vocabulary for
 ([`unsupported-solid-runtime`](unsupported-solid-runtime.md)) rather than
@@ -66,7 +66,7 @@ Renamed and merged configuration keys, retired identities, and the six merges
 whose disables deliberately do not transfer are listed in the
 [catalog migration note](../rule-catalog-migration.md).
 
-## Solid 2.0 catalog — 31 rules
+## Solid 2.0 catalog — 32 rules
 
 | Code | Rule | Severity | Default |
 | --- | --- | --- | --- |
@@ -83,6 +83,7 @@ whose disables deliberately do not transfer are listed in the
 | SC2005 | [until-in-tracked-scope](until-in-tracked-scope.md) | error | on |
 | SC2006 | [flush-in-action](flush-in-action.md) | error | on |
 | SC2007 | [static-dynamic-async-source](static-dynamic-async-source.md) | error | on |
+| SC2008 | [flush-in-effect-callback](flush-in-effect-callback.md) | warning | on |
 | SC3001 | [leaf-owner-forbidden-call](leaf-owner-forbidden-call.md) | error | on |
 | SC4001 | [missing-owner](missing-owner.md) | warning | on |
 | SC5001 | [pending-async-unsuspendable-read](pending-async-unsuspendable-read.md) | error | on |

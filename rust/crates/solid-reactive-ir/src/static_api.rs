@@ -298,6 +298,46 @@ impl StaticApiContext<'_> {
                     uncertain: false,
                 });
             }
+            // SC2008: flush() run synchronously by a user effect's apply
+            // callback. The flush that runs effects is already in progress, so
+            // the nested call returns without draining in every build, and the
+            // dev build of `@solidjs/signals` (from rc.1) reports it:
+            // `flush`'s running-flush branch tests `inEffectCallback`, which
+            // `runEffect` raises around exactly `_effectFn(...)`, and warns
+            // `FLUSH_IN_EFFECT_CALLBACK` (rc.13 `dist/dev-shared.js:2680-2698`,
+            // `dist/dev.js:1876-1906`). Which primitive reports, on which
+            // release, and which callback is the effect phase are the
+            // dialect's; the proof that the call runs on that callback's own
+            // stack is `effect_phase`'s.
+            if let Some(kind) = kind
+                && dialect.warns_inside_effect_phase(kind)
+                && let Some(origin) =
+                    crate::effect_phase::effect_phase_origin(file, call.span, self.lookup)
+            {
+                let reached = match origin.helper_calls {
+                    0 => "directly in the apply callback of a createEffect".to_owned(),
+                    1 => format!(
+                        "in a function that the apply callback of a createEffect in {} calls",
+                        origin.path
+                    ),
+                    calls => format!(
+                        "in a function reached through {calls} calls from the apply callback of a createEffect in {}",
+                        origin.path
+                    ),
+                };
+                result.violations.push(StaticViolation {
+                    id: "SC2008".into(),
+                    rule: "flush-in-effect-callback".into(),
+                    message: format!(
+                        "{primitive}() is called {reached}, which runs inside the flush that drains effects; the nested flush is a no-op that drains nothing, and the dev build warns FLUSH_IN_EFFECT_CALLBACK, so the writes it was meant to reveal are processed in that flush's continuation, not at this call"
+                    ),
+                    hint: "Remove the flush(): writes made in an effect are processed by the flush that is already running. To force a drain afterwards, defer it (`queueMicrotask(() => flush())`) or call it from an event handler or other code that runs outside the effect.".into(),
+                    location: location(file.path.shared(), call.callee),
+                    analysis_context: String::new(),
+                    fixes: vec![],
+                    uncertain: false,
+                });
+            }
             let Some(kind @ (Primitive::Refresh | Primitive::Affects)) = kind else {
                 continue;
             };
@@ -747,41 +787,8 @@ fn action_step_body(
     if !body.r#async {
         return Some("sync generator");
     }
-    let own = |span: Span| {
-        crate::owners::containing_ast_function(&file.ast, span)
-            .is_some_and(|function| function.span == body.span)
-    };
-    let awaits = file
-        .ast
-        .awaits
-        .iter()
-        .copied()
-        .filter(|span| body.body.contains(*span) && own(*span))
-        .collect::<Vec<_>>();
-    let implicit = file
-        .ast
-        .implicit_suspensions
-        .iter()
-        .copied()
-        .filter(|span| body.body.contains(*span) && own(*span))
-        .collect::<Vec<_>>();
-    let before = |suspension: &Span| suspension.start < call.span.end;
-    if awaits
-        .iter()
-        .any(|suspension| before(suspension) && !suspension.contains(call.span))
-        || implicit.iter().any(before)
-    {
-        return None;
-    }
-    let repeated_past_a_suspension = file.ast.loop_statements.iter().any(|looped| {
-        looped.contains(call.span)
-            && body.body.contains(*looped)
-            && awaits
-                .iter()
-                .chain(&implicit)
-                .any(|suspension| looped.contains(*suspension))
-    });
-    (!repeated_past_a_suspension).then_some("async generator")
+    crate::effect_phase::runs_before_first_suspension(file, body, call.span)
+        .then_some("async generator")
 }
 
 /// The root expression span of a member/call chain: `state.user` and

@@ -1,0 +1,1 @@
+{"note": "FLUSH_IN_EFFECT_CALLBACK: flush on the stack of a createEffect apply (direct, helper, other file, IIFE, untrack, forEach, async helper before its first await); controls: handler, timer, shadowed, compute function, createRenderEffect first run, deferred never-applied effect"}

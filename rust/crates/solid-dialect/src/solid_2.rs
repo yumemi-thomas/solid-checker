@@ -88,6 +88,14 @@ pub struct Solid2 {
     /// rc.8 or later; an unread or unresolved one keeps `false`, which states
     /// nothing, under its `SC9014` notice.
     flush_in_action: bool,
+    /// N6, from `@solidjs/signals`: whether its dev `flush` reports
+    /// `FLUSH_IN_EFFECT_CALLBACK` when called from an effect's apply callback
+    /// (`dist/dev-shared.js:2687-2698` on rc.13; rc.1 `dist/dev.js:1120`, rc.3
+    /// `:1810`, rc.6 `:2286`, rc.8 `dist/dev-shared.js:1935`, rc.9 `:2241`).
+    /// rc.0 has no `inEffectCallback` marker. `true` only for a signals
+    /// release some review read at rc.1 or later; an unread or unresolved one
+    /// keeps `false`.
+    flush_in_effect_callback: bool,
     /// B2, from `@solidjs/web`.
     dynamic_options: releases::DynamicOptions,
     /// N3, from `@solidjs/signals`: whether its dev store-setter guard
@@ -1930,6 +1938,28 @@ impl Dialect for Solid2 {
     /// releases that have it (`Solid2::flush_in_action`).
     fn throws_inside_action_step(&self, primitive: Primitive) -> bool {
         self.flush_in_action && primitive == Primitive::Flush
+    }
+
+    /// `createEffect(compute, apply)`'s apply, argument 1: queued on the effect
+    /// queue and run by `runEffect` inside the draining flush, between
+    /// `setEffectCallback(true)` and `setEffectCallback(false)`
+    /// (`@solidjs/signals@2.0.0-rc.13` `dist/dev.js:1876`, `:1906`). Every
+    /// creation path of a user effect enqueues the run (`dist/dev.js:1737-1740`),
+    /// so the draining flush is always the one on the stack. `createRenderEffect`
+    /// is not: unless `schedule` is set its first run is the synchronous
+    /// `runEffect(node, LANE_RUN)` at creation, with no flush in progress.
+    fn callback_runs_in_effect_phase(&self, primitive: Primitive, argument: usize) -> bool {
+        primitive == Primitive::CreateEffect && argument == 1
+    }
+
+    /// `flush` opens, once a flush is running, with `if (inEffectCallback)`
+    /// report `FLUSH_IN_EFFECT_CALLBACK` and `return` (rc.13
+    /// `dist/dev-shared.js:2680-2698`); the production build returns at the
+    /// same branch without the report (`dist/prod/core/scheduler.js`). The
+    /// marker and the report are in every read release from rc.1; rc.0 has
+    /// neither (`Solid2::flush_in_effect_callback`).
+    fn warns_inside_effect_phase(&self, primitive: Primitive) -> bool {
+        self.flush_in_effect_callback && primitive == Primitive::Flush
     }
 
     /// `createSignal` and `createOptimistic` both return

@@ -96,7 +96,7 @@ downloads only the binary matching your platform.
 | Audited runtime | `solid-js@2.0.0-rc.9`, `@solidjs/signals@2.0.0-rc.9` and `@solidjs/web@2.0.0-rc.9` |
 | Dialect id | `solid-v2` |
 | Rule names | Unprefixed |
-| Catalog | 31 rules |
+| Catalog | 32 rules |
 | Effect model | `createEffect(compute, apply)` |
 | Async boundary | `Loading` / async computations |
 | Lifecycle | `onSettled`; leaf cleanup returned from callbacks |

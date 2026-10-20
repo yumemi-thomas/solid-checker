@@ -24,6 +24,12 @@ Write in an owned scope (`reactive-write-in-owned-scope`, SC2001):
 - A named handler both attached as `onClick` and called directly in the component body hides the write in a helper it calls; the runtime warns at that call (review probe `r2-event-reuse`, step 4; present before it).
 - A setter call in a component's default parameter initializer runs in the owned component scope; the write rule places nothing there (reviewer case `r4-param-write`).
 
+`flush` in an effect apply (`flush-in-effect-callback`, SC2008). The runtime reports these; the rule claims none of them (ADR 0341):
+
+- `createRenderEffect`'s re-runs report `FLUSH_IN_EFFECT_CALLBACK`, but its first run is synchronous at creation, outside any flush, where `flush()` drains. The rule cannot say which run a call is in.
+- A cleanup returned from a `createEffect` apply reports when the next run replaces it (it runs inside the marker) and not at disposal.
+- An apply passed by name (`createEffect(v, applyFn)`) or written as the `{ effect }` bundle: the position is not placed. A helper in a callback handed to an unmodelled consumer (a project function taking the callback, a package call) is not followed.
+
 Async read outside a loading boundary (`async-outside-loading-boundary`, SC5003):
 
 - `r9-b3-childrenasync` (App.tsx:15): an async memo read flows through `children()` into JSX with no `Loading`.
