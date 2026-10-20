@@ -270,6 +270,14 @@ function ZwspOuter(props: Wide) {
   );
 }
 
+// `arguments[0]` is the props object under another name: deleting through it
+// removes the caller's getter before the read. Uncertifiable.
+function ArgumentsDeleteReader(props: Wide) {
+  delete arguments[0].count;
+  const count = props.count;
+  return <span>{count}</span>;
+}
+
 export function App() {
   const [count] = createSignal(1);
   return (
@@ -293,6 +301,7 @@ export function App() {
       <StaticMemberOuter count={count()} />
       <BomOuter count={count()} />
       <ZwspOuter count={count()} />
+      <ArgumentsDeleteReader count={count()} />
     </div>
   );
 }

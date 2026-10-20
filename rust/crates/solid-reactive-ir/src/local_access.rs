@@ -330,6 +330,29 @@ pub(super) fn props_root_unaccounted_uses(
     if crate::indexes::binding_written(file, Span::new(start, end)) {
         return None;
     }
+    // `arguments[0]` is the props object under another name (`delete
+    // arguments[0].count` removes the caller's getter). Any `arguments` inside
+    // the declaring function leaves the root unprovable.
+    let declaration_span = Span::new(start, end);
+    if file
+        .ast
+        .functions
+        .iter()
+        .filter(|function| {
+            function
+                .parameters
+                .iter()
+                .any(|parameter| parameter.pattern.contains(declaration_span))
+        })
+        .any(|function| {
+            file.ast.identifiers.iter().any(|identifier| {
+                function.span.contains(identifier.span)
+                    && file.source_text(identifier.span) == Some("arguments")
+            })
+        })
+    {
+        return None;
+    }
     // A `const` alias (`const local = props`) is the same root: its own uses
     // are judged exactly like the parameter's, and it is never a separate
     // witness (the read rule only certifies the parameter's own reads).
