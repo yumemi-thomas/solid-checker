@@ -772,13 +772,21 @@ fn the_idle_watchdog_spares_an_active_request() {
     let cold = finish(retained(), true);
     assert_eq!(cold.cache_hit(), Some(false));
     // A client that has connected and not yet sent its request is being
-    // served: the daemon is reading it.
+    // served: the daemon is reading it, for longer than the idle limit.
     let socket = sockets.socket();
     let slow = std::os::unix::net::UnixStream::connect(&socket).unwrap();
+    // The next client is started now and waits in the accept queue behind
+    // the slow one, so the daemon takes it the moment the slow request ends
+    // (with the idle clock just reset). Started after the slow one ends, its
+    // own start-up raced the 1 s limit, which a cold CI runner lost.
+    let warm = {
+        let command = retained();
+        std::thread::spawn(move || finish(command, true))
+    };
     std::thread::sleep(std::time::Duration::from_secs(3));
     assert!(socket.exists(), "the watchdog ended a request in progress");
     drop(slow);
-    let warm = finish(retained(), true);
+    let warm = warm.join().unwrap();
     assert_eq!(warm.cache_hit(), Some(true), "{}", warm.stderr);
 }
 
