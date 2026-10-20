@@ -155,6 +155,12 @@ pub(super) const AUDITED_ROUTE_RELEASES: &[crate::AuditedRouteRelease] = &[
         core_version: "1.171.22",
         core_digest: "f021f4ec652071a558534f6260030d2eed88333e59ad2cf7dbfda6017b7ae1c2",
     },
+    crate::AuditedRouteRelease {
+        version: "2.0.0-rc.8",
+        router_digest: "f787dd4fcc67947323589722392073fced11f091242642f2206074f57455a9de",
+        core_version: "1.171.22",
+        core_digest: "f021f4ec652071a558534f6260030d2eed88333e59ad2cf7dbfda6017b7ae1c2",
+    },
 ];
 
 /// The three owners, in the order [`Solid2`]'s answers are read from them.

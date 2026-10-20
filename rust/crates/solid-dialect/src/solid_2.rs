@@ -721,6 +721,7 @@ impl Dialect for Solid2 {
     /// | `2.0.0-rc.0` | `1.171.16` |
     /// | `2.0.0-rc.4` | `1.171.22` |
     /// | `2.0.0-rc.6` | `1.171.22` |
+    /// | `2.0.0-rc.8` | `1.171.22` |
     ///
     /// What was read: every factory (`createFileRoute`, `createRoute`,
     /// `createRootRoute`, `createRootRouteWithContext`, `createLazyRoute`,
@@ -735,6 +736,15 @@ impl Dialect for Solid2 {
     /// `route.options[type]?.preload?.()`, truth tests, and
     /// `Object.assign(route.options, lazyRoute.options)`. None of the four
     /// values is called.
+    ///
+    /// rc.8 was audited by diffing its `npm pack` against rc.6 on all three
+    /// builds: every file above is byte-identical and the same router-core
+    /// is loaded; only `RouterProvider`, `Transitioner`, `link` and `router`
+    /// changed (an `isServer ?? router.isServer` test, navigation
+    /// attribution, intent handlers installed through getters), `Asset`'s
+    /// compiled output differs on `esm`/`cjs` (a `mergeProps` dropped), and
+    /// the new `flightData` module reads a server-function response's
+    /// headers. None reads one of the four keys.
     fn audited_route_components(&self, version: &str) -> Option<crate::AuditedRouteRelease> {
         releases::AUDITED_ROUTE_RELEASES
             .iter()

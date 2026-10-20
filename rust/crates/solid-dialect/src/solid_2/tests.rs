@@ -256,7 +256,13 @@ fn only_audited_tanstack_releases_render_route_components() {
     let two: &dyn Dialect = &Solid2::RC9;
     let hex =
         |digest: &str| digest.len() == 64 && digest.bytes().all(|byte| byte.is_ascii_hexdigit());
-    for version in ["2.0.0-beta.29", "2.0.0-rc.0", "2.0.0-rc.4", "2.0.0-rc.6"] {
+    for version in [
+        "2.0.0-beta.29",
+        "2.0.0-rc.0",
+        "2.0.0-rc.4",
+        "2.0.0-rc.6",
+        "2.0.0-rc.8",
+    ] {
         let release = two.audited_route_components(version).expect(version);
         assert_eq!(release.version, version);
         assert!(
@@ -264,7 +270,14 @@ fn only_audited_tanstack_releases_render_route_components() {
             "{version}"
         );
     }
-    for version in ["2.0.0-rc.5", "2.0.0", "1.120.0", "2.0.0-rc.6-x", ""] {
+    for version in [
+        "2.0.0-rc.5",
+        "2.0.0-rc.7",
+        "2.0.0",
+        "1.120.0",
+        "2.0.0-rc.8-x",
+        "",
+    ] {
         assert_eq!(two.audited_route_components(version), None, "{version}");
     }
 }
