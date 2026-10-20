@@ -245,7 +245,7 @@ fn getter_reads(
 /// `this` with no static reference. Transparent TypeScript wrappers erase at
 /// run time, so `(eval as typeof eval)(...)` and `eval!(...)` are direct too;
 /// an escaped spelling is refused by the callers' backslash checks.
-fn direct_eval_in(file: &solid_facts::FileFacts, within: Span) -> bool {
+pub(crate) fn direct_eval_in(file: &solid_facts::FileFacts, within: Span) -> bool {
     file.ast.module_hazards.iter().any(|hazard| {
         hazard.kind == solid_facts::ast::ModuleHazardKind::Eval && within.contains(hazard.span)
     }) || file.ast.calls.iter().any(|call| {

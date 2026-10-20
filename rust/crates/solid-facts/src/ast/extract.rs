@@ -100,6 +100,9 @@ pub(super) struct Collector<'s, 'semantic> {
     pub(super) dominating_awaits: Vec<(Span, Span)>,
     pub(super) try_head_awaits: Vec<TryHeadAwaitFact>,
     pub(super) in_place_import_globs: Vec<Span>,
+    pub(super) unmodeled_require_references: Vec<Span>,
+    /// The `require` identifiers that are the (peeled) callee of a call.
+    pub(super) direct_require_callees: Vec<Span>,
     /// `import.meta.glob` member spans that are the callee of a call whose
     /// options are provably lazy.
     pub(super) lazy_import_glob_callees: Vec<Span>,
@@ -326,6 +329,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             dominating_awaits: Vec::new(),
             try_head_awaits: Vec::new(),
             in_place_import_globs: Vec::new(),
+            unmodeled_require_references: Vec::new(),
+            direct_require_callees: Vec::new(),
             lazy_import_glob_callees: Vec::new(),
             open_blocks: Vec::new(),
             straight_line_calls: Vec::new(),
@@ -411,6 +416,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.try_head_awaits
             .sort_unstable_by_key(|fact| fact.awaited);
         self.in_place_import_globs.sort_unstable();
+        self.unmodeled_require_references.sort_unstable();
         self.straight_line_calls.sort_unstable();
         self.straight_line_constructs.sort_unstable();
         self.completion_sites.sort_unstable();
@@ -488,6 +494,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             dominating_awaits: self.dominating_awaits,
             try_head_awaits: self.try_head_awaits,
             in_place_import_globs: self.in_place_import_globs,
+            unmodeled_require_references: self.unmodeled_require_references,
             straight_line_calls: self.straight_line_calls,
             straight_line_constructs: self.straight_line_constructs,
             completion_sites: self.completion_sites,

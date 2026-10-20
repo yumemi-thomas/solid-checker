@@ -138,6 +138,14 @@ fn reachability_function_symbol(
             .cloned();
     }
     function.name.as_ref().and_then(|name| {
+        // A declaration's name may be rebound (`go = other`, or a direct
+        // `eval("go = …")`): a call through it then proves nothing of this
+        // function.
+        if function.kind == solid_facts::ast::FunctionKind::Declaration
+            && crate::indexes::binding_written(file, name.span)
+        {
+            return None;
+        }
         entities
             .get(&location(file.path.shared(), name.span))
             .cloned()

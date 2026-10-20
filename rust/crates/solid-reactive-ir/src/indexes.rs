@@ -130,6 +130,11 @@ pub(crate) fn returns_source_root(file: &FileFacts) -> bool {
 }
 
 pub(super) fn binding_written(file: &FileFacts, declaration: Span) -> bool {
+    // A direct `eval` reaches every binding visible where it is written and
+    // can rebind it (`eval("go = () => {}")`) with no static reference.
+    if crate::interproc::property_gets::direct_eval_in(file, Span::new(0, u32::MAX)) {
+        return true;
+    }
     // A redeclaration (`var xs = …` over a parameter, a second `function f`)
     // writes the same binding without any reference. Any other declaration
     // of the same name in the scope counts, a shadowing one included.

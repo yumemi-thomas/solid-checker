@@ -737,6 +737,31 @@ fn switch_case_facts_mark_only_declarators_written_directly_in_a_clause() {
 }
 
 #[test]
+fn require_wrappers_are_loads_and_other_mentions_are_unmodeled() {
+    for source in [
+        "require('./a')",
+        "(require as any)('./a')",
+        "require!('./a')",
+        "(require satisfies Function)('./a')",
+        "(<any>require)('./a')",
+    ] {
+        let facts = extract("direct.ts", source).unwrap();
+        assert_eq!(facts.module_loads.len(), 1, "{source}");
+        assert!(facts.unmodeled_require_references.is_empty(), "{source}");
+    }
+    for source in [
+        "(0, require)('./a')",
+        "const r = require; r('./a')",
+        "typeof require",
+        "require.resolve('./a')",
+        "new require('./a')",
+    ] {
+        let facts = extract("other.ts", source).unwrap();
+        assert_eq!(facts.unmodeled_require_references.len(), 1, "{source}");
+    }
+}
+
+#[test]
 fn import_globs_are_in_place_unless_provably_lazy() {
     let lazy = [
         "import.meta.glob('./a')",

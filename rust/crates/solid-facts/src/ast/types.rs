@@ -155,6 +155,14 @@ pub struct AstFacts {
     /// is not recorded.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub in_place_import_globs: Vec<Span>,
+    /// Every reference to the unresolved global `require` that is not the
+    /// callee of a call, once parentheses and TypeScript wrappers (`as`,
+    /// `satisfies`, `!`, `<T>`) are peeled (facts schema 69): `(0, require)(x)`,
+    /// `const r = require`, `typeof require`, `require.resolve`. Such a
+    /// reference may load a module in place with no recorded load, so the
+    /// module holding one may sit on an import cycle.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unmodeled_require_references: Vec<Span>,
     /// The call expressions written in their innermost enclosing function's
     /// straight-line flow, as [`Self::unconditional_awaits`] are, and outside
     /// any optional chain (`a?.b(c())` evaluates `c()` only when `a` is not
@@ -1731,6 +1739,7 @@ impl AstFacts {
             dominating_awaits: Vec::new(),
             try_head_awaits: Vec::new(),
             in_place_import_globs: Vec::new(),
+            unmodeled_require_references: Vec::new(),
             straight_line_calls: Vec::new(),
             straight_line_constructs: Vec::new(),
             completion_sites: Vec::new(),

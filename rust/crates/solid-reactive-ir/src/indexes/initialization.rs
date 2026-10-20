@@ -107,7 +107,16 @@ impl<'a> SemanticLookup<'a> {
         // `helper!()`, `(helper as F)()`: the mention is the wrapped identifier.
         self.file_by_path(path).is_some_and(|file| {
             let peeled = file.ast.peel_ts_sugar_span(span);
-            peeled != span && spans.contains(&peeled)
+            if peeled != span && spans.contains(&peeled) {
+                return true;
+            }
+            // `A.helper()`, `ns.helper()`: the mention is the member's
+            // property, though the call's callee is the whole member.
+            file.ast
+                .members
+                .iter()
+                .find(|member| member.span == peeled)
+                .is_some_and(|member| spans.contains(&member.property))
         })
     }
 
@@ -182,6 +191,27 @@ impl<'a> SemanticLookup<'a> {
         })
     }
 
+    /// Where, at module level, the code at `span` runs: its own position, or
+    /// that of the function expression or arrow it sits in, as late as the
+    /// code that creates it. A hoisted declaration or a method may run
+    /// anywhere, so it has none.
+    fn module_level_position(ast: &solid_facts::ast::AstFacts, span: Span) -> Option<u32> {
+        let mut position = span.start;
+        let mut executor = executing_function(ast, span);
+        while let Some(function) = executor {
+            match function.kind {
+                FunctionKind::Arrow | FunctionKind::Expression
+                    if function.method_name.is_none() =>
+                {
+                    position = function.span.start;
+                    executor = creating_function(ast, function);
+                }
+                _ => return None,
+            }
+        }
+        Some(position)
+    }
+
     fn module_census(&self) -> &ModuleCensus {
         self.initialization
             .census
@@ -206,6 +236,13 @@ impl<'a> SemanticLookup<'a> {
         let Some(initializer) = binding_fact.initializer else {
             return false;
         };
+        // A direct `eval` calls any function, or rebinds any binding, visible
+        // where it is written, at any point: nothing is proved of this file.
+        if crate::interproc::property_gets::direct_eval_in(declaring_file, Span::new(0, u32::MAX))
+            || crate::interproc::property_gets::direct_eval_in(caller_file, Span::new(0, u32::MAX))
+        {
+            return false;
+        }
         if binding_fact.in_switch_case {
             // A jump to a later clause enters the shared scope without
             // running the declarator, whoever mentions it.
@@ -223,8 +260,11 @@ impl<'a> SemanticLookup<'a> {
             // (`b` imports `c` then re-exports `d`; `c` imports `b`).
             let census = self.module_census();
             return !census.is_cyclic(caller_file.path.as_str())
-                && census
-                    .statically_imports(caller_file.path.as_str(), declaring_file.path.as_str());
+                && census.imports_before(
+                    caller_file.path.as_str(),
+                    declaring_file.path.as_str(),
+                    Self::module_level_position(&caller_file.ast, span),
+                );
         }
         if initializer.contains(span) {
             // Inside the function expression itself: it runs only once it

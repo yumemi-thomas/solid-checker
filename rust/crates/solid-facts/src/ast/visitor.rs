@@ -99,8 +99,11 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             self.straight_line_calls.push(span(call.span));
         }
         self.record_completion_site(call.span);
-        if let Expression::Identifier(callee) = &call.callee {
+        // TypeScript wrappers erase at run time: `(require as any)("./b")`,
+        // `require!("./b")` and `require satisfies X` call `require` directly.
+        if let Expression::Identifier(callee) = peel_ts_sugar(&call.callee) {
             if self.is_unresolved_named(callee, "require") {
+                self.direct_require_callees.push(span(callee.span));
                 let specifier = match call.arguments.as_slice() {
                     [Argument::StringLiteral(source)] => {
                         Some((source.value.as_str().into(), span(source.span)))
@@ -771,6 +774,14 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             span: span(identifier.span),
             role: IdentifierRole::Reference,
         });
+        // Resolved or not: a `declare function require` shadows the host's
+        // `require` in the binder, and the host's is what runs.
+        if identifier.name == "require"
+            && !self.direct_require_callees.contains(&span(identifier.span))
+        {
+            self.unmodeled_require_references
+                .push(span(identifier.span));
+        }
         // The identifier, not `new Proxy(`: `Proxy.revocable` builds the same
         // thing, and `const P = Proxy` defers the construction to a name this
         // pass does not follow. A shadowed `Proxy` is somebody's own class and

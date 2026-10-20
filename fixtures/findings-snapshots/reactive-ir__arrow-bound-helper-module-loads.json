@@ -26,6 +26,26 @@
       "code": "SC2001",
       "kind": "uncertifiable",
       "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-module-loads/early-provider.ts",
+      "start": 113,
+      "end": 124,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-module-loads/early-provider2.ts",
+      "start": 113,
+      "end": 124,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
       "path": "fixtures/reactive-ir/arrow-bound-helper-module-loads/glob-a.ts",
       "start": 339,
       "end": 350,
@@ -49,6 +69,16 @@
       "path": "fixtures/reactive-ir/arrow-bound-helper-module-loads/impeq-a.ts",
       "start": 146,
       "end": 157,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-module-loads/jsbridge-a.ts",
+      "start": 308,
+      "end": 319,
       "fixes": 0
     },
     {
@@ -79,6 +109,56 @@
       "path": "fixtures/reactive-ir/arrow-bound-helper-module-loads/req-a.ts",
       "start": 133,
       "end": 144,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-module-loads/reqas-a.ts",
+      "start": 299,
+      "end": 310,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-module-loads/reqcomma-a.ts",
+      "start": 313,
+      "end": 324,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-module-loads/reqglobal-a.ts",
+      "start": 256,
+      "end": 267,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-module-loads/reqnn-a.ts",
+      "start": 234,
+      "end": 245,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arrow-bound-helper-module-loads/reqsat-a.ts",
+      "start": 282,
+      "end": 293,
       "fixes": 0
     },
     {

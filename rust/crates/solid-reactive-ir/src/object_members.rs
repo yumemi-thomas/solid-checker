@@ -206,6 +206,12 @@ pub(crate) struct ModuleCensus {
     unknown_load: bool,
     /// Static import and re-export edges between analyzed modules.
     graph: HashMap<String, HashSet<String>>,
+    /// The edges ES evaluation runs before the importer's own body: static
+    /// imports and `export … from`.
+    hoisted: HashMap<String, HashSet<String>>,
+    /// Loads that run where they are written (`require(…)`, `import x =
+    /// require(…)`) at module level: the targets and where the load ends.
+    in_place: HashMap<String, Vec<(HashSet<String>, u32)>>,
 }
 
 impl ModuleCensus {
@@ -230,6 +236,24 @@ impl ModuleCensus {
             }
         }
         false
+    }
+
+    /// Whether `from` has loaded `to` by the time code at module-level
+    /// position `position` runs (`None`: the position is not known): through
+    /// a hoisted edge, or an in-place load that ends at or before it. What the
+    /// first module loads is finished by then (the importer is on no cycle).
+    pub(crate) fn imports_before(&self, from: &str, to: &str, position: Option<u32>) -> bool {
+        let mut firsts = self.hoisted.get(from).cloned().unwrap_or_default();
+        if let Some(position) = position {
+            for (targets, end) in self.in_place.get(from).into_iter().flatten() {
+                if *end <= position {
+                    firsts.extend(targets.iter().cloned());
+                }
+            }
+        }
+        firsts
+            .iter()
+            .any(|first| first == to || self.statically_imports(first, to))
     }
 
     pub(crate) fn new(facts: &ProjectFacts, lookup: &SemanticLookup<'_>) -> Self {
@@ -270,6 +294,11 @@ impl ModuleCensus {
                 Landing::Installed
             }
         };
+        let analyzed = lookup
+            .files()
+            .iter()
+            .map(|file| file.path.as_str())
+            .collect::<HashSet<_>>();
         // Where a specifier loads: analyzed project modules (graph edges), an
         // installed dependency, or code the census cannot see.
         let landing = |file: &FileFacts, span, module: &str| -> Landing {
@@ -313,17 +342,27 @@ impl ModuleCensus {
                 return Landing::Installed;
             }
             let mut paths = HashSet::from_iter([path.clone()]);
+            // What runs: the redirect's runtime modules, else the module itself.
+            let mut runs = vec![path.clone()];
             if let Some(runtime) = redirects.get(&path) {
                 paths.extend(runtime.iter().cloned());
+                runs = runtime.iter().cloned().collect();
             } else if declaration_only {
                 // Types only: the runtime module beside them is project code
                 // no analyzed file carries.
+                return Landing::Unknown;
+            }
+            // A project file no analyzed file carries (JavaScript outside
+            // `allowJs`) has imports the census cannot see.
+            if runs.iter().any(|run| !analyzed.contains(run.as_str())) {
                 return Landing::Unknown;
             }
             Landing::Modules(paths)
         };
         let mut result = Self::default();
         let mut graph = HashMap::<String, HashSet<String>>::default();
+        let mut hoisted = HashMap::<String, HashSet<String>>::default();
+        let mut in_place_loads = HashMap::<String, Vec<(HashSet<String>, u32)>>::default();
         let mut barrels = HashMap::<String, HashSet<String>>::default();
         for file in lookup.files() {
             let path = file.path.to_string();
@@ -338,6 +377,10 @@ impl ModuleCensus {
                 }
                 if let Landing::Modules(targets) = landed {
                     graph
+                        .entry(path.clone())
+                        .or_default()
+                        .extend(targets.iter().cloned());
+                    hoisted
                         .entry(path.clone())
                         .or_default()
                         .extend(targets.iter().cloned());
@@ -365,6 +408,10 @@ impl ModuleCensus {
                 match landing(file, export.span, module) {
                     Landing::Modules(targets) => {
                         graph
+                            .entry(path.clone())
+                            .or_default()
+                            .extend(targets.iter().cloned());
+                        hoisted
                             .entry(path.clone())
                             .or_default()
                             .extend(targets.iter().cloned());
@@ -403,6 +450,19 @@ impl ModuleCensus {
                                 .entry(path.clone())
                                 .or_default()
                                 .extend(targets.iter().cloned());
+                            // Evaluated where it is written; a load inside a
+                            // function runs whenever that function does.
+                            if !file
+                                .ast
+                                .functions
+                                .iter()
+                                .any(|function| function.span.contains(load.span))
+                            {
+                                in_place_loads
+                                    .entry(path.clone())
+                                    .or_default()
+                                    .push((targets.clone(), load.span.end));
+                            }
                         }
                         result.exposed.extend(targets);
                     }
@@ -427,6 +487,11 @@ impl ModuleCensus {
                             .entry(path.clone())
                             .or_default()
                             .extend(targets.iter().cloned());
+                        // `import x = require(…)` runs where it is written.
+                        in_place_loads
+                            .entry(path.clone())
+                            .or_default()
+                            .push((targets.clone(), import.span.end));
                         result.exposed.extend(targets);
                     }
                     Landing::Installed => {}
@@ -449,13 +514,19 @@ impl ModuleCensus {
             // load, so the importer may be on a cycle.
             if file.ast.calls.iter().any(|call| {
                 !call.construct
-                    && file.source_text(call.callee) == Some("require")
+                    && file.source_text(file.ast.peel_ts_sugar_span(call.callee)) == Some("require")
                     && !file
                         .ast
                         .module_loads
                         .iter()
                         .any(|load| load.span == call.span)
             }) {
+                result.unknown_load = true;
+                result.cyclic.insert(path.clone());
+            }
+            // Any other mention of `require` (`(0, require)(x)`, an alias, an
+            // argument) may load in place with no recorded load.
+            if !file.ast.unmodeled_require_references.is_empty() {
                 result.unknown_load = true;
                 result.cyclic.insert(path.clone());
             }
@@ -494,6 +565,8 @@ impl ModuleCensus {
             }
         }
         result.graph = graph;
+        result.hoisted = hoisted;
+        result.in_place = in_place_loads;
         result
     }
 }
