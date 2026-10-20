@@ -19,6 +19,8 @@ Strict read in a setup body (`strict-read-untracked`, SC1001):
 - `review-opus3-g06-yield-star-spread-body` (App.tsx:13): a read in a generator reached through `yield*` and spread in the body. Delegation is not followed.
 - `precision-ref-callback-read` (App.tsx:4): a read in an intrinsic `ref` callback runs untracked in the apply phase; the read rule places nothing in the `DirectiveApply` role.
 
+- `@solid-primitives/utils` helpers over a getter, beyond `access(getter)` and `accessWith(getter)` (ADR 0338): `accessArray([getter])`, `withAccess(getter, fn)` and `access` reached through another project helper's call hop read the getter on every path but are not decided, because the proof is the callee's own body for the call's own arguments; they stay silent or uncertifiable. A getter held through an alias (`const alias = count`), a function literal (`access(() => count())`) and a props value are arity-unknown and stay uncertifiable. In a tracked async computation after an `await`, `access(count)` is still the SC1002 through-call obligation, which is never a violation.
+
 Write in an owned scope (`reactive-write-in-owned-scope`, SC2001):
 
 - A named handler both attached as `onClick` and called directly in the component body hides the write in a helper it calls; the runtime warns at that call (review probe `r2-event-reuse`, step 4; present before it).

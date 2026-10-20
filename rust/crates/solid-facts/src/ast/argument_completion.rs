@@ -39,6 +39,9 @@ pub struct ParameterValue {
     pub nullish: Option<bool>,
     /// The value is `undefined` (as opposed to `null`), when nullish.
     pub undefined: Option<bool>,
+    /// The exact `length` of the value, when it is a function whose arity the
+    /// caller proves. Only meaningful with `type_of == Some("function")`.
+    pub length: Option<u32>,
 }
 
 impl ParameterValue {
@@ -51,6 +54,7 @@ impl ParameterValue {
             truthy: Some(false),
             nullish: Some(true),
             undefined: Some(true),
+            length: None,
         }
     }
 }
@@ -222,6 +226,83 @@ pub fn argument_site_standings(
     )
 }
 
+/// The references to parameter `index` of the function at `function` that
+/// cannot invoke its value: the operand of `typeof`, and a read of its
+/// `length` that only feeds a test or a comparison. Every other use of a
+/// parameter (an alias, an argument, a member call) may run it, which is why
+/// ruling out its direct calls proves nothing about those. The caller
+/// accounts for the rest. `None` when the source does not parse or the function or its parameter is not found.
+#[must_use]
+pub fn inert_parameter_references(
+    path: &Path,
+    source: &str,
+    function: Span,
+    index: usize,
+) -> Option<Vec<Span>> {
+    if source.len() > 4 * 1024 * 1024 {
+        return None;
+    }
+    let source_type = SourceType::from_path(path).ok()?.with_module(true);
+    let allocator = Allocator::default();
+    let parsed = Parser::new(&allocator, source, source_type).parse();
+    if parsed.panicked || !parsed.errors.is_empty() {
+        return None;
+    }
+    let built = SemanticBuilder::new().build(&parsed.program);
+    let semantic = &built.semantic;
+    let nodes = semantic.nodes();
+    let scoping = semantic.scoping();
+    let owner = nodes.iter().find(|node| {
+        let span = node.kind().span();
+        span.start == function.start
+            && span.end == function.end
+            && matches!(
+                node.kind(),
+                AstKind::Function(_) | AstKind::ArrowFunctionExpression(_)
+            )
+    })?;
+    let params = match owner.kind() {
+        AstKind::Function(function) => &function.params,
+        AstKind::ArrowFunctionExpression(arrow) => &arrow.params,
+        _ => return None,
+    };
+    let BindingPattern::BindingIdentifier(identifier) = &params.items.get(index)?.pattern else {
+        return None;
+    };
+    let symbol = identifier.symbol_id.get()?;
+    let mut inert = Vec::new();
+    for reference in scoping.get_resolved_references(symbol) {
+        let node = reference.node_id();
+        let reference_span = nodes.kind(node).span();
+        let parent = nodes.parent_id(node);
+        let is_inert = match nodes.kind(parent) {
+            AstKind::UnaryExpression(unary) => unary.operator == UnaryOperator::Typeof,
+            AstKind::StaticMemberExpression(member) => {
+                !member.optional
+                    && member.property.name == "length"
+                    && member.object.span() == reference_span
+                    && match nodes.kind(nodes.parent_id(parent)) {
+                        AstKind::BinaryExpression(_)
+                        | AstKind::LogicalExpression(_)
+                        | AstKind::IfStatement(_) => true,
+                        AstKind::UnaryExpression(unary) => {
+                            unary.operator == UnaryOperator::LogicalNot
+                        }
+                        AstKind::ConditionalExpression(conditional) => {
+                            conditional.test.span() == member.span
+                        }
+                        _ => false,
+                    }
+            }
+            _ => false,
+        };
+        if is_inert {
+            inert.push(Span::new(reference_span.start, reference_span.end));
+        }
+    }
+    Some(inert)
+}
+
 #[derive(Default)]
 struct Refusal {
     eval: bool,
@@ -285,6 +366,7 @@ impl Scope<'_, '_> {
         match expression {
             Expression::BooleanLiteral(literal) => Some(literal.value),
             Expression::NullLiteral(_) => Some(false),
+            Expression::StaticMemberExpression(_) => self.length(expression).map(|n| n != 0),
             Expression::UnaryExpression(unary) if unary.operator == UnaryOperator::LogicalNot => {
                 self.truthy(&unary.argument).map(|value| !value)
             }
@@ -331,6 +413,9 @@ impl Scope<'_, '_> {
     /// `typeof p === "kind"`, `p === null`, `p == null`, `p === undefined`
     /// and their negations, either way round.
     fn compare(&self, binary: &oxc_ast::ast::BinaryExpression<'_>) -> Option<bool> {
+        if let Some(decided) = self.compare_length(binary) {
+            return Some(decided);
+        }
         let (negated, loose) = match binary.operator {
             BinaryOperator::StrictEquality => (false, false),
             BinaryOperator::StrictInequality => (true, false),
@@ -342,6 +427,60 @@ impl Scope<'_, '_> {
             .compare_sides(&binary.left, &binary.right, loose)
             .or_else(|| self.compare_sides(&binary.right, &binary.left, loose))?;
         Some(decided != negated)
+    }
+
+    /// The exact `length` of `p.length` where `p` is a parameter this call
+    /// proves a function of known arity. A function's `length` is a
+    /// non-writable own data property, so a parameter nothing writes keeps it.
+    fn length(&self, expression: &Expression<'_>) -> Option<u32> {
+        let Expression::StaticMemberExpression(member) = peel(expression) else {
+            return None;
+        };
+        if member.optional || member.property.name != "length" {
+            return None;
+        }
+        let value = self.parameter(&member.object)?;
+        if value.type_of != Some("function") {
+            return None;
+        }
+        value.length
+    }
+
+    /// `p.length` against a numeric literal, with any of `===`, `!==`, `==`,
+    /// `!=`, `<`, `<=`, `>` and `>=`, either way round.
+    fn compare_length(&self, binary: &oxc_ast::ast::BinaryExpression<'_>) -> Option<bool> {
+        use std::cmp::Ordering;
+        let literal = |expression: &Expression<'_>| match peel(expression) {
+            Expression::NumericLiteral(number) => Some(number.value),
+            _ => None,
+        };
+        let (length, number, flipped) = match (self.length(&binary.left), literal(&binary.right)) {
+            (Some(length), Some(number)) => (length, number, false),
+            _ => match (literal(&binary.left), self.length(&binary.right)) {
+                (Some(number), Some(length)) => (length, number, true),
+                _ => return None,
+            },
+        };
+        let ordering = f64::from(length).partial_cmp(&number)?;
+        // The ordering is now that of the left operand against the right.
+        let ordering = if flipped {
+            ordering.reverse()
+        } else {
+            ordering
+        };
+        match binary.operator {
+            BinaryOperator::StrictEquality | BinaryOperator::Equality => {
+                Some(ordering == Ordering::Equal)
+            }
+            BinaryOperator::StrictInequality | BinaryOperator::Inequality => {
+                Some(ordering != Ordering::Equal)
+            }
+            BinaryOperator::LessThan => Some(ordering == Ordering::Less),
+            BinaryOperator::LessEqualThan => Some(ordering != Ordering::Greater),
+            BinaryOperator::GreaterThan => Some(ordering == Ordering::Greater),
+            BinaryOperator::GreaterEqualThan => Some(ordering != Ordering::Less),
+            _ => None,
+        }
     }
 
     fn compare_sides(

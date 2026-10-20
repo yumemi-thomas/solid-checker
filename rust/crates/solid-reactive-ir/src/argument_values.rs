@@ -11,6 +11,7 @@
 
 use solid_facts::FileFacts;
 use solid_facts::ast::{BindingShape, CallFact, FunctionFact, ParameterValue, RuntimeValueKind};
+use solid_facts::core::Span;
 
 use crate::SemanticLookup;
 
@@ -134,7 +135,7 @@ pub(crate) fn parameter_values(
         return None;
     }
     let mapping = ExactArgumentMapping::projected(file, call, resolved_file, resolved);
-    mapped_parameter_values(file, call, callee_file, callee, mapping)
+    mapped_parameter_values(file, call, callee_file, callee, mapping, lookup)
 }
 
 /// Values proved by a call whose exact target is an immediate function
@@ -152,7 +153,7 @@ pub(crate) fn parameter_values_for_literal_call(
         return None;
     }
     let mapping = ExactArgumentMapping::literal(file, call, callee_file, callee)?;
-    mapped_parameter_values(file, call, callee_file, callee, mapping)
+    mapped_parameter_values(file, call, callee_file, callee, mapping, lookup)
 }
 
 /// Values proved by a stable transported callable target. `exact_target`
@@ -171,7 +172,7 @@ pub(crate) fn parameter_values_for_transported_call(
     }
     let mapping =
         ExactArgumentMapping::transported(file, call, callee_file, callee, exact_target, lookup)?;
-    mapped_parameter_values(file, call, callee_file, callee, mapping)
+    mapped_parameter_values(file, call, callee_file, callee, mapping, lookup)
 }
 
 fn mapped_parameter_values(
@@ -180,6 +181,7 @@ fn mapped_parameter_values(
     callee_file: &FileFacts,
     callee: &FunctionFact,
     mapping: ExactArgumentMapping<'_>,
+    lookup: &SemanticLookup<'_>,
 ) -> Option<Vec<ParameterValue>> {
     if !mapping.matches(file, call, callee_file, callee)
         || call.arguments.iter().any(|argument| argument.spread)
@@ -203,7 +205,7 @@ fn mapped_parameter_values(
             continue;
         }
         let value = match call.arguments.get(index) {
-            Some(argument) => argument_value(file, index, argument),
+            Some(argument) => argument_value(file, index, argument, lookup),
             None => Some(ParameterValue::omitted(index)),
         };
         // A default replaces an `undefined` argument, explicit or omitted.
@@ -220,6 +222,7 @@ fn argument_value(
     file: &FileFacts,
     index: usize,
     argument: &solid_facts::ast::ArgumentFact,
+    lookup: &SemanticLookup<'_>,
 ) -> Option<ParameterValue> {
     let span = file.ast.peel_ts_sugar_span(argument.span);
     let text = file.source_text(span)?.trim();
@@ -229,6 +232,7 @@ fn argument_value(
         truthy: Some(truthy),
         nullish: Some(false),
         undefined: Some(false),
+        length: None,
     };
     match text {
         "true" => return Some(known("boolean", true)),
@@ -240,6 +244,7 @@ fn argument_value(
                 truthy: Some(false),
                 nullish: Some(true),
                 undefined: Some(false),
+                length: None,
             });
         }
         "undefined" | "void 0" if argument.runtime_value_kind == RuntimeValueKind::Nullish => {
@@ -252,6 +257,12 @@ fn argument_value(
     }
     if let Some(truthy) = string_literal_truthiness(text) {
         return Some(known("string", truthy));
+    }
+    if let Some(length) = solid_getter_length(file, span, lookup) {
+        return Some(ParameterValue {
+            length: Some(length),
+            ..known("function", true)
+        });
     }
     if crate::cleanup::callback_argument_literal(file, argument.span).is_some()
         || argument.runtime_value_kind == RuntimeValueKind::Function
@@ -266,6 +277,55 @@ fn argument_value(
         RuntimeValueKind::Object | RuntimeValueKind::Array
     )
     .then(|| known("object", true))
+}
+
+/// ADR 0338: the exact `length` of the getter `reference` names, when it is
+/// the accessor slot of a Solid primitive's result that the selected dialect
+/// has audited ([`Dialect::accessor_getter_length`]) and nothing in the file
+/// rewrites the binding. The primitive is the exact one the call resolves to
+/// (an import of the dialect's package, never a name), the pattern's slot is
+/// the accessor's (`const [value] = createSignal(0)`, or the whole of a
+/// `createMemo`), and a store, a setter, a tuple left unpacked, a parameter
+/// or an import prove nothing.
+fn solid_getter_length(
+    file: &FileFacts,
+    reference: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<u32> {
+    use solid_dialect::ResultSlot;
+
+    let declaration = file.ast.reference_declaration(reference)?;
+    let binding = file.ast.bindings.iter().find(|binding| {
+        binding.call_initializer.is_some()
+            && binding.names.iter().any(|name| name.span == declaration)
+    })?;
+    let call = file.ast.call_at(binding.call_initializer?)?;
+    if call.construct || crate::indexes::binding_written(file, declaration) {
+        return None;
+    }
+    let entities = lookup.entities();
+    let symbol = entities.at(file.path.as_str(), declaration)?;
+    if crate::value_identity::binding_has_write(file, entities, symbol) {
+        return None;
+    }
+    let primitive = crate::call_primitive_name_cached(
+        lookup,
+        file,
+        call,
+        entities,
+        lookup.symbol_names(),
+        lookup.dialect,
+    )?
+    .primitive()?;
+    let slot = match binding.shape {
+        BindingShape::Array => {
+            let first = binding.array_slots.first()?.as_ref()?;
+            (first.span == declaration).then_some(ResultSlot::TupleItem(0))?
+        }
+        BindingShape::Identifier => ResultSlot::Whole,
+        _ => return None,
+    };
+    lookup.dialect.accessor_getter_length(primitive, slot)
 }
 
 /// The truthiness of a decimal, hex, octal or binary numeric literal.

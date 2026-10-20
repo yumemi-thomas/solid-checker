@@ -299,6 +299,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/dependency-source/node_modules/**
 !fixtures/reactive-ir/dependency-source-package-accessor/node_modules/
 !fixtures/reactive-ir/dependency-source-package-accessor/node_modules/**
+!fixtures/reactive-ir/package-access-helper/node_modules/
+!fixtures/reactive-ir/package-access-helper/node_modules/**
 !fixtures/reactive-ir/parameter-forwarding-completion/node_modules/
 !fixtures/reactive-ir/parameter-forwarding-completion/node_modules/**
 !fixtures/reactive-ir/tuple-slot-provenance/node_modules/

@@ -90,6 +90,13 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   the same read for `access(count)`. A call-scoped lower bound of at least one
   proves the read; an optional invocation is **uncertifiable**. Neither callback
   closure nor a possible invocation proves that this call invokes the accessor.
+  When the argument is a `createSignal`, `createOptimistic` or `createMemo`
+  getter, the walk knows it is a function of `length` 0 (ADR 0338), so the
+  package's `access(v) = typeof v === "function" && !v.length ? v() : v` calls
+  it on every path: `access(count)` in a component body is a violation, and
+  the same call on an alias, a function literal, a props value or any value
+  whose arity is unknown stays uncertifiable
+  (`fixtures/reactive-ir/package-access-helper`).
   The invocation's execution event and trigger must both be the export call;
   a same-stack schedule at a later event is insufficient. Tracked JSX and event
   handlers remain clean; a retained callback, a spread slot, or a non-call protocol item does
