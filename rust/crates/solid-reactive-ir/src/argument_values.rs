@@ -355,8 +355,39 @@ fn solid_getter_length(
         _ => return None,
     };
     let length = lookup.dialect.accessor_getter_length(primitive, slot)?;
+    // An exported getter is reachable with no static reference: through the
+    // module namespace (`import * as m`, `Object.values(m)`, `m[key]`,
+    // `import()`), where other code can redefine its `length` first.
+    if binding_is_exported(file, binding, declaration) {
+        return None;
+    }
     getter_is_only_called_or_decided(file, declaration, symbol, length, lookup, target)
         .then_some(length)
+}
+
+/// Whether the module publishes the binding declared at `declaration`: an
+/// export declaration that declares it at module level (`export const [v] =
+/// …`), or an export specifier naming it (`export { v }`,
+/// `export { v as default }`). A declaration nested in a function or class
+/// the export contains belongs to that body, not to the module.
+fn binding_is_exported(
+    file: &FileFacts,
+    binding: &solid_facts::ast::BindingFact,
+    declaration: Span,
+) -> bool {
+    file.ast.module_level_exports().any(|export| {
+        (export.span.contains(binding.declaration)
+            && !file.ast.classes.iter().any(|class| {
+                class.span.contains(binding.declaration) && class.span != binding.declaration
+            })
+            && !file.ast.functions.iter().any(|function| {
+                export.span.contains(function.span) && function.body.contains(binding.declaration)
+            }))
+            || export.specifiers.iter().any(|specifier| {
+                specifier.local.span == declaration
+                    || file.ast.reference_declaration(specifier.local.span) == Some(declaration)
+            })
+    })
 }
 
 /// Whether every reference to the getter declared at `declaration` is a call
