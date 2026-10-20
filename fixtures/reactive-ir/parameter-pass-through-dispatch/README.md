@@ -1,0 +1,3 @@
+# parameter-pass-through-dispatch
+
+**Claim (ADR 0213).** In a closed program, a parameter-member obligation whose argument is the enclosing function's own parameter is discharged when that parameter holds a built-in value on every entry: entered only through call expressions, written nowhere, every call passing a `value_origin`-proven value or its own such parameter (defaults too). `forward`, `withDefault` clean; `mixed` (`props.items`), `rewritten`, `escaping` SC9012. Helpers are written inside `App` (nested helper calls keep their obligation, ADR 0202). Scaffolding from `closed-export-member-dispatch`.

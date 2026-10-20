@@ -45,8 +45,11 @@ func resolvedCallEqual(left, right *Call) bool {
 		left.Validity == right.Validity &&
 		left.Kind == right.Kind &&
 		resolvedDeclarationEqual(left.Declaration, right.Declaration) &&
+		resolvedDeclarationEqual(left.DefaultLibraryBinding, right.DefaultLibraryBinding) &&
 		callTargetSetEqual(left.Targets, right.Targets) &&
-		slices.EqualFunc(left.Arguments, right.Arguments, argumentMappingEqual)
+		slices.EqualFunc(left.Arguments, right.Arguments, argumentMappingEqual) &&
+		left.AssertionSignature == right.AssertionSignature &&
+		left.NeverReturns == right.NeverReturns
 }
 
 func callTargetSetEqual(left, right *CallTargetSet) bool {

@@ -10,7 +10,7 @@ pub(crate) fn go_compatible<T: Serialize>(
         serde_json::to_string(value)?
     };
     // Go's encoding/json escapes these code points by default. Keeping that
-    // behavior makes Rust and Go snapshots/contracts byte-for-byte
+    // behavior makes Rust and Go snapshots byte-for-byte
     // interchangeable during the additive migration.
     Ok(encoded
         .replace('&', "\\u0026")

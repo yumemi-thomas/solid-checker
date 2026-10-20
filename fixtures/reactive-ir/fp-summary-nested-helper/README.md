@@ -1,0 +1,3 @@
+# fp-summary-nested-helper
+
+**Claim.** A helper written inside a component does not make the body read what the helper reads: a read through it is a strict-window read only at the call that runs it (`interproc::interprocedural_result_reads_for_file` skips calls in nested non-component functions). Chains read in JSX/memos/handlers, array-stored helpers and never-proven-called object-stored helpers are none/uncertifiable; `read()`/`b()` called in the body, an IIFE and `Button`'s body prop read are violations. Stub copies `createSignal`/`createMemo` verbatim from rc.9; `tsc` clean against real rc.9.

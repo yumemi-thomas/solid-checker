@@ -1,0 +1,3 @@
+# invocation-flow-owner
+
+**Claim (ADR 0327).** A function literal whose every invocation, followed forward as ADR 0319 follows it, is a host event dispatch runs with no owner, so an `onCleanup` or effect there is a proven `SC4001`. The owner walk is stricter than the read walk: any primitive callback slot refuses (`createRoot`/`runWithOwner` pass the caller's read role while supplying an owner), as do mixed invocations, class-field and nested-default calls. Runtime: `fixtures/runtime-oracle/oracle-owner-flow*`. `runWithOwner`/`getOwner`/`createRoot` are copied from `@solidjs/signals@2.0.0-rc.13` `dist/types/core/owner.d.ts`.

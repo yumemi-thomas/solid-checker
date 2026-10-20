@@ -1,0 +1,15 @@
+{
+  "note": "Opus review round 5 (s7-rest-handler-read-untrack): Show/Match function children by arity, with nested deferred code",
+  "steps": [
+    {
+      "action": "click",
+      "selector": "#b"
+    },
+    {
+      "action": "assert-text",
+      "id": "ran",
+      "selector": "#k",
+      "text": "4"
+    }
+  ]
+}

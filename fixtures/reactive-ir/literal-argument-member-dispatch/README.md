@@ -1,0 +1,3 @@
+# Primitive receivers select built-in members
+
+A helper invoking a parameter member (`key.replace(...)`) leaves the implementation to each call site; a literal argument (string, number, boolean, bigint, template, RegExp) comes from its built-in prototype and reads nothing reactive, so no dispatch obligation (also for resolved standard-library methods, ADR 0190); `Date.getTime`, unknown arguments and reading `replace` callbacks stay `SC9012`. `Nested.tsx` follows nested parameter-member paths; `TrackedDispatch.tsx`/`DeclarationDispatch.tsx` discharge it through exact local caller contexts. Sources pass `tsc` against published rc.13 without the stub.

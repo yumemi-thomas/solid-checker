@@ -1,0 +1,1 @@
+{"name": "router-params-patch-package", "private": true, "scripts": {"postinstall": "patch-package"}, "devDependencies": {"patch-package": "^8.0.0"}}

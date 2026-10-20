@@ -46,7 +46,7 @@ The project-wide query surface rule discovery asks for semantic answers — the 
 _Avoid_: Index helpers, fact-table scan, range-query module
 
 **Fact domain**:
-One of the independent evidence suppliers the checker cross-references: Oxc syntax facts, Solid compiler execution facts, Type Facts, and package contracts. User-facing documentation may call them "sources of evidence"; the canonical term is fact domain.
+One of the independent evidence suppliers the checker cross-references: Oxc syntax facts, Solid compiler execution facts, Type Facts, and dependency source. User-facing documentation may call them "sources of evidence"; the canonical term is fact domain.
 _Avoid_: Backends, sidecars, analysis inputs
 
 **Compiler semantic trace**:
@@ -57,88 +57,58 @@ _Avoid_: Execution map, compiler sidecar, instrumented output
 The checker-normalized fact domain projected from a validated compiler semantic trace, binding source sites to actual execution, callback, ownership, and discarded-code decisions. Its protocol version is independent of the producer trace version.
 _Avoid_: Type Facts, compiler predictions, semantic trace (that is the producer form)
 
-**Claim domain**:
-One independently knowable set of package behavior, such as callback invocations, reactive reads, or cleanup operations. Its knowledge may be open or closed without determining any sibling claim domain.
-_Avoid_: Fact domain, section, field group
 
-**Domain closure**:
-Accepted proof that one claim domain enumerates every behavior possible for its exact package, export, artifact case, guard, and resource scope. Closure never transfers implicitly to a parent, child, or sibling claim domain.
-_Avoid_: Complete contract, tested absence, empty result
 
-**Claim knowledge**:
-The local knowledge state of one claim domain: unknown, partial positive, complete positive, or complete negative. A state says nothing about a parent, child, sibling, alternative, or referenced resource unless that subject has its own claim knowledge.
-_Avoid_: Status wrapper, inherited completeness, contract completeness
 
-**Operation cardinality**:
-A proved lower and upper bound on how often one semantic operation occurs within an explicit scope such as one trigger occurrence, one package call, or one resource lifetime. Possibility, guarantee, repetition, and bound scope are separate facts.
-_Avoid_: Call count, observed frequency, phase repetition
 
-**Guard partition**:
-A finite set of statically decidable contract alternatives selected from exact call, value, protocol, or artifact facts. A complete partition is proved disjoint and exhaustive; unresolved selection joins every possible alternative.
-_Avoid_: Runtime condition, source expression, heuristic branch
 
-**Contract proposal**:
-An unaccepted machine description of package behavior together with proof obligations. A proposal cannot certify a project or discharge a proof obligation.
-_Avoid_: Generated contract, inferred contract
 
-**Accepted package contract**:
-A normalized package contract whose closed claims, package identity, artifact cases, and proof inputs are bound by a valid acceptance receipt. Open claims remain usable only as partial knowledge.
-_Avoid_: Verified JSON, trusted contract, reviewed contract
 
-**Normalized contract model**:
-The rich, wire-independent semantic representation produced by the single contract decoder and normalizer. Reactive IR consumes this model and never compact-document omission, summary, closure-array, or schema-version conventions.
-_Avoid_: Expanded JSON, decoded schema, contract AST
 
-**Artifact case**:
-One exact package-entrypoint resolution outcome, including its resolution trace, runtime artifact, declarations, and dependency closure. Artifact cases are selected exclusively and never merged.
-_Avoid_: Environment, mode, variant
 
-**Operation graph**:
-A causal description of package behavior whose nodes are semantic operations and whose edges express scheduling, data, cleanup, error, or lifetime relationships.
-_Avoid_: Phase list, callback list, execution trace
+**Built-in runtime model**:
+The selected Solid dialect's reviewed premises about `solid-js`,
+`@solidjs/signals`, and `@solidjs/web`. Ordinary analysis uses these premises
+without core package contracts. Model selection is neither an independent
+implementation certificate nor authentication of installed runtime bytes;
+unmodelled behavior remains unknown.
+_Avoid_: Certified Solid runtime, bundled core receipt, trusted package name
 
-**Evidence sidecar**:
-A hash-bound artifact containing detailed fact transcripts, probe observations, and proof material for package-contract claims. Ordinary project analysis does not need it after acceptance.
-_Avoid_: Contract evidence field, audit log
 
-**Proof demand**:
-A verifier-derived, policy- and artifact-snapshot-bound requirement for one exact claim or positive fact, assigned to its authoritative fact owner. Callers may transport its opaque identity but cannot create, omit, satisfy, or declare it inapplicable.
-_Avoid_: Proof checklist, caller obligation, requested evidence field
 
-**Artifact snapshot**:
-The immutable content-addressed view of one independently acquired package artifact used for every read during a certification transaction. It is distinct from an artifact case (a selected resolution outcome) and from a Type Facts generation (a project-analysis state).
-_Avoid_: Package directory, temporary extraction, artifact case, generation
 
-**Probe gate**:
-A verifier-derived mandatory contradiction veto for one proposed closed claim. A contradiction blocks closure; success or finite non-observation never proves absence, completeness, or safety.
-_Avoid_: Runtime proof, passing probe, negative observation
 
-**Verified positive fact**:
-An analyzer-visible possible behavior retained only after its exact proof demand has an authoritative witness. It does not close its surrounding claim domain or imply that unobserved sibling behavior is absent.
-_Avoid_: Partial proof, inferred behavior, closed claim
 
-**Acceptance receipt**:
-A verifier-issued binding among a contract's wire and semantic identities, exact artifacts, proof material, and verification policy. It is the authority ordinary analysis uses to accept closed claims.
-_Avoid_: Verification report, signature, trust flag
 
-**Issuer provenance**:
-The authenticated channel through which a receipt gains trust: compiled
-built-in bytes, a configured persistent-local issuer, or an explicitly trusted
-portable issuer chain. A key ID, public key, or signature carried only inside
-the receipt is never issuer provenance.
-_Avoid_: Self-signed receipt, receipt key, trusted signature
 
-**Semantic digest**:
-A canonical identity of normalized package-contract meaning that excludes wire version, summary names, formatting, and evidence layout.
-_Avoid_: File hash, contract hash
+
+
+
+
+
+
+
+
 
 **Rule options**:
-The project-level per-rule configuration document, `.solid-checker/rule-options.json`, discovered beside a project's contracts and carrying the upstream eslint-plugin-solid options the 1.x rules honour. Defaults are upstream's defaults; parsing fails closed. Part of every build and diagnostic identity.
+The project-level per-rule configuration document, `.solid-checker/rule-options.json`, discovered in the project's `.solid-checker` directory. Every shipped rule takes `enabled` and nothing else; an unknown option is refused rather than ignored, so a typo cannot silently mean "defaults". A retired rule name still loads and is a no-op, which is how a document written against the 1.x catalog keeps parsing (ADR 0110). Parsing fails closed. Part of every build and diagnostic identity.
 _Avoid_: Rule config, checker settings, options file
 
 **Finding kind**:
 Whether a finding is a **violation** (the analyzer proved the code misbehaves at runtime) or **uncertifiable** (a proof obligation the analyzer could not resolve). Distinct from severity (error/warning).
 _Avoid_: Finding status, finding type
+
+
+
+
+
+
+
+
+
+
+
+
 
 **Discarded region**:
 A source region the Solid compiler censused and then **deleted** — the `Value(Elided)` decision, projected as `ExecutionMap::discarded_regions` and classified `ExecutionRole::DiscardedRendering`. Distinct from an *untracked region*, which is code that executes once at render: a discarded region executes zero times, so it supports no finding and no certification. Silence over one means "both compilers deleted this", never "this was proven safe".
@@ -147,3 +117,23 @@ _Avoid_: Elided region, dead region, untracked region (that is the once-executin
 **Failure class**:
 A user-facing grouping of the runtime misbehavior that findings prevent: silent staleness (reads that register no dependency), feedback loops (writes and actions in owned scopes), escaped async (pending reads outside tracked or Loading-bounded regions), and lifecycle leaks (effects, cleanups, and boundaries without a live owner).
 _Avoid_: Bug category, rule group (that is the SCxxxx numbering)
+
+**Source-edge refusal**:
+A caller's recorded statement that source-boundary analysis was withheld for one exact occurrence of an import specifier (ADR 0310): an importer, the specifier as written, and a form plus the byte range of the whole statement or expression, held in the package boundary apart from package identities. The analysis joins it to the supplied facts by exact membership, keeps the package obligation open at that pair, and reports one neutral SC9005 uncertifiable finding per occurrence. It does not authenticate the caller's decision and establishes no missing module, missing export, runtime target or execution; a source implementation the program supplies is not withdrawn by it, and a record carries no generation, so the caller reacquires it for each facts generation.
+_Avoid_: Source refusal, retained reason, missing-contract finding
+
+**Dependency source**:
+The exact installed runtime files selected for analysis alongside project source. Missing files or incomplete behavior remain unknown.
+_Avoid_: trusted package, inferred contract
+
+**Source selection**:
+Resolution of runtime entrypoints for a declared target and build under the Vite and Solid plugin premises; distinct from proving behavior in those files.
+_Avoid_: contract selection, name-based trust
+
+**Package integrity premise**:
+The condition that code outside the analyzed program neither supplies selected packages’ contexts nor rewrites their created objects (ADR 0300). Visible counterevidence withholds proof.
+_Avoid_: authenticated package, proved integrity
+
+**Unanalyzable import**:
+An exact package import whose required runtime behavior could not be established from selected source. It remains an explicit SC9005 uncertifiable obligation.
+_Avoid_: missing contract, safe external call

@@ -27,7 +27,7 @@
 //!
 //! These rules ask the engine instead: [`UpstreamCompatContext::accessors`]
 //! and `setters` are the sources it *proved*, through TypeScript symbol
-//! resolution, package contracts and cross-file propagation. A local named
+//! resolution, dependency source and cross-file propagation. A local named
 //! `createSignal` that is not Solid's is not a source here, and a signal that
 //! arrives through three wrappers still is.
 
@@ -63,7 +63,7 @@ pub(super) fn check_file(
 ///
 /// A proven reactive source handed, uncalled, to a callee nothing in the
 /// analysis can describe: not one of the dialect's primitives, no body in the
-/// project, no package-contract summary. The callee may call it in a tracking
+/// project, no dependency-source summary. The callee may call it in a tracking
 /// scope, read it once and sever the reactivity, or store it for later — and
 /// which of those it does decides whether the surrounding code is correct.
 ///
@@ -128,11 +128,11 @@ fn reactive_source_uncaptured(
         {
             continue;
         }
-        let callee_symbol = context.entities.at(file.path.as_str(), call.callee);
-        let Some(callee_symbol) = callee_symbol else {
-            continue;
-        };
-        if context.contracted.contains_key(callee_symbol) {
+        if context
+            .entities
+            .at(file.path.as_str(), call.callee)
+            .is_none()
+        {
             continue;
         }
         let Some(resolved_call) = context.lookup.resolved_callee_call(file, call.callee) else {
@@ -173,7 +173,7 @@ fn reactive_source_uncaptured(
                     })
             });
         // Calling a callback parameter with an accessor does not read or lose
-        // that source inside this helper. Interprocedural contract generation
+        // that source inside this helper. The interprocedural summary
         // records the accessor at the callback argument position, so the
         // consumer can classify the callback parameter exactly.
         if callee_is_parameter {
@@ -258,7 +258,7 @@ fn expected_function_got_expression(
             };
             if context.dialect.static_event_values_are_attributes()
                 && (static_string_expression(context, file, expression).is_some()
-                    || super::solid1x_syntax::expression_is_static_literal(file, expression))
+                    || super::syntax::expression_is_static_literal(file, expression))
             {
                 // Solid 1.x freezes this value into a plain attribute instead
                 // of installing it as a listener. It is therefore not a
@@ -298,9 +298,7 @@ fn expected_function_got_expression(
             // installing it once is exactly right and stays silent.
             let member_symbol = file
                 .ast
-                .members
-                .iter()
-                .find(|member| member.span == expression)
+                .member_at(expression)
                 .and_then(|_| member_root(file, expression))
                 .and_then(|root| Some((root, context.entities.at(file.path.as_str(), root)?)));
             if let Some((root, symbol)) = member_symbol {
@@ -328,7 +326,31 @@ fn expected_function_got_expression(
                 } else {
                     None
                 };
-                if let Some(uncertain) = uncertain {
+                // Review round 4: an element created inside a tracked JSX
+                // expression (`{cond && <button onClick={props.f}/>}`) or in a
+                // component's children (`<Show>`) is created again when that
+                // scope re-runs, installing the current handler: "installed
+                // once" is not proven there.
+                let recreated = file
+                    .ast
+                    .jsx_containing(expression)
+                    .find(|element| {
+                        element
+                            .attributes
+                            .iter()
+                            .any(|candidate| candidate.expression == Some(expression))
+                    })
+                    .is_some_and(|element| {
+                        file.compiler
+                            .tracked_regions
+                            .iter()
+                            .any(|region| region.span.contains(element.span))
+                            || crate::execution_role::inside_component_element_children(
+                                file,
+                                element.span,
+                            )
+                    });
+                if let Some(uncertain) = uncertain.map(|uncertain| uncertain || recreated) {
                     defects.push(StaticDefect {
                         kind: StaticDefectKind::ReactiveHandlerRead {
                             attribute: name.to_owned(),
@@ -547,9 +569,8 @@ fn no_direct_mutation(
         let Some(symbol) = source_symbol_at(context, file, root) else {
             continue;
         };
-        // Proven accessors and proven props roots are both readonly through
-        // members; `prop_sources` covers the props objects the accessor map
-        // does not.
+        // `prop_sources` proves the props container, not the mutability of
+        // values supplied through it. Store sources have their own proof.
         let (name, _) = match context.accessors.get(symbol) {
             Some(source) => source,
             None => {
@@ -560,9 +581,49 @@ fn no_direct_mutation(
             }
         };
         let props = !context.accessors.contains_key(symbol);
+        // `const { program } = props` binds the *value* of one property, not
+        // the props container: `program.x = y` writes to whatever object the
+        // caller passed (a plain mutable one as often as not), so it is not a
+        // write to a readonly proxy. The binding shape is the fact -- a
+        // whole-object alias (`const p = props`) keeps the container proof.
+        if props
+            && file.ast.bindings.iter().any(|binding| {
+                binding.shape == solid_facts::ast::BindingShape::Object
+                    && binding.object_slots.iter().any(|slot| {
+                        context
+                            .entities
+                            .get(&location(file.path.shared(), slot.local.span))
+                            == Some(symbol)
+                    })
+            })
+        {
+            continue;
+        }
         let name = name.as_str();
         let through_member = root != assignment.target;
         let kind = context.source_kinds.get(symbol).copied();
+        // A member chain rooted at a *call* writes to whatever that call
+        // returned, and this rule's claim -- the write is dropped because
+        // Solid handed out a readonly proxy -- is a claim about the reactive
+        // container, not about its value. Calling a signal accessor yields the
+        // stored value, so `el()!.style.color = "red"` mutates a DOM node and
+        // `obj().a = 2` mutates a plain object: both writes land, and neither
+        // is this rule's. Nine such findings were measured against
+        // `@kobalte/core`, every one of them wrong.
+        //
+        // Only the container binding itself is proven readonly here: `props`,
+        // a store root, or an accessor written through without being called.
+        // `peel_ts_sugar_span` peels `!` and `as` but never a call or a member,
+        // so the deliberate `(state as { count: number }).count = 1` case below
+        // still reaches its branch, and only the call form leaves.
+        if through_member
+            && file
+                .ast
+                .call_at(file.ast.peel_ts_sugar_span(root))
+                .is_some()
+        {
+            continue;
+        }
         // `createMutable` is the one Solid 1.x source whose proxy is designed
         // to be written through directly. It still behaves like a store for
         // reads, but treating that shared read shape as readonly recreates
@@ -580,6 +641,27 @@ fn no_direct_mutation(
         if props && !through_member {
             continue;
         }
+        // Props are shallow: `props.state.count = 1` may write through an
+        // application-owned mutable proxy or a plain object. Only a write to
+        // the props container's own property is proven dropped here. Keep
+        // transparent wrappers, but never infer the nested value's behavior
+        // from the root's readonly behavior.
+        if props
+            && (!file
+                .ast
+                .identifiers
+                .iter()
+                .any(|identifier| identifier.span == file.ast.peel_ts_sugar_span(root))
+                || !file
+                    .ast
+                    .member_at(file.ast.peel_ts_sugar_span(assignment.target))
+                    .is_some_and(|member| {
+                        file.ast.peel_ts_sugar_span(member.object)
+                            == file.ast.peel_ts_sugar_span(root)
+                    }))
+        {
+            continue;
+        }
         let target = if through_member {
             if props {
                 DirectMutationTarget::Props
@@ -594,7 +676,7 @@ fn no_direct_mutation(
         // A write to the root record's *own* property is TS2540 where the
         // dialect's store type is `Readonly` at that level -- 2.0 -- so it is
         // TypeScript's, not this rule's. The readonly-ness is shallow, so a
-        // nested record and a props object both stay here; 1.x's store type is
+        // nested store record and a direct props property stay here; 1.x's store type is
         // mutable throughout, and its rule is unaffected.
         //
         // The root must be a bare identifier. `(state as { count: number }).count
@@ -606,9 +688,7 @@ fn no_direct_mutation(
             && context.dialect.store_root_properties_are_readonly()
             && file
                 .ast
-                .members
-                .iter()
-                .find(|member| member.span == assignment.target)
+                .member_at(assignment.target)
                 .is_some_and(|member| member.object == root)
             && file
                 .ast
@@ -637,7 +717,13 @@ fn no_direct_mutation(
             location: location(file.path.shared(), assignment.target),
             analysis_context: String::new(),
             fixes: vec![],
-            uncertain: props && context.uncertain_prop_sources.contains(symbol),
+            // A write through a 2.0 props object, or a `merge`/`omit` view of
+            // it, is not dropped: on rc.13 the assigned value reads back
+            // (runtime oracle cases `r9-d5-writeplainprops`, `-writemerge`,
+            // `-writeomit`, `review-r1-alias-mutation`). Only a getter-backed
+            // prop rejects it (a TypeError), and which props are getters is
+            // not proven here, so the claim stays an obligation.
+            uncertain: props,
         });
     }
 }

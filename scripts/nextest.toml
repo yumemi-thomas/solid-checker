@@ -1,0 +1,6 @@
+# Explicitly selected by verify.sh; does not affect ordinary Cargo tests.
+[profile.verify]
+test-threads = 8
+
+[profile.verify.junit]
+path = "junit.xml"

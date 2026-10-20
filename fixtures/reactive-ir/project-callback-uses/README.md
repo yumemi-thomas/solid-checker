@@ -1,0 +1,3 @@
+# Closed callback-use summaries of project consumers
+
+A read in a callback a body passes to an exact project function (or static one-segment callback prop) is not strict when every use of that parameter is closed and none runs on the body's stack: a tracked compute slot, exact `untrack`, compiler-tracked JSX, an audited fresh-stack scheduler, or forwarding to a closed summary. It installs no role and clears no package/ownership obligation; stored, returned, escaped, labelled-untrack, receiver-using, patchable or async shapes are uncertifiable. Stub slots keep the published `@solidjs/signals` shapes.

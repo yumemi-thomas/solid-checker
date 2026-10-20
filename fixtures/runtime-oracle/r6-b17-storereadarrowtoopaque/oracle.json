@@ -1,0 +1,3 @@
+{
+  "note": "r6 reviewer: b17/StoreReadArrowToOpaque. Runtime-only witnesses supply the original ambient globals (no-op sink/runner, true flag, resolved promise); their declarations remain opaque to analysis."
+}

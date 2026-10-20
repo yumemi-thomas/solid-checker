@@ -1,0 +1,15 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/host-dead-return-prototype/App.tsx",
+      "start": 350,
+      "end": 355,
+      "fixes": 0
+    }
+  ]
+}

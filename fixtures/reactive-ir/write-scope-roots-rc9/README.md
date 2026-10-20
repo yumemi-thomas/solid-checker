@@ -1,0 +1,3 @@
+# write-scope-roots-rc9
+
+rc.9 twin of `write-scope-roots-rc3` (same `roots.ts`/`components.tsx`): `@solidjs/signals@2.0.0-rc.9` removed the root exemption from `devGuardStoreSetterWrite` (`dist/dev-shared.js:5878`, #3500) and the dev component body is still a root, so every store setter directly in a component body or in a function passed to `createRoot` by name throws; expected SC2001 beyond rc.3's findings on those store setters (including via `untrack`/`flush`, `Row`, and `init`), plus SC9014; an `addEventListener` listener's calls are uncertifiable, as on rc.3. Stubs extracted from the rc.9 tarballs (`solid-js`' own `createRoot` const byte-faithful); `tsc` clean against stubs and real rc.9.

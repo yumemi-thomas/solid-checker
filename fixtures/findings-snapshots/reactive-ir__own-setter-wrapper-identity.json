@@ -1,0 +1,15 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "no-direct-mutation",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/own-setter-wrapper-identity/App.tsx",
+      "start": 1023,
+      "end": 1033,
+      "fixes": 0
+    }
+  ]
+}

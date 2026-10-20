@@ -11,3 +11,4 @@ solid-reactive-ir = { path = "../../../crates/solid-reactive-ir" }
 
 [dev-dependencies]
 serde_json.workspace = true
+solid-dialect = { path = "../../../crates/solid-dialect" }

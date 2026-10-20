@@ -1,0 +1,3 @@
+{
+  "note": "control for the owner family: the helper's handler runs the callback under runWithOwner or createRoot, so it has an owner and nothing is reported"
+}

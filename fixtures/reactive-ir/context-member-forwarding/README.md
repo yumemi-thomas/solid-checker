@@ -1,0 +1,3 @@
+# Context member forwarding
+
+One default-less context with one closed literal provider transports its exact orientation signal through a wrapper's single return of an immutable intermediate binding with pure truthiness/nullish tests; const simple member destructuring permits only immediate calls of each selected identifier; body/eager/apply consumers keep their role and tracked reads stay clean. It is an exact wrapper handoff to the receiver census, not general dataflow (the companion refusal project pins the boundaries). Primitive stubs are `accessor-provenance`'s reduced published rc.13 signatures.

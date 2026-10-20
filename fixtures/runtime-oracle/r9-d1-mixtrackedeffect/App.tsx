@@ -1,0 +1,13 @@
+import { createSignal, createMemo, createEffect, createRoot, runWithOwner, getOwner, onSettled, onCleanup, untrack, createTrackedEffect, children } from "solid-js";
+function now(f: () => void) {
+  f();
+}
+function use(cb: () => void) {
+  createTrackedEffect(() => cb());
+  untrack(cb);
+}
+export function C() {
+  const [count] = createSignal(0);
+  use(() => console.log(count()));
+  return <main />;
+}

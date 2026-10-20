@@ -1,11 +1,16 @@
 //! A `napi-build` 2.4.1-compatible shim for this workspace's WASI toolchain.
 //!
-//! The pinned Solid 1.x compiler correctly makes its Node adapter optional,
-//! but its build script still calls `napi_build::setup()` unconditionally.
-//! On WASI that asks the linker to export a Node registration symbol which the
+//! The pinned compiler fork correctly makes its Node adapter optional, but its
+//! build script still calls `napi_build::setup()` unconditionally. On WASI that
+//! asks the linker to export a Node registration symbol which the
 //! feature-disabled crate does not define. The crate advertises 2.4.1 to meet
-//! the Solid 2 compiler's resolver constraint, while its WASI module retains
-//! the link behavior audited with this package's emnapi 1.x runtime.
+//! the compiler's resolver constraint, while its WASI module retains the link
+//! behavior audited with this package's emnapi 1.x runtime.
+//!
+//! The shim was written for the Solid 1.x fork's build script. That dependency
+//! went with the dialect (ADR 0110), and `solidjs-compiler` needs it for the
+//! same reason — which is why this crate outlived the fork that motivated it.
+//! The `emnapi 1.x` above is the napi runtime's version, not Solid's.
 
 use std::env;
 

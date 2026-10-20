@@ -1,0 +1,3 @@
+# leaf-scope-optional-dom
+
+**Claim (ADR 0318).** An optional call (`el?.m()`) whose exact declaration is a `lib.dom` member in the audited script-free table is read like its non-optional form (`script_free_dom_member`): `OptionalQueries` and `OptionalListener` (registration runs nothing) are none; every other optional DOM member stays `SC9012` since it can run author code with no callback argument (focus/blur/click dispatch events, attribute/tree mutations run custom-element reactions, WebGL `getContext`), as do `removeEventListener` (no audited timing) and `DirectFocus` (ADR 0329). DOM types are TypeScript's own.

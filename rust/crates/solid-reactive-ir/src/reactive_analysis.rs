@@ -5,18 +5,15 @@
 //! its cache slots, timing split, and the merge into `ProgramDraft`; the
 //! top-level pipeline only sequences the resulting stage.
 
-use std::{
-    collections::HashMap,
-    time::{Duration, Instant},
-};
+use crate::HashMap;
+use std::time::{Duration, Instant};
 
 use solid_facts::core::SourcePath;
 use typefacts::Declaration;
 
 use crate::cache::{
-    CachedInterproceduralGraph, CachedInterproceduralResults, CachedLateStages,
-    CachedTypedAccessors, LocalAccessResult, PARALLEL_INDEX_FILE_THRESHOLD, ReusePlan,
-    SourceDiscoveryTypeScriptDelta,
+    CachedInterproceduralGraph, CachedInterproceduralResults, CachedLateStages, LocalAccessResult,
+    PARALLEL_INDEX_FILE_THRESHOLD, ReusePlan, SourceDiscoveryTypeScriptDelta,
 };
 use crate::indexes::ProjectIndexes;
 use crate::interproc::{InterproceduralContext, InterproceduralTimings};
@@ -33,7 +30,6 @@ use crate::upstream_compat;
 use crate::{BuildTimings, ReactiveRead};
 
 pub(crate) struct IncrementalCaches<'a> {
-    pub(crate) typed_accessors: Option<&'a mut HashMap<SourcePath, CachedTypedAccessors>>,
     pub(crate) interprocedural_graph:
         Option<&'a mut HashMap<SourcePath, CachedInterproceduralGraph>>,
     pub(crate) interprocedural_results: Option<&'a mut CachedInterproceduralResults>,
@@ -70,6 +66,7 @@ pub(crate) fn collect_project<'facts>(
         symbol_names: ctx.symbol_names,
         reachable_calls: ctx.reachable_calls,
         accessors: ctx.accessors,
+        typed_sources: ctx.typed_sources,
         accessor_origins: &source.accessor_origins,
         setters: &source.setters,
         actions: &source.actions,
@@ -79,12 +76,9 @@ pub(crate) fn collect_project<'facts>(
         server_rendering: crate::source_discovery::project_server_rendering(
             ctx.facts,
             &ctx.rule_options.runtime,
+            ctx.dialect,
         ),
         source_declarations,
-        contract_reads: &source.contract_reads,
-        contract_parameter_reads: &source.contract_parameter_reads,
-        contract_returns: &source.contract_returns,
-        bundled_returns: &source.bundled_returns,
         source_kinds: ctx.source_kinds,
         prop_sources: ctx.prop_sources,
         uncertain_prop_sources: ctx.uncertain_prop_sources,
@@ -101,7 +95,7 @@ pub(crate) fn collect_project<'facts>(
         })
         .flatten();
     let references_by_source = if cached_interprocedural.is_some() {
-        HashMap::new()
+        HashMap::default()
     } else {
         references_for_sources(
             &ctx.facts.typescript,
@@ -124,22 +118,15 @@ pub(crate) fn collect_project<'facts>(
         facts: ctx.facts,
         project_indexes,
         accessors: ctx.accessors,
-        contracted_accessor_symbols: &source.contracted_accessor_symbols,
         returned_source_symbols: &source.returned_source_symbols,
         summary_source_symbols: &source.summary_source_symbols,
         source_phases: &source.source_phases,
         source_kinds: ctx.source_kinds,
-        contract_reads: &source.contract_reads,
-        contract_parameter_reads: &source.contract_parameter_reads,
-        contract_callbacks: &source.contract_callbacks,
-        contract_returns: &source.contract_returns,
-        bundled_returns: &source.bundled_returns,
-        source_primitives: &source.source_primitives,
         entities: ctx.entities,
         references_by_source: &references_by_source,
         symbol_names: ctx.symbol_names,
-        changed_semantic_symbols: typescript_delta.map(|delta| &delta.semantic_symbol_ids),
         retained_source_paths: &source.retained_source_paths,
+        typed_sources: ctx.typed_sources,
         lookup: ctx.semantic_lookup,
     };
     let run_local_access = || {
@@ -174,11 +161,8 @@ pub(crate) fn collect_project<'facts>(
                 let interprocedural = scope.spawn(move || {
                     let _worker_limit = AnalysisWorkerLimit::enter(worker_limit);
                     let started = Instant::now();
-                    let result = interprocedural_context.build(
-                        caches.typed_accessors,
-                        caches.interprocedural_graph,
-                        caches.interprocedural_results,
-                    );
+                    let result = interprocedural_context
+                        .build(caches.interprocedural_graph, caches.interprocedural_results);
                     (result, started.elapsed())
                 });
                 let local_worker_limit = AnalysisWorkerLimit::enter(worker_limit);
@@ -201,11 +185,8 @@ pub(crate) fn collect_project<'facts>(
                 let local_access = run_local_access();
                 let local_elapsed = started.elapsed();
                 let started = Instant::now();
-                let interprocedural = interprocedural_context.build(
-                    caches.typed_accessors,
-                    caches.interprocedural_graph,
-                    caches.interprocedural_results,
-                );
+                let interprocedural = interprocedural_context
+                    .build(caches.interprocedural_graph, caches.interprocedural_results);
                 (
                     local_access,
                     interprocedural,
@@ -259,10 +240,8 @@ pub(crate) fn collect_project<'facts>(
         .collect();
     draft.strict_read_obligations = strict_read_obligations;
     draft.write_action_obligations = write_action_obligations;
-    // Unresolved-dispatch obligations and contract-incomplete consumer
-    // obligations travel in one vector because the same interprocedural walk
-    // discovers both, but they are two different finding kinds: `SC9012`
-    // versus `SC9005`. Under one dedup identity two findings that merely start
+    // Unresolved-dispatch obligations and unavailable-package-behavior
+    // obligations are two different finding kinds: `SC9012` versus `SC9005`. Under one dedup identity two findings that merely start
     // at the same byte suppressed one another, and which survived depended on
     // push order. `push_defect` therefore derives the identity from the defect
     // kind's family and never from the vector it arrived in.
@@ -270,32 +249,51 @@ pub(crate) fn collect_project<'facts>(
         draft.push_defect(obligation);
     }
     timings.absorb_interprocedural(&interprocedural.timings);
+    draft.source_call_targets = interprocedural.source_call_targets.clone();
     draft.strict_read_obligations += interprocedural.reads.len();
     draft.reads.extend(interprocedural.reads.iter().cloned());
+    draft.apply_compute_reads = crate::execution_role::apply_compute_reads(
+        ctx.facts,
+        &draft.reads,
+        ctx.semantic_lookup,
+        ctx.accessors,
+        &source.accessor_origins,
+    );
+    // Recompute after both cache merges. A consumer in another file can change
+    // while the literal's local read row is reused; a cached true is never proof.
+    let mut consumers = crate::execution_role::ReadConsumerSummaries::new(ctx.semantic_lookup);
+    for read in &mut draft.reads {
+        read.project_consumer_non_strict = false;
+        if !read.callee_callback_timing
+            || !read.execution.reports_untracked_read()
+            || read.summary_attributed
+            || read.missing_jsx_census
+            || read.host_callback_timing
+            || read.callback_invocation_unproven
+        {
+            continue;
+        }
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(read.location.start_byte),
+            u32::try_from(read.location.end_byte),
+        ) else {
+            continue;
+        };
+        if let Some(file) = ctx
+            .semantic_lookup
+            .file_by_path(read.location.path.as_ref())
+        {
+            read.project_consumer_non_strict =
+                consumers.proves_non_strict(file, solid_facts::core::Span::new(start, end));
+        }
+    }
     for obligation in interprocedural.dispatch_obligations.iter() {
         draft.push_defect(obligation.clone());
     }
     static_rules::component_returns_conditionally(ctx, draft);
-    draft.contract_exports = interprocedural.exports.clone();
-    draft.contract_generation_obligations =
-        interprocedural.contract_generation_obligations.to_vec();
-    for obligation in interprocedural.contract_generation_obligations.iter() {
-        draft.push_defect(crate::StaticDefect {
-            kind: crate::StaticDefectKind::UnknownCallbackExecution {
-                package: obligation.package.clone(),
-                entrypoint: obligation.entrypoint.clone(),
-                function: obligation.function.clone(),
-                parameter: obligation.parameter,
-                parameter_type: obligation.parameter_type.clone(),
-                required_execution: obligation.required_execution.clone(),
-                claim_context: obligation.claim_context.clone(),
-            },
-            location: obligation.location.clone(),
-            analysis_context: obligation.message.clone(),
-            fixes: vec![],
-            uncertain: false,
-        });
-    }
+    // After every read, write and action table is merged: the rule's
+    // negative proof is that none of them lies inside the predicate.
+    static_rules::result_access_callbacks(ctx, draft);
     upstream_compat::check_project(
         ctx,
         caches
@@ -315,26 +313,26 @@ mod tests {
     use crate::pipeline::ProgramDraft;
     use crate::{StaticDefect, StaticDefectFamily, StaticDefectKind};
 
-    /// Contract-incomplete consumer obligations ride the same vector as
-    /// unresolved-dispatch obligations, but they are two finding kinds
-    /// (`SC9005` and `SC9012`). Under one dedup identity the pair that a
-    /// contract-driven call site naturally produces at one start byte
-    /// suppressed each other, and which one survived depended on push order.
+    /// Unavailable-package-behavior obligations and unresolved-dispatch
+    /// obligations are two finding kinds (`SC9005` and `SC9012`). Under one
+    /// dedup identity the pair that a call site into an unanalyzed package
+    /// naturally produces at one start byte suppressed each other, and which
+    /// one survived depended on push order.
     #[test]
-    fn contract_and_dispatch_obligations_do_not_deduplicate_each_other() {
+    fn unavailable_behavior_and_dispatch_obligations_do_not_deduplicate_each_other() {
         let location = Location {
             path: "App.tsx".into(),
             start_byte: 12,
             end_byte: 20,
         };
-        let contract = StaticDefect {
-            kind: StaticDefectKind::PackageContractExportMissing {
+        let unavailable = StaticDefect {
+            kind: StaticDefectKind::PackageBehaviorUnavailable {
                 module: "reactive-package".into(),
                 export: "mapValue".into(),
                 reexported: false,
             },
             location: location.clone(),
-            analysis_context: "unbound-contract-claims:callback arguments".into(),
+            analysis_context: "callback arguments".into(),
             fixes: vec![],
             uncertain: false,
         };
@@ -344,52 +342,21 @@ mod tests {
                 member: None,
             },
             location,
-            analysis_context: "contract-parameter-member-argument-unresolved".into(),
+            analysis_context: "parameter-member-argument-unresolved".into(),
             fixes: vec![],
             uncertain: true,
         };
         assert_ne!(
-            contract.kind.dedup_identity(),
+            unavailable.kind.dedup_identity(),
             dispatch.kind.dedup_identity()
         );
         let mut draft = ProgramDraft::default();
-        draft.push_defect(contract.clone());
+        draft.push_defect(unavailable.clone());
         draft.push_defect(dispatch);
         assert_eq!(draft.static_defects.len(), 2);
         // The identity still deduplicates its own kind at the same byte.
-        draft.push_defect(contract);
+        draft.push_defect(unavailable);
         assert_eq!(draft.static_defects.len(), 2);
-    }
-
-    /// A contract-generation obligation projects to the same dialect rule as
-    /// a contract-incomplete consumer obligation (`SC9005`) but keeps its own
-    /// dedup identity: one call site can produce both at one start byte, and
-    /// a shared identity would drop whichever was pushed second.
-    #[test]
-    fn generation_obligations_keep_their_own_identity_within_the_contract_rule() {
-        let generation = StaticDefectKind::UnknownCallbackExecution {
-            package: "partial-package".into(),
-            entrypoint: ".".into(),
-            function: "withValue".into(),
-            parameter: 0,
-            parameter_type: "() => void".into(),
-            required_execution: "synchronous".into(),
-            claim_context: "{}".into(),
-        };
-        let consumer = StaticDefectKind::PackageContractExportMissing {
-            module: "partial-package".into(),
-            export: "withValue".into(),
-            reexported: false,
-        };
-        assert_eq!(
-            generation.family(),
-            StaticDefectFamily::UnknownCallbackExecution
-        );
-        assert_eq!(
-            consumer.family(),
-            StaticDefectFamily::PackageContractIncomplete
-        );
-        assert_ne!(generation.dedup_identity(), consumer.dedup_identity());
     }
 
     /// The identity strings are load-bearing: they are the keys of one
@@ -399,16 +366,12 @@ mod tests {
     #[test]
     fn dedup_identities_are_pinned_per_finding_family() {
         assert_eq!(
-            StaticDefectFamily::PackageContractIncomplete.dedup_identity(),
-            "package-contract-incomplete"
+            StaticDefectFamily::PackageBehaviorUnavailable.dedup_identity(),
+            "package-behavior-unavailable"
         );
         assert_eq!(
             StaticDefectFamily::ReactiveDispatchUnresolved.dedup_identity(),
             "reactive-dispatch-unresolved"
-        );
-        assert_eq!(
-            StaticDefectFamily::UnknownCallbackExecution.dedup_identity(),
-            "unknown-callback-execution"
         );
         assert_eq!(
             StaticDefectFamily::ReactiveObjectDestructure.dedup_identity(),
@@ -423,8 +386,7 @@ mod tests {
             "components-return-once"
         );
 
-        // Kinds that share a dialect rule share the identity; the two
-        // contract families deliberately do not.
+        // Kinds that share a dialect rule share the identity.
         assert_eq!(
             StaticDefectKind::ReactiveCallbackUnresolved {
                 callee: "map".into()
@@ -444,15 +406,6 @@ mod tests {
             }
             .dedup_identity(),
             StaticDefectFamily::ReactiveDispatchUnresolved.dedup_identity()
-        );
-        assert_eq!(
-            StaticDefectKind::PackageContractEnvironmentDependent {
-                module: "pkg".into(),
-                export: "value".into(),
-                reexported: false,
-            }
-            .dedup_identity(),
-            StaticDefectFamily::PackageContractIncomplete.dedup_identity()
         );
     }
 }

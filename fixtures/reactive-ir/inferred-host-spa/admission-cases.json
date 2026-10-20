@@ -1,0 +1,112 @@
+[
+  {
+    "name": "tailwind-accept",
+    "source": "import p from '@tailwindcss/vite'; export default {plugins:[p({optimize:false})]};",
+    "accepted": true
+  },
+  {
+    "name": "tailwind-refuse",
+    "source": "import p from '@tailwindcss/vite'; export default {plugins:[p({configureServer(){}})]};",
+    "accepted": false
+  },
+  {
+    "name": "uno-accept",
+    "source": "import p from '@unocss/vite'; export default {plugins:[p({configFile:false})]};",
+    "accepted": true
+  },
+  {
+    "name": "uno-refuse",
+    "source": "import p from '@unocss/vite'; export default {plugins:[p()]};",
+    "accepted": false
+  },
+  {
+    "name": "pwa-accept",
+    "source": "import {VitePWA as p} from 'vite-plugin-pwa'; export default {plugins:[p({strategies:\"generateSW\"})]};",
+    "accepted": true
+  },
+  {
+    "name": "pwa-refuse",
+    "source": "import {VitePWA as p} from 'vite-plugin-pwa'; export default {plugins:[p({strategies:\"injectManifest\"})]};",
+    "accepted": false
+  },
+  {
+    "name": "icons-executable-fallback-refuse",
+    "source": "import p from 'unplugin-icons/vite'; export default {plugins:[p({compiler:\"solid\",autoInstall:false})]};",
+    "accepted": false
+  },
+  {
+    "name": "icons-refuse",
+    "source": "import p from 'unplugin-icons/vite'; export default {plugins:[p({compiler:\"solid\",customCollections:{}})]};",
+    "accepted": false
+  },
+  {
+    "name": "svg-accept",
+    "source": "import p from 'vite-plugin-solid-svg'; export default {plugins:[p({svgo:{enabled:false}})]};",
+    "accepted": true
+  },
+  {
+    "name": "svg-refuse",
+    "source": "import p from 'vite-plugin-solid-svg'; export default {plugins:[p()]};",
+    "accepted": false
+  },
+  {
+    "name": "paths-accept",
+    "source": "import p from 'vite-tsconfig-paths'; export default {plugins:[p()]};",
+    "accepted": true
+  },
+  {
+    "name": "paths-refuse",
+    "source": "import p from 'vite-tsconfig-paths'; export default {plugins:[p({parseNative:true})]};",
+    "accepted": false
+  },
+  {
+    "name": "tanstack-accept",
+    "source": "import {tanstackRouter as p} from '@tanstack/router-plugin/vite'; export default {plugins:[p({target:\"solid\",autoCodeSplitting:true})]};",
+    "accepted": true
+  },
+  {
+    "name": "tanstack-refuse",
+    "source": "import {tanstackRouter as p} from '@tanstack/router-plugin/vite'; export default {plugins:[p({target:\"solid\",virtualRouteConfig:\"./src/App.tsx\"})]};",
+    "accepted": false
+  },
+  {
+    "name": "filesystem-accept",
+    "source": "import {fileRoutes as p} from 'filesystem-routing/vite'; export default {plugins:[p({types:true,httpMethods:true})]};",
+    "accepted": true
+  },
+  {
+    "name": "filesystem-refuse",
+    "source": "import {fileRoutes as p} from 'filesystem-routing/vite'; export default {plugins:[p({buildInputs:[\"ssr\"]})]};",
+    "accepted": false
+  },
+  {
+    "name": "spreads-accept",
+    "source": " export default {...{server:{port:3000}},plugins:[]};",
+    "accepted": true
+  },
+  {
+    "name": "spreads-refuse",
+    "source": " export default {...opaque,plugins:[]};",
+    "accepted": false
+  },
+  {
+    "name": "branches-accept",
+    "source": "import {defineConfig} from 'vite'; export default defineConfig(({mode})=>mode===\"production\"?{plugins:[]}:{plugins:[]});",
+    "accepted": true
+  },
+  {
+    "name": "branches-refuse",
+    "source": "import {defineConfig} from 'vite'; export default defineConfig(({mode})=>mode===\"production\"?{plugins:[]}:{plugins:[custom()]});",
+    "accepted": false
+  },
+  {
+    "name": "empty-unknown-import-refuse",
+    "source": "import {} from './server-plugin'; export default {plugins:[]};",
+    "accepted": false
+  },
+  {
+    "name": "vite-alias-overlay-admitted-but-edge-needs-congruence",
+    "source": "export default {plugins:[],resolve:{alias:{'~':'./src'}}};",
+    "accepted": true
+  }
+]

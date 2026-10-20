@@ -5,7 +5,8 @@
     "": {
       "name": "solid-checker-wasm",
       "dependencies": {
-        "@napi-rs/wasm-runtime": "^1.1.6",
+        "@napi-rs/wasm-runtime": "1.1.6",
+        "@tybys/wasm-util": "0.10.3",
       },
       "devDependencies": {
         "@emnapi/core": "^1.7.1",

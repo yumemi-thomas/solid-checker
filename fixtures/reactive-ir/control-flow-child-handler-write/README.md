@@ -1,0 +1,3 @@
+# control-flow-child-handler-write
+
+A function inside an element that is a child of a control-flow component (`<Show>`, `<For>`, `<Repeat>`, `<Match>`, `<Switch>`) belongs to that element: an event handler there is the compiler's event callback and a signal write in it is legal; only a function at the control-flow component's own level takes its render role, so an IIFE child and the render callback's body writes are `SC2001` violations (rc.9 dev: handler writes raise nothing, those two throw `REACTIVE_WRITE_IN_OWNED_SCOPE`). `solid-js.d.ts` holds `createSignal` and the two non-keyed `Show` overloads verbatim from rc.9.

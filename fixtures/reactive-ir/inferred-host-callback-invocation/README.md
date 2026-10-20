@@ -1,0 +1,5 @@
+# Inferred host: callback invocation (baseline findings only)
+
+Hand-stated twins of registrations whose callbacks call `startClosed()`: prop invocation, event handlers, `Show`/`For` selection, effects, timers vs exact cancellation, listeners vs matching removal, and unregistered cleanups. The stub has no admitted client runtime artifact, so no browser host is inferred (`browser host not inferred: missing exact installed client package entry`) and nothing here shows browser feasibility: ADR 0270's feasible-callback proofs are pinned by the synthetic invocation tests in `solid-reactive-ir/src/hosts/tests.rs`, not by this fixture.
+
+What the snapshot does pin, host-independent: three `SC4001` for `onCleanup` called without an owner (the top-level and the two helper/fresh-stack cleanups), one `SC7007` (uncertifiable: the RPC-only callback argument has no rich-argument transport proof), and one `SC9012` (the `onSettled` callback body calls the opaque `startClosed()`, so its synchronous body cannot be resolved). Signatures are copied from published rc.13 declarations (`standard-runtime-configuration`).

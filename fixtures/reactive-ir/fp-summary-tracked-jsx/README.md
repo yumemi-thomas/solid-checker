@@ -1,0 +1,3 @@
+# fp-summary-tracked-jsx
+
+**Claim.** A helper whose reactive reads are all in its own JSX does not read them while called (the compiler lowers attributes/children to tracked effects and component properties to getters), so calling it from a strict-read window (a `<For>` callback) is not a strict read (`execution_role::runs_outside_owner_call`); handler attribute values keep their answer; helpers that read while called stay reported at the call. `solid-js.d.ts` is `fp-exec-control-flow-callback`'s, byte-faithful to published rc.9 (`createSignal`, `For`, `Show`) plus `li`'s `aria-expanded`; also `tsc`-clean against real rc.9.

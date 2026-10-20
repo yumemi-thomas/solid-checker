@@ -1,0 +1,75 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "package-behavior-unavailable",
+      "code": "SC9005",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-all/App.tsx",
+      "start": 89,
+      "end": 127,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-all/App.tsx",
+      "start": 396,
+      "end": 410,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-all/App.tsx",
+      "start": 644,
+      "end": 658,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-source-uncaptured",
+      "code": "SC9011",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-all/App.tsx",
+      "start": 882,
+      "end": 886,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-all/App.tsx",
+      "start": 1066,
+      "end": 1083,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-source-uncaptured",
+      "code": "SC9011",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-all/App.tsx",
+      "start": 1352,
+      "end": 1356,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-all/App.tsx",
+      "start": 1617,
+      "end": 1630,
+      "fixes": 0
+    }
+  ]
+}

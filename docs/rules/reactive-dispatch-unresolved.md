@@ -15,7 +15,9 @@ reactivity analysis but cannot be established. Covered forms include:
 - a helper that invokes `argument.method()` when the argument is a conditional
   or union of objects whose method summaries differ;
 - a computed call such as `handlers[index]()` whose runtime target is not an
-  exact symbol; and
+  exact symbol;
+- a Solid primitive used as a value (`const eff = createEffect`,
+  `Reflect.apply(createEffect, …)`): the calls it reaches are not followed; and
 - an exported helper that directly invokes a member supplied through a
   parameter outside a proven tracked JSX region, because callers outside the
   analyzed project can supply unseen behavior.
@@ -29,7 +31,112 @@ reactivity analysis but cannot be established. Covered forms include:
   such as `Array.prototype.filter` after `await`, when the callback body is
   hidden behind a wrapper or is async; and
 - an exported structured return whose shorthand value depends on an ambiguous,
-  bare/path-mapped, or global binding that cannot be joined exactly.
+  bare/path-mapped, or global binding that cannot be joined exactly; and
+- a callback that runs whenever the call's **returned object is read**, which
+  is rc.9's `omit(props, predicate)`. See below.
+
+### Local helpers and invocation context
+
+A synchronous local helper can inherit the same dispatch exclusions as a
+direct call. For example, a helper used only by tracked JSX does not need an
+untracked-read dispatch proof at its declaration:
+
+```tsx
+const visible = () => pageSlice(props.items);
+return <div>{visible().length}</div>;
+```
+
+The checker requires an immutable local arrow or an unwritten local function
+declaration, an exact census of its references,
+and only direct calls whose contexts are accounted for. It also follows local
+helper chains into component-property expressions the compiler proves it lowers
+to getters: those execute when the consuming component reads the property,
+where the existing source analysis accounts for reads. This does not prove the
+runtime method is a built-in, make arbitrary props tracked, or establish any
+write or ownership permission.
+
+An additional eager call, an escaped or aliased helper, a mutable binding,
+an async helper, a recursive cycle, visible direct eval, or missing context
+evidence keeps the obligation. The local traversal is bounded to 32 helpers;
+cross-file helpers and deferred callback factories are not covered by this proof.
+
+The same caller traversal covers compiler-proven event and deferred contexts,
+where a direct dispatch call is already excluded. A mixed eager invocation
+still keeps the obligation, and constructing a callback does not execute its
+parameter defaults.
+
+### Source helper member callbacks
+
+When an analyzed helper invokes an argument's member only under a proven
+tracked or deferred context, that invocation does not become an untracked
+dispatch question at the helper's caller. For example:
+
+```ts
+function trackedOptions(options: { enabled: () => boolean }) {
+  return createMemo(() => options.enabled());
+}
+```
+
+The source invocation's context travels with the internal member summary and
+its cache dependency state. No runtime implementation is chosen from its type
+or property name. An additional eager call, unknown callback consumer or
+callback default leaves the corresponding obligation open. These exclusions
+affect read-dispatch obligations only; leaf-scope cleanup/flush/primitive
+obligations still need their separate proofs.
+
+Options fields can forward through another exact source helper. The existing
+closed callback-use proof supplies a tracked/fresh subset for this purpose;
+explicit untrack alone is deliberately insufficient for dispatch exclusion.
+Every field consumer, sibling and outer callback carrier must close. Source
+invocation contexts are refreshed after cached graph contributions merge each
+generation, so a downstream consumer edit can restore the obligation without
+changing the forwarding helper. No runtime method is selected from a property
+name or type.
+
+### `omit` predicates (Solid 2.0.0-rc.9)
+
+`@solidjs/signals@2.0.0-rc.9` accepts `omit(props, hidden)` with a single
+function argument (`keys.length === 1 && typeof keys[0] === "function"`,
+`dist/dev.js:4380`). Where `Proxy` exists, `omit` stores the predicate in the
+view it returns, and the view's traps call it on every property get, `in` test
+and key enumeration, and on every merge or spread of the view
+(`dist/dev-shared.js:273`, `dist/dev.js:3495-3498`, `:4178-4241`). Those calls
+run in the reading computation's tracking scope and under its owner. Without
+`Proxy`, `omit` calls it once per property during the call (`:4408-4427`).
+
+The call site does not decide where the view is read, so code inside the
+predicate is never reported as a violation. It is not placed in the component
+body either. A predicate is certified only when it is proven inert, and
+otherwise it gets this finding at the predicate argument, with one of three
+reasons in `analysisContext`:
+
+| reason | the predicate |
+| --- | --- |
+| `result-access-callback-reactive-operation` | reads or writes reactive state: a recorded read, write, action or async read, or a reference to a signal, setter, action, store or props binding |
+| `result-access-callback-opaque-call` | calls something that is not a resolved standard-library function, such as a project helper, a package export or an unresolved callee |
+| `result-access-callback-body-unresolved` | has no inspectable body at this call: an import, a call result, a member, a `let` |
+
+Inert means the literal written at the position, or a `function` or `const`
+arrow in the same file that the argument names exactly, contains none of the
+above. `(key) => key === "a"` and
+`(key) => typeof key === "string" && key.startsWith("_")` are inert. A value
+proven not to be a function, like `omit(props, "a")`, is a key list and is
+not a predicate.
+
+The same holds one project wrapper away. If
+`function hideBy(props, hidden) { return omit(props, hidden); }` is called in
+the project, the argument at `hidden`'s position is judged at that call. The
+wrapper's own `omit` claims nothing, because the body is its callers'. An
+exported wrapper still keeps an open callback for callers outside the project
+([package-behavior-unavailable](package-behavior-unavailable.md)).
+
+Not followed: a predicate forwarded through two or more wrappers, through a
+destructured or renamed parameter, or through a spread argument. Code in such
+a predicate takes the role of the code around it.
+
+rc.3's `omit` never invokes an argument, and rc.3's typings reject a function
+key (TS2345). Under the audited vocabulary, and under a release analyzed with
+it, the second argument is a key list and this section does not apply.
 
 Finite candidate sets are not automatically uncertain. If every exact
 candidate is present and has the same reactive-read summary, the checker uses
@@ -55,9 +162,8 @@ that observer. Resolved standard-library methods are likewise excluded.
 
 Narrow the runtime value to one exact implementation, or introduce an adapter
 with an analyzed body and one explicit reactive behavior. For a public helper,
-avoid invoking structurally supplied methods in a contract that is meant to be
-certifiable, or keep the dispatch behind a package boundary with an audited
-reactivity contract.
+make the implementation and exact call targets available to source analysis.
+An unresolved package boundary remains uncertifiable.
 
 ## Related
 

@@ -1,0 +1,11 @@
+{
+  "note": "Opus review round 5 (t10-default-timer-write): Show/Match function children by arity, with nested deferred code",
+  "steps": [
+    {
+      "action": "assert-text",
+      "id": "ran",
+      "selector": "#k",
+      "text": "2"
+    }
+  ]
+}

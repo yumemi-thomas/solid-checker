@@ -1,5 +1,12 @@
 // Command typefacts-reactor is a throwaway WASI reactor used to prove that
 // the real TypeScript-Go Type Facts producer can run inside a browser worker.
+//
+// Built for wasip1 it is a reactor: the four exports below are its whole
+// interface and main is empty (main_wasip1.go). Built for any other target it
+// is a stdin/stdout command (main_native.go) that answers one request with the
+// same analysis and the same response encoder, so the two builds can be
+// compared byte for byte on the same project. Neither build is a maintained
+// producer or a source of certification authority.
 package main
 
 import (
@@ -18,12 +25,23 @@ type request struct {
 	ProjectID  string                   `json:"projectId"`
 	Generation uint64                   `json:"generation"`
 	Demands    []typefacts.EntityDemand `json:"demands"`
+	// ModuleGraph, when present, asks for the resolved module graph of the
+	// same program that answers Demands. It is passed to the canonical
+	// DemandClosure.ModuleGraph verbatim: the zero demand is the inventory
+	// alone, and Imports with no ImportPaths covers every program file,
+	// exactly as that owner defines them.
+	ModuleGraph *typefacts.ModuleInventoryDemand `json:"moduleGraph,omitempty"`
 }
 
 type response struct {
 	OK    bool            `json:"ok"`
 	Table json.RawMessage `json:"table,omitempty"`
-	Error string          `json:"error,omitempty"`
+	// ModuleGraph is the canonical inventory marshalled as the producer
+	// returned it, present exactly when the request asked for it. It is a
+	// sibling of Table and never inside it: Rust's TypeScriptSnapshot denies
+	// unknown fields.
+	ModuleGraph *typefacts.ModuleInventory `json:"moduleGraph,omitempty"`
+	Error       string                     `json:"error,omitempty"`
 }
 
 // sourceDigest is the source identity Rust's TypeScriptSnapshot expects. The
@@ -65,13 +83,9 @@ func allocateInput(size uint32) uint32 {
 
 //go:wasmexport run_typefacts
 func runTypeFacts() uint32 {
-	result, err := analyze(input)
-	if err != nil {
-		output, _ = json.Marshal(response{Error: err.Error()})
-		return 1
-	}
-	output, _ = json.Marshal(response{OK: true, Table: result})
-	return 0
+	var status uint32
+	output, status = respond(input)
+	return status
 }
 
 //go:wasmexport output_pointer
@@ -87,21 +101,67 @@ func outputLength() uint32 {
 	return uint32(len(output))
 }
 
-func analyze(encoded []byte) ([]byte, error) {
+// respond answers one encoded request. It is the single response encoder of
+// both builds.
+func respond(encoded []byte) ([]byte, uint32) {
+	table, graph, err := analyze(encoded)
+	return encode(table, graph, err)
+}
+
+// encode writes a failure with no table and no graph, or a success carrying
+// both answers of one program. Status 0 is success.
+func encode(table json.RawMessage, graph *typefacts.ModuleInventory, err error) ([]byte, uint32) {
+	if err == nil {
+		encoded, marshalErr := json.Marshal(response{OK: true, Table: table, ModuleGraph: graph})
+		if marshalErr == nil {
+			return encoded, 0
+		}
+		err = marshalErr
+	}
+	encoded, _ := json.Marshal(response{Error: err.Error()})
+	return encoded, 1
+}
+
+// closureAnswers is what the response is assembled from: one opened
+// DemandClosure. Every answer in a success comes from the same value, so from
+// the same program.
+type closureAnswers interface {
+	DemandTableForGroups(
+		ctx context.Context,
+		generation uint64,
+		groups []typefacts.DemandGroup,
+		changedPaths []string,
+	) (*typefacts.FactTable, error)
+	SourceFiles(ctx context.Context) ([]typefacts.SourceFile, error)
+	ModuleGraph(ctx context.Context, demand typefacts.ModuleInventoryDemand) (typefacts.ModuleInventory, error)
+}
+
+var _ closureAnswers = (*typefacts.DemandClosure)(nil)
+
+func analyze(encoded []byte) (json.RawMessage, *typefacts.ModuleInventory, error) {
 	var request request
 	if err := json.Unmarshal(encoded, &request); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	backend, err := tsgo.OpenProject(context.Background(), request.ProjectID, nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	closure, err := typefacts.NewDemandClosure(backend, nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer closure.Close()
+	return assemble(context.Background(), request, closure)
+}
 
+// assemble answers request from closure. A failure of any answer fails the
+// whole response, so no success ever carries a partial table or graph.
+func assemble(
+	ctx context.Context,
+	request request,
+	closure closureAnswers,
+) (json.RawMessage, *typefacts.ModuleInventory, error) {
 	byPath := make(map[string][]typefacts.EntityDemand)
 	for _, demand := range request.Demands {
 		byPath[demand.Location.Path] = append(byPath[demand.Location.Path], demand)
@@ -116,35 +176,56 @@ func analyze(encoded []byte) ([]byte, error) {
 		groups = append(groups, typefacts.DemandGroup{Path: path, Demands: byPath[path]})
 	}
 	table, err := closure.DemandTableForGroups(
-		context.Background(),
+		ctx,
 		request.Generation,
 		groups,
 		paths,
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	digests, err := sourceDigests(context.Background(), closure)
+	digests, err := sourceDigests(ctx, closure)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return json.Marshal(wireTable{
+	// The retained table keeps its entity rows in the closure's own per-file
+	// runs, not in the public Entities slice, so they are read through the
+	// owner's canonical projection. The collected values borrow the table's
+	// nested storage: they are marshalled at once, with no closure call in
+	// between, and only the marshalled bytes outlive this block. Symbols stay
+	// as the owner leaves them (nil): Rust performs the symbol closure.
+	var entities []typefacts.EntityFact
+	table.RangeEntities(func(entity typefacts.EntityFact) {
+		entities = append(entities, entity)
+	})
+	encodedTable, err := json.Marshal(wireTable{
 		Schema:     table.Schema,
 		Generation: table.Generation,
 		// The project the reactor actually opened above, echoed from the
 		// request the checker planned against.
 		ProjectID: request.ProjectID,
 		Sources:   digests,
-		Entities:  table.Entities,
+		Entities:  entities,
 		Symbols:   table.Symbols,
 		Files:     table.Files,
 	})
+	if err != nil {
+		return nil, nil, err
+	}
+	if request.ModuleGraph == nil {
+		return encodedTable, nil, nil
+	}
+	inventory, err := closure.ModuleGraph(ctx, *request.ModuleGraph)
+	if err != nil {
+		return nil, nil, err
+	}
+	return encodedTable, &inventory, nil
 }
 
 // sourceDigests hashes the bytes the producer's own TypeScript project
 // resolved, so ProjectFacts::join compares two independently derived views of
 // source identity rather than the host's single view against itself.
-func sourceDigests(ctx context.Context, closure *typefacts.DemandClosure) ([]sourceDigest, error) {
+func sourceDigests(ctx context.Context, closure closureAnswers) ([]sourceDigest, error) {
 	sources, err := closure.SourceFiles(ctx)
 	if err != nil {
 		return nil, err
@@ -162,5 +243,3 @@ func sourceDigests(ctx context.Context, closure *typefacts.DemandClosure) ([]sou
 	})
 	return digests, nil
 }
-
-func main() {}

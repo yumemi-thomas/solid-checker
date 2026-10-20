@@ -1,0 +1,3 @@
+# leaf-scope-helper-completion
+
+**Claim (ADR 0275).** A forbidden operation reached through a helper called in a leaf owner's callback is a violation only when the helper runs it on every normal completion and every hop is unconditional; behind a branch, early return, thrown/`never`/`asserts` guard (ADR 0278/0279), logical assignment, loop or possible `await` it is an obligation (`cleanup::reached_on_every_call`); a branch in the leaf callback itself stays under the statically-present-code premise. `ArgumentBranch` is the `@solid-primitives/timer` shape; `Immediate.tsx` covers IIFEs and async prefixes.

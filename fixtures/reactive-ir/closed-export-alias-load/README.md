@@ -1,0 +1,3 @@
+# A non-relative dynamic import names the module the compiler resolves
+
+In a closed application (ADR 0219) `import("@entry")` loads `helper` through a `paths` alias and `Object.values(module)` enters it with an argument no call site shows: the compiler resolves `@entry` to `helpers.ts`, so the obligation stays (`SC9012`); `kept` clears because the program's dynamic imports resolve to other files and `require("fs")` names a Node built-in; but `paths` mapping `fs` onto `shimmed.ts` makes `shimmed` stay (`SC9012`). Without the attested resolution a non-relative specifier may name any project module.

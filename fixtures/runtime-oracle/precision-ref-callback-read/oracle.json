@@ -1,0 +1,4 @@
+{
+  "note": "Precision probe 2026-10-19: a signal read in an intrinsic ref callback runs untracked in the apply phase; the runtime warns STRICT_READ_UNTRACKED and the checker is silent.",
+  "open": [{ "code": "STRICT_READ_UNTRACKED", "site": "App.tsx:4", "reason": "strict-read-untracked does not place reads in the DirectiveApply role" }]
+}

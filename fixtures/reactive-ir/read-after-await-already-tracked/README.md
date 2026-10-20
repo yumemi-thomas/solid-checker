@@ -1,0 +1,3 @@
+# A read after an await of a source already tracked
+
+SC1002 `reactive-read-after-await` does not fire for a source the same function already read on every run before its first suspension (a dependency, so a later read loses nothing; ADR 0195, matching rc.13's `UNTRACKED_READ_AFTER_AWAIT`). The earlier read must be a straight-line call (no branch, logical operator, loop, switch, try, optional chain or nested function) before every suspension; reads under `if`, after a conditional await, of a different accessor, inside `maybe?.use(...)` or a nested arrow still report. Stub from `fp-owner-nested-async-read` (published typings).

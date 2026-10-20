@@ -9,6 +9,632 @@ use solid_facts_backend::{
 };
 
 #[test]
+fn nested_member_callee_edits_refresh_unchanged_callers() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../fixtures/reactive-ir/literal-argument-member-dispatch");
+    let directory = temporary_directory("nested-member-callee-edit");
+    for name in [
+        "tsconfig.json",
+        "solid-js.d.ts",
+        "Nested.tsx",
+        "nested-source.ts",
+    ] {
+        fs::copy(fixture.join(name), directory.join(name)).unwrap();
+    }
+    let stub = directory.join("node_modules/solid-js");
+    fs::create_dir_all(&stub).unwrap();
+    fs::write(
+        stub.join("package.json"),
+        r#"{"name":"solid-js","version":"2.0.0-rc.13"}"#,
+    )
+    .unwrap();
+    let veto = directory.join("veto.ts");
+    fs::write(&veto, "export {};\n").unwrap();
+    let veto = veto.canonicalize().unwrap().to_string_lossy().into_owned();
+    let project = directory
+        .join("tsconfig.json")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let caller = directory
+        .join("Nested.tsx")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let helper = directory
+        .join("nested-source.ts")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let source = fs::read_to_string(&helper).unwrap();
+    let escaped = source.replacen(
+        "return input.source.read();",
+        "retain(input.source);\n  return input.source.read();",
+        1,
+    );
+    let caller_source = fs::read_to_string(&caller).unwrap();
+    let site =
+        caller_source.find("readNested({ source:").unwrap() as u64 + "readNested(".len() as u64;
+    let typescript = TypeFactsSession::open(&typefacts, &project, &[]).unwrap();
+    let (mut warm, _) =
+        NativeIncrementalSession::open_pipelined(dialect::default_dialect(), project, typescript)
+            .unwrap();
+    let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
+    let selected = dialect::default_dialect();
+    let has_obligation = |program: &solid_reactive_ir::Program| {
+        selected.solve(program).iter().any(|finding| {
+            finding.id == "SC9012"
+                && finding.kind == "uncertifiable"
+                && finding.primary_location.path.as_ref() == caller
+                && finding.primary_location.start_byte == site
+        })
+    };
+    let first = warm.analyze().unwrap();
+    let (initial, _) = incremental.build(&first, selected.vocabulary).unwrap();
+    assert!(!has_obligation(&initial));
+    for (version, path, text, expected) in [
+        (1, &helper, escaped.as_str(), true),
+        (2, &helper, source.as_str(), false),
+        (3, &veto, "export function veto() { eval(''); }\n", true),
+        (4, &veto, "export {};\n", false),
+    ] {
+        let facts = warm
+            .edit(
+                vec![SourceChange {
+                    path: path.clone(),
+                    version,
+                    source: Some(text.into()),
+                    compiler_options: CompilerOptions::default(),
+                }],
+                None,
+            )
+            .unwrap();
+        let cold = solid_reactive_ir::build(&facts, selected.vocabulary).unwrap();
+        let (retained, _) = incremental.build(&facts, selected.vocabulary).unwrap();
+        assert_eq!(retained, cold, "generation {version}");
+        assert_eq!(has_obligation(&retained), expected, "generation {version}");
+        assert!(warm.last_build_timings().source_files_reused > 0);
+    }
+    drop(warm);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn native_scheduler_writes_refresh_retained_eager_read_summaries() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let fixture = root.join("fixtures/reactive-ir/accessor-provenance");
+    let directory = temporary_directory("native-scheduler-read-edit");
+    for name in [
+        "tsconfig.json",
+        "package.json",
+        "solid-js.d.ts",
+        "factory.ts",
+        "RuntimeStack.tsx",
+    ] {
+        fs::copy(fixture.join(name), directory.join(name)).unwrap();
+    }
+    let stub = directory.join("node_modules/solid-js");
+    fs::create_dir_all(&stub).unwrap();
+    fs::write(
+        stub.join("package.json"),
+        r#"{"name":"solid-js","version":"2.0.0-rc.13"}"#,
+    )
+    .unwrap();
+    let writes = directory.join("writes.ts");
+    fs::write(&writes, "export {};\n").unwrap();
+    let project = directory
+        .join("tsconfig.json")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let caller = directory
+        .join("RuntimeStack.tsx")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let writes = writes
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let source = fs::read_to_string(&caller).unwrap();
+    let site = source.find("helper();").unwrap() as u64;
+    let typescript = TypeFactsSession::open(&typefacts, &project, &[]).unwrap();
+    let (mut warm, _) =
+        NativeIncrementalSession::open_pipelined(dialect::default_dialect(), project, typescript)
+            .unwrap();
+    let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
+    let first = warm.analyze().unwrap();
+    let (initial, _) = incremental
+        .build(&first, dialect::default_dialect().vocabulary)
+        .unwrap();
+    let has_read = |program: &solid_reactive_ir::Program| {
+        program
+            .reads
+            .iter()
+            .any(|read| read.location.path.as_ref() == caller && read.location.start_byte == site)
+    };
+    assert!(!has_read(&initial));
+    for (version, source, expected) in [
+        (1, "queueMicrotask = callback => callback();\n", true),
+        (2, "export {};\n", false),
+        (
+            3,
+            "globalThis.queueMicrotask = callback => callback();\n",
+            true,
+        ),
+        (4, "export {};\n", false),
+    ] {
+        let facts = warm
+            .edit(
+                vec![SourceChange {
+                    path: writes.clone(),
+                    version,
+                    source: Some(source.into()),
+                    compiler_options: CompilerOptions::default(),
+                }],
+                None,
+            )
+            .unwrap();
+        let cold = solid_reactive_ir::build(&facts, dialect::default_dialect().vocabulary).unwrap();
+        let (retained, _) = incremental
+            .build(&facts, dialect::default_dialect().vocabulary)
+            .unwrap();
+        assert_eq!(has_read(&retained), expected, "generation {version}");
+        assert_eq!(retained, cold, "generation {version}");
+        assert!(warm.last_build_timings().source_files_reused > 0);
+    }
+    drop(warm);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn augmented_timer_writes_in_another_file_refresh_retained_facts() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let fixture = root.join("fixtures/reactive-ir/leaf-scope-host-callbacks");
+    let directory = temporary_directory("augmented-timer-edit");
+    for name in [
+        "tsconfig.json",
+        "solid-js.d.ts",
+        "timers.d.ts",
+        "AugmentedTimers.tsx",
+    ] {
+        fs::copy(fixture.join(name), directory.join(name)).unwrap();
+    }
+    let stub = directory.join("node_modules/solid-js");
+    fs::create_dir_all(&stub).unwrap();
+    fs::write(
+        stub.join("package.json"),
+        r#"{"name":"solid-js","version":"2.0.0-rc.13"}"#,
+    )
+    .unwrap();
+    let writes = directory.join("writes.ts");
+    fs::write(&writes, "export {};\n").unwrap();
+    let project = directory
+        .join("tsconfig.json")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let caller = directory
+        .join("AugmentedTimers.tsx")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let writes = writes
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let source = fs::read_to_string(&caller).unwrap();
+    let site = source.find("    setInterval(").unwrap() as u64 + 4;
+    let typescript = TypeFactsSession::open(&typefacts, &project, &[]).unwrap();
+    let (mut warm, _) =
+        NativeIncrementalSession::open_pipelined(dialect::default_dialect(), project, typescript)
+            .unwrap();
+    let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
+    let first = warm.analyze().unwrap();
+    let (initial, _) = incremental
+        .build(&first, dialect::default_dialect().vocabulary)
+        .unwrap();
+    let unresolved = |program: &solid_reactive_ir::Program| {
+        program.leaf_operations.iter().any(|operation| {
+            operation.location.path.as_ref() == caller
+                && operation.location.start_byte == site
+                && operation.uncertain
+        })
+    };
+    assert!(!unresolved(&initial));
+    for (version, source, expected) in [
+        (1, "setInterval = (() => 0) as typeof setInterval;\n", true),
+        (2, "export {};\n", false),
+        (
+            3,
+            "window.setInterval = (() => 0) as typeof window.setInterval;\n",
+            true,
+        ),
+        (4, "export {};\n", false),
+        (
+            5,
+            "window[\"setInterval\"] = (() => 0) as typeof window.setInterval;\n",
+            true,
+        ),
+        (6, "export {};\n", false),
+    ] {
+        let facts = warm
+            .edit(
+                vec![SourceChange {
+                    path: writes.clone(),
+                    version,
+                    source: Some(source.into()),
+                    compiler_options: CompilerOptions::default(),
+                }],
+                None,
+            )
+            .unwrap();
+        let cold = solid_reactive_ir::build(&facts, dialect::default_dialect().vocabulary).unwrap();
+        let (retained, _) = incremental
+            .build(&facts, dialect::default_dialect().vocabulary)
+            .unwrap();
+        assert_eq!(unresolved(&retained), expected, "generation {version}");
+        assert_eq!(retained, cold, "generation {version}");
+        assert!(warm.last_build_timings().source_files_reused > 0);
+    }
+    drop(warm);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn leaf_source_target_edits_match_cold_analysis() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let fixture = root.join("fixtures/reactive-ir/leaf-source-call-targets");
+    let directory = temporary_directory("leaf-source-target-edit");
+    for name in ["tsconfig.json", "solid-js.d.ts", "service.ts", "App.tsx"] {
+        fs::copy(fixture.join(name), directory.join(name)).unwrap();
+    }
+    let stub = directory.join("node_modules/solid-js");
+    fs::create_dir_all(&stub).unwrap();
+    fs::copy(
+        fixture.join("node_modules/solid-js/package.json"),
+        stub.join("package.json"),
+    )
+    .unwrap();
+    let project = directory
+        .join("tsconfig.json")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let service = directory
+        .join("service.ts")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let caller = directory
+        .join("App.tsx")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let source = fs::read_to_string(&service).unwrap();
+    let caller_source = fs::read_to_string(&caller).unwrap();
+    let site = caller_source.find("service.cleanLeaf()").unwrap() as u64;
+    let typescript = TypeFactsSession::open(&typefacts, &project, &[]).unwrap();
+    let (mut warm, _) =
+        NativeIncrementalSession::open_pipelined(dialect::default_dialect(), project, typescript)
+            .unwrap();
+    let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
+    let first = warm.analyze().unwrap();
+    let (initial, _) = incremental
+        .build(&first, dialect::default_dialect().vocabulary)
+        .unwrap();
+    let operations = |program: &solid_reactive_ir::Program| {
+        program
+            .leaf_operations
+            .iter()
+            .filter(|operation| {
+                operation.location.path.as_ref() == caller && operation.location.start_byte == site
+            })
+            .map(|operation| (operation.uncertain, operation.possible))
+            .collect::<Vec<_>>()
+    };
+    assert!(operations(&initial).is_empty());
+    for (version, edited_source, expected) in [
+        (
+            1,
+            source.replacen(
+                "cleanLeaf() { void 0; }",
+                "cleanLeaf() { onCleanup(() => {}); }",
+                1,
+            ),
+            vec![(false, false)],
+        ),
+        (2, source.clone(), vec![]),
+        (
+            3,
+            source.replacen("void 0;", "this;  ", 1),
+            vec![(true, false)],
+        ),
+        (4, source, vec![]),
+    ] {
+        let edited = warm
+            .edit(
+                vec![SourceChange {
+                    path: service.clone(),
+                    version,
+                    source: Some(edited_source),
+                    compiler_options: CompilerOptions::default(),
+                }],
+                None,
+            )
+            .unwrap();
+        assert!(warm.last_build_timings().source_files_reused > 0);
+        let cold =
+            solid_reactive_ir::build(&edited, dialect::default_dialect().vocabulary).unwrap();
+        let (retained, _) = incremental
+            .build(&edited, dialect::default_dialect().vocabulary)
+            .unwrap();
+        assert_eq!(operations(&retained), expected);
+        assert_eq!(retained, cold, "version {version}");
+    }
+    drop(warm);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn routed_callback_consumer_edits_refresh_retained_dispatch_contexts() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let fixture = root.join("fixtures/reactive-ir/forwarded-tracked-compute");
+    let directory = temporary_directory("routed-member-consumer-edit");
+    for name in [
+        "tsconfig.json",
+        "solid-js.d.ts",
+        "member-consumers.ts",
+        "member-helpers.ts",
+        "RoutedMembers.tsx",
+    ] {
+        fs::copy(fixture.join(name), directory.join(name)).unwrap();
+    }
+    let stub = directory.join("node_modules/solid-js");
+    fs::create_dir_all(&stub).unwrap();
+    fs::copy(
+        fixture.join("node_modules/solid-js/package.json"),
+        stub.join("package.json"),
+    )
+    .unwrap();
+    let project = directory
+        .join("tsconfig.json")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let consumer = directory
+        .join("member-consumers.ts")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let caller = directory
+        .join("RoutedMembers.tsx")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let source = fs::read_to_string(&consumer).unwrap();
+    let caller_source = fs::read_to_string(&caller).unwrap();
+    let argument = caller_source.find("routedMember({").unwrap() + "routedMember(".len();
+    let read_site = argument + "{ read: () => ".len();
+    let typescript = TypeFactsSession::open(&typefacts, &project, &[]).unwrap();
+    let (mut warm, _) =
+        NativeIncrementalSession::open_pipelined(dialect::default_dialect(), project, typescript)
+            .unwrap();
+    let first = warm.analyze().unwrap();
+    let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
+    let (initial, _) = incremental
+        .build(&first, dialect::default_dialect().vocabulary)
+        .unwrap();
+    let dispatch = |program: &solid_reactive_ir::Program| {
+        program.static_defects.iter().any(|defect| {
+            defect.location.path.as_ref() == caller
+                && defect.location.start_byte == argument as u64
+                && defect.analysis_context == "parameter-member-targets-diverge"
+        })
+    };
+    let non_strict = |program: &solid_reactive_ir::Program| {
+        program.reads.iter().any(|read| {
+            read.location.path.as_ref() == caller
+                && read.location.start_byte == read_site as u64
+                && read.project_consumer_non_strict
+        })
+    };
+    assert!(!dispatch(&initial));
+    assert!(non_strict(&initial));
+    for (version, edited_source, excluded) in [
+        (
+            1,
+            source.replacen(
+                "return createMemo(() => options.compute());",
+                "options.compute();\n  return createMemo(() => options.compute());",
+                1,
+            ),
+            false,
+        ),
+        (2, source, true),
+    ] {
+        let edited = warm
+            .edit(
+                vec![SourceChange {
+                    path: consumer.clone(),
+                    version,
+                    source: Some(edited_source),
+                    compiler_options: CompilerOptions::default(),
+                }],
+                None,
+            )
+            .unwrap();
+        assert!(warm.last_build_timings().source_files_reused > 0);
+        let cold =
+            solid_reactive_ir::build(&edited, dialect::default_dialect().vocabulary).unwrap();
+        let (retained, timings) = incremental
+            .build(&edited, dialect::default_dialect().vocabulary)
+            .unwrap();
+        assert!(timings.interprocedural_graph_reused_files > 0);
+        // ADR 0321: the dispatch resolves to the argument literal's arrow in
+        // every version; the arrow's read carries the consumer context.
+        assert!(!dispatch(&retained), "version {version}");
+        assert_eq!(non_strict(&retained), excluded, "version {version}");
+        assert_eq!(
+            retained, cold,
+            "consumer-only edit {version} must refresh callback and dispatch proofs"
+        );
+    }
+    drop(warm);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn returned_anonymous_member_caller_edit_matches_cold_analysis() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let fixture = root.join("fixtures/reactive-ir/accessor-provenance");
+    let directory = temporary_directory("provenance-caller-edit");
+    for name in [
+        "tsconfig.json",
+        "solid-js.d.ts",
+        "warm-factory.ts",
+        "Warm.tsx",
+    ] {
+        fs::copy(fixture.join(name), directory.join(name)).unwrap();
+    }
+    let stub = directory.join("node_modules/solid-js");
+    fs::create_dir_all(&stub).unwrap();
+    fs::copy(
+        fixture.join("node_modules/solid-js/package.json"),
+        stub.join("package.json"),
+    )
+    .unwrap();
+    let project = directory
+        .join("tsconfig.json")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let caller = directory
+        .join("Warm.tsx")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let typescript = TypeFactsSession::open(&typefacts, &project, &[]).unwrap();
+    let (mut warm, _) = NativeIncrementalSession::open_pipelined(
+        dialect::default_dialect(),
+        project.clone(),
+        typescript,
+    )
+    .unwrap();
+    let first = warm.analyze().unwrap();
+    let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
+    incremental
+        .build(&first, dialect::default_dialect().vocabulary)
+        .unwrap();
+    let source = fs::read_to_string(&caller)
+        .unwrap()
+        .replace("store.other()", "store.value()");
+    let edited = warm
+        .edit(
+            vec![SourceChange {
+                path: caller.clone(),
+                version: 1,
+                source: Some(source.clone()),
+                compiler_options: CompilerOptions::default(),
+            }],
+            None,
+        )
+        .unwrap();
+    assert!(warm.last_build_timings().source_files_reused > 0);
+    let fresh = solid_reactive_ir::build(&edited, dialect::default_dialect().vocabulary).unwrap();
+    let (retained, timings) = incremental
+        .build(&edited, dialect::default_dialect().vocabulary)
+        .unwrap();
+    assert_eq!(
+        timings.interprocedural_graph_reused_files,
+        timings.source_discovery_reused_files
+    );
+    assert!(!retained.static_defects.iter().any(|defect| {
+        defect.location.path.as_ref() == caller
+            && defect.analysis_context == "returned-callable-outside-source-universe"
+            && matches!(
+                defect.kind,
+                solid_reactive_ir::StaticDefectKind::ReactiveDispatchUnresolved { .. }
+            )
+    }));
+    assert!(
+        retained
+            .reads
+            .iter()
+            .any(|read| read.location.path.as_ref() == caller)
+    );
+    assert_eq!(
+        retained, fresh,
+        "returned callable body facts must be stable across caller-only edits"
+    );
+    let reverted_source = source.replace("store.value()", "store.other()");
+    let reverted = warm
+        .edit(
+            vec![SourceChange {
+                path: caller.clone(),
+                version: 2,
+                source: Some(reverted_source),
+                compiler_options: CompilerOptions::default(),
+            }],
+            None,
+        )
+        .unwrap();
+    let fresh_reverted =
+        solid_reactive_ir::build(&reverted, dialect::default_dialect().vocabulary).unwrap();
+    let (retained_reverted, _) = incremental
+        .build(&reverted, dialect::default_dialect().vocabulary)
+        .unwrap();
+    assert!(
+        !retained_reverted
+            .reads
+            .iter()
+            .any(|read| read.location.path.as_ref() == caller)
+    );
+    assert_eq!(
+        retained_reverted, fresh_reverted,
+        "returning to the inert member must remove the read in retained and cold IR"
+    );
+    drop(warm);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn native_incremental_session_reuses_oxc_and_solid_facts() {
     let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
         Ok(value) => value,
@@ -163,10 +789,12 @@ fn rust_cli_covers_reactivity_v2_semantic_migration_matrix() {
             "reactive-write-in-owned-scope",
         ),
         ("owned-reexport-action.tsx", "action-called-in-owned-scope"),
-        ("effect-apply-parameter.tsx", "strict-read-untracked"),
-        ("effect-apply-member.tsx", "strict-read-untracked"),
-        ("after-await-member.tsx", "reactive-read-after-await"),
-        ("after-await-parameter.tsx", "reactive-read-after-await"),
+        // ADR 0294: an exported function's `Accessor<T>` parameter is a
+        // typed candidate, so its reads are obligations, not violations.
+        ("effect-apply-parameter.tsx", "reactive-dispatch-unresolved"),
+        ("effect-apply-member.tsx", "reactive-dispatch-unresolved"),
+        ("after-await-member.tsx", "reactive-dispatch-unresolved"),
+        ("after-await-parameter.tsx", "reactive-dispatch-unresolved"),
         ("after-await-namespace.tsx", "reactive-read-after-await"),
         (
             "after-await-callback-before-read.tsx",
@@ -457,7 +1085,6 @@ fn joins_real_oxc_compiler_and_tsgo_facts() {
         "initial incremental fragments must match the fresh builder"
     );
     assert_eq!(incremental_timings.source_discovery_recomputed_files, 2);
-    assert_eq!(incremental_timings.typed_accessor_recomputed_files, 2);
     let findings = selected.solve(&program);
     assert_eq!(findings.len(), 1, "findings = {findings:#?}");
     // Catalog-relative name: unprefixed in 2.0, `v1/`-prefixed in a
@@ -563,10 +1190,6 @@ fn incremental_reactive_ir_matches_fresh_after_an_edit() {
     );
     assert_eq!(
         timings.source_discovery_reused_files + timings.source_discovery_recomputed_files,
-        u64::try_from(edited.files.len()).unwrap()
-    );
-    assert_eq!(
-        timings.typed_accessor_reused_files + timings.typed_accessor_recomputed_files,
         u64::try_from(edited.files.len()).unwrap()
     );
     assert_eq!(
@@ -677,6 +1300,359 @@ declare namespace JSX {
     assert!(selected.solve(&retained).iter().any(|finding| {
         finding.rule == "reactive-dispatch-unresolved" && finding.kind == "uncertifiable"
     }));
+}
+
+/// ADR 0221: moving an `await` across a read in an async callee changes
+/// whether that read runs during the call, while the callee's read summary
+/// can stay the same. A warm session must answer what a cold build does.
+#[test]
+fn incremental_result_cache_follows_a_moved_await() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let directory = temporary_directory("moved-await-cache");
+    let project = directory.join("tsconfig.json");
+    let app = directory.join("App.tsx");
+    let helper = directory.join("helper.ts");
+    let declarations = directory.join("solid-js.d.ts");
+    fs::write(
+        &project,
+        r#"{"compilerOptions":{"jsx":"preserve","module":"ESNext","moduleResolution":"Bundler","strict":true,"target":"ES2022"},"files":["App.tsx","helper.ts","solid-js.d.ts"]}"#,
+    )
+    .unwrap();
+    fs::write(
+        &app,
+        r#"import { load } from "./helper";
+export function App() {
+  void load();
+  return <div />;
+}
+"#,
+    )
+    .unwrap();
+    let before = r#"import { createSignal } from "solid-js";
+const [count] = createSignal(0);
+export async function load() {
+  const value = count();
+  await Promise.resolve();
+  return value;
+}
+"#;
+    let after = r#"import { createSignal } from "solid-js";
+const [count] = createSignal(0);
+export async function load() {
+  await Promise.resolve();
+  const value = count();
+  return value;
+}
+"#;
+    fs::write(&helper, before).unwrap();
+    fs::write(
+        &declarations,
+        r#"declare module "solid-js" {
+  export function createSignal<T>(value: T): [() => T, (value: T) => void];
+}
+declare namespace JSX {
+  interface IntrinsicElements { div: Record<string, unknown>; }
+  interface Element {}
+}
+"#,
+    )
+    .unwrap();
+
+    let project_id = project.to_string_lossy().into_owned();
+    let sources = [&app, &helper]
+        .iter()
+        .map(|path| SourceFile {
+            path: path.to_string_lossy().into_owned(),
+            source: fs::read_to_string(path).unwrap().into(),
+            compiler_options: CompilerOptions::default(),
+        })
+        .collect();
+    let selected = dialect::by_id("solid-v2").unwrap();
+    let typescript = open_type_facts_session(&typefacts, &project_id);
+    let mut session =
+        NativeIncrementalSession::open(selected, project_id, sources, typescript).unwrap();
+    let first = session.analyze().unwrap();
+    let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
+    let (initial, _) = incremental.build(&first, selected.vocabulary).unwrap();
+    let violations = |program: &_| {
+        selected
+            .solve(program)
+            .iter()
+            .filter(|finding| {
+                finding.rule == "strict-read-untracked" && finding.kind == "violation"
+            })
+            .count()
+    };
+    assert_eq!(
+        violations(&initial),
+        1,
+        "the read before the await runs during the call"
+    );
+
+    for (version, source) in [(1, after), (2, before), (3, after)] {
+        let edited = session
+            .edit(
+                vec![SourceChange {
+                    path: helper.to_string_lossy().into_owned(),
+                    version,
+                    source: Some(source.into()),
+                    compiler_options: CompilerOptions::default(),
+                }],
+                None,
+            )
+            .unwrap();
+        let fresh = solid_reactive_ir::build(&edited, selected.vocabulary).unwrap();
+        let (retained, _) = incremental.build(&edited, selected.vocabulary).unwrap();
+        assert_eq!(retained, fresh, "version {version}");
+        assert_eq!(
+            violations(&retained),
+            usize::from(source == before),
+            "version {version}"
+        );
+    }
+}
+
+/// ADR 0283: a caller's getter read through a helper's own parameter Get
+/// rests on the helper's body, which no read summary states. The helper file
+/// holds no call-role syntax, so only the `FunctionSource` dependency can
+/// invalidate the caller's retained result when the Get becomes an alias.
+#[test]
+fn incremental_result_cache_follows_a_helper_parameter_get() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let directory = temporary_directory("helper-parameter-get-cache");
+    let project = directory.join("tsconfig.json");
+    let app = directory.join("App.tsx");
+    let helper = directory.join("helper.ts");
+    let declarations = directory.join("solid-js.d.ts");
+    fs::write(
+        &project,
+        r#"{"compilerOptions":{"jsx":"preserve","module":"ESNext","moduleResolution":"Bundler","strict":true,"target":"ES2022"},"files":["App.tsx","helper.ts","solid-js.d.ts"]}"#,
+    )
+    .unwrap();
+    fs::write(
+        &app,
+        r#"import { createSignal } from "solid-js";
+import { read } from "./helper";
+export function App() {
+  const [count] = createSignal(0);
+  const value = read({ get a() { return count(); } });
+  return <div>{value}</div>;
+}
+"#,
+    )
+    .unwrap();
+    let before = r#"export function read(o: { a: number }) {
+  return o.a;
+}
+"#;
+    let after = r#"export function read(o: { a: number }) {
+  const alias = o;
+  return alias.a;
+}
+"#;
+    fs::write(&helper, before).unwrap();
+    fs::write(
+        &declarations,
+        r#"declare module "solid-js" {
+  export function createSignal<T>(value: T): [() => T, (value: T) => void];
+}
+declare namespace JSX {
+  interface IntrinsicElements { div: Record<string, unknown>; }
+  interface Element {}
+}
+"#,
+    )
+    .unwrap();
+
+    let project_id = project.to_string_lossy().into_owned();
+    let sources = [&app, &helper]
+        .iter()
+        .map(|path| SourceFile {
+            path: path.to_string_lossy().into_owned(),
+            source: fs::read_to_string(path).unwrap().into(),
+            compiler_options: CompilerOptions::default(),
+        })
+        .collect();
+    let selected = dialect::by_id("solid-v2").unwrap();
+    let typescript = open_type_facts_session(&typefacts, &project_id);
+    let mut session =
+        NativeIncrementalSession::open(selected, project_id, sources, typescript).unwrap();
+    let first = session.analyze().unwrap();
+    let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
+    let (initial, _) = incremental.build(&first, selected.vocabulary).unwrap();
+    let violations = |program: &_| {
+        selected
+            .solve(program)
+            .iter()
+            .filter(|finding| {
+                finding.rule == "strict-read-untracked" && finding.kind == "violation"
+            })
+            .count()
+    };
+    assert_eq!(
+        violations(&initial),
+        1,
+        "the helper's Get runs the getter in the component body"
+    );
+
+    for (version, source) in [(1, after), (2, before), (3, after)] {
+        let edited = session
+            .edit(
+                vec![SourceChange {
+                    path: helper.to_string_lossy().into_owned(),
+                    version,
+                    source: Some(source.into()),
+                    compiler_options: CompilerOptions::default(),
+                }],
+                None,
+            )
+            .unwrap();
+        let fresh = solid_reactive_ir::build(&edited, selected.vocabulary).unwrap();
+        let (retained, _) = incremental.build(&edited, selected.vocabulary).unwrap();
+        assert_eq!(retained, fresh, "version {version}");
+        assert_eq!(
+            violations(&retained),
+            usize::from(source == before),
+            "version {version}"
+        );
+    }
+}
+
+/// ADR 0287: whether a hook returns its store reads the hook's own syntax --
+/// the proxy trap, and the same-file forward to the function holding it --
+/// which no summary or declared type carries. An edit to either has to
+/// invalidate the caller's retained source discovery.
+#[test]
+fn incremental_result_cache_follows_a_proxy_trap_and_forward() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let directory = temporary_directory("proxy-store-cache");
+    let project = directory.join("tsconfig.json");
+    let app = directory.join("App.tsx");
+    let hook = directory.join("hook.ts");
+    let declarations = directory.join("solid-js.d.ts");
+    fs::write(
+        &project,
+        r#"{"compilerOptions":{"jsx":"preserve","module":"ESNext","moduleResolution":"Bundler","strict":true,"target":"ES2022"},"files":["App.tsx","hook.ts","solid-js.d.ts"]}"#,
+    )
+    .unwrap();
+    fs::write(
+        &app,
+        r#"import { createSignal } from "solid-js";
+import { useQuery } from "./hook";
+export function App() {
+  const query = useQuery();
+  const [config] = createSignal(query.search);
+  return <div>{config()}</div>;
+}
+"#,
+    )
+    .unwrap();
+    let hook_source = |trap: &str, forward: &str| {
+        format!(
+            r#"import {{ createStore }} from "solid-js";
+type Query = {{ search: string }};
+const other: Query = {{ search: "" }};
+function useBase(): Query {{
+  const [state] = createStore<Query>({{ search: "" }});
+  return new Proxy(state, {{
+    get(target, prop, receiver) {{
+      return {trap};
+    }},
+  }});
+}}
+function usePlain(): Query {{
+  return {{ search: "" }};
+}}
+export function useQuery(): Query {{
+  return {forward}();
+}}
+"#
+        )
+    };
+    let proven = hook_source("Reflect.get(target, prop, receiver)", "useBase");
+    let other_trap = hook_source("Reflect.get(other, prop, receiver)", "useBase");
+    let other_forward = hook_source("Reflect.get(target, prop, receiver)", "usePlain");
+    fs::write(&hook, &proven).unwrap();
+    fs::write(
+        &declarations,
+        r#"declare module "solid-js" {
+  export function createSignal<T>(value: T): [() => T, (value: T) => void];
+  export function createStore<T extends object>(value: T): [T, (fn: (state: T) => void) => void];
+}
+declare namespace JSX {
+  interface IntrinsicElements { div: Record<string, unknown>; }
+  interface Element {}
+}
+"#,
+    )
+    .unwrap();
+
+    let project_id = project.to_string_lossy().into_owned();
+    let sources = [&app, &hook]
+        .iter()
+        .map(|path| SourceFile {
+            path: path.to_string_lossy().into_owned(),
+            source: fs::read_to_string(path).unwrap().into(),
+            compiler_options: CompilerOptions::default(),
+        })
+        .collect();
+    let selected = dialect::by_id("solid-v2").unwrap();
+    let typescript = open_type_facts_session(&typefacts, &project_id);
+    let mut session =
+        NativeIncrementalSession::open(selected, project_id, sources, typescript).unwrap();
+    let first = session.analyze().unwrap();
+    let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
+    let (initial, _) = incremental.build(&first, selected.vocabulary).unwrap();
+    let violations = |program: &_| {
+        selected
+            .solve(program)
+            .iter()
+            .filter(|finding| {
+                finding.rule == "strict-read-untracked" && finding.kind == "violation"
+            })
+            .count()
+    };
+    assert_eq!(
+        violations(&initial),
+        1,
+        "the forwarded proxy reads its store in the component body"
+    );
+
+    for (version, source) in [
+        (1, &other_trap),
+        (2, &proven),
+        (3, &other_forward),
+        (4, &proven),
+    ] {
+        let edited = session
+            .edit(
+                vec![SourceChange {
+                    path: hook.to_string_lossy().into_owned(),
+                    version,
+                    source: Some(source.clone()),
+                    compiler_options: CompilerOptions::default(),
+                }],
+                None,
+            )
+            .unwrap();
+        let fresh = solid_reactive_ir::build(&edited, selected.vocabulary).unwrap();
+        let (retained, _) = incremental.build(&edited, selected.vocabulary).unwrap();
+        assert_eq!(retained, fresh, "version {version}");
+        assert_eq!(
+            violations(&retained),
+            usize::from(source == &proven),
+            "version {version}"
+        );
+    }
 }
 
 #[test]
@@ -825,165 +1801,6 @@ void Card;
 }
 
 #[test]
-fn incremental_contract_exports_drop_removed_names() {
-    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
-        Ok(value) => value,
-        Err(_) => return,
-    };
-    let (mut session, paths) = tracer_fixture_session(&typefacts);
-    let first = session.analyze().unwrap();
-    let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
-    let (initial, _) = incremental
-        .build(&first, dialect::default_dialect().vocabulary)
-        .unwrap();
-    assert!(initial.contract_exports.contains_key("Bad"));
-
-    let original = fs::read_to_string(&paths[0]).unwrap();
-    let changed = original.replacen("export function Bad", "function Bad", 1);
-    assert_ne!(changed, original);
-    let edited = session
-        .edit(
-            vec![SourceChange {
-                path: paths[0].to_string_lossy().into_owned(),
-                version: 1,
-                source: Some(changed),
-                compiler_options: CompilerOptions::default(),
-            }],
-            None,
-        )
-        .unwrap();
-    let fresh = solid_reactive_ir::build(&edited, dialect::default_dialect().vocabulary).unwrap();
-    let (retained, _) = incremental
-        .build(&edited, dialect::default_dialect().vocabulary)
-        .unwrap();
-
-    assert_eq!(retained, fresh);
-    assert!(!retained.contract_exports.contains_key("Bad"));
-}
-
-#[test]
-fn incremental_contract_exports_refresh_changed_summaries() {
-    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
-        Ok(value) => value,
-        Err(_) => return,
-    };
-    let (mut session, paths) = tracer_fixture_session(&typefacts);
-    let first = session.analyze().unwrap();
-    let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
-    let (initial, _) = incremental
-        .build(&first, dialect::default_dialect().vocabulary)
-        .unwrap();
-    let initial_good = initial.contract_exports.get("Good").cloned().unwrap();
-
-    let original = fs::read_to_string(&paths[0]).unwrap();
-    let changed = original.replacen(
-        "return <div>{count()}</div>;",
-        "return <div>static</div>;",
-        1,
-    );
-    assert_ne!(changed, original);
-    let edited = session
-        .edit(
-            vec![SourceChange {
-                path: paths[0].to_string_lossy().into_owned(),
-                version: 1,
-                source: Some(changed),
-                compiler_options: CompilerOptions::default(),
-            }],
-            None,
-        )
-        .unwrap();
-    let fresh = solid_reactive_ir::build(&edited, dialect::default_dialect().vocabulary).unwrap();
-    let (retained, _) = incremental
-        .build(&edited, dialect::default_dialect().vocabulary)
-        .unwrap();
-
-    assert_eq!(retained, fresh);
-    assert_ne!(
-        retained.contract_exports.get("Good"),
-        Some(&initial_good),
-        "a changed inferred function contract must invalidate its fragment"
-    );
-}
-
-#[test]
-fn incremental_contract_exports_refresh_cross_file_reexports() {
-    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
-        Ok(value) => value,
-        Err(_) => return,
-    };
-    let directory = temporary_directory("contract-reexport-invalidation");
-    let project = directory.join("tsconfig.json");
-    let source = directory.join("source.ts");
-    let entrypoint = directory.join("index.ts");
-    fs::write(
-        &project,
-        r#"{"compilerOptions":{"allowImportingTsExtensions":true,"noEmit":true},"files":["source.ts","index.ts"]}"#,
-    )
-    .unwrap();
-    let original = "export function source() { return 1; }\n";
-    fs::write(&source, original).unwrap();
-    fs::write(
-        &entrypoint,
-        "export { source as publicSource } from \"./source.ts\";\n",
-    )
-    .unwrap();
-    let project_id = project.to_string_lossy().into_owned();
-    let sources = [&source, &entrypoint]
-        .into_iter()
-        .map(|path| SourceFile {
-            path: path.to_string_lossy().into_owned(),
-            source: fs::read_to_string(path).unwrap().into(),
-            compiler_options: CompilerOptions::default(),
-        })
-        .collect();
-    let typescript = TypeFactsSession::open(&typefacts, &project_id, &[]).unwrap();
-    let mut session =
-        NativeIncrementalSession::open(dialect::default_dialect(), project_id, sources, typescript)
-            .unwrap();
-    let first = session.analyze().unwrap();
-    let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
-    let (initial, _) = incremental
-        .build(&first, dialect::default_dialect().vocabulary)
-        .unwrap();
-    assert_eq!(
-        initial
-            .contract_exports
-            .get("publicSource")
-            .and_then(|summary| summary.async_behavior.known().map(String::as_str)),
-        Some("")
-    );
-
-    let changed = "export async function source() { return 1; }\n";
-    fs::write(&source, changed).unwrap();
-    let edited = session
-        .edit(
-            vec![SourceChange {
-                path: source.to_string_lossy().into_owned(),
-                version: 1,
-                source: Some(changed.into()),
-                compiler_options: CompilerOptions::default(),
-            }],
-            None,
-        )
-        .unwrap();
-    let fresh = solid_reactive_ir::build(&edited, dialect::default_dialect().vocabulary).unwrap();
-    let (retained, _) = incremental
-        .build(&edited, dialect::default_dialect().vocabulary)
-        .unwrap();
-
-    assert_eq!(retained, fresh);
-    assert_eq!(
-        retained
-            .contract_exports
-            .get("publicSource")
-            .and_then(|summary| summary.async_behavior.known().map(String::as_str)),
-        Some("promise"),
-        "an unchanged re-export fragment must follow its changed source contract"
-    );
-}
-
-#[test]
 fn incremental_reactive_ir_reuses_semantic_indexes_for_same_shape_body_edit() {
     let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
         Ok(value) => value,
@@ -996,13 +1813,16 @@ fn incremental_reactive_ir_reuses_semantic_indexes_for_same_shape_body_edit() {
         .build(&first, dialect::default_dialect().vocabulary)
         .unwrap();
 
-    let original = fs::read_to_string(&paths[1]).unwrap();
-    let changed = original.replacen("createSignal(0)", "createSignal(1)", 1);
+    // A same-length JSX text edit keeps every fact's shape. A call argument's
+    // literal is not such an edit (ADR 0252): owner guards read it, so a
+    // change there must recompute the owner fixed point.
+    let original = fs::read_to_string(&paths[0]).unwrap();
+    let changed = original.replacen(">Read</button>", ">Load</button>", 1);
     assert_ne!(changed, original);
     let edited = session
         .edit(
             vec![SourceChange {
-                path: paths[1].to_string_lossy().into_owned(),
+                path: paths[0].to_string_lossy().into_owned(),
                 version: 1,
                 source: Some(changed),
                 compiler_options: CompilerOptions::default(),
@@ -1216,11 +2036,11 @@ fn edit_recovers_when_the_service_dies_between_update_and_analyze() {
 ///
 /// The measurement is per generation, and a retained session keeps the last
 /// one. An edit that removes the program's only bare specifier asks for nothing
-/// -- there is no specifier a contract could describe -- so leaving the previous
+/// -- there is no specifier a package could be matched by -- so leaving the previous
 /// generation's counts in place would make `SOLID_CHECKER_TIMINGS` attribute
 /// them to a generation that never issued the operation.
 #[test]
-fn an_empty_identity_scope_clears_the_previous_generations_measurement() {
+fn an_identity_measurement_describes_the_current_generation() {
     let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
         Ok(value) => value,
         Err(_) => return,
@@ -1280,10 +2100,13 @@ fn an_empty_identity_scope_clears_the_previous_generations_measurement() {
             None,
         )
         .unwrap();
+    // Every program file is attested (ADR 0219), so the edited file is still
+    // asked about; the specifier it no longer has is not carried over from
+    // the previous generation.
     let measurement = session.last_import_identity();
-    assert_eq!(measurement.requested, 0);
-    assert_eq!(measurement.attested, 0);
+    assert_eq!(measurement.requested, 1);
+    assert_eq!(measurement.attested, 1);
+    assert_eq!(measurement.unknown, 0);
     assert_eq!(measurement.specifiers, 0);
-    assert_eq!(measurement.modules, 0);
     fs::remove_dir_all(directory).unwrap();
 }

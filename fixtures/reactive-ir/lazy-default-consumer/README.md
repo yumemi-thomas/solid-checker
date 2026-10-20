@@ -1,0 +1,3 @@
+# lazy-default-consumer
+
+**Claim (ADR 0292).** A component declared in a `lazy` loader and returned as its module's `default` is rendered by `lazy`, not retained by the module object, so under a browser host with `dep-loop` as source its `start()` is reported like any rendered component's (`Dialect::renders_loaded_default_argument`, rc.13 only; one-argument async loader, one closed object return, synchronous loader-declared component, unexported wrapper used only as a JSX tag); other shapes stay uncertifiable. `lazy` overloads copy published rc.13 `types/client/component.d.ts`; twin `lazy-default-consumer-rc9`.

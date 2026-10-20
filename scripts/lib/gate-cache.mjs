@@ -12,9 +12,8 @@
 //   (a) the unit's own tree on disk -- every file under the fixture project,
 //       walked from the filesystem rather than from `git ls-files`, because an
 //       untracked file changes the answer exactly as much as a tracked one;
-//   (b) the binaries the unit executes: the checker (which carries
-//       `pkg/contracts/bundled/**` compiled in via `include_bytes!`), the
-//       TypeFacts producer, and its `.buildinfo` stamp;
+//   (b) the binaries the unit executes: the checker, the TypeFacts
+//       producer, and its `.buildinfo` stamp;
 //   (c) the gate script and every local module it can reach, plus all of
 //       `scripts/lib/**` unconditionally -- import tracing is an
 //       over-approximation on purpose, and an unresolvable dynamic import
@@ -25,8 +24,8 @@
 //   (f) a format-version constant, so a change to what an entry *means*
 //       invalidates every entry rather than being misread;
 //   (g) `options.trees` -- directory trees the gate *executes* but does not
-//       own, the CLI it spawns being the case that matters. The contract
-//       corpus's whole soundness argument is this class: its generator lives in
+//       own, the CLI it spawns being the case that matters. The adapter
+//       gates' whole soundness argument is this class: the CLI lives in
 //       `packages/cli`, which no unit tree and no traced import covers;
 //   (h) per unit, whatever ancestor chain the unit's *own* answer depends on --
 //       `ancestorChainDigest` exists because dialect selection walks upward out

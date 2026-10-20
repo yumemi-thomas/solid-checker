@@ -1,0 +1,3 @@
+{
+  "note": "a function child (uncertifiable, ADR 0326 amendment) and a render prop (proven SC1001), each called in the receiving component body; a child handed to an unknown function (uncertifiable); controls the runtime tracks or defers: a call in JSX, an event handler, For"
+}

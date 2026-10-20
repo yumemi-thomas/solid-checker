@@ -1,0 +1,3 @@
+# async-call-prefix
+
+**Claim (ADR 0221, G2).** A call of an async project function runs its body on the caller's stack up to the first possible suspension, so a read in that prefix, or in a default the call activates by omitting the argument, runs during the call (`interproc::body_site_runs_during_call`, per invocation at every hop): `SC1001` violations before the first `await` (nested helpers, cross-file, omitted defaults); uncertifiable after a possible suspension, for unproven or closure-creating defaults, async generators and loop bodies; `StoreProtocolKeys` follows ADR 0293. Stubs from `prop-head-get`; `tsc` against real rc.13.

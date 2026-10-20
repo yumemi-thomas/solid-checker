@@ -11,7 +11,9 @@ export interface SolidCheckerRuntimeSettings {
    * Whether code outside this project may import from it. `"closed"` asserts
    * the analyzed files are the whole program, which lets an exported symbol's
    * caller set be enumerated. It never licenses guessing one: every reference
-   * must still resolve to a use the analyzer understands.
+   * must still resolve to a use the analyzer understands. When unset, the
+   * project's nearest `package.json` decides: a private or unpublished
+   * package is closed, a published library is open (ADR 0193).
    */
   programBoundary?: "open" | "closed" | (string & {});
   /** Exact package/framework conditions selected for this analysis. */
@@ -29,12 +31,14 @@ export interface SolidCheckerSettings {
   command?: string;
   /** Arguments placed before solid-checker's generated CLI arguments. */
   commandArgs?: string[];
-  /** Receipt-issued stable-v1 contract catalog for exact imports. */
-  acceptedContracts?: string;
   /** Force a dialect instead of detecting it from the project. */
-  dialect?: "solid-v1" | "solid-v2" | (string & {});
+  dialect?: "solid-v2" | (string & {});
   /** Exact runtime selection used for artifact cases and rendering proofs. */
   runtime?: SolidCheckerRuntimeSettings;
+  // `acceptedContracts`, `receiptTrustConfiguration` and `dependencySource`
+  // were removed with package-contract consumption; setting one is refused.
+  /** Opt-in Vite client resolver observation; executes project config. Off by default. */
+  runtimeResolution?: "required" | "off";
   /** Read a canonical JSON snapshot instead of starting an analysis process. */
   snapshotPath?: string;
 }
@@ -46,11 +50,24 @@ export interface SolidCheckerPlugin extends ESLint.Plugin {
   };
   rules: Record<string, Rule.RuleModule> & {
     certification: Rule.RuleModule;
+    /**
+     * The run's `solid-checker: note:` lines about unavailable source
+     * analysis, at line 1 of every linted file.
+     * `warn` in every shipped config; `off` hides the notes.
+     */
+    "package-note": Rule.RuleModule;
+    /** @deprecated Alias of package-note, kept so existing configs keep loading. */
+    "contract-note": Rule.RuleModule;
   };
   configs: Record<string, Linter.Config> & {
     recommended: Linter.Config;
     v1: Linter.Config;
     v2: Linter.Config;
+    /**
+     * `v2` with `settings.solidChecker.runtime.target` set to `"browser"`
+     * (ADR 0269), for client applications.
+     */
+    "browser-v2": Linter.Config;
   };
 }
 

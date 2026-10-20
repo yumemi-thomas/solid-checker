@@ -1,0 +1,11 @@
+{
+  "note": "r9 reviewer: d9/MixDestructure. Runtime-only witnesses supply the original ambient globals (no-op sink/runner, true flag, resolved promise); their declarations remain opaque to analysis. Runtime adaptation: mount the original component with populated signal-backed props so its reactive reads and control-flow branches execute. Static-only investigation: assert both callback invocations complete (untrack and memo). Destructuring runs in permitted scopes; the no-destructure violation is a possible false positive from mixed invocation placement.",
+  "steps": [
+    {
+      "action": "assert-text",
+      "selector": "#oracle-mixed",
+      "text": "1:2",
+      "id": "runtime-observation-0"
+    }
+  ]
+}

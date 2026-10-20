@@ -1,0 +1,85 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-in-deferred-callback/App.tsx",
+      "start": 784,
+      "end": 795,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-in-deferred-callback/App.tsx",
+      "start": 1069,
+      "end": 1080,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/write-in-deferred-callback/App.tsx",
+      "start": 1480,
+      "end": 1487,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-in-deferred-callback/App.tsx",
+      "start": 1506,
+      "end": 1521,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-in-deferred-callback/App.tsx",
+      "start": 2007,
+      "end": 2018,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-in-deferred-callback/App.tsx",
+      "start": 2210,
+      "end": 2221,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-in-deferred-callback/App.tsx",
+      "start": 2435,
+      "end": 2446,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-in-deferred-callback/App.tsx",
+      "start": 2620,
+      "end": 2631,
+      "fixes": 0
+    }
+  ]
+}

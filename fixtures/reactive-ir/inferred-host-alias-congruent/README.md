@@ -1,0 +1,3 @@
+# Inferred host: alias-congruent
+
+The exact Node `path.resolve` binding computes the literal Vite replacement equal to the tsconfig paths target; Type Facts must attest the target and the config never resolves an import. The admitted host shows only as status `uncertifiable`; its sites are pinned by `host-cases.json`, which `native_execution_fixture_sites_keep_function_boundaries_and_edge_refusals` (`inferred_host/tests.rs`) checks against native discovery, including that a proven value use installs the congruent alias execution edge. Shape and Element/JSX signatures are those of `inferred-host-spa`.

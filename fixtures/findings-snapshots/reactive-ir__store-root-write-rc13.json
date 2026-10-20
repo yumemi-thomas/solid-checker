@@ -1,0 +1,45 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "no-direct-mutation",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-root-write-rc13/store.ts",
+      "start": 437,
+      "end": 449,
+      "fixes": 0
+    },
+    {
+      "rule": "no-direct-mutation",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-root-write-rc13/store.ts",
+      "start": 597,
+      "end": 614,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/store-root-write-rc13/store.ts",
+      "start": 885,
+      "end": 936,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/store-root-write-rc13/store.ts",
+      "start": 940,
+      "end": 992,
+      "fixes": 0
+    }
+  ]
+}

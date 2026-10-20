@@ -1,0 +1,3 @@
+# rc9-static-dynamic-async
+
+`dynamic(source, { static: true })` on `@solidjs/web@2.0.0-rc.9` renders the source's result once, so a Promise is never rendered (dev throws, `dist/web.dev.js:2249`; production falls through to `() => undefined`), yet published typings accept it (`types/index.d.ts:82-97`). SC2007 `static-dynamic-async-source` violation for inline `async` functions, `Promise.resolve`/`new Promise` expression arrows and identifiers resolving to same-file async functions; sync sources, default form, `{ static: flag }`, shadowed `Promise`, parameters/`let` and block-bodied resolve are silent; also SC9014. rc.3: `release-triple-static-dynamic-async-rc3`.

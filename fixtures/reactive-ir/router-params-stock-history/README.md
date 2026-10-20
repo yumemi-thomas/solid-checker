@@ -1,0 +1,3 @@
+# Stock histories keep the router premise (ADR 0324)
+
+`createRouter` takes its integration from `config.history` (`dist/routers/factory.jsx:141,187,207`), and `utils.paramsWrapper` replaces the params object (`dist/index.js:1306`). The premise holds while every router creation names no history or a stock one (`browserHistory`, `hashHistory`, `memoryHistory`, `routers/history.js:91,131,178`) called directly and never given `utils`: no history, a direct call, and a `const` only `get`/`set` all settle the site (no `SC9012`). Router is the published `@solidjs/router@2.0.0-next.26` byte for byte (MIT; digest `e67af539…04d6`).

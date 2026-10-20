@@ -12,10 +12,14 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
     };
 
     for (rule, count) in [
-        ("reactive-write-in-owned-scope", 9),
+        ("reactive-write-in-owned-scope", 11),
         ("action-called-in-owned-scope", 2),
-        ("strict-read-untracked", 22),
-        ("reactive-read-after-await", 20),
+        // Review round 4: two zero-parameter `Show` children are tracked
+        // inserts, not strict-read callbacks.
+        ("strict-read-untracked", 18),
+        ("reactive-read-after-await", 19),
+        // ADR 0294: the exported `install(read: Accessor<number>)` shapes.
+        ("reactive-dispatch-unresolved", 3),
         ("no-destructure", 1),
         ("components-return-once", 3),
         ("leaf-owner-forbidden-call", 7),
@@ -34,15 +38,27 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         ),
         (
             "effect-apply-invalid.tsx",
-            [("strict-read-untracked", 3)].as_slice(),
+            [
+                ("strict-read-untracked", 2),
+                ("reactive-dispatch-unresolved", 1),
+            ]
+            .as_slice(),
         ),
         (
             "effect-apply-extended-invalid.tsx",
-            [("strict-read-untracked", 5)].as_slice(),
+            [
+                ("strict-read-untracked", 4),
+                ("reactive-dispatch-unresolved", 1),
+            ]
+            .as_slice(),
         ),
         (
             "after-await-invalid.tsx",
-            [("reactive-read-after-await", 3)].as_slice(),
+            [
+                ("reactive-read-after-await", 2),
+                ("reactive-dispatch-unresolved", 1),
+            ]
+            .as_slice(),
         ),
         (
             "await-control-flow-invalid.tsx",
@@ -58,7 +74,7 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         ),
         (
             "control-flow-invalid.tsx",
-            [("strict-read-untracked", 7)].as_slice(),
+            [("strict-read-untracked", 5)].as_slice(),
         ),
         (
             "props-extended-invalid.tsx",
@@ -144,7 +160,18 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         ),
         (
             "owned-scope-valid.tsx",
-            [("missing-owner", 1), ("cleanup-return-unresolved", 0)].as_slice(),
+            [
+                ("missing-owner", 1),
+                ("cleanup-return-unresolved", 0),
+                // Not incidental: a deliberate divergence from upstream, which
+                // lists `flush(fn)` inside a memo as valid. `flush` keeps the
+                // memo's owner, so the inline write and the `flushWrite` it is
+                // passed throw REACTIVE_WRITE_IN_OWNED_SCOPE on every
+                // rc.0-rc.9 dev build (ownership case
+                // reactive-write-in-owned-scope/positive/002).
+                ("reactive-write-in-owned-scope", 2),
+            ]
+            .as_slice(),
         ),
     ]);
     for (file, rules) in incidental {
@@ -162,12 +189,10 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
     }
 
     for (file, rules) in [
+        // SC2001 is pinned at two above: the `flush(fn)` divergence.
         (
             "owned-scope-valid.tsx",
-            &[
-                "reactive-write-in-owned-scope",
-                "action-called-in-owned-scope",
-            ][..],
+            &["action-called-in-owned-scope"][..],
         ),
         ("effect-apply-valid.tsx", &["strict-read-untracked"][..]),
         (

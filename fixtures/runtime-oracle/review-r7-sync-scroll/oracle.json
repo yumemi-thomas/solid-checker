@@ -1,0 +1,11 @@
+{
+  "note": "ADR 0326/0327 reviewer r7: sync-scroll. Static-only investigation: assert rendering completes after the synchronous dispatch and owner assertion. This is the documented event-owner premise false positive (ADR 0327): dispatch inherits the component owner, and the detached element receives no later automatic events.",
+  "steps": [
+    {
+      "action": "assert-text",
+      "selector": "#oracle-dispatch",
+      "text": "dispatched synchronously",
+      "id": "runtime-observation-0"
+    }
+  ]
+}

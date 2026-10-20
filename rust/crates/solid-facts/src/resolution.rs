@@ -2,15 +2,16 @@
 //! specifier actually resolves to, as the compiler resolved it.
 //!
 //! Oxc sees the specifier *text*; nothing in the syntax facts says where that
-//! text resolves. A package contract describes one installed package, so
-//! applying it to an import needs the resolution, not the name — a tsconfig
+//! text resolves. A package's behavior belongs to one installed package, so
+//! applying a package summary to an import needs the resolution, not the
+//! name — a tsconfig
 //! `paths` entry, a `baseUrl` mapping, or a project-local reimplementation can
 //! own a bare specifier while a package of that same name is installed beside
 //! it. This table carries the compiler's own answer for that question and
 //! nothing derived from path shape.
 //!
 //! The table is deliberately optional on [`crate::ProjectFacts`]. An analysis
-//! that carries it binds contracts by installed identity; one that does not
+//! that carries it binds packages by installed identity; one that does not
 //! (an adapter with no Type Facts session of its own) keeps the older
 //! name-matched behavior, which is a documented limitation of that adapter and
 //! not a silent upgrade. Absence of the *whole table* and absence of *one row*
@@ -80,8 +81,7 @@ pub struct AttestedImport {
     /// disagree: this one names the package whose manifest the resolution
     /// consulted, which for a subpath export or a nested install is not always
     /// the nearest manifest above the selected file. A consumer comparing a
-    /// contract against a package must say which of the two it means — see
-    /// `solid_reactive_ir::contracts`, which says so at the comparison.
+    /// package identity against a name must say which of the two it means.
     pub resolver_package_name: Option<CompactString>,
     /// Version recorded by the resolver's own package identity.
     pub resolver_package_version: Option<CompactString>,
@@ -97,7 +97,7 @@ pub struct AttestedImportIndex {
     by_file: HashMap<Arc<str>, Vec<AttestedImport>>,
 }
 
-/// The answer to "may a contract for this package be applied to this
+/// The answer to "may a fact about this package be applied to this
 /// specifier?" before the package identity is compared.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SpecifierAttestation<'a> {

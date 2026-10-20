@@ -1,0 +1,3 @@
+# Exact accessor provenance
+
+Which reads an eager read summary attributes to an enclosing factory/helper, and when a transported accessor member is a violation, clean or uncertifiable: native timers/microtasks (independent exact globals), memo/effect computes, queued `onSettled` and later-only closures contribute no eager read; lookalikes, unknown consumers and aliased/escaped/mutable/computed receivers keep obligations. ADR 0273: any mutation vetoes transported members project-wide; ADR 0276: a `??` right-operand read is uncertifiable. Reduced stub keeps published rc.13 signal/memo, effect (cleanup-or-void) and context signatures.

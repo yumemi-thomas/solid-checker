@@ -8,34 +8,31 @@
 //! the reactive engine reads — Oxc AST facts, resolved primitives, TypeScript
 //! entities — never source text through a regex.
 //!
-//! # Which dialect runs which group
+//! # Which group runs
 //!
-//! [`check_file`] gates each submodule on the dialect version, mirroring what
-//! the two catalogs declare. The module names make that ownership explicit:
-//! the `solid1x_*` modules retain their historical implementation names, but
-//! their entry points are gated per rule: structural preferences and intrinsic
-//! content competition are shared, while attributes, directives, and DOM-slot
-//! folding remain 1.x-only. `shared_reactivity` contains defect classes carried by both catalogs
-//! (minus the one 1.x-only rule its own gate documents). The version match
-//! here and the catalogs above cannot drift silently: each dialect's solver
-//! panics on an emitted identity its catalog does not resolve, and both rule
-//! crates' fixture suites execute this pass.
+//! Every submodule here now runs for every compiled vocabulary. The
+//! `solid1x_*` module names were historical implementation names from the
+//! eslint-plugin-solid port and are gone with them;
+//! eslint-plugin-solid port, and the 1.x-only groups behind them — attributes,
+//! directives, DOM-slot folding, and the `jsx-no-undef` surface — went with
+//! that dialect (ADR 0110). What is left is shared, so the names say so:
+//! `syntax`, `structure`, `rule_options`, and `shared_reactivity`.
+//!
+//! The catalogs and this pass cannot drift silently: the solver panics on an
+//! emitted identity its catalog does not resolve, and the rule crate's fixture
+//! suite executes this pass.
 
+pub mod rule_options;
 mod shared_reactivity;
-mod solid1x_attributes;
-pub mod solid1x_options;
-mod solid1x_structure;
-mod solid1x_syntax;
-mod solid1x_undef;
+mod structure;
+mod syntax;
 
-use std::collections::{HashMap, HashSet};
+use crate::{HashMap, HashSet};
 
 use crate::cache::SourceReferenceLocations;
 use crate::indexes::SemanticLookup;
 use crate::pipeline::{AnalysisContext, ProgramDraft, parallel_file_results};
-use crate::{
-    EntitySymbols, Fix, ReactiveSourceKind, StaticViolation, SymbolId, TextEdit, location,
-};
+use crate::{EntitySymbols, Fix, ReactiveSourceKind, StaticViolation, SymbolId, location};
 use solid_facts::FileFacts;
 use solid_facts::core::Span;
 use typefacts::{ArrayShape, Location, RuntimeValueDomain};
@@ -50,7 +47,7 @@ struct IndexedReactiveRead {
 /// grouped once by file for the preference rules that ask whether evaluating a
 /// governing expression subscribes. This is deliberately downstream of the
 /// engine's read analysis: aliases, caller-classified props, derived helpers,
-/// and package-contract reads must all receive the same answer here that they
+/// and dependency-source reads must all receive the same answer here that they
 /// receive everywhere else.
 #[derive(Default)]
 pub(super) struct ReactiveReadIndex {
@@ -59,7 +56,7 @@ pub(super) struct ReactiveReadIndex {
 
 impl ReactiveReadIndex {
     fn new(reads: &[crate::ReactiveRead]) -> Self {
-        let mut by_path = HashMap::<String, Vec<IndexedReactiveRead>>::new();
+        let mut by_path = HashMap::<String, Vec<IndexedReactiveRead>>::default();
         for read in reads {
             let (Ok(start), Ok(end)) = (
                 u32::try_from(read.location.start_byte),
@@ -74,11 +71,16 @@ impl ReactiveReadIndex {
                     span: Span::new(start, end),
                     // `uncertain` specifically means that a component prop's
                     // reactive backing is not established. Accessor, store,
-                    // and contract identities remain proven reactive even
+                    // and dependency-source identities remain proven reactive even
                     // when their surrounding function is only a possible
                     // component. A style preference cannot promote the 1.x
                     // catalog's historical all-props heuristic into proof.
-                    proven: !read.uncertain || read.kind.as_ref() != "component-props",
+                    proven: (!read.uncertain || read.kind.as_ref() != "component-props")
+                        && !read.host_callback_timing
+                        && !read.callee_callback_timing
+                        && !read.callback_invocation_unproven
+                        && !read.missing_jsx_census
+                        && !read.transported,
                 });
         }
         for reads in by_path.values_mut() {
@@ -89,8 +91,12 @@ impl ReactiveReadIndex {
 
     /// Whether evaluating exactly `expression` performs a proven reactive
     /// read outside a nested function. A read summarized onto an enclosing
-    /// call remains eligible: that is the interprocedural proof that invoking
-    /// the helper executes the dependency. An unresolved read never qualifies.
+    /// call remains eligible under the pre-existing summary policy. A read
+    /// supplied by accessor transport is withheld even through ordinary helper
+    /// hops: its source identity does not prove synchronous execution. A read whose invocation timing is
+    /// unproven (host, callee or callback timing, missing JSX census) does not
+    /// qualify: source identity alone never proves a dependency of the
+    /// governing expression.
     pub(super) fn has_proven_read(
         &self,
         context: &UpstreamCompatContext<'_>,
@@ -174,14 +180,9 @@ pub(super) fn source_symbol_at<'a>(
 
 /// The object a member chain is rooted at: `store.a.b` -> `store`.
 pub(super) fn member_root(file: &FileFacts, span: Span) -> Option<Span> {
-    let mut current = file.ast.members.iter().find(|member| member.span == span)?;
+    let mut current = file.ast.member_at(span)?;
     loop {
-        match file
-            .ast
-            .members
-            .iter()
-            .find(|member| member.span == current.object)
-        {
+        match file.ast.member_at(current.object) {
             Some(outer) => current = outer,
             None => return Some(current.object),
         }
@@ -403,7 +404,7 @@ pub(super) fn static_string_expression(
     file: &FileFacts,
     span: Span,
 ) -> Option<String> {
-    static_string_expression_inner(context, file, span, &mut HashSet::new())
+    static_string_expression_inner(context, file, span, &mut HashSet::default())
 }
 
 fn static_string_expression_inner(
@@ -593,22 +594,6 @@ fn read_hex_escape(
     Some(value)
 }
 
-pub(super) fn fix_replace(
-    file: &FileFacts,
-    span: Span,
-    message: impl Into<String>,
-    new_text: impl Into<String>,
-) -> Fix {
-    Fix {
-        message: message.into(),
-        applicability: "safe".into(),
-        edits: vec![TextEdit {
-            location: location(file.path.shared(), span),
-            new_text: new_text.into(),
-        }],
-    }
-}
-
 /// Builds a static violation, filling in the boilerplate every rule shares
 /// (identity, location, and an empty `analysis_context` — the rules that
 /// need one, like `no-unknown-namespaces`, set it after the call).
@@ -638,7 +623,7 @@ pub(super) fn violation(
 /// The reactive maps are the reason the decomposed `reactivity` rules can be
 /// semantic rather than syntactic: upstream decides what is reactive from
 /// naming conventions and call shapes, while these are the sources the engine
-/// *proved*, through TypeScript symbol resolution, package contracts, and
+/// *proved*, through TypeScript symbol resolution, dependency source, and
 /// cross-file propagation.
 pub(super) struct UpstreamCompatContext<'a> {
     /// The vocabulary these rules are checking against. Consulted rather than
@@ -664,7 +649,7 @@ pub(super) struct UpstreamCompatContext<'a> {
     /// `Reactive` everywhere for dialects that keep the upstream
     /// over-approximation.
     pub(super) props_reactivity: &'a crate::source_discovery::PropsReactivityIndex,
-    /// Local, interprocedural, alias-propagated, and contract-derived reads,
+    /// Local, interprocedural, alias-propagated, and dependency-source-derived reads,
     /// indexed once for exact governing-expression queries.
     pub(super) reactive_reads: ReactiveReadIndex,
     /// The proven-source symbol at each exact TypeScript reference location,
@@ -677,16 +662,11 @@ pub(super) struct UpstreamCompatContext<'a> {
     /// size. Owned: the reference lists it is built from live shorter than
     /// this struct's borrows.
     pub(super) source_reference_index: HashMap<String, HashMap<(u64, u64), SymbolId>>,
-    /// The imported symbols a package contract describes.
+    /// The imported symbols a dependency-source summary describes.
     ///
     /// Read as the negative: a callee absent from here, absent from the
     /// dialect's primitives, and with no body in the project is one whose
     /// reactive behaviour nothing in the analysis knows.
-    pub(super) contracted: &'a HashMap<SymbolId, crate::contracts::ResolvedContractBinding>,
-    /// Per-rule options, defaulted to upstream's defaults when the project
-    /// carries no `.solid-checker/rule-options.json`. See
-    /// [`solid1x_options`].
-    pub(super) solid1x_options: &'a solid1x_options::Solid1xRuleOptions,
     pub(super) prefer_for_enabled: bool,
     pub(super) prefer_show_enabled: bool,
 }
@@ -696,13 +676,9 @@ pub(super) struct UpstreamCompatContext<'a> {
 fn check_file(file: &FileFacts, context: &UpstreamCompatContext<'_>) -> FileDiagnostics {
     let mut violations = Vec::new();
     let mut defects = Vec::new();
-    solid1x_syntax::check_file(file, context, &mut violations);
+    syntax::check_file(file, &mut violations);
     if context.prefer_for_enabled || context.prefer_show_enabled {
-        solid1x_structure::check_file(file, context, &mut violations);
-    }
-    if context.dialect.carries_eslint_era_rules() {
-        solid1x_attributes::check_file(file, context, &mut violations);
-        solid1x_undef::check_file(file, context, &mut violations);
+        structure::check_file(file, context, &mut violations);
     }
     shared_reactivity::check_file(file, context, &mut defects);
     FileDiagnostics {
@@ -733,11 +709,7 @@ pub(crate) fn check_project(
     reusable: bool,
     draft: &mut ProgramDraft,
 ) {
-    let (prefer_for_name, prefer_show_name) = if ctx.dialect.carries_eslint_era_rules() {
-        ("v1/prefer-for", "v1/prefer-show")
-    } else {
-        ("prefer-for", "prefer-show")
-    };
+    let (prefer_for_name, prefer_show_name) = ("prefer-for", "prefer-show");
     let prefer_for_enabled = ctx
         .rule_options
         .is_enabled(prefer_for_name, true, &["preferences"]);
@@ -775,8 +747,6 @@ pub(crate) fn check_project(
                 ctx.accessors.keys(),
             )
         }),
-        contracted: ctx.contracted,
-        solid1x_options: ctx.solid1x_rule_options,
         prefer_for_enabled,
         prefer_show_enabled,
     };

@@ -1,0 +1,10 @@
+{
+  "note": "Opus review round 5 (t6-rest-timer-owner): Show/Match function children by arity, with nested deferred code",
+  "open": [
+    {
+      "code": "NO_OWNER_EFFECT",
+      "site": "App.tsx:8",
+      "reason": "An effect created in a timer inside a Show callback runs with no owner; the owner graph does not follow timer callbacks there (pre-existing, also with a parameter)."
+    }
+  ]
+}

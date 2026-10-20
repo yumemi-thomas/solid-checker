@@ -7,13 +7,13 @@ use crate::owners::{
 };
 use crate::pipeline::available_analysis_workers;
 use crate::{
-    ActionInvocation, AsyncRead, CacheRetention, ContractCallback, ContractExport,
-    ContractGenerationObligation, FunctionNode, OwnerRequirement, Program, ReactiveRead,
-    ReactiveSourceKind, ReactiveWrite, RuleOptions, StaticDefect,
+    ActionInvocation, AsyncRead, CacheRetention, CallbackSummary, FunctionNode, OwnerRequirement,
+    Program, ReactiveRead, ReactiveSourceKind, ReactiveWrite, RuleOptions, StaticDefect,
+    UnresolvedCallbackObligation,
 };
 
+use crate::{HashMap, HashSet};
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -34,10 +34,11 @@ use typefacts::{Declaration, Location};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct BuildIdentity {
+    pub(crate) runtime_configuration: crate::RuntimeConfigurationPremise,
     pub(crate) dialect: solid_dialect::Version,
     pub(crate) project_id: String,
     pub(crate) generation: u64,
-    pub(crate) contracts: Vec<[u8; 32]>,
+    pub(crate) boundary_fingerprints: Vec<[u8; 32]>,
     /// Per-rule options change what the static pass emits, so two runs with
     /// different options never share a retained program.
     pub(crate) rule_options: RuleOptions,
@@ -52,7 +53,7 @@ pub(crate) struct RetainedBuild {
 struct SourceDiscoveryDomain {
     dialect: solid_dialect::Version,
     project_id: String,
-    contracts: Vec<[u8; 32]>,
+    boundary_fingerprints: Vec<[u8; 32]>,
 }
 
 /// Owns every derived cache retained across Reactive IR generations.
@@ -64,7 +65,6 @@ struct SourceDiscoveryDomain {
 pub(crate) struct IncrementalCacheState {
     ast_indexes: HashMap<SourcePath, CachedAstFileIndex>,
     source_discovery: HashMap<SourcePath, CachedSourceDiscovery>,
-    typed_accessors: HashMap<SourcePath, CachedTypedAccessors>,
     interprocedural_graph: HashMap<SourcePath, CachedInterproceduralGraph>,
     interprocedural_results: CachedInterproceduralResults,
     typescript_indexes: Option<CachedTypeScriptIndexes>,
@@ -77,7 +77,6 @@ pub(crate) struct IncrementalCacheState {
 pub(crate) struct BuildCaches<'a> {
     pub(crate) ast_indexes: Option<&'a mut HashMap<SourcePath, CachedAstFileIndex>>,
     pub(crate) source_discovery: Option<&'a mut HashMap<SourcePath, CachedSourceDiscovery>>,
-    pub(crate) typed_accessors: Option<&'a mut HashMap<SourcePath, CachedTypedAccessors>>,
     pub(crate) interprocedural_graph:
         Option<&'a mut HashMap<SourcePath, CachedInterproceduralGraph>>,
     pub(crate) interprocedural_results: Option<&'a mut CachedInterproceduralResults>,
@@ -93,12 +92,12 @@ impl IncrementalCacheState {
         &mut self,
         dialect: solid_dialect::Version,
         project_id: &str,
-        contracts: &[[u8; 32]],
+        boundary_fingerprints: &[[u8; 32]],
     ) -> bool {
         let next = SourceDiscoveryDomain {
             dialect,
             project_id: project_id.to_owned(),
-            contracts: contracts.to_vec(),
+            boundary_fingerprints: boundary_fingerprints.to_vec(),
         };
         if self.domain.as_ref() == Some(&next) {
             return false;
@@ -112,7 +111,6 @@ impl IncrementalCacheState {
         BuildCaches {
             ast_indexes: Some(&mut self.ast_indexes),
             source_discovery: Some(&mut self.source_discovery),
-            typed_accessors: Some(&mut self.typed_accessors),
             interprocedural_graph: Some(&mut self.interprocedural_graph),
             interprocedural_results: Some(&mut self.interprocedural_results),
             typescript_indexes: Some(&mut self.typescript_indexes),
@@ -137,7 +135,6 @@ impl IncrementalCacheState {
         if retention == CacheRetention::Compact {
             self.ast_indexes.clear();
             self.source_discovery.clear();
-            self.typed_accessors.clear();
             self.late_stages = None;
         }
     }
@@ -145,7 +142,6 @@ impl IncrementalCacheState {
     fn clear_derived(&mut self) {
         self.ast_indexes.clear();
         self.source_discovery.clear();
-        self.typed_accessors.clear();
         self.interprocedural_graph.clear();
         self.interprocedural_results = CachedInterproceduralResults::default();
         self.typescript_indexes = None;
@@ -178,23 +174,14 @@ pub(crate) struct SourceDiscoveryContribution {
     /// (`createStore(value)` / `createOptimisticStore(value)`): no compute
     /// node exists, so the store is not a valid `refresh()` target.
     pub(crate) value_form_stores: Vec<SymbolId>,
-    pub(crate) contracted_accessor_symbols: Vec<SymbolId>,
 }
 
 pub(crate) struct CachedSourceDiscovery {
     pub(crate) identity: SourceDiscoveryIdentity,
+    /// Includes project source hashes for exact returned-source proofs;
+    /// unchanged caller types alone cannot retain a callee's return identity.
     pub(crate) cross_file_proofs: Option<CrossFileProofDigest>,
     pub(crate) contribution: SourceDiscoveryContribution,
-}
-
-#[derive(Clone)]
-pub(crate) struct TypedAccessorContribution {
-    pub(crate) owner: Span,
-    pub(crate) read: SummaryRead,
-}
-
-pub(crate) struct CachedTypedAccessors {
-    pub(crate) contributions: Vec<TypedAccessorContribution>,
 }
 
 #[derive(Clone)]
@@ -207,27 +194,52 @@ pub(crate) enum InterproceduralGraphTarget {
 pub(crate) struct InterproceduralGraphContribution {
     pub(crate) direct_reads: Vec<(Span, SummaryRead)>,
     pub(crate) edges: Vec<(Span, InterproceduralGraphTarget)>,
+    /// ADR 0276: the subset of [`Self::edges`] whose call is a completion site
+    /// of its owner, so the callee runs on every normal completion of it.
+    pub(crate) guaranteed_edges: Vec<(Span, InterproceduralGraphTarget)>,
     /// A composite TypeScript call can be dispatched to several exact local
     /// implementations. These edges stay deferred until their summaries can
     /// be compared; adding all of them eagerly would union incompatible
     /// behavior and make an ambiguous call look certified.
     pub(crate) dispatches: Vec<(Span, Vec<SymbolId>)>,
     pub(crate) invoked_parameters: Vec<(Span, usize)>,
+    /// `(owner, parameter index)` for a parameter the owner calls *itself*,
+    /// directly, in its own body -- `function f(cb) { cb() }` -- which is the
+    /// one `callbacks` row the implementation census can confirm site for
+    /// site (ADR 0100). Recorded beside the row rather than in it: the wire
+    /// spells this and a primitive's inline position with the same word.
+    pub(crate) direct_callback_parameters: Vec<(Span, usize)>,
+    /// ADR 0183: `(owner, parameter)` for a parameter written directly as an
+    /// eager owned-computation slot (`createMemo(fn)`) by a call that covers
+    /// every normal completion of the owner's body. A proposal input only.
+    pub(crate) guaranteed_callback_parameters: Vec<(Span, usize)>,
+    /// `(owner, protocol, parameter index)` for a property read (`Get`) or a
+    /// coercion (`Coerce`) of a parameter's own value written directly in the
+    /// owner's body (item A of ways-to-improve § 3.3): the proposal input the
+    /// generator describes as a non-call `callbacks` item. Never evidence.
+    pub(crate) direct_protocol_parameters:
+        Vec<(Span, crate::summary_semantics::InvokeProtocol, usize)>,
+    /// `(owner, parameter index, member path)` for a call of a literal-keyed
+    /// member of a parameter's own unwritten binding written directly in the
+    /// owner's body -- `handler[0](…)` (item B of ways-to-improve § 3.3): the
+    /// proposal input beside the member-path `inline` row the pass writes.
+    /// Never evidence.
+    pub(crate) direct_member_callback_parameters: Vec<(Span, usize, Vec<String>)>,
     /// `(owner, parameter index)` for a parameter whose caller-supplied value
     /// this function neither invokes nor observes inertly — it stores it, hands
     /// it on, or returns it. See
     /// `interproc::push_unaccounted_parameter_escapes`.
     pub(crate) escaped_parameters: Vec<(Span, usize)>,
-    /// A member invoked on a parameter: `(owner, parameter index, access
-    /// path)` for `function invoke(reader) { reader.read() }`. The path is the
+    /// A member invoked on a parameter, with its owner and execution context,
+    /// for `function invoke(reader) { reader.read() }`. The path is the
     /// whole chain from the parameter -- `reader.source.read()` records
     /// `["source", "read"]`, not `["read"]` -- and is empty when the
     /// parameter's own value is read, or when no segment could be named
     /// exactly. The implementation is not a property of the owner -- each call
     /// site supplies it -- so this records the obligation and leaves
     /// resolution to the site.
-    pub(crate) invoked_parameter_members: Vec<(Span, usize, Vec<String>)>,
-    pub(crate) callbacks: Vec<(Span, ContractCallback)>,
+    pub(crate) invoked_parameter_members: Vec<(Span, crate::interproc::ParameterMemberInvocation)>,
+    pub(crate) callbacks: Vec<(Span, CallbackSummary)>,
     pub(crate) callback_forwardings: Vec<(
         Span,
         InterproceduralGraphTarget,
@@ -235,8 +247,7 @@ pub(crate) struct InterproceduralGraphContribution {
         usize,
         crate::interproc::ForwardedAmbientExecution,
     )>,
-    pub(crate) contract_generation_obligations: Vec<(Span, ContractGenerationObligation)>,
-    pub(crate) contract_consumer_obligations: Vec<StaticDefect>,
+    pub(crate) unresolved_callback_obligations: Vec<(Span, UnresolvedCallbackObligation)>,
     pub(crate) returned_bindings: Vec<(SymbolId, SymbolId)>,
     pub(crate) factory_calls: Vec<(Span, SymbolId)>,
 }
@@ -245,12 +256,18 @@ pub(crate) struct CachedInterproceduralGraph {
     pub(crate) nodes: Vec<SummaryNode>,
     pub(crate) contribution: InterproceduralGraphContribution,
     pub(crate) compiler: Arc<solid_facts::compiler::ExecutionMap>,
+    /// ADR 0320: the member-resolution digest the contribution was built
+    /// under; member calls resolve through the program-wide census.
+    pub(crate) member_resolution: Option<crate::indexes::CrossFileProofDigest>,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub(crate) enum InterproceduralResultDependency {
     Symbol(SymbolId),
     InlineFunction(String, Span),
+    /// ADR 0280: a result decided a callee's branches from this call's
+    /// arguments, so it depends on the callee's source text itself.
+    FunctionSource(String, Span),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -260,10 +277,10 @@ pub(crate) enum InterproceduralResultDependencyState {
         name: Option<String>,
         summary: Vec<SummaryRead>,
         invoked_parameters: Vec<usize>,
-        invoked_parameter_members: Vec<(usize, Vec<String>)>,
+        invoked_parameter_members: Vec<crate::interproc::ParameterMemberInvocation>,
     },
     Returned(Vec<SummaryRead>),
-    Inline(Vec<SummaryRead>),
+    Source(solid_facts::core::SourceHash),
 }
 
 pub(crate) struct CachedInterproceduralResultFile {
@@ -271,6 +288,9 @@ pub(crate) struct CachedInterproceduralResultFile {
     pub(crate) reads: Vec<ReactiveRead>,
     pub(crate) dispatch_obligations: Vec<StaticDefect>,
     pub(crate) compiler: Arc<solid_facts::compiler::ExecutionMap>,
+    /// Whether this file, as analyzed, held syntax a caller's call-role proof
+    /// reads beyond its summaries (`interproc::call_role_syntax`).
+    pub(crate) call_role_syntax: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -283,32 +303,17 @@ pub(crate) struct CachedReactiveSource {
 
 #[derive(Default)]
 pub(crate) struct CachedInterproceduralResults {
+    pub(crate) transported_calls:
+        HashMap<Location, crate::interproc::accessor_provenance::Callable>,
+    pub(crate) unavailable_calls: HashSet<Location>,
+    /// Array-derived directness depends on runtime origins even when the
+    /// selected function and its read summary remain unchanged.
+    pub(crate) array_source_origins: HashSet<SymbolId>,
     pub(crate) dependency_states:
         HashMap<InterproceduralResultDependency, InterproceduralResultDependencyState>,
     pub(crate) dependency_users: HashMap<InterproceduralResultDependency, usize>,
     pub(crate) files: HashMap<SourcePath, CachedInterproceduralResultFile>,
     pub(crate) reactive_sources: Option<Arc<Vec<CachedReactiveSource>>>,
-    pub(crate) contract_exports: CachedContractExports,
-}
-
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub(crate) struct ContractNodeKey {
-    pub(crate) path: String,
-    pub(crate) ordinal: usize,
-}
-
-#[derive(Clone, Default, Eq, PartialEq)]
-pub(crate) struct ContractExportFragment {
-    pub(crate) direct: Vec<(String, ContractExport)>,
-    pub(crate) syntax: Vec<(String, ContractExport, bool)>,
-    pub(crate) dependencies: HashSet<ContractNodeKey>,
-}
-
-#[derive(Default)]
-pub(crate) struct CachedContractExports {
-    pub(crate) nodes: HashMap<ContractNodeKey, ContractExport>,
-    pub(crate) files: HashMap<String, ContractExportFragment>,
-    pub(crate) aggregate: Option<Arc<BTreeMap<String, ContractExport>>>,
 }
 
 pub(crate) type SourceDiscoverySymbolFingerprint = [u8; 32];
@@ -389,7 +394,7 @@ pub(crate) fn build_typescript_indexes(
     table: &solid_facts::TypeScriptTable,
     dialect: &dyn Dialect,
     project_files: usize,
-    runtime_redirects: &HashMap<String, String>,
+    runtime_redirects: &std::collections::HashMap<String, String>,
 ) -> (CachedTypeScriptIndexes, Duration, Duration) {
     let parallel =
         project_files >= PARALLEL_INDEX_FILE_THRESHOLD && available_analysis_workers() > 1;
@@ -520,6 +525,7 @@ pub(crate) struct LocalAccessBuild {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct LocalAccessSymbolState {
     pub(crate) accessor: Option<(SymbolId, Location)>,
+    pub(crate) typed_source: Option<crate::source_discovery::TypedSource>,
     pub(crate) accessor_origin: Option<(SymbolId, SymbolId, Location)>,
     pub(crate) setter: Option<(SymbolId, Location, bool, ReactiveSourceKind)>,
     pub(crate) action: Option<(SymbolId, Location)>,
@@ -529,8 +535,6 @@ pub(crate) struct LocalAccessSymbolState {
     /// proof folded into `ssr_client_bare` / `server_rendering_unresolved`, so
     /// a fixed import elsewhere invalidates every file reading this source.
     pub(crate) async_options: crate::source_discovery::AsyncSourceOptions,
-    pub(crate) contract_reads: Option<Vec<(String, String, Location, String)>>,
-    pub(crate) contract_parameter_reads: Option<Vec<(usize, String, String, Location)>>,
     pub(crate) source_kind: Option<ReactiveSourceKind>,
     pub(crate) prop_source: Option<(
         SymbolId,
@@ -609,6 +613,8 @@ pub(crate) fn same_reachability_ast(
         && previous.identifiers == current.identifiers
         && previous.awaits == current.awaits
         && previous.unconditional_awaits == current.unconditional_awaits
+        && previous.dominating_awaits == current.dominating_awaits
+        && previous.try_head_awaits == current.try_head_awaits
         && previous.returns == current.returns
         && previous.jsx_elements == current.jsx_elements
         && previous.members == current.members
@@ -833,7 +839,7 @@ impl ReusePlan {
                     interprocedural: None,
                     missing_owners: None,
                     settled_gates: None,
-                    owner_files: HashMap::new(),
+                    owner_files: HashMap::default(),
                     compat_reference_locations: None,
                 });
             }

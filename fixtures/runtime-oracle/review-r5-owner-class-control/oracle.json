@@ -1,0 +1,10 @@
+{
+  "note": "ADR 0326/0327 reviewer r5: owner-class-control.",
+  "open": [
+    {
+      "code": "NO_OWNER_CLEANUP",
+      "site": "App.tsx:9",
+      "reason": "Documented nested class-field owner gap (ADR 0327): construction occurs during unowned event dispatch, but the owner walk refuses calls inside a class field."
+    }
+  ]
+}

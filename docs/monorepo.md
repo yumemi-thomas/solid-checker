@@ -18,14 +18,13 @@ Physical colocation does not merge module interfaces:
 - `rust/crates/solid-facts` owns syntax and normalized fact-domain integration.
 - `rust/crates/typefacts` owns the Rust Type Facts process/session interface.
 - `apps/solid-typefacts` and its private packages own TypeScript-Go facts.
-- `rust/crates/solid-dialect` owns the Solid vocabulary seam both language
-  versions answer through.
+- `rust/crates/solid-dialect` owns the Solid vocabulary seam every language
+  version answers through. One dialect ships; the seam is what the next major
+  re-enters by (ADR 0110).
 - `rust/dialects/solid-v2` owns Solid 2 vocabulary and the adapter over the
   pinned `solidjs-compiler` fork.
-- `rust/dialects/solid-v1` owns Solid 1.x vocabulary and the adapter over the
-  separate `solid-1x-compiler` fork.
-- `rust/crates/solid-facts-backend` owns package-contract acquisition and
-  normalization.
+- `rust/crates/solid-facts-backend` owns dependency-source selection, the
+  package boundary and fact normalization.
 - `rust/crates/solid-reactive-ir` composes facts and owns proof obligations.
 
 Oxc and compiler facts stay in-process. Type Facts stays behind its versioned
@@ -71,16 +70,14 @@ configuration, output, optional source map, upstream base, and semantic
 implementation identity. The exact distribution and implementation revisions
 are deliberately separate and are recorded in the Phase 4 report.
 
-The detailed transition is in
-[Compiler and Type Facts bootstrap](package-contract-v2/compiler-and-typefacts-bootstrap.md).
+## One compiler fork per dialect
 
-## Solid 1.x compiler policy
-
-Solid 1.x remains on
-[`solid-1x-compiler`](https://github.com/yumemi-thomas/solid-1x-compiler), kept
-at differential parity with the Babel compiler Solid 1.x ships. Solid 2
-compiler relocation does not authorize importing next-only lowering into this
-fork. Its exact `rev` and notice move together.
+Each dialect crate depends on exactly one compiler fork, and a dialect's exact
+`rev` and its notice move together. Solid 1.x was retired in 2026-09
+([ADR 0110](decisions.md#adr-0110)) and its
+`solid-1x-compiler` dependency went with it, so `solidjs-compiler` is the only
+fork this workspace pins today. The arrangement is kept rather than inlined: it
+is how a second dialect is added back without rediscovering the boundary.
 
 ## Type Facts colocation policy
 
@@ -132,10 +129,3 @@ The completed migration must not regress into mixed ownership states:
 - a branch name where an exact compiler revision is required.
 
 Each transition is atomic and fails closed on a mismatch.
-
-## Corpus policy
-
-Solid Primitives is a pinned compatibility corpus, not shipped code. Run
-`make corpus` to clone the reviewed revision into a temporary directory, build
-it, generate contracts to a fixed point, and validate all published artifacts.
-Set `SOLID_PRIMITIVES_CORPUS` to reuse an existing clean checkout.

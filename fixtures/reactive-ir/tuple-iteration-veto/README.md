@@ -1,0 +1,3 @@
+# Returned-tuple iteration veto (ADR 0282 amendment)
+
+A project iterator replacement yielding two harmless closures makes the call to `peek` `SC9012` uncertifiable, never the SC1001 the intact iterator proves; mutation in another file or a replaced accessor slot also withdraws the proof. `cases.json` seeds isolated variants of `mutations.ts` (assignment, aliases, reflective mutation, iterator prototypes, dynamic keys, eval/`Function`, gateways); positives keep the uncertain call, negatives (fresh allocations, exact `Proxy`, context primitives, source-derived `StoreSetter`) keep the proven read.

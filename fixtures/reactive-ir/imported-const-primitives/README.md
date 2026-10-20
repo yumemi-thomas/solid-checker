@@ -1,0 +1,3 @@
+# Imported constants (ADR 0325)
+
+A named import of another module's exported `const` holds a primitive when its initializer is proven one, settling the unmodeled use a callee makes of the prop/argument it feeds (ADR 0320): the import must land on the declaring module (no re-export hop), a module not a script, a module-level `const` of one identifier exported under exactly the imported name. `Cluster`, `Limit`, `Aliased`, `Direct` settle (no SC9012); objects, calls, assertions, `export let`, default imports, barrels, `export *` and `Chained` stay open. Published rc.13 declarations from `standard-runtime-configuration`.

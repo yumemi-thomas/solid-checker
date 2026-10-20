@@ -1,14 +1,11 @@
 //! Rust-led orchestration of Oxc AST facts, Solid execution facts, and
 //! TypeScript-Go semantic facts.
 
-#[cfg(not(any(feature = "dialect-v1", feature = "dialect-v2")))]
+#[cfg(not(feature = "dialect-v2"))]
 compile_error!("solid-facts-backend requires at least one dialect feature");
 
-mod artifact_resolution;
-mod bounded_json;
 mod cache;
-mod contract_certification;
-pub use contract_certification::report_certification_timing;
+pub mod check;
 
 /// Whether published artifacts are flushed to stable storage before they are
 /// made visible. Atomic visibility never changes: every publication still
@@ -42,300 +39,48 @@ pub fn durable_sync(file: &std::fs::File) -> std::io::Result<()> {
     }
 }
 
-/// Creates `destination` as a private copy of `source`, refusing an existing
-/// destination. On APFS the copy is a `clonefile(2)` — a copy-on-write file
-/// with its own inode that shares no future with the source, so it is exactly
-/// as private as a byte copy and costs no data write; everywhere else, and
-/// whenever the clone is refused, the bytes are copied. Callers that need the
-/// copy's identity hash the destination afterwards, as they always did, so the
-/// guarantee ("this exact private file is what launches") is unchanged.
-/// Returns whether the destination was cloned rather than written.
-pub fn clone_or_copy_file(
-    source: &std::path::Path,
-    destination: &std::path::Path,
-) -> std::io::Result<bool> {
-    #[cfg(target_os = "macos")]
-    {
-        use std::os::unix::ffi::OsStrExt as _;
-        let source_c = std::ffi::CString::new(source.as_os_str().as_bytes())
-            .map_err(|_| std::io::Error::from(std::io::ErrorKind::InvalidInput))?;
-        let destination_c = std::ffi::CString::new(destination.as_os_str().as_bytes())
-            .map_err(|_| std::io::Error::from(std::io::ErrorKind::InvalidInput))?;
-        // SAFETY: both pointers are valid NUL-terminated paths for the call.
-        let status = unsafe { libc::clonefile(source_c.as_ptr(), destination_c.as_ptr(), 0) };
-        if status == 0 {
-            return Ok(true);
-        }
-        let error = std::io::Error::last_os_error();
-        if error.kind() == std::io::ErrorKind::AlreadyExists {
-            return Err(error);
-        }
-        // Not APFS, a cross-volume path, or a filesystem that refuses clones:
-        // fall through to the byte copy.
-    }
-    let mut input = std::fs::File::open(source)?;
-    let mut output = std::fs::OpenOptions::new()
-        .create_new(true)
-        .write(true)
-        .open(destination)?;
-    std::io::copy(&mut input, &mut output)?;
-    durable_sync(&output)?;
-    Ok(false)
-}
-mod contract_document;
-mod contract_interface;
-mod contract_workflow;
 mod demand_plan;
+pub mod dependency_program;
+pub mod dependency_sources;
 mod diagnostics;
 pub mod dialect;
-mod evidence_sidecars;
-mod first_party_bundles;
-mod inferred_contract;
-mod phase16_benchmark;
-mod proposal_generation;
-mod runtime_probe_wire;
-mod runtime_probes;
+mod host_config;
+pub mod host_constants;
+mod host_inline;
+mod host_invocation;
+mod host_loadable;
+mod host_plugins;
+mod inferred_host;
+pub mod installed_bytes;
+mod package_requirements;
+mod release_scope;
+pub mod runtime_resolution;
+pub mod source_redirects;
 mod wire;
 
 pub use cache::{CacheStats, FactsCache};
-pub use contract_certification::{
-    ArtifactSnapshot, ArtifactSnapshotError, AuthenticatedPolicy2Receipt, BuiltInReceiptEntry,
-    CanonicalDependencyNodeIdentity, CertificationPlan, CertificationPlanningError,
-    CertificationPlanningTransaction, CertificationRequest, ConfiguredReceiptIssuer,
-    DependencyCompositionError, DependencyCompositionRequirement, DependencyCompositionSchedule,
-    DependencyNodeIdentity, DependencyQueueNode, DependencyReceiptCompositionError,
-    FinalizedGraphNode, FinalizedPolicy2Contract, FinalizedPolicy2Graph, InspectedProbeGateBatch,
-    LocalArtifact, LockPinnedArchive, Policy2FinalizationError, Policy2ReceiptBindings,
-    Policy2ReceiptError, Policy2ReceiptProvenance, Policy2TrustConfiguration, Policy2TrustEntry,
-    Policy2TrustStore, ProbeGate, ProbeGateError, ProbeGateOutcome, ProbeGateOutcomeKind,
-    ProbeGateSchedule, PublishedArchive, PublishedContractGraphPlan,
-    PublishedGraphCertificationError, PublishedGraphLockSelection, PublishedGraphNodeRequest,
-    PublishedGraphPlanningError, PublishedGraphSourceRequest, PublishedPolicy2Catalog,
-    ReceiptIssuerKind, ReceiptPublicationError, SnapshotLimits, SnapshotVerifiedClosure,
-    SnapshotVerifiedExports, SnapshotVerifiedResolution, TypeFactsCertificationError,
-    TypeFactsCertificationSchedule, TypeFactsProducerPin, UntrustedArtifactEnvelope,
-    VerifiedDependencyComposition, VerifiedProbeGateBatch, VerifiedTypeFactsEvidence,
-    WitnessWireError, authenticate_policy2_receipt, canonicalize_policy2_main,
-    certify_published_contract_graph_case_set, certify_value_only_case_set,
-    decode_policy2_trust_configuration, encode_policy2_trust_configuration,
-    issue_builtin_policy2_receipt, issue_policy2_receipt, plan_certification,
-    plan_published_contract_graph, policy2_main_semantic_digest, policy2_policy_digest,
-    policy2_resolved_import_root, policy2_trust_configuration_for_issuer, publish_policy2_catalog,
-};
-#[cfg(feature = "dialect-v2")]
-pub use contract_certification::{
-    CompilerCertificationConfiguration, CompilerCertificationError, CompilerCertificationSchedule,
-    LiveCompilerEvidenceBatch, VerifiedCompilerEvidence,
-    is_compiler_certification_session_argument, serve_compiler_certification_session,
-};
-pub use contract_document::SidecarDigests;
-pub use contract_interface::{
-    AcceptedContractSource, AcceptedDependencyEdge, AffectedClaimDomain, ArtifactResolutionFailure,
-    ArtifactResolver, ArtifactResolverChain, BundledEvidenceStore, ClosureEntry, ClosureFileRole,
-    ClosureHazard, ClosureHazardKind, ClosureInput, ClosureManifest, ClosurePackageIdentity,
-    ContractFailure, EvidenceKey, EvidenceStore, EvidenceStoreFailure, HostResolutionAdapter,
-    ImportRequest, LocalEvidenceStore, ReceiptStore, ResolutionAuthority, ResolutionTrace,
-    ResolutionTraceStep, ResolvedExportBinding, ResolvedExportTarget, ResolvedFile, ResolvedImport,
-    StandaloneResolutionAdapter, TypeFactsResolutionAdapter, accepted_contract_catalog_members,
-    load_accepted_contract, load_accepted_contract_index, load_authenticated_policy2_contract,
-    load_authenticated_policy2_embedded_contract, read_accepted_contract_catalog,
-    read_accepted_contract_catalog_with_trust, read_policy2_trust_configuration,
-    read_proposal_dependency_catalog_for_generation,
-};
-pub use contract_workflow::{
-    ContractWorkflowError, ProposalArtifacts, merge_plans, review as review_contract_document,
-};
 pub use diagnostics::{
-    DiagnosticAnalysis, DiagnosticSession, DiagnosticTimings, Metrics, PackageContractStatus,
-    PackageSummary, RequestedRuleEnablement, Snapshot, SnapshotEvidence, SnapshotFinding,
-    SnapshotFix, SnapshotTextEdit, SourceLocation, accepted_package_contract_statuses,
-    analysis_metrics, analyze_project_accepted_measured_with_enablement, discovered_contract_paths,
-    discovered_rule_options_path, imported_package_roots, semantic_demand_options_for_enablement,
-    source_location,
+    DiagnosticAnalysis, DiagnosticSession, DiagnosticTimings, Metrics, RequestedRuleEnablement,
+    Snapshot, SnapshotEvidence, SnapshotFinding, SnapshotFix, SnapshotTextEdit, SourceLocation,
+    analysis_metrics, analyze_project_inputs_measured_with_enablement,
+    discovered_rule_options_path, imported_package_manifest_paths, imported_package_roots,
+    semantic_demand_options_for_enablement, source_location, unsupported_runtime_snapshot,
 };
-pub use evidence_sidecars::{
-    EVIDENCE_SIDECAR_VERSION, EnvironmentIdentity, EvidenceCatalog, EvidenceSidecarDocuments,
-    EvidenceSidecarError, EvidenceSidecarReferences, FactDomainIdentity, FactTranscriptIdentity,
-    PROBE_EVIDENCE_FORMAT, PROOF_EVIDENCE_FORMAT, ProbeClaimMaterial, ProbeObservationMaterial,
-    ProbeOutcome, ProofClaimMaterial, ProofInputIdentity, SandboxIdentity, SandboxKind,
-    ToolIdentity, ValidatedEvidenceSidecars, emit_evidence_sidecars, validate_evidence_sidecars,
+pub use host_config::{tsconfig_extends_chain, tsconfig_extends_witness};
+pub use inferred_host::{
+    InferredHost, inferred_host_directory_digest, inferred_host_input_digest,
+    inferred_host_input_paths, inferred_host_input_paths_for_project,
+    inferred_host_input_paths_for_sources, inferred_project_host_with_note,
 };
-pub use first_party_bundles::{
-    BundleSelector, FirstPartyBundle, FirstPartyBundleError, bundled_first_party_contract_index,
-    solid1_bundles, solid2_rc3_bundles,
-};
-pub use phase16_benchmark::phase16_benchmark_report;
-pub use proposal_generation::{
-    ConstructedProposal, LocalProposalClaim, PlannedProposal, PositiveOperationCandidate,
-    ProbeCandidate, ProofObligation, ProofObligationKind, ProofPlannedProposal, ProposalAnalysis,
-    ProposalGenerationError, ProposalPlan, ProposalSubject, construct_proposal, emit_proposal,
-    plan_probes, plan_proofs,
-};
-pub use runtime_probe_wire::{
-    PlannedRuntimeProbes, RuntimeProbeWireError, evaluate_runtime_probe_runs, plan_runtime_probes,
-};
-pub use runtime_probes::{
-    ArtifactModeMatrix, BoundaryPhase, CleanupPhase, DrainStep, IsolationIdentity,
-    PROBE_TRANSCRIPT_FORMAT, PROBE_TRANSCRIPT_VERSION, ProbeAuthority, ProbeContradictionRecord,
-    ProbeEvent, ProbeEventClass, ProbeEventKind, ProbeEventMatch, ProbeMode, ProbePolicy,
-    ProbeRecipe, ProbeRun, ProbeRunOutcome, ProbeScenario, ProbeSessionRequest, ProbeTranscript,
-    ResponseState, RuntimeProbeError, RuntimeProbeEvaluation, RuntimeProbePlan, SettlementState,
-    StreamState, TransitionState, evaluate_runtime_probes,
+pub use package_requirements::{external_package_boundary, unsupplied_package_boundary};
+/// The shared analysis input an in-memory adapter builds without the
+/// filesystem.
+pub use solid_reactive_ir::{
+    AnalysisInputs, RuntimeEnvironment, package_boundary::PackageBoundary,
 };
 pub use wire::{
     SemanticDemandGroup, SourceChange, SourceFile, TypeFactsExchangeTimings, TypeFactsProvider,
 };
-
-/// Validates one stable-v1 main document without exposing its wire model.
-/// Analyzer use still requires exact artifact selection and a receipt through
-/// [`load_accepted_contract`].
-pub fn validate_contract_document(bytes: &[u8]) -> Result<(), ContractFailure> {
-    contract_document::decode(bytes)?.normalize()?;
-    Ok(())
-}
-
-/// Plans policy-2 certification from one stable-v1 open proposal without
-/// exposing its wire model. Artifact bytes and the independently acquired
-/// resolution are replayed by [`plan_certification`] before any demand IDs are
-/// returned to orchestration.
-pub fn plan_contract_document_certification(
-    document: &[u8],
-    import_request: ImportRequest,
-    resolved_import: ResolvedImport,
-    artifact: UntrustedArtifactEnvelope,
-) -> Result<CertificationPlan, CertificationPlanningError> {
-    CertificationPlanningTransaction::new().plan_contract_document(
-        document,
-        import_request,
-        resolved_import,
-        artifact,
-    )
-}
-
-/// Encodes one exact artifact's analyzer inference as an unaccepted
-/// stable-v1 proposal. Every proposed closure is opened before emission;
-/// only the proof checker can later finalize it and issue a receipt.
-pub fn encode_inferred_contract_proposal(
-    inferred: &solid_reactive_ir::PackageContract,
-    resolved: &ResolvedImport,
-    pretty: bool,
-) -> Result<Vec<u8>, ContractFailure> {
-    let proposal = inferred_contract::normalize_inferred_contract(inferred, resolved)?;
-    contract_document::encode(&proposal, &SidecarDigests::default(), pretty)
-}
-
-/// Emits the stable-v1 main proposal and its separately bound proof plan.
-/// Neither artifact carries analyzer acceptance authority.
-pub fn encode_inferred_contract_workflow(
-    inferred: &solid_reactive_ir::PackageContract,
-    resolved: &ResolvedImport,
-    pretty: bool,
-) -> Result<ProposalArtifacts, ContractWorkflowError> {
-    let (proposal, candidates) =
-        inferred_contract::normalize_inferred_contract_with_candidates(inferred, resolved)?;
-    contract_workflow::encode_proposal_artifacts(&proposal, candidates, pretty)
-}
-
-/// Emits one exact entrypoint's analyzer inference while keeping the resolved
-/// package subpath explicit at the construction seam. A caller cannot reuse
-/// an export map inferred for `.` to answer `./web`, even when both subpaths
-/// happen to expose the same public names.
-pub fn encode_inferred_entrypoint_workflow(
-    package_name: &str,
-    package_version: &str,
-    requested_entrypoint: &str,
-    exports: std::collections::BTreeMap<String, solid_reactive_ir::ContractExport>,
-    resolved: &ResolvedImport,
-    pretty: bool,
-) -> Result<ProposalArtifacts, ContractWorkflowError> {
-    encode_inferred_entrypoint_workflow_with_external_targets(
-        package_name,
-        package_version,
-        requested_entrypoint,
-        exports,
-        resolved,
-        &std::collections::BTreeSet::new(),
-        pretty,
-    )
-}
-
-/// Proposal-only graph acquisition seam. External targets are untrusted
-/// candidates admitted solely so native dependency-graph planning can replay
-/// them against child archives; this function never accepts or certifies them.
-pub fn encode_inferred_entrypoint_workflow_with_external_targets(
-    package_name: &str,
-    package_version: &str,
-    requested_entrypoint: &str,
-    exports: std::collections::BTreeMap<String, solid_reactive_ir::ContractExport>,
-    resolved: &ResolvedImport,
-    external_targets: &std::collections::BTreeSet<(String, String)>,
-    pretty: bool,
-) -> Result<ProposalArtifacts, ContractWorkflowError> {
-    if requested_entrypoint != resolved.requested_entrypoint {
-        return Err(ContractFailure::IdentityMismatch {
-            reason: format!(
-                "inferred entrypoint {requested_entrypoint:?} does not match resolved entrypoint {:?}",
-                resolved.requested_entrypoint
-            ),
-        }
-        .into());
-    }
-    let inferred = solid_reactive_ir::PackageContract {
-        package: solid_reactive_ir::ContractPackage {
-            name: package_name.to_owned(),
-            version: package_version.to_owned(),
-            integrity: String::new(),
-        },
-        entrypoints: [(
-            requested_entrypoint.to_owned(),
-            solid_reactive_ir::ContractEntrypoint { exports },
-        )]
-        .into(),
-        source_path: String::new(),
-    };
-    inferred
-        .validate()
-        .map_err(|reason| ContractFailure::InvalidSemanticModel { reason })?;
-    let (proposal, candidates) =
-        inferred_contract::normalize_inferred_contract_with_candidates_and_external_targets(
-            &inferred,
-            resolved,
-            external_targets,
-        )?;
-    contract_workflow::encode_proposal_artifacts(&proposal, candidates, pretty)
-}
-
-/// Merges independently analyzed exact artifact cases without exposing compact
-/// summary mechanics to JavaScript orchestration.
-pub fn merge_contract_proposals<'a>(
-    documents: impl IntoIterator<Item = &'a [u8]>,
-    pretty: bool,
-) -> Result<Vec<u8>, ContractFailure> {
-    let mut package = None;
-    let mut cases = Vec::new();
-    for document in documents {
-        let contract = contract_document::decode(document)?.normalize()?;
-        if let Some(expected) = &package {
-            if expected != contract.package() {
-                return Err(ContractFailure::IdentityMismatch {
-                    reason: "proposal documents describe different package identities".into(),
-                });
-            }
-        } else {
-            package = Some(contract.package().clone());
-        }
-        cases.extend_from_slice(contract.artifact_cases());
-    }
-    let package = package.ok_or_else(|| ContractFailure::InvalidSemanticModel {
-        reason: "proposal merge requires at least one document".into(),
-    })?;
-    let contract = solid_reactive_ir::contract_semantics::ContractProposal::new(package, cases)
-        .normalize()
-        .map_err(|error| ContractFailure::InvalidSemanticModel {
-            reason: error.to_string(),
-        })?;
-    contract_document::encode(&contract, &SidecarDigests::default(), pretty)
-}
 
 #[must_use]
 pub fn default_typefacts_executable() -> String {
@@ -365,20 +110,15 @@ pub fn default_typefacts_executable() -> String {
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct SemanticDemandOptions {
     pub array_map_receiver_types: bool,
-    /// Package generation only: retain exact parameter value domains for the
-    /// hash-bound runtime probe construction sidecar.
-    pub contract_probe_parameters: bool,
 }
 
 impl SemanticDemandOptions {
     pub const NONE: Self = Self {
         array_map_receiver_types: false,
-        contract_probe_parameters: false,
     };
 
     pub const PREFERENCES: Self = Self {
         array_map_receiver_types: true,
-        contract_probe_parameters: false,
     };
 }
 
@@ -440,8 +180,8 @@ pub enum BackendError {
     TypeFactsService { code: String, message: String },
     #[error("reactive IR error: {0}")]
     ReactiveIr(#[from] solid_reactive_ir::BuildError),
-    #[error("package contract error: {0}")]
-    Contract(String),
+    #[error("runtime premise error: {0}")]
+    RuntimePremise(String),
     #[error("TypeFacts compatibility handshake failed: {0}")]
     Handshake(String),
     #[error("rule options error: {0}")]
@@ -512,6 +252,22 @@ impl TypeFactsSession {
         })
     }
 
+    /// A session over a producer program its owner already opened and carries
+    /// frame by frame (`typefacts::FrameBridge`): the owned WASM producer.
+    /// Every answer decodes, validates and expands exactly as a process
+    /// session's; the session never relaunches, replays or certifies.
+    pub fn open_bridged(
+        bridge: Box<dyn typefacts::FrameBridge + Send>,
+        project_id: &str,
+    ) -> Result<Self, BackendError> {
+        let session = typefacts::Session::open_bridged(bridge, project_id)?;
+        Ok(Self {
+            session,
+            last_exchange_timings: None,
+            last_table_changes: None,
+        })
+    }
+
     /// The project's configured source set, as the TypeScript program sees it.
     pub fn configured_sources(&mut self) -> Result<Vec<SourceFile>, BackendError> {
         Ok(self
@@ -547,20 +303,6 @@ impl TypeFactsSession {
         demand: &typefacts::ModuleGraphDemand,
     ) -> Result<typefacts::ModuleGraph, BackendError> {
         Ok(self.session.module_graph(demand)?)
-    }
-
-    /// Compiler-selected call facts for exact call-expression demands.
-    ///
-    /// Like [`Self::module_graph`], this is a read of the live TypeScript
-    /// generation and does not alter the retained analysis demand set. Package
-    /// proof callers opt into the bounded callable tree and implementation
-    /// census; ordinary project analysis pays neither serialization nor
-    /// retention cost.
-    pub fn invocations(
-        &mut self,
-        demands: &[typefacts::InvocationDemand],
-    ) -> Result<typefacts::InvocationAnswer, BackendError> {
-        Ok(self.session.invocations(demands)?)
     }
 
     /// Applies an overlay and advances the generation.
@@ -655,52 +397,53 @@ pub struct NativeIncrementalSession {
     last_build_timings: NativeBuildTimings,
     last_import_identity: ImportIdentityMeasurement,
     semantic_demand_options: SemanticDemandOptions,
+    /// Per path, the digest of the program's text where the session's source
+    /// is a span-preserving rewrite of it (ADR 0166's host-constant fold, as
+    /// [`build_project_native_measured_with_program_hashes`] takes it).
+    program_hashes: HashMap<String, SourceHash>,
+    facts_transform: Option<FactsTransform>,
 }
 
-/// The importing files whose module specifiers must be attested before a
-/// package contract may be bound to any of them.
+/// An edited path's previous source and program digest, restored when the
+/// edit never lands.
+type DisplacedSource = (String, Option<SourceFile>, Option<SourceHash>);
+
+/// A step every generation's joined facts pass through before their import
+/// identities are attested, with the session's own Type Facts program (ADR
+/// 0296: a dependency-source program's roots and redirects). It runs on every
+/// path that produces facts, so no generation's facts can miss it.
+pub type FactsTransform =
+    Box<dyn FnMut(&mut ProjectFacts, &mut TypeFactsSession) -> Result<(), BackendError>>;
+
+/// The importing files whose module specifiers are attested: every file of
+/// the program.
 ///
-/// A contract is applied by installed identity, which needs the compiler's own
-/// resolution for the specifier
-/// ([`solid_reactive_ir::PackageContract::for_import`]). Asking for that
-/// resolution is an explicit operation on the Type Facts session, and its
-/// import half is proportional to the files asked about — so it is asked only
-/// of the files that could carry a contract-bound specifier at all: the ones
-/// with at least one bare specifier. A relative or `node:` specifier can never
-/// name a package.
+/// Two consumers read the answer:
+/// - A package is matched by installed identity, which needs the compiler's
+///   own resolution of the specifier.
+/// - The IR asks which module each specifier loads before it trusts that no
+///   namespace object, barrel or dynamic import reaches a module (ADR 0219).
+///   That includes relative specifiers, since only the compiler maps
+///   `./x.js` to `x.ts`.
 ///
-/// The scope deliberately does **not** consult contract discovery, though that
-/// would narrow it further. The attestation is computed once per program
-/// generation and a retained session reuses it across checks, while contracts
-/// are re-discovered on every check; a scope keyed on today's contracts would
-/// answer for a contract that appeared afterwards by *silently omitting* its
-/// files, which is name-only binding restored by accident. `export … from`
-/// specifiers count for the same reason contract resolution binds them.
+/// Both questions hold for any file, so the scope is not narrowed to files
+/// with a bare specifier. It is one request per program generation, and its
+/// import half is proportional to the files asked about.
 ///
-/// An empty answer means no specifier in this program could name a package, and
-/// the caller then asks for nothing.
+/// The scope deliberately does **not** consult package discovery. The
+/// attestation is computed once per program generation and a retained session
+/// reuses it across checks, while packages are re-discovered on every check.
+/// A scope keyed on today's packages would answer for a package that
+/// appeared afterwards by *silently omitting* its files, which is name-only
+/// binding restored by accident.
+///
+/// An empty answer means the program has no files, and the caller then asks
+/// for nothing.
 #[must_use]
-pub fn contract_identity_scope(facts: &ProjectFacts) -> Vec<String> {
+pub fn import_identity_scope(facts: &ProjectFacts) -> Vec<String> {
     facts
         .files
         .iter()
-        .filter(|file| {
-            file.ast
-                .imports
-                .iter()
-                .map(|import| import.module.as_str())
-                .chain(
-                    file.ast
-                        .exports
-                        .iter()
-                        .filter_map(|export| export.module.as_deref()),
-                )
-                .any(|specifier| {
-                    !specifier.starts_with('.')
-                        && !specifier.starts_with('/')
-                        && !specifier.starts_with("node:")
-                })
-        })
         .map(|file| file.path.as_str().to_owned())
         .collect()
 }
@@ -733,11 +476,11 @@ pub struct ImportIdentityMeasurement {
 /// inventory (unconditional — it is the operation's reason to exist) and the
 /// import provenance of the requested files only. `packages: true` adds the
 /// owning manifest and the resolver's own recorded identity to each row, which
-/// is the fact a contract is bound by.
+/// is the fact a package is bound by.
 ///
 /// A requested file the program does not hold is reported by the producer
-/// rather than dropped, and it is recorded here as *not covered*: a contract
-/// then refuses every specifier in it. Presenting an unanswered file as "this
+/// rather than dropped, and it is recorded here as *not covered*: the
+/// boundary then refuses every specifier in it. Presenting an unanswered file as "this
 /// file imports nothing" would silently restore name-only binding for it.
 pub fn attest_import_identities(
     typescript: &mut TypeFactsSession,
@@ -854,6 +597,32 @@ impl NativeIncrementalSession {
         Ok((session, sources))
     }
 
+    /// A session whose `sources` are, where `program_hashes` names a path, a
+    /// span-preserving rewrite of the text the Type Facts program holds. The
+    /// join compares those digests instead, exactly as
+    /// [`build_project_native_measured_with_program_hashes`] does for a
+    /// one-shot build. An edit replaces a path's text with the program's own,
+    /// so it drops that path's entry.
+    #[must_use]
+    pub fn open_rewritten(
+        dialect: &'static Dialect,
+        project_id: String,
+        sources: Vec<SourceFile>,
+        program_hashes: HashMap<String, SourceHash>,
+        typescript: TypeFactsSession,
+    ) -> Self {
+        let mut session = Self::from_sources(dialect, project_id, sources, typescript);
+        session.program_hashes = program_hashes;
+        session
+    }
+
+    /// Install the [`FactsTransform`] every later generation passes through.
+    /// Facts already joined are discarded, so none escapes it.
+    pub fn set_facts_transform(&mut self, transform: FactsTransform) {
+        self.facts_transform = Some(transform);
+        self.last_facts = None;
+    }
+
     fn from_sources(
         dialect: &'static Dialect,
         project_id: String,
@@ -875,6 +644,8 @@ impl NativeIncrementalSession {
             last_build_timings: NativeBuildTimings::default(),
             last_import_identity: ImportIdentityMeasurement::default(),
             semantic_demand_options: SemanticDemandOptions::NONE,
+            program_hashes: HashMap::new(),
+            facts_transform: None,
         }
     }
 
@@ -930,7 +701,11 @@ impl NativeIncrementalSession {
         // displaced entries restore the overlay if the update never lands.
         let mut displaced = Vec::with_capacity(changes.len());
         for change in changes {
-            displaced.push((change.path.clone(), self.sources.get(&change.path).cloned()));
+            displaced.push((
+                change.path.clone(),
+                self.sources.get(&change.path).cloned(),
+                self.program_hashes.remove(&change.path),
+            ));
             self.cache.invalidate_path(&change.path);
             if let Some(source) = change.source {
                 self.sources.insert(
@@ -1033,6 +808,7 @@ impl NativeIncrementalSession {
             cancelled,
             retained,
             self.semantic_demand_options,
+            &self.program_hashes,
         );
         result.map(|(facts, timings)| {
             self.last_build_timings = timings;
@@ -1040,9 +816,12 @@ impl NativeIncrementalSession {
         })
     }
 
-    fn restore_overlay(&mut self, displaced: Vec<(String, Option<SourceFile>)>) {
-        for (path, previous) in displaced {
+    fn restore_overlay(&mut self, displaced: Vec<DisplacedSource>) {
+        for (path, previous, program_hash) in displaced {
             self.cache.invalidate_path(&path);
+            if let Some(hash) = program_hash {
+                self.program_hashes.insert(path.clone(), hash);
+            }
             match previous {
                 Some(source) => {
                     self.sources.insert(path, source);
@@ -1093,14 +872,17 @@ impl NativeIncrementalSession {
         }
         let mut sources = self.sources.values().cloned().collect::<Vec<_>>();
         sources.sort_by(|left, right| left.path.cmp(&right.path));
-        let (facts, timings) = build_project_native_cached_measured_with_demands(
+        let (facts, timings) = build_project_native_cached_measured_inner(
             self.dialect,
             self.project_id.clone(),
             self.generation,
             sources,
             &mut self.typescript,
             &mut self.cache,
+            None,
+            None,
             self.semantic_demand_options,
+            &self.program_hashes,
         )?;
         self.last_build_timings = timings;
         let facts = Arc::new(self.attested(facts)?);
@@ -1133,6 +915,7 @@ impl NativeIncrementalSession {
             Some(cancelled),
             None,
             self.semantic_demand_options,
+            &self.program_hashes,
         )?;
         self.last_build_timings = timings;
         let facts = Arc::new(self.attested(facts)?);
@@ -1141,16 +924,19 @@ impl NativeIncrementalSession {
     }
 
     /// Attaches this program's attested import identities to the facts it
-    /// produced, so a package contract reaching them is bound to the install
+    /// produced, so a package reaching them is bound to the install
     /// each specifier resolves to rather than to its name.
     ///
     /// Every path that produces `ProjectFacts` from this session passes through
     /// here. A retained session reuses one generation's facts across many
     /// checks, so the attestation is computed once per generation with it — and
     /// it must not be conditional on anything that can change between checks
-    /// (see [`contract_identity_scope`]).
+    /// (see [`import_identity_scope`]).
     fn attested(&mut self, mut facts: ProjectFacts) -> Result<ProjectFacts, BackendError> {
-        let scope = contract_identity_scope(&facts);
+        if let Some(transform) = &mut self.facts_transform {
+            transform(&mut facts, &mut self.typescript)?;
+        }
+        let scope = import_identity_scope(&facts);
         if scope.is_empty() {
             // This generation asked for nothing, and the measurement must say
             // so rather than leave the previous generation's counts standing.
@@ -1187,6 +973,29 @@ impl NativeIncrementalSession {
     #[must_use]
     pub fn cancellation_handle(&self) -> Option<typefacts::Cancellation> {
         self.typescript.cancellation_handle()
+    }
+
+    /// Every file the open program holds, by path. This session's source set
+    /// is fixed when it opens, so a retained caller compares this across an
+    /// edit: an edited import can add a file to the program or drop one.
+    pub fn program_modules(&mut self) -> Result<Vec<String>, BackendError> {
+        Ok(self
+            .typescript
+            .module_graph(&typefacts::ModuleGraphDemand::default())?
+            .modules
+            .into_iter()
+            .map(|module| module.path.to_string())
+            .collect())
+    }
+
+    /// The open program's module graph with every import's resolution: what
+    /// a retained caller observes to notice that the filesystem now resolves
+    /// the program differently (a relinked package, an edited manifest).
+    pub fn resolution_graph(&mut self) -> Result<typefacts::ModuleGraph, BackendError> {
+        self.typescript.module_graph(&typefacts::ModuleGraphDemand {
+            imports: true,
+            ..typefacts::ModuleGraphDemand::default()
+        })
     }
 
     /// Recovery is the session's own concern now.
@@ -1321,6 +1130,32 @@ pub fn build_project_native_measured_with_demands(
     typescript: &mut impl TypeFactsProvider,
     semantic_demand_options: SemanticDemandOptions,
 ) -> Result<(ProjectFacts, NativeBuildTimings), BackendError> {
+    build_project_native_measured_with_program_hashes(
+        dialect,
+        project_id,
+        generation,
+        sources,
+        &HashMap::new(),
+        typescript,
+        semantic_demand_options,
+    )
+}
+
+/// [`build_project_native_measured_with_demands`] for sources some of which are
+/// a span-preserving rewrite of the text the Type Facts program holds (ADR
+/// 0166's host-constant fold): `program_hashes` names, per path, the digest of
+/// the program's text, which the join compares instead of the digest of the
+/// text the facts were extracted from. Every span of a rewrite is the span of
+/// the same position in the original, so a fact keyed by span joins as before.
+pub fn build_project_native_measured_with_program_hashes(
+    dialect: &'static Dialect,
+    project_id: impl Into<String>,
+    generation: u64,
+    sources: Vec<SourceFile>,
+    program_hashes: &HashMap<String, SourceHash>,
+    typescript: &mut impl TypeFactsProvider,
+    semantic_demand_options: SemanticDemandOptions,
+) -> Result<(ProjectFacts, NativeBuildTimings), BackendError> {
     let project_id = project_id.into();
     let generation = Generation::new(generation).map_err(|_| BackendError::Generation)?;
     let source_files_recomputed = u64::try_from(sources.len()).unwrap_or(u64::MAX);
@@ -1343,10 +1178,12 @@ pub fn build_project_native_measured_with_demands(
                     compiler.analyze(&request)?
                 };
                 execution.validate(&file.source)?;
-                Ok((
-                    start + offset,
-                    FileFacts::new(generation, Arc::clone(&file.source), ast, execution)?,
-                ))
+                let mut facts =
+                    FileFacts::new(generation, Arc::clone(&file.source), ast, execution)?;
+                if let Some(hash) = program_hashes.get(&file.path) {
+                    facts.source_hash = hash.clone();
+                }
+                Ok((start + offset, facts))
             })
             .collect::<Result<Vec<_>, BackendError>>()
     })?;
@@ -1401,20 +1238,6 @@ pub fn build_project_native_measured_with_demands(
     ))
 }
 
-pub fn build_project_native_cached(
-    dialect: &'static Dialect,
-    project_id: impl Into<String>,
-    generation: u64,
-    sources: Vec<SourceFile>,
-    typescript: &mut impl TypeFactsProvider,
-    cache: &mut FactsCache,
-) -> Result<ProjectFacts, BackendError> {
-    build_project_native_cached_measured(
-        dialect, project_id, generation, sources, typescript, cache,
-    )
-    .map(|(facts, _)| facts)
-}
-
 pub fn build_project_native_cached_measured(
     dialect: &'static Dialect,
     project_id: impl Into<String>,
@@ -1453,30 +1276,8 @@ pub fn build_project_native_cached_measured_with_demands(
         None,
         None,
         semantic_demand_options,
+        &HashMap::new(),
     )
-}
-
-pub fn build_project_native_cached_cancellable(
-    dialect: &'static Dialect,
-    project_id: impl Into<String>,
-    generation: u64,
-    sources: Vec<SourceFile>,
-    typescript: &mut impl TypeFactsProvider,
-    cache: &mut FactsCache,
-    cancelled: &std::sync::atomic::AtomicBool,
-) -> Result<ProjectFacts, BackendError> {
-    build_project_native_cached_measured_inner(
-        dialect,
-        project_id,
-        generation,
-        sources,
-        typescript,
-        cache,
-        Some(cancelled),
-        None,
-        SemanticDemandOptions::NONE,
-    )
-    .map(|(facts, _)| facts)
 }
 
 struct RetainedFileFacts<'a> {
@@ -1497,6 +1298,7 @@ fn build_project_native_cached_measured_inner(
     cancelled: Option<&std::sync::atomic::AtomicBool>,
     retained: Option<RetainedFileFacts<'_>>,
     semantic_demand_options: SemanticDemandOptions,
+    program_hashes: &HashMap<String, SourceHash>,
 ) -> Result<(ProjectFacts, NativeBuildTimings), BackendError> {
     let project_id = project_id.into();
     let generation = Generation::new(generation).map_err(|_| BackendError::Generation)?;
@@ -1552,7 +1354,10 @@ fn build_project_native_cached_measured_inner(
     for (((file, ast), execution), index) in
         prepared.into_iter().zip(executions).zip(pending_indices)
     {
-        let facts = FileFacts::new(generation, Arc::clone(&file.source), ast, execution)?;
+        let mut facts = FileFacts::new(generation, Arc::clone(&file.source), ast, execution)?;
+        if let Some(hash) = program_hashes.get(&file.path) {
+            facts.source_hash = hash.clone();
+        }
         files[index] = Some(facts);
     }
     let files = files
@@ -1716,40 +1521,81 @@ fn semantic_demands(
     demand_plan::plan(dialect, files, options)
 }
 
-fn structural_accessor_spans(dialect: &'static Dialect, file: &FileFacts) -> HashSet<Span> {
-    let vocabulary = dialect.vocabulary;
-    let mut named_imports = HashMap::<&str, solid_dialect::Primitive>::new();
-    let mut namespace_imports = HashMap::<&str, &str>::new();
-    for import in &file.ast.imports {
-        if !vocabulary.owns_module(&import.module) {
-            continue;
-        }
-        for binding in &import.bindings {
-            match binding.kind {
-                solid_facts::ast::ImportKind::Named => {
-                    let Some(local) = file.source_text(binding.local.span) else {
-                        continue;
-                    };
-                    let imported = binding.imported.as_deref().unwrap_or(local);
-                    let Some(primitive) = vocabulary.primitive(imported) else {
-                        continue;
-                    };
-                    if vocabulary
-                        .export_modules(imported, solid_dialect::ExportPosition::Value)
-                        .contains(&import.module.as_str())
-                    {
-                        named_imports.insert(local, primitive);
+/// The dialect primitives a file imports, by the spelling a static callee names
+/// them with: a named import from a module the vocabulary owns and exports the
+/// primitive from, or a member of a namespace import of one.
+///
+/// Syntax only, so it decides *demands* and never what a callee is: a local that
+/// shadows the import answers too, which costs the producer one more question
+/// and proves nothing. What a call's callee actually is stays the semantic
+/// lookup's.
+pub(crate) struct PrimitiveImports<'a> {
+    vocabulary: &'static dyn solid_dialect::Dialect,
+    named: HashMap<&'a str, solid_dialect::Primitive>,
+    namespaces: HashMap<&'a str, &'a str>,
+}
+
+impl<'a> PrimitiveImports<'a> {
+    pub(crate) fn new(dialect: &'static Dialect, file: &'a FileFacts) -> Self {
+        let vocabulary = dialect.vocabulary;
+        let mut named = HashMap::new();
+        let mut namespaces = HashMap::new();
+        for import in &file.ast.imports {
+            if !vocabulary.owns_module(&import.module) {
+                continue;
+            }
+            for binding in &import.bindings {
+                match binding.kind {
+                    solid_facts::ast::ImportKind::Named => {
+                        let Some(local) = file.source_text(binding.local.span) else {
+                            continue;
+                        };
+                        let imported = binding.imported.as_deref().unwrap_or(local);
+                        let Some(primitive) = vocabulary.primitive(imported) else {
+                            continue;
+                        };
+                        if vocabulary
+                            .export_modules(imported, solid_dialect::ExportPosition::Value)
+                            .contains(&import.module.as_str())
+                        {
+                            named.insert(local, primitive);
+                        }
                     }
-                }
-                solid_facts::ast::ImportKind::Namespace => {
-                    if let Some(local) = file.source_text(binding.local.span) {
-                        namespace_imports.insert(local, &import.module);
+                    solid_facts::ast::ImportKind::Namespace => {
+                        if let Some(local) = file.source_text(binding.local.span) {
+                            namespaces.insert(local, import.module.as_str());
+                        }
                     }
+                    _ => {}
                 }
-                _ => {}
             }
         }
+        Self {
+            vocabulary,
+            named,
+            namespaces,
+        }
     }
+
+    /// The primitive a static callee's spelling denotes, if it names one.
+    pub(crate) fn primitive(&self, static_callee: &str) -> Option<solid_dialect::Primitive> {
+        if let Some(primitive) = self.named.get(static_callee) {
+            return Some(*primitive);
+        }
+        let (namespace, property) = static_callee.split_once('.')?;
+        let module = self.namespaces.get(namespace)?;
+        let name = property.rsplit('.').next().unwrap_or(property);
+        self.vocabulary
+            .namespace_import_primitives(module)
+            .contains(&name)
+            .then(|| self.vocabulary.primitive(name))
+            .flatten()
+    }
+}
+
+fn structural_accessor_spans(dialect: &'static Dialect, file: &FileFacts) -> HashSet<Span> {
+    let vocabulary = dialect.vocabulary;
+    let imports = PrimitiveImports::new(dialect, file);
     let mut result = HashSet::new();
     for binding in &file.ast.bindings {
         let Some(initializer) = binding.call_initializer else {
@@ -1761,20 +1607,7 @@ fn structural_accessor_spans(dialect: &'static Dialect, file: &FileFacts) -> Has
         let Some(static_callee) = call.static_callee(&file.source) else {
             continue;
         };
-        let primitive = if let Some(primitive) = named_imports.get(static_callee) {
-            Some(*primitive)
-        } else if let Some((namespace, property)) = static_callee.split_once('.')
-            && let Some(module) = namespace_imports.get(namespace)
-        {
-            let name = property.rsplit('.').next().unwrap_or(property);
-            vocabulary
-                .namespace_import_primitives(module)
-                .contains(&name)
-                .then(|| vocabulary.primitive(name))
-                .flatten()
-        } else {
-            None
-        };
+        let primitive = imports.primitive(static_callee);
         if !primitive.is_some_and(|primitive| vocabulary.creates_reactive_source(primitive)) {
             continue;
         }
@@ -1970,9 +1803,19 @@ fn structural_functions(file: &FileFacts) -> Vec<typefacts::SourceFunction> {
                 file.ast
                     .returns
                     .iter()
+                    .chain(
+                        file.ast
+                            .functions
+                            .iter()
+                            .filter_map(|owner| owner.expression_return.as_ref()),
+                    )
                     .any(|returned| {
-                        returned.value == solid_facts::ast::ReturnValueKind::Function
-                            && returned.span == function.span
+                        returned
+                            .argument
+                            .into_iter()
+                            .chain(returned.elements().iter().flatten().copied())
+                            .chain(returned.properties().iter().map(|property| property.value))
+                            .any(|value| file.ast.peel_ts_sugar_span(value) == function.span)
                     })
                     .then(|| typefacts_location(file.path.as_str(), function.span))
             });
@@ -2079,782 +1922,4 @@ fn compiler_cache_key(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use solid_facts::compiler::COMPILER_FACTS_PROTOCOL;
-    use solid_facts::core::SourceHash;
-    use typefacts::SourceDigest;
-
-    /// The wire schema the in-memory stub claims; the real value comes from
-    /// the producer's handshake, which no stub performs.
-    const STUB_SCHEMA: u64 = 2;
-
-    struct Compiler;
-    impl CompilerFactsProvider for Compiler {
-        fn analyze(
-            &mut self,
-            request: &AnalysisRequest,
-        ) -> Result<ExecutionMap, CompilerProviderError> {
-            Ok(ExecutionMap {
-                compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
-                source_hash: request.source_hash.clone(),
-                semantic_model: Default::default(),
-                tracked_regions: vec![],
-                untracked_regions: vec![],
-                discarded_regions: vec![],
-                ownership_regions: vec![],
-                callback_roles: vec![],
-                jsx_operations: vec![],
-            })
-        }
-    }
-
-    struct CountingCompiler(usize);
-    impl CompilerFactsProvider for CountingCompiler {
-        fn analyze(
-            &mut self,
-            request: &AnalysisRequest,
-        ) -> Result<ExecutionMap, CompilerProviderError> {
-            self.0 += 1;
-            Compiler.analyze(request)
-        }
-    }
-
-    /// Stands in for a retained session: it answers with a table stamped for
-    /// the generation it is on, and advances the way a real session does when
-    /// the caller moves to the next one.
-    struct Types {
-        source: SourceDigest,
-        project_id: String,
-        generation: u64,
-    }
-    impl TypeFactsProvider for Types {
-        fn semantic_grouped(
-            &mut self,
-            _groups: &[SemanticDemandGroup<'_>],
-        ) -> Result<TypeScriptTable, BackendError> {
-            let generation = self.generation;
-            self.generation += 1;
-            Ok(TypeScriptTable::from_parts(
-                STUB_SCHEMA,
-                generation,
-                self.project_id.clone(),
-                vec![self.source.clone()],
-                vec![],
-                vec![],
-                vec![],
-            ))
-        }
-    }
-
-    fn test_file_facts(path: &str, source: &str) -> FileFacts {
-        let ast = solid_facts::ast::extract(path, source).unwrap();
-        FileFacts::new(
-            Generation::new(1).unwrap(),
-            source,
-            ast,
-            ExecutionMap {
-                compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
-                source_hash: SourceHash::of(source),
-                semantic_model: Default::default(),
-                tracked_regions: vec![],
-                untracked_regions: vec![],
-                discarded_regions: vec![],
-                ownership_regions: vec![],
-                callback_roles: vec![],
-                jsx_operations: vec![],
-            },
-        )
-        .unwrap()
-    }
-
-    #[test]
-    fn retained_demands_and_indexed_hydration_match_fresh_results() {
-        let files = vec![
-            test_file_facts(
-                "src/b.tsx",
-                "export const B = () => <div>{createSignal(1)}</div>;",
-            ),
-            test_file_facts(
-                "src/a.ts",
-                "export function A(value: number) { return value; }",
-            ),
-        ];
-        let dialect = dialect::default_dialect();
-        let fresh_demands = semantic_demands(dialect, &files, SemanticDemandOptions::NONE).unwrap();
-        let mut cache = FactsCache::default();
-        let retained_demands =
-            semantic_demands_cached(dialect, &files, &mut cache, SemanticDemandOptions::NONE)
-                .unwrap();
-        assert_eq!(retained_demands, fresh_demands);
-
-        let fresh_table = TypeScriptTable::from_parts(
-            STUB_SCHEMA,
-            1,
-            "project",
-            vec![],
-            vec![],
-            vec![],
-            files
-                .iter()
-                .rev()
-                .map(|file| typefacts::FileFact {
-                    path: file.path.to_string().into(),
-                    calls: vec![].into(),
-                    bindings: vec![].into(),
-                    functions: vec![].into(),
-                    async_functions: vec![].into(),
-                })
-                .collect(),
-        );
-        let retained_table = fresh_table.clone();
-        let fresh_table = hydrate_structural_file_facts(fresh_table, &files);
-        let retained_table =
-            hydrate_structural_file_facts_cached(retained_table, &files, &mut cache);
-        assert_eq!(
-            retained_table.files().collect::<Vec<_>>(),
-            fresh_table.files().collect::<Vec<_>>()
-        );
-    }
-
-    #[test]
-    fn semantic_demand_plan_is_complete_for_downstream_consumers() {
-        let file = test_file_facts(
-            "src/component.tsx",
-            // Every export shape the `kind` decision can be asked about, not
-            // just the declaration form: a specifier list, a class
-            // declaration, an anonymous default class (whose recorded span is
-            // the class node, there being no name), and a destructuring
-            // declarator. Each must carry both signature facts, because
-            // `export_kind_proof` reads absence at one of these spans as a
-            // refusal.
-            "const value = createMemo(async () => 1); const effectArgs: [() => number] = [() => 1]; createEffect(...effectArgs); const local = 1; const o: { a: number } = { a: 1 }; export { local }; export class K {} export const { a } = o; export default class {} export function Card(props: { title: string }) { const key = 'title'; const copy = { ...props }; return <div>{props[key]}{copy.title}{value()}</div>; }",
-        );
-        let demands = semantic_demands(
-            dialect::default_dialect(),
-            std::slice::from_ref(&file),
-            SemanticDemandOptions::NONE,
-        )
-        .unwrap();
-
-        for member in &file.ast.members {
-            let location = typefacts_location(file.path.as_str(), member.object);
-            assert!(
-                demands
-                    .iter()
-                    .any(|demand| demand.symbol && demand.location == location),
-                "member object {location:?} must retain symbol provenance"
-            );
-        }
-        for spread in &file.ast.spreads {
-            let location = typefacts_location(file.path.as_str(), spread.argument);
-            assert!(
-                demands
-                    .iter()
-                    .any(|demand| demand.symbol && demand.location == location),
-                "spread argument {location:?} must retain symbol provenance"
-            );
-        }
-        for call in &file.ast.calls {
-            let location = typefacts_location(file.path.as_str(), call.callee);
-            let demand = demands
-                .iter()
-                .find(|demand| demand.location == location && demand.query_location.is_some())
-                .expect("every call callee needs a symbol/type query");
-            assert!(demand.symbol);
-            assert_eq!(demand.type_descriptor, call.arguments.is_empty());
-            let property = callee_property_location(&file.source, &location);
-            if property != location {
-                assert!(demands.iter().any(|demand| {
-                    demand.location == property && demand.symbol && demand.query_location.is_none()
-                }));
-            }
-            for argument in call.arguments.iter().filter(|argument| {
-                argument.value == solid_facts::ast::ArgumentValueKind::Identifier
-            }) {
-                let argument_location = typefacts_location(file.path.as_str(), argument.span);
-                assert!(
-                    demands.iter().any(|demand| {
-                        demand.location == argument_location
-                            && demand.symbol
-                            && demand.type_descriptor
-                            && demand.callability
-                    }),
-                    "identifier call arguments need compiler callability for runtime semantics"
-                );
-            }
-            for argument in call.arguments.iter().filter(|argument| !argument.spread) {
-                let argument_location = typefacts_location(file.path.as_str(), argument.span);
-                assert!(demands.iter().any(|demand| {
-                    demand.location == argument_location && demand.primitive_value_domain
-                }));
-            }
-            for argument in call.arguments.iter().filter(|argument| argument.spread) {
-                let argument_location = typefacts_location(
-                    file.path.as_str(),
-                    file.ast
-                        .spreads
-                        .iter()
-                        .find(|spread| spread.span == argument.span)
-                        .map_or(argument.span, |spread| spread.argument),
-                );
-                assert!(
-                    demands.iter().any(|demand| demand.symbol
-                        && demand.tuple_shape
-                        && demand.location == argument_location),
-                    "call spread {argument_location:?} must retain symbol provenance and exact tuple shape"
-                );
-            }
-        }
-        for import in &file.ast.imports {
-            for binding in &import.bindings {
-                let location = typefacts_location(file.path.as_str(), binding.local.span);
-                assert!(demands.iter().any(|demand| {
-                    demand.location == location && demand.reference_space && demand.runtime_identity
-                }));
-            }
-        }
-        for export in &file.ast.exports {
-            for item in export.specifiers.iter().chain(&export.declarations) {
-                let location = typefacts_location(file.path.as_str(), item.local.span);
-                // Both signature facts, at every export specifier and every
-                // exported declaration name. `export_kind_proof` treats an
-                // absent fact at one of these spans as a *refusal* rather than
-                // as a keep-the-summary no-op, which is only honest because
-                // this invariant holds: absence there is the producer finding
-                // no node to classify, never the plan declining to ask.
-                assert!(demands.iter().any(|demand| {
-                    demand.location == location
-                        && demand.callability
-                        && demand.constructability
-                        && demand.runtime_identity
-                }));
-            }
-        }
-        assert!(demands.iter().any(|demand| {
-            demand.r#async && demand.location.path.as_ref() == file.path.as_str()
-        }));
-        assert!(
-            demands.windows(2).all(|pair| pair[0] != pair[1]),
-            "the transport plan must not contain duplicate queries"
-        );
-        assert!(
-            demands
-                .windows(2)
-                .all(|pair| pair[0].location != pair[1].location),
-            "each syntax location must combine all requested compiler facts"
-        );
-        let mut reversed = vec![
-            file.clone(),
-            test_file_facts("src/a.ts", "export const a = 1;"),
-        ];
-        let planned = semantic_demands(
-            dialect::default_dialect(),
-            &reversed,
-            SemanticDemandOptions::NONE,
-        )
-        .unwrap();
-        reversed.reverse();
-        assert_eq!(
-            planned,
-            semantic_demands(
-                dialect::default_dialect(),
-                &reversed,
-                SemanticDemandOptions::NONE,
-            )
-            .unwrap(),
-            "query order must not depend on source traversal order"
-        );
-    }
-
-    #[test]
-    fn array_shape_demands_are_limited_to_compiler_proven_jsx_maps() {
-        let mut file = test_file_facts(
-            "src/lists.tsx",
-            "const rendered = <ul>{items().map(item => item)}</ul>; const computed = items().map(item => item);",
-        );
-        let map_calls = file
-            .ast
-            .calls
-            .iter()
-            .filter(|call| {
-                file.ast.members.iter().any(|member| {
-                    member.span == call.callee && file.source_text(member.property) == Some("map")
-                })
-            })
-            .map(|call| call.span)
-            .collect::<Vec<_>>();
-        assert_eq!(map_calls.len(), 2);
-        Arc::make_mut(&mut file.compiler).jsx_operations.push(
-            solid_facts::compiler::JsxOperation {
-                span: map_calls[0],
-                kind: "jsx-expression".into(),
-            },
-        );
-
-        let default_demands = semantic_demands(
-            dialect::default_dialect(),
-            &[file.clone()],
-            SemanticDemandOptions::NONE,
-        )
-        .unwrap();
-        assert!(
-            default_demands.iter().all(|demand| !demand.array_shape),
-            "the low-level NONE option must not request map receiver shapes"
-        );
-
-        let demands = semantic_demands(
-            dialect::default_dialect(),
-            &[file.clone()],
-            SemanticDemandOptions::PREFERENCES,
-        )
-        .unwrap();
-        for (index, call_span) in map_calls.into_iter().enumerate() {
-            let member = file
-                .ast
-                .members
-                .iter()
-                .find(|member| {
-                    member.span
-                        == file
-                            .ast
-                            .calls
-                            .iter()
-                            .find(|call| call.span == call_span)
-                            .unwrap()
-                            .callee
-                })
-                .unwrap();
-            let location = typefacts_location(file.path.as_str(), member.object);
-            let array_shape = demands
-                .iter()
-                .find(|demand| demand.location == location)
-                .is_some_and(|demand| demand.array_shape);
-            assert_eq!(
-                array_shape,
-                index == 0,
-                "only the compiler-proven JSX child map should request an array-shape query"
-            );
-        }
-    }
-
-    #[test]
-    fn structural_accessors_follow_the_selected_vocabulary_and_export_modules() {
-        let file = test_file_facts(
-            "src/sources.ts",
-            r#"
-                import { createResource, createProjection } from "solid-js";
-                import { createStore } from "solid-js/store";
-                const [resource] = createResource(fetcher);
-                const projection = createProjection(() => state);
-                const [store] = createStore({ count: 0 });
-            "#,
-        );
-        let names = |selected| {
-            structural_accessor_spans(selected, &file)
-                .into_iter()
-                .filter_map(|span| file.source_text(span).map(str::to_owned))
-                .collect::<HashSet<_>>()
-        };
-
-        assert_eq!(
-            names(
-                dialect::by_version(solid_dialect::Version::V1)
-                    .expect("default build includes solid-v1"),
-            ),
-            HashSet::from(["resource".to_owned(), "store".to_owned()])
-        );
-        assert_eq!(
-            names(
-                dialect::by_version(solid_dialect::Version::V2)
-                    .expect("default build includes solid-v2"),
-            ),
-            HashSet::from(["projection".to_owned()])
-        );
-    }
-
-    #[test]
-    fn returned_member_calls_combine_symbol_and_resolved_call_demands() {
-        let file = test_file_facts(
-            "src/cleanup.ts",
-            "export function subscribe(source: { on(): () => void }) { return source.on(); }",
-        );
-        let returned = file
-            .ast
-            .returns
-            .iter()
-            .find_map(|returned| returned.callee)
-            .expect("returned call");
-        let location = typefacts_location(file.path.as_str(), returned);
-        let demands = semantic_demands(
-            dialect::default_dialect(),
-            std::slice::from_ref(&file),
-            SemanticDemandOptions::NONE,
-        )
-        .unwrap();
-        let matching = demands
-            .iter()
-            .filter(|demand| demand.location == location)
-            .collect::<Vec<_>>();
-        assert_eq!(matching.len(), 1);
-        assert!(matching[0].symbol);
-        assert!(matching[0].resolved_call);
-        assert!(matching[0].query_location.is_some());
-    }
-
-    #[test]
-    fn joins_all_three_fact_sources() {
-        let source = "export const answer = 42;";
-        let mut compiler = Compiler;
-        let mut types = Types {
-            project_id: "project".into(),
-            generation: 1,
-            source: SourceDigest {
-                path: "src/a.ts".into(),
-                sha256: typefacts::SourceHash::of(source),
-            },
-        };
-        let project = build_project(
-            dialect::default_dialect(),
-            "project",
-            1,
-            vec![SourceFile {
-                path: "src/a.ts".into(),
-                source: source.into(),
-                compiler_options: CompilerOptions::default(),
-            }],
-            &mut compiler,
-            &mut types,
-        )
-        .unwrap();
-        assert_eq!(project.files.len(), 1);
-        assert_eq!(
-            project.typescript.sources().collect::<Vec<_>>(),
-            vec![&types.source]
-        );
-    }
-
-    /// How many analyses the stub dialect's compiler has performed; proves
-    /// the native pipeline ran the selected dialect's compiler rather than
-    /// the default one.
-    static STUB_COMPILER_RUNS: std::sync::atomic::AtomicUsize =
-        std::sync::atomic::AtomicUsize::new(0);
-
-    struct RecordingStubCompiler;
-    impl CompilerFactsProvider for RecordingStubCompiler {
-        fn analyze(
-            &mut self,
-            request: &AnalysisRequest,
-        ) -> Result<ExecutionMap, CompilerProviderError> {
-            STUB_COMPILER_RUNS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            Compiler.analyze(request)
-        }
-    }
-
-    const STUB_RULE: solid_reactive_ir::RuleMetadata = solid_reactive_ir::RuleMetadata {
-        code: "ST0001",
-        name: "stub-dialect-ran",
-        severity: "warning",
-        uncertifiable: false,
-        default_enabled: true,
-        presets: &[],
-    };
-
-    fn stub_solve(
-        _program: &solid_reactive_ir::Program,
-    ) -> (
-        Vec<solid_reactive_ir::Finding>,
-        solid_reactive_ir::SolveTimings,
-    ) {
-        (
-            vec![solid_reactive_ir::Finding::new(
-                STUB_RULE,
-                "the stub dialect's catalog examined this program".into(),
-                typefacts::Location {
-                    path: "src/a.ts".into(),
-                    start_byte: 0,
-                    end_byte: 0,
-                },
-            )],
-            solid_reactive_ir::SolveTimings::default(),
-        )
-    }
-
-    static STUB_DIALECT: dialect::Dialect = dialect::Dialect {
-        id: "stub-dialect",
-        compiler_facts_identity: "stub-compiler:trace0:test",
-        vocabulary: &solid_dialect::Solid2,
-        rule_count: 1,
-        compiler: || Box::new(RecordingStubCompiler),
-        solve_measured: stub_solve,
-        docs_url: |rule| format!("stub://docs/{rule}"),
-        has_rule: |_| false,
-        rule_metadata: |rule| (rule == STUB_RULE.name).then_some(STUB_RULE),
-        semantic_demands: dialect::SemanticDemandCapabilities::NONE,
-        catalog_capabilities: solid_reactive_ir::CatalogCapabilities::SOLID_2,
-    };
-
-    /// An alternate dialect flows end to end through the native pipeline:
-    /// its compiler produces the execution maps, its catalog produces the
-    /// findings, and its cache keys never collide with another dialect's.
-    #[test]
-    fn alternate_dialect_flows_through_native_pipeline() {
-        let source = "export const answer = 42;";
-        let mut types = Types {
-            project_id: "project/tsconfig.json".into(),
-            generation: 1,
-            source: SourceDigest {
-                path: "src/a.ts".into(),
-                sha256: typefacts::SourceHash::of(source),
-            },
-        };
-        let sources = vec![SourceFile {
-            path: "src/a.ts".into(),
-            source: source.into(),
-            compiler_options: CompilerOptions::default(),
-        }];
-        let facts = build_project_native(
-            &STUB_DIALECT,
-            "project/tsconfig.json",
-            1,
-            sources.clone(),
-            &mut types,
-        )
-        .unwrap();
-        assert!(
-            STUB_COMPILER_RUNS.load(std::sync::atomic::Ordering::SeqCst) > 0,
-            "the stub dialect's compiler must produce the execution maps"
-        );
-        let analysis = analyze_project_accepted_measured_with_enablement(
-            &STUB_DIALECT,
-            std::path::Path::new("project/tsconfig.json"),
-            &sources,
-            &facts,
-            &solid_reactive_ir::contract_semantics::AcceptedContractIndex::default(),
-            RequestedRuleEnablement::default(),
-        )
-        .unwrap()
-        .0;
-        let identities = analysis
-            .snapshot
-            .findings
-            .iter()
-            .map(|finding| (finding.id.as_str(), finding.rule.as_str()))
-            .collect::<Vec<_>>();
-        assert_eq!(
-            identities,
-            vec![("ST0001", "stub-dialect-ran")],
-            "the stub dialect's catalog must supply the findings"
-        );
-
-        let request = AnalysisRequest::new(
-            "src/a.ts",
-            Arc::<str>::from(source),
-            CompilerOptions::default(),
-        );
-        let stub_key = compiler_cache_key(&STUB_DIALECT, &request).unwrap();
-        assert!(stub_key.contains(STUB_DIALECT.compiler_facts_identity));
-        assert!(stub_key.contains(&format!("\0{}\0", COMPILER_FACTS_PROTOCOL)));
-        assert_ne!(
-            stub_key,
-            compiler_cache_key(dialect::default_dialect(), &request).unwrap(),
-            "an execution map cached by one dialect must never answer for another"
-        );
-    }
-
-    /// Regression for the real defect in `@solidjs/start@2.0.3`'s
-    /// `dist/shared/dev-toolbar/index.jsx`, which imports its own
-    /// `package.json`: the TypeScript program legitimately hands a `.json`
-    /// module to the native build alongside ordinary JS/TS sources, and the
-    /// build must certify it inert -- not crash, and not invoke a JS/JSX
-    /// compiler that has no grammar for JSON -- rather than merely tolerate
-    /// it.
-    /// Stands in for a retained session the same way [`Types`] does, but
-    /// over an arbitrary source set: this regression needs digests for both
-    /// the JS entry and the JSON module it imports, and [`Types`] only ever
-    /// carries one.
-    struct MultiSourceTypes {
-        project_id: String,
-        generation: u64,
-        sources: Vec<SourceDigest>,
-    }
-    impl TypeFactsProvider for MultiSourceTypes {
-        fn semantic_grouped(
-            &mut self,
-            _groups: &[SemanticDemandGroup<'_>],
-        ) -> Result<TypeScriptTable, BackendError> {
-            let generation = self.generation;
-            self.generation += 1;
-            Ok(TypeScriptTable::from_parts(
-                STUB_SCHEMA,
-                generation,
-                self.project_id.clone(),
-                self.sources.clone(),
-                vec![],
-                vec![],
-                vec![],
-            ))
-        }
-    }
-
-    #[test]
-    fn a_json_import_source_is_certified_inert_without_invoking_the_compiler() {
-        let index_source =
-            "import pkg from \"./package.json\";\nexport const version = pkg.version;\n";
-        let json_source = r#"{"name": "demo", "version": "1.0.0"}"#;
-        let mut types = MultiSourceTypes {
-            project_id: "project/tsconfig.json".into(),
-            generation: 1,
-            sources: vec![
-                SourceDigest {
-                    path: "index.mjs".into(),
-                    sha256: typefacts::SourceHash::of(index_source),
-                },
-                SourceDigest {
-                    path: "package.json".into(),
-                    sha256: typefacts::SourceHash::of(json_source),
-                },
-            ],
-        };
-        let sources = vec![
-            SourceFile {
-                path: "index.mjs".into(),
-                source: index_source.into(),
-                compiler_options: CompilerOptions::default(),
-            },
-            SourceFile {
-                path: "package.json".into(),
-                source: json_source.into(),
-                compiler_options: CompilerOptions::default(),
-            },
-        ];
-        // `build_project` takes its `CompilerFactsProvider` directly rather
-        // than the dialect constructing one internally, so a local counter
-        // proves how many files it ran on without racing another test's
-        // shared dialect-compiler counter.
-        let mut compiler = CountingCompiler(0);
-        let facts = build_project(
-            dialect::default_dialect(),
-            "project/tsconfig.json",
-            1,
-            sources,
-            &mut compiler,
-            &mut types,
-        )
-        .unwrap();
-
-        let json_file = facts
-            .files
-            .iter()
-            .find(|file| file.path.as_str() == "package.json")
-            .expect("the JSON module must still be enrolled as an analyzed file");
-        assert!(json_file.ast.calls.is_empty());
-        assert!(json_file.ast.bindings.is_empty());
-        assert!(json_file.ast.functions.is_empty());
-        assert!(json_file.ast.imports.is_empty());
-        assert!(json_file.ast.exports.is_empty());
-        assert!(json_file.ast.members.is_empty());
-        assert!(json_file.compiler.tracked_regions.is_empty());
-        assert!(json_file.compiler.untracked_regions.is_empty());
-        // Every execution-fact array, enumerated: the claim is that a JSON
-        // module has *no* execution facts, so a new array left out of this list
-        // would let the next one arrive populated with this test still green.
-        assert!(json_file.compiler.discarded_regions.is_empty());
-        assert!(json_file.compiler.ownership_regions.is_empty());
-        assert!(json_file.compiler.callback_roles.is_empty());
-        assert!(json_file.compiler.jsx_operations.is_empty());
-
-        // Only `index.mjs` needed the dialect's compiler; the JSON module's
-        // inertness is a proof from its module kind, not a question the JS/JSX
-        // compiler was asked and happened to answer favorably.
-        assert_eq!(
-            compiler.0, 1,
-            "the dialect compiler must run for index.mjs only, never for the JSON module"
-        );
-    }
-
-    /// The JSON fix is an extension/module-kind rule, not a blanket "skip
-    /// anything unparseable": a source reached through a genuinely
-    /// unsupported extension must still fail the native build closed, exactly
-    /// as it did before the JSON module kind got its own path.
-    #[test]
-    fn a_non_json_unsupported_extension_still_fails_the_native_build() {
-        let source = "binary";
-        let mut types = Types {
-            project_id: "project/tsconfig.json".into(),
-            generation: 1,
-            source: SourceDigest {
-                path: "asset.wasm".into(),
-                sha256: typefacts::SourceHash::of(source),
-            },
-        };
-        let sources = vec![SourceFile {
-            path: "asset.wasm".into(),
-            source: source.into(),
-            compiler_options: CompilerOptions::default(),
-        }];
-        let error = build_project_native(
-            &STUB_DIALECT,
-            "project/tsconfig.json",
-            1,
-            sources,
-            &mut types,
-        )
-        .expect_err("a non-JSON unsupported extension must still fail closed, not be skipped");
-        assert!(
-            matches!(
-                error,
-                BackendError::Ast(solid_facts::ast::AstFactsError::SourceType { .. })
-            ),
-            "unexpected error variant: {error:?}"
-        );
-    }
-
-    #[test]
-    fn reuses_ast_and_compiler_facts_by_source_identity() {
-        let source = "export const answer = 42;";
-        let input = SourceFile {
-            path: "src/a.ts".into(),
-            source: source.into(),
-            compiler_options: CompilerOptions::default(),
-        };
-        let mut compiler = CountingCompiler(0);
-        let mut types = Types {
-            project_id: "project".into(),
-            generation: 1,
-            source: SourceDigest {
-                path: "src/a.ts".into(),
-                sha256: typefacts::SourceHash::of(source),
-            },
-        };
-        let mut cache = FactsCache::default();
-        let projects = [1, 2].map(|generation| {
-            build_project_cached(
-                dialect::default_dialect(),
-                "project",
-                generation,
-                vec![input.clone()],
-                &mut compiler,
-                &mut types,
-                &mut cache,
-            )
-            .unwrap()
-        });
-        assert_eq!(compiler.0, 1);
-        assert!(Arc::ptr_eq(
-            &projects[0].files[0].ast,
-            &projects[1].files[0].ast
-        ));
-        assert!(Arc::ptr_eq(
-            &projects[0].files[0].compiler,
-            &projects[1].files[0].compiler
-        ));
-        assert_eq!(
-            cache.stats(),
-            CacheStats {
-                ast_entries: 1,
-                compiler_entries: 1
-            }
-        );
-    }
-}
+mod tests;

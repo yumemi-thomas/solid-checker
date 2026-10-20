@@ -1,0 +1,55 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/argument-sensitive-leaf/App.tsx",
+      "start": 214,
+      "end": 223,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/argument-sensitive-leaf/App.tsx",
+      "start": 475,
+      "end": 486,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/argument-sensitive-leaf/App.tsx",
+      "start": 663,
+      "end": 674,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/argument-sensitive-leaf/App.tsx",
+      "start": 840,
+      "end": 851,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/argument-sensitive-leaf/App.tsx",
+      "start": 840,
+      "end": 851,
+      "fixes": 0
+    }
+  ]
+}

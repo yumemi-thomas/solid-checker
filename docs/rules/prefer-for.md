@@ -12,7 +12,7 @@ children instead of using Solid 2.0's list control flow.
 Reports a one-callback `.map()` only when the call itself occupies a JSX child
 expression and evaluating its receiver there performs a proven reactive read.
 Exact signal/accessor and memo calls, store paths, derived helper summaries,
-contract-derived reads, and caller-proven reactive prop or accessor-prop reads
+dependency-source-derived reads, and caller-proven reactive prop or accessor-prop reads
 qualify. Type Facts must also prove that the receiver is an array or tuple.
 Resolved-call facts must also select the standard-library `map` declaration.
 Maps assigned to variables or used in attributes stay clean, as do static

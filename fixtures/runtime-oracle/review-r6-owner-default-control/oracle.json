@@ -1,0 +1,10 @@
+{
+  "note": "ADR 0326/0327 reviewer r6: owner-default-control.",
+  "open": [
+    {
+      "code": "NO_OWNER_CLEANUP",
+      "site": "App.tsx:9",
+      "reason": "Documented nested default-parameter owner gap (ADR 0327): later() evaluates cb() during unowned event dispatch, but the owner walk refuses the nested parameter initializer."
+    }
+  ]
+}

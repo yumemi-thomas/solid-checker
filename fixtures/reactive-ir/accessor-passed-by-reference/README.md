@@ -1,0 +1,3 @@
+# accessor-passed-by-reference
+
+**Claim.** An accessor passed by reference to a project function, `run(count)`, is read at that call when the callee's own synchronous body calls the parameter (`execution_role::invokes_parameter_during_call`), taking the call's role: `SC1001` in a component body (`run`, cross-module `readNow`), clean in tracked JSX or a handler. A call in a timer callback, returned closure, array push or after an `await` is not proven to run during the call (none). `SC9005` on `keep` is its callback-timing obligation. Stub: `createSignal` verbatim from rc.9; `tsc --noEmit` strict.

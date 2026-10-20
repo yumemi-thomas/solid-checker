@@ -1,0 +1,3 @@
+# obligation-exclusion-boundary
+
+**Claim (ADR 0320, round 7).** A dispatch obligation is kept only where the reads it hides could decide a claim, and each exclusion must hold for every invocation: code after an await reached on every path runs on a later task, but after a skippable await (`??=`, optional-call argument/key, labelled `break`, destructuring default) it may run synchronously; a function at a callback position takes that role only if every reference is such a position; a value proven primitive by its own expression carries no member (declared types and assertions prove nothing). Other shapes are `SC9012`.

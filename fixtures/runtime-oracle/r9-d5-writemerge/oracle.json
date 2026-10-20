@@ -1,0 +1,11 @@
+{
+  "note": "r9 reviewer: d5/WriteMerge. Runtime-only witnesses supply the original ambient globals (no-op sink/runner, true flag, resolved promise); their declarations remain opaque to analysis. Runtime adaptation: mount the original component with populated signal-backed props so its reactive reads and control-flow branches execute. Runtime observation: render the assigned ref and assert its value, distinguishing a completed mutation from an unexecuted site.",
+  "steps": [
+    {
+      "action": "assert-text",
+      "selector": "#oracle-mutation",
+      "text": "1",
+      "id": "runtime-observation-0"
+    }
+  ]
+}

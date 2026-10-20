@@ -1,0 +1,3 @@
+# host-dead-return
+
+**Claim (ADR 0288).** Under a declared browser host, a package analyzed as source (ADR 0284) has its `isServer` guard folded before facts are read, so `if (isServer) return [...]` is not a return site and ADR 0282's single-unconditional-return rule sees the live return only (`dep-loop` has the shape of `@solid-primitives/raf@4.0.0-next.2`'s `createRAF`): SC1001; guards under control tests, `isServer || flag`, namespaced `isServer` and project files (not folded) are none. Twins: `-server`, `-wildcard`, `-prototype`. The `@solidjs/web` stub is the published `2.0.0-rc.13` manifest reduced to `name`, `version`, `type`, `types`, `"."` (byte-faithful) with only the published `const isServer = false;`/`true;`.

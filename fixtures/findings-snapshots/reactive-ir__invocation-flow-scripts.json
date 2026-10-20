@@ -1,0 +1,45 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow-scripts/App.tsx",
+      "start": 450,
+      "end": 457,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow-scripts/App.tsx",
+      "start": 666,
+      "end": 673,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow-scripts/App.tsx",
+      "start": 891,
+      "end": 898,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow-scripts/App.tsx",
+      "start": 1153,
+      "end": 1160,
+      "fixes": 0
+    }
+  ]
+}

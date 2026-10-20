@@ -1,0 +1,1 @@
+{"name": "router-params-override-tarball", "private": true, "overrides": {"@solidjs/router": "https://example.invalid/router-2.0.0-next.26.tgz"}}

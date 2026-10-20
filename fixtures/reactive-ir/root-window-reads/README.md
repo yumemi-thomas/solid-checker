@@ -1,0 +1,3 @@
+# `createRoot` and `runWithOwner` inherit the strict-read window of their call (ADR 0323)
+
+`createRoot(init)` is `runWithOwner(createOwner(), () => init(dispose))`, and `runWithOwner` swaps `context`, sets `tracking = false` and touches nothing else (`@solidjs/signals@2.0.0-rc.13` `dist/dev-shared.js:3478-3481`, `:6919-6947`), so a read in either callback warns exactly where the same read at the call would: violations in a body, silence in memos, events, timers, continuations and `untrack(fn)`, obligations for hooks running their callback in a root. Declarations: published rc.13 (`standard-runtime-configuration`).

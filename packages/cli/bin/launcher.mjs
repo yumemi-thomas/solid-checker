@@ -90,6 +90,7 @@ function nativeInvocation(command) {
   }
 
   const env = { ...process.env };
+  env.SOLID_CHECKER_RUNTIME_RESOLVER ??= join(packageRoot, "scripts", "runtime-resolver.mjs");
   if (!env.SOLID_TYPEFACTS_BIN) {
     const packagedTypeFacts = packagedBinary("solid-typefacts");
     if (existsSync(packagedTypeFacts)) {
@@ -103,13 +104,38 @@ function nativeInvocation(command) {
   return invocation;
 }
 
+// The executable `runNative` would spawn, resolved the same way (override,
+// packaged binding, repository `bin/`). Callers that report or warn about the
+// binary in use ask here instead of re-deriving the search order.
+export function nativeExecutable(command) {
+  return nativeInvocation(command).executable;
+}
+
+// The executable and the environment it is spawned with, for a host that
+// spawns it itself (the ESLint adapter, which is CommonJS and runs in a
+// long-lived process): only the variables the launcher sets.
+export function nativeInvocationFor(command) {
+  const { executable, env } = nativeInvocation(command);
+  return {
+    executable,
+    env: {
+      SOLID_TYPEFACTS_BIN: env.SOLID_TYPEFACTS_BIN,
+      SOLID_CHECKER_RUNTIME_RESOLVER: env.SOLID_CHECKER_RUNTIME_RESOLVER
+    }
+  };
+}
+
 export function runNative(command, args, options = {}) {
   const { executable, env } = nativeInvocation(command);
   return spawnSync(executable, args, {
     cwd: options.cwd ?? process.cwd(),
     env: { ...env, ...options.env },
     stdio: options.stdio ?? "inherit",
-    encoding: options.encoding
+    encoding: options.encoding,
+    // Only forwarded when given: `undefined` keeps spawnSync's own defaults.
+    ...(options.timeout === undefined ? {} : { timeout: options.timeout }),
+    ...(options.killSignal === undefined ? {} : { killSignal: options.killSignal }),
+    ...(options.maxBuffer === undefined ? {} : { maxBuffer: options.maxBuffer })
   });
 }
 

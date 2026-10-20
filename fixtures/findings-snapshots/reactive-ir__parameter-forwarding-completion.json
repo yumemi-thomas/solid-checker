@@ -1,0 +1,25 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-forwarding-completion/App.tsx",
+      "start": 362,
+      "end": 380,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-forwarding-completion/App.tsx",
+      "start": 490,
+      "end": 506,
+      "fixes": 0
+    }
+  ]
+}

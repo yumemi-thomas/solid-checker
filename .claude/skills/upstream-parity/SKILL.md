@@ -6,7 +6,7 @@ description: Investigate retained eslint-plugin-solid behavior after parity-corp
 # Upstream compatibility work
 
 eslint-plugin-solid 0.14.5 at commit `6d3bc311` is the audited source for the
-retained Solid 1.x compatibility heuristics. The former 465-case parity corpus
+retained Solid 1.x compatibility heuristics. The former parity corpus
 has been retired: `fixtures/ownership-cases/migration-ledger.json` reconciles
 all of it, and retained behavior now lives in product-owned cases with explicit
 TypeScript ownership.
@@ -19,8 +19,7 @@ make ownership-gate
 
 The gate uses a fresh debug checker, real published typings, exact UTF-8 spans,
 and the cases in `fixtures/ownership-cases/cases.json`. A behavior change must
-update its focused case and, when relevant, `docs/precision-backlog.md` in the
-same semantic commit. There is no deviation allowlist to update.
+update its focused case in the same semantic commit. There is no deviation allowlist to update.
 
 ## The upstream-faithfulness rule
 
@@ -35,8 +34,8 @@ behavior. Before changing one:
    ~~~
 
 2. Establish which semantic owner decides the product behavior. TypeScript
-   owns type errors, the pinned Solid compiler owns lowering, runtime probes
-   own execution behavior, and package contracts own external callbacks.
+   owns type errors, the pinned Solid compiler owns lowering, the selected dialect owns runtime premises, and exact dependency source
+   supplies external callback behavior. Unavailable behavior stays open.
 3. If no stronger evidence distinguishes the behavior, retain the audited
    upstream heuristic.
 4. If the checker deliberately differs for evidence-backed precision, encode

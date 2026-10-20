@@ -1,0 +1,3 @@
+# Context member identity
+
+An exact single-provider context member read is attributed to its signal only through exact identifier identity: `TabsContext`/`useTabs` published through a local export list in a closed program (`"private": true`) are censused like `export const`; a Type Facts entity at a composite span names its leading token, not the value, so it must not veto the context. `TabsList`'s untracked `ctx.orientation()` is SC1001. Negative `context-member-namespace-provider`, open control `context-member-identity-open`. Stub: `accessor-provenance`'s plus `button.disabled` (published rc.13 signatures).

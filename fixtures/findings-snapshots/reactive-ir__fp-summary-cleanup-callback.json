@@ -1,0 +1,25 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-summary-cleanup-callback/App.tsx",
+      "start": 1083,
+      "end": 1086,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-summary-cleanup-callback/App.tsx",
+      "start": 1271,
+      "end": 1274,
+      "fixes": 0
+    }
+  ]
+}

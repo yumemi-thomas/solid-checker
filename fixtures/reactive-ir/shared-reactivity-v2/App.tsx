@@ -121,6 +121,12 @@ export function DerivedButDiscarded() {
 // Derivation is transitive: labelled reads doubled, which reads count. Only
 // labelled is invoked in the untracked component body, so SC1001 must follow
 // the dependency chain rather than relying on a direct signal read.
+//
+// One finding, on the invoking call site. The `doubled()` read inside
+// `labelled`'s own body is not reported on its own: a read written inside a
+// helper is a defect only because of where the helper is called, and that is
+// what the reported site says. The same gate keeps the helper silent when it
+// is called from an event handler instead.
 export function TransitivelyDerivedButDiscarded() {
   const [count] = createSignal(0);
   const doubled = () => count() * 2;

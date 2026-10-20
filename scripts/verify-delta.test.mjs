@@ -1,5 +1,5 @@
 // `verify-delta` is only trustworthy if its mapping is, so the mapping is what
-// is tested: every row of AGENTS.md's table, the longest-prefix rule that keeps
+// is tested: every row of the mapping, the longest-prefix rule that keeps
 // two rows from stealing each other's paths, and -- the one that matters most --
 // the fail-closed fallback, because a wrong "no checks needed" is the failure
 // this script could plausibly have.
@@ -17,6 +17,7 @@ import {
   UNIVERSAL,
   classify,
   planFor,
+  baseOf,
   porcelainPaths,
   producerStampDrift,
 } from "./verify-delta.mjs";
@@ -38,18 +39,15 @@ test("every check a row or the universal set names actually exists", () => {
 
 test("each table row claims its own owner's paths", () => {
   const expected = [
-    ["rust/crates/solid-facts/src/lib.rs", ["facts-lib"]],
-    ["rust/crates/solid-reactive-ir/src/rules/mod.rs", ["ir-lib", "coverage"]],
+    ["rust/crates/solid-facts/src/lib.rs", ["facts-lib", "wasm-compile"]],
+    ["rust/crates/solid-reactive-ir/src/rules/mod.rs", ["ir-lib", "coverage", "wasm-compile"]],
+    ["rust/dialects/solid-v2/rules/src/lib.rs", ["dialects-process", "wasm-compile"]],
+    ["rust/dialects/solid-v2/compiler/src/lib.rs", ["dialects-process"]],
     ["rust/crates/solid-facts-backend/src/diagnostics.rs", ["backend-process", "coverage"]],
-    ["rust/dialects/solid-v1/src/rules.rs", ["contract-process", "conformance"]],
-    [
-      "pkg/contracts/bundled/solid-v2/solid-js.json",
-      ["contract-process", "conformance", "coverage", "ownership-gate"],
-    ],
     ["fixtures/reactive-ir/store-flow/App.tsx", ["coverage", "ownership-gate"]],
     ["fixtures/findings-snapshots/engine__oxlint-conformance.json", ["coverage", "ownership-gate"]],
     ["packages/cli/lib/rules-solid-v2.json", ["bun-test-cli"]],
-    ["packages/wasm/src/index.ts", ["bun-test-wasm"]],
+    ["packages/wasm/src/index.ts", ["bun-test-wasm", "wasm-parity"]],
   ];
   for (const [path, checks] of expected) {
     assert.deepEqual(classify(path)?.checks, checks, path);
@@ -64,10 +62,10 @@ test("the longest matching prefix wins, so no row swallows another's directory",
     "backend-process",
     "coverage",
   ]);
-  assert.deepEqual(classify("rust/crates/solid-facts/src/dialect.rs").checks, ["facts-lib"]);
+  assert.deepEqual(classify("rust/crates/solid-facts/src/dialect.rs").checks, ["facts-lib", "wasm-compile"]);
 });
 
-test("a mapped change set runs its rows' checks, a fresh binary first, then the universal set", () => {
+test("a mapped change set runs preflight checks before building and testing", () => {
   const plan = planFor([
     "rust/crates/solid-reactive-ir/src/lib.rs",
     "fixtures/reactive-ir/store-flow/App.tsx",
@@ -76,14 +74,15 @@ test("a mapped change set runs its rows' checks, a fresh binary first, then the 
   assert.equal(plan.full, false);
   assert.deepEqual(plan.unmapped, []);
   assert.deepEqual(plan.checks, [
-    // AGENTS.md's table says "coverage compare (fresh debug binary)", and a
-    // coverage run against a stale binary is the trap the document warns about.
+    // Coverage runs a fresh debug binary: a coverage run against a stale
+    // binary would hide the source change under test.
     "build-typefacts",
+    ...UNIVERSAL,
     "build-debug",
     "ir-lib",
     "coverage",
     "ownership-gate",
-    ...UNIVERSAL,
+    "wasm-compile",
   ]);
   // No duplicate, even though both rows select coverage.
   assert.equal(plan.checks.filter((check) => check === "coverage").length, 1);
@@ -91,14 +90,53 @@ test("a mapped change set runs its rows' checks, a fresh binary first, then the 
 
 test("a change that needs no checker skips the debug build", () => {
   const plan = planFor(["rust/crates/solid-facts/src/ast.rs"]);
-  assert.deepEqual(withoutUniversal(plan.checks), ["build-typefacts", "facts-lib"]);
+  assert.deepEqual(withoutUniversal(plan.checks), ["build-typefacts", "facts-lib", "wasm-compile"]);
   assert.ok(!plan.checks.includes("build-debug"));
 });
 
-test("the universal handoff set is appended to every mapped plan", () => {
+test("every check a row selects is executed exactly once", () => {
   for (const row of ROWS) {
-    const plan = planFor([`${row.prefix}probe`]);
-    assert.deepEqual(plan.checks.slice(-UNIVERSAL.length), UNIVERSAL, row.prefix);
+    const plan = planFor([row.prefix.endsWith("/") ? `${row.prefix}probe` : row.prefix]);
+    for (const check of row.checks) {
+      assert.equal(plan.checks.filter((id) => id === check).length, 1, `${row.prefix}: ${check}`);
+    }
+  }
+});
+
+test("a WASM package change runs the parity gate once, before the package tests", () => {
+  const plan = planFor(["packages/wasm/owned-client.mjs", "packages/wasm/owned-mount.mjs"]);
+  assert.equal(plan.full, false);
+  assert.deepEqual(plan.unmapped, []);
+  assert.deepEqual(plan.checks, ["build-typefacts", ...UNIVERSAL, "wasm-parity", "bun-test-wasm"]);
+});
+
+test("analysis-only changes get the WASM compile check, never the package build or parity", () => {
+  for (const path of [
+    "rust/crates/solid-reactive-ir/src/lib.rs",
+    "rust/crates/solid-facts/src/lib.rs",
+    "rust/dialects/solid-v2/rules/src/lib.rs",
+  ]) {
+    const plan = planFor([path]);
+    assert.ok(plan.checks.includes("wasm-compile"), path);
+    assert.ok(!plan.checks.includes("wasm-parity"), path);
+  }
+  assert.ok(CHECKS["wasm-compile"].command.includes("--no-default-features"));
+  // Host code, the WASM crate and the package keep their own answers.
+  for (const path of [
+    "rust/crates/solid-facts-backend/src/lib.rs",
+    "rust/dialects/solid-v2/compiler/src/lib.rs",
+  ]) {
+    assert.ok(!planFor([path]).checks.includes("wasm-compile"), path);
+  }
+  // Parity builds the package, so it replaces the compile check.
+  const both = planFor(["rust/crates/solid-facts/src/lib.rs", "packages/wasm/src/index.ts"]);
+  assert.ok(both.checks.includes("wasm-parity") && !both.checks.includes("wasm-compile"));
+});
+
+test("the universal handoff set precedes tests in every mapped plan", () => {
+  for (const row of ROWS) {
+    const plan = planFor([row.prefix.endsWith("/") ? `${row.prefix}probe` : row.prefix]);
+    assert.deepEqual(plan.checks.slice(1, 1 + UNIVERSAL.length), UNIVERSAL, row.prefix);
   }
   // Nothing changed is still the universal set, never nothing at all.
   assert.deepEqual(planFor([]).checks, ["build-typefacts", ...UNIVERSAL]);
@@ -109,11 +147,14 @@ test("a path no row claims escalates to the full verify, and says which path did
     "scripts/coverage.mjs",
     "scripts/lib/pool.mjs",
     "Makefile",
-    "schema/solid-reactivity.schema.json",
+    "schema/typefacts-v1.schema.json",
     "rust/Cargo.toml",
     "rust/Cargo.lock",
-    "AGENTS.md",
-    "docs/precision-backlog.md",
+    "docs/rules/no-destructure.md",
+    "docs/package-contract-v2/compiler-bootstrap/compiler.json",
+    "docs/precision-backlog.md.orig",
+    "AGENTS.mdx",
+    "README.md",
     ".github/workflows/ci.yml",
     "benchmarks/verify-performance.mjs",
     "rust/crates/solid-facts-something-new/src/lib.rs",
@@ -123,6 +164,41 @@ test("a path no row claims escalates to the full verify, and says which path did
     assert.deepEqual(plan.checks, ["verify"]);
     assert.deepEqual(plan.unmapped, [path]);
   }
+});
+
+test("prose no check reads runs the universal set only", () => {
+  for (const path of [
+    "AGENTS.md",
+    "CLAUDE.md",
+    "CONTEXT.md",
+    "CONTRIBUTING.md",
+    "docs/precision-backlog.md",
+    "docs/decisions.md",
+    "docs/open-work.md",
+    "docs/README.md",
+    "docs/adr/0110-the-checker-analyzes-solid-2-only.md",
+    "docs/typefacts/adr/0026-example.md",
+    ".claude/skills/add-fixture/SKILL.md",
+  ]) {
+    const plan = planFor([path]);
+    assert.equal(plan.full, false, path);
+    assert.deepEqual(plan.checks, ["build-typefacts", ...UNIVERSAL], path);
+  }
+});
+
+test("the base comes from --base, then SOLID_VERIFY_BASE, then the last green commit, then origin/main", () => {
+  assert.deepEqual(baseOf(["bun", "x", "--base", "abc123"], { SOLID_VERIFY_BASE: "env" }), {
+    base: "abc123",
+  });
+  assert.deepEqual(baseOf(["bun", "x"], { SOLID_VERIFY_BASE: "env" }), { base: "env" });
+  assert.deepEqual(baseOf(["bun", "x"], {}), { base: "origin/main" });
+  // The last green commit sits between the environment and origin/main.
+  const green = "a".repeat(40);
+  assert.deepEqual(baseOf(["bun", "x"], {}, green), { base: green, green: true });
+  assert.deepEqual(baseOf(["bun", "x"], { SOLID_VERIFY_BASE: "env" }, green), { base: "env" });
+  assert.deepEqual(baseOf(["bun", "x", "--base", "abc"], {}, green), { base: "abc" });
+  assert.ok(baseOf(["bun", "x", "--base"], {}).error);
+  assert.ok(baseOf(["bun", "x", "--base", "--dry-run"], {}).error);
 });
 
 test("one unmapped path escalates the whole plan, however many are mapped", () => {

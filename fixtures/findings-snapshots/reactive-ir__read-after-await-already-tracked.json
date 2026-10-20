@@ -1,0 +1,55 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-already-tracked/App.tsx",
+      "start": 851,
+      "end": 856,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-already-tracked/App.tsx",
+      "start": 1065,
+      "end": 1070,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-already-tracked/App.tsx",
+      "start": 1213,
+      "end": 1218,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-already-tracked/App.tsx",
+      "start": 1418,
+      "end": 1423,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-already-tracked/App.tsx",
+      "start": 1615,
+      "end": 1620,
+      "fixes": 0
+    }
+  ]
+}

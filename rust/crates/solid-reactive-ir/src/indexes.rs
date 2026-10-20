@@ -3,10 +3,8 @@
 //! This module hides AST and TypeScript table layout from rule discovery. The
 //! builder asks semantic questions here instead of repeatedly scanning facts.
 
-use std::{
-    collections::{HashMap, HashSet},
-    sync::{Arc, OnceLock},
-};
+use crate::{HashMap, HashSet};
+use std::sync::{Arc, OnceLock};
 
 use sha2::{Digest, Sha256};
 use solid_facts::core::Span;
@@ -16,7 +14,366 @@ use typefacts::{
 };
 
 use super::{SymbolId, SymbolName};
-use crate::owners::{function_binding_name, jsx_element_is_loading};
+use crate::owners::function_binding_name;
+
+mod callees;
+mod class_prototype;
+mod completion;
+mod components;
+mod member_values;
+mod primitive_proof;
+
+/// Functions by `(path, span)`: the proven components, then the escaped ones
+/// among them ([`SemanticLookup::escaped_component_functions`]).
+pub(super) type ComponentSets<'a> = (HashSet<(&'a str, Span)>, HashSet<(&'a str, Span)>);
+
+/// Whether the reference at `span` is the declaration that introduces a
+/// binding or the import/export surface that forwards it. Neither is a runtime
+/// entry: emission resolves the export surface itself, by name.
+///
+/// Only the export *specifier* counts: `export { Panel }`, or the name a
+/// declaration export introduces. An `ExportNamedDeclaration`'s own span
+/// covers the whole declaration, body included (solid-facts
+/// `visit_export_named_declaration`), so testing containment accepted every
+/// reference written inside an exported function: `apply(Panel)` and
+/// `return Panel` read as "export surface", and the escape they prove was
+/// lost. That is the unsound direction: callers read a true verdict as "the
+/// enumerated entries are all of them".
+///
+/// A dotted tag stays unaccounted for. `<ns.Panel/>` resolves at the whole
+/// `ns.Panel` name span, but the reference walked is the `Panel` property
+/// inside it, so it matches no surface here. That is the conservative
+/// direction; closing it is a resolution question rather than a widening one.
+pub(crate) fn reference_is_declaration_or_module_surface(file: &FileFacts, span: Span) -> bool {
+    file.ast
+        .functions
+        .iter()
+        .any(|function| function.name.as_ref().is_some_and(|name| name.span == span))
+        || file
+            .ast
+            .bindings
+            .iter()
+            .any(|binding| binding.names.iter().any(|name| name.span == span))
+        || file.ast.exports.iter().any(|export| {
+            export
+                .specifiers
+                .iter()
+                .chain(export.declarations.iter())
+                .any(|specifier| specifier.local.span == span)
+        })
+        || file
+            .ast
+            .imports
+            .iter()
+            .any(|import| import.span.contains(span))
+}
+
+/// The string a computed key names when it is a `const` bound to a string
+/// literal in the same file (`const key = "run"; c[key] = f`).
+fn constant_string_key(file: &FileFacts, key: Span) -> Option<String> {
+    let key = file.ast.peel_ts_sugar_span(key);
+    let declaration = file.ast.reference_declaration(key)?;
+    let binding = file.ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding
+                .names
+                .first()
+                .is_some_and(|name| name.span == declaration)
+    })?;
+    if binding.initializer_value_kind != solid_facts::ast::RuntimeValueKind::Primitive {
+        return None;
+    }
+    let text = file.source_text(file.ast.peel_ts_sugar_span(binding.initializer?))?;
+    let unquoted = text
+        .strip_prefix('"')
+        .and_then(|text| text.strip_suffix('"'))
+        .or_else(|| {
+            text.strip_prefix('\'')
+                .and_then(|text| text.strip_suffix('\''))
+        })?;
+    (!unquoted.contains('\\')).then(|| unquoted.to_string())
+}
+
+/// Whether the binding declared at `declaration` is written anywhere in its
+/// file after its declaration: as an assignment target or inside one (a
+/// destructuring pattern), or as a loop head (`for (x of …)`). A write of a
+/// member of it (`x.y = …`) does not rebind it.
+/// Whether some function in `file` returns a bare identifier, or a `new` of a
+/// callee spelled `Proxy` (ADR 0287): the only shapes whose callee syntax a
+/// returned-source proof (ADR 0222) reads beyond the summaries and Type Facts
+/// the caches compare. A same-file `return g(…)` forward (ADR 0287) proves
+/// nothing unless its file also holds one of these, so it is bound with it.
+pub(crate) fn returns_source_root(file: &FileFacts) -> bool {
+    file.ast
+        .returns
+        .iter()
+        .chain(
+            file.ast
+                .functions
+                .iter()
+                .filter_map(|function| function.expression_return.as_ref()),
+        )
+        .filter_map(|returned| returned.argument)
+        .any(|argument| {
+            let argument = file.ast.peel_ts_sugar_span(argument);
+            file.ast.identifiers.iter().any(|identifier| {
+                identifier.span == argument
+                    && identifier.role == solid_facts::ast::IdentifierRole::Reference
+            }) || file.ast.calls.iter().any(|call| {
+                call.construct
+                    && call.span == argument
+                    && file.source_text(file.ast.peel_ts_sugar_span(call.callee)) == Some("Proxy")
+            })
+        })
+}
+
+pub(super) fn binding_written(file: &FileFacts, declaration: Span) -> bool {
+    // A redeclaration (`var xs = …` over a parameter, a second `function f`)
+    // writes the same binding without any reference. Any other declaration
+    // of the same name in the scope counts, a shadowing one included.
+    let name = file.source_text(declaration);
+    let scope = file
+        .ast
+        .functions
+        .iter()
+        .filter(|function| function.span.contains(declaration))
+        .min_by_key(|function| function.span.end - function.span.start)
+        .map_or(Span::new(0, u32::MAX), |function| function.span);
+    let redeclared = file.ast.bindings.iter().any(|binding| {
+        scope.contains(binding.declaration)
+            && binding
+                .names
+                .iter()
+                .any(|other| other.span != declaration && file.source_text(other.span) == name)
+    }) || file.ast.functions.iter().any(|function| {
+        scope.contains(function.span)
+            && function.kind == solid_facts::ast::FunctionKind::Declaration
+            && function.name.as_ref().is_some_and(|other| {
+                other.span != declaration && file.source_text(other.span) == name
+            })
+    });
+    if redeclared {
+        return true;
+    }
+    let targets = file
+        .ast
+        .assignments
+        .iter()
+        .map(|assignment| assignment.target)
+        .chain(file.ast.iteration_targets.iter().copied())
+        .collect::<Vec<_>>();
+    file.ast
+        .reference_declarations
+        .iter()
+        .filter(|(_, declared)| *declared == declaration)
+        .any(|(reference, _)| {
+            targets.iter().any(|target| target.contains(*reference))
+                && !file
+                    .ast
+                    .members
+                    .iter()
+                    .any(|member| member.object == *reference)
+        })
+}
+
+/// ADR 0209, 0314: the members assignments write, by name, and the
+/// prototypes they write through under a key no proof names.
+#[derive(Default)]
+pub(super) struct AssignedMembers {
+    names: HashSet<String>,
+    /// A write through a prototype whose owner is not proven: every object's
+    /// members may be anything.
+    global: bool,
+    /// Project constructors, by file and declaration, whose prototype is
+    /// written: their instances' members may be anything.
+    constructors: HashSet<(String, Span)>,
+    /// Host constructors whose prototype is written, each with whether every
+    /// declaration of it is in `lib.dom.d.ts`.
+    hosts: Vec<(String, bool)>,
+}
+
+/// Whose instances a write through one `prototype` reaches (ADR 0314).
+enum PrototypeOwner {
+    /// The project constructor declared at this span of the writing file.
+    Constructor(Span),
+    /// These host constructors, through this static method's parameter.
+    Hosts(String, Vec<(String, bool)>),
+}
+
+/// Whether some assignment writes the global binding `name` directly
+/// (`HTMLCanvasElement = …`): an identifier target no local declaration
+/// binds.
+fn global_identifier_written(facts: &ProjectFacts, name: &str) -> bool {
+    facts.files.iter().any(|file| {
+        file.ast
+            .assignments
+            .iter()
+            .map(|assignment| assignment.target)
+            .chain(file.ast.iteration_targets.iter().copied())
+            .any(|target| {
+                // The whole target, or a leaf of a destructuring pattern; an
+                // identifier inside a member target or a type assertion
+                // (`(x as HTMLCanvasElement).width = …`) writes no binding.
+                let target = file.ast.peel_ts_sugar_span(target);
+                let pattern = file
+                    .source_text(target)
+                    .is_some_and(|text| text.starts_with(['[', '{']));
+                file.ast.identifiers.iter().any(|identifier| {
+                    (identifier.span == target || (pattern && target.contains(identifier.span)))
+                        && file.source_text(identifier.span) == Some(name)
+                        && file.ast.reference_declaration(identifier.span).is_none()
+                })
+            })
+    })
+}
+
+/// Whether `text` is exactly one string, template (without nested
+/// templates), numeric or boolean literal.
+fn primitive_literal_text(text: &str) -> bool {
+    if text == "true" || text == "false" {
+        return true;
+    }
+    let bytes = text.as_bytes();
+    let Some(&first) = bytes.first() else {
+        return false;
+    };
+    if first.is_ascii_digit() {
+        return bytes
+            .iter()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_'));
+    }
+    if !matches!(first, b'"' | b'\'' | b'`') || bytes.len() < 2 || bytes[bytes.len() - 1] != first {
+        return false;
+    }
+    let mut escaped = false;
+    for &byte in &bytes[1..bytes.len() - 1] {
+        if escaped {
+            escaped = false;
+        } else if byte == b'\\' {
+            escaped = true;
+        } else if byte == first {
+            return false;
+        }
+    }
+    !escaped
+}
+
+/// ADR 0320: standard-library functions whose result is a primitive other
+/// than `undefined` for every argument (`ToString`, `ToNumber` and the like
+/// run user code but return a primitive).
+const PRIMITIVE_RESULT_FUNCTIONS: &[&str] = &[
+    "StringConstructor.call",
+    "NumberConstructor.call",
+    "BooleanConstructor.call",
+    "BigIntConstructor.call",
+    "parseInt",
+    "parseFloat",
+    "isNaN",
+    "isFinite",
+    "NumberConstructor.parseInt",
+    "NumberConstructor.parseFloat",
+    "NumberConstructor.isFinite",
+    "NumberConstructor.isInteger",
+    "NumberConstructor.isNaN",
+    "NumberConstructor.isSafeInteger",
+    "encodeURIComponent",
+    "decodeURIComponent",
+    "encodeURI",
+    "decodeURI",
+    "DateConstructor.now",
+    "ArrayConstructor.isArray",
+    "Math.abs",
+    "Math.ceil",
+    "Math.floor",
+    "Math.round",
+    "Math.trunc",
+    "Math.sign",
+    "Math.max",
+    "Math.min",
+    "Math.pow",
+    "Math.sqrt",
+    "Math.cbrt",
+    "Math.random",
+    "Math.log",
+    "Math.log2",
+    "Math.log10",
+    "Math.exp",
+    "Math.hypot",
+    "Math.sin",
+    "Math.cos",
+    "Math.tan",
+    "Math.atan2",
+];
+
+/// ADR 0211: what a value's origin proves about the object it evaluates to.
+#[derive(Clone, Copy, Debug)]
+pub(super) enum ValueOrigin<'a> {
+    /// A fresh object of a reviewed standard-library value class: an array
+    /// literal, `new Date(…)`, `Array.from(…)`. Its members are its built-in
+    /// prototype's, none of which reads reactive state.
+    Builtin,
+    /// An instance of exactly this project class.
+    ProjectClass(&'a FileFacts, &'a solid_facts::ast::ClassFact),
+}
+
+/// The standard-library constructors whose instances are plain values: their
+/// built-in methods read and write the instance and call only the callbacks
+/// they are handed. `Proxy`, `Function`, `Promise` and every event target are
+/// left out: their members run user code that was registered elsewhere.
+const BUILTIN_VALUE_CONSTRUCTORS: &[&str] = &[
+    "ArrayConstructor.construct",
+    "DateConstructor.construct",
+    "MapConstructor.construct",
+    "SetConstructor.construct",
+    "WeakMapConstructor.construct",
+    "WeakSetConstructor.construct",
+    "RegExpConstructor.construct",
+    "ArrayBufferConstructor.construct",
+    "DataViewConstructor.construct",
+    "Int8ArrayConstructor.construct",
+    "Uint8ArrayConstructor.construct",
+    "Uint8ClampedArrayConstructor.construct",
+    "Int16ArrayConstructor.construct",
+    "Uint16ArrayConstructor.construct",
+    "Int32ArrayConstructor.construct",
+    "Uint32ArrayConstructor.construct",
+    "Float32ArrayConstructor.construct",
+    "Float64ArrayConstructor.construct",
+    "BigInt64ArrayConstructor.construct",
+    "BigUint64ArrayConstructor.construct",
+];
+
+/// Static standard-library functions that return a fresh array, when called on
+/// the global they are declared for.
+const FRESH_ARRAY_STATICS: &[&str] = &[
+    "ArrayConstructor.from",
+    "ArrayConstructor.of",
+    "ObjectConstructor.keys",
+    "ObjectConstructor.values",
+    "ObjectConstructor.entries",
+];
+
+/// Members of a proven built-in receiver that return the receiver itself.
+const RECEIVER_RETURNING_METHODS: &[&str] = &["sort", "reverse", "fill", "copyWithin"];
+
+/// Members of a proven built-in receiver that return a fresh built-in value:
+/// on an array, one built by its species; on a typed array, buffer or string,
+/// one of its own class. No reviewed value class has a member of these names
+/// that returns anything else.
+const FRESH_VALUE_METHODS: &[&str] = &[
+    "map",
+    "filter",
+    "slice",
+    "concat",
+    "flat",
+    "flatMap",
+    "toSorted",
+    "toReversed",
+    "toSpliced",
+    "with",
+    "split",
+];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum ComponentStatus {
@@ -54,7 +411,7 @@ type DeclarationSymbols<'a> = HashMap<(&'a str, u64, u64), &'a str>;
 /// preserving the direct-then-declaration order of the per-method lookup this
 /// replaces -- which rescanned every project entity twice per call.
 fn declaration_symbols(typescript: &TypeScriptTable) -> DeclarationSymbols<'_> {
-    let mut by_location = DeclarationSymbols::new();
+    let mut by_location = DeclarationSymbols::default();
     for entity in typescript
         .entities()
         .filter(|entity| !entity.symbol.is_empty())
@@ -160,9 +517,9 @@ pub(super) struct CachedAstFileIndex {
 
 impl CachedAstFileIndex {
     pub(super) fn new(file: &FileFacts) -> Self {
-        let mut calls_by_span = HashMap::new();
-        let mut calls_by_callee = HashMap::<Span, Vec<_>>::new();
-        let mut direct_calls_by_callee = HashMap::new();
+        let mut calls_by_span = HashMap::default();
+        let mut calls_by_callee = HashMap::<Span, Vec<_>>::default();
+        let mut direct_calls_by_callee = HashMap::default();
         for (index, call) in file.ast.calls.iter().enumerate() {
             calls_by_span.entry(call.span).or_insert(index);
             calls_by_callee.entry(call.callee).or_default().push(index);
@@ -170,7 +527,7 @@ impl CachedAstFileIndex {
                 direct_calls_by_callee.entry(call.callee).or_insert(index);
             }
         }
-        let mut functions_by_span = HashMap::new();
+        let mut functions_by_span = HashMap::default();
         for (index, function) in file.ast.functions.iter().enumerate() {
             functions_by_span.entry(function.span).or_insert(index);
         }
@@ -256,12 +613,11 @@ enum SymbolFunction {
     Aborted,
 }
 
-/// Whether any JSX call site renders a function, and whether one of those
-/// call sites is wrapped in a Loading boundary in its caller file.
+/// Whether any JSX call site renders a function. Boundary placement above a
+/// render is resolved transitively by `owners::read_loading_cover`.
 #[derive(Clone, Copy, Default)]
 pub(super) struct CallSiteLoading {
     pub(super) any: bool,
-    pub(super) loading_wrapped: bool,
 }
 
 #[derive(Clone)]
@@ -285,6 +641,20 @@ struct FunctionCallSite {
 
 type BindingsByReference = HashMap<String, HashMap<(u64, u64), BindingResolution>>;
 
+/// Rendering-prop flows by value reference: the render sites each reaches
+/// ([`SemanticLookup::prop_render_sites_at`]).
+type PropRenderSites<'a> = HashMap<(&'a str, Span), Vec<Span>>;
+
+/// One argument a project wrapper forwards into a result-access slot
+/// ([`SemanticLookup::result_access_forwarded_arguments`]).
+#[derive(Clone, Copy, Debug)]
+pub(super) struct ResultAccessForwarded {
+    /// The argument at the wrapper's call site.
+    pub(super) argument: Span,
+    /// The primitive whose slot the wrapper forwards it into.
+    pub(super) primitive: solid_dialect::Primitive,
+}
+
 /// Lazy project-wide lookups that replace repeated whole-project scans.
 ///
 /// Every map is built at most once per build, on first use, in the exact
@@ -292,6 +662,8 @@ type BindingsByReference = HashMap<String, HashMap<(u64, u64), BindingResolution
 /// first-writer results are unchanged. Warm builds that never ask a question
 /// never pay for an index.
 pub(super) struct SemanticLookup<'a> {
+    object_members: OnceLock<crate::object_members::Targets>,
+    literal_receiver_members: OnceLock<HashSet<(String, Span)>>,
     facts: &'a ProjectFacts,
     /// The Solid-version vocabulary this build analyzes with. Every consumer
     /// of the lookup shares one dialect; a build never mixes two.
@@ -300,11 +672,28 @@ pub(super) struct SemanticLookup<'a> {
     /// program. Build-wide like the dialect, and false unless selected: a
     /// build that was never told stays fail-closed.
     pub(super) program_closed: bool,
+    /// What the backend read of the installed router (ADR 0324). Set by the
+    /// pipeline from the runtime environment; empty otherwise.
+    router_install: crate::router_params::RouterInstallEvidence,
     ast_indexes: &'a HashMap<solid_facts::core::SourcePath, CachedAstFileIndex>,
     entities: &'a EntitySymbols,
     symbol_names: &'a HashMap<SymbolId, SymbolName>,
-    resolved_contracts: &'a crate::contracts::ResolvedContracts,
     functions_by_symbol: OnceLock<HashMap<&'a str, SymbolFunction>>,
+    /// ADR 0319: every literal's invocation-flow answer.
+    invocation_flow_answers: OnceLock<HashMap<(String, Span), crate::ExecutionRole>>,
+    /// The literals whose every invocation is a host event dispatch.
+    unowned_event_literals: OnceLock<HashSet<(String, Span)>>,
+    /// ADR 0320: whether some call may copy keys into an existing object.
+    objects_assigned_into: OnceLock<bool>,
+    router_params: OnceLock<crate::router_params::RouterParamsStatus>,
+    /// ADR 0334: the route option values the audited router renders.
+    route_component_values: OnceLock<HashSet<(String, Span)>>,
+    /// ADR 0209: the property names some assignment in the project writes
+    /// (`x.name = …`), and which prototypes it writes through (ADR 0314).
+    assigned_member_names: OnceLock<AssignedMembers>,
+    /// Review round 1 of ADR 0293: whether some file may define a property
+    /// reflectively ([`Self::property_may_be_defined_reflectively`]).
+    reflective_property_definition: OnceLock<bool>,
     entities_by_location: OnceLock<HashMap<(&'a str, u64, u64), &'a EntityFact>>,
     contained_entities_by_path: OnceLock<HashMap<&'a str, Vec<&'a EntityFact>>>,
     descriptors_by_symbol: OnceLock<HashMap<&'a str, &'a TypeDescriptor>>,
@@ -314,6 +703,7 @@ pub(super) struct SemanticLookup<'a> {
     jsx_call_sites: OnceLock<HashMap<(&'a str, Span), CallSiteLoading>>,
     declaration_symbols: OnceLock<DeclarationSymbols<'a>>,
     function_call_sites: OnceLock<HashMap<(&'a str, Span), Vec<FunctionCallSite>>>,
+    prop_render_sites: OnceLock<PropRenderSites<'a>>,
     direct_value_aliases: OnceLock<HashSet<SymbolId>>,
     bindings_by_symbol: OnceLock<HashMap<SymbolId, BindingResolution>>,
     bindings_by_reference: OnceLock<BindingsByReference>,
@@ -324,11 +714,33 @@ pub(super) struct SemanticLookup<'a> {
     callback_capabilities: OnceLock<DialectCallbackCapabilities>,
     returned_callback_proof_digest: OnceLock<Option<CrossFileProofDigest>>,
     project_has_component_type: OnceLock<bool>,
-    component_functions: OnceLock<HashSet<(&'a str, Span)>>,
+    /// Proven components, then functions whose only missing proof is an
+    /// escaping reference (`ComponentStatus::Uncertain`).
+    component_functions: OnceLock<ComponentSets<'a>>,
+    result_access_forwarded: OnceLock<HashMap<&'a str, Vec<ResultAccessForwarded>>>,
     cross_file_proof_digest: OnceLock<Option<CrossFileProofDigest>>,
+    tuple_iteration_veto: OnceLock<bool>,
+    string_code_veto: OnceLock<bool>,
+    /// ADR 0277: `(path, function span, parameter index)` for each parameter
+    /// a synchronous project function calls on its every-completion path.
+    parameter_completion_calls: OnceLock<HashSet<(&'a str, Span, usize)>>,
+    /// ADR 0278: the calls TypeScript resolves to a signature returning
+    /// `never`, or (ADR 0279) to an `asserts` signature, per path. Such a call never completes normally, so a caller
+    /// that catches its throw carries on with the rest of the body skipped.
+    never_returning_calls: OnceLock<HashMap<&'a str, Vec<Span>>>,
+    /// ADR 0280: `(path, function span)` for each function that tests one
+    /// of its own parameters in a condition or a logical operand, the only
+    /// functions a call's arguments can decide anything in.
+    parameter_testing_functions: OnceLock<HashSet<(&'a str, Span)>>,
+    /// ADR 0292: `(path, function span, property span)` for each object
+    /// property that is a proven component's one route, the `default` of the
+    /// module a dialect component loader renders.
+    lazy_default_render_witnesses: OnceLock<HashSet<(&'a str, Span, Span)>>,
+    effect_apply_regions: OnceLock<crate::effect_execution::ApplyRegions>,
+    effect_apply_calls: OnceLock<crate::effect_execution::ApplyCalls<'a>>,
 }
 
-/// Which parts of the returned-adapter contract this build's dialect can
+/// Which parts of the returned-adapter interface this build's dialect can
 /// actually answer, for the primitives this project names.
 ///
 /// Solid 2.0 leaves every method behind these flags at its `false`/`None`
@@ -381,6 +793,18 @@ fn member_at(file: &FileFacts, span: Span) -> Option<&solid_facts::ast::MemberFa
         .map(|index| &file.ast.members[index])
 }
 
+/// Whether `path` lies inside an installation of one of `packages`: its
+/// components contain the package name as consecutive directory names
+/// (`solid-js`, or `@solidjs` then `web`). Exact components, never a
+/// substring, so `my-solid-js-tools/` and `@solidjs/router/` are neither.
+fn declared_in_package(path: &str, packages: &[&str]) -> bool {
+    let components = path.split(['/', '\\']).collect::<Vec<_>>();
+    packages.iter().any(|package| {
+        let name = package.split('/').collect::<Vec<_>>();
+        components.windows(name.len()).any(|window| window == name)
+    })
+}
+
 /// Resolved Solid primitive names for one file's calls and JSX elements,
 /// index-aligned with `file.ast.calls` / `file.ast.jsx_elements`. Computed
 /// once per file per build so per-call classifier scans stop re-resolving
@@ -391,13 +815,30 @@ pub(super) struct FilePrimitives {
 }
 
 impl<'a> SemanticLookup<'a> {
+    pub(crate) fn effect_apply_calls(&self) -> &crate::effect_execution::ApplyCalls<'a> {
+        self.effect_apply_calls
+            .get_or_init(|| crate::effect_execution::calls(self))
+    }
+    pub(crate) fn effect_apply_regions(&self) -> &crate::effect_execution::ApplyRegions {
+        self.effect_apply_regions
+            .get_or_init(|| crate::effect_execution::regions(self))
+    }
+    /// The installed router's evidence; see [`Self::router_install`].
+    #[must_use]
+    pub(super) fn with_router_install(
+        mut self,
+        install: crate::router_params::RouterInstallEvidence,
+    ) -> Self {
+        self.router_install = install;
+        self
+    }
+
     pub(super) fn new(
         facts: &'a ProjectFacts,
         ast_indexes: &'a HashMap<solid_facts::core::SourcePath, CachedAstFileIndex>,
         entities: &'a EntitySymbols,
         symbol_names: &'a HashMap<SymbolId, SymbolName>,
         dialect: &'a dyn solid_dialect::Dialect,
-        resolved_contracts: &'a crate::contracts::ResolvedContracts,
         program_closed: bool,
     ) -> Self {
         debug_assert!(
@@ -409,14 +850,23 @@ impl<'a> SemanticLookup<'a> {
             "entity table must be sorted by path for per-path containment slices"
         );
         Self {
+            object_members: OnceLock::new(),
+            literal_receiver_members: OnceLock::new(),
             facts,
             dialect,
             program_closed,
+            router_install: crate::router_params::RouterInstallEvidence::default(),
             ast_indexes,
             entities,
             symbol_names,
-            resolved_contracts,
             functions_by_symbol: OnceLock::new(),
+            invocation_flow_answers: OnceLock::new(),
+            unowned_event_literals: OnceLock::new(),
+            objects_assigned_into: OnceLock::new(),
+            router_params: OnceLock::new(),
+            route_component_values: OnceLock::new(),
+            assigned_member_names: OnceLock::new(),
+            reflective_property_definition: OnceLock::new(),
             entities_by_location: OnceLock::new(),
             contained_entities_by_path: OnceLock::new(),
             descriptors_by_symbol: OnceLock::new(),
@@ -426,6 +876,7 @@ impl<'a> SemanticLookup<'a> {
             jsx_call_sites: OnceLock::new(),
             declaration_symbols: OnceLock::new(),
             function_call_sites: OnceLock::new(),
+            prop_render_sites: OnceLock::new(),
             direct_value_aliases: OnceLock::new(),
             bindings_by_symbol: OnceLock::new(),
             bindings_by_reference: OnceLock::new(),
@@ -437,66 +888,29 @@ impl<'a> SemanticLookup<'a> {
             returned_callback_proof_digest: OnceLock::new(),
             project_has_component_type: OnceLock::new(),
             component_functions: OnceLock::new(),
+            result_access_forwarded: OnceLock::new(),
             cross_file_proof_digest: OnceLock::new(),
+            tuple_iteration_veto: OnceLock::new(),
+            string_code_veto: OnceLock::new(),
+            parameter_completion_calls: OnceLock::new(),
+            never_returning_calls: OnceLock::new(),
+            parameter_testing_functions: OnceLock::new(),
+            lazy_default_render_witnesses: OnceLock::new(),
+            effect_apply_regions: OnceLock::new(),
+            effect_apply_calls: OnceLock::new(),
         }
     }
 
-    pub(super) fn contract_callbacks(&self, symbol: &str) -> Option<&[super::ContractCallback]> {
-        self.resolved_contracts
-            .by_symbol
-            .get(symbol)
-            .and_then(|binding| binding.summary.callbacks.known())
-            .map(Vec::as_slice)
-    }
-
-    /// The package and imported export name a symbol's contract binding
-    /// carries, whatever its claim status. Consumer-side obligations name the
-    /// export whose claim could not be applied, which is the same identity the
-    /// unknown-claim path reports.
-    pub(super) fn contract_export_identity(&self, symbol: &str) -> Option<(&str, &str)> {
-        self.resolved_contracts
-            .by_symbol
-            .get(symbol)
-            .map(|binding| {
-                (
-                    binding.package_name.as_str(),
-                    binding.imported_name.as_str(),
-                )
-            })
-    }
-
-    pub(super) fn unknown_contract_callback_export(&self, symbol: &str) -> Option<(&str, &str)> {
-        self.resolved_contracts
-            .by_symbol
-            .get(symbol)
-            .filter(|binding| {
-                binding.summary.callbacks.is_open()
-                    || binding
-                        .summary
-                        .open_claims
-                        .contains(&crate::contract_semantics::ClaimDomain::Callbacks)
-            })
-            .map(|binding| {
-                (
-                    binding.package_name.as_str(),
-                    binding.imported_name.as_str(),
-                )
-            })
-    }
-
-    pub(super) fn contract_owner_requirements(
-        &self,
-        symbol: &str,
-    ) -> Option<&[super::ContractOwnerRequirement]> {
-        self.resolved_contracts
-            .by_symbol
-            .get(symbol)
-            .and_then(|binding| binding.summary.owner_requirements.known())
-            .map(Vec::as_slice)
-    }
-
-    pub(super) fn has_contract_binding(&self, symbol: &SymbolId) -> bool {
-        self.resolved_contracts.by_symbol.contains_key(symbol)
+    /// The exact compiler symbol demanded at one span of one file, if any.
+    ///
+    /// Deliberately narrower than [`Self::callee_symbol`]: no wrapper peeling
+    /// and no member fallback, because the callers are spans that *are* a
+    /// binding name (an import's local name) rather than an arbitrary callee
+    /// expression.
+    pub(super) fn entity_symbol(&self, file: &FileFacts, span: Span) -> Option<&'a str> {
+        self.entities
+            .at(file.path.as_str(), span)
+            .map(SymbolId::as_str)
     }
 
     /// Every primitive this build can resolve at a call site.
@@ -641,14 +1055,238 @@ impl<'a> SemanticLookup<'a> {
     /// file can make a function in another file an owned component. Returned
     /// callback reachability has the same shape. One digest gives every
     /// dependent cache family the same coherent generation marker.
+    /// ADR 0320: [`Self::cross_file_proof_digest`] plus the program-wide
+    /// member-replacement census member resolution reads (an assignment of a
+    /// name or through an unknown key, a reflective definition, code copying
+    /// keys into objects). Only the stages that resolve members -- the
+    /// interprocedural graph and results, local accesses -- are keyed on it,
+    /// so a write elsewhere does not discard source discovery.
+    pub(super) fn member_resolution_digest(&self) -> Option<CrossFileProofDigest> {
+        let base = self.cross_file_proof_digest()?;
+        let assigned = self.assigned_members();
+        let mut names = assigned.names.iter().collect::<Vec<_>>();
+        names.sort_unstable();
+        let mut hasher = Sha256::new();
+        hasher.update(base);
+        hasher.update(b"member-replacement\0");
+        hasher.update([
+            u8::from(assigned.global),
+            u8::from(self.property_may_be_defined_reflectively()),
+            u8::from(self.objects_may_be_assigned_into()),
+        ]);
+        for name in names {
+            hasher.update(u64::try_from(name.len()).unwrap_or(u64::MAX).to_le_bytes());
+            hasher.update(name.as_bytes());
+        }
+        Some(hasher.finalize().into())
+    }
+
     pub(super) fn cross_file_proof_digest(&self) -> Option<CrossFileProofDigest> {
         *self.cross_file_proof_digest.get_or_init(|| {
+            // The project-wide proofs below are independent and each a whole
+            // pass over the program; on every incremental build they are
+            // recomputed. Warm them concurrently so the digest costs the
+            // longest of them, not their sum. Each fills its own `OnceLock`,
+            // so the answers are the ones a sequential run computes.
+            let tuple_results = self.files().iter().any(|file| {
+                file.ast.returns.iter().any(|returned| {
+                    returned.argument.is_some_and(|argument| {
+                        file.ast
+                            .array_literals
+                            .contains(&file.ast.peel_ts_sugar_span(argument))
+                    })
+                }) || file.ast.bindings.iter().any(|binding| {
+                    binding.shape == solid_facts::ast::BindingShape::Array
+                        && file
+                            .ast
+                            .functions
+                            .iter()
+                            .any(|function| function.body.contains(binding.pattern))
+                        && binding
+                            .call_initializer
+                            .and_then(|span| self.primitive_at_call(file, span))
+                            .is_some_and(|primitive| self.dialect.returns_reactive_tuple(primitive))
+                })
+            });
+            if crate::pipeline::available_analysis_workers() > 1 {
+                let limit = crate::pipeline::analysis_worker_limit_for_lanes(4);
+                std::thread::scope(|scope| {
+                    let warm = |work: &(dyn Fn() + Sync)| {
+                        let _limit = crate::pipeline::AnalysisWorkerLimit::enter(limit);
+                        work();
+                    };
+                    if tuple_results {
+                        scope.spawn(move || {
+                            warm(&|| {
+                                let _ = self.tuple_iteration_may_be_mutated();
+                            })
+                        });
+                    }
+                    scope.spawn(move || {
+                        warm(&|| {
+                            let _ = self.effect_apply_calls();
+                        })
+                    });
+                    scope.spawn(move || {
+                        warm(&|| {
+                            let _ = self.object_member_targets();
+                        })
+                    });
+                    warm(&|| {
+                        let _ = self.component_functions();
+                    });
+                });
+            }
             let components = self.component_functions();
             let mut component_keys = components.iter().copied().collect::<Vec<_>>();
             component_keys.sort_unstable();
+            let mut escaped_keys = self
+                .escaped_component_functions()
+                .iter()
+                .copied()
+                .collect::<Vec<_>>();
+            escaped_keys.sort_unstable();
             let mut hasher = Sha256::new();
             hasher.update(b"components\0");
+            // ADR 0282: a mutation in another file can withdraw the tuple
+            // callable edge without changing the consuming file's facts.
+            // Projects with no supported tuple result cannot consume this
+            // premise. Do not invalidate their unrelated object/source caches.
+            if tuple_results {
+                hasher.update(b"tuple-iteration-veto\0");
+                hasher.update([u8::from(self.tuple_iteration_may_be_mutated())]);
+            }
+            // ADR 0324: whether the router premise applies is a property of
+            // every file (a history in one decides what another reads).
+            hasher.update(b"router-params\0");
+            hasher.update([u8::from(self.router_params().applies())]);
+            // ADR 0325: an imported constant's primitive-ness is another
+            // file's fact.
+            hasher.update(b"imported-primitive-consts\0");
+            for (path, span) in self.exported_primitive_consts() {
+                hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
+                hasher.update(path.as_bytes());
+                hasher.update(span.start.to_le_bytes());
+                hasher.update(span.end.to_le_bytes());
+            }
+            // ADR 0302: a compute helper or source in another file decides an
+            // apply's owner/execution edge. Bind each call's answer, including
+            // named callbacks that also have independent invocations.
+            let mut apply_sites = self.effect_apply_calls().iter().collect::<Vec<_>>();
+            apply_sites.sort_unstable_by_key(|(site, _)| **site);
+            hasher.update(b"effect-apply-execution\0");
+            for ((path, span, argument), execution) in apply_sites {
+                hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
+                hasher.update(path.as_bytes());
+                hasher.update(span.start.to_le_bytes());
+                hasher.update(span.end.to_le_bytes());
+                hasher.update(u64::try_from(*argument).unwrap_or(u64::MAX).to_le_bytes());
+                let tag = match execution {
+                    crate::effect_execution::ApplyExecution::Proven => 0_u8,
+                    crate::effect_execution::ApplyExecution::Absent => 1,
+                    crate::effect_execution::ApplyExecution::Unknown => 2,
+                };
+                hasher.update([tag]);
+            }
+            // ADR 0314: which prototypes another file writes decides which
+            // receivers keep an exact member here.
+            {
+                let assigned = self.assigned_members();
+                hasher.update(b"prototype-writes\0");
+                hasher.update([u8::from(assigned.global)]);
+                let mut constructors = assigned.constructors.iter().collect::<Vec<_>>();
+                constructors.sort_unstable();
+                for (path, span) in constructors {
+                    hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
+                    hasher.update(path.as_bytes());
+                    hasher.update(span.start.to_le_bytes());
+                    hasher.update(span.end.to_le_bytes());
+                }
+                let mut hosts = assigned.hosts.clone();
+                hosts.sort_unstable();
+                for (name, dom) in hosts {
+                    hasher.update(u64::try_from(name.len()).unwrap_or(u64::MAX).to_le_bytes());
+                    hasher.update(name.as_bytes());
+                    hasher.update([u8::from(dom)]);
+                }
+            }
+            let mut member_targets = self.object_member_targets().iter().collect::<Vec<_>>();
+            member_targets.sort_unstable_by(|a, b| {
+                (a.0.path.as_ref(), a.0.start_byte, a.0.end_byte).cmp(&(
+                    b.0.path.as_ref(),
+                    b.0.start_byte,
+                    b.0.end_byte,
+                ))
+            });
+            hasher.update(b"object-member-targets\0");
+            for (site, (path, span)) in member_targets {
+                for value in [site.path.as_ref(), path.as_str()] {
+                    hasher.update(u64::try_from(value.len()).unwrap_or(u64::MAX).to_le_bytes());
+                    hasher.update(value.as_bytes());
+                }
+                hasher.update(site.start_byte.to_le_bytes());
+                hasher.update(site.end_byte.to_le_bytes());
+                hasher.update(span.start.to_le_bytes());
+                hasher.update(span.end.to_le_bytes());
+            }
+            // Returned-source proofs inspect callee syntax and binding facts,
+            // even when its public type and read summary do not change. Bind
+            // the byte identity of every file that can hold such a proof (a
+            // bare identifier or `new Proxy` return, ADR 0222 and 0287); a file gaining or losing one
+            // enters or leaves the digest, so the set itself is bound too.
+            let mut source_inputs = self
+                .files()
+                .iter()
+                .filter(|file| returns_source_root(file))
+                .collect::<Vec<_>>();
+            source_inputs.sort_unstable_by(|left, right| left.path.cmp(&right.path));
+            hasher.update(b"returned-source-inputs\0");
+            for file in source_inputs {
+                let path = file.path.as_str();
+                hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
+                hasher.update(path.as_bytes());
+                hasher.update(file.source_hash.as_str().as_bytes());
+            }
+            // ADR 0319: an invocation-flow proof follows a function value
+            // through any file of a closed program -- bindings, returns,
+            // object members, callee parameters, component props -- so a
+            // literal's role here can move with another file's contents.
+            // Every consumer reads the role from one per-build table of
+            // answers (`invocation_flow_answers`); bind that table, as ADR
+            // 0302 binds each apply's answer. A closed program with no proven
+            // answer still writes the marker, so closing or opening the
+            // boundary always moves the digest.
+            if self.program_closed {
+                let mut answers = self.invocation_flow_answers().iter().collect::<Vec<_>>();
+                answers.sort_unstable_by(|left, right| left.0.cmp(right.0));
+                hasher.update(b"invocation-flow-answers\0");
+                for ((path, span), role) in answers {
+                    hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
+                    hasher.update(path.as_bytes());
+                    hasher.update(span.start.to_le_bytes());
+                    hasher.update(span.end.to_le_bytes());
+                    hasher.update(format!("{role:?}").as_bytes());
+                    hasher.update([0]);
+                }
+                // The owner seeds read the same walk's owner answers.
+                let mut literals = self.unowned_event_literals().iter().collect::<Vec<_>>();
+                literals.sort_unstable();
+                hasher.update(b"unowned-event-literals\0");
+                for (path, span) in literals {
+                    hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
+                    hasher.update(path.as_bytes());
+                    hasher.update(span.start.to_le_bytes());
+                    hasher.update(span.end.to_le_bytes());
+                }
+            }
             for (path, span) in component_keys {
+                hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
+                hasher.update(path.as_bytes());
+                hasher.update(span.start.to_le_bytes());
+                hasher.update(span.end.to_le_bytes());
+            }
+            hasher.update(b"escaped-components\0");
+            for (path, span) in escaped_keys {
                 hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
                 hasher.update(path.as_bytes());
                 hasher.update(span.start.to_le_bytes());
@@ -657,6 +1295,64 @@ impl<'a> SemanticLookup<'a> {
             if let Some(returned) = self.returned_callback_proof_digest() {
                 hasher.update(b"returned-callbacks\0");
                 hasher.update(returned);
+            }
+            // Review round 1 of ADR 0293: an exempt store Get is withheld
+            // only while no file writes a member of its key, writes through a
+            // prototype, or defines a property reflectively.
+            if let Some(census) = self.exempt_store_key_census() {
+                hasher.update(b"exempt-store-keys\0");
+                for (key, written) in census {
+                    hasher.update(u64::try_from(key.len()).unwrap_or(u64::MAX).to_le_bytes());
+                    hasher.update(key.as_bytes());
+                    hasher.update([u8::from(written)]);
+                }
+            }
+            // ADR 0277: whether a helper calls its parameter on every
+            // completion decides the role of a callback written in its
+            // caller, and moving that call into a branch changes no summary.
+            let mut parameter_calls = self
+                .parameter_completion_calls()
+                .iter()
+                .copied()
+                .collect::<Vec<_>>();
+            parameter_calls.sort_unstable();
+            // ADR 0278: a guard's declared `never` lives in another file's
+            // types, so it is bound here rather than by this file's bytes.
+            let mut never_paths = self.never_returning_calls().iter().collect::<Vec<_>>();
+            never_paths.sort_unstable();
+            hasher.update(b"never-returning-calls\0");
+            for (path, calls) in never_paths {
+                hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
+                hasher.update(path.as_bytes());
+                for call in calls {
+                    hasher.update(call.start.to_le_bytes());
+                    hasher.update(call.end.to_le_bytes());
+                }
+            }
+            hasher.update(b"parameter-completion-calls\0");
+            for (path, span, index) in parameter_calls {
+                hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
+                hasher.update(path.as_bytes());
+                hasher.update(span.start.to_le_bytes());
+                hasher.update(span.end.to_le_bytes());
+                hasher.update(u64::try_from(index).unwrap_or(u64::MAX).to_le_bytes());
+            }
+            // A wrapper in one file decides the role of a callback written in
+            // another. Hashed only when present, so a project with no such
+            // wrapper keeps the digest it had.
+            let forwarded = self.result_access_forwarded_index();
+            if !forwarded.is_empty() {
+                let mut paths = forwarded.keys().copied().collect::<Vec<_>>();
+                paths.sort_unstable();
+                hasher.update(b"result-access-forwarded\0");
+                for path in paths {
+                    hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
+                    hasher.update(path.as_bytes());
+                    for entry in &forwarded[path] {
+                        hasher.update(entry.argument.start.to_le_bytes());
+                        hasher.update(entry.argument.end.to_le_bytes());
+                    }
+                }
             }
             Some(hasher.finalize().into())
         })
@@ -743,10 +1439,9 @@ impl<'a> SemanticLookup<'a> {
                     .calls
                     .iter()
                     .map(|call| {
-                        super::primitive_name(
-                            file.path.as_str(),
-                            call.callee,
-                            call.static_callee(&file.source),
+                        super::call_primitive_name(
+                            file,
+                            call,
                             self.entities,
                             self.symbol_names,
                             self.dialect,
@@ -775,12 +1470,88 @@ impl<'a> SemanticLookup<'a> {
         self.entities
     }
 
+    pub(super) fn object_member_targets(&self) -> &crate::object_members::Targets {
+        self.object_members
+            .get_or_init(|| crate::object_members::index(self.facts, self))
+    }
+
+    pub(super) fn literal_receiver_members(&self) -> &HashSet<(String, Span)> {
+        self.literal_receiver_members
+            .get_or_init(|| crate::object_members::literal_receiver_members(self))
+    }
+
+    pub(super) fn object_member_function(
+        &self,
+        file: &FileFacts,
+        callee: Span,
+    ) -> Option<(&'a FileFacts, &'a solid_facts::ast::FunctionFact)> {
+        let (path, span) = self
+            .object_member_targets()
+            .get(&crate::location(file.path.shared(), callee))?;
+        let file = self.file_by_path(path)?;
+        Some((file, file.ast.function_at(*span)?))
+    }
+
     pub(super) fn symbol_names(&self) -> &'a HashMap<SymbolId, SymbolName> {
         self.symbol_names
     }
 
+    pub(super) fn symbol_at(
+        &self,
+        path: &str,
+        span: Span,
+    ) -> Option<solid_facts::TypeScriptSymbol<'a>> {
+        let entity = self.entity_at(path, span)?;
+        if entity.symbol_unresolved || entity.symbol.is_empty() {
+            return None;
+        }
+        self.symbols_by_id().get(entity.symbol.as_ref()).copied()
+    }
+
     pub(super) fn files(&self) -> &'a [FileFacts] {
         &self.facts.files
+    }
+
+    /// ADR 0319: the invocation-flow answer of every literal, computed once.
+    pub(crate) fn invocation_flow_answers(&self) -> &HashMap<(String, Span), crate::ExecutionRole> {
+        self.invocation_flow_answers
+            .get_or_init(|| crate::execution_role::invocation_flow_answers(self))
+    }
+
+    /// The literals whose every invocation is a host event dispatch, for the
+    /// owner seeds; see [`crate::execution_role::unowned_event_literals`].
+    pub(crate) fn unowned_event_literals(&self) -> &HashSet<(String, Span)> {
+        self.unowned_event_literals
+            .get_or_init(|| crate::execution_role::unowned_event_literals(self))
+    }
+
+    pub(super) fn tuple_iteration_may_be_mutated(&self) -> bool {
+        *self
+            .tuple_iteration_veto
+            .get_or_init(|| crate::interproc::accessor_provenance::tuple_iteration_write(self))
+    }
+
+    /// Facts are immutable for this lookup's lifetime. Proxy and invocation
+    /// guards consume the same project census as tuple identity, without
+    /// repeating it at every source-call site. A new generation has a new lock.
+    pub(super) fn visible_string_code(&self) -> bool {
+        *self
+            .string_code_veto
+            .get_or_init(|| crate::interproc::accessor_provenance::visible_string_code(self))
+    }
+
+    /// ADR 0292: whether `property` holding `function` is the `default` of a
+    /// module object a dialect component loader renders, and that function's
+    /// one reference ([`crate::owners::lazy_default_render_witnesses`]).
+    pub(super) fn is_lazy_default_render_witness(
+        &self,
+        file: &FileFacts,
+        function: Span,
+        property: Span,
+    ) -> bool {
+        self.lazy_default_render_witnesses
+            .get_or_init(|| crate::owners::lazy_default_render_witnesses(self))
+            .contains(&(file.path.as_str(), function, property))
     }
 
     pub(super) fn file_by_path(&self, path: &str) -> Option<&'a FileFacts> {
@@ -797,15 +1568,97 @@ impl<'a> SemanticLookup<'a> {
             .map(|index| &self.facts.files[*index])
     }
 
-    pub(super) fn symbol_references(&self, symbol: &str) -> Vec<Location> {
-        self.symbols_by_id
+    /// A missing symbol is missing reference evidence, not an empty census.
+    /// The compiler's declarations of `symbol`, at their name spans; `None`
+    /// when Type Facts does not know the symbol.
+    pub(super) fn symbol_declarations(&self, symbol: &str) -> Option<&'a [typefacts::Declaration]> {
+        self.symbols_by_id()
+            .get(symbol)
+            .map(|candidate| candidate.declarations())
+    }
+
+    pub(super) fn symbol_references_if_present(&self, symbol: &str) -> Option<Vec<Location>> {
+        self.symbols_by_id()
+            .get(symbol)
+            .map(|candidate| candidate.references().cloned().collect())
+    }
+
+    /// ADR 0324: whether the router-parameters premise applies to this
+    /// project.
+    pub(super) fn router_params(&self) -> &crate::router_params::RouterParamsStatus {
+        self.router_params.get_or_init(|| {
+            crate::router_params::router_params_status(
+                self.facts,
+                self.dialect,
+                &self.router_install,
+            )
+        })
+    }
+
+    /// ADR 0334: whether `span` in `path` is a component value of a route's
+    /// options that the audited `@tanstack/solid-router` only renders.
+    pub(super) fn route_component_value(&self, path: &str, span: Span) -> bool {
+        self.route_component_values
             .get_or_init(|| {
-                self.facts
-                    .typescript
-                    .symbols()
-                    .map(|candidate| (candidate.id(), candidate))
-                    .collect()
+                crate::route_components::route_component_values(
+                    self.facts,
+                    self.dialect,
+                    &self.router_install,
+                    &|file, name| {
+                        let symbol = self.entities.at(file.path.as_str(), name)?;
+                        let references = self.symbol_references_if_present(symbol.as_str())?;
+                        references
+                            .iter()
+                            .map(|reference| {
+                                Some((
+                                    reference.path.to_string(),
+                                    Span::new(
+                                        u32::try_from(reference.start_byte).ok()?,
+                                        u32::try_from(reference.end_byte).ok()?,
+                                    ),
+                                ))
+                            })
+                            .collect()
+                    },
+                    crate::object_members::namespace_exposed_modules(self.facts, self).as_ref(),
+                    crate::interproc::accessor_provenance::reflective_prototype_write(self),
+                )
             })
+            .contains(&(path.to_owned(), span))
+    }
+
+    /// The compiler's attested resolution of the project's import specifiers,
+    /// when the analysis carries it.
+    pub(super) fn resolved_imports(&self) -> Option<&'a solid_facts::AttestedImportIndex> {
+        self.facts.resolved_imports.as_ref()
+    }
+
+    /// The project bundler's resolution of each module load, when the host
+    /// asked for it (ADR 0220).
+    pub(super) fn runtime_resolutions(
+        &self,
+    ) -> Option<&'a solid_facts::runtime_resolution::RuntimeResolutionIndex> {
+        self.facts.runtime_resolutions.as_ref()
+    }
+
+    /// The files declaring the module a namespace binding at `span` names:
+    /// its symbol's alias target's declarations. `None` when Type Facts does
+    /// not resolve it.
+    pub(super) fn namespace_module_paths(&self, path: &str, span: Span) -> Option<Vec<&'a str>> {
+        let symbol = self.entities.at(path, span)?;
+        let symbols = self.symbols_by_id();
+        let target = symbols.get(symbol.as_str())?.alias_target();
+        let paths = symbols
+            .get(target)?
+            .declarations()
+            .iter()
+            .map(|declaration| declaration.location.path.as_ref())
+            .collect::<Vec<&'a str>>();
+        (!paths.is_empty()).then_some(paths)
+    }
+
+    pub(super) fn symbol_references(&self, symbol: &str) -> Vec<Location> {
+        self.symbols_by_id()
             .get(symbol)
             .map(|candidate| candidate.references().cloned().collect())
             .unwrap_or_default()
@@ -817,2129 +1670,57 @@ impl<'a> SemanticLookup<'a> {
     /// they are called. Building this reverse index once keeps that proof
     /// linear in project facts instead of rescanning every binding for every
     /// call site.
-    pub(super) fn binding_at_reference(
-        &self,
-        path: &str,
-        span: Span,
-    ) -> Option<(&'a FileFacts, &'a solid_facts::ast::BindingFact, SymbolId)> {
-        let resolution = self
-            .bindings_by_reference()
-            .get(path)?
-            .get(&(u64::from(span.start), u64::from(span.end)))?;
-        let file = &self.facts.files[resolution.file];
-        Some((
-            file,
-            &file.ast.bindings[resolution.binding],
-            resolution.symbol.clone(),
-        ))
-    }
-
-    fn bindings_by_reference(&self) -> &BindingsByReference {
-        self.bindings_by_reference.get_or_init(|| {
-            let symbols = self.symbols_by_id.get_or_init(|| {
-                self.facts
-                    .typescript
-                    .symbols()
-                    .map(|candidate| (candidate.id(), candidate))
-                    .collect()
-            });
-            let mut by_path = HashMap::<String, HashMap<(u64, u64), BindingResolution>>::new();
-            let mut by_symbol = HashMap::<SymbolId, BindingResolution>::new();
-            for (file_index, file) in self.facts.files.iter().enumerate() {
-                for (binding_index, binding) in file.ast.bindings.iter().enumerate() {
-                    for name in &binding.names {
-                        let Some(symbol) = self.entities.at(file.path.as_str(), name.span) else {
-                            continue;
-                        };
-                        let resolution = BindingResolution {
-                            file: file_index,
-                            binding: binding_index,
-                            symbol: symbol.clone(),
-                        };
-                        by_symbol
-                            .entry(symbol.clone())
-                            .or_insert_with(|| resolution.clone());
-                        by_path
-                            .entry(file.path.to_string())
-                            .or_default()
-                            .entry((u64::from(name.span.start), u64::from(name.span.end)))
-                            .or_insert_with(|| resolution.clone());
-                        if let Some(candidate) = symbols.get(symbol.as_str()) {
-                            for reference in candidate.references() {
-                                by_path
-                                    .entry(reference.path.to_string())
-                                    .or_default()
-                                    .entry((reference.start_byte, reference.end_byte))
-                                    .or_insert_with(|| resolution.clone());
-                            }
-                        }
-                    }
-                }
-            }
-            // The symbol-reference table proves aliases even when no entity
-            // was demanded at a use. Conversely, exact entity facts can exist
-            // at a use omitted from that reference projection. Retain both
-            // compiler proofs, matching the former direct-or-reference query.
-            for (path, entities) in &self.entities.by_path {
-                for ((start, end), symbol) in entities {
-                    if let Some(resolution) = by_symbol.get(symbol) {
-                        by_path
-                            .entry(path.clone())
-                            .or_default()
-                            .entry((*start, *end))
-                            .or_insert_with(|| resolution.clone());
-                    }
-                }
-            }
-            by_path
-        })
-    }
-
-    /// Whether the last reference in this JSX member-object span resolves to
-    /// a binding initialized by the dialect's `createContext` primitive
-    /// anywhere in the project.
-    ///
-    /// Context providers are routinely declared in one module and rendered
-    /// in another. Indexing canonical TypeScript symbols keeps that ordinary
-    /// import/re-export boundary from erasing the runtime contract while
-    /// still rejecting objects that merely expose a property named
-    /// `Provider`. Matching the reference that ends with the object span also
-    /// supports `<contexts.ValueContext.Provider>` without confusing it with
-    /// `<ValueContext.someObject.Provider>`.
-    pub(super) fn is_context_reference(&self, path: &str, span: Span) -> bool {
-        self.context_symbols().iter().any(|symbol| {
-            self.symbols_by_id
-                .get_or_init(|| {
-                    self.facts
-                        .typescript
-                        .symbols()
-                        .map(|candidate| (candidate.id(), candidate))
-                        .collect()
-                })
-                .get(symbol)
-                .is_some_and(|candidate| {
-                    candidate.references().any(|reference| {
-                        reference.path.as_ref() == path
-                            && reference.start_byte >= u64::from(span.start)
-                            && reference.end_byte == u64::from(span.end)
-                    })
-                })
-        })
-    }
-
-    fn context_symbols(&self) -> &HashSet<&'a str> {
-        self.context_symbols.get_or_init(|| {
-            self.facts
-                .files
-                .iter()
-                .flat_map(|file| {
-                    let primitives = self.primitives(file);
-                    file.ast.bindings.iter().filter_map(move |binding| {
-                        let initializer = binding.call_initializer?;
-                        let call = file
-                            .ast
-                            .calls
-                            .iter()
-                            .position(|call| call.span == initializer)?;
-                        (super::known_primitive(&primitives.calls[call])
-                            == Some(solid_dialect::Primitive::CreateContext))
-                        .then(|| {
-                            binding.names.iter().find_map(|name| {
-                                self.entities
-                                    .at(file.path.as_str(), name.span)
-                                    .map(|symbol| symbol.as_str())
-                            })
-                        })
-                        .flatten()
-                    })
-                })
-                .collect()
-        })
-    }
-
-    pub(super) fn call_by_callee(
-        &self,
-        file: &FileFacts,
-        callee: Span,
-    ) -> Option<&solid_facts::ast::CallFact> {
-        self.ast_indexes
-            .get(file.path.as_str())
-            .and_then(|index| index.call_by_callee(callee))
-    }
-
-    /// The compiler-selected signature and argument mapping for this call.
-    ///
-    /// Resolved-call facts are demanded at the complete callee expression,
-    /// unlike member declaration identity which lives on its property span.
-    pub(super) fn resolved_callee_call(
-        &self,
-        file: &FileFacts,
-        callee: Span,
-    ) -> Option<&'a ResolvedCall> {
-        let original_callee = callee;
-        let callee = file.ast.peel_ts_sugar_span(callee);
-        let call_span = self
-            .call_by_callee(file, original_callee)
-            .or_else(|| self.call_by_callee(file, callee))
-            .map_or(original_callee, |call| call.span);
-        self.entity_at(file.path.as_str(), callee)
-            .and_then(|entity| entity.resolved_call.as_deref())
-            .or_else(|| {
-                self.entity_at(file.path.as_str(), call_span)
-                    .and_then(|entity| entity.resolved_call.as_deref())
-            })
-    }
-
-    pub(super) fn function_called_at(
-        &self,
-        path: &str,
-        callee: Span,
-    ) -> Option<(&'a FileFacts, &'a solid_facts::ast::FunctionFact)> {
-        let symbol = self.entities.at(path, callee)?;
-        self.function_for_symbol(symbol)
-    }
-
-    fn method_symbol_ref(&self, path: &str, span: Span) -> Option<&'a str> {
-        self.declaration_symbols
-            .get_or_init(|| declaration_symbols(&self.facts.typescript))
-            .get(&(path, u64::from(span.start), u64::from(span.end)))
-            .copied()
-    }
-
-    pub(super) fn function_for_symbol(
+    /// ADR 0209: the project class `symbol` declares: its one declaration is a
+    /// class declaration, written at the name of a class in an analyzed file.
+    /// A symbol with several declarations (a class merged with an interface or
+    /// a namespace) names no exact class.
+    pub(super) fn class_for_symbol(
         &self,
         symbol: &str,
-    ) -> Option<(&'a FileFacts, &'a solid_facts::ast::FunctionFact)> {
-        match self.functions_by_symbol().get(symbol)? {
-            SymbolFunction::Resolved { file, function } => {
-                let file = &self.facts.files[*file];
-                Some((file, &file.ast.functions[*function]))
-            }
-            SymbolFunction::Aborted => None,
-        }
-    }
-
-    pub(super) fn entity_at(&self, path: &str, span: Span) -> Option<&'a EntityFact> {
-        self.entities_by_location()
-            .get(&(path, u64::from(span.start), u64::from(span.end)))
-            .copied()
-    }
-
-    pub(super) fn typescript_file(&self, path: &str) -> Option<&'a FileFact> {
-        self.facts.typescript.file(path)
-    }
-
-    /// The symbol a callee span resolves to. Transparent wrappers are peeled
-    /// because they preserve the called value; arbitrary contained symbols are
-    /// never substituted, since `handlers[i]()` and `wrapper.value()` must not
-    /// inherit the identity of `i` or `wrapper` when the complete callee has no
-    /// semantic fact.
-    pub(super) fn callee_symbol(&self, file: &FileFacts, callee: Span) -> Option<&'a str> {
-        let callee = file.ast.peel_ts_sugar_span(callee);
-        let member_property = self
-            .ast_indexes
-            .get(file.path.as_str())
-            .and_then(|index| index.member_property(callee));
-        let computed_member = file.ast.computed_members.contains(&callee);
-        member_property
-            .and_then(|property| {
-                self.resolved_declaration_symbol(file, callee).or_else(|| {
-                    if computed_member {
-                        None
-                    } else {
-                        self.entities
-                            .at(file.path.as_str(), property)
-                            .map(SymbolId::as_str)
-                    }
-                })
-            })
-            .or_else(|| {
-                if member_property.is_none() {
-                    self.entities
-                        .at(file.path.as_str(), callee)
-                        .map(SymbolId::as_str)
-                } else {
-                    None
-                }
-            })
-    }
-
-    /// Exact callable identities for one call site.
-    ///
-    /// A normal TypeScript call fact supplies one selected declaration. A
-    /// composite/union call deliberately supplies none; in that case this
-    /// method only expands aliases and object values whose exact property
-    /// declarations are present in the semantic table. It never turns a
-    /// property spelling into a project-wide method lookup. Callers must
-    /// compare the returned candidates' summaries before using more than one.
-    pub(super) fn callee_symbols(&self, file: &FileFacts, callee: Span) -> Vec<SymbolId> {
-        let callee = file.ast.peel_ts_sugar_span(callee);
-        let member_property = self
-            .ast_indexes
-            .get(file.path.as_str())
-            .and_then(|index| index.member_property(callee));
-        // For an identifier call the entity at the complete callee is the
-        // value binding (including a function parameter). A resolved
-        // FunctionType declaration is not the runtime function identity and
-        // must not replace it.
-        if member_property.is_none()
-            && let Some(symbol) = self.entities.at(file.path.as_str(), callee)
-        {
-            if !self.direct_value_aliases().contains(symbol) {
-                return vec![symbol.clone()];
-            }
-            let mut visited = HashSet::new();
-            let aliases = self.direct_value_symbols(file, callee, &mut visited);
-            if !aliases.is_empty() {
-                return aliases;
-            }
-            return vec![symbol.clone()];
-        }
-        if let Some(call) = self.resolved_callee_call(file, callee)
-            && call.validity == ResolvedCallValidity::Valid
-            && let Some(declaration) = call.declaration.as_ref()
-            && !declaration.symbol.is_empty()
-        {
-            let symbol = SymbolId::from(declaration.symbol.as_ref());
-            // A selected declaration is sufficient when it names an
-            // analyzed implementation or an explicitly resolved package
-            // contract. A TypeScript interface/signature declaration without
-            // either is only a structural type, so continue to exact
-            // receiver/call-site dispatch below.
-            if self.function_for_symbol(symbol.as_str()).is_some()
-                || self.resolved_contracts.by_symbol.contains_key(&symbol)
-            {
-                return vec![symbol];
-            }
-        }
-        let Some(member_property) = member_property else {
-            return self
-                .entities
-                .at(file.path.as_str(), callee)
-                .cloned()
-                .into_iter()
-                .collect();
+    ) -> Option<(&'a FileFacts, &'a solid_facts::ast::ClassFact)> {
+        let [declaration] = self.symbols_by_id().get(symbol)?.declarations() else {
+            return None;
         };
-        if file.ast.computed_members.binary_search(&callee).is_ok() {
-            return Vec::new();
-        }
-        let Some(property_name) = file.source_text(member_property) else {
-            return Vec::new();
-        };
-        let member = file.ast.members.iter().find(|member| member.span == callee);
-        let Some(member) = member else {
-            return Vec::new();
-        };
-        let mut symbols = Vec::new();
-        let mut visited_spans = HashSet::new();
-        self.member_value_symbols(
-            file,
-            member.object,
-            property_name,
-            &mut visited_spans,
-            &mut symbols,
-        );
-        if symbols.is_empty() {
-            self.structural_parameter_member_symbols(
-                file,
-                member.object,
-                property_name,
-                &mut symbols,
-            );
-        }
-        symbols.sort_unstable();
-        symbols.dedup();
-        symbols
-    }
-
-    /// The root symbol of a non-computed member callee, and the access path
-    /// reaching it from that root.
-    ///
-    /// `reader.read(value)` answers `(reader, ["read"])`, and
-    /// `parsed.modifiers.includes(m)` answers `(parsed, ["modifiers",
-    /// "includes"])` -- **not** `(parsed, ["includes"])`. Rooting a whole
-    /// chain at its last segment names a property the receiver does not have,
-    /// and a consumer matches a contract's path as a *prefix* of the observed
-    /// access (`type_facts::parameter_value_source_matches`), so a wrong first
-    /// segment is a demand no runtime can witness.
-    ///
-    /// A computed member or a callee with no member fact answers `None`, the
-    /// same conservative gate [`Self::callee_symbols`] applies -- `handlers[i]()`
-    /// must never be read as a property named `i`.
-    ///
-    /// **The chain's root must be a plain identifier.** `EntitySymbols::at`
-    /// answers a symbol for any span the compiler emitted an entity at, and at
-    /// a conditional, sequence, logical, or call expression that symbol is some
-    /// *operand's* -- not the value the chain walks through. Trusting it
-    /// attaches properties of the chain's result to a binding that never has
-    /// them: `(k ? options.a : options.b).c.slice(n)` would be reported as `k`
-    /// reading `["c", "slice"]`. Those are refused, and so is
-    /// `options().slice(n)`, whose `slice` is a property of the call's result.
-    ///
-    /// Segments *inside* the chain fail closed to the longest exact prefix
-    /// rather than being guessed or skipped: `props[key].values()` cannot name
-    /// anything and answers an empty path, and `props.of[key].values()` answers
-    /// `["of"]`. A chain longer than [`MEMBER_CALLEE_PATH_LIMIT`] is cut the
-    /// same way. With the root pinned to an identifier, a shorter path is
-    /// always a true prefix of the real access, and so a strictly weaker claim
-    /// under both the prefix matcher and the exact one
-    /// (`type_facts::parameter_value_source_matches` and its `_exact` sibling
-    /// compare a witness against *this* stated path, never against the access
-    /// it was cut from). An empty path claims only "read through this
-    /// parameter".
-    pub(super) fn member_callee_receiver(
-        &self,
-        file: &FileFacts,
-        callee: Span,
-    ) -> Option<(SymbolId, Vec<String>)> {
-        let callee = file.ast.peel_ts_sugar_span(callee);
-        if file.ast.computed_members.binary_search(&callee).is_ok() {
+        if &*declaration.kind != "class" {
             return None;
         }
-        let ast_index = self.ast_indexes.get(file.path.as_str())?;
-        // The callee must itself be a named member. `notify(callback)` is a
-        // plain identifier: it is a call *of* a value, not a call *through* a
-        // property of one, and answering it with a zero-segment path would
-        // make every ordinary call read as a member access on its callee.
-        let leaf = member_at(file, callee)?;
-        let leaf_property = ast_index
-            .member_property(callee)
-            .and_then(|property| file.source_text(property))?
-            .to_owned();
-        // Walk leaf -> root, then reverse: the model orders a path outwards
-        // from the parameter. An unnameable segment discards everything
-        // collected so far -- those sit *outside* it, and only the segments
-        // still to be walked form an exact prefix of the real access.
-        let mut segments = vec![leaf_property];
-        let mut current = file.ast.peel_ts_sugar_span(leaf.object);
-        let root = loop {
-            let Some(member) = member_at(file, current) else {
-                break current;
-            };
-            if file.ast.computed_members.binary_search(&current).is_ok() {
-                segments.clear();
-            } else if let Some(name) = ast_index
-                .member_property(current)
-                .and_then(|property| file.source_text(property))
-            {
-                segments.push(name.to_owned());
-            } else {
-                segments.clear();
-            }
-            let next = file.ast.peel_ts_sugar_span(member.object);
-            // A member's object is a strict sub-span of the member itself, so
-            // every step shrinks the span and the walk terminates. The depth
-            // it terminates at bounds the *path*, not the walk: cutting the
-            // walk short would lose the root and force a drop, and a dropped
-            // row is the negative claim this must never make. A fact table
-            // that does not shrink is malformed, and refused rather than
-            // walked forever.
-            if next.start < current.start || next.end >= current.end {
-                return None;
-            }
-            current = next;
-        };
-        // Refuse a root that is not a plain identifier: see the doc comment.
-        // Everything collected above sits on the chain's *result*, so a
-        // symbol answered at a compound span would be given a path of
-        // properties it does not have.
-        if file
-            .ast
-            .identifiers
-            .binary_search_by_key(&root, |identifier| identifier.span)
-            .is_err()
-        {
-            return None;
-        }
-        segments.reverse();
-        segments.truncate(MEMBER_CALLEE_PATH_LIMIT);
-        let receiver = self.entities.at(file.path.as_str(), root)?;
-        Some((receiver.clone(), segments))
-    }
-
-    /// Every exact implementation `value.property` may resolve to.
-    ///
-    /// This retains a finite runtime union rather than silently selecting one
-    /// candidate. Consumers may certify it only after proving every candidate
-    /// has equivalent behavior; an empty result is missing evidence, not
-    /// safety.
-    pub(super) fn member_value_symbols_at(
-        &self,
-        file: &FileFacts,
-        value: Span,
-        property_name: &str,
-    ) -> Vec<SymbolId> {
-        let mut symbols = Vec::new();
-        let mut visited = HashSet::new();
-        self.member_value_symbols(file, value, property_name, &mut visited, &mut symbols);
-        symbols.sort_unstable();
-        symbols.dedup();
-        symbols
-    }
-
-    /// Resolve `parameter.member()` through the exact project call sites of
-    /// the containing function. This is the structural-interface seam: the
-    /// member declaration itself may be a composite TypeScript signature,
-    /// while each analyzed call site supplies an exact runtime value. Every
-    /// call site must resolve to a concrete property value; one missing or
-    /// ambiguous site makes the whole dispatch uncertifiable.
-    fn structural_parameter_member_symbols(
-        &self,
-        file: &FileFacts,
-        object: Span,
-        property_name: &str,
-        symbols: &mut Vec<SymbolId>,
-    ) {
-        let object = file.ast.peel_ts_sugar_span(object);
-        let Some(receiver_symbol) = self.entities.at(file.path.as_str(), object) else {
-            return;
-        };
-        let Some(function) = file
-            .ast
-            .functions_body_containing(object)
-            .min_by_key(|function| function.body.end - function.body.start)
-        else {
-            return;
-        };
-        let Some(parameter_index) = function.parameters.iter().position(|parameter| {
-            parameter.names.iter().any(|name| {
-                self.entities
-                    .at(file.path.as_str(), name.span)
-                    .is_some_and(|symbol| symbol == receiver_symbol)
-            })
-        }) else {
-            return;
-        };
-        let Some(function_name) = function_binding_name(file, function) else {
-            return;
-        };
-        if self
-            .entities
-            .at(file.path.as_str(), function_name.span)
-            .is_none()
-        {
-            return;
-        }
-        let call_sites = self.function_call_sites(file.path.as_str(), function.span);
-        if call_sites.is_empty() {
-            return;
-        }
-        let mut unresolved_site = false;
-        for (caller_file, callee) in call_sites {
-            let Some(call) = self.call_by_callee(caller_file, callee) else {
-                unresolved_site = true;
-                continue;
-            };
-            let Some(argument) = call.arguments.get(parameter_index) else {
-                unresolved_site = true;
-                continue;
-            };
-            let mut site_symbols = Vec::new();
-            let mut visited = HashSet::new();
-            self.member_value_symbols(
-                caller_file,
-                argument.span,
-                property_name,
-                &mut visited,
-                &mut site_symbols,
-            );
-            site_symbols.sort_unstable();
-            site_symbols.dedup();
-            if site_symbols.is_empty() {
-                unresolved_site = true;
-            } else {
-                symbols.extend(site_symbols);
-            }
-        }
-        if unresolved_site {
-            symbols.clear();
-        }
-    }
-
-    fn member_value_symbols(
-        &self,
-        file: &FileFacts,
-        object: Span,
-        property_name: &str,
-        visited_spans: &mut HashSet<Span>,
-        symbols: &mut Vec<SymbolId>,
-    ) {
-        let object = file.ast.peel_ts_sugar_span(object);
-        if !visited_spans.insert(object) {
-            return;
-        }
-        if let Some(conditional) = file
-            .ast
-            .conditional_expressions
-            .iter()
-            .find(|conditional| conditional.span == object)
-        {
-            self.member_value_symbols(
-                file,
-                conditional.consequent,
-                property_name,
-                visited_spans,
-                symbols,
-            );
-            self.member_value_symbols(
-                file,
-                conditional.alternate,
-                property_name,
-                visited_spans,
-                symbols,
-            );
-            return;
-        }
-
-        let direct_symbol = self.entities.at(file.path.as_str(), object);
-        let identifier_reference = direct_symbol.is_none()
-            && file.ast.identifiers.iter().any(|identifier| {
-                identifier.span == object
-                    && identifier.role == solid_facts::ast::IdentifierRole::Reference
-            });
-        let binding = direct_symbol
-            .and_then(|symbol| self.binding_for_symbol(symbol))
-            .or_else(|| {
-                identifier_reference.then(|| {
-                    self.binding_at_reference(file.path.as_str(), object)
-                        .map(|(binding_file, binding, _)| (binding_file, binding))
-                })?
-            });
-        if let Some((binding_file, binding)) = binding {
-            if let Some(initializer) = binding.initializer {
-                self.member_value_symbols(
-                    binding_file,
-                    initializer,
-                    property_name,
-                    visited_spans,
-                    symbols,
-                );
-                if !symbols.is_empty() {
-                    return;
-                }
-            }
-            // A binding without an inspectable initializer is not evidence
-            // for any implementation. Retaining its variable symbol would
-            // turn receiver identity into a method-name guess.
-            return;
-        }
-
-        let Some(properties) = file
-            .ast
-            .object_properties
-            .iter()
-            .filter(|property| {
-                object.contains(property.span)
-                    && !property.computed
-                    && file.source_text(property.key) == Some(property_name)
-            })
-            .max_by_key(|property| property.span.start)
-        else {
-            for spread in file
-                .ast
-                .spreads
-                .iter()
-                .filter(|spread| object.contains(spread.span))
-            {
-                self.member_value_symbols(
-                    file,
-                    spread.argument,
-                    property_name,
-                    visited_spans,
-                    symbols,
-                );
-            }
-            return;
-        };
-
-        // The property key itself is a semantic identity once demanded by
-        // the backend. This works for class/object methods and for function
-        // properties copied through an exact object spread.
-        if let Some(symbol) = self.entities.at(file.path.as_str(), properties.key) {
-            symbols.push(symbol.clone());
-        }
-        for function in file.ast.functions.iter().filter(|function| {
-            properties.value.contains(function.span)
-                && function.method_name.as_ref().is_some_and(|name| {
-                    name.span == properties.key
-                        && self.entities.at(file.path.as_str(), name.span).is_some()
-                })
-        }) {
-            if let Some(name) = function.method_name.as_ref()
-                && let Some(symbol) = self.entities.at(file.path.as_str(), name.span)
-            {
-                symbols.push(symbol.clone());
-            }
-        }
-        if symbols.is_empty() {
-            self.member_value_symbols(
-                file,
-                properties.value,
-                property_name,
-                visited_spans,
-                symbols,
-            );
-        }
-        for spread in file.ast.spreads.iter().filter(|spread| {
-            object.contains(spread.span) && spread.span.start > properties.span.start
-        }) {
-            self.member_value_symbols(file, spread.argument, property_name, visited_spans, symbols);
-        }
-    }
-
-    fn binding_for_symbol(
-        &self,
-        symbol: &str,
-    ) -> Option<(&'a FileFacts, &'a solid_facts::ast::BindingFact)> {
-        let resolution = self.bindings_by_symbol().get(symbol)?;
-        let file = &self.facts.files[resolution.file];
-        Some((file, &file.ast.bindings[resolution.binding]))
-    }
-
-    /// Bindings whose initializer can replace the binding's callable identity.
-    ///
-    /// Most call sites name an import, a function, a signal tuple slot, or the
-    /// direct result of another call. Their entity symbol is already the exact
-    /// runtime identity. Only identifier aliases, object destructures, and
-    /// conditional initializers need the recursive value proof.
-    fn direct_value_aliases(&self) -> &HashSet<SymbolId> {
-        self.direct_value_aliases.get_or_init(|| {
-            let mut aliases = HashSet::new();
-            for file in &self.facts.files {
-                for binding in &file.ast.bindings {
-                    let conditional_initializer = binding.initializer.is_some_and(|initializer| {
-                        let initializer = file.ast.peel_ts_sugar_span(initializer);
-                        file.ast
-                            .conditional_expressions
-                            .iter()
-                            .any(|conditional| conditional.span == initializer)
-                    });
-                    if binding.initializer_identifier.is_none()
-                        && binding.shape != solid_facts::ast::BindingShape::Object
-                        && !conditional_initializer
-                    {
-                        continue;
-                    }
-                    for name in &binding.names {
-                        if let Some(symbol) = self.entities.at(file.path.as_str(), name.span) {
-                            aliases.insert(symbol.clone());
-                        }
-                    }
-                }
-            }
-            aliases
-        })
-    }
-
-    fn bindings_by_symbol(&self) -> &HashMap<SymbolId, BindingResolution> {
-        self.bindings_by_symbol.get_or_init(|| {
-            let mut bindings = HashMap::new();
-            for (file_index, file) in self.facts.files.iter().enumerate() {
-                for (binding_index, binding) in file.ast.bindings.iter().enumerate() {
-                    for name in &binding.names {
-                        let Some(symbol) = self.entities.at(file.path.as_str(), name.span) else {
-                            continue;
-                        };
-                        bindings.entry(symbol.clone()).or_insert(BindingResolution {
-                            file: file_index,
-                            binding: binding_index,
-                            symbol: symbol.clone(),
-                        });
-                    }
-                }
-            }
-            bindings
-        })
-    }
-
-    fn direct_value_symbols(
-        &self,
-        file: &FileFacts,
-        value: Span,
-        visited: &mut HashSet<Span>,
-    ) -> Vec<SymbolId> {
-        let value = file.ast.peel_ts_sugar_span(value);
-        if !visited.insert(value) {
-            return Vec::new();
-        }
-        if let Some(conditional) = file
-            .ast
-            .conditional_expressions
-            .iter()
-            .find(|conditional| conditional.span == value)
-        {
-            let mut symbols = self.direct_value_symbols(file, conditional.consequent, visited);
-            symbols.extend(self.direct_value_symbols(file, conditional.alternate, visited));
-            symbols.sort_unstable();
-            symbols.dedup();
-            return symbols;
-        }
-        let direct_symbol = self.entities.at(file.path.as_str(), value);
-        let identifier_reference = direct_symbol.is_none()
-            && file.ast.identifiers.iter().any(|identifier| {
-                identifier.span == value
-                    && identifier.role == solid_facts::ast::IdentifierRole::Reference
-            });
-        let Some(symbol) = direct_symbol.cloned().or_else(|| {
-            identifier_reference.then(|| {
-                self.binding_at_reference(file.path.as_str(), value)
-                    .map(|(_, _, symbol)| symbol)
-            })?
-        }) else {
-            return Vec::new();
-        };
-        let Some((binding_file, binding)) = direct_symbol
-            .and_then(|symbol| self.binding_for_symbol(symbol))
-            .or_else(|| {
-                identifier_reference.then(|| {
-                    self.binding_at_reference(file.path.as_str(), value)
-                        .map(|(binding_file, binding, _)| (binding_file, binding))
-                })?
-            })
-        else {
-            return vec![symbol.clone()];
-        };
-        if binding.initializer_function {
-            return vec![symbol.clone()];
-        }
-        // A destructuring pattern is not an alias of its initializer. `const
-        // { href } = props` binds `props.href`; `const [first] = pair` binds
-        // `pair[0]`. Carrying the initializer's identity across the pattern
-        // made every destructured local *be* the whole object, which is how
-        // `@solidjs/router`'s `Navigate` published a callback claim saying the
-        // props object itself is invoked -- a claim no adapter can verify,
-        // because `href({ navigate })` invokes a member. Only an identifier
-        // binding may inherit its initializer's callable identity; the object
-        // slot below resolves a destructured property on its own evidence, and
-        // a slot with no inspectable value stays this binding's own symbol so
-        // the claim is never made.
-        let inherits_initializer_identity =
-            binding.shape == solid_facts::ast::BindingShape::Identifier;
-        if inherits_initializer_identity && let Some(initializer) = &binding.initializer_identifier
-        {
-            let aliases = self.direct_value_symbols(binding_file, initializer.span, visited);
-            if !aliases.is_empty() {
-                return aliases;
-            }
-        }
-        if binding.shape == solid_facts::ast::BindingShape::Object
-            && let Some(initializer) = binding.initializer
-            && let Some(slot) = binding.object_slots.iter().find(|slot| {
-                self.entities
-                    .at(binding_file.path.as_str(), slot.local.span)
-                    .is_some_and(|candidate| candidate == &symbol)
-            })
-        {
-            let mut aliases = Vec::new();
-            let mut visited_objects = HashSet::new();
-            self.member_value_symbols(
-                binding_file,
-                initializer,
-                slot.property.as_str(),
-                &mut visited_objects,
-                &mut aliases,
-            );
-            aliases.sort_unstable();
-            aliases.dedup();
-            if !aliases.is_empty() {
-                return aliases;
-            }
-        }
-        if inherits_initializer_identity && let Some(initializer) = binding.initializer {
-            let aliases = self.direct_value_symbols(binding_file, initializer, visited);
-            if aliases.len() > 1 {
-                return aliases;
-            }
-        }
-        vec![symbol.clone()]
-    }
-
-    fn resolved_declaration_symbol(&self, file: &FileFacts, callee: Span) -> Option<&'a str> {
-        self.resolved_callee_call(file, callee)
-            .and_then(|call| call.declaration.as_ref())
-            .map(|declaration| declaration.symbol.as_ref())
-            .filter(|symbol| !symbol.is_empty())
-    }
-
-    /// The type descriptor at `span`, falling back to the smallest typed entity
-    /// contained in it for legacy consumers that deliberately query a region
-    /// rather than one complete expression. Exact facts win: a descriptor on
-    /// the demanded expression can never be replaced by an inner callee or
-    /// member just because that entity happens to be smaller.
-    pub(super) fn smallest_contained_descriptor(
-        &self,
-        path: &str,
-        span: Span,
-    ) -> Option<&'a TypeDescriptor> {
-        self.entity_at(path, span)
-            .and_then(|entity| entity.type_descriptor.as_deref())
-            .or_else(|| {
-                self.smallest_contained(path, span, |entity| entity.type_descriptor.is_some())
-                    .and_then(|entity| entity.type_descriptor.as_deref())
-            })
-            .or_else(|| {
-                let symbol = self.entities.at(path, span)?;
-                self.descriptors_by_symbol
-                    .get_or_init(|| {
-                        self.facts
-                            .typescript
-                            .entities()
-                            .filter_map(|entity| {
-                                (!entity.symbol.is_empty())
-                                    .then_some(entity.symbol.as_ref())
-                                    .zip(entity.type_descriptor.as_deref())
-                            })
-                            .collect()
-                    })
-                    .get(symbol.as_str())
-                    .copied()
-            })
-    }
-
-    /// Whether a function is proven to be a Solid component by a JSX call
-    /// site or by an exact compiler-resolved Solid component type alias.
-    pub(super) fn function_is_component(
-        &self,
-        file: &FileFacts,
-        function: &solid_facts::ast::FunctionFact,
-    ) -> bool {
-        self.component_functions()
-            .contains(&(file.path.as_str(), function.span))
-    }
-
-    /// Three-outcome component identity. Exact JSX uses and Solid component
-    /// types are proven; a dialect naming convention only preserves the
-    /// ambiguity and must never become proof by itself.
-    pub(super) fn function_component_status(
-        &self,
-        file: &FileFacts,
-        function: &solid_facts::ast::FunctionFact,
-    ) -> ComponentStatus {
-        if self.function_is_component(file, function) {
-            return ComponentStatus::Proven;
-        }
-        let possible = crate::owners::component_binding_name(file, function).is_some_and(|name| {
-            self.dialect
-                .component_name_may_be_component(file.source_text(name.span).unwrap_or_default())
-        });
-        if possible {
-            ComponentStatus::Uncertain
-        } else {
-            ComponentStatus::No
-        }
-    }
-
-    pub(super) fn function_may_be_component(
-        &self,
-        file: &FileFacts,
-        function: &solid_facts::ast::FunctionFact,
-    ) -> bool {
-        self.function_component_status(file, function) != ComponentStatus::No
-    }
-
-    fn component_functions(&self) -> &HashSet<(&'a str, Span)> {
-        self.component_functions.get_or_init(|| {
-            self.facts
-                .files
-                .iter()
-                .flat_map(|file| {
-                    file.ast.functions.iter().filter_map(move |function| {
-                        self.compute_function_is_component(file, function)
-                            .then_some((file.path.as_str(), function.span))
-                    })
-                })
-                .collect()
-        })
-    }
-
-    fn compute_function_is_component(
-        &self,
-        file: &FileFacts,
-        function: &solid_facts::ast::FunctionFact,
-    ) -> bool {
-        if self
-            .jsx_call_site_loading(file.path.as_str(), function.span)
-            .any
-        {
-            return true;
-        }
-        let binding_name = crate::owners::component_binding_name(file, function);
-        let directly_contains_jsx = |span: Span| {
-            file.ast.jsx_within(span).any(|element| {
-                crate::owners::containing_ast_function(&file.ast, element.span)
-                    .is_some_and(|owner| owner.span == function.span)
-            }) || file.ast.jsx_fragments.iter().any(|fragment| {
-                span.contains(*fragment)
-                    && crate::owners::containing_ast_function(&file.ast, *fragment)
-                        .is_some_and(|owner| owner.span == function.span)
-            })
-        };
-        let directly_returns_jsx = function
-            .expression_return
-            .as_ref()
-            .and_then(|returned| returned.argument)
-            .is_some_and(directly_contains_jsx)
-            || file.ast.returns_within(function.body).any(|returned| {
-                returned.argument.is_some_and(directly_contains_jsx)
-                    && crate::owners::containing_ast_function(&file.ast, returned.span)
-                        .is_some_and(|owner| owner.span == function.span)
-            });
-        // Every remaining runtime proof below only decides whether a direct
-        // JSX return is used as a component value or as an ordinary callback.
-        // Without such a return, only an exact compiler-resolved Component
-        // type can still establish component identity. Avoid building the
-        // project-wide reference and call-site indexes for ordinary helpers.
-        if !directly_returns_jsx {
-            if !self.project_has_component_type() {
-                return false;
-            }
-            let Some(name) = binding_name else {
-                return false;
-            };
-            let Some(descriptor) =
-                self.smallest_contained_descriptor(file.path.as_str(), name.span)
-            else {
-                return false;
-            };
-            return descriptor.alias_declarations.iter().any(|declaration| {
-                self.dialect
-                    .type_role(descriptor.origin_module.as_ref(), declaration.name.as_ref())
-                    == Some(solid_dialect::TypeRole::Component)
-            });
-        }
-        // Component identity is about the function value itself, not anything
-        // lexically nested below a callback expression. The largest function
-        // inside a callback/argument is the direct value; nested declarations
-        // remain independently classifiable.
-        let direct_function_value = |candidate: &FileFacts, container: Span| {
-            candidate
-                .ast
-                .functions_within(container)
-                .max_by_key(|candidate| candidate.span.end - candidate.span.start)
-                .is_some_and(|candidate| candidate.span == function.span)
-        };
-        let used_as_callback_value = |candidate: &FileFacts| {
-            candidate
-                .compiler
-                .callback_roles
-                .iter()
-                .any(|role| direct_function_value(candidate, role.span))
-                || candidate
-                    .ast
-                    .arguments_containing(function.span)
-                    .any(|(call, index)| {
-                        direct_function_value(candidate, call.arguments[index].span)
-                            && self
-                                .primitive_at_call(candidate, call.span)
-                                .map(|primitive| {
-                                    self.dialect.callback_semantics_at(
-                                        primitive,
-                                        index,
-                                        call.arguments.len(),
-                                    )
-                                })
-                                .is_some_and(|semantics| {
-                                    semantics.execution.is_some() || semantics.stores_as_value
-                                })
-                    })
-        };
-        let used_as_any_call_argument = file
-            .ast
-            .arguments_containing(function.span)
-            .any(|(call, index)| direct_function_value(file, call.arguments[index].span));
-        let reference_span = |reference: &typefacts::Location| {
-            let candidate = self.file_by_path(reference.path.as_ref())?;
-            let start = u32::try_from(reference.start_byte).ok()?;
-            let end = u32::try_from(reference.end_byte).ok()?;
-            Some((candidate, Span::new(start, end)))
-        };
-        let reference_is_callback_value = |candidate: &FileFacts, span: Span| {
-            candidate.compiler.callback_roles.iter().any(|role| {
-                role.span.contains(span)
-                    && candidate.ast.functions_within(role.span).next().is_none()
-            }) || candidate
-                .ast
-                .arguments_containing(span)
-                .any(|(call, index)| {
-                    candidate
-                        .ast
-                        .functions_within(call.arguments[index].span)
-                        .next()
-                        .is_none()
-                        && self
-                            .primitive_at_call(candidate, call.span)
-                            .map(|primitive| {
-                                self.dialect.callback_semantics_at(
-                                    primitive,
-                                    index,
-                                    call.arguments.len(),
-                                )
-                            })
-                            .is_some_and(|semantics| {
-                                semantics.execution.is_some() || semantics.stores_as_value
-                            })
-                })
-        };
-        let component_value_operation = |candidate: &FileFacts, span: Span| {
-            candidate.compiler.jsx_operations.iter().any(|operation| {
-                if operation.kind == "component-property" && operation.span.contains(span) {
-                    return candidate.ast.jsx_elements.iter().any(|element| {
-                        element.attributes.iter().any(|attribute| {
-                            attribute.value.is_some_and(|value| value.contains(span))
-                                && candidate.source_text(attribute.local_name) == Some("component")
-                        })
-                    });
-                }
-                operation.kind == "component-spread"
-                    && operation.span.contains(span)
-                    && candidate.ast.object_properties.iter().any(|property| {
-                        operation.span.contains(property.span)
-                            && property.value.contains(span)
-                            && candidate.source_text(property.key) == Some("component")
-                    })
-            })
-        };
-        let used_as_render_value = file.compiler.jsx_operations.iter().any(|operation| {
-            matches!(
-                operation.kind.as_str(),
-                "component-property" | "component-spread" | "component-child"
-            ) && operation.span.contains(function.span)
-                && direct_function_value(file, operation.span)
-                && !component_value_operation(file, function.span)
-        });
-        let mut referenced_as_callback = false;
-        let mut referenced_as_component_property = false;
-        if let Some(symbol) = binding_name
-            .and_then(|name| self.entities.at(file.path.as_str(), name.span))
-            .and_then(|symbol| {
-                self.symbols_by_id
-                    .get_or_init(|| {
-                        self.facts
-                            .typescript
-                            .symbols()
-                            .map(|candidate| (candidate.id(), candidate))
-                            .collect()
-                    })
-                    .get(symbol.as_str())
-                    .copied()
-            })
-        {
-            for reference in symbol.references() {
-                let Some((candidate, span)) = reference_span(reference) else {
-                    continue;
-                };
-                referenced_as_callback |= reference_is_callback_value(candidate, span);
-                referenced_as_component_property |= component_value_operation(candidate, span);
-            }
-        }
-        let hoc_bound = binding_name.is_some()
-            && crate::owners::function_binding_name(file, function).is_none();
-        let directly_called = !self
-            .function_call_sites(file.path.as_str(), function.span)
-            .is_empty();
-        if directly_returns_jsx
-            && (self.dialect.direct_jsx_return_is_component()
-                || hoc_bound
-                || referenced_as_component_property)
-            && !directly_called
-            && (!used_as_callback_value(file) || hoc_bound)
-            && (!used_as_any_call_argument || hoc_bound)
-            && !used_as_render_value
-            && (!referenced_as_callback || referenced_as_component_property)
-        {
-            return true;
-        }
-        let Some(name) = binding_name else {
-            return false;
-        };
-        let Some(descriptor) = self.smallest_contained_descriptor(file.path.as_str(), name.span)
-        else {
-            return false;
-        };
-        descriptor.alias_declarations.iter().any(|declaration| {
-            self.dialect
-                .type_role(descriptor.origin_module.as_ref(), declaration.name.as_ref())
-                == Some(solid_dialect::TypeRole::Component)
-        })
-    }
-
-    fn project_has_component_type(&self) -> bool {
-        *self.project_has_component_type.get_or_init(|| {
-            self.facts.typescript.entities().any(|entity| {
-                entity.type_descriptor.as_deref().is_some_and(|descriptor| {
-                    descriptor.alias_declarations.iter().any(|declaration| {
-                        self.dialect
-                            .type_role(descriptor.origin_module.as_ref(), declaration.name.as_ref())
-                            == Some(solid_dialect::TypeRole::Component)
-                    })
-                })
-            })
-        })
-    }
-
-    /// Whether `span` executes inside a function proven to be a component.
-    pub(super) fn inside_component(&self, file: &FileFacts, span: Span) -> bool {
-        file.ast
-            .functions_body_containing(span)
-            .any(|function| self.function_is_component(file, function))
-    }
-
-    /// Whether `span` is inside a function whose component identity is
-    /// possible but not proven. Consumers use this to preserve an
-    /// uncertifiable outcome instead of selecting either execution model.
-    pub(super) fn inside_possible_component(&self, file: &FileFacts, span: Span) -> bool {
-        file.ast.functions_body_containing(span).any(|function| {
-            self.function_component_status(file, function) == ComponentStatus::Uncertain
-        })
-    }
-
-    /// Compiler-derived callability at `span`, falling back to the smallest
-    /// contained demanded entity only for callers that intentionally query a
-    /// region, then to another demanded occurrence of the same symbol.
-    pub(super) fn smallest_contained_callability(
-        &self,
-        path: &str,
-        span: Span,
-    ) -> Option<Callability> {
-        self.entity_at(path, span)
-            .and_then(|entity| entity.callability)
-            .or_else(|| {
-                self.smallest_contained(path, span, |entity| entity.callability.is_some())
-                    .and_then(|entity| entity.callability)
-            })
-            .or_else(|| {
-                let symbol = self.entities.at(path, span)?;
-                self.callability_by_symbol
-                    .get_or_init(|| {
-                        self.facts
-                            .typescript
-                            .entities()
-                            .filter_map(|entity| {
-                                (!entity.symbol.is_empty())
-                                    .then_some(entity.symbol.as_ref())
-                                    .zip(entity.callability)
-                            })
-                            .collect()
-                    })
-                    .get(symbol.as_str())
-                    .copied()
-            })
-    }
-
-    /// Whether any JSX call site renders the function at `(path, function)`,
-    /// and whether one of those call sites sits under a Loading boundary.
-    pub(super) fn jsx_call_site_loading(&self, path: &str, function: Span) -> CallSiteLoading {
-        self.jsx_call_sites()
-            .get(&(path, function))
-            .copied()
-            .unwrap_or_default()
-    }
-
-    /// Call sites whose Type Facts resolve to one project function: call
-    /// expressions, and the JSX tags that render a component. Aliases,
-    /// imports, and same-named locals follow canonical symbols. One entry per
-    /// invocation — a closing tag is part of the render it closes, not a
-    /// second call.
-    pub(super) fn function_call_sites(
-        &self,
-        path: &str,
-        function: Span,
-    ) -> Vec<(&'a FileFacts, Span)> {
-        self.all_function_call_sites()
-            .get(&(path, function))
-            .into_iter()
-            .flatten()
-            .map(|site| (&self.facts.files[site.file], site.callee))
-            .collect()
-    }
-
-    /// Every reference to a project function that one of its call sites
-    /// accounts for.
-    ///
-    /// The same sites as [`Self::function_call_sites`], plus the extra
-    /// occurrence of the callee's name a single site can spell:
-    /// `<Panel></Panel>` renders `Panel` once and writes its name twice, and
-    /// TypeScript reports both occurrences as references to the same symbol.
-    /// The escape test asks whether *every* reference to a function is
-    /// accounted for, so it asks here; every other consumer counts
-    /// invocations and asks above.
-    ///
-    /// A closing tag can never appear on its own: the extra span is stored on
-    /// the edge that the *opening* tag's resolution created, so if the opening
-    /// tag resolved to nothing there is no site to carry it.
-    pub(super) fn function_call_site_references(
-        &self,
-        path: &str,
-        function: Span,
-    ) -> Vec<(&'a FileFacts, Span)> {
-        self.all_function_call_sites()
-            .get(&(path, function))
-            .into_iter()
-            .flatten()
-            .flat_map(|site| {
-                let file = &self.facts.files[site.file];
-                std::iter::once((file, site.callee))
-                    .chain(site.also_referenced.map(|span| (file, span)))
-            })
-            .collect()
-    }
-
-    fn smallest_contained(
-        &self,
-        path: &str,
-        span: Span,
-        predicate: impl Fn(&EntityFact) -> bool,
-    ) -> Option<&'a EntityFact> {
-        let start = u64::from(span.start);
-        let end = u64::from(span.end);
-        let entities = self.contained_entities_by_path().get(path)?;
-        let first = entities.partition_point(|entity| entity.location.start_byte < start);
-        let last = entities.partition_point(|entity| entity.location.start_byte <= end);
-        entities[first..last]
-            .iter()
-            .enumerate()
-            .filter_map(|(index, entity)| {
-                (entity.location.end_byte <= end && predicate(entity)).then_some((index, *entity))
-            })
-            .min_by_key(|(index, entity)| {
-                (
-                    entity.location.end_byte - entity.location.start_byte,
-                    *index,
-                )
-            })
-            .map(|(_, entity)| entity)
-    }
-
-    fn contained_entities_by_path(&self) -> &HashMap<&'a str, Vec<&'a EntityFact>> {
-        self.contained_entities_by_path.get_or_init(|| {
-            let mut by_path = HashMap::<&str, Vec<&EntityFact>>::new();
-            for entity in self.facts.typescript.entities() {
-                by_path
-                    .entry(entity.location.path.as_ref())
-                    .or_default()
-                    .push(entity);
-            }
-            for entities in by_path.values_mut() {
-                entities.sort_by_key(|entity| entity.location.start_byte);
-            }
-            by_path
-        })
-    }
-
-    fn functions_by_symbol(&self) -> &HashMap<&'a str, SymbolFunction> {
-        self.functions_by_symbol.get_or_init(|| {
-            let mut map = HashMap::new();
-            for (file_index, file) in self.facts.files.iter().enumerate() {
-                for (function_index, function) in file.ast.functions.iter().enumerate() {
-                    let Some(name) = function.name.as_ref().or(function.method_name.as_ref())
-                    else {
-                        continue;
-                    };
-                    let Some(symbol) = self
-                        .entities
-                        .at(file.path.as_str(), name.span)
-                        .map(SymbolId::as_str)
-                        .or_else(|| {
-                            function.method_name.as_ref().and_then(|method| {
-                                self.method_symbol_ref(file.path.as_str(), method.span)
-                            })
-                        })
-                    else {
-                        continue;
-                    };
-                    map.entry(symbol).or_insert(SymbolFunction::Resolved {
-                        file: file_index,
-                        function: function_index,
-                    });
-                }
-                for binding in &file.ast.bindings {
-                    if !binding.initializer_function && binding.call_initializer.is_none() {
-                        continue;
-                    }
-                    if binding.call_initializer.is_some()
-                        && (binding.shape != solid_facts::ast::BindingShape::Identifier
-                            || binding.names.len() != 1)
-                    {
-                        // A call result may name a wrapped function only when
-                        // one identifier owns the whole result. Tuple/object
-                        // bindings name slots, not closures nested in the
-                        // call's arguments (`createSignal(() => value)`).
-                        continue;
-                    }
-                    let mut outcome = None;
-                    for name in &binding.names {
-                        let Some(symbol) = self.entities.at(file.path.as_str(), name.span) else {
-                            continue;
-                        };
-                        if map.contains_key(symbol.as_str()) {
-                            continue;
-                        }
-                        let outcome = *outcome.get_or_insert_with(|| match binding.initializer {
-                            None => Some(SymbolFunction::Aborted),
-                            Some(initializer) => file
-                                .ast
-                                .functions
-                                .iter()
-                                .enumerate()
-                                .filter(|(_, function)| initializer.contains(function.span))
-                                .max_by_key(|(_, function)| function.span.end - function.span.start)
-                                .map(|(function_index, _)| SymbolFunction::Resolved {
-                                    file: file_index,
-                                    function: function_index,
-                                }),
-                        });
-                        if let Some(outcome) = outcome {
-                            map.insert(symbol.as_str(), outcome);
-                        }
-                    }
-                }
-            }
-            map
-        })
-    }
-
-    /// Every JSX element whose tag name resolves, exactly, to one project
-    /// function, paired with the function it renders.
-    ///
-    /// The single authority on "this tag renders that function". Two indexes
-    /// need that answer — [`Self::jsx_call_sites`], which decides component
-    /// identity and Loading placement, and [`Self::all_function_call_sites`],
-    /// which puts the render edge in the call graph — and they must agree: the
-    /// render edges are invisible to component identity only because a
-    /// rendered function is already `jsx_call_site_loading(..).any`. Two copies
-    /// of the resolution could drift apart on the next filter added to either;
-    /// one iterator cannot.
-    fn jsx_rendered_functions(
-        &self,
-    ) -> impl Iterator<
-        Item = (
-            usize,
-            &'a FileFacts,
-            &'a solid_facts::ast::JsxElementFact,
-            &'a FileFacts,
-            &'a solid_facts::ast::FunctionFact,
-        ),
-    > + '_ {
-        self.facts
+        let file = self
+            .facts
             .files
             .iter()
-            .enumerate()
-            .flat_map(move |(file_index, caller_file)| {
-                caller_file
-                    .ast
-                    .jsx_elements
-                    .iter()
-                    .filter_map(move |element| {
-                        let (target_file, target) =
-                            self.function_called_at(caller_file.path.as_str(), element.name.span)?;
-                        Some((file_index, caller_file, element, target_file, target))
-                    })
-            })
+            .find(|file| *declaration.location.path == *file.path.as_str())?;
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(declaration.location.start_byte),
+            u32::try_from(declaration.location.end_byte),
+        ) else {
+            return None;
+        };
+        let at = Span::new(start, end);
+        let class = file.ast.classes.iter().find(|class| {
+            class
+                .name
+                .as_ref()
+                .is_some_and(|name| name.span == at || class.span == at)
+        })?;
+        Some((file, class))
     }
+}
 
-    fn jsx_call_sites(&self) -> &HashMap<(&'a str, Span), CallSiteLoading> {
-        self.jsx_call_sites.get_or_init(|| {
-            let mut map = HashMap::<(&'a str, Span), CallSiteLoading>::new();
-            for (_, caller_file, element, target_file, target) in self.jsx_rendered_functions() {
-                let entry = map
-                    .entry((target_file.path.as_str(), target.span))
-                    .or_default();
-                entry.any = true;
-                if !entry.loading_wrapped {
-                    entry.loading_wrapped = caller_file.ast.jsx_elements.iter().any(|boundary| {
-                        boundary.span.contains(element.span)
-                            && boundary.span != element.span
-                            && jsx_element_is_loading(
-                                caller_file,
-                                boundary,
-                                self.entities,
-                                self.symbol_names,
-                                self.dialect,
-                            )
-                    });
-                }
-            }
-            map
-        })
-    }
-
-    /// Every entry the graph can name for each project function.
-    ///
-    /// Rendering `<Panel/>` invokes `Panel`: the tag is a call site, not a
-    /// value escape, and the same exact resolution that proves which function a
-    /// tag renders ([`Self::jsx_rendered_functions`], shared with
-    /// `jsx_call_sites` so component identity and the call graph cannot
-    /// disagree about which tags resolve) names the callee here. The edge's
-    /// callee is the tag *name* span only — the component's own reference — so
-    /// a component used as a value rather than rendered (`<Wrap
-    /// child={Panel}/>`, `return Panel`, `apply(Panel)`) is still an escape;
-    /// `component_value_operation` keeps that distinction. A tag whose exact
-    /// declaration is unresolved — an untyped import, an ambiguous computed
-    /// name — resolves to nothing and emits no edge, so consumers keep failing
-    /// closed on it rather than gaining a caller the runtime does not have.
-    ///
-    /// A dotted tag is not that case. `<ns.Panel/>` resolves: TypeScript
-    /// reports the symbol at the whole `ns.Panel` name span, so an edge is
-    /// emitted whose callee *is* that whole span — a member expression, not an
-    /// identifier. Consumers that expect an identifier there fail closed on
-    /// their own terms: `structural_parameter_member_symbols` finds no
-    /// `CallFact` and marks the site unresolved, and the escape test's
-    /// byte-exact span set does not match the `Panel` property reference it
-    /// walks, so a dotted render stays an escape.
-    ///
-    /// Call expressions come first, then render sites: a function that is both
-    /// called and rendered is asked about its call sites in that order, so a
-    /// consumer that takes the first answer it can use
-    /// (`semantic_write_execution_role_within` takes the first non-`Unknown`
-    /// execution role) resolves the tie by an argued rule rather than by which
-    /// file happens to hold the call. A call expression is the more direct
-    /// evidence of the two — its own syntax names the invocation — so it wins.
-    fn all_function_call_sites(&self) -> &HashMap<(&'a str, Span), Vec<FunctionCallSite>> {
-        self.function_call_sites.get_or_init(|| {
-            let mut map = HashMap::<(&str, Span), Vec<FunctionCallSite>>::new();
-            for (file_index, caller_file) in self.facts.files.iter().enumerate() {
-                for call in &caller_file.ast.calls {
-                    let Some(symbol) = self.callee_symbol(caller_file, call.callee) else {
-                        continue;
-                    };
-                    let Some((target_file, target)) = self.function_for_symbol(symbol) else {
-                        continue;
-                    };
-                    map.entry((target_file.path.as_str(), target.span))
-                        .or_default()
-                        .push(FunctionCallSite {
-                            file: file_index,
-                            callee: call.callee,
-                            also_referenced: None,
-                        });
-                }
-            }
-            for (file_index, _, element, target_file, target) in self.jsx_rendered_functions() {
-                map.entry((target_file.path.as_str(), target.span))
-                    .or_default()
-                    .push(FunctionCallSite {
-                        file: file_index,
-                        callee: element.name.span,
-                        // One render, one edge. `<Panel></Panel>` writes the
-                        // tag name twice and TypeScript reports both
-                        // occurrences as references to `Panel`, so the escape
-                        // test has to account for the closing one — but it is
-                        // the same invocation, so it rides on this edge
-                        // instead of minting a second one. Carried here rather
-                        // than re-derived by the consumer so it can only ever
-                        // be the closing name of the element whose opening tag
-                        // resolved to this function.
-                        also_referenced: element.closing_name,
-                    });
-            }
-            map
-        })
-    }
-
-    fn entities_by_location(&self) -> &HashMap<(&'a str, u64, u64), &'a EntityFact> {
-        self.entities_by_location.get_or_init(|| {
-            let mut map = HashMap::new();
-            for entity in self.facts.typescript.entities() {
-                map.entry((
-                    entity.location.path.as_ref(),
-                    entity.location.start_byte,
-                    entity.location.end_byte,
-                ))
-                .or_insert(entity);
-            }
-            map
-        })
-    }
+/// Whether a file refers to the CommonJS exports object (`module`, `exports`)
+/// as a name no declaration binds. A module that does can have its exports
+/// replaced under a CommonJS transform, so its `export const` is not a frozen
+/// ES namespace entry (ADR 0325). Any reference counts, read or written: the
+/// proof wants the file to be ES module syntax alone.
+fn file_names_commonjs_exports(file: &FileFacts) -> bool {
+    file.ast.identifiers.iter().any(|identifier| {
+        identifier.role == solid_facts::ast::IdentifierRole::Reference
+            && file
+                .source
+                .get(identifier.span.start as usize..identifier.span.end as usize)
+                .is_some_and(|name| name == "module" || name == "exports")
+            && file.ast.reference_declaration(identifier.span).is_none()
+    })
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use solid_facts::compiler::{COMPILER_FACTS_PROTOCOL, ExecutionMap};
-    use solid_facts::core::{Generation, SourceHash, SourcePath};
-
-    const PATH: &str = "app.tsx";
-
-    /// The span of the `index`-th occurrence of `needle` in `source`.
-    fn span_of(source: &str, needle: &str, index: usize) -> Span {
-        let start = source
-            .match_indices(needle)
-            .nth(index)
-            .expect("needle occurs in source")
-            .0;
-        Span::new(
-            u32::try_from(start).unwrap(),
-            u32::try_from(start + needle.len()).unwrap(),
-        )
-    }
-
-    fn project(source: &str) -> ProjectFacts {
-        let generation = Generation::new(1).unwrap();
-        ProjectFacts {
-            generation,
-            project_id: "fixture".into(),
-            files: vec![FileFacts {
-                generation,
-                path: SourcePath::new(PATH).unwrap(),
-                source_hash: SourceHash::of(source),
-                source: Arc::from(source),
-                ast: Arc::new(solid_facts::ast::extract(PATH, source).unwrap()),
-                compiler: Arc::new(ExecutionMap {
-                    compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
-                    source_hash: SourceHash::of(source),
-                    semantic_model: Default::default(),
-                    tracked_regions: Vec::new(),
-                    untracked_regions: Vec::new(),
-                    discarded_regions: Vec::new(),
-                    ownership_regions: Vec::new(),
-                    callback_roles: Vec::new(),
-                    jsx_operations: Vec::new(),
-                }),
-            }],
-            typescript: TypeScriptTable::from_parts(
-                3,
-                1,
-                "fixture",
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-            ),
-            typescript_changes: None,
-            resolved_imports: None,
-            runtime_symbol_redirects: HashMap::new(),
-        }
-    }
-
-    fn entity_symbols(spans: &[(Span, &str)]) -> EntitySymbols {
-        EntitySymbols {
-            by_path: HashMap::from([(
-                PATH.to_string(),
-                spans
-                    .iter()
-                    .map(|(span, symbol)| {
-                        (
-                            (u64::from(span.start), u64::from(span.end)),
-                            SymbolId::from(*symbol),
-                        )
-                    })
-                    .collect(),
-            )]),
-        }
-    }
-
-    /// Builds a lookup over one synthetic file and runs `body` against it.
-    fn with_lookup<T>(
-        source: &str,
-        spans: &[(Span, &str)],
-        body: impl FnOnce(&SemanticLookup<'_>) -> T,
-    ) -> T {
-        let facts = project(source);
-        let entities = entity_symbols(spans);
-        let ast_indexes = HashMap::new();
-        let symbol_names = HashMap::new();
-        let dialect = solid_dialect::Solid2;
-        let contracts = crate::contracts::ResolvedContracts {
-            bindings: Vec::new(),
-            by_symbol: HashMap::new(),
-            missing_exports: Vec::new(),
-            counts: crate::ContractBindingCounts::default(),
-        };
-        let lookup = SemanticLookup::new(
-            &facts,
-            &ast_indexes,
-            &entities,
-            &symbol_names,
-            &dialect,
-            &contracts,
-            false,
-        );
-        body(&lookup)
-    }
-
-    /// Call sites keyed by target function span, as `(callee start, end)`.
-    /// One entry per invocation, which is what every consumer but the escape
-    /// test reads.
-    fn call_sites(source: &str, spans: &[(Span, &str)]) -> Vec<(Span, Vec<(u32, u32)>)> {
-        with_lookup(source, spans, |lookup| {
-            let mut sites = lookup
-                .all_function_call_sites()
-                .iter()
-                .map(|((_, function), sites)| {
-                    let mut callees = sites
-                        .iter()
-                        .map(|site| (site.callee.start, site.callee.end))
-                        .collect::<Vec<_>>();
-                    callees.sort_unstable();
-                    (*function, callees)
-                })
-                .collect::<Vec<_>>();
-            sites.sort_by_key(|(function, _)| (function.start, function.end));
-            sites
-        })
-    }
-
-    /// Every reference to `function` that its call sites account for — the set
-    /// the escape test in `attribution` tests membership in.
-    fn accounted_references(
-        source: &str,
-        spans: &[(Span, &str)],
-        function: Span,
-    ) -> Vec<(u32, u32)> {
-        with_lookup(source, spans, |lookup| {
-            let mut references = lookup
-                .function_call_site_references(PATH, function)
-                .into_iter()
-                .map(|(_, span)| (span.start, span.end))
-                .collect::<Vec<_>>();
-            references.sort_unstable();
-            references
-        })
-    }
-
-    #[test]
-    fn a_jsx_tag_resolving_to_a_project_function_is_a_call_site() {
-        let source =
-            "function Panel() {\n  return <p />;\n}\nfunction App() {\n  return <Panel />;\n}\n";
-        let declaration = span_of(source, "Panel", 0);
-        let tag = span_of(source, "Panel", 1);
-        let panel = span_of(source, "function Panel() {\n  return <p />;\n}", 0);
-
-        assert_eq!(
-            call_sites(source, &[(declaration, "panel"), (tag, "panel")]),
-            vec![(panel, vec![(tag.start, tag.end)])]
-        );
-    }
-
-    #[test]
-    fn a_component_used_as_a_value_is_not_a_call_site() {
-        // The rendered tag is `Wrap`, and only `Wrap` gains the edge: `Panel`
-        // appears as an attribute value, which renders nothing by itself.
-        let source = concat!(
-            "function Panel() {\n  return <p />;\n}\n",
-            "function Wrap(props) {\n  return <p />;\n}\n",
-            "function App() {\n  return <Wrap child={Panel} />;\n}\n",
-        );
-        let panel_declaration = span_of(source, "Panel", 0);
-        let panel_value = span_of(source, "Panel", 1);
-        let wrap_declaration = span_of(source, "Wrap", 0);
-        let wrap_tag = span_of(source, "Wrap", 1);
-        let wrap = span_of(source, "function Wrap(props) {\n  return <p />;\n}", 0);
-
-        assert_eq!(
-            call_sites(
-                source,
-                &[
-                    (panel_declaration, "panel"),
-                    (panel_value, "panel"),
-                    (wrap_declaration, "wrap"),
-                    (wrap_tag, "wrap"),
-                ]
-            ),
-            vec![(wrap, vec![(wrap_tag.start, wrap_tag.end)])]
-        );
-    }
-
-    #[test]
-    fn a_resolvable_dotted_tag_is_an_edge_whose_callee_is_the_whole_name() {
-        // TypeScript reports the component's symbol at both the whole
-        // `ns.Panel` name and the `Panel` property inside it, so the tag does
-        // resolve and the edge is emitted — with the whole name as its callee,
-        // because that is the span the tag names. The property reference is a
-        // *different* span, which is why the escape test in `attribution`
-        // still reports the enumeration incomplete for a dotted render: that
-        // test is byte-exact span membership, not a containment check.
-        let source =
-            "function Panel() {\n  return <p />;\n}\nfunction App() {\n  return <ns.Panel />;\n}\n";
-        let declaration = span_of(source, "Panel", 0);
-        let whole_name = span_of(source, "ns.Panel", 0);
-        let property = span_of(source, "Panel", 1);
-        let panel = span_of(source, "function Panel() {\n  return <p />;\n}", 0);
-
-        assert_eq!(
-            call_sites(
-                source,
-                &[
-                    (declaration, "panel"),
-                    (whole_name, "panel"),
-                    (property, "panel"),
-                ]
-            ),
-            vec![(panel, vec![(whole_name.start, whole_name.end)])]
-        );
-        assert_eq!(
-            accounted_references(
-                source,
-                &[
-                    (declaration, "panel"),
-                    (whole_name, "panel"),
-                    (property, "panel"),
-                ],
-                panel
-            ),
-            vec![(whole_name.start, whole_name.end)],
-            "the property reference the escape test walks is not accounted for"
-        );
-    }
-
-    #[test]
-    fn a_dotted_tag_without_an_exact_whole_name_entity_is_not_a_call_site() {
-        // The counterfactual to the test above: no entity at the whole name,
-        // as for a namespace object TypeScript could not resolve. The tag
-        // names no proven declaration, so the graph keeps failing closed
-        // instead of inventing a caller.
-        let source =
-            "function Panel() {\n  return <p />;\n}\nfunction App() {\n  return <ns.Panel />;\n}\n";
-        let declaration = span_of(source, "Panel", 0);
-        let property = span_of(source, "Panel", 1);
-
-        assert!(call_sites(source, &[(declaration, "panel"), (property, "panel")]).is_empty());
-    }
-
-    #[test]
-    fn a_closing_tag_is_accounted_for_by_the_opening_tags_edge() {
-        // `<Panel></Panel>` renders `Panel` once and writes its name twice.
-        // TypeScript reports both occurrences as references to the same
-        // symbol, so the escape test has to account for both — but the call
-        // graph must still hold exactly one edge, because there is one
-        // invocation.
-        let source = "function Panel() {\n  return <p />;\n}\nfunction App() {\n  return <Panel></Panel>;\n}\n";
-        let declaration = span_of(source, "Panel", 0);
-        let opening = span_of(source, "Panel", 1);
-        let closing = span_of(source, "Panel", 2);
-        let panel = span_of(source, "function Panel() {\n  return <p />;\n}", 0);
-        let entities = [
-            (declaration, "panel"),
-            (opening, "panel"),
-            (closing, "panel"),
-        ];
-
-        assert_eq!(
-            call_sites(source, &entities),
-            vec![(panel, vec![(opening.start, opening.end)])],
-            "one render is one edge"
-        );
-        assert_eq!(
-            accounted_references(source, &entities, panel),
-            vec![(opening.start, opening.end), (closing.start, closing.end)],
-            "both occurrences of the tag name are accounted for"
-        );
-    }
-
-    #[test]
-    fn a_closing_tag_cannot_account_for_a_reference_on_its_own() {
-        // The invariant behind the test above: the closing name rides on the
-        // edge the *opening* tag's resolution created. With no entity at the
-        // opening name there is no edge, so the closing name accounts for
-        // nothing — a closing tag can never be the thing that makes a
-        // reference look like a call.
-        let source = "function Panel() {\n  return <p />;\n}\nfunction App() {\n  return <Panel></Panel>;\n}\n";
-        let declaration = span_of(source, "Panel", 0);
-        let closing = span_of(source, "Panel", 2);
-        let panel = span_of(source, "function Panel() {\n  return <p />;\n}", 0);
-        let entities = [(declaration, "panel"), (closing, "panel")];
-
-        assert!(call_sites(source, &entities).is_empty());
-        assert!(accounted_references(source, &entities, panel).is_empty());
-    }
-
-    /// Both directions of the alias gate, so neither forcing can survive.
-    ///
-    /// Forcing it true republishes the claim `@solidjs/router`'s `Navigate`
-    /// made: the destructured `href` *is* `props`, so a call of `href` reads as
-    /// a call of the props object. Forcing it false drops the identifier alias,
-    /// so `alias()` stops resolving to `handler` and every claim about the
-    /// aliased callable disappears.
-    #[test]
-    fn only_an_identifier_binding_inherits_its_initializer_identity() {
-        let source = concat!(
-            "const alias = handler;\n",
-            "const { href } = props;\n",
-            "alias();\n",
-            "href();\n",
-        );
-        let entities = [
-            (span_of(source, "alias", 0), "symbol:alias"),
-            (span_of(source, "alias", 1), "symbol:alias"),
-            (span_of(source, "handler", 0), "symbol:handler"),
-            (span_of(source, "href", 0), "symbol:href"),
-            (span_of(source, "href", 1), "symbol:href"),
-            (span_of(source, "props", 0), "symbol:props"),
-        ];
-        let (aliased, destructured) = with_lookup(source, &entities, |lookup| {
-            let file = &lookup.facts.files[0];
-            let mut visited = HashSet::new();
-            let aliased =
-                lookup.direct_value_symbols(file, span_of(source, "alias", 1), &mut visited);
-            let mut visited = HashSet::new();
-            let destructured =
-                lookup.direct_value_symbols(file, span_of(source, "href", 1), &mut visited);
-            (aliased, destructured)
-        });
-        assert_eq!(
-            aliased,
-            vec![SymbolId::from("symbol:handler")],
-            "an identifier binding is an alias of its initializer"
-        );
-        assert_eq!(
-            destructured,
-            vec![SymbolId::from("symbol:href")],
-            "a destructured local is its own binding, never the object it came from"
-        );
-    }
-
-    /// The receiver symbol and access path `member_callee_receiver` answers
-    /// for `callee`.
-    ///
-    /// This builds its own lookup because `with_lookup` deliberately carries
-    /// no AST indexes, and the member walk reads property spans out of one.
-    fn member_callee_path(
-        source: &str,
-        callee: Span,
-        spans: &[(Span, &str)],
-    ) -> Option<(String, Vec<String>)> {
-        let facts = project(source);
-        let ast_indexes = facts
-            .files
-            .iter()
-            .map(|file| (file.path.clone(), CachedAstFileIndex::new(file)))
-            .collect::<HashMap<_, _>>();
-        let entities = entity_symbols(spans);
-        let symbol_names = HashMap::new();
-        let dialect = solid_dialect::Solid2;
-        let contracts = crate::contracts::ResolvedContracts {
-            bindings: Vec::new(),
-            by_symbol: HashMap::new(),
-            missing_exports: Vec::new(),
-            counts: crate::ContractBindingCounts::default(),
-        };
-        let lookup = SemanticLookup::new(
-            &facts,
-            &ast_indexes,
-            &entities,
-            &symbol_names,
-            &dialect,
-            &contracts,
-            false,
-        );
-        lookup
-            .member_callee_receiver(&facts.files[0], callee)
-            .map(|(receiver, path)| (receiver.to_string(), path))
-    }
-
-    /// `props` and the body reference to it, the entity pair every chain
-    /// rooted at the first parameter needs.
-    fn props_entities(source: &str) -> Vec<(Span, &'static str)> {
-        vec![
-            (span_of(source, "props", 0), "symbol:props"),
-            (span_of(source, "props", 1), "symbol:props"),
-        ]
-    }
-
-    /// The whole chain, not its last segment.
-    ///
-    /// Reverting the walk to the pre-fix rooting — resolve the immediate
-    /// object, report one property — answers `["includes"]` here, a property
-    /// of `props.modifiers` attributed to `props`. That claim can never be
-    /// witnessed, because a consumer matches the stated path as a *prefix* of
-    /// the observed access.
-    #[test]
-    fn a_member_chain_reads_the_whole_path_from_its_root() {
-        let source = "function f(props, m) {\n  return props.modifiers.includes(m);\n}\n";
-        let callee = span_of(source, "props.modifiers.includes", 0);
-
-        assert_eq!(
-            member_callee_path(source, callee, &props_entities(source)),
-            Some((
-                "symbol:props".to_owned(),
-                vec!["modifiers".to_owned(), "includes".to_owned()]
-            ))
-        );
-    }
-
-    #[test]
-    fn a_one_segment_chain_reads_that_one_property() {
-        let source = "function f(props) {\n  return props.of();\n}\n";
-        let callee = span_of(source, "props.of", 0);
-
-        assert_eq!(
-            member_callee_path(source, callee, &props_entities(source)),
-            Some(("symbol:props".to_owned(), vec!["of".to_owned()]))
-        );
-    }
-
-    /// A segment that cannot be named exactly cuts the path back to the
-    /// longest exact prefix *from the root*, and never invents the segments
-    /// outside it.
-    #[test]
-    fn an_unnameable_segment_truncates_to_the_prefix_from_the_root() {
-        let inside = "function f(props, key) {\n  return props.of[key].values();\n}\n";
-        let at_root = "function f(props, key) {\n  return props[key].values();\n}\n";
-
-        assert_eq!(
-            member_callee_path(
-                inside,
-                span_of(inside, "props.of[key].values", 0),
-                &props_entities(inside)
-            ),
-            Some(("symbol:props".to_owned(), vec!["of".to_owned()])),
-            "the segment outside the computed one is not a property of `props`"
-        );
-        assert_eq!(
-            member_callee_path(
-                at_root,
-                span_of(at_root, "props[key].values", 0),
-                &props_entities(at_root)
-            ),
-            Some(("symbol:props".to_owned(), Vec::new())),
-            "nothing can be named, so the row claims only a read through `props`"
-        );
-    }
-
-    /// A chain deeper than the path limit keeps its row, cut to the limit.
-    ///
-    /// Dropping it would publish the negative claim "this export performs no
-    /// parameter read" into a `Complete` reads set. The pair pins both sides
-    /// of the boundary so neither a smaller limit nor a reinstated refusal
-    /// survives.
-    #[test]
-    fn an_over_long_chain_is_truncated_and_never_dropped() {
-        let chain = |segments: usize| {
-            let names = (0..segments)
-                .map(|index| format!("s{index}"))
-                .collect::<Vec<_>>();
-            let source = format!(
-                "function f(props) {{\n  return props.{}();\n}}\n",
-                names.join(".")
-            );
-            let callee_text = format!("props.{}", names.join("."));
-            let entities = props_entities(&source);
-            let callee = span_of(&source, &callee_text, 0);
-            let answer = member_callee_path(&source, callee, &entities);
-            (names, answer)
-        };
-
-        let (exact_names, exact) = chain(MEMBER_CALLEE_PATH_LIMIT);
-        assert_eq!(
-            exact,
-            Some(("symbol:props".to_owned(), exact_names)),
-            "a chain at the limit is reported whole"
-        );
-
-        let (over_names, over) = chain(MEMBER_CALLEE_PATH_LIMIT + 1);
-        assert_eq!(
-            over,
-            Some((
-                "symbol:props".to_owned(),
-                over_names[..MEMBER_CALLEE_PATH_LIMIT].to_vec()
-            )),
-            "one segment past the limit keeps the row at the prefix from the root"
-        );
-    }
-
-    /// A chain whose root is a compound expression publishes nothing.
-    ///
-    /// The compiler's entity table answers a symbol at a conditional,
-    /// sequence, or logical span — the *leftmost operand's*. Trusting it makes
-    /// `k`, a boolean condition, read `["c", "slice"]`: every segment is a
-    /// property of the chain's result, and none is a property of `k`. Each
-    /// case registers that entity, so removing the identifier gate makes this
-    /// test report the fabricated row rather than `None`.
-    #[test]
-    fn a_compound_chain_root_is_refused_rather_than_attributed() {
-        let conditional =
-            "function f(props, k, n) {\n  return (k ? props.a : props.b).c.slice(n);\n}\n";
-        let sequence = "function f(props, k, n) {\n  return (k, props.a).c.slice(n);\n}\n";
-        let logical =
-            "function f(props, fallback, n) {\n  return (props.a || fallback).c.slice(n);\n}\n";
-
-        assert_eq!(
-            member_callee_path(
-                conditional,
-                span_of(conditional, "(k ? props.a : props.b).c.slice", 0),
-                &[
-                    (span_of(conditional, "k ? props.a : props.b", 0), "symbol:k"),
-                    (span_of(conditional, "k", 1), "symbol:k"),
-                ]
-            ),
-            None,
-            "a ternary's condition does not own the ternary result's properties"
-        );
-        assert_eq!(
-            member_callee_path(
-                sequence,
-                span_of(sequence, "(k, props.a).c.slice", 0),
-                &[
-                    (span_of(sequence, "k, props.a", 0), "symbol:k"),
-                    (span_of(sequence, "k", 1), "symbol:k"),
-                ]
-            ),
-            None,
-            "a discarded sequence operand does not own the result's properties"
-        );
-        assert_eq!(
-            member_callee_path(
-                logical,
-                span_of(logical, "(props.a || fallback).c.slice", 0),
-                &[
-                    (span_of(logical, "props.a || fallback", 0), "symbol:props"),
-                    (span_of(logical, "props", 1), "symbol:props"),
-                ]
-            ),
-            None,
-            "either branch of a logical may supply the value the chain walks"
-        );
-    }
-
-    /// `props().slice(n)` names a property of the *call's result*.
-    ///
-    /// The call is not the parameter, so the row that would be published here
-    /// says `props` has a `slice` property when nothing establishes that.
-    #[test]
-    fn a_call_at_the_chain_root_is_refused() {
-        let source = "function f(props, n) {\n  return props().slice(n);\n}\n";
-
-        assert_eq!(
-            member_callee_path(
-                source,
-                span_of(source, "props().slice", 0),
-                &[
-                    (span_of(source, "props()", 0), "symbol:props"),
-                    (span_of(source, "props", 1), "symbol:props"),
-                ]
-            ),
-            None
-        );
-    }
-
-    /// A callee that is not a member at all, and one whose own property is
-    /// computed, are both refused — the two gates that keep an ordinary call
-    /// from reading as a member access.
-    #[test]
-    fn a_non_member_or_computed_callee_is_refused() {
-        let plain = "function f(notify, cb) {\n  return notify(cb);\n}\n";
-        let computed = "function f(props, key) {\n  return props.of[key]();\n}\n";
-
-        assert_eq!(
-            member_callee_path(
-                plain,
-                span_of(plain, "notify", 1),
-                &[
-                    (span_of(plain, "notify", 0), "symbol:notify"),
-                    (span_of(plain, "notify", 1), "symbol:notify"),
-                ]
-            ),
-            None,
-            "a call of a value is not a call through a property of one"
-        );
-        assert_eq!(
-            member_callee_path(
-                computed,
-                span_of(computed, "props.of[key]", 0),
-                &props_entities(computed)
-            ),
-            None,
-            "`handlers[i]()` must never be read as a property named `i`"
-        );
-    }
-}
+mod tests;

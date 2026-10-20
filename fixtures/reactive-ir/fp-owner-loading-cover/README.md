@@ -1,0 +1,3 @@
+# fp-owner-loading-cover
+
+`async-outside-loading-boundary` (`SC5003`) is a claim about a *render* with no `<Loading>` above it, proven only when the whole render chain is visible: reads in a memo, user-effect compute or derived signal are not renders (only a render effect emits it on rc.9 dev); a memo whose value is an async function is never pending; a boundary any number of hops above covers it; a chain ending at a function nothing renders is uncertifiable; only a chain to a `render()` root with no boundary is a violation; callback-prop reads are none. Stub as `fp-owner-show-children-callback` plus `@solidjs/web`'s `render`.

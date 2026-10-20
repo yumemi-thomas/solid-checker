@@ -1,0 +1,3 @@
+# flush-read-role
+
+`flush(fn)`'s callback has the caller's **read** role, as `write-scope-roots-rc3` pins its write role: it runs `fn` inline touching neither owner nor listener (`@solidjs/signals@2.0.0-rc.0` `dist/dev.js:1085-1099`, rc.3 `:1788-1802`, rc.9 `dev-shared.js:2202-2230`), so a body read raises `STRICT_READ_UNTRACKED` (`SC1001` violation) and a memo/effect-compute read subscribes (none); inside `untrack` it inherits the cleared listener (none); `Solid2::runs_callback_deferred` no longer lists `flush`. `node_modules/` is `write-scope-roots-rc3`'s byte for byte (published rc.3 typings); checked against real rc.3/rc.9.

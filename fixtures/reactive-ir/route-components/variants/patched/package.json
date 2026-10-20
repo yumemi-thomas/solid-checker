@@ -1,0 +1,7 @@
+{
+  "name": "route-components-patched",
+  "private": true,
+  "patchedDependencies": {
+    "@tanstack/solid-router@2.0.0-rc.6": "patches/@tanstack%2Fsolid-router@2.0.0-rc.6.patch"
+  }
+}

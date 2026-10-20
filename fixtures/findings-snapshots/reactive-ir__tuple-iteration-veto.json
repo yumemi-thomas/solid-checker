@@ -1,0 +1,25 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-iteration-veto/App.tsx",
+      "start": 126,
+      "end": 130,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/tuple-iteration-veto/App.tsx",
+      "start": 221,
+      "end": 225,
+      "fixes": 0
+    }
+  ]
+}

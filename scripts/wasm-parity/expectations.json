@@ -1,0 +1,1084 @@
+{
+  "source": {
+    "witness": "/private/tmp/sc-scratch.noindex/p5-consumer-checkpoint/owned-check/witness-2026-10-15T11-53-39-184Z",
+    "summarySha256": "2b98734ef0d73f87794d620529fb21321911650828fecf62d4abafbe6502156b",
+    "images": {
+      "node": "4255a388254ca4319e2f95f1da375d5deaddf25baf9c7c85070b67f9543b15d0",
+      "nativeProducer": "073f35e45da263aa694798c0fbea2c8e163cc50885a2fd9c666d8cd53343d86b",
+      "producerReactor": "1e9a59763392921284fbafa2245a756560beada93f3fbf15c04a3756e86e41d5",
+      "nativeChecker": "8062778d14068ff2ac99f47bf80b65947c84b554b224f9483ad889cda028ce7a",
+      "checkerReactor": "e6eefffd43022ab99157a225d4ecff44ae07225cb514bf663ed5a715360f465b"
+    }
+  },
+  "w5": {
+    "referenceStatus": "violation",
+    "results": {
+      "truncated": {
+        "status": 1,
+        "error": "TypeFacts session error: Type Facts process failed: bridged frame: I/O error: failed to fill whole buffer",
+        "snapshot": false,
+        "host": {
+          "opened": [
+            1
+          ],
+          "closed": [
+            1
+          ],
+          "exchanges": 2,
+          "faulted": true,
+          "pendingResults": []
+        },
+        "afterStatus": 0,
+        "afterSnapshotEqual": true,
+        "afterHost": {
+          "opened": [
+            2,
+            3
+          ],
+          "closed": [
+            2,
+            3
+          ],
+          "exchanges": 12,
+          "faulted": false,
+          "pendingResults": []
+        },
+        "activeProgramsAfter": []
+      },
+      "trailing": {
+        "status": 1,
+        "error": "TypeFacts session error: Type Facts process failed: bridged frame carries 1 trailing bytes",
+        "snapshot": false,
+        "host": {
+          "opened": [
+            4
+          ],
+          "closed": [
+            4
+          ],
+          "exchanges": 2,
+          "faulted": true,
+          "pendingResults": []
+        },
+        "afterStatus": 0,
+        "afterSnapshotEqual": true,
+        "afterHost": {
+          "opened": [
+            5,
+            6
+          ],
+          "closed": [
+            5,
+            6
+          ],
+          "exchanges": 12,
+          "faulted": false,
+          "pendingResults": []
+        },
+        "activeProgramsAfter": []
+      },
+      "garbage": {
+        "status": 1,
+        "error": "TypeFacts session error: Type Facts process failed: CBOR codec error: Semantic(None, \"invalid type: break, expected map\")",
+        "snapshot": false,
+        "host": {
+          "opened": [
+            7
+          ],
+          "closed": [
+            7
+          ],
+          "exchanges": 2,
+          "faulted": true,
+          "pendingResults": []
+        },
+        "afterStatus": 0,
+        "afterSnapshotEqual": true,
+        "afterHost": {
+          "opened": [
+            8,
+            9
+          ],
+          "closed": [
+            8,
+            9
+          ],
+          "exchanges": 12,
+          "faulted": false,
+          "pendingResults": []
+        },
+        "activeProgramsAfter": []
+      },
+      "wrong-request": {
+        "status": 1,
+        "error": "TypeFacts session error: Type Facts response is invalid: request identity mismatch",
+        "snapshot": false,
+        "host": {
+          "opened": [
+            10
+          ],
+          "closed": [
+            10
+          ],
+          "exchanges": 2,
+          "faulted": true,
+          "pendingResults": []
+        },
+        "afterStatus": 0,
+        "afterSnapshotEqual": true,
+        "afterHost": {
+          "opened": [
+            11,
+            12
+          ],
+          "closed": [
+            11,
+            12
+          ],
+          "exchanges": 12,
+          "faulted": false,
+          "pendingResults": []
+        },
+        "activeProgramsAfter": []
+      },
+      "wrong-generation": {
+        "status": 1,
+        "error": "TypeFacts session error: Type Facts response is invalid: answer names schema 1, project <root>/tsconfig.json, generation 2; asked schema 1, project <root>/tsconfig.json, generation 1",
+        "snapshot": false,
+        "host": {
+          "opened": [
+            13
+          ],
+          "closed": [
+            13
+          ],
+          "exchanges": 2,
+          "faulted": true,
+          "pendingResults": []
+        },
+        "afterStatus": 0,
+        "afterSnapshotEqual": true,
+        "afterHost": {
+          "opened": [
+            14,
+            15
+          ],
+          "closed": [
+            14,
+            15
+          ],
+          "exchanges": 12,
+          "faulted": false,
+          "pendingResults": []
+        },
+        "activeProgramsAfter": []
+      },
+      "wrong-project": {
+        "status": 1,
+        "error": "TypeFacts session error: Type Facts response is invalid: answer names schema 1, project <root>/tsconfig.jsonx, generation 1; asked schema 1, project <root>/tsconfig.json, generation 1",
+        "snapshot": false,
+        "host": {
+          "opened": [
+            16
+          ],
+          "closed": [
+            16
+          ],
+          "exchanges": 2,
+          "faulted": true,
+          "pendingResults": []
+        },
+        "afterStatus": 0,
+        "afterSnapshotEqual": true,
+        "afterHost": {
+          "opened": [
+            17,
+            18
+          ],
+          "closed": [
+            17,
+            18
+          ],
+          "exchanges": 12,
+          "faulted": false,
+          "pendingResults": []
+        },
+        "activeProgramsAfter": []
+      },
+      "wrong-token": {
+        "status": 1,
+        "error": "TypeFacts session error: Type Facts service state-mismatch: type facts generation mismatch: symbol evidence token \"1x\", retained token \"1\"",
+        "snapshot": false,
+        "host": {
+          "opened": [
+            19,
+            20
+          ],
+          "closed": [
+            19,
+            20
+          ],
+          "exchanges": 8,
+          "faulted": true,
+          "pendingResults": []
+        },
+        "afterStatus": 0,
+        "afterSnapshotEqual": true,
+        "afterHost": {
+          "opened": [
+            21,
+            22
+          ],
+          "closed": [
+            21,
+            22
+          ],
+          "exchanges": 12,
+          "faulted": false,
+          "pendingResults": []
+        },
+        "activeProgramsAfter": []
+      },
+      "wrong-program": {
+        "status": 1,
+        "error": "TypeFacts session error: Type Facts service project-mismatch: type facts generation mismatch",
+        "snapshot": false,
+        "host": {
+          "opened": [
+            24
+          ],
+          "closed": [
+            24
+          ],
+          "exchanges": 2,
+          "faulted": true,
+          "pendingResults": []
+        },
+        "decoy": {
+          "handle": 23,
+          "closeStatus": 0
+        },
+        "afterStatus": 0,
+        "afterSnapshotEqual": true,
+        "afterHost": {
+          "opened": [
+            25,
+            26
+          ],
+          "closed": [
+            25,
+            26
+          ],
+          "exchanges": 12,
+          "faulted": false,
+          "pendingResults": []
+        },
+        "activeProgramsAfter": []
+      }
+    },
+    "programs": {
+      "opened": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26
+      ],
+      "closed": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        24,
+        23,
+        25,
+        26
+      ],
+      "active": []
+    }
+  },
+  "w6UpdateReplay": {
+    "handshakeEqual": true,
+    "exchanges": [
+      {
+        "operation": "open",
+        "status": 0,
+        "equal": true,
+        "equalWithoutTimings": true
+      },
+      {
+        "operation": "sources",
+        "status": 0,
+        "equal": true,
+        "equalWithoutTimings": true
+      },
+      {
+        "operation": "modules",
+        "status": 0,
+        "equal": true,
+        "equalWithoutTimings": true
+      },
+      {
+        "operation": "analyze",
+        "status": 0,
+        "equal": false,
+        "equalWithoutTimings": true
+      },
+      {
+        "operation": "symbols",
+        "status": 0,
+        "equal": true,
+        "equalWithoutTimings": true
+      },
+      {
+        "operation": "symbols",
+        "status": 0,
+        "equal": true,
+        "equalWithoutTimings": true
+      },
+      {
+        "operation": "symbols",
+        "status": 0,
+        "equal": true,
+        "equalWithoutTimings": true
+      },
+      {
+        "operation": "analyze",
+        "status": 0,
+        "equal": false,
+        "equalWithoutTimings": true
+      },
+      {
+        "operation": "update",
+        "status": 0,
+        "equal": true,
+        "equalWithoutTimings": true
+      },
+      {
+        "operation": "analyze",
+        "status": 0,
+        "equal": false,
+        "equalWithoutTimings": true
+      },
+      {
+        "operation": "sources",
+        "status": 0,
+        "equal": true,
+        "equalWithoutTimings": true
+      },
+      {
+        "operation": "close",
+        "status": 0,
+        "equal": true,
+        "equalWithoutTimings": true
+      }
+    ]
+  },
+  "w7BadHandshake": {
+    "status": 1,
+    "error": "TypeFacts session error: Type Facts compatibility handshake failed: expected protocol 79, schema sha256:2533cc3d559a1318cd62a6adc256bd96aa610a7a9e4b1d6fea985e0996e6d527, build \"dev\"; got protocol 79, schema sha256:2533cc3d559a1318cd62a6adc256bd96aa610a7a9e4b1d6fea985e0996e6d526, build \"dev\"",
+    "host": {
+      "opened": [
+        1
+      ],
+      "closed": [
+        1
+      ],
+      "exchanges": 0,
+      "faulted": false,
+      "pendingResults": []
+    }
+  },
+  "answering": {
+    "w1-real-typings-violation": {
+      "request": {
+        "projectId": "<root>/tsconfig.json",
+        "runtime": {},
+        "dependencySources": []
+      },
+      "argv": [
+        "--format",
+        "json",
+        "--project",
+        "<root>/tsconfig.json"
+      ],
+      "native": {
+        "status": 0,
+        "snapshotStatus": "violation",
+        "notes": [
+          "solid-checker: note: browser host not inferred: <root>/package.json: cannot read application manifest"
+        ]
+      },
+      "wasi": {
+        "status": 0,
+        "snapshotStatus": "violation",
+        "notes": [
+          "solid-checker: note: browser host not inferred: <root>/package.json: cannot read application manifest"
+        ],
+        "host": {
+          "opened": [
+            1
+          ],
+          "closed": [
+            1
+          ],
+          "exchanges": 7,
+          "faulted": false,
+          "pendingResults": []
+        },
+        "frames": 10
+      },
+      "findings": [
+        {
+          "id": "SC1004",
+          "rule": "components-return-once",
+          "kind": "violation",
+          "path": "<root>/Gate.tsx",
+          "startByte": 109,
+          "endByte": 116
+        },
+        {
+          "id": "SC1003",
+          "rule": "no-destructure",
+          "kind": "uncertifiable",
+          "path": "<root>/Row.tsx",
+          "startByte": 55,
+          "endByte": 63
+        }
+      ],
+      "metrics": {
+        "filesAnalyzed": 3,
+        "functionsAnalyzed": 3,
+        "proofObligations": 3,
+        "cachedSummaries": 0,
+        "unresolvedObligations": 0
+      },
+      "premises": [
+        "standard runtime configuration (ADRs 0266/0268)"
+      ],
+      "tsc": {
+        "status": 0,
+        "output": ""
+      }
+    },
+    "w2-real-typings-clean": {
+      "request": {
+        "projectId": "<root>/tsconfig.json",
+        "runtime": {},
+        "dependencySources": []
+      },
+      "argv": [
+        "--format",
+        "json",
+        "--project",
+        "<root>/tsconfig.json"
+      ],
+      "native": {
+        "status": 0,
+        "snapshotStatus": "certified",
+        "notes": [
+          "solid-checker: note: browser host not inferred: <root>/package.json: cannot read application manifest"
+        ]
+      },
+      "wasi": {
+        "status": 0,
+        "snapshotStatus": "certified",
+        "notes": [
+          "solid-checker: note: browser host not inferred: <root>/package.json: cannot read application manifest"
+        ],
+        "host": {
+          "opened": [
+            1
+          ],
+          "closed": [
+            1
+          ],
+          "exchanges": 7,
+          "faulted": false,
+          "pendingResults": []
+        },
+        "frames": 10
+      },
+      "findings": [],
+      "metrics": {
+        "filesAnalyzed": 1,
+        "functionsAnalyzed": 1,
+        "proofObligations": 0,
+        "cachedSummaries": 0,
+        "unresolvedObligations": 0
+      },
+      "premises": [
+        "standard runtime configuration (ADRs 0266/0268)"
+      ],
+      "tsc": {
+        "status": 0,
+        "output": ""
+      }
+    },
+    "w2-uncertifiable": {
+      "request": {
+        "projectId": "<root>/tsconfig.json",
+        "runtime": {},
+        "dependencySources": []
+      },
+      "argv": [
+        "--format",
+        "json",
+        "--project",
+        "<root>/tsconfig.json"
+      ],
+      "native": {
+        "status": 0,
+        "snapshotStatus": "uncertifiable",
+        "notes": [
+          "solid-checker: note: browser host not inferred: <root>/package.json: cannot read application manifest"
+        ]
+      },
+      "wasi": {
+        "status": 0,
+        "snapshotStatus": "uncertifiable",
+        "notes": [
+          "solid-checker: note: browser host not inferred: <root>/package.json: cannot read application manifest"
+        ],
+        "host": {
+          "opened": [
+            1
+          ],
+          "closed": [
+            1
+          ],
+          "exchanges": 8,
+          "faulted": false,
+          "pendingResults": []
+        },
+        "frames": 11
+      },
+      "findings": [
+        {
+          "id": "SC9005",
+          "rule": "package-behavior-unavailable",
+          "kind": "uncertifiable",
+          "path": "<root>/App.tsx",
+          "startByte": 415,
+          "endByte": 464
+        }
+      ],
+      "metrics": {
+        "filesAnalyzed": 1,
+        "functionsAnalyzed": 1,
+        "proofObligations": 1,
+        "cachedSummaries": 0,
+        "unresolvedObligations": 1
+      },
+      "premises": [
+        "standard runtime configuration (ADRs 0266/0268)"
+      ]
+    },
+    "w3-dependency-source-program": {
+      "request": {
+        "projectId": "<root>/tsconfig.json",
+        "runtime": {
+          "target": "browser",
+          "build": "development"
+        },
+        "dependencySources": [
+          "dep-hooks"
+        ]
+      },
+      "argv": [
+        "--format",
+        "json",
+        "--project",
+        "<root>/tsconfig.json",
+        "--runtime-target",
+        "browser",
+        "--runtime-build",
+        "development",
+        "--dependency-source",
+        "dep-hooks"
+      ],
+      "native": {
+        "status": 0,
+        "snapshotStatus": "violation",
+        "notes": []
+      },
+      "wasi": {
+        "status": 0,
+        "snapshotStatus": "violation",
+        "notes": [],
+        "host": {
+          "opened": [
+            1,
+            2
+          ],
+          "closed": [
+            1,
+            2
+          ],
+          "exchanges": 12,
+          "faulted": false,
+          "pendingResults": []
+        },
+        "frames": 18
+      },
+      "findings": [
+        {
+          "id": "SC1001",
+          "rule": "strict-read-untracked",
+          "kind": "violation",
+          "path": "<root>/App.tsx",
+          "startByte": 234,
+          "endByte": 248
+        },
+        {
+          "id": "SC9011",
+          "rule": "reactive-source-uncaptured",
+          "kind": "uncertifiable",
+          "path": "<root>/legacy/Legacy.tsx",
+          "startByte": 348,
+          "endByte": 352
+        }
+      ],
+      "metrics": {
+        "filesAnalyzed": 3,
+        "functionsAnalyzed": 7,
+        "proofObligations": 4,
+        "cachedSummaries": 0,
+        "unresolvedObligations": 1
+      },
+      "premises": [
+        "standard runtime configuration (ADRs 0266/0268)",
+        "package integrity (ADR 0300): code outside the analyzed program neither provides selected packages' exported contexts nor rewrites objects those packages create"
+      ]
+    },
+    "w3-visible-js": {
+      "request": {
+        "projectId": "<root>/tsconfig.json",
+        "runtime": {
+          "target": "browser",
+          "build": "development"
+        },
+        "dependencySources": [
+          "dep-router"
+        ]
+      },
+      "argv": [
+        "--format",
+        "json",
+        "--project",
+        "<root>/tsconfig.json",
+        "--runtime-target",
+        "browser",
+        "--runtime-build",
+        "development",
+        "--dependency-source",
+        "dep-router"
+      ],
+      "native": {
+        "status": 0,
+        "snapshotStatus": "uncertifiable",
+        "notes": []
+      },
+      "wasi": {
+        "status": 0,
+        "snapshotStatus": "uncertifiable",
+        "notes": [],
+        "host": {
+          "opened": [
+            1,
+            2
+          ],
+          "closed": [
+            1,
+            2
+          ],
+          "exchanges": 13,
+          "faulted": false,
+          "pendingResults": []
+        },
+        "frames": 19
+      },
+      "findings": [
+        {
+          "id": "SC9012",
+          "rule": "reactive-dispatch-unresolved",
+          "kind": "uncertifiable",
+          "path": "<root>/App.tsx",
+          "startByte": 285,
+          "endByte": 300
+        },
+        {
+          "id": "SC1001",
+          "rule": "strict-read-untracked",
+          "kind": "uncertifiable",
+          "path": "<root>/node_modules/dep-wrap/index.jsx",
+          "startByte": 170,
+          "endByte": 184
+        }
+      ],
+      "metrics": {
+        "filesAnalyzed": 4,
+        "functionsAnalyzed": 14,
+        "proofObligations": 4,
+        "cachedSummaries": 0,
+        "unresolvedObligations": 1
+      },
+      "premises": [
+        "standard runtime configuration (ADRs 0266/0268)",
+        "package integrity (ADR 0300): code outside the analyzed program neither provides selected packages' exported contexts nor rewrites objects those packages create"
+      ]
+    },
+    "w4-project-intact": {
+      "request": {
+        "projectId": "<root>/tsconfig.json",
+        "runtime": {},
+        "dependencySources": []
+      },
+      "argv": [
+        "--format",
+        "json",
+        "--project",
+        "<root>/tsconfig.json"
+      ],
+      "native": {
+        "status": 0,
+        "snapshotStatus": "violation",
+        "notes": [
+          "solid-checker: note: browser host not inferred: <root>/package.json: cannot read application manifest"
+        ]
+      },
+      "wasi": {
+        "status": 0,
+        "snapshotStatus": "violation",
+        "notes": [
+          "solid-checker: note: browser host not inferred: <root>/package.json: cannot read application manifest"
+        ],
+        "host": {
+          "opened": [
+            1
+          ],
+          "closed": [
+            1
+          ],
+          "exchanges": 7,
+          "faulted": false,
+          "pendingResults": []
+        },
+        "frames": 10
+      },
+      "findings": [
+        {
+          "id": "SC1004",
+          "rule": "components-return-once",
+          "kind": "violation",
+          "path": "<root>/Gate.tsx",
+          "startByte": 109,
+          "endByte": 116
+        },
+        {
+          "id": "SC1003",
+          "rule": "no-destructure",
+          "kind": "uncertifiable",
+          "path": "<root>/Row.tsx",
+          "startByte": 55,
+          "endByte": 63
+        }
+      ],
+      "metrics": {
+        "filesAnalyzed": 4,
+        "functionsAnalyzed": 4,
+        "proofObligations": 3,
+        "cachedSummaries": 0,
+        "unresolvedObligations": 0
+      },
+      "premises": [
+        "standard runtime configuration (ADRs 0266/0268)"
+      ],
+      "tsc": {
+        "status": 0,
+        "output": ""
+      }
+    },
+    "w4-project-omitted": {
+      "request": {
+        "projectId": "<root>/tsconfig.json",
+        "runtime": {},
+        "dependencySources": []
+      },
+      "argv": [
+        "--format",
+        "json",
+        "--project",
+        "<root>/tsconfig.json"
+      ],
+      "native": {
+        "status": 0,
+        "snapshotStatus": "uncertifiable",
+        "notes": [
+          "solid-checker: note: browser host not inferred: <root>/package.json: cannot read application manifest"
+        ]
+      },
+      "wasi": {
+        "status": 0,
+        "snapshotStatus": "uncertifiable",
+        "notes": [
+          "solid-checker: note: browser host not inferred: <root>/package.json: cannot read application manifest"
+        ],
+        "host": {
+          "opened": [
+            1
+          ],
+          "closed": [
+            1
+          ],
+          "exchanges": 8,
+          "faulted": false,
+          "pendingResults": []
+        },
+        "frames": 11
+      },
+      "findings": [
+        {
+          "id": "SC1003",
+          "rule": "no-destructure",
+          "kind": "uncertifiable",
+          "path": "<root>/Row.tsx",
+          "startByte": 55,
+          "endByte": 63
+        }
+      ],
+      "metrics": {
+        "filesAnalyzed": 3,
+        "functionsAnalyzed": 3,
+        "proofObligations": 1,
+        "cachedSummaries": 0,
+        "unresolvedObligations": 0
+      },
+      "premises": [
+        "standard runtime configuration (ADRs 0266/0268)"
+      ],
+      "tsc": {
+        "status": 2,
+        "output": "<root-relative>/Use.tsx(1,22): error TS2307: Cannot find module './Gate' or its corresponding type declarations."
+      }
+    },
+    "w6-changed-fresh": {
+      "request": {
+        "projectId": "<root>/tsconfig.json",
+        "runtime": {},
+        "dependencySources": []
+      },
+      "argv": [
+        "--format",
+        "json",
+        "--project",
+        "<root>/tsconfig.json"
+      ],
+      "native": {
+        "status": 0,
+        "snapshotStatus": "uncertifiable",
+        "notes": [
+          "solid-checker: note: browser host not inferred: <root>/package.json: cannot read application manifest"
+        ]
+      },
+      "wasi": {
+        "status": 0,
+        "snapshotStatus": "uncertifiable",
+        "notes": [
+          "solid-checker: note: browser host not inferred: <root>/package.json: cannot read application manifest"
+        ],
+        "host": {
+          "opened": [
+            1
+          ],
+          "closed": [
+            1
+          ],
+          "exchanges": 8,
+          "faulted": false,
+          "pendingResults": []
+        },
+        "frames": 11
+      },
+      "findings": [
+        {
+          "id": "SC1003",
+          "rule": "no-destructure",
+          "kind": "uncertifiable",
+          "path": "<root>/Row.tsx",
+          "startByte": 55,
+          "endByte": 63
+        }
+      ],
+      "metrics": {
+        "filesAnalyzed": 3,
+        "functionsAnalyzed": 3,
+        "proofObligations": 2,
+        "cachedSummaries": 0,
+        "unresolvedObligations": 0
+      },
+      "premises": [
+        "standard runtime configuration (ADRs 0266/0268)"
+      ],
+      "tsc": {
+        "status": 0,
+        "output": ""
+      }
+    }
+  },
+  "refusals": {
+    "w4-omission": {
+      "native": {
+        "status": 2,
+        "notes": [
+          "solid-checker-rust: --dependency-source \"dep-hooks\": <root>/node_modules/dep-hooks/src/index.jsx imports \"./read.js\", which resolves to no source file"
+        ]
+      },
+      "wasi": {
+        "status": 1,
+        "error": "--dependency-source \"dep-hooks\": <root>/node_modules/dep-hooks/src/index.jsx imports \"./read.js\", which resolves to no source file",
+        "host": {
+          "opened": [
+            1
+          ],
+          "closed": [
+            1
+          ],
+          "exchanges": 4,
+          "faulted": false,
+          "pendingResults": []
+        },
+        "frames": [
+          {
+            "op": "open",
+            "status": 0
+          },
+          {
+            "op": "handshake",
+            "status": 0
+          },
+          {
+            "op": "exchange",
+            "status": 0
+          },
+          {
+            "op": "exchange",
+            "status": 0
+          },
+          {
+            "op": "exchange",
+            "status": 0
+          },
+          {
+            "op": "exchange",
+            "status": 0
+          },
+          {
+            "op": "close",
+            "status": 0
+          }
+        ]
+      },
+      "messageEqual": true,
+      "omitted": "node_modules/dep-hooks/src/read.js",
+      "tsc": {
+        "intact": {
+          "status": 0,
+          "output": ""
+        },
+        "omitted": {
+          "status": 0,
+          "output": ""
+        }
+      }
+    },
+    "w7-missing-project": {
+      "native": {
+        "status": 2,
+        "notes": [
+          "solid-checker-rust: No such file or directory (os error 2)"
+        ]
+      },
+      "wasi": {
+        "status": 1,
+        "error": "No such file or directory (os error 44)",
+        "host": {
+          "opened": [],
+          "closed": [],
+          "exchanges": 0,
+          "faulted": false,
+          "pendingResults": []
+        },
+        "frames": []
+      },
+      "messageEqual": false
+    },
+    "w7-open-failure": {
+      "native": {
+        "status": 2,
+        "notes": [
+          "solid-typefacts: open TS-Go project: parse tsconfig: 1 configuration error(s)",
+          "solid-typefacts: open TS-Go project: parse tsconfig: 1 configuration error(s)",
+          "solid-checker-rust: TypeFacts session error: Type Facts process failed: I/O error: failed to fill whole buffer"
+        ]
+      },
+      "wasi": {
+        "status": 1,
+        "error": "open TS-Go project: parse tsconfig: 1 configuration error(s)",
+        "host": {
+          "opened": [],
+          "closed": [],
+          "exchanges": 0,
+          "faulted": false,
+          "pendingResults": []
+        },
+        "frames": [
+          {
+            "op": "open",
+            "status": 1
+          }
+        ]
+      },
+      "messageEqual": false
+    }
+  }
+}

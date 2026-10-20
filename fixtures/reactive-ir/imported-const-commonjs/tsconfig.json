@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "jsx": "preserve",
+    "module": "Preserve",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "target": "ES2022",
+    "allowJs": true,
+    "esModuleInterop": true
+  },
+  "include": ["*.ts", "*.tsx", "*.cjs"]
+}

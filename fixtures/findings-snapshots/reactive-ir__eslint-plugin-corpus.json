@@ -92,10 +92,10 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-read-after-await",
-      "code": "SC1002",
-      "kind": "violation",
-      "severity": "error",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/after-await-invalid.tsx",
       "start": 545,
       "end": 549,
@@ -214,7 +214,7 @@
     {
       "rule": "components-return-once",
       "code": "SC1004",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/component-return-invalid.tsx",
       "start": 126,
@@ -224,7 +224,7 @@
     {
       "rule": "components-return-once",
       "code": "SC1004",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/component-return-invalid.tsx",
       "start": 249,
@@ -249,16 +249,6 @@
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/component-return-valid.tsx",
       "start": 526,
       "end": 537,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/eslint-plugin-corpus/control-flow-invalid.tsx",
-      "start": 231,
-      "end": 241,
       "fixes": 0
     },
     {
@@ -312,16 +302,6 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/eslint-plugin-corpus/control-flow-invalid.tsx",
-      "start": 1275,
-      "end": 1282,
-      "fixes": 0
-    },
-    {
       "rule": "reactive-write-in-owned-scope",
       "code": "SC2001",
       "kind": "violation",
@@ -372,13 +352,13 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/effect-apply-extended-invalid.tsx",
       "start": 308,
-      "end": 322,
+      "end": 320,
       "fixes": 0
     },
     {
@@ -512,13 +492,13 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/effect-apply-invalid.tsx",
       "start": 398,
-      "end": 404,
+      "end": 402,
       "fixes": 0
     },
     {
@@ -839,6 +819,26 @@
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/owned-scope-valid.tsx",
       "start": 140,
       "end": 152,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/owned-scope-valid.tsx",
+      "start": 276,
+      "end": 287,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/owned-scope-valid.tsx",
+      "start": 342,
+      "end": 353,
       "fixes": 0
     },
     {

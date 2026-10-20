@@ -1,0 +1,1 @@
+{ "note": "control: a signal read in the component body warns STRICT_READ_UNTRACKED and is a proven violation", "steps": [] }

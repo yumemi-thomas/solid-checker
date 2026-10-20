@@ -10,198 +10,50 @@ Install it as a development dependency:
 bun add --dev solid-checker
 ```
 
-Then run `solid-checker --certify`.
+Then run `solid-checker --certify`. It reports proven violations and project
+notices only; results the analysis could not decide are internal (`--internal`
+or `--format json` shows them).
 
-Library maintainers can generate an unaccepted stable-v1 proposal from one
-exact installed package without writing semantic JSON:
+## Dependency analysis
 
-```sh
-solid-checker contract generate \
-  --package-root . \
-  --integrity 'sha512-…'
-```
+Declare `--runtime-target browser|node` and `--runtime-build development|production`
+to select installed dependency source using the Vite and Solid plugin premises.
+`--dependency-source <specifier>` narrows selection. Unavailable behavior stays
+an explicit SC9005 uncertifiable obligation. Without a declared host, the
+checker does not invent package behavior.
 
-Application developers can write the proposal into their project-owned
-contract directory:
+Package contracts, catalogs, receipts, generation and certification commands
+have been removed. ESLint’s `acceptedContracts`, `receiptTrustConfiguration`
+and `dependencySource` settings are refused. `--no-package-contracts` remains
+a compatibility no-op. See [ADR 0312](../../docs/decisions.md#adr-0312).
 
-```sh
-solid-checker contract generate \
-  --package-root node_modules/solid-dnd \
-  --integrity 'sha512-…' \
-  --output .solid-checker/contracts/solid-dnd/solid-reactivity.json
-```
+## Development feedback
 
-Generation acquires exact runtime, declaration, export, and closure identities
-without executing package code. It enumerates finite entrypoints and condition
-partitions, refuses wildcard/unbounded surfaces, and preserves unresolved
-semantic leaves as local open claims. The proposal cannot affect analysis
-until policy-2 certification verifies every demanded witness and issues an
-authenticated receipt. Policy-1 proof-file issuance is retired:
+The experimental feedback command combines native findings with recorded
+application observations:
 
 ```sh
-solid-checker contract review solid-reactivity.json
-solid-checker contract verify # deterministic migration refusal
+solid-checker feedback --project tsconfig.json
+solid-checker feedback manifest --project tsconfig.json > capture.json
+solid-checker feedback --project tsconfig.json --capture capture.json
+solid-checker feedback run --project tsconfig.json --scenario scenario.json --browser /absolute/path/chromium
 ```
 
-`solid-checker contract certify --integrity 'sha512-…'` now owns exact registry
-reacquisition, Rust demand planning, witness scheduling, issuer invocation,
-and catalog-last publication. The initial policy-2 producer rollout fails
-closed at the first unavailable live witness adapter; `--audit-output` records
-the exact demand-local refusal but is explicitly non-replayable authority.
-Until every demanded producer answers and an issuer is configured, the native
-checker reports the exact import as uncertifiable rather than accepting
-name-only, stale, unreceipted, or artifact-mismatched input.
-`solid-checker contract probe` is a separate opt-in falsification workflow;
-ordinary generation and analysis never execute dependency code, and a passing
-probe never closes a claim.
+The manifest starts an input-bound capture. A collector fills its `events` and
+`runtimeInputs` before the final command. Source, configuration, resolution and
+runtime changes refuse stale captures. Native findings keep their original
+violation/uncertifiable classification; recorded untracked reads are information
+because snapshot intent is open. Runtime exceptions and failed application
+assertions can be supplied as separate observations. `feedback run` now collects
+live native read observations and conditional automatic warnings from native
+source models. Scenarios can contain interactions without assertions or
+comparison code. Discarded reads, competing returns and unresolved result
+relevance stay open. The automatic notes do not prove stale output or intent.
+The command also executes supplied browser assertions. Add
+`--compare-project /absolute/path/comparison/tsconfig.json` to measure the same
+assertions in a separate checkout: failed assertions that pass there receive
+informational debugging guidance; passing originals stay quiet. The collector
+uses a reviewed RC.9 native-reader profile. Automatic source proposals and
+package behavior inference remain unavailable.
 
-`contract generate` writes a `.certification-inputs.json` sidecar beside the
-proposal (with the existing `.proposal.json` and `.refusals.json`) recording
-the emitted artifact cases, their resolutions, and the identity they were
-generated under. `contract certify --proposal <FILE>` reuses that emission
-instead of regenerating it when the package identity, integrity, package root,
-certification importer, entrypoints and conditions all match and the document
-and plan still carry the recorded digests; anything else regenerates. Reuse
-moves no authority: Rust verifies every resolution against the authenticated
-archive and proves every claim before a receipt exists, exactly as it does for
-an in-process generation. Generate under `--certification-importer` set to the
-path certification will use (its name derives from the package root and the
-catalog) for the hand-over to be admissible.
-
-`SOLID_CHECKER_MATERIALIZED_STORE` names a directory where certification keeps
-the loadable files of each compiler-source snapshot (content-addressed, linked
-into each private Type Facts project instead of written) and the verified
-execution images of the producer and checker (launched in place instead of
-copied per certification). Every entry is re-verified against the in-memory
-snapshot or the pin before use and the source census still verifies every file
-the producer reads, so the store is a cache, never an authority. Unset, every
-certification writes its own private copies.
-
-Published catalogs, receipts and trust configurations are written to a
-temporary path, flushed to stable storage, and renamed into place.
-`SOLID_CHECKER_DURABLE_WRITES=none` skips the flush (atomic visibility is
-unchanged; only crash durability is relaxed) for callers whose catalogs are
-scratch, such as the ecosystem benchmark. Leave it unset for a real
-publication.
-
-Certification acquires every named package — the root and each compiler-source
-dependency the lockfile selects — from the registry, up to
-`SOLID_CHECKER_REGISTRY_CONCURRENCY` (default 8) at a time. Setting
-`SOLID_CHECKER_REGISTRY_CACHE` to a directory keeps acquisitions that
-authenticated against their pinned sha512 integrity, addressed by exact
-(origin, package, version, integrity); a later acquisition of the same identity
-reuses those bytes only after re-checking that the archive still hashes to the
-integrity and the packument still carries that exact record. Unset, every
-acquisition fetches from the registry.
-
-Check which dependencies still need one, and which have a contract that no
-longer matches the installed version:
-
-```sh
-solid-checker contract check
-```
-
-Packages are reported as bundled, accepted, unverified, stale, unbound, or
-missing; every uncertifying status names its remedy, and the command exits
-non-zero when action is required. `unbound` means no exact project import
-occurrence matches the catalog entry. `stale` means document, receipt, package,
-artifact, closure, or proof identity drifted and must be regenerated and
-re-proved. `contract generate --missing` sweeps registry-installed missing
-packages with exact package-manager integrity while leaving existing proposals
-alone. Linked/local packages without that identity remain uncertifiable.
-
-The CLI uses the Oxc graphical reporter for framed terminal diagnostics:
-
-```sh
-solid-checker --project tsconfig.json
-```
-
-The `default` format prints the same style of source frames, severity markers,
-evidence labels, and error summary used by Oxlint. Use `--format json` for
-machine-readable findings or `--format text` for compact output.
-
-Optimized macOS and Linux checks retain a per-project TypeScript and analysis
-session for up to two idle minutes, so repeated invocations reuse coherent
-facts instead of rebuilding the project. Set `SOLID_CHECKER_DAEMON=0` to force
-a one-shot check or `SOLID_CHECKER_DAEMON_IDLE_SECS=<seconds>` to change the
-idle lifetime. The default process-tree resident-memory ceiling is 2048 MiB;
-change it with `SOLID_CHECKER_DAEMON_MAX_RSS_MB=<MiB>` (`0` disables it).
-`SOLID_CHECKER_TIMINGS=1` writes cache-hit, generation, latency, and payload
-telemetry as JSON on stderr.
-
-Projects with at least 1,000 source files automatically use balanced cache
-retention: the current result stays hot, while the largest derived indexes are
-released between changed generations. Override it with
-`SOLID_CHECKER_CACHE_RETENTION=performance`, `balanced`, or `compact`.
-
-To report project findings through Oxlint, load the bundled JavaScript adapter:
-
-```json
-{
-  "jsPlugins": ["solid-checker/eslint"],
-  "rules": {
-    "solid-checker/certification": "error"
-  }
-}
-```
-
-The adapter discovers the nearest `tsconfig.json`, runs native project analysis
-once, caches its snapshot, and projects matching findings into Oxlint. Set
-`settings.solidChecker.project` when the project uses a nonstandard config name
-or a solution-style root config that only references application configs.
-
-By default the analysis picks its dialect from the `solid-js` version the
-project resolves. Set `settings.solidChecker.dialect` to `"solid-v1"` or
-`"solid-v2"` to override detection for every rule the adapter runs.
-When package contracts or rendering proofs depend on deployment conditions,
-set `settings.solidChecker.runtime` with explicit `target`, `build`,
-`rendering`, `conditions`, and `frameworkTransforms` fields. Incomplete or
-contradictory selections remain uncertifiable; the adapter includes the full
-selection in its analysis cache identity.
-
-Every catalog rule is also its own ESLint rule, so a project can disable one
-finding without losing the rest: unprefixed names
-(`solid-checker/strict-read-untracked`) come from the Solid 2.0 catalog, and
-`v1/`-prefixed names (`solid-checker/v1/no-destructure`) come from the Solid
-1.x catalog. A `v1/` rule analyzes with the 1.x dialect on its own when the
-configuration has not chosen one. All rules of one dialect share a single
-cached analysis run, so enabling an entire catalog still spawns the checker
-once per project.
-
-The plugin ships three flat configs. `configs.recommended` enables only
-`solid-checker/certification`, which reports every finding through one rule.
-`configs.v1` and `configs.v2` enable their catalog's rules at each rule's
-native severity and turn `certification` off. The configs compose in either
-order: each finding reports exactly once, per rule. Even when a listing such
-as `[configs.v1, configs.recommended]` re-enables `certification` (flat
-config resolves each rule from the later entry), certification skips every
-finding an enabled per-rule rule owns for the linted file and reports only
-the rest.
-
-The adapter discovers shipped dialect catalogs by enumerating
-`lib/rules-solid-vN.json`. Each generated catalog carries its stable `dialect`
-id, compatibility `config` key, and optional rule `namespace`; adding a catalog
-does not require a JavaScript registry or version branch.
-
-Project-wide rule enablement and per-rule options (for example
-`v1/prefer-classlist`'s `classnames`) live in the project's
-`.solid-checker/rule-options.json`, which the native analysis
-discovers itself — not in ESLint rule configuration. The adapter runs one
-analysis per project, so a single discovered file is what keeps ESLint, the
-standalone CLI, and every editor integration reading the same options. See
-`docs/rules/README.md` in the repository for the format.
-
-In StackBlitz, WebContainers, or a browser worker, import the process-free
-WASM API from the same package:
-
-```js
-import { checkSync } from "solid-checker";
-```
-
-Supported targets are Linux (x64 and arm64), macOS (arm64), and
-Windows (x64). macOS on Intel is not published; build from a checkout with
-`make build-rust` to run there. Bun installs only the matching
-`@solid-checker/binding-<target>` optional dependency; the portable package
-contains the launchers. The launcher forwards arguments, stdio, signals, and
-exit status. While running from this monorepo, it builds missing development
-binaries with `make build-rust`.
+See [the capture format and current limits](../../docs/development-feedback.md).

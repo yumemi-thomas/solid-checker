@@ -11,6 +11,7 @@ import ast "github.com/microsoft/typescript-go/internal/ast"
 import _ "unsafe"
 
 type Diagnostic = ast.Diagnostic
+type SourceFileParseOptions = ast.SourceFileParseOptions
 
 //go:linkname GetNodeAtPosition github.com/microsoft/typescript-go/internal/ast.GetNodeAtPosition
 func GetNodeAtPosition(file *ast.SourceFile, position int, includeJSDoc bool) *ast.Node
@@ -27,11 +28,23 @@ func HasSyntacticModifier(node *ast.Node, flags ast.ModifierFlags) bool
 //go:linkname IsExpression github.com/microsoft/typescript-go/internal/ast.IsExpression
 func IsExpression(node *ast.Node) bool
 
+//go:linkname IsOptionalChain github.com/microsoft/typescript-go/internal/ast.IsOptionalChain
+func IsOptionalChain(node *ast.Node) bool
+
 //go:linkname IsAsExpression github.com/microsoft/typescript-go/internal/ast.IsAsExpression
 func IsAsExpression(node *ast.Node) bool
 
+//go:linkname IsAssertionExpression github.com/microsoft/typescript-go/internal/ast.IsAssertionExpression
+func IsAssertionExpression(node *ast.Node) bool
+
 //go:linkname IsArrayBindingPattern github.com/microsoft/typescript-go/internal/ast.IsArrayBindingPattern
 func IsArrayBindingPattern(node *ast.Node) bool
+
+//go:linkname IsLabeledStatement github.com/microsoft/typescript-go/internal/ast.IsLabeledStatement
+func IsLabeledStatement(node *ast.Node) bool
+
+//go:linkname IsPropertyAssignment github.com/microsoft/typescript-go/internal/ast.IsPropertyAssignment
+func IsPropertyAssignment(node *ast.Node) bool
 
 //go:linkname IsArrayLiteralExpression github.com/microsoft/typescript-go/internal/ast.IsArrayLiteralExpression
 func IsArrayLiteralExpression(node *ast.Node) bool
@@ -134,6 +147,12 @@ func IsPrefixUnaryExpression(node *ast.Node) bool
 //go:linkname IsPropertyAccessExpression github.com/microsoft/typescript-go/internal/ast.IsPropertyAccessExpression
 func IsPropertyAccessExpression(node *ast.Node) bool
 
+//go:linkname IsElementAccessExpression github.com/microsoft/typescript-go/internal/ast.IsElementAccessExpression
+func IsElementAccessExpression(node *ast.Node) bool
+
+//go:linkname IsDeleteExpression github.com/microsoft/typescript-go/internal/ast.IsDeleteExpression
+func IsDeleteExpression(node *ast.Node) bool
+
 //go:linkname IsObjectLiteralExpression github.com/microsoft/typescript-go/internal/ast.IsObjectLiteralExpression
 func IsObjectLiteralExpression(node *ast.Node) bool
 
@@ -191,6 +210,9 @@ func IsQualifiedName(node *ast.Node) bool
 //go:linkname IsReturnStatement github.com/microsoft/typescript-go/internal/ast.IsReturnStatement
 func IsReturnStatement(node *ast.Node) bool
 
+//go:linkname IsShorthandPropertyAssignment github.com/microsoft/typescript-go/internal/ast.IsShorthandPropertyAssignment
+func IsShorthandPropertyAssignment(node *ast.Node) bool
+
 //go:linkname IsSpreadElement github.com/microsoft/typescript-go/internal/ast.IsSpreadElement
 func IsSpreadElement(node *ast.Node) bool
 
@@ -226,6 +248,22 @@ const KindJsxSelfClosingElement = ast.KindJsxSelfClosingElement
 const KindMinusToken = ast.KindMinusToken
 const KindPlusToken = ast.KindPlusToken
 const KindPropertySignature = ast.KindPropertySignature
+
+// KindFirstNode is the compiler's own boundary between tokens — trivia,
+// literals, punctuation, identifiers, and keywords — and the node kinds above
+// them. Everything strictly below it is a token, which is the only way to say
+// "this is not a syntactic construct" without restating a 160-entry list that
+// a compiler bump could silently extend.
+const KindFirstNode = ast.KindFirstNode
+
+// NodeFlagsUsing is set on the declaration list of both `using x = …` and
+// `await using x = …`; the latter additionally sets NodeFlagsConst, which is
+// why testing this one bit covers both spellings.
+const NodeFlagsUsing = ast.NodeFlagsUsing
+
+// NodeFlagsConst marks a `const` declaration list (ADR 0153 asks it of a
+// context binding).
+const NodeFlagsConst = ast.NodeFlagsConst
 const KindQuestionQuestionToken = ast.KindQuestionQuestionToken
 const KindTrueKeyword = ast.KindTrueKeyword
 const KindUndefinedKeyword = ast.KindUndefinedKeyword
@@ -242,3 +280,7 @@ type Kind = ast.Kind
 const SymbolFlagsAlias = ast.SymbolFlagsAlias
 const SymbolFlagsOptional = ast.SymbolFlagsOptional
 const SymbolFlagsValue = ast.SymbolFlagsValue
+const SymbolFlagsClass = ast.SymbolFlagsClass
+const SymbolFlagsInterface = ast.SymbolFlagsInterface
+const SymbolFlagsEnum = ast.SymbolFlagsEnum
+const SymbolFlagsTypeAlias = ast.SymbolFlagsTypeAlias

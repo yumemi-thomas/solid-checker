@@ -4,10 +4,6 @@ import { test } from "vitest";
 
 const ci = readFileSync(".github/workflows/ci.yml", "utf8");
 const publish = readFileSync(".github/workflows/publish-npm.yml", "utf8");
-const contractCorpus = readFileSync(".github/workflows/contract-corpus.yml", "utf8");
-const ecosystemBenchmark = readFileSync(".github/workflows/ecosystem-benchmark.yml", "utf8");
-const ecosystemManifest = JSON.parse(readFileSync("scripts/ecosystem-benchmark/manifest.json", "utf8"));
-const ecosystemSentinel = JSON.parse(readFileSync("scripts/ecosystem-benchmark/sentinel.json", "utf8"));
 
 function jobBody(workflow, name) {
   const lines = workflow.split("\n");
@@ -94,48 +90,4 @@ test("native caches do not restore macOS target executables", () => {
   assert.equal(sharedKey(release), sharedKey(main));
   assert.equal(actionInput(main, "cache-targets"), safeTargetPolicy);
   assert.equal(actionInput(release, "cache-targets"), safeTargetPolicy);
-});
-
-test("the contract corpus installs and watches its stable-v1 producer", () => {
-  const install = contractCorpus.indexOf(
-    "bun install --cwd packages/cli --ignore-scripts --no-progress --frozen-lockfile"
-  );
-  const run = contractCorpus.indexOf("run: make contract-corpus");
-
-  assert.ok(install >= 0, "contract-corpus must install the producer's runtime dependencies");
-  assert.ok(install < run, "producer dependencies must be installed before contract generation");
-  assert.match(contractCorpus, /- "packages\/cli\/scripts\/\*\*"/);
-  assert.doesNotMatch(contractCorpus, /generate-package-contract\.mjs/);
-});
-
-test("the PR ecosystem sentinel shards every pinned family without weakening timeouts", () => {
-  const shards = jobBody(ecosystemBenchmark, "sentinel-family");
-  const sentinelIds = new Set(ecosystemSentinel.probes);
-  const foundIds = new Set();
-  const families = new Set();
-  for (const row of ecosystemManifest.rows) {
-    for (const probe of row.probes) {
-      if (!sentinelIds.has(probe.id)) continue;
-      foundIds.add(probe.id);
-      families.add(row.family);
-    }
-  }
-
-  assert.deepEqual([...foundIds].sort(), [...sentinelIds].sort());
-  assert.deepEqual(
-    matrixIncludes(shards),
-    [...families].sort().map(family => ({
-      family,
-      concurrency: family === "motion-solidjs" || family === "solid-recharts" ? 1 : 4,
-    })),
-  );
-  assert.match(
-    shards,
-    /^\s+run: bun scripts\/ecosystem-benchmark\/run\.mjs --sentinel --family "\$\{\{ matrix\.family \}\}" --timeout 120 --concurrency "\$\{\{ matrix\.concurrency \}\}"$/m,
-  );
-  assert.match(shards, /name: ecosystem-benchmark-sentinel-\$\{\{ matrix\.family \}\}-report/);
-
-  const aggregate = jobBody(ecosystemBenchmark, "sentinel");
-  assert.match(aggregate, /^\s+needs: sentinel-family$/m);
-  assert.match(aggregate, /^\s+SHARD_RESULT: \$\{\{ needs\.sentinel-family\.result \}\}$/m);
 });

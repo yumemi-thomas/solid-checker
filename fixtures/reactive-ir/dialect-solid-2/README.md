@@ -1,10 +1,3 @@
 # dialect-solid-2
 
-Half of a pair. `App.tsx` and `tsconfig.json` here are byte-identical to
-`dialect-solid-1x/`; the coverage runner asserts it. The package declaration
-is deliberately dialect-specific and preserves the real 2.0.0-rc.0
-`createEffect` overloads. `node_modules/solid-js/package.json` selects 2.0.
-
-Read the two snapshots side by side -- the diff between them is the whole
-point, and it is the only automated evidence that the 1.x adapter does
-anything.
+Half of a retired pair (the 1.x half is gone): the package declaration preserves the real 2.0.0-rc.0 `createEffect` overloads and `node_modules/solid-js/package.json` selects 2.0 (the stub selects the reviewed dialect; it does not authenticate installed runtime bytes). It pins the native Solid 2 findings in `App.tsx`: `SC7001` violations for the missing apply function (`OneArgument`) and for casts that leave a provably non-callable effect argument, an uncertifiable `SC7001` under a `"use server"` directive, `SC7002` for an async `{ sync: true }` memo, `SC4001` for the module-level `createReaction` trackers and `SeedOrApply`, and `SC1001` for the apply callback's untracked read; calls the published typings already reject stay silent. The retired contract-catalog checks (ADR 0027) no longer apply.

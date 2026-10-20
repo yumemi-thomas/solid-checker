@@ -1,33 +1,28 @@
 //! Build entry points and the staged incremental pipeline that
 //! assembles a `Program`, plus the bounded-parallelism helpers.
 
-use std::{
-    cell::Cell,
-    collections::{BTreeMap, HashMap, HashSet},
-    sync::Arc,
-    time::Instant,
-};
+use crate::{HashMap, HashSet};
+use std::{cell::Cell, sync::Arc, time::Instant};
 
+use crate::boundary_defects::discover_boundary_defects;
 use crate::cache::{BuildCaches, ReusePlan, build_typescript_indexes};
-use crate::contract_semantics::AcceptedContractIndex;
-use crate::contracts::{
-    ResolvedContractBinding, accepted_bundled_returns, resolve_accepted_contract_imports,
-};
+use crate::hosts::ProjectHostIndex;
 use crate::identity::{SymbolId, SymbolName};
 use crate::indexes::{CachedAstFileIndex, EntitySymbols, ProjectIndexes, SemanticLookup};
+use crate::package_boundary::PackageBoundary;
 use crate::reachability::{ReachabilityInputs, reachability_stage};
 use crate::source_discovery::{StageContext, discover_sources};
 use crate::symbols::{add_solid_import_names, patch_typescript_indexes};
 use crate::timings::{ReactiveIrStage, StageClock};
 use crate::{
-    ActionInvocation, AsyncRead, BuildError, BuildTimings, ContractExport,
-    ContractGenerationObligation, LeafOwnerOperation, ObligationCounts, ObligationReach,
+    ActionInvocation, AsyncRead, BuildError, BuildTimings, LeafOwnerOperation, ObligationCounts,
     OwnerRequirement, PrimitiveCreation, Program, ReactiveRead, ReactiveSourceKind, ReactiveWrite,
-    RuleOptions, Solid1xRuleOptions, StaticDefect, StaticViolation, location_order,
+    RuleOptions, StaticDefect, StaticViolation, location_order,
 };
 use crate::{
     cleanup, directives, owners, reactive_analysis, server_rules, static_api, static_rules,
 };
+use sha2::{Digest as _, Sha256};
 use solid_dialect::Dialect;
 use solid_facts::core::Span;
 use solid_facts::{FileFacts, ProjectFacts};
@@ -38,6 +33,10 @@ use typefacts::Location;
 /// of its signature rather than ambient mutation of a shared function body.
 #[derive(Default)]
 pub(crate) struct ProgramDraft {
+    pub(crate) source_call_targets:
+        Arc<HashMap<Location, crate::interproc::accessor_provenance::Callable>>,
+    pub(crate) apply_compute_reads: HashSet<Location>,
+    pub(crate) development_feedback: Vec<crate::development_feedback::DevelopmentFile>,
     pub(crate) reads: Vec<ReactiveRead>,
     pub(crate) writes: Vec<ReactiveWrite>,
     pub(crate) action_invocations: Vec<ActionInvocation>,
@@ -46,14 +45,10 @@ pub(crate) struct ProgramDraft {
     pub(crate) static_defects: Vec<StaticDefect>,
     pub(crate) leaf_operations: Vec<LeafOwnerOperation>,
     pub(crate) directive_creations: Vec<PrimitiveCreation>,
+    pub(crate) undecided_component_regions: Vec<crate::UndecidedRegion>,
     pub(crate) missing_owners: Vec<OwnerRequirement>,
-    pub(crate) contract_exports: Arc<BTreeMap<String, ContractExport>>,
-    pub(crate) contract_generation_obligations: Vec<ContractGenerationObligation>,
     pub(crate) strict_read_obligations: usize,
     pub(crate) write_action_obligations: HashSet<(&'static str, String, u64, u64)>,
-    /// How contract binding answered, carried through so a refusal is
-    /// countable in the finished [`Program`].
-    pub(crate) contract_binding: crate::ContractBindingCounts,
     /// One static diagnostic per (rule, file, offset) identity, across the
     /// stages that share an identity space.
     pub(crate) seen_diagnostics: HashSet<(&'static str, Arc<str>, u64)>,
@@ -78,8 +73,8 @@ impl ProgramDraft {
         }
     }
 
-    /// Removes source-derived diagnostics and contract-generation obligations
-    /// whose primary operation the compiler proved it deleted.
+    /// Removes source-derived diagnostics whose primary operation the
+    /// compiler proved it deleted.
     ///
     /// These tables are intentionally filtered together at the last common
     /// pipeline seam. Their producers range from API-shape checks through the
@@ -111,16 +106,10 @@ impl ProgramDraft {
             .retain(|violation| retained(&violation.location));
         self.directive_creations
             .retain(|creation| retained(&creation.location));
-        self.contract_generation_obligations
-            .retain(|obligation| retained(&obligation.location));
     }
 
     /// Orders every table by location and assembles the final [`Program`].
-    pub(crate) fn into_program(
-        mut self,
-        factory_instances: usize,
-        obligation_reach: Vec<ObligationReach>,
-    ) -> Program {
+    pub(crate) fn into_program(mut self, factory_instances: usize) -> Program {
         self.reads
             .sort_by(|left, right| location_order(&left.location, &right.location));
         self.writes
@@ -137,9 +126,10 @@ impl ProgramDraft {
             .sort_by(|left, right| location_order(&left.location, &right.location));
         self.async_reads
             .sort_by(|left, right| location_order(&left.location, &right.location));
-        self.contract_generation_obligations
-            .sort_by(|left, right| location_order(&left.location, &right.location));
         Program {
+            apply_compute_reads: self.apply_compute_reads,
+            runtime_configuration: crate::RuntimeConfigurationPremise::Assumed,
+            development_feedback: self.development_feedback,
             reads: self.reads,
             writes: self.writes,
             actions: self.action_invocations,
@@ -149,15 +139,12 @@ impl ProgramDraft {
             directive_creations: self.directive_creations,
             missing_owners: self.missing_owners,
             async_reads: self.async_reads,
-            contract_exports: self.contract_exports,
-            contract_generation_obligations: self.contract_generation_obligations,
-            obligation_reach,
+            undecided_component_regions: self.undecided_component_regions,
             obligation_counts: ObligationCounts {
                 strict_reads: self.strict_read_obligations,
                 writes_and_actions: self.write_action_obligations.len(),
                 factory_instances,
             },
-            contract_binding: self.contract_binding,
         }
     }
 }
@@ -173,6 +160,8 @@ pub(crate) struct AnalysisContext<'a> {
     pub(crate) symbol_names: &'a HashMap<SymbolId, SymbolName>,
     pub(crate) aliases: &'a HashMap<SymbolId, SymbolId>,
     pub(crate) accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
+    /// ADR 0294: typed candidates, never proven sources.
+    pub(crate) typed_sources: &'a HashMap<SymbolId, crate::source_discovery::TypedSource>,
     pub(crate) setters: &'a HashMap<SymbolId, (SymbolId, Location, bool, ReactiveSourceKind)>,
     pub(crate) actions: &'a HashMap<SymbolId, (SymbolId, Location)>,
     pub(crate) prop_sources: &'a HashMap<SymbolId, (SymbolId, Location)>,
@@ -185,16 +174,68 @@ pub(crate) struct AnalysisContext<'a> {
     pub(crate) value_form_stores: &'a HashSet<SymbolId>,
     pub(crate) reachable_calls: &'a HashMap<Location, usize>,
     pub(crate) symbols_by_root: &'a HashMap<SymbolId, Vec<SymbolId>>,
-    pub(crate) contracted: &'a HashMap<SymbolId, ResolvedContractBinding>,
     pub(crate) rule_options: &'a RuleOptions,
-    pub(crate) solid1x_rule_options: &'a Solid1xRuleOptions,
+}
+
+/// What one analysis is given about the code it cannot read: the package
+/// boundary, every import the analysis cannot answer from source, each with
+/// the cause recorded at the decision that found it.
+///
+/// `hosts` is the inferred execution host. The IR pipeline fingerprints it
+/// and never reads it.
+#[derive(Clone, Copy, Debug)]
+pub struct AnalysisInputs<'a> {
+    pub boundary: &'a PackageBoundary,
+    pub hosts: Option<&'a ProjectHostIndex>,
+}
+
+impl<'a> AnalysisInputs<'a> {
+    /// No recorded boundary and no host: every caller that has not been given
+    /// one.
+    #[must_use]
+    pub fn empty() -> Self {
+        static EMPTY: std::sync::OnceLock<PackageBoundary> = std::sync::OnceLock::new();
+        Self {
+            boundary: EMPTY.get_or_init(PackageBoundary::default),
+            hosts: None,
+        }
+    }
+
+    /// These inputs with an inferred host.
+    #[must_use]
+    pub fn with_hosts(self, hosts: &'a ProjectHostIndex) -> Self {
+        Self {
+            hosts: Some(hosts),
+            ..self
+        }
+    }
+
+    /// The cache identity of the inputs. An empty boundary and an absent host
+    /// add nothing; any recorded cause, explanation included, and every byte
+    /// of a host is part of it.
+    #[must_use]
+    pub fn cache_fingerprints(&self) -> Vec<[u8; 32]> {
+        let mut fingerprints = Vec::new();
+        if !self.boundary.is_empty() {
+            fingerprints.push(self.boundary.digest());
+        }
+        if let Some(hosts) = self.hosts {
+            let mut hash = Sha256::new();
+            hash.update(b"project-host-index-v1");
+            // Deterministic BTree collections; include config, integration,
+            // source inventory, roots and the final conservative join.
+            hash.update(serde_json::to_vec(hosts).expect("host index is serializable"));
+            fingerprints.push(hash.finalize().into());
+        }
+        fingerprints
+    }
 }
 
 pub fn build(facts: &ProjectFacts, dialect: &dyn Dialect) -> Result<Program, BuildError> {
-    build_with_accepted_contracts_measured(
+    build_with_analysis_inputs_measured(
         facts,
         dialect,
-        &AcceptedContractIndex::default(),
+        AnalysisInputs::empty(),
         &RuleOptions::default(),
     )
     .map(|(program, _)| program)
@@ -203,7 +244,7 @@ pub fn build(facts: &ProjectFacts, dialect: &dyn Dialect) -> Result<Program, Bui
 /// The staged incremental pipeline. One stage per clock span, in order:
 ///
 /// 1. Project indexes, the late-stage cache gate, TypeScript indexes,
-///    symbol names, contract resolution, and the semantic lookup.
+///    symbol names, boundary defects, and the semantic lookup.
 /// 2. Source discovery and reachability, in two parallel lanes.
 /// 3. The static prepass ([`static_rules::static_prepass`]).
 /// 4. Local accesses and the interprocedural fixed point, two lanes again.
@@ -214,50 +255,34 @@ pub fn build(facts: &ProjectFacts, dialect: &dyn Dialect) -> Result<Program, Bui
 ///
 /// Stages read the shared [`AnalysisContext`], write the [`ProgramDraft`],
 /// and end their span on the [`StageClock`]; each late-stage cache sub-slot
-/// is handed to exactly one stage. See
-/// `docs/pipeline-orchestrator-redesign.md`.
-pub fn build_with_accepted_contracts_measured(
+/// is handed to exactly one stage.
+pub fn build_with_analysis_inputs_measured(
     facts: &ProjectFacts,
     dialect: &dyn Dialect,
-    contracts: &AcceptedContractIndex,
+    inputs: AnalysisInputs<'_>,
     rule_options: &RuleOptions,
 ) -> Result<(Program, BuildTimings), BuildError> {
-    build_with_accepted_contract_inputs_measured_incremental(
+    build_with_analysis_inputs_measured_incremental(
         facts,
         dialect,
-        contracts,
+        inputs,
         rule_options,
         BuildCaches::default(),
+        crate::runtime_configuration::scan(facts, dialect),
     )
 }
 
-pub(crate) fn build_with_accepted_contracts_measured_incremental(
+pub(crate) fn build_with_analysis_inputs_measured_incremental(
     facts: &ProjectFacts,
     dialect: &dyn Dialect,
-    contracts: &AcceptedContractIndex,
+    inputs: AnalysisInputs<'_>,
     rule_options: &RuleOptions,
     caches: BuildCaches<'_>,
-) -> Result<(Program, BuildTimings), BuildError> {
-    build_with_accepted_contract_inputs_measured_incremental(
-        facts,
-        dialect,
-        contracts,
-        rule_options,
-        caches,
-    )
-}
-
-fn build_with_accepted_contract_inputs_measured_incremental(
-    facts: &ProjectFacts,
-    dialect: &dyn Dialect,
-    contracts: &AcceptedContractIndex,
-    rule_options: &RuleOptions,
-    caches: BuildCaches<'_>,
+    runtime_configuration: crate::RuntimeConfigurationPremise,
 ) -> Result<(Program, BuildTimings), BuildError> {
     let BuildCaches {
         ast_indexes: ast_indexes_cache,
         source_discovery: source_discovery_cache,
-        typed_accessors: typed_accessor_cache,
         interprocedural_graph: interprocedural_graph_cache,
         interprocedural_results: interprocedural_result_cache,
         typescript_indexes: typescript_indexes_cache,
@@ -366,31 +391,34 @@ fn build_with_accepted_contract_inputs_measured_incremental(
     add_solid_import_names(facts, entities, dialect, &mut symbol_names);
     build_timings.symbol_name_indexes = substage_started.elapsed();
     let substage_started = Instant::now();
-    let mut resolved_contracts =
-        resolve_accepted_contract_imports(facts, contracts, entities, dialect);
-    let bundled_returns = accepted_bundled_returns(facts, contracts);
-    build_timings.contract_resolution = substage_started.elapsed();
-    let missing_contract_exports = std::mem::take(&mut resolved_contracts.missing_exports);
+    // An import the analysis cannot answer from source is the package
+    // boundary's question.
+    let boundary_defects = discover_boundary_defects(facts, inputs, entities, dialect);
+    build_timings.boundary_defects = substage_started.elapsed();
     let semantic_lookup = SemanticLookup::new(
         facts,
         ast_indexes,
         entities,
         &symbol_names,
         dialect,
-        &resolved_contracts,
         rule_options.runtime.program_is_closed(),
-    );
+    )
+    .with_router_install(rule_options.runtime.router_install.clone());
     let semantic_lookup = &semantic_lookup;
     let reuse = ReusePlan::prepare(
         facts,
         late_stage_cache.as_deref_mut(),
-        semantic_lookup.cross_file_proof_digest(),
+        semantic_lookup.member_resolution_digest(),
     );
     // Source discovery does not inspect missing exports, and the static prepass
     // owns them after the two independent index passes complete.
     let mut draft = ProgramDraft {
-        static_defects: missing_contract_exports,
-        contract_binding: resolved_contracts.counts,
+        development_feedback: if rule_options.development_feedback {
+            crate::development_feedback::models(facts, semantic_lookup, dialect)
+        } else {
+            Vec::new()
+        },
+        static_defects: boundary_defects,
         ..ProgramDraft::default()
     };
     let mut owned_reachable_calls = None;
@@ -405,8 +433,6 @@ fn build_with_accepted_contract_inputs_measured_incremental(
         source_declarations,
         symbol_names: &symbol_names,
         semantic_lookup,
-        resolved_contracts: &resolved_contracts,
-        bundled_returns: &bundled_returns,
         runtime: &rule_options.runtime,
     };
     let discover = move || {
@@ -487,6 +513,7 @@ fn build_with_accepted_contract_inputs_measured_incremental(
         symbol_names: &symbol_names,
         aliases,
         accessors: &source_discovery.accessors,
+        typed_sources: &source_discovery.typed_sources,
         setters: &source_discovery.setters,
         actions: &source_discovery.actions,
         prop_sources: &source_discovery.prop_sources,
@@ -499,9 +526,7 @@ fn build_with_accepted_contract_inputs_measured_incremental(
         value_form_stores: &source_discovery.value_form_stores,
         reachable_calls,
         symbols_by_root: &typescript_indexes.symbols_by_root,
-        contracted: &resolved_contracts.by_symbol,
         rule_options,
-        solid1x_rule_options: &rule_options.solid1x,
     };
     static_rules::static_prepass(&analysis, &mut draft);
     clock.finish(&mut build_timings, ReactiveIrStage::StaticPrepass);
@@ -514,7 +539,6 @@ fn build_with_accepted_contract_inputs_measured_incremental(
             typescript_delta: typescript_indexes.source_discovery_delta.as_ref(),
         },
         reactive_analysis::IncrementalCaches {
-            typed_accessors: typed_accessor_cache,
             interprocedural_graph: interprocedural_graph_cache,
             interprocedural_results: interprocedural_result_cache,
             late_stages: late_stage_cache.as_deref_mut().and_then(Option::as_mut),
@@ -524,12 +548,14 @@ fn build_with_accepted_contract_inputs_measured_incremental(
         &mut build_timings,
         &mut clock,
     );
+    static_rules::reactive_read_after_await_through_calls(&analysis, &mut draft);
     cleanup::collect_project(&analysis, &mut draft);
     clock.finish(&mut build_timings, ReactiveIrStage::LeafAndCleanup);
     static_api::check_project(&analysis, &mut draft);
     server_rules::check_project(&analysis, &mut draft);
     clock.finish(&mut build_timings, ReactiveIrStage::StaticApi);
     directives::discover_directive_creations(&analysis, &mut draft);
+    draft.undecided_component_regions = semantic_lookup.undecided_component_regions();
     clock.finish(&mut build_timings, ReactiveIrStage::Directives);
     owners::collect_project(
         &analysis,
@@ -543,21 +569,19 @@ fn build_with_accepted_contract_inputs_measured_incremental(
     clock.finish(&mut build_timings, ReactiveIrStage::OwnerFixedPoint);
     // Static and compatibility passes deliberately operate on source facts.
     // Apply the compiler's stronger "this code was not emitted" fact once,
-    // after every producer has run and before unresolved obligations are
-    // attributed to exported surfaces.
+    // after every producer has run.
     draft.discard_deleted_static_diagnostics(facts);
-    // Every stage that can file an unresolved obligation has run, so the
-    // attribution question is answerable exactly once, over the final defect
-    // list, rather than per stage over a partial one.
-    let obligation_reach = crate::attribution::obligation_reach(
+    crate::effect_execution::gate_diagnostics(semantic_lookup, &mut draft);
+    crate::attribution::discharge_closed_program_export_dispatch(
         facts,
         semantic_lookup,
         entities,
         aliases,
         &typescript_indexes.symbols_by_root,
-        &draft.static_defects,
+        &mut draft.static_defects,
     );
-    let program = draft.into_program(factory_instances, obligation_reach);
+    let mut program = draft.into_program(factory_instances);
+    program.runtime_configuration = runtime_configuration;
     clock.finish(&mut build_timings, ReactiveIrStage::FinalOrdering);
     build_timings.total = total_started.elapsed();
     Ok((program, build_timings))

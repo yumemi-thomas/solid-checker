@@ -32,10 +32,10 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-read-after-await",
-      "code": "SC1002",
-      "kind": "violation",
-      "severity": "error",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
       "path": "fixtures/engine/eslint-reactivity-v2/after-await-member.tsx",
       "start": 183,
       "end": 193,
@@ -62,10 +62,10 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-read-after-await",
-      "code": "SC1002",
-      "kind": "violation",
-      "severity": "error",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
       "path": "fixtures/engine/eslint-reactivity-v2/after-await-parameter.tsx",
       "start": 198,
       "end": 202,
@@ -184,7 +184,7 @@
     {
       "rule": "components-return-once",
       "code": "SC1004",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/engine/eslint-reactivity-v2/component-reactive-conditional-return.tsx",
       "start": 53,
@@ -194,7 +194,7 @@
     {
       "rule": "components-return-once",
       "code": "SC1004",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/engine/eslint-reactivity-v2/component-reactive-early-return.tsx",
       "start": 50,
@@ -222,23 +222,23 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/engine/eslint-reactivity-v2/effect-apply-member.tsx",
       "start": 140,
-      "end": 152,
+      "end": 150,
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/engine/eslint-reactivity-v2/effect-apply-parameter.tsx",
       "start": 129,
-      "end": 135,
+      "end": 133,
       "fixes": 0
     },
     {

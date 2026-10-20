@@ -1,0 +1,7 @@
+{
+  "name": "inferred-host-dynamic-unknown",
+  "type": "module",
+  "scripts": {
+    "build": "vite build"
+  }
+}

@@ -182,6 +182,16 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/static-api/App.tsx",
+      "start": 2276,
+      "end": 2284,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-write-in-owned-scope",
       "code": "SC2001",
       "kind": "violation",

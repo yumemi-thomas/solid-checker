@@ -1,0 +1,51 @@
+{
+  "package": "@tybys/wasm-util",
+  "version": "0.10.3",
+  "registryTarball": "https://registry.npmjs.org/@tybys/wasm-util/-/wasm-util-0.10.3.tgz",
+  "lockIntegrity": "sha512-F3fo1MYrRJYL3zER0OUOmkutjr1Vp23m7OsSgp7nq4SP6OqX6C/56XFIPAl5bt3zaBRjmW7SGz3u/6LwFpYcOg==",
+  "provenance": "The upstream bytes below are the files installed in packages/wasm/node_modules/@tybys/wasm-util at version 0.10.3 (both lockfiles pin it). On 2026-10-15 they were also compared, file for file, with the local npm cache's copy of the registry tarball above, whose sha512 equals the lock integrity (tarball sha256 509f6b8f8fca49118dbb2a7fd7726e5b6fe4b5a22344c9ce91eefdd8dcd34761); every file was identical. That is a local comparison with npm's cached download, not a fresh registry fetch.",
+  "upstreamFiles": {
+    "lib/mjs/webassembly.mjs": "91325003629e1127c0e504fca01202478c7b86c240d06d26506e3a6f387152aa",
+    "lib/mjs/memory.mjs": "a4d5d55b4ffa514f42cc417cfc93f8ff581b4b6fec634e9052218e0d8ea2d008",
+    "lib/mjs/jspi.mjs": "5146843a4f313cc41937d7f4b593d7f9307cfd0ea0ccbfb6b7da5cffa3d58579",
+    "lib/mjs/wasi/index.mjs": "daaeec31469c5c895f1e631ac52ee4a35fa113ccd45929aafe5eacc50d334fd1",
+    "lib/mjs/wasi/preview1.mjs": "4494e0e8762bbb4f6348dca4ff16e8f168532ab2ea170abc7905a7c496c0abc1",
+    "lib/mjs/wasi/path.mjs": "13d2048be07ff7be2bbbb9f304b6bd7e4c57fd3db6761bce42bb1307303268c9",
+    "lib/mjs/wasi/types.mjs": "c8c6eeed1eeff08504af69068416145e8237cd978fb3dae5fdb939944f226837",
+    "lib/mjs/wasi/fd.mjs": "feb7ed568ac13a9a4b375ff9db9eb0bcbb5bbf69c202bbeece767d7338e090da",
+    "lib/mjs/wasi/error.mjs": "83f14b24535486987c23b24aad0296ee5e2ceecf2bff428cb279fa23e5e55f8e",
+    "lib/mjs/wasi/util.mjs": "7db52c92ed46715c8b8567a117c2abb34375766986d32a78afc14d2bbfc7d077",
+    "lib/mjs/wasi/rights.mjs": "f70dba81c11077000d04a741de1edc759f0df47750a02f470531e5163a326cd7"
+  },
+  "ownedFiles": {
+    "lib/mjs/webassembly.mjs": "91325003629e1127c0e504fca01202478c7b86c240d06d26506e3a6f387152aa",
+    "lib/mjs/memory.mjs": "a4d5d55b4ffa514f42cc417cfc93f8ff581b4b6fec634e9052218e0d8ea2d008",
+    "lib/mjs/jspi.mjs": "5146843a4f313cc41937d7f4b593d7f9307cfd0ea0ccbfb6b7da5cffa3d58579",
+    "lib/mjs/wasi/index.mjs": "daaeec31469c5c895f1e631ac52ee4a35fa113ccd45929aafe5eacc50d334fd1",
+    "lib/mjs/wasi/preview1.mjs": "d955989e48f9cd5fcb6f479a76ea669efdfeed53157ded6a643ef94e57a701fb",
+    "lib/mjs/wasi/path.mjs": "13d2048be07ff7be2bbbb9f304b6bd7e4c57fd3db6761bce42bb1307303268c9",
+    "lib/mjs/wasi/types.mjs": "c8c6eeed1eeff08504af69068416145e8237cd978fb3dae5fdb939944f226837",
+    "lib/mjs/wasi/fd.mjs": "feb7ed568ac13a9a4b375ff9db9eb0bcbb5bbf69c202bbeece767d7338e090da",
+    "lib/mjs/wasi/error.mjs": "83f14b24535486987c23b24aad0296ee5e2ceecf2bff428cb279fa23e5e55f8e",
+    "lib/mjs/wasi/util.mjs": "7db52c92ed46715c8b8567a117c2abb34375766986d32a78afc14d2bbfc7d077",
+    "lib/mjs/wasi/rights.mjs": "f70dba81c11077000d04a741de1edc759f0df47750a02f470531e5163a326cd7",
+    "lib/mjs/wasi/physical.mjs": "f3e6ff9a3f22a66d08d026f9f3c4ea5654fb11eadd004e982a80173a2c4a4c3b"
+  },
+  "changedFiles": [
+    "lib/mjs/wasi/preview1.mjs"
+  ],
+  "addedFiles": [
+    "lib/mjs/wasi/physical.mjs"
+  ],
+  "patch": "owned.patch (unified diff, apply with patch -p1 inside a copy of the upstream package)",
+  "licenses": {
+    "LICENSE": {
+      "source": "https://raw.githubusercontent.com/toyobayashi/wasm-util/master/LICENSE, retrieved 2026-10-15; byte-identical to the LICENSE shipped in @tybys/wasm-util@0.10.4 (local bun cache). The 0.10.3 tarball ships none, and the v0.10.3 tag URL returns 404.",
+      "sha256": "09e436100bf926e78df875ec80cf3d0c643dfec779b52cfe2aa96afa0de714cb"
+    },
+    "nodePathNotice": {
+      "source": "https://raw.githubusercontent.com/nodejs/node/v24.11.1/lib/path.js, retrieved 2026-10-15, lines 1-20",
+      "fileSha256": "dd326ecdc2d6ad2025c4991f4b480d76a9f1d52b7f6d0988a5dc0a1d02de5209"
+    }
+  }
+}

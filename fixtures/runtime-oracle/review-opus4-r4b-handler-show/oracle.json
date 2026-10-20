@@ -1,0 +1,11 @@
+{
+  "note": "Opus review round 4 (r4b-handler-show): component children, frozen handlers, Show/Match arity, Loading through wrappers",
+  "steps": [
+    {
+      "action": "assert-text",
+      "id": "ran",
+      "selector": "#last",
+      "text": "B"
+    }
+  ]
+}

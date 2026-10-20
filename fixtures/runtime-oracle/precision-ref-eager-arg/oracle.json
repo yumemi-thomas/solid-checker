@@ -1,0 +1,1 @@
+{ "note": "Precision probe 2026-10-19: an eager argument of a ref expression runs while rendering, under the component's owner. The onCleanup witness raises no NO_OWNER_CLEANUP, so SC6001 on the memo beside it was a false violation (fixture reactive-ir/directive-owned-subscopes)." }

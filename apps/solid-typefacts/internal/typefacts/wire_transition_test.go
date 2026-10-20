@@ -56,6 +56,35 @@ func TestStreamedWireTransitionIsByteIdentical(t *testing.T) {
 	}
 }
 
+func TestLibraryBindingChangesRowsButFrozenSchemasOmitIt(t *testing.T) {
+	table := goldenWireTable()
+	before := *table.Entities[0].ResolvedCall
+	after := before
+	after.DefaultLibraryBinding = &ResolvedDeclaration{
+		Symbol: "symbol:h:library", Name: "setTimeout", Kind: "FunctionDeclaration",
+		Location:      Location{Path: "bundled:/libs/lib.dom.d.ts", StartByte: 1, EndByte: 11},
+		QualifiedName: "setTimeout", SourceFile: "bundled:/libs/lib.dom.d.ts", StandardLibrary: true,
+	}
+	if resolvedCallEqual(&before, &after) {
+		t.Fatal("binding changes must invalidate an entity row")
+	}
+	encode := func(schema uint64, call *Call) []byte {
+		t.Helper()
+		table.Entities[0].ResolvedCall = call
+		encoded, err := (&wireTransitionEncoder{tableSchema: schema}).Encode(wireTransitionInput{ProjectID: table.ProjectID, Target: &table})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return encoded.Bytes
+	}
+	if !bytes.Equal(encode(TypeFactsTableSchemaVersionV19, &before), encode(TypeFactsTableSchemaVersionV19, &after)) {
+		t.Fatal("v19 must remain frozen")
+	}
+	if bytes.Equal(encode(TypeFactsTableSchemaVersionV20, &before), encode(TypeFactsTableSchemaVersionV20, &after)) {
+		t.Fatal("v20 lost library binding")
+	}
+}
+
 func TestBorrowedEntityRunsEncodeByteIdentically(t *testing.T) {
 	flat := goldenWireTable()
 	expected, err := (&wireTransitionEncoder{}).Encode(wireTransitionInput{

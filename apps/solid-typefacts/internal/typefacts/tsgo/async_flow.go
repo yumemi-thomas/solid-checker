@@ -372,8 +372,56 @@ func scanAsyncFlow(p *project, path string, sourceFile *ast.SourceFile, root, no
 		*state = mergeAsyncBranches(trueState, falseState)
 		return
 	}
+	// ADR 0320: constructs that may skip an await. A labelled statement's
+	// body can be left by `break label` past an await written in it; the
+	// right side of a logical assignment runs only when the target allows; a
+	// destructuring default runs only for `undefined`; an optional chain
+	// skips its arguments and keys when its base is nullish. None of their
+	// awaits dominates what follows them.
+	if ast.IsLabeledStatement(node) {
+		bodyState := *state
+		scanAsyncFlow(p, path, sourceFile, root, node.AsLabeledStatement().Statement, &bodyState, calls)
+		*state = mergeAsyncBranches(*state, bodyState)
+		return
+	}
+	if ast.IsOptionalChain(node) {
+		if ast.IsCallExpression(node) && state.awaited {
+			if call, ok := p.sourceCallFact(path, sourceFile, node); ok {
+				*calls = append(*calls, call.Callee)
+			}
+		}
+		chainState := *state
+		node.ForEachChild(func(child *ast.Node) bool {
+			scanAsyncFlow(p, path, sourceFile, root, child, &chainState, calls)
+			return false
+		})
+		*state = mergeAsyncBranches(*state, chainState)
+		return
+	}
+	if ast.IsBindingElement(node) && node.AsBindingElement().Initializer != nil {
+		defaultState := *state
+		scanAsyncFlow(p, path, sourceFile, root, node.AsBindingElement().Initializer, &defaultState, calls)
+		*state = mergeAsyncBranches(*state, defaultState)
+		return
+	}
+	if ast.IsShorthandPropertyAssignment(node) && node.AsShorthandPropertyAssignment().ObjectAssignmentInitializer != nil {
+		defaultState := *state
+		scanAsyncFlow(p, path, sourceFile, root, node.AsShorthandPropertyAssignment().ObjectAssignmentInitializer, &defaultState, calls)
+		*state = mergeAsyncBranches(*state, defaultState)
+		return
+	}
 	if ast.IsBinaryExpression(node) {
 		expression := node.AsBinaryExpression()
+		destructuringDefault := expression.OperatorToken.Kind == ast.KindEqualsToken &&
+			node.Parent != nil &&
+			(ast.IsArrayLiteralExpression(node.Parent) || ast.IsPropertyAssignment(node.Parent))
+		if ast.IsLogicalOrCoalescingAssignmentOperator(expression.OperatorToken.Kind) || destructuringDefault {
+			scanAsyncFlow(p, path, sourceFile, root, expression.Left, state, calls)
+			rightState := *state
+			scanAsyncFlow(p, path, sourceFile, root, expression.Right, &rightState, calls)
+			*state = mergeAsyncBranches(*state, rightState)
+			return
+		}
 		if expression.OperatorToken.Kind == ast.KindAmpersandAmpersandToken ||
 			expression.OperatorToken.Kind == ast.KindBarBarToken ||
 			expression.OperatorToken.Kind == ast.KindQuestionQuestionToken {

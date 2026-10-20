@@ -83,30 +83,16 @@ type project struct {
 	// rather than once per returned-callable resolution. Checker-owned symbol
 	// pointers make it generation-scoped, like runtimePaths.
 	assignedSymbols map[*ast.SourceFile]map[*ast.Symbol]struct{}
-	// calleeInvocations memoizes what a callable's body does with its own
-	// parameters, per callee symbol *and the depth it was asked at*, for the
-	// accepted generation. The descent reads a whole body per callee and real
-	// packages call the same small helpers from every export, so the answer is
-	// asked for far more often than it changes.
-	//
-	// The depth belongs in the key because it is an input to the answer. The
-	// walk refuses below maxCalleeInvocationDepth, so a callee asked at depth 3
-	// has one body of headroom where the same callee asked at depth 0 has four,
-	// and the deeper question can be answered "no evidence" where the shallower
-	// one is answered exactly. Keying by symbol alone let a warm entry lend its
-	// headroom to a later, deeper question: an export certified or not
-	// depending on which *other* exports had been demanded before it, over the
-	// same source and the same binaries. Nothing in a receipt, a gate-cache key
-	// or a proof digest names the demand list, so that dependence had to go.
-	//
-	// Only an *exact* answer is stored — one computed without a depth cut, a
-	// cycle cut, or an exhausted budget. An exact answer met no cut, so it does
-	// not depend on the interprocedural cycle guard's contents either, and a
-	// hit returns precisely what recomputing at that same depth would. With the
-	// depth in the key that makes the emitted fact set a pure function of the
-	// program. Checker-owned symbol pointers make it generation-scoped, like
-	// assignedSymbols.
-	calleeInvocations map[calleeInvocationKey]*calleeInvocationFacts
+	// Dot and literal-keyed writes veto a global library-binding fallback regardless
+	// of receiver spelling (window aliases included). Rebuilt each generation.
+	libraryPropertyWrites map[string]bool
+	// ownLiteralSymbols memoizes ADR 0044's answer per symbol: the variable
+	// declaration a name is bound to when this program initialized it from an
+	// object or array literal, or nil. Keyed by symbol rather than by file
+	// because a module-level lookup table is read through an *import* at its
+	// use site, so the declaration is behind an alias. A premise twin is a
+	// different program with different symbols and never shares entries.
+	ownLiteralSymbols map[*ast.Symbol]*ast.Node
 	// resolved-call caches are generation-scoped and populated only by
 	// resolvedCall demands. Signatures and symbols are checker-owned pointers,
 	// so every accepted update drops the maps as it installs the new checker.
@@ -118,6 +104,25 @@ type project struct {
 	// types. TypeToString is presentation work, not a semantic decision, and
 	// is disproportionately allocation-heavy when repeated per call.
 	typeDescriptors map[*checker.Type]*typefacts.TypeDescriptor
+	// apparentFunctionMembers is the global `Function` interface's member
+	// names for the accepted generation, sorted. The callable-path census asks
+	// for them once per callable node, and the answer is a property of the
+	// program's lib and augmentations, not of the node. The resolved flag
+	// distinguishes "not asked yet" from "asked, and this program declares no
+	// global Function".
+	apparentFunctionMembers         []string
+	apparentFunctionMembersResolved bool
+	// objectMemberNames is the global `Object` interface's member names.
+	// Cross-alternative census reconciliation asks whether a name could be
+	// answered by the `Object` fallback the declared census never enumerates,
+	// and must not synthesize an absence for one. The resolved flag separates
+	// "not asked yet" from "asked, and this program declares no global
+	// Object" — the latter suppresses every absence, because without the set
+	// an absence cannot be told from a fallback member. Dropped with
+	// apparentFunctionMembers; both are properties of the program's lib and
+	// augmentations.
+	objectMemberNames         map[string]struct{}
+	objectMemberNamesResolved bool
 	// declarationShapes caches diagnostic-free exported contracts for the
 	// accepted program generation. Incremental updates need only emit the
 	// candidate generation's shape; semantically affected files are evicted
@@ -148,12 +153,24 @@ type project struct {
 // OpenProject opens one configured project. trace may be nil, which disables
 // backend tracing.
 func OpenProject(ctx context.Context, configPath string, trace typefacts.Trace) (typefacts.Project, error) {
+	return OpenProjectWithConfig(ctx, configPath, nil, trace)
+}
+
+// OpenProjectWithConfig is OpenProject with configSource, when it is not nil,
+// as the bytes of configPath. They are an overlay at that exact path, so the
+// configuration is anchored where it would be on disk (its directory, default
+// type roots, `${configDir}`) while nothing is written there, and every later
+// rebuild reads the same bytes.
+func OpenProjectWithConfig(ctx context.Context, configPath string, configSource *string, trace typefacts.Trace) (typefacts.Project, error) {
 	absConfigPath, err := filepath.Abs(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("resolve tsconfig path: %w", err)
 	}
 	absConfigPath = normalizeTypeScriptPath(absConfigPath)
 	fs := newOverlayFS(bundled.WrapFS(osvfs.FS()))
+	if configSource != nil {
+		fs.set(absConfigPath, *configSource)
+	}
 	program, typeChecker, release, err := buildProgram(ctx, absConfigPath, fs)
 	if err != nil {
 		return nil, err
@@ -275,12 +292,16 @@ func (p *project) ReleaseAnalysisState() {
 	p.currentSourceFiles = nil
 	p.runtimePaths = nil
 	p.assignedSymbols = nil
-	p.calleeInvocations = nil
+	p.libraryPropertyWrites = nil
 	p.resolvedDeclarations = nil
 	p.resolvedParameters = nil
 	p.callDiagnostics = nil
 	p.callDemandScratch = nil
 	p.typeDescriptors = nil
+	p.apparentFunctionMembers = nil
+	p.apparentFunctionMembersResolved = false
+	p.objectMemberNames = nil
+	p.objectMemberNamesResolved = false
 	p.nextSymbol = 0
 	p.referenceIndex.releaseAnalysisState()
 }
@@ -547,7 +568,7 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 	p.generation++
 	p.runtimePaths = nil
 	p.assignedSymbols = nil
-	p.calleeInvocations = nil
+	p.libraryPropertyWrites = nil
 	if incremental && incrementalPath != "" && currentExportsKnown {
 		if p.exportedIdentities == nil {
 			p.exportedIdentities = make(map[*ast.Symbol]preservedExportIdentity)
@@ -579,6 +600,10 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 	p.callDiagnostics = nil
 	p.callDemandScratch = nil
 	p.typeDescriptors = nil
+	p.apparentFunctionMembers = nil
+	p.apparentFunctionMembersResolved = false
+	p.objectMemberNames = nil
+	p.objectMemberNamesResolved = false
 	p.nextSymbol = 0
 
 	stageStarted = time.Now()
@@ -1566,6 +1591,10 @@ func (p *project) Close() error {
 	p.callDiagnostics = nil
 	p.callDemandScratch = nil
 	p.typeDescriptors = nil
+	p.apparentFunctionMembers = nil
+	p.apparentFunctionMembersResolved = false
+	p.objectMemberNames = nil
+	p.objectMemberNamesResolved = false
 	p.declarationShapes = nil
 	p.exportedIdentities = nil
 	p.exportedIdentitiesByRef = nil
@@ -1804,13 +1833,22 @@ func (p *project) canonicalSymbol(symbol *ast.Symbol) *ast.Symbol {
 		if symbol == nil || symbol.Flags&ast.SymbolFlagsAlias == 0 {
 			break
 		}
-		original := p.checker.GetAliasedSymbol(symbol)
+		original := p.formChecker().GetAliasedSymbol(symbol)
 		if original == nil || original == symbol {
 			break
 		}
 		symbol = original
 	}
 	return symbol
+}
+
+// formChecker is the checker the uncensused-form census asks: the premise
+// twin's while one is active (ADR 0038), the accepted program's otherwise.
+// Every symbol the twin's classifiers see was bound by the twin program, and
+// asking the accepted checker about it would answer about a node it never
+// checked; every symbol outside a twin census is the accepted program's.
+func (p *project) formChecker() *checker.Checker {
+	return p.checker
 }
 
 func declarationKind(node *ast.Node) string {

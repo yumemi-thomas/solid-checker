@@ -1,0 +1,3 @@
+# Dependency source: owner requirements at the project's call (ADR 0290)
+
+An owner requirement inside a package analyzed as source (`dep-timer`) is reported at the project's call that runs it, under that call's owner context (ADR 0275/0280; not in the package's own copy, ADR 0284): the operation and every call on the way must be on its function's every-completion path, or the call's arguments decide the branch. Numeric/arrow delays in `onClick`, `choice(false)` and after-`await` in `try` are violations; bodies, `bind`/`length`, scheduled references clean; signal arguments, `useMaybe`, shared helpers, owner guards, `catch`, after-await helpers uncertifiable. Stub: published 2.0.0-rc.13 signatures.

@@ -1,0 +1,155 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-tracked-compute/App.tsx",
+      "start": 495,
+      "end": 502,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-tracked-compute/App.tsx",
+      "start": 792,
+      "end": 799,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-tracked-compute/member-consumers.ts",
+      "start": 241,
+      "end": 349,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-tracked-compute/member-consumers.ts",
+      "start": 616,
+      "end": 754,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-tracked-compute/member-helpers.ts",
+      "start": 397,
+      "end": 500,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-tracked-compute/MemberContexts.tsx",
+      "start": 419,
+      "end": 426,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-tracked-compute/MemberContexts.tsx",
+      "start": 698,
+      "end": 705,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-tracked-compute/MemberContexts.tsx",
+      "start": 844,
+      "end": 851,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-tracked-compute/QueryOptions.tsx",
+      "start": 599,
+      "end": 605,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-tracked-compute/QueryOptions.tsx",
+      "start": 1109,
+      "end": 1115,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-tracked-compute/QueryOptions.tsx",
+      "start": 1363,
+      "end": 1369,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-tracked-compute/RoutedMembers.tsx",
+      "start": 515,
+      "end": 522,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-tracked-compute/RoutedMembers.tsx",
+      "start": 935,
+      "end": 942,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-tracked-compute/RoutedMembers.tsx",
+      "start": 1265,
+      "end": 1272,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-tracked-compute/RoutedMembers.tsx",
+      "start": 1446,
+      "end": 1453,
+      "fixes": 0
+    }
+  ]
+}

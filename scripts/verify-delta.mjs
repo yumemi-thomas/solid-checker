@@ -1,22 +1,30 @@
 #!/usr/bin/env bun
-// `make verify-delta`: AGENTS.md's "which check to run" table, mechanized.
+// `make verify-delta`: maps changed paths to the checks that own them.
 //
 // The table tells a reader which narrow check a change needs and which
 // expensive ones can wait. Applied by hand it is a judgement call made under
 // time pressure, which is the condition under which the wrong row gets picked.
 // This runs the table instead: it reads what actually changed, prints the row
-// it matched for every path, and runs exactly those checks plus the universal
-// handoff set the table always appends.
+// it matched for every path, and runs the universal preflight before the
+// selected tests and gates.
 //
-//   bun scripts/verify-delta.mjs             plan and run
-//   bun scripts/verify-delta.mjs --dry-run   print the plan, run nothing
+//   bun scripts/verify-delta.mjs              plan and run
+//   bun scripts/verify-delta.mjs --dry-run    print the plan, run nothing
+//   bun scripts/verify-delta.mjs --base REV   diff against REV (or SOLID_VERIFY_BASE;
+//                                             `make verify-delta BASE=REV`)
+//
+// Without an explicit base, the plan diffs against the last commit a full
+// `make verify` passed on with a clean tree (rust/target/verify-green-commit,
+// written by scripts/verify.sh) when that commit is an ancestor of HEAD, and
+// otherwise against origin/main. Everything since the last green run is
+// planned; nothing before it needs re-checking.
 //
 // **`make verify` remains the handoff authority.** This is the fast loop, and
 // it is only ever as good as the mapping below; a full run is what a claim of
 // "verified" rests on.
 //
 // The mapping fails closed. A path that matches no row -- `scripts/`, the
-// `Makefile`, `schema/`, `rust/Cargo.toml`, documentation, anything new --
+// `Makefile`, `schema/`, `rust/Cargo.toml`, `docs/rules/`, anything new --
 // escalates to the full `make verify`, and prints which path did it. An
 // unmapped path can change any answer in the repository, so guessing that it
 // changes none is the one failure mode this script must not have.
@@ -44,6 +52,7 @@ import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { identity as typefactsIdentity } from "./typefacts-source-identity.mjs";
+import { certificationEnvironment } from "./lib/certification-environment.mjs";
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -53,9 +62,9 @@ const DEBUG_CHECKER = "rust/target/debug/solid-checker-rust";
 const TYPEFACTS = "bin/solid-typefacts";
 
 /**
- * The checks, keyed by the identifier AGENTS.md's table uses.
+ * The checks, by identifier.
  *
- * Commands are the table's commands verbatim, including the toolchain pin and
+ * Commands carry the toolchain pin and
  * the `SOLID_TYPEFACTS_BIN` arming that fixture-driven process tests skip
  * silently without.
  */
@@ -67,7 +76,9 @@ export const CHECKS = {
     command: ["scripts/build-typefacts.sh"],
   },
   "build-debug": {
-    why: "coverage and the ownership gate must run a fresh debug binary, not a packaged one that can lag rust/ source",
+    why:
+      "coverage and the ownership gate must run a fresh debug binary, not a packaged one that can lag " +
+      "rust/ source",
     command: [
       "cargo", TOOLCHAIN, "build", "--manifest-path", MANIFEST,
       "-p", "solid-facts-backend", "--bin", "solid-checker-rust",
@@ -88,10 +99,10 @@ export const CHECKS = {
     ],
     env: { SOLID_TYPEFACTS_BIN: join(ROOT, TYPEFACTS) },
   },
-  "contract-process": {
+  "dialects-process": {
     command: [
       "cargo", TOOLCHAIN, "test", "--manifest-path", MANIFEST, "-p", "solid-facts-backend",
-      "--test", "contracts_process", "--test", "dialects_process",
+      "--test", "dialects_process",
     ],
     env: { SOLID_TYPEFACTS_BIN: join(ROOT, TYPEFACTS) },
   },
@@ -109,21 +120,32 @@ export const CHECKS = {
       SOLID_TYPEFACTS_BIN: join(ROOT, TYPEFACTS),
     },
   },
-  conformance: {
-    commands: [
-      ["bun", "scripts/check-bundled-contracts.mjs"],
-      ["bun", "scripts/check-contract-pins.mjs"],
-      ["bun", "scripts/dialect-manifests.mjs", "check-composed-contracts"],
-    ],
-  },
   "bun-test-cli": { command: ["bun", "run", "--cwd", "packages/cli", "test"] },
   "bun-test-wasm": { command: ["bun", "run", "--cwd", "packages/wasm", "test"] },
+  "wasm-parity": {
+    why:
+      "the owned check ships two reactors built from rust/ and apps/ beside the package's own " +
+      "worker and transport; only the packed package, installed in isolation and compared with the " +
+      "native check, shows a package change kept that answer. It goes through the Makefile, which " +
+      "builds the package and records the update frames before the gate, which builds nothing",
+    command: ["make", "wasm-parity"],
+  },
+  "wasm-compile": {
+    why:
+      "an analysis-only change moves the native and WASM builds of the same analysis identically, so the " +
+      "package build and parity gate are skipped; this seconds-long check keeps a WASM-only compile break " +
+      "(the crate without its default napi host) failing here rather than only in `make verify`",
+    command: [
+      "cargo", TOOLCHAIN, "check", "--manifest-path", MANIFEST, "-p", "solid-checker-wasm",
+      "--all-targets", "--no-default-features", "--features", "dialect-v2",
+    ],
+  },
   // The universal handoff set, appended to every plan.
   "fmt-check": {
     command: ["cargo", TOOLCHAIN, "fmt", "--manifest-path", MANIFEST, "--all", "--", "--check"],
   },
   "whitespace-check": { command: ["git", "diff", "--check"] },
-  "schema-json": { command: ["jq", "empty", "schema/solid-reactivity.schema.json"] },
+  "schema-json": { command: ["jq", "empty", "schema/typefacts-v1.schema.json", "schema/typefacts-codec-limits.json"] },
   "dialect-manifests": { command: ["bun", "scripts/dialect-manifests.mjs", "validate"] },
   clippy: {
     command: [
@@ -134,7 +156,7 @@ export const CHECKS = {
   verify: { command: ["scripts/verify.sh"] },
 };
 
-/** AGENTS.md's universal handoff set, in the order the document lists it. */
+/** The universal handoff set, run before expensive tests and gates. */
 export const UNIVERSAL = [
   "fmt-check",
   "whitespace-check",
@@ -144,46 +166,49 @@ export const UNIVERSAL = [
 ];
 
 /**
- * One row of AGENTS.md's table, as a prefix test.
+ * One row of the mapping, as a prefix test.
  *
  * Prefixes are matched longest-first, so `rust/crates/solid-facts-backend/`
  * cannot be swallowed by `rust/crates/solid-facts`. Nothing here matches by
  * name fragment or regex: a row applies to a directory, exactly.
  */
 export const ROWS = [
-  { prefix: "rust/crates/solid-facts/", owner: "solid-facts (AST, normalized facts)", checks: ["facts-lib"] },
+  // The three analysis-only rows (solid-facts, solid-reactive-ir, the v2 rules
+  // crate) select `wasm-compile` and never the WASM package build or parity:
+  // parity compares two builds of one analysis, so an edit confined to the
+  // analysis moves both identically. Every other rust/ row, and anything
+  // under packages/wasm, solid-checker-wasm, typefacts, apps/, shims/ or
+  // scripts/wasm-parity*, keeps its own answer; `make verify` is the authority.
+  {
+    prefix: "rust/crates/solid-facts/",
+    owner: "solid-facts (AST, normalized facts)",
+    checks: ["facts-lib", "wasm-compile"],
+  },
   {
     prefix: "rust/crates/solid-reactive-ir/",
-    owner: "solid-reactive-ir (IR, indexes, contracts, interprocedural, rules engine)",
-    checks: ["ir-lib", "coverage"],
+    owner: "solid-reactive-ir (IR, indexes, source summaries, interprocedural, rules engine)",
+    checks: ["ir-lib", "coverage", "wasm-compile"],
   },
   {
     prefix: "rust/crates/solid-facts-backend/",
     owner: "solid-facts-backend process/diagnostics",
     checks: ["backend-process", "coverage"],
   },
-  // No `rust/crates/solid-dialect/` row, deliberately. AGENTS.md's table has
-  // none, and the crate owns the shared `Dialect` interface that
-  // `solid-reactive-ir` and both dialect crates consume -- so a change there can
-  // move findings, break the IR library tests, and break the backend's process
-  // tests alike. Writing a row narrower than that blast radius is exactly the
-  // guess this script must not make; adding a row is a policy change to the
-  // table, made there first. Until then the path is unmapped and escalates.
+  // No `rust/crates/solid-dialect/` row, deliberately. The crate owns the
+  // shared `Dialect` interface that `solid-reactive-ir` and the dialect crate
+  // consume -- so a change there can move findings, break the IR library
+  // tests, and break the backend's process tests alike. Writing a row narrower
+  // than that blast radius is exactly the guess this script must not make, so
+  // the path is unmapped and escalates.
   {
     prefix: "rust/dialects/",
-    owner: "dialects, contracts at the process boundary",
-    checks: ["contract-process", "conformance"],
+    owner: "dialects at the process boundary",
+    checks: ["dialects-process"],
   },
   {
-    // `pkg/contracts/bundled/**` reaches the analyzer through `include_bytes!`
-    // (rust/crates/solid-facts-backend/src/diagnostics.rs), so editing one
-    // changes what every fixture project's findings are -- and changes nothing
-    // at all until the binary is rebuilt. AGENTS.md's Known trap says so
-    // explicitly: build rust/target/debug first, then run coverage and
-    // ownership. A row that ran neither would be the trap, mechanized.
-    prefix: "pkg/contracts/",
-    owner: "dialects, contracts at the process boundary (compiled into the binary via include_bytes!)",
-    checks: ["contract-process", "conformance", "coverage", "ownership-gate"],
+    prefix: "rust/dialects/solid-v2/rules/",
+    owner: "the Solid 2 rules crate (analysis only)",
+    checks: ["dialects-process", "wasm-compile"],
   },
   {
     prefix: "fixtures/",
@@ -191,12 +216,35 @@ export const ROWS = [
     checks: ["coverage", "ownership-gate"],
   },
   { prefix: "packages/cli/", owner: "packages/cli", checks: ["bun-test-cli"] },
-  { prefix: "packages/wasm/", owner: "packages/wasm", checks: ["bun-test-wasm"] },
+  { prefix: "packages/wasm/", owner: "packages/wasm", checks: ["bun-test-wasm", "wasm-parity"] },
+  // Prose that no build, test, or gate reads: the universal set only. Only
+  // paths checked to be unread by code belong here. `docs/rules/` is read by
+  // the CLI tests and emitted in every finding's URL, and other `docs/`
+  // subtrees feed manifests and hints, so the rest of `docs/` stays unmapped.
+  ...[
+    "docs/adr/",
+    "docs/typefacts/adr/",
+    "docs/precision-backlog.md",
+    "docs/decisions.md",
+    "docs/open-work.md",
+    "docs/README.md",
+    ".claude/",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "CONTEXT.md",
+    "CONTRIBUTING.md",
+  ].map((prefix) => ({ prefix, owner: "prose read by no check", checks: [] })),
 ].sort((a, b) => b.prefix.length - a.prefix.length);
 
-/** The table row a path belongs to, or `null` when nothing claims it. */
+/**
+ * The table row a path belongs to, or `null` when nothing claims it. A prefix
+ * ending in `/` claims a directory; any other prefix claims exactly one file.
+ */
 export function classify(path) {
-  return ROWS.find((row) => path.startsWith(row.prefix)) ?? null;
+  return (
+    ROWS.find((row) => (row.prefix.endsWith("/") ? path.startsWith(row.prefix) : path === row.prefix)) ??
+    null
+  );
 }
 
 /**
@@ -229,11 +277,19 @@ export function planFor(paths) {
     // set can report that it needs rebuilding. The stamp check is ~10ms when it
     // is already current.
     "build-typefacts",
-    ...(needsChecker ? ["build-debug"] : []),
-    ...["facts-lib", "ir-lib", "backend-process", "contract-process"].filter((id) => selected.has(id)),
-    ...["coverage", "ownership-gate", "conformance"].filter((id) => selected.has(id)),
-    ...["bun-test-cli", "bun-test-wasm"].filter((id) => selected.has(id)),
     ...UNIVERSAL,
+    ...(needsChecker ? ["build-debug"] : []),
+    // Before the process tests: it rebuilds with the harness pins recomputed,
+    // and everything after it should run against that binary.
+    ...["facts-lib", "ir-lib", "backend-process", "dialects-process"].filter((id) => selected.has(id)),
+    ...["coverage", "ownership-gate"].filter((id) => selected.has(id)),
+    // Before the WASM package's own tests: its Make target builds the package
+    // (owned artifacts included) that those tests load on a fresh tree.
+    ...["wasm-parity"].filter((id) => selected.has(id)),
+    // The parity gate builds the package, which compiles the WASM crate
+    // itself, so the cheap compile check is only for plans without it.
+    ...(selected.has("wasm-compile") && !selected.has("wasm-parity") ? ["wasm-compile"] : []),
+    ...["bun-test-cli", "bun-test-wasm"].filter((id) => selected.has(id)),
   ];
   return { full: false, unmapped, decisions, checks: ordered };
 }
@@ -345,16 +401,16 @@ export const BASIS_CAVEATS = [
 ];
 
 /**
- * Everything this branch changed: the merge-base diff against `origin/main`
- * plus whatever the working tree has on top.
+ * Everything this branch changed: the merge-base diff against `base`
+ * (default `origin/main`) plus whatever the working tree has on top.
  *
- * A missing or unreadable `origin/main` is not "nothing changed" -- it is an
- * unknown change set, so it escalates the same way an unmapped path does.
+ * A missing or unreadable base is not "nothing changed" -- it is an unknown
+ * change set, so it escalates the same way an unmapped path does.
  */
-export function changedPaths() {
-  const diff = git(["diff", "--name-only", "-z", "origin/main...HEAD"]);
+export function changedPaths(base = "origin/main") {
+  const diff = git(["diff", "--name-only", "-z", `${base}...HEAD`]);
   if (diff.error) {
-    return { error: `cannot diff against origin/main (${diff.error})` };
+    return { error: `cannot diff against ${base} (${diff.error})` };
   }
   const status = git(["status", "--porcelain", "-z"]);
   if (status.error) {
@@ -372,10 +428,49 @@ const commandsOf = (check) => CHECKS[check].commands ?? [CHECKS[check].command];
 
 const render = (command) => command.join(" ");
 
+/** Where scripts/verify.sh records the last clean, fully green commit. */
+const GREEN_STAMP = "rust/target/verify-green-commit";
+
+/**
+ * `--base REV`, then `SOLID_VERIFY_BASE`, then the last green commit when it
+ * is an ancestor of HEAD, then `origin/main`.
+ */
+export function baseOf(argv, env, green = null) {
+  const index = argv.indexOf("--base");
+  if (index !== -1) {
+    const value = argv[index + 1];
+    if (!value || value.startsWith("--")) return { error: "--base needs a revision" };
+    return { base: value };
+  }
+  if (env.SOLID_VERIFY_BASE) return { base: env.SOLID_VERIFY_BASE };
+  if (green) return { base: green, green: true };
+  return { base: "origin/main" };
+}
+
+/** The recorded green commit, only if it is still an ancestor of HEAD. */
+export function greenCommit(root = ROOT) {
+  const stamp = join(root, GREEN_STAMP);
+  if (!existsSync(stamp)) return null;
+  const commit = readFileSync(stamp, "utf8").trim();
+  if (!/^[0-9a-f]{40}$/.test(commit)) return null;
+  const ancestor = spawnSync("git", ["merge-base", "--is-ancestor", commit, "HEAD"], { cwd: root });
+  return ancestor.status === 0 ? commit : null;
+}
+
+/** Printed decisions are capped; a large change set is summarized by row. */
+const DECISION_PRINT_LIMIT = 40;
+
 function main() {
   const dryRun = process.argv.includes("--dry-run");
   const drift = producerStampDrift(readProducerIdentity());
-  const changed = changedPaths();
+  const selected = baseOf(process.argv, process.env, greenCommit());
+  if (selected.error) {
+    console.error(`verify-delta: ${selected.error}`);
+    return 2;
+  }
+  const { base } = selected;
+  if (selected.green) console.log(`verify-delta: base is the last fully green commit ${base.slice(0, 12)}.`);
+  const changed = changedPaths(base);
   let plan;
   if (drift) {
     console.log(`verify-delta: ${drift}.`);
@@ -389,23 +484,33 @@ function main() {
     console.log("verify-delta: escalating to the full `make verify` -- fail closed.");
     plan = { full: true, unmapped: [], decisions: [], checks: ["verify"] };
   } else if (changed.paths.length === 0) {
-    console.log("verify-delta: nothing changed against origin/main or in the working tree.");
+    console.log(`verify-delta: nothing changed against ${base} or in the working tree.`);
     plan = { full: false, unmapped: [], decisions: [], checks: ["build-typefacts", ...UNIVERSAL] };
   } else {
     plan = planFor(changed.paths);
   }
 
-  console.log(`\n=== verify-delta: mapping ${plan.decisions.length} changed path(s) ===`);
-  for (const decision of plan.decisions) {
-    console.log(
-      `  ${decision.path}\n      row: ${decision.row}` +
-        `\n      checks: ${decision.checks.length ? decision.checks.join(", ") : "(none)"}`,
-    );
+  console.log(`\n=== verify-delta: mapping ${plan.decisions.length} changed path(s) against ${base} ===`);
+  if (plan.decisions.length <= DECISION_PRINT_LIMIT) {
+    for (const decision of plan.decisions) {
+      console.log(
+        `  ${decision.path}\n      row: ${decision.row}` +
+          `\n      checks: ${decision.checks.length ? decision.checks.join(", ") : "(none)"}`,
+      );
+    }
+  } else {
+    const byRow = new Map();
+    for (const decision of plan.decisions) byRow.set(decision.row, (byRow.get(decision.row) ?? 0) + 1);
+    for (const [row, count] of byRow) console.log(`  ${count} path(s): ${row}`);
+    console.log(`  (more than ${DECISION_PRINT_LIMIT} paths; pass --base to narrow the change set)`);
   }
   if (plan.full && plan.unmapped.length > 0) {
+    const shown = plan.unmapped.slice(0, DECISION_PRINT_LIMIT);
+    const hidden = plan.unmapped.length - shown.length;
     console.log(
-      `\nverify-delta: ${plan.unmapped.length} path(s) match no row in AGENTS.md's table:` +
-        `\n  ${plan.unmapped.join("\n  ")}` +
+      `\nverify-delta: ${plan.unmapped.length} path(s) match no row in the mapping:` +
+        `\n  ${shown.join("\n  ")}` +
+        (hidden > 0 ? `\n  … and ${hidden} more` : "") +
         `\nAn unmapped path can change any answer here, so the plan escalates to the full` +
         ` \`make verify\` rather than guessing. Add a row only when a directory's blast radius` +
         ` is genuinely known.`,
@@ -429,14 +534,18 @@ function main() {
   }
 
   console.log("");
+  let cargoEnvironment;
   for (const check of plan.checks) {
     for (const command of commandsOf(check)) {
       const started = Date.now();
       const [executable, ...args] = command;
+      if (executable === "cargo") cargoEnvironment ??= certificationEnvironment(ROOT);
       const result = spawnSync(executable, args, {
         cwd: ROOT,
         stdio: "inherit",
-        env: { ...process.env, ...(CHECKS[check].env ?? {}) },
+        // Later Bun/Make drivers can invoke Cargo too. Keep the same pins
+        // across the whole selected plan.
+        env: { ...(cargoEnvironment ?? process.env), ...(CHECKS[check].env ?? {}) },
       });
       const seconds = ((Date.now() - started) / 1000).toFixed(2);
       if (result.error || result.status !== 0) {

@@ -1,0 +1,3 @@
+# tuple-slot-provenance
+
+**Claim (ADR 0282).** `const [running, start, stop] = make(); start()` calls exactly the closure in slot 1 of the array literal `make`'s one unconditional return builds (fresh array, same-statement pattern), followed like `const { start } = make()`: only an exact `const` pattern of plain identifier slots bound to that call, with an inline arrow or unwritten `const` arrow slot, is admitted (SC1001; SC9012 for inline-arrow/indexed forms); guards, `let`, defaults, rest, nesting, holes, spreads, aliases, forwards and shared slots are refused. See `tuple-iteration-veto`, `tuple-slot-context`.

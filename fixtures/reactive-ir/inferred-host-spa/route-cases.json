@@ -1,0 +1,22 @@
+[
+  {
+    "source": "export default function Page(){ return null; }",
+    "server": false
+  },
+  {
+    "source": "export default function Page(){return null;} export function GET(){return null;}",
+    "server": true
+  },
+  {
+    "source": "export const config={runtime:\"server\"}; export default function Page(){return null;}",
+    "server": true
+  },
+  {
+    "source": "export {handler as POST} from \"./handler\"; export default function Page(){return null;}",
+    "server": true
+  },
+  {
+    "source": "export * from \"./unknown\"; export default function Page(){return null;}",
+    "server": true
+  }
+]

@@ -32,6 +32,20 @@ type Session struct {
 	closeErr        error
 	schema          uint64
 	producerBuild   string
+	// inlineSources answers Sources with each file's bytes in its descriptor
+	// instead of a temporary arena file. A process-free host has no shared
+	// temporary directory to hand an arena path through; the Rust decoder
+	// accepts either form.
+	inlineSources bool
+}
+
+// SessionOptions are construction-time choices that do not change any
+// answer's content, only how a response carries it.
+type SessionOptions struct {
+	BuildID string
+	// InlineSources returns Sources inline (SourceFileV3.Source) rather than
+	// through a temporary arena file. Off by default.
+	InlineSources bool
 }
 
 type retainedSessionState struct {
@@ -52,6 +66,17 @@ func NewSession(backend Project, projectID string, trace Trace) (*Session, error
 // NewSession's explicit dev identity.
 func NewSessionWithBuildID(backend Project, projectID string, trace Trace, buildID string) (*Session, error) {
 	return newSession(backend, projectID, trace, buildID)
+}
+
+// NewSessionWithOptions is NewSessionWithBuildID with the transport options
+// above. It assumes ownership of backend, including when construction fails.
+func NewSessionWithOptions(backend Project, projectID string, trace Trace, options SessionOptions) (*Session, error) {
+	session, err := newSession(backend, projectID, trace, options.BuildID)
+	if err != nil {
+		return nil, err
+	}
+	session.inlineSources = options.InlineSources
+	return session, nil
 }
 
 func newSession(backend Project, projectID string, trace Trace, buildID string) (*Session, error) {
@@ -348,6 +373,16 @@ func (s *Session) lifecycle(
 		if err != nil {
 			return fail("sources-failed", err)
 		}
+		if s.inlineSources {
+			// Canonical descriptors: an empty file encodes with no source key
+			// on both sides (omitempty here, serde default in Rust).
+			descriptors := make([]SourceFileV3, len(sources))
+			for index, source := range sources {
+				descriptors[index] = SourceFileV3{Path: source.Path, Source: source.Source}
+			}
+			response.Sources = descriptors
+			break
+		}
 		arena, descriptors, lengths, err := s.writeSourceArena(sources)
 		if err != nil {
 			return fail("sources-failed", err)
@@ -373,44 +408,6 @@ func (s *Session) lifecycle(
 		response.Modules = inventory.Modules
 		response.ModuleImports = inventory.Imports
 		response.UnknownImportPaths = inventory.UnknownImportPaths
-	case LifecycleInvocations:
-		if request.Generation != generation {
-			return fail("generation-mismatch", ErrGenerationMismatch)
-		}
-		answer, err := s.closure.InvocationTranscripts(ctx, request.InvocationDemands)
-		if err != nil {
-			if ctx.Err() != nil {
-				return fail("analysis-cancelled", ctx.Err())
-			}
-			return fail("invocations-failed", err)
-		}
-		if answer.Envelope.Generation != generation || len(answer.Transcripts) != len(request.InvocationDemands) {
-			return fail("invocations-failed", fmt.Errorf("invocation answer does not match generation or demand count"))
-		}
-		answer.Envelope.ProjectID = s.projectID
-		answer.Envelope.SchemaSHA256 = TypeFactsSchemaSHA256
-		answer.Envelope.ProducerBuild = s.producerBuild
-		response.InvocationTranscripts = answer.Transcripts
-		response.InvocationEnvelope = &answer.Envelope
-	case LifecycleExportValues:
-		if request.Generation != generation {
-			return fail("generation-mismatch", ErrGenerationMismatch)
-		}
-		answer, err := s.closure.ExportValueTranscripts(ctx, request.ExportValueDemands)
-		if err != nil {
-			if ctx.Err() != nil {
-				return fail("analysis-cancelled", ctx.Err())
-			}
-			return fail("export-values-failed", err)
-		}
-		if answer.Envelope.Generation != generation || len(answer.Transcripts) != len(request.ExportValueDemands) {
-			return fail("export-values-failed", fmt.Errorf("export-value answer does not match generation or demand count"))
-		}
-		answer.Envelope.ProjectID = s.projectID
-		answer.Envelope.SchemaSHA256 = TypeFactsSchemaSHA256
-		answer.Envelope.ProducerBuild = s.producerBuild
-		response.ExportValueTranscripts = answer.Transcripts
-		response.ExportValueEnvelope = &answer.Envelope
 	case LifecycleCancel:
 		// Cancellation is delivered through the active request's context by
 		// the transport adapter. This operation acknowledges that delivery.

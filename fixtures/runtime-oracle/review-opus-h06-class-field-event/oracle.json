@@ -1,0 +1,11 @@
+{
+  "note": "Opus review of c31223260 (h06-class-field-event): a class field initializer runs at construction, not in the body",
+  "steps": [
+    {
+      "action": "assert-text",
+      "selector": "#ran-a",
+      "text": "ran",
+      "id": "runtime-observation-0"
+    }
+  ]
+}

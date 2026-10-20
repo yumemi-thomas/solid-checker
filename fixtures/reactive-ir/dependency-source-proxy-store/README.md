@@ -1,0 +1,3 @@
+# dependency-source-proxy-store
+
+**Claim (ADR 0287 under ADR 0284).** A forwarding proxy trap branch returning another object's member is excluded only when a host-constant fold proves it dead for the declared host: with a browser host and `dep-query` as source, `FoldedQuery` (server branch guarded by `@solidjs/web`'s `isServer`, exported `false` by `dist/web.js`) is an SC1001 violation at `query.search`; `WindowQuery` (the `typeof window` guard of `@tanstack/solid-query` 6.0.0-rc.0) is silent (ADR 0295); under Node both are silent. Stubs byte-faithful to published rc.13 (`@solidjs/web` keeps only `exports` and `isServer`).

@@ -1,0 +1,3 @@
+# forwarded-tracked-compute
+
+**Claim (ADR 0200).** A function literal passed to a project function whose only use of that parameter is a direct call in the tracked compute of a computation it creates (`createMemo`) runs only there, so its read is tracked (`forwarded_tracked_compute_role`); eager/later/unknown uses keep violation/uncertifiable answers. `QueryOptions.tsx`/`wrappers.ts` (typed adapters of `@tanstack/solid-query@6.0.0-rc.3`'s shape) and `MemberContexts.tsx`/`RoutedMembers.tsx` (object-member carriers) apply the same; mixed, escaped, later and receiver-exposing carriers keep obligations.

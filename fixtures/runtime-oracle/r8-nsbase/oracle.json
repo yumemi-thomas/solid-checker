@@ -1,0 +1,11 @@
+{
+  "note": "r8 reviewer: nsbase. Synthetic dep-ns runtime copied to widget.ts with its declaration signatures; this tests local invocation, not dependency namespace/source-selection premises. Runtime adaptation: mount the original component with populated signal-backed props so its reactive reads and control-flow branches execute. Static-only row investigation: widget.ts Root returns plain children (the snapshot from StaticMembers or the node from Frame). Assert Frame renders its supplied child. The Root prop-read violation has no matching runtime diagnostic or application frame and remains a possible reactive-provenance false positive.",
+  "steps": [
+    {
+      "action": "assert-text",
+      "id": "root-renders-child",
+      "selector": "section[data-export=\"App\"]",
+      "text": "2"
+    }
+  ]
+}

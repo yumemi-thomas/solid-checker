@@ -1,0 +1,3 @@
+# render-effect-apply-timing
+
+**Claim.** `createRenderEffect(compute, apply)` runs its first `apply` during the call under the caller's owner and later applies from the flush with no owner; `createEffect` queues every apply. Cleanup/effect in a render-effect apply is `SC4001` violation at module scope and uncertifiable in a body or `createRoot` (a later run needs a changing source); in a `createEffect` apply in a body it is a violation; render-effect compute and body-apply writes are none. Stub copies effect constructors, callback/option types, `onCleanup`, `Disposable`, `createRoot` verbatim from published rc.3.

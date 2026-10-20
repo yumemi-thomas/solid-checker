@@ -1,0 +1,1 @@
+{ "note": "Precision probe 2026-10-19: a memo inside a createRoot the ref callback creates is owned by that root; the onCleanup witness is silent. Only the createRoot call stays static-only SC6001, the rule's detached-root premise (fixture reactive-ir/directive-owned-subscopes)." }

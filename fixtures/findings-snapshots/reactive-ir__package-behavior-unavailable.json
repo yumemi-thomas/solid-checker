@@ -1,0 +1,15 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "package-behavior-unavailable",
+      "code": "SC9005",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-behavior-unavailable/App.tsx",
+      "start": 415,
+      "end": 464,
+      "fixes": 0
+    }
+  ]
+}

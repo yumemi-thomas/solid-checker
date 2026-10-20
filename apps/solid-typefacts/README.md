@@ -68,5 +68,5 @@ assert_eq!(answer.transcripts.len(), 1);
 make test
 ```
 
-The imported design history is retained under `docs/typefacts/`; repository
+The imported design history is in git (tag `docs-archive-2026-10-19`); repository
 integration and release ownership now belong to solid-checker.

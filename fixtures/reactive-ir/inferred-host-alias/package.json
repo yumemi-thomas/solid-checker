@@ -1,0 +1,7 @@
+{
+  "name": "inferred-host-alias",
+  "type": "module",
+  "scripts": {
+    "build": "vite build"
+  }
+}

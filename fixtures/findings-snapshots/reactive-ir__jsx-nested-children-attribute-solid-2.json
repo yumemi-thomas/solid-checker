@@ -30,6 +30,16 @@
       "start": 11814,
       "end": 11823,
       "fixes": 1
+    },
+    {
+      "rule": "unaudited-solid-release",
+      "code": "SC9014",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/jsx-nested-children-attribute-solid-2/node_modules/solid-js/package.json",
+      "start": 0,
+      "end": 0,
+      "fixes": 0
     }
   ]
 }

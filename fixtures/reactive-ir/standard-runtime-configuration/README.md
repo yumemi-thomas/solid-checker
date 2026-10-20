@@ -1,0 +1,3 @@
+# Standard runtime configuration (ADRs 0266/0268)
+
+`App.tsx` has an untracked read and a tracked twin; `cases/` are configured one at a time. Visible runtime-configuration vetoes (external calls, `DEV.hooks` writes, `Object.assign`, descriptors, namespace members, `OBSERVE.exclude`, escapes; hydration `sharedConfig` writes, aliases, deletes, context escapes) withhold the App read's violation; truthiness-only tests, local homonyms, type-only imports and ordinary exports keep it. Solid/signals stubs are the full published rc.13 typings, unchanged; hydration cases use the real `solid-js/internal` `sharedConfig` declaration (`types/internal.d.ts:138`).

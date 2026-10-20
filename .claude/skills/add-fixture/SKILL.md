@@ -38,12 +38,16 @@ The checker resolves the dialect from the nearest
 `node_modules/solid-js/package.json` above the project, walked like a bundler
 (`rust/crates/solid-facts-backend/src/dialect.rs`):
 
-- version resolves to 1.x (e.g. `{"name":"solid-js","version":"1.9.14"}`) →
-  the v1 rule catalog runs;
-- stub missing, unparsable, or version unclassifiable (`workspace:*`) → silent
-  fallback to the v2 default.
+- version resolves to a major this build carries (today only 2.x, e.g.
+  `{"name":"solid-js","version":"2.0.0-rc.3"}`) → that dialect's catalog runs;
+- version resolves to a major with no dialect here (`1.9.14`, or a future
+  `3.0.0`) → the project is **refused** with `SC9013` and nothing else is
+  reported (ADR 0110 § 1). A fixture pinned this way asserts a refusal, not
+  its own subject;
+- stub missing, unparsable, or the version field is not a version
+  (`workspace:*`) → silent fallback to the v2 default.
 
-So a v1 fixture without its stub is a **no-op that still passes**. And because
+So a fixture without its stub is a **no-op that still passes**. And because
 `.gitignore` blocks `**/node_modules/` globally, every fixture stub needs its
 own exception lines:
 
@@ -56,9 +60,12 @@ Without them the stub exists locally but is silently excluded from `git add`,
 and the fixture un-dialects only in CI. Verify with
 `git status --short fixtures/<group>/<name>/` that the stub shows up.
 
-Where 1.x and 2.0 intentionally differ, the behavior is pinned by the
-`fixtures/reactive-ir/dialect-solid-1x` / `dialect-solid-2` pair — read those
-fixtures' comments before mirroring behavior across dialects.
+`scripts/coverage.mjs` checks all four shapes on every run — presence,
+parseability, the major, and whether git tracks the file —  through
+`scripts/lib/dialect-stubs.mjs`. It cannot see a stub added to an
+*already-tracked* fixture without running, though, so run coverage after
+touching any fixture's `node_modules` rather than trusting a `verify-delta`
+plan, whose basis is git and cannot see ignored files.
 
 ## Snapshot flow
 
@@ -67,13 +74,8 @@ per fixture project, holding rule, code, kind, severity, path, and span
 (messages excluded, except for the wording-under-test projects listed in
 `scripts/coverage.mjs`).
 
-1. After Rust source changes, compare with the **fresh debug binary** so a
-   stale checked-in binary cannot hide the change:
-
-   ~~~sh
-   SOLID_CHECKER_BIN="$PWD/rust/target/debug/solid-checker-rust" \
-   SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" node scripts/coverage.mjs
-   ~~~
+1. Run `make coverage`. It builds the fresh debug checker and compares with
+   it, so a stale packaged binary cannot hide the change.
 
 2. Review the reported diff. Every moved finding must be explainable by the
    intended semantic change — a snapshot update is a record of a deliberate
@@ -81,26 +83,16 @@ per fixture project, holding rule, code, kind, severity, path, and span
 3. Only then rerun with `--update`. Update only the snapshots your change
    owns; do not rewrite unrelated ones to make the run green.
 4. If precision status changed (new proof, new approximation, new fail-closed
-   path), record it in `docs/precision-backlog.md`.
+   path, known miss), record it in `docs/open-work.md` and the commit message.
 5. Commit the snapshot update in the same commit as the code that moved the
    findings, not a thematically nearby one.
 
-Package-contract fixtures (`fixtures/package-contracts/`) additionally pin the
-exact package artifact; keep unknown external behavior fail-closed rather than
-adding blanket trust to make a case green. They are registered by name in
-`scripts/contract-corpus.mjs`, which compares `expected.json` (the contract) and,
-where the fixture carries one, `expected-generation.json` (the review plan's
-attested closure record — per entrypoint: `targets`, package-relative module
-paths, `notes`, `runtimeNotes`; hashes deliberately unpinned). Add the second
-file only for a claim about which modules the *analyzing program* reported it
-opened: that is invisible in the contract document and cannot be tested from
-`scripts/contract-generation.test.mjs`, whose stub native checker resolves
-nothing. See `fixtures/package-contracts/torture-corpus.md`.
+## A fixture that analyzes package source
 
-Two closure shapes cannot be a committed fixture at all: a symlink escaping the
-package root (it would be this repository's first committed symlink, and arrives
-as a plain file on a Windows checkout) and one file reached by two case
-spellings. Those are generated into a temporary directory against the real
-producer in `scripts/contract-closure-record.test.mjs` — the right home for any
-closure property that depends on the filesystem underneath the package rather
-than on its contents.
+Ship the exact published runtime JavaScript and declaration bytes in the
+fixture’s `node_modules`, with package name, exact version and integrity in its
+README. Keep the package manifest and source-selection conditions faithful.
+Declare the runtime target and build the fixture actually exercises. Preserve
+per-fixture `.gitignore` exceptions and run coverage after touching ignored
+inputs. Unknown behavior must stay explicitly uncertifiable; no catalog,
+authorization marker, receipt or contract can discharge it.

@@ -74,7 +74,27 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let dialect = match options.dialect.as_deref() {
         Some(id) => solid_facts_backend::dialect::by_id(id)
             .ok_or_else(|| format!("unknown dialect {id:?}"))?,
-        None => solid_facts_backend::dialect::detect(&project),
+        // The benchmark measures a retained session's timings; running it
+        // against a runtime this build has no dialect for would measure the
+        // wrong language rather than fail, so it refuses like the daemon does.
+        None => match solid_facts_backend::dialect::detect_detailed(&project) {
+            solid_facts_backend::dialect::Detection::Installed { dialect, .. } => dialect,
+            solid_facts_backend::dialect::Detection::Unsupported {
+                installed,
+                manifest,
+                ..
+            } => {
+                return Err(format!(
+                    "solid-js {installed} at {} is a runtime this build carries no dialect for [{}]",
+                    manifest.display(),
+                    solid_facts_backend::dialect::UNSUPPORTED_RUNTIME_CODE
+                )
+                .into());
+            }
+            solid_facts_backend::dialect::Detection::Defaulted { .. } => {
+                solid_facts_backend::dialect::default_dialect()
+            }
+        },
     };
     let (mut session, sources) =
         NativeIncrementalSession::open_pipelined(dialect, project_id, typescript)?;
@@ -426,8 +446,6 @@ fn rust_pipeline_breakdown(
         "ownerFixedPointReusedSamples": samples.iter().filter(|timing| timing.reactive_ir.owner_fixed_point_reused).count(),
         "ownerReusedFiles": distribution(samples.iter().map(|timing| timing.reactive_ir.owner_reused_files).collect()),
         "ownerRecomputedFiles": distribution(samples.iter().map(|timing| timing.reactive_ir.owner_recomputed_files).collect()),
-        "typedAccessorReusedFiles": distribution(samples.iter().map(|timing| timing.reactive_ir.typed_accessor_reused_files).collect()),
-        "typedAccessorRecomputedFiles": distribution(samples.iter().map(|timing| timing.reactive_ir.typed_accessor_recomputed_files).collect()),
         "interproceduralGraphReusedFiles": distribution(samples.iter().map(|timing| timing.reactive_ir.interprocedural_graph_reused_files).collect()),
         "interproceduralGraphRecomputedFiles": distribution(samples.iter().map(|timing| timing.reactive_ir.interprocedural_graph_recomputed_files).collect()),
         "interproceduralResultReusedFiles": distribution(samples.iter().map(|timing| timing.reactive_ir.interprocedural_result_reused_files).collect()),
@@ -439,7 +457,8 @@ fn rust_pipeline_breakdown(
             "aliasRoots": durations(|timing| timing.reactive_ir.alias_roots),
             "entitySymbols": durations(|timing| timing.reactive_ir.entity_symbols),
             "symbolNameIndexes": durations(|timing| timing.reactive_ir.symbol_name_indexes),
-            "contractResolution": durations(|timing| timing.reactive_ir.contract_resolution),
+            // The JSON key predates the rename; schemaVersion 2 readers rely on it.
+            "contractResolution": durations(|timing| timing.reactive_ir.boundary_defects),
             "reachability": durations(|timing| timing.reactive_ir.reachability),
             "sourceDiscovery": durations(|timing| timing.reactive_ir.source_discovery),
             "typedAccessorsAndPropRoots": durations(|timing| timing.reactive_ir.typed_accessors_and_prop_roots),
@@ -452,7 +471,6 @@ fn rust_pipeline_breakdown(
             "interproceduralDirectSummaries": durations(|timing| timing.reactive_ir.interprocedural_direct_summaries),
             "interproceduralDirectIndex": durations(|timing| timing.reactive_ir.interprocedural_direct_index),
             "interproceduralDirectReferences": durations(|timing| timing.reactive_ir.interprocedural_direct_references),
-            "interproceduralTypedAccessors": durations(|timing| timing.reactive_ir.interprocedural_typed_accessors),
             "interproceduralPropagation": durations(|timing| timing.reactive_ir.interprocedural_propagation),
             "interproceduralReturnedDirect": durations(|timing| timing.reactive_ir.interprocedural_returned_direct),
             "interproceduralReturnedDelta": durations(|timing| timing.reactive_ir.interprocedural_returned_delta),

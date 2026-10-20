@@ -34,24 +34,35 @@ pub struct ProjectFacts {
     /// the compiler.
     ///
     /// `None` is not "nothing resolved": it says this analysis carries no
-    /// resolution facts at all, so a package contract can only be matched by
+    /// resolution facts at all, so a package can only be matched by
     /// specifier name — the pre-attestation behavior, kept for an adapter with
-    /// no Type Facts session of its own. `Some` binds contracts by installed
+    /// no Type Facts session of its own. `Some` binds packages by installed
     /// package identity and fails closed per specifier. See
     /// [`crate::resolution`].
     #[serde(skip)]
     pub resolved_imports: Option<AttestedImportIndex>,
+    /// The project bundler's own resolution of each module load, when the
+    /// host asked for it (ADR 0220). See [`crate::runtime_resolution`].
+    #[serde(skip)]
+    pub runtime_resolutions: Option<crate::runtime_resolution::RuntimeResolutionIndex>,
     /// Exact TypeScript-symbol redirects from a declaration-bound import to
     /// the package-local runtime implementation selected for that same static
     /// specifier.
     ///
-    /// Empty for ordinary project analysis. Package-contract generation fills
-    /// it only from the generator's resolved importer/specifier/target map,
-    /// after joining both ends to compiler entities. Reactive IR then treats
+    /// Empty for ordinary project analysis. Dependency-source analysis fills
+    /// it only from the resolved importer/specifier/target map, after joining
+    /// both ends to compiler entities. Reactive IR then treats
     /// the runtime implementation as the alias root; missing or ambiguous
     /// joins add no redirect and preserve the existing fail-closed result.
     #[serde(skip)]
     pub runtime_symbol_redirects: HashMap<String, String>,
+    /// ADR 0284, experimental: canonical directories of the installed
+    /// packages whose runtime source is analyzed as project code. Their
+    /// files take part in every proof, but a finding located in one is not
+    /// reported, and their own runtime-configuration uses do not veto the
+    /// project's findings. Empty for ordinary analysis.
+    #[serde(skip)]
+    pub dependency_source_roots: Vec<String>,
 }
 
 #[derive(Clone)]
@@ -157,7 +168,10 @@ impl TypeScriptTable {
     }
 
     #[must_use]
-    pub fn with_files(mut self, files: Vec<FileFact>) -> Self {
+    pub fn with_files(mut self, mut files: Vec<FileFact>) -> Self {
+        // Sorted by path, as the retained table already yields them, so a
+        // lookup is a binary search rather than a scan of every file.
+        files.sort_by(|left, right| left.path.cmp(&right.path));
         self.file_overrides = Some(files.into());
         self
     }
@@ -213,7 +227,8 @@ impl TypeScriptTable {
     #[must_use]
     pub fn file(&self, path: &str) -> Option<&FileFact> {
         if let Some(files) = &self.file_overrides {
-            return files.iter().find(|file| file.path.as_ref() == path);
+            let index = files.partition_point(|file| file.path.as_ref() < path);
+            return files.get(index).filter(|file| file.path.as_ref() == path);
         }
         self.retained.as_ref().map_or_else(
             || {
@@ -453,6 +468,17 @@ impl FileFacts {
 }
 
 impl ProjectFacts {
+    /// ADR 0284: the package directory, among
+    /// [`Self::dependency_source_roots`], that holds `path`, compared by path
+    /// component so `/x/router-extra` is not inside `/x/router`.
+    #[must_use]
+    pub fn dependency_source_root(&self, path: &str) -> Option<&str> {
+        self.dependency_source_roots
+            .iter()
+            .find(|root| std::path::Path::new(path).starts_with(root.as_str()))
+            .map(String::as_str)
+    }
+
     pub fn join(
         generation: Generation,
         project_id: impl Into<String>,
@@ -489,7 +515,9 @@ impl ProjectFacts {
             typescript,
             typescript_changes: None,
             resolved_imports: None,
+            runtime_resolutions: None,
             runtime_symbol_redirects: HashMap::new(),
+            dependency_source_roots: Vec::new(),
         })
     }
 }

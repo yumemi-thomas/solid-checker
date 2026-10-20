@@ -1,0 +1,11 @@
+{
+  "note": "Opus review round 3 (f03-class-expr-assigned-event): class-field and generator shapes across every rule",
+  "steps": [
+    {
+      "action": "assert-text",
+      "selector": "#ran-a",
+      "text": "ran",
+      "id": "runtime-observation-0"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "note": "Opus review of c31223260 (g02-generator-iife-event): a generator body runs on next(), not at the call; a false SC1001 before 2026-10-19",
+  "steps": [
+    {
+      "action": "assert-text",
+      "selector": "#ran-a",
+      "text": "ran",
+      "id": "runtime-observation-0"
+    }
+  ]
+}

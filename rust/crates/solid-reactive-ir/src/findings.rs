@@ -7,6 +7,7 @@
 //!
 //! [`Program`]: crate::Program
 
+use crate::ExecutionRole;
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 use typefacts::Location;
@@ -33,9 +34,9 @@ pub struct RuleMetadata {
     pub presets: &'static [&'static str],
 }
 
-/// Base URL of the per-rule documentation pages in `docs/rules/`. Both
-/// dialect catalogs address their pages under it; the per-dialect part is the
-/// directory the rule name itself carries (`v1/...` or none).
+/// Base URL of the per-rule documentation pages in `docs/rules/`. Every
+/// dialect catalog addresses its pages under it; the per-dialect part is the
+/// directory the rule name itself carries — none, for the default surface.
 pub const DOCS_BASE_URL: &str =
     "https://github.com/yumemi-thomas/solid-checker/blob/main/docs/rules";
 
@@ -44,9 +45,9 @@ pub const DOCS_BASE_URL: &str =
 /// the shared wire shape and formatting.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RuleManifestIdentity {
-    /// Stable checker dialect id (`solid-v1`, `solid-v2`).
+    /// Stable checker dialect id (`solid-v2`).
     pub dialect: &'static str,
-    /// Backward-compatible ESLint flat-config name (`v1`, `v2`).
+    /// Backward-compatible ESLint flat-config name (`v2`).
     pub config: &'static str,
     /// Rule-name namespace without the slash, or empty for the default surface.
     pub namespace: &'static str,
@@ -107,6 +108,14 @@ pub struct Finding {
     pub analysis_context: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub subject_kind: String,
+    /// ADR 0205: for an analysis-coverage finding, the kind of gap it is
+    /// (`package-boundary`, `caller-supplied-member`, …) and what it is about
+    /// (the package, helper or owner primitive). A reporter groups by these
+    /// instead of by message text. Empty for every other finding.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub coverage_family: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub coverage_subject: String,
     pub primary_location: Location,
     pub related_locations: Vec<Location>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -130,6 +139,8 @@ impl Finding {
             severity: metadata.severity.into(),
             analysis_context: String::new(),
             subject_kind: String::new(),
+            coverage_family: String::new(),
+            coverage_subject: String::new(),
             primary_location,
             related_locations: vec![],
             evidence: vec![],
@@ -152,15 +163,19 @@ impl Finding {
     ) -> Self {
         let uncertain = requirement.uncertain;
         let conditional_owner = requirement.conditional_owner;
+        let later_run_unowned = requirement.later_run_unowned;
         let runtime_uncertain = requirement.runtime_uncertain;
         let component_uncertain = requirement.component_uncertain;
         let missing_jsx_census = requirement.missing_jsx_census;
         // `uncertain` predates the reason fields. Treat a deserialized legacy
         // row with no explicit reason as caller uncertainty.
+        let through_dependency = requirement.through_dependency.as_ref();
         let caller_uncertain = requirement.caller_uncertain
             || (uncertain
+                && through_dependency.is_none()
                 && !runtime_uncertain
                 && !conditional_owner
+                && !later_run_unowned
                 && !component_uncertain
                 && !missing_jsx_census);
         let mut message = message.to_string();
@@ -185,11 +200,17 @@ impl Finding {
             };
         }
         let mut evidence = vec![EvidenceStep {
-            message: if component_uncertain {
+            message: if requirement.after_await {
+                "this call runs after an `await`, from a promise continuation: the owner current before the `await` is not current after it, and no other owner is"
+                    .into()
+            } else if component_uncertain {
                 "component identity is unresolved, so this operation may execute with or without a reactive owner"
                     .into()
             } else if conditional_owner {
                 "runWithOwner receives a nullable owner, so this operation may execute detached"
+                    .into()
+            } else if later_run_unowned {
+                "the enclosing callback runs under its caller's owner only on its first run; a later run comes from the scheduler's flush, where no owner is current"
                     .into()
             } else {
                 "no containing component, computation, or root owner dominates this operation"
@@ -197,6 +218,38 @@ impl Finding {
             },
             location: Some(requirement.location.clone()),
         }];
+        // ADR 0290: the operation is in a package analyzed as source, and
+        // this is the project's call that runs it.
+        if let Some(operation) = through_dependency {
+            message.push_str(
+                "; this call runs it inside a package analyzed as source, under this call's owner context",
+            );
+            if uncertain
+                && !runtime_uncertain
+                && !conditional_owner
+                && !later_run_unowned
+                && !component_uncertain
+                && !requirement.caller_uncertain
+            {
+                message.push_str(
+                    ", which solid-checker cannot prove provides an owner on every path to it",
+                );
+            }
+            hint.push_str(
+                " The operation is in the package; give this call an owner (call it in a component or computation, or under createRoot).",
+            );
+            evidence.insert(
+                0,
+                EvidenceStep {
+                    message: "this call enters package code that performs the operation".into(),
+                    location: Some(requirement.location.clone()),
+                },
+            );
+            evidence.push(EvidenceStep {
+                message: "the operation, in the package's source".into(),
+                location: Some(operation.clone()),
+            });
+        }
         if runtime_uncertain {
             let (clause, guidance, evidence_message) = match requirement.operation {
                 crate::OwnerRequirementOperation::SettledCleanup => (
@@ -225,6 +278,14 @@ impl Finding {
                 " Narrow the owner to a non-null value before runWithOwner, or handle the detached lifetime explicitly.",
             );
         }
+        if later_run_unowned {
+            message.push_str(
+                "; the enclosing callback is owned only on its first run and runs with no owner on any later run, so solid-checker cannot prove every execution has an owner",
+            );
+            hint.push_str(
+                " Create owned work in the effect's compute, or keep the apply callback free of primitives and cleanups that a later run would leave detached.",
+            );
+        }
         if component_uncertain {
             message.push_str(
                 "; the containing function may be a Solid component or an ordinary helper, so its owner context cannot be certified",
@@ -238,7 +299,7 @@ impl Finding {
                 "; this function is exported, so solid-checker cannot prove its callers provide an owner",
             );
             hint.push_str(
-                " If every caller runs this exported function under an owner, document that in the package's reactivity contract.",
+                " If every caller runs this exported function under an owner, make that ownership visible to solid-checker, for example by calling it from a component or computation in the project.",
             );
         }
         Self {
@@ -296,20 +357,65 @@ pub fn finish_findings(
     )
 }
 
+/// The context a read with no named context is described in, from its role.
+/// A module-scope read has no enclosing function, and an effect's apply
+/// callback is not a rendering function; naming either one so would describe
+/// a context that does not exist.
+const fn unnamed_read_context(execution: crate::ExecutionRole) -> &'static str {
+    match execution {
+        crate::ExecutionRole::ModuleInitialization => "module scope",
+        crate::ExecutionRole::EffectApply => "effect apply callback",
+        crate::ExecutionRole::Unknown => "code the analysis cannot place",
+        _ => "rendering function",
+    }
+}
+
 /// The strict-read message: how an untracked read of a reactive value is
 /// described. The sentence is version-independent; what differs per dialect
 /// is the hint, which the catalogs word themselves.
 #[must_use]
 pub fn strict_read_message(read: &ReactiveRead) -> String {
-    let context = if !read.context.is_empty() {
-        &read.context
-    } else if read.execution == crate::ExecutionRole::ModuleInitialization {
-        // A module-scope read has no enclosing function to name; calling it a
-        // "rendering function" would describe a context that does not exist.
-        "module scope"
+    strict_read_message_with_compute(read, false)
+}
+
+/// The compute observation affects only wording, never the read's proof.
+#[must_use]
+pub fn strict_read_message_with_compute(read: &ReactiveRead, compute_reads_source: bool) -> String {
+    let context = if read.context.is_empty() {
+        unnamed_read_context(read.execution)
     } else {
-        "rendering function"
+        &read.context
     };
+    // No fact places the read: neither the compiler's census nor the semantic
+    // roles say whether it runs tracked, untracked, in a callback, or at all.
+    if read.execution == ExecutionRole::Unknown {
+        let through = if read.via.is_empty() {
+            String::new()
+        } else {
+            format!(" through {}", read.via)
+        };
+        return format!(
+            "{} {:?} is read{through} in {context}, but no compiler or semantic fact places where this code runs (tracked, untracked, in a callback, or never), so whether this read is untracked cannot be proven either way",
+            reactive_value_label(&read.kind),
+            read.accessor,
+        );
+    }
+    if read.callback_invocation_unproven {
+        let tracking = if read.missing_jsx_census
+            || read.host_callback_timing
+            || read.callee_callback_timing
+        {
+            "its execution or tracking context is also unresolved"
+        } else {
+            "the call is outside a tracking scope"
+        };
+        return format!(
+            "{} {:?} may be read through {} at a call written in {context}; the callee's summary states an inline invocation but does not prove this call invokes the accessor; {tracking}, so the untracked read is uncertifiable",
+            reactive_value_label(&read.kind),
+            read.accessor,
+            read.via,
+        );
+    }
     // A census gap unmakes the second half of the ordinary sentence. "Which
     // does not track" and "never updates" are claims about the execution
     // context, and the only evidence for them here would be the compiler's
@@ -324,6 +430,62 @@ pub fn strict_read_message(read: &ReactiveRead) -> String {
         };
         return format!(
             "{} {:?} is read{through} in {context}, inside a JSX expression the Solid compiler's execution census does not cover; whether that read is tracked cannot be proven either way, because the compiler reported no execution site for this JSX region and its silence is not evidence that the read never updates",
+            reactive_value_label(&read.kind),
+            read.accessor,
+        );
+    }
+    // The same honesty for the execution window. The callback is written in
+    // `context` but runs wherever the host invokes it, and the host may do so
+    // inside the strict-read window (a synchronous dispatch, a bound call, a
+    // synchronous thenable) or after it; only the first is the untracked read
+    // the ordinary sentence describes.
+    if read.host_callback_timing {
+        let through = if read.via.is_empty() {
+            String::new()
+        } else {
+            format!(" through {}", read.via)
+        };
+        return format!(
+            "{} {:?} is read{through} in a callback written in {context} that a host API retains (an event listener, a bound argument, a thenable callback or a Geolocation callback); the host may invoke this callback inside the component body's strict-read window, or after it, so whether this read runs untracked in {context} cannot be proven either way",
+            reactive_value_label(&read.kind),
+            read.accessor,
+        );
+    }
+    // The same honesty when the invoker is project code: the literal is
+    // handed to a function whose body is not proven to call it during the
+    // call, so it may run then, later from a closure the function returns or
+    // keeps, or never.
+    if read.callee_callback_timing {
+        if read.execution == ExecutionRole::EffectApply {
+            return format!(
+                "{} {:?} may be read in {context}; whether apply executes is unresolved for these options and compute dependencies, so this untracked read is uncertifiable",
+                reactive_value_label(&read.kind),
+                read.accessor,
+            );
+        }
+        let through = if read.via.is_empty() {
+            String::new()
+        } else {
+            format!(" through {}", read.via)
+        };
+        return format!(
+            "{} {:?} is read{through} in a callback written in {context} and passed to a consumer that is not proven to invoke it during the call or component rendering; that consumer may invoke it then, later from a closure it returns or keeps, or never, so whether this read runs untracked in {context} cannot be proven either way",
+            reactive_value_label(&read.kind),
+            read.accessor,
+        );
+    }
+    if compute_reads_source
+        && read.execution == crate::ExecutionRole::EffectApply
+        && !read.is_uncertifiable()
+        && !read.summary_attributed
+    {
+        let through = if read.via.is_empty() {
+            "directly".to_owned()
+        } else {
+            format!("through {}", read.via)
+        };
+        return format!(
+            "{} {:?} is read {through} in {context}, which does not track; this effect's compute also reads the same source, so the effect can re-run when it changes, but this apply read is untracked and Solid warns in development",
             reactive_value_label(&read.kind),
             read.accessor,
         );
@@ -349,6 +511,7 @@ pub fn strict_read_message(read: &ReactiveRead) -> String {
 fn reactive_value_label(kind: &str) -> &'static str {
     match kind {
         "store-path" => "reactive store path",
+        "reactive-getter" => "reactive getter",
         "component-props" => "component prop",
         _ => "reactive accessor",
     }
@@ -361,10 +524,30 @@ fn reactive_value_label(kind: &str) -> &'static str {
 /// facts; over a census hole it would be an overstatement, since the compiler
 /// never reported on that region at all.
 fn untracked_evidence_sentence(read: &ReactiveRead, subject: &str) -> String {
-    if read.missing_jsx_census {
+    if read.execution == ExecutionRole::Unknown {
+        format!("no compiler or semantic fact places where {subject} runs")
+    } else if read.callback_invocation_unproven {
+        format!(
+            "{subject} is an accessor passed to an accepted inline callback slot whose call-scoped cardinality does not guarantee an invocation"
+        )
+    } else if read.missing_jsx_census {
         format!(
             "{subject} sits inside a JSX expression the compiler's execution census does not cover, so no compiler fact places it inside or outside a tracked region"
         )
+    } else if read.host_callback_timing {
+        format!(
+            "{subject} sits in a callback a host API retains and may invoke on its invoker's stack, so no fact places its execution inside or after the component body's strict-read window"
+        )
+    } else if read.callee_callback_timing {
+        if read.execution == ExecutionRole::EffectApply {
+            format!(
+                "{subject} is in an effect apply whose invocation is not proven by its defer options and compute dependencies"
+            )
+        } else {
+            format!(
+                "{subject} sits in a callback passed to a consumer that is not proven to invoke it during the call or component rendering, so no fact places its execution inside or after the component body's strict-read window"
+            )
+        }
     } else {
         format!("{subject} is outside every compiler-tracked JSX region and deferred callback")
     }
@@ -391,21 +574,29 @@ pub fn strict_read_evidence(read: &ReactiveRead) -> Vec<EvidenceStep> {
         };
         evidence.push(EvidenceStep {
             message: format!(
-                "{origin_context} reads the {}",
+                "{origin_context} {} the {}",
+                if read.callback_invocation_unproven {
+                    "may read"
+                } else {
+                    "reads"
+                },
                 reactive_value_label(&read.kind)
             ),
             location: Some(origin.clone()),
         });
         evidence.push(EvidenceStep {
             message: format!(
-                "the call to {} propagates that read into {}",
+                "the call to {} propagates that {}read into {}",
                 read.via,
-                if !read.context.is_empty() {
-                    &read.context
-                } else if read.execution == crate::ExecutionRole::ModuleInitialization {
-                    "module scope"
+                if read.callback_invocation_unproven {
+                    "possible "
                 } else {
-                    "rendering function"
+                    ""
+                },
+                if read.context.is_empty() {
+                    unnamed_read_context(read.execution)
+                } else {
+                    &read.context
                 }
             ),
             location: Some(read.location.clone()),
@@ -499,149 +690,4 @@ pub fn assert_rules_have_documentation(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{Finding, RuleMetadata, strict_read_evidence, strict_read_message};
-    use crate::{ExecutionRole, OwnerRequirement, ReactiveRead};
-    use typefacts::Location;
-
-    fn location(start: u64) -> Location {
-        Location {
-            path: "app.tsx".into(),
-            start_byte: start,
-            end_byte: start + 1,
-        }
-    }
-
-    fn read(missing_jsx_census: bool) -> ReactiveRead {
-        ReactiveRead {
-            kind: "accessor".into(),
-            accessor: "count".into(),
-            location: location(20),
-            declaration: location(10),
-            execution: ExecutionRole::UntrackedRendering,
-            context: "Panel".into(),
-            via: "".into(),
-            origin: None,
-            origin_context: "".into(),
-            uncertain: false,
-            missing_jsx_census,
-        }
-    }
-
-    /// The census-gap wording *is* the precision claim of the escalation: a
-    /// finding that says "outside every compiler-tracked JSX region" asserts a
-    /// completed search of facts that were never collected. The two census-gap
-    /// fixtures pin the message through the snapshot (they are in coverage's
-    /// `KEEPS_WORDING` set), but nothing in the snapshot carries evidence
-    /// steps, so the last evidence sentence is pinned here or nowhere.
-    #[test]
-    fn a_census_gap_never_claims_a_completed_search_of_compiler_facts() {
-        let overstatement = "outside every compiler-tracked JSX region";
-
-        let ordinary = read(false);
-        assert!(strict_read_message(&ordinary).contains("which does not track"));
-        assert!(
-            strict_read_evidence(&ordinary)
-                .last()
-                .unwrap()
-                .message
-                .contains(overstatement),
-            "a read with a census entry keeps the completed-search evidence"
-        );
-
-        let gap = read(true);
-        let message = strict_read_message(&gap);
-        assert!(
-            message.contains("execution census does not cover"),
-            "the census gap must be named in the message: {message}"
-        );
-        assert!(
-            !message.contains("which does not track") && !message.contains("never updates when"),
-            "the message must not claim the read never updates: {message}"
-        );
-        let evidence = strict_read_evidence(&gap);
-        let last = &evidence.last().unwrap().message;
-        assert!(
-            !last.contains(overstatement),
-            "the evidence must not claim a completed search: {last}"
-        );
-        assert!(
-            last.contains("no compiler fact places it inside or outside a tracked region"),
-            "the evidence must state the missing fact: {last}"
-        );
-    }
-
-    /// The interprocedural arm reaches the same sentence through a different
-    /// subject, so it gets its own assertion rather than riding on the direct
-    /// one.
-    #[test]
-    fn the_census_gap_evidence_covers_the_propagated_read_too() {
-        let mut gap = read(true);
-        gap.via = "title".into();
-        gap.origin = Some(location(4));
-        let evidence = strict_read_evidence(&gap);
-        let last = &evidence.last().unwrap().message;
-        assert!(
-            last.starts_with("the call sits inside a JSX expression the compiler's execution census does not cover"),
-            "unexpected evidence for the propagated read: {last}"
-        );
-        assert!(strict_read_message(&gap).contains("read through title"));
-    }
-
-    /// A missing-census owner requirement must not claim a completed search for
-    /// a live, unowned operation.
-    #[test]
-    fn a_census_gap_makes_an_owner_requirement_uncertifiable_not_a_violation() {
-        let metadata = RuleMetadata {
-            code: "SC4001",
-            name: "missing-owner",
-            severity: "error",
-            uncertifiable: false,
-            default_enabled: true,
-            presets: &[],
-        };
-        let requirement = || OwnerRequirement {
-            operation: crate::OwnerRequirementOperation::Cleanup,
-            location: location(20),
-            uncertain: false,
-            runtime_uncertain: false,
-            caller_uncertain: false,
-            conditional_owner: false,
-            component_uncertain: false,
-            missing_jsx_census: false,
-            report: true,
-        };
-
-        let ordinary = Finding::for_owner_requirement(
-            metadata,
-            &requirement(),
-            "onCleanup is called without a reactive owner",
-            "Register it under a component or root.",
-        );
-        assert_eq!(ordinary.kind, "violation");
-        assert!(
-            ordinary.evidence[0]
-                .message
-                .contains("no containing component, computation, or root owner dominates"),
-            "the ordinary requirement keeps its completed-search evidence: {:?}",
-            ordinary.evidence[0].message
-        );
-
-        let mut missing = requirement();
-        missing.uncertain = true;
-        missing.missing_jsx_census = true;
-        let missing = Finding::for_owner_requirement(
-            metadata,
-            &missing,
-            "onCleanup is called without a reactive owner",
-            "Register it under a component or root.",
-        );
-        assert_eq!(missing.kind, "uncertifiable");
-        assert!(missing.message.contains("execution census does not cover"));
-        assert!(
-            !missing.evidence[0]
-                .message
-                .contains("no containing component, computation, or root owner dominates")
-        );
-    }
-}
+mod tests;

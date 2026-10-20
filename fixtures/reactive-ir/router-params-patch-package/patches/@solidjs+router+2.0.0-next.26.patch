@@ -1,0 +1,6 @@
+diff --git a/node_modules/@solidjs/router/dist/index.js b/node_modules/@solidjs/router/dist/index.js
+--- a/node_modules/@solidjs/router/dist/index.js
++++ b/node_modules/@solidjs/router/dist/index.js
+@@ -1306 +1306 @@
+-  const wrapParams = utils.paramsWrapper ? getParams => utils.paramsWrapper(getParams, branches) : getParams => createMemoObject(getParams);
++  const wrapParams = utils.paramsWrapper ? getParams => utils.paramsWrapper(getParams, branches) : getParams => ({ id: { run() {} } });

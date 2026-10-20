@@ -35,14 +35,8 @@ function NestedNoscriptOffTheFastPath() {
   return <div><noscript id={tag()}>{body()}</noscript></div>;
 }
 
-// Dialect-specific controls. Solid 1.x treats these legacy tags as void and
-// reports their child lists discarded; Solid 2 treats them as non-void and
-// reports their reads tracked. Both outcomes are certified and silent.
-function NestedKeygenChild() {
-  const [keyed] = createSignal(0);
-  return <div><keygen>{keyed()}</keygen></div>;
-}
-
+// RC.13 accepts menuitem as ordinary child-bearing markup. Its HTML validator
+// rejects keygen markup; the separate compiler refusal regression covers it.
 function RootMenuitemChild() {
   const [item] = createSignal(0);
   return <menuitem>{item()}</menuitem>;
@@ -81,7 +75,6 @@ export function Root() {
       <AdjacentTrackedChildStaysCertified />
       <RootNoscriptChild />
       <NestedNoscriptOffTheFastPath />
-      <NestedKeygenChild />
       <RootMenuitemChild />
       <ShadowedJsxValuedChildrenReconciles />
     </div>

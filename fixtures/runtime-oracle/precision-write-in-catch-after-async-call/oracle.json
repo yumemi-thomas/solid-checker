@@ -1,0 +1,3 @@
+{
+  "note": "Step 4 (try-head awaits): a catch after awaiting an async function's call runs after the suspension, with no owner, and is silent; the control's catch is reached by a synchronous throw in the body's window."
+}

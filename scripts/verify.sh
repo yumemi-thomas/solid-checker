@@ -1,6 +1,12 @@
 #!/bin/sh
 set -eu
 
+# What this run verifies, captured before any step: the green stamp written at
+# the end must name exactly this commit, on a tree that was clean throughout.
+verify_start_head=$(git rev-parse HEAD)
+verify_start_status=$(git status --porcelain)
+verify_tree_moved=0
+
 rust_manifest=rust/Cargo.toml
 cargo_profile=verify
 checker_bin="$PWD/rust/target/$cargo_profile/solid-checker-rust"
@@ -20,21 +26,13 @@ case "$rust_test_runner" in
     ;;
 esac
 
-run_rust_tests() {
-  if [ "$rust_test_runner" = nextest ]; then
-    cargo +1.97 nextest run --cargo-profile "$cargo_profile" "$@"
-  else
-    cargo +1.97 test --profile "$cargo_profile" "$@"
-  fi
-}
-
 # `bun` is now required before the first cargo step, not only by the Bun gates
 # further down: the timing clock below is a `bun -e`, and under `set -e` a
 # failed command substitution in an assignment aborts the script with a bare
 # "bun: command not found" that says nothing about what wanted it. Fail fast
 # with a sentence instead.
 if ! command -v bun >/dev/null 2>&1; then
-  echo "make verify: bun is required (the per-step clock, the coverage/oracle/contract gates," >&2
+  echo "make verify: bun is required (the per-step clock, the coverage/oracle gates," >&2
   echo "  and the Bun steps all run under it). Install Bun and re-run." >&2
   exit 127
 fi
@@ -44,10 +42,9 @@ fi
 #
 # `make verify` is one long sequence of unequal steps, and without a breakdown
 # every discussion about its cost is a guess. Each `step <name>` closes the
-# previous step (printing its wall time) and opens the next, so the commands
-# below stay exactly what they were -- same commands, same order, same
-# fail-fast: nothing is wrapped, nothing is subshelled, `set -eu` still aborts
-# the script on the first failure.
+# previous step (printing its wall time) and opens the next. The combined test
+# stage waits for both suites and reports each status; `set -eu` prevents later
+# gates from running if either suite fails.
 #
 # The clock is a single `bun -e` per boundary (bun is already required by
 # steps below), so one read serves as the previous step's end and the next
@@ -56,7 +53,7 @@ fi
 # steps finish in tens of milliseconds.
 #
 # `SOLID_CHECKER_GATE_CACHE=0` in the environment forces the content-addressed
-# gate caches (coverage, contract corpus, registry pins) to recompute
+# gate caches (coverage, registry pins) to recompute
 # everything; `SOLID_CHECKER_GATE_CONCURRENCY=<N>` overrides the gates' default
 # fan-out of min(cores, 8).
 # ---------------------------------------------------------------------------
@@ -69,6 +66,12 @@ run_start=$(epoch_ms)
 step_start=$run_start
 
 step() {
+  # A tree that differs from the start at any step boundary (an edit, even one
+  # reverted before the end) means some step may have checked other bytes than
+  # the commit, so the run must not stamp it green.
+  if [ "$(git status --porcelain)" != "$verify_start_status" ]; then
+    verify_tree_moved=1
+  fi
   if [ -n "$step_name" ]; then
     step_now=$(epoch_ms)
     step_ms=$((step_now - step_start))
@@ -116,42 +119,64 @@ go vet ./apps/solid-typefacts/...
 step bun-install
 bun install --cwd packages/cli --ignore-scripts --no-progress --frozen-lockfile
 
-step go-test-race
-go test -race ./apps/solid-typefacts/...
-
-step clippy
-cargo +1.97 clippy --profile "$cargo_profile" \
-  --manifest-path "$rust_manifest" --workspace --all-targets
-
-step check-backend-v1
-cargo +1.97 check --profile "$cargo_profile" \
-  --manifest-path "$rust_manifest" -p solid-facts-backend \
-  --all-targets --no-default-features --features dialect-v1
-
-step check-backend-v2
-cargo +1.97 check --profile "$cargo_profile" \
-  --manifest-path "$rust_manifest" -p solid-facts-backend \
-  --all-targets --no-default-features --features dialect-v2
-
-step check-wasm-v1
-cargo +1.97 check --profile "$cargo_profile" \
-  --manifest-path "$rust_manifest" -p solid-checker-wasm \
-  --all-targets --no-default-features --features dialect-v1
-
-step check-wasm-v2
-cargo +1.97 check --profile "$cargo_profile" \
-  --manifest-path "$rust_manifest" -p solid-checker-wasm \
-  --all-targets --no-default-features --features dialect-v2
-
 step compiler-identity
 bun scripts/check-compiler-facts-identity.mjs
 
 step build-typefacts
-scripts/build-typefacts.sh
+TYPEFACTS_BUILD_ID="${SOLID_CHECKER_BUILD_ID:-dev}" scripts/build-typefacts.sh
 
-step test-workspace
+# ---------------------------------------------------------------------------
+# Compile-time inputs and the Node the runtime resolver runs.
+#
+# Every Cargo build below shares one environment (build id, probe Node), so
+# preflight and tests do not alternate between differently-fingerprinted builds.
+step certification-pins
+if ! command -v node >/dev/null 2>&1; then
+  echo "make verify: node is required (the runtime resolver runs project config with it)." >&2
+  exit 127
+fi
+probe_node="${PROBE_NODE:-$(node -e 'process.stdout.write(require("fs").realpathSync(process.execPath))')}"
+# The runtime resolver (ADR 0220) runs project config with this Node.
+PROBE_NODE="$probe_node"
+SOLID_CHECKER_PROBE_NODE="$probe_node"
+export PROBE_NODE SOLID_CHECKER_PROBE_NODE
+
+SOLID_CHECKER_BUILD_ID="${SOLID_CHECKER_BUILD_ID:-dev}"
+TYPEFACTS_BUILD_ID="$SOLID_CHECKER_BUILD_ID"
+SOLID_CHECKER_CARGO_PROFILE="$cargo_profile"
+export SOLID_CHECKER_BUILD_ID TYPEFACTS_BUILD_ID SOLID_CHECKER_CARGO_PROFILE
+
+step clippy
+cargo +1.97 clippy --profile "$cargo_profile" \
+  --manifest-path "$rust_manifest" --workspace --all-targets -- -D warnings
+
+# One dialect ships (ADR 0110), so `--no-default-features --features dialect-v2`
+# is the default build and a separate arm would compile the same configuration
+# twice. These steps return when a second dialect does.
+
+# The product-owned corpus carries exact checker expectations and per-finding
+# TypeScript ownership for every retained former parity case. The oracle tree
+# is the audited release, version- and integrity-verified by `provision`, which
+# refuses a substituted prerelease; it is idempotent, short-circuiting on a
+# tree that already passes that check.
+step oracle-provision
+bun scripts/tsc-oracle.mjs provision --dialect all
+
+# The assignments are inside the function rather than prefixed onto the call:
+step go-rust-tests
 TYPEFACTS_TEST_BIN="$PWD/bin/solid-typefacts" SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" \
-  run_rust_tests --manifest-path "$rust_manifest" --workspace
+  node scripts/verify-tests.mjs "$rust_test_runner" &
+tests_pid=$!
+stop_tests() {
+  kill -TERM "$tests_pid" 2>/dev/null || :
+  wait "$tests_pid" 2>/dev/null || :
+  exit 130
+}
+trap stop_tests INT TERM HUP
+tests_status=0
+wait "$tests_pid" || tests_status=$?
+trap - INT TERM HUP
+test "$tests_status" -eq 0
 
 step build-checker
 cargo +1.97 build --profile "$cargo_profile" --manifest-path "$rust_manifest" \
@@ -161,15 +186,33 @@ step coverage
 SOLID_CHECKER_BIN="$checker_bin" \
   SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" bun scripts/coverage.mjs
 
-# The product-owned corpus carries exact checker expectations and per-finding
-# TypeScript ownership for every retained former parity case.
-step oracle-provision
-bun scripts/tsc-oracle.mjs provision --dialect all
-
 step ownership-gate
 SOLID_CHECKER_BIN="$checker_bin" \
   SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" bun scripts/ownership-gate.mjs \
   --require-retained --require-complete
+
+# The WASM package (P5 S2): its Node-API module and the owned check's two
+# reactors, built one after the other with the pins exported above. Then the
+# packed owned check, installed in isolation, against this checker. The gate builds nothing itself and fails on any
+# missing input; the bridge test records the update frames it replays, in the
+# same scratch tree outside the repository. See scripts/wasm-parity/README.md.
+step build-wasm-package
+bun install --cwd packages/wasm --ignore-scripts --no-progress --frozen-lockfile
+bun run --cwd packages/wasm build
+cargo +1.97 build --locked --manifest-path scripts/wasm-parity/guests/path-control/Cargo.toml \
+  --target wasm32-wasip1 --release --target-dir rust/target/wasm-parity-guests
+GOOS=wasip1 GOARCH=wasm GOTOOLCHAIN=local go build -trimpath \
+  -o rust/target/wasm-parity-guests/path-control-go.wasm ./scripts/wasm-parity/guests/path-control-go
+
+step wasm-parity
+wasm_parity_scratch=$(mktemp -d "${TMPDIR:-/tmp}/sc-wasm-parity.XXXXXX")
+mkdir -p "$wasm_parity_scratch/n2-tmp"
+TMPDIR="$wasm_parity_scratch/n2-tmp" TYPEFACTS_BRIDGE_FRAMES="$wasm_parity_scratch/update-frames" \
+  TYPEFACTS_TEST_BIN="$PWD/bin/solid-typefacts" \
+  cargo +1.97 test --profile "$cargo_profile" --manifest-path "$rust_manifest" \
+  -p typefacts --test bridge_process -- --exact bridged_answers_equal_process_answers
+SOLID_CHECKER_BIN="$checker_bin" SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" \
+  bun scripts/wasm-parity.mjs --scratch "$wasm_parity_scratch" --update-frames "$wasm_parity_scratch/update-frames"
 
 step build-session-bench
 cargo +1.97 build --release --manifest-path "$rust_manifest" \
@@ -184,51 +227,6 @@ SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" \
 step bun-test
 bun run --cwd packages/cli test
 
-# Phase 0 is immutable historical evidence. Validate its pinned bytes and
-# internal invariants; never regenerate it from the current dependency graph.
-step phase0-baseline
-bun scripts/package-contract-v2-phase0.mjs --check
-
-# Phase 16 pins full-corpus reachability/refusals and the accepted-corpus
-# compactness/load/query measurements. Expensive ecosystem generation is a
-# separately refreshed authority; this check refuses drift in any of its inputs.
-step phase16-corpus
-bun scripts/package-contract-v2-phase16.mjs --check
-
-# Phase 18 proves that every live main producer, consumer, bundle, fixture,
-# receipt, manifest, cache, and documentation path uses the first stable public
-# schema version 1 without rewriting independent version namespaces.
-step phase18-stable-cut
-bun scripts/package-contract-phase18.mjs
-
-# Phase 19A keeps policy 1 active while pinning the exact authority/refusal
-# baseline and a Rust-owned, internal policy-2 manifest and digest. This gate
-# fails if the audit rendering, producer identities, or issuance-shortcut
-# inventory drifts before the atomic policy cut.
-step phase19-policy
-bun scripts/package-contract-phase19.mjs
-
-# Phase 20 is the live row-disposition authority. Its generated ledger must
-# remain byte-identical to the checked full-corpus report, including ordinary
-# receipt loads, typed applicability, and complete dependency plans.
-step phase20-ledger
-bun scripts/package-contract-v2-phase20-ledger.mjs --check
-
-# Phase 21 freezes the exact 30-row Phase 20 refusal cohort before tracking
-# proof-preserving reductions. Its taxonomy must retain the upstream and CJS
-# controls while keeping semantic terminal classes authoritative over prose.
-step phase21-ledger
-bun scripts/package-contract-v2-phase21-ledger.mjs --check
-
-# Proposal orchestration can change a refusal envelope without changing the
-# normalized Rust model. Keep the exact generator corpus in the local handoff
-# authority as well as its dedicated CI workflow so snapshot drift cannot hide
-# behind library and CLI unit coverage.
-step contract-corpus
-SOLID_CHECKER_NATIVE_BIN="$checker_bin" \
-  SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" \
-  bun scripts/contract-corpus.mjs
-
 # AGENTS.md's absolute rule, as a gate: no rule's positive case may also be a
 # `tsc` error against the real published Solid typings. Provisioning installs
 # the audited package versions and verifies them, so a drifted install fails
@@ -236,9 +234,7 @@ SOLID_CHECKER_NATIVE_BIN="$checker_bin" \
 # every case as well, so it takes the same fresh verification build as coverage
 # and ownership -- the packaged binary may lag rust/ source.
 step tsc-oracle-test
-# The whole glob, exactly as CI's contracts job runs it: naming individual
-# files here once let a contract-generation regression reach CI that every
-# local handoff had missed, because verify gated 5 of the 17 test files.
+# The whole glob, exactly as CI's scripts-and-cli job runs it.
 SOLID_CHECKER_NATIVE_BIN="$checker_bin" \
   SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" \
   bun packages/cli/node_modules/vitest/vitest.mjs run \
@@ -262,13 +258,20 @@ sh -n scripts/*.sh
 jq empty schema/*.json
 jq empty fixtures/tsc-oracle/*.json
 jq empty fixtures/obligation-cases/*.json
-find pkg/contracts/bundled -type f -name '*.json' -exec jq empty {} +
 bun scripts/dialect-manifests.mjs validate
-
-step conformance
-bun scripts/check-bundled-contracts.mjs
-bun scripts/check-contract-pins.mjs
-bun scripts/dialect-manifests.mjs check-composed-contracts
+bun scripts/doc-budget.mjs
 
 step ""
 summarize
+
+# A clean tree that passed every step is the default base for the next
+# `make verify-delta` (scripts/verify-delta.mjs): the fast loop then plans only
+# what changed since the last full green run. Stamp only when the run started
+# clean, HEAD never moved, and the tree matched the start at every step
+# boundary. An edit made and reverted inside a single step is not observable
+# here; parallel agents work in their own worktrees, which keeps that window
+# to a deliberate act.
+if [ -z "$verify_start_status" ] && [ "$verify_tree_moved" = 0 ] &&
+  [ -z "$(git status --porcelain)" ] && [ "$(git rev-parse HEAD)" = "$verify_start_head" ]; then
+  printf '%s\n' "$verify_start_head" > rust/target/verify-green-commit
+fi

@@ -1,0 +1,3 @@
+# returned-store-proxy
+
+**Claim (ADR 0287).** A hook returning `new Proxy(state, handler)` over the store it created returns that store when the handler defines only a `get` trap returning `Reflect.get(target, prop[, receiver])` over its own unwritten parameters (the shape of `@tanstack/solid-query` 6.0.0-rc.0's `useQuery`): SC1001 on `query.search`; second traps, other returns/stores, written or leaked targets, fallthrough, held handlers, escaped roots and cross-file forwards are refused (ADR 0282: SC9012 while the iteration veto holds). Stubs from `returned-store-nested-read` (published rc.13).

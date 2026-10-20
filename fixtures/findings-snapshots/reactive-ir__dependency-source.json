@@ -1,0 +1,25 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source/App.tsx",
+      "start": 372,
+      "end": 386,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source/App.tsx",
+      "start": 1219,
+      "end": 1233,
+      "fixes": 0
+    }
+  ]
+}

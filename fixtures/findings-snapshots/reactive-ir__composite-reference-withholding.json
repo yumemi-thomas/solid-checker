@@ -1,0 +1,25 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "reactive-handler-frozen",
+      "code": "SC1007",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/composite-reference-withholding/App.tsx",
+      "start": 985,
+      "end": 990,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/composite-reference-withholding/App.tsx",
+      "start": 1094,
+      "end": 1106,
+      "fixes": 0
+    }
+  ]
+}

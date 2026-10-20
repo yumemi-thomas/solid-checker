@@ -1,0 +1,11 @@
+{
+  "note": "Opus review of c31223260 (l06-abort-onabort): a DOM call that dispatches synchronously inside onSettled (ADR 0329, extended)",
+  "steps": [
+    {
+      "action": "assert-text",
+      "selector": "#ran-a",
+      "text": "ran",
+      "id": "runtime-observation-0"
+    }
+  ]
+}

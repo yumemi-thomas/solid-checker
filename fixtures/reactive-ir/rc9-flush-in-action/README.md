@@ -1,0 +1,3 @@
+# rc9-flush-in-action
+
+SC2006 `flush-in-action`: `@solidjs/signals@2.0.0-rc.8` added a dev guard throwing `FLUSH_IN_ACTION` when `actionStepDepth > 0` (rc.9 `dist/dev-shared.js:2210-2219`), raised only around `action`'s `it.next`/`it.throw` (production never throws): anywhere in a sync generator, and in an async generator up to its first suspension and after each `yield` are violations; after-`await`, `for await`, awaiting loops, parameter initializers, scheduled callbacks, `untrack(() => flush())`, wrapped generators, shadowed `flush` and handlers are silent. `flush`, `action`, `untrack` are byte-faithful to published rc.9.

@@ -1,0 +1,3 @@
+# A package's context-provided getter (ADR 0289)
+
+With `--dependency-source dep-router`, a project Get of a package getter reading an accessor is `SC9012` **uncertifiable**, never a violation, in a role that reports untracked reads (body, local, chain, destructuring, literal computed key); JSX, memos, handlers, inert getters, data members and project-shaped plain-object hooks are clean (the package's `Object.assign(obj, written)` is ADR 0284's wildcard veto). `dep-router` has the shape of `@solidjs/router` 2.0.0-next.26; without the flag nothing is reported. Stub `context-member-identity`'s (published rc.13 signatures).

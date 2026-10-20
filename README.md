@@ -30,17 +30,30 @@ owner. No single tool can check those rules from source text alone, so
   every update.
 - **Type facts** — what TypeScript knows about every symbol: where an accessor
   came from, which calls a given `await` dominates, what a function returns.
-- **Package contracts** — the declared reactive behavior of your dependencies'
-  exports, so analysis doesn't stop at `node_modules`.
+- **Dependency source** — selected installed runtime files analyzed alongside
+  project code; unavailable behavior stays uncertifiable.
 
-Combining them lets the analyzer **certify** the project rather than
-pattern-match risky-looking syntax. Every finding carries a stable code
-(`SCxxxx`), the evidence that proves it, and a fix hint, and is one of two
-kinds:
+Combining them lets the analyzer prove defects rather than pattern-match
+risky-looking syntax. Every finding you see carries a stable code (`SCxxxx`),
+the evidence that proves it, and a fix hint:
 
 - **violation** — the analyzer proved the code misbehaves at runtime.
-- **uncertifiable** — the analyzer could not prove the code correct, and the
-  rule page explains how to make it provable.
+- **notice** — the analysis did not apply to this project as stated: the
+  installed Solid runtime is unsupported, or its release is unaudited.
+
+Code the analyzer could neither prove correct nor prove wrong is not reported:
+those *uncertifiable* results are an internal measure of what the analysis
+cannot decide yet (`--format json` and `--internal` show them;
+[ADR 0328](docs/decisions.md#adr-0328)).
+
+Reports state their runtime premises. The [standard runtime configuration
+premise](docs/decisions.md#adr-0266), amended by
+ADR 0268, assumes Solid's standard configuration and hydration host. Dependency
+source mode also uses the [package integrity premise](docs/decisions.md#adr-0300):
+code outside the analyzed program neither provides selected packages' exported
+contexts nor rewrites objects those packages create. Visible providers and
+member or descriptor writes still withhold a proof. These assumptions are
+conditions of certification; an absent visible veto does not establish them.
 
 For example, `SC1002` [reactive-read-after-await](docs/rules/reactive-read-after-await.md):
 
@@ -64,8 +77,8 @@ bunx --bun --no-install solid-checker --project tsconfig.json
 ```
 
 Diagnostics print as framed source excerpts with severity markers, evidence
-labels, and a fix hint. In CI, add `--certify` to fail the build unless the
-project is fully certified:
+labels, and a fix hint. In CI, add `--certify` to fail the build on any
+violation or project notice:
 
 ```sh
 bunx --bun --no-install solid-checker --project tsconfig.json --certify
@@ -76,26 +89,34 @@ downloads only the binary matching your platform.
 
 ## Solid compatibility
 
-The release treats Solid 1.x and Solid 2.0 as separate dialects over one shared
-analysis engine:
+**This build analyzes Solid 2.0 only.**
 
-| | Solid 1.x | Solid 2.0 |
-| --- | --- | --- |
-| Audited runtime | `solid-js@1.9.14` | `solid-js@2.0.0-rc.0` and `@solidjs/web@2.0.0-rc.0` |
-| Dialect id | `solid-v1` | `solid-v2` |
-| Rule names | `v1/<rule>` | Unprefixed |
-| Catalog | 18 rules | 26 rules |
-| Effect model | `createEffect(fn, initialValue?, options?)` | `createEffect(compute, apply)` |
-| Async boundary | `Suspense` / `createResource` | `Loading` / async computations |
-| Lifecycle | `onMount`; cleanup via `onCleanup` | `onSettled`; leaf cleanup returned from callbacks |
-| Directives | `use:` | `ref` directive factories |
-| Props helpers | `mergeProps` / `splitProps` | `merge` / `omit` |
+| | Solid 2.0 |
+| --- | --- |
+| Audited runtime | `solid-js@2.0.0-rc.9`, `@solidjs/signals@2.0.0-rc.9` and `@solidjs/web@2.0.0-rc.9` |
+| Dialect id | `solid-v2` |
+| Rule names | Unprefixed |
+| Catalog | 31 rules |
+| Effect model | `createEffect(compute, apply)` |
+| Async boundary | `Loading` / async computations |
+| Lifecycle | `onSettled`; leaf cleanup returned from callbacks |
+| Directives | `ref` directive factories |
+| Props helpers | `merge` / `omit` |
+
+Solid 1.x was retired in 2026-09 ([ADR 0110](docs/decisions.md#adr-0110)).
+A project whose resolved `solid-js` is a major this build has no vocabulary for
+is **refused outright** — one `SC9013 unsupported-solid-runtime` result naming
+the `package.json` that decided it, and no other findings — rather than analyzed
+under a language it does not run. An absent or unclassifiable install still gets
+the Solid 2.0 default, because that is an absence rather than a contradicted
+answer.
 
 The checker detects the installed `solid-js` major automatically. Use
-`--dialect solid-v1` or `--dialect solid-v2` only when a package manager or
-fixture prevents version discovery. Solid 2.0 is still a release candidate, so
-its bundled contracts intentionally require the exact audited RC; a later RC
-must be reviewed before it can certify a project.
+`--dialect solid-v2` only when a package manager or fixture prevents version
+discovery; passing it also overrides the refusal above, so it is appropriate
+only when the resolved manifest misreports what will actually be installed.
+Solid 2.0 is still a release candidate; release-dependent vocabulary is
+reviewed against exact audited versions. Unreviewed behavior stays open.
 
 See [the workspace architecture](rust/ARCHITECTURE.md#version-ownership-at-a-glance)
 for where version-specific code belongs and [the rule index](docs/rules/README.md)
@@ -103,7 +124,7 @@ for the two catalogs.
 
 On macOS and Linux, optimized release checks retain one project actor for up
 to two idle minutes. It owns the TypeScript program and analysis caches,
-resynchronizes source and contract inputs before every answer, and makes
+resynchronizes source and runtime inputs before every answer, and makes
 repeated CLI and editor checks incremental. Set `SOLID_CHECKER_DAEMON=0` for a
 strict one-shot process, or `SOLID_CHECKER_DAEMON_IDLE_SECS=<seconds>` to tune
 the idle lifetime. The actor and its Type Facts child are evicted when their
@@ -149,14 +170,16 @@ With Oxlint:
 {
   "jsPlugins": ["solid-checker/eslint"],
   "rules": {
-    "solid-checker/certification": "error"
+    "solid-checker/certification": "error",
+    "solid-checker/package-note": "warn"
   }
 }
 ```
 
 The plugin finds the nearest `tsconfig.json` automatically (in ESLint it also
 reuses `parserOptions.project`). Set `settings.solidChecker.project` if your
-config has a nonstandard name or is a solution-style root config.
+config has a nonstandard name or is a solution-style root config. Removed
+contract settings are refused with a migration message.
 
 > The plugin analyzes the project once per lint run and reports from that
 > snapshot, so it fits lint commands, editor-on-save, and CI.
@@ -168,79 +191,23 @@ Run `solid-checker --help` for the full list. The options you'll reach for most:
 | Option | Description |
 | --- | --- |
 | `--project <PATH>` | TypeScript project to analyze (default: `tsconfig.json`). |
-| `--dialect <solid-v1\|solid-v2>` | Override automatic Solid major-version detection. |
-| `--format <default\|text\|json>` | Output format. `default` prints framed source excerpts, `text` is compact, `json` is machine-readable. |
-| `--certify` | Exit non-zero unless the project is fully certified. Use this in CI. |
+| `--dialect solid-v2` | Override automatic Solid major-version detection. Also overrides the unsupported-runtime refusal. |
+| `--format <default\|full\|text\|json>` | Output format. `default` prints violations, then project notices, as framed source excerpts. `full` frames every shown finding in place, `text` is compact, `json` is the complete machine-readable report, uncertifiable results included. |
+| `--certify` | Exit non-zero on any violation or project notice. Use this in CI. |
+| `--internal` | Maintainer view: the human formats also show uncertifiable results (findings to review, then analysis-coverage gaps), and `--certify` fails unless the project is fully certified. |
 | `--preset <NAME>` | Enable a catalog preset (repeatable; the compatibility `preferences` preset is currently available). |
 | `--enable-rule <NAME>` | Explicitly enable one rule (repeatable). |
-| `--check-contracts` | Report imported Solid packages whose reactivity contract is missing, unverified, stale, or bound to no import, with the command that fixes each. Also spelled `solid-checker contract check`. |
+| `--runtime-target <browser\|node>`, `--runtime-build <development\|production>` | Declare the runtime host for dependency source selection under Vite with the Solid plugin. Unavailable selection keeps explicit uncertifiable package obligations. |
+| `--dependency-source <SPECIFIER>` | Analyze only the named installed packages from source (repeatable; `*` is every Solid package, the default under a declared target and build). Requires both host flags. |
 | `-h`, `--help` | Print help. |
 
-Authoring a package contract (see [Publishing a Solid library?](#publishing-a-solid-library)):
+## Dependencies
 
-| Option | Description |
-| --- | --- |
-| `--emit-contract <PATH>` | Write an inferred `solid-reactivity.json` contract candidate. |
-| `--package-name <NAME>` | Package name recorded in the emitted contract. |
-| `--package-version <VERSION>` | Exact package version recorded in the contract. |
-| `--declaration-artifact <PATH>` | Hash a declaration artifact into the contract. |
-| `--implementation-artifact <PATH>` | Hash an implementation artifact into the contract. |
-| `--contract <PATH>` | Override or discover a package contract (repeatable). |
-| `--validate-contract <PATH>` | Validate a contract and its artifact hashes. |
-
-## Using a library that ships no contract
-
-`solid-checker` needs proof of reactive behavior that package declarations do
-not express. When an imported package has no receipt-issued contract for its
-exact installed artifact, the checker reports the uncertifiable `SC9005
-package-contract-incomplete` finding and `--certify` fails.
-
-List which of your dependencies are missing a contract, and which have one
-that no longer matches the installed version:
-
-```sh
-solid-checker contract check
-```
-
-Each package is reported as `bundled`, `accepted`, `unverified`, `stale`,
-`unbound`, or `missing`. The command exits non-zero when a package cannot be
-certified, so it also works as a CI gate. Generate an unaccepted stable-v1
-proposal for an exact registry-installed artifact with its integrity:
-
-```sh
-solid-checker contract generate \
-  --package-root node_modules/example-package \
-  --integrity 'sha512-…' \
-  --output .solid-checker/contracts/example-package/solid-reactivity.json
-```
-
-Generation never grants acceptance. Policy-1 proof-file verification is
-retired; the active loader requires a receipt-version-2 payload plus explicit
-issuer provenance. Until the automatic `solid-checker contract certify`
-workflow can discharge every demand and atomically publish that result, the
-proposal remains uncertifiable. See
-[package contracts](docs/package-contracts.md) for the trust boundary and
-current migration state.
-
-## Publishing a Solid library?
-
-Generate an unaccepted proposal for every finite runtime entrypoint:
-
-```sh
-solid-checker contract generate --package-root . --integrity 'sha512-…'
-```
-
-Package name and exact version come from `package.json`; integrity remains an
-independent required input. Finite export subpaths and bounded condition
-partitions are analyzed as exclusive artifact cases. Wildcard-only surfaces
-remain uncertifiable until you pass each finite `--entrypoint` explicitly.
-Use `--conditions browser,development` for one exact environment.
-
-The current wire document is temporary `schemaVersion: 2` with semantic model
-version 1. Rust alone normalizes summaries, validates closure, and issues
-receipts. JavaScript orchestration manages artifact acquisition and processes;
-it does not interpret package semantics. The eventual stable schema-version-1
-cut is atomic and does not provide a legacy compatibility decoder.
+Package behavior is analyzed from installed runtime source under the declared
+host and source-selection premises. An unavailable or unsupported package
+boundary stays explicitly uncertifiable (SC9005). Contract generation,
+certification, catalogs and receipts have been removed; see
+[ADR 0312](docs/decisions.md#adr-0312).
 
 ## WASM
 
@@ -254,8 +221,5 @@ import { checkSync } from "solid-checker";
 ## Documentation
 
 - [Rule index](docs/rules/README.md) — every diagnostic, with examples and fixes
-- [Rule catalog migration](docs/rule-catalog-migration.md) — renamed, merged,
-  retired, and default-policy changes
-- [Package contracts](docs/package-contracts.md) — the dependency trust model
-- [Documentation index](docs/README.md) — architecture, protocols, glossary
+- [Documentation index](docs/README.md) — decisions, open work, protocols
 - [Contributing](CONTRIBUTING.md) — building and developing solid-checker

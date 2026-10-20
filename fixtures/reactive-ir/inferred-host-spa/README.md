@@ -1,0 +1,5 @@
+# Inferred host: spa
+
+Hand-stated browser-only document: only the parsed HTML module entry (`index.html` to `src/main.ts`) authorizes the root. What the snapshot shows: status `uncertifiable` with no listed finding. An inferred browser host cannot certify (`diagnostics.rs` forces `violation` or `uncertifiable` once a host index exists), so `uncertifiable` is the admission outcome; the declined twins (`-metadata-published`, `-workspace-published`, `-dynamic-unknown`) are `certified`. `startClosed(): void` is opaque since package contracts were removed (ADR 0312), so no finding carries the inferred host.
+
+Pins that are not findings: the `*-cases.json` proof inputs (admission, class, nullish, resource, completion, route) and `completion-variants.json` are read by Rust tests (`host_config/tests.rs`, `host_loadable/tests.rs`, `inferred_host/tests.rs`, `solid-facts` `host_execution/tests.rs` and `host_call_completion.rs`) and pin eager vs inert work. Element/JSX declarations are reduced in `jsx.d.ts`.

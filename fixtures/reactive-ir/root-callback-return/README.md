@@ -1,0 +1,3 @@
+# Exact callback returned source identity
+
+ADR 0259's `createRoot` passthrough: `TimerRead`, `CounterRead`, `ObjectRead`, `MemoRead`, `SelectedObjectRead`, `WrappedRead` are SC1001 violations at body accessor calls, the same in JSX clean; nonliteral callbacks, multiple/conditional returns, dispose, async/escaped callbacks, unknown factories and mutable bindings keep their prior evidence; `ShadowedRoot` clean. ADR 0282: tuple-based reads are SC9012. Solid stubs copy `write-scope-roots-rc9` unchanged; JSX reduced.

@@ -1,66 +1,134 @@
+//! The reactive IR: project indexes, interprocedural analysis, execution
+//! roles, owner and reachability proofs, and the findings they produce.
+//!
+//! Module map (each row is a file or directory under `src/`). The analysis
+//! modules reference each other cyclically (`execution_role`, `owners`,
+//! `indexes`, `interproc`), so the crate is split inside, not across.
+//! Directories hold a facade `foo.rs` with shared types plus child modules
+//! re-exported through it; `foo/tests.rs` holds the unit tests.
+//!
+//! | Module | Responsibility |
+//! | --- | --- |
+//! | `pipeline` | Build entry points and the staged incremental pipeline. |
+//! | `cache` | Cross-generation state: per-file contributions, fingerprints, reuse checks. |
+//! | `symbols` | TypeScript symbol, alias-root and entity indexes, full and incremental. |
+//! | `indexes` | `ProjectIndexes` and `SemanticLookup`, the semantic query surface. Children: completion, class_prototype, primitive_proof, callees, member_values, components. |
+//! | `identity` | Compact symbol identities shared by the indexes. |
+//! | `source_discovery` | Reactive sources, accessors and props reactivity. Children: returned_sources, discover_file, discover_sources, typed_sources, props_reactivity. |
+//! | `static_rules`, `static_api`, `server_rules` | File-local rules run right after source discovery. |
+//! | `local_access` | Per-file reads and writes of reactive values. |
+//! | `interproc` | Interprocedural reactive-read analysis. Children: parameter_use, retained_literal, graph, obligations, return_escape, callback_chain, structured_returns, result_view, result_reads, reads. |
+//! | `accessor_provenance` | Exact project-owned callable transport (a `#[path]` child of `interproc`). |
+//! | `property_gets` | Value Gets instantiated at a package call (a `#[path]` child of `interproc`). |
+//! | `execution_role` | Execution-role classification of a span. Children: events, callee_roles, named_callbacks, invocation_flow, unowned_event_literals and more. |
+//! | `project_consumer` | Closed, read-only project callback-use summaries (a `#[path]` child of `execution_role`). |
+//! | `owners` | Which computations need a reactive owner, and where one is missing. |
+//! | `reachability` | Positive execution reachability and call multiplicity. |
+//! | `hosts`, `callback_host` | Browser/server host reachability and callback invocation premises. |
+//! | `reactive_analysis` | The coupled local/interprocedural stage. |
+//! | `attribution` | Discharges parameter-member dispatch obligations in a closed program. |
+//! | `cleanup`, `directives`, `effect_api`, `effect_execution` | Leaf-owner diagnostics, directive discovery, `createEffect` semantics. |
+//! | `argument_values`, `callback_return`, `literal_member_slots`, `object_members`, `value_identity` | What arguments, returns, members and values prove. |
+//! | `summary_semantics`, `runtime_semantics`, `runtime_configuration` | Summary vocabulary, audited runtime behaviour, assumed runtime conditions. |
+//! | `package_boundary`, `boundary_defects`, `router_params` | Package-source boundary obligations and the router-parameters premise. |
+//! | `findings`, `projection` | The finding model and its projection onto dialect rule catalogs. |
+//! | `upstream_compat` | Retained eslint-plugin-solid 0.14.5 heuristics (see AGENTS.md before editing). |
+//! | `development_feedback`, `timings` | Executed-feedback models and the stage-timing contract. |
+
+mod argument_values;
 mod attribution;
+mod boundary_defects;
 mod cache;
+mod callback_return;
 mod cleanup;
-pub mod contract_semantics;
-mod contracts;
+mod development_feedback;
 mod directives;
+pub use development_feedback::{
+    DevelopmentFile, DevelopmentFunction, DevelopmentOperation, ResultRelevance,
+};
 mod effect_api;
+mod effect_execution;
 mod execution_role;
 mod findings;
 mod identity;
 mod indexes;
 mod interproc;
+mod literal_member_slots;
 mod local_access;
 mod owners;
+/// The crate's maps and sets hash spans, symbol ids and paths on every
+/// lookup; Fx hashing is several times cheaper than SipHash for such keys.
+/// No answer depends on iteration order: the default hasher already
+/// randomized it on every run.
+pub type HashMap<K, V> = std::collections::HashMap<K, V, rustc_hash::FxBuildHasher>;
+/// See [`HashMap`].
+pub type HashSet<T> = std::collections::HashSet<T, rustc_hash::FxBuildHasher>;
+
+pub mod package_boundary;
 mod pipeline;
 mod projection;
 mod reachability;
 mod reactive_analysis;
+pub mod route_components;
+pub mod router_params;
+mod runtime_configuration;
 mod runtime_semantics;
+pub use runtime_configuration::RuntimeConfigurationPremise;
+mod object_members;
 mod server_rules;
 mod source_discovery;
 mod static_api;
 mod static_rules;
+pub mod summary_semantics;
 mod symbols;
 mod timings;
 mod upstream_compat;
+mod value_identity;
 
-pub use attribution::ObligationReach;
 pub use owners::function_binding_name;
-pub use pipeline::{build, build_with_accepted_contracts_measured};
 
-pub use upstream_compat::solid1x_options::{RuleOptions, RuleOverride, Solid1xRuleOptions};
+/// Whether `span` in `file` sits in an instance field initializer of a class,
+/// directly or in a function written there: code that runs only when an
+/// instance is constructed (review rounds 2-3 of 2026-10-19). The backend
+/// demotes every violation anchored there to an uncertifiable result, whatever
+/// rule placed it.
+#[must_use]
+pub fn site_in_instance_field(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+) -> bool {
+    execution_role::inside_instance_field(file, span)
+}
+pub use pipeline::{AnalysisInputs, build, build_with_analysis_inputs_measured};
+
+pub use upstream_compat::rule_options::{RuleOptions, RuleOverride};
+
+pub mod callback_host;
+pub mod hosts;
 
 pub use findings::{
     DOCS_BASE_URL, EvidenceStep, Finding, RuleManifestIdentity, RuleMetadata, SolveTimings,
     assert_rules_have_documentation, direct_mutation_wording, finish_findings, rule_manifest_json,
-    strict_read_evidence, strict_read_message, strict_read_related_locations,
+    strict_read_evidence, strict_read_message, strict_read_message_with_compute,
+    strict_read_related_locations,
 };
 pub use projection::{
-    CatalogCapabilities, CatalogWording, FindingSeed, FindingWording, PackageContractIssue,
-    PackageContractIssueKind, StaticDefectTerms, StaticDefectText, project_finding,
-    project_findings, static_defect_text, suppress_findings_owned_by_enabled_rules,
+    CatalogCapabilities, CatalogWording, FindingSeed, FindingWording, StaticDefectTerms,
+    StaticDefectText, project_finding, project_findings, static_defect_text,
+    suppress_findings_owned_by_enabled_rules,
 };
 
 use cache::{BuildIdentity, IncrementalCacheState, RetainedBuild};
-use pipeline::build_with_accepted_contracts_measured_incremental;
+use pipeline::build_with_analysis_inputs_measured_incremental;
 
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
+    collections::{BTreeSet, VecDeque},
     sync::Arc,
     time::{Duration, Instant},
 };
 
-use contracts::{
-    ContractAnalysis, ContractGraph, ContractSemantics, contract_export_summaries,
-    contract_export_summaries_incremental,
-};
-pub use contracts::{
-    ExportKindProof, export_kind_proof, export_kind_proof_from_entity, project_accepted_export,
-    raised_function_export,
-};
 use execution_role::{
-    NamedCallbackRoles, allowed_callback_spans, assigned_member_function_contains, execution_role,
+    NamedCallbackRoles, allowed_callback_spans, assigned_member_function_contains,
     named_callback_roles, semantic_execution_role,
 };
 use identity::{SymbolId, SymbolInterner, SymbolName, symbol_id, symbol_name};
@@ -77,9 +145,18 @@ use typefacts::Location;
 #[serde(rename_all = "kebab-case")]
 pub enum ExecutionRole {
     /// Neither compiler facts nor semantic facts classify this span. Unknown
-    /// is not a violation: projection suppresses it instead of converting a
-    /// missing fact into a user-facing claim.
+    /// is not a violation, and not a silent clean either: projection reports a
+    /// read, write or action here as an uncertifiable obligation of its rule
+    /// ([`ReactiveRead::is_uncertifiable`], [`ReactiveWrite::is_uncertifiable`],
+    /// [`ActionInvocation::is_uncertifiable`]).
     Unknown,
+    /// Proven to run only where no read, write or action rule reports, but in
+    /// no single role: invocations in several non-reporting roles (ADR 0323's
+    /// merge), or code past the strict-read window (after an unconditional
+    /// `await`). Every consumer treats it as it treats [`Self::Unknown`],
+    /// except projection, which reports nothing here: the absence of a breach
+    /// is proven, only the role is not one.
+    Unreported,
     /// One-shot module evaluation: reads are untracked, but writes do not run
     /// inside an owned tracking computation.
     ModuleInitialization,
@@ -140,6 +217,10 @@ pub struct RuntimeEnvironment {
     /// an *additional*, unseen caller exists.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub program_boundary: Option<ProgramBoundary>,
+    /// What the backend read of the installed `@solidjs/router` (ADR 0324).
+    /// No request or options document sets it, so it is skipped on the wire.
+    #[serde(skip)]
+    pub router_install: router_params::RouterInstallEvidence,
 }
 
 /// Whether callers outside the analyzed project may exist.
@@ -239,7 +320,7 @@ impl RuntimeEnvironment {
     }
 
     /// Exact runtime premises used by native rules and passed to the backend
-    /// artifact/guard resolver. Contract branch mechanics never reach the IR.
+    /// artifact/guard resolver. Condition-resolution mechanics never reach the IR.
     #[must_use]
     pub fn selected_conditions(&self) -> BTreeSet<String> {
         let mut conditions = self.conditions.clone();
@@ -307,6 +388,14 @@ impl ExecutionRole {
     pub const fn reports_disallowed_write(self) -> bool {
         matches!(self, Self::TrackedJsx | Self::UntrackedRendering)
     }
+
+    /// Whether a read, write or action in this role is reported at all: a
+    /// proven role that breaks the rule, or [`Self::Unknown`], where no fact
+    /// rules the breach out and the finding is an uncertifiable obligation.
+    #[must_use]
+    pub const fn reports_unplaced(self) -> bool {
+        matches!(self, Self::Unknown)
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -337,17 +426,67 @@ pub struct ReactiveRead {
     /// uncertifiable.
     #[serde(default, skip_serializing_if = "is_false")]
     pub missing_jsx_census: bool,
+    /// The read sits in a callback a host API retains and may invoke on its
+    /// invoker's stack -- an `addEventListener` listener, a `bind` bound
+    /// argument, a `PromiseLike.then` callback, a Geolocation callback
+    /// (`execution_role::host_callback_timing`). The host may invoke it inside
+    /// the component body's strict-read window, or after it, and nothing here
+    /// proves which. A third hole beside the other two, about the execution
+    /// window rather than the reactive backing or the compiler census, and
+    /// worded separately for that reason.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub host_callback_timing: bool,
+    /// The read sits in a function literal handed to a project function or
+    /// through a JSX prop whose consumer is not proven to invoke it during rendering
+    /// (`execution_role::callee_callback_timing`): the literal is written in
+    /// the component body but runs wherever the callee runs it -- during the
+    /// call, from a closure the callee returns or stores, or never -- and the
+    /// lexical position proves none of these. A fourth hole beside the other
+    /// three, about which code invokes the read rather than when a host does,
+    /// and worded separately for that reason. Also used when an effect apply's
+    /// defer options and compute dependencies leave its invocation unresolved.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub callee_callback_timing: bool,
+    /// Generation-local closed project-consumer proof, used only by strict-read
+    /// projection. It establishes no execution role, write legality, async-read
+    /// behavior, ownership, or escape permission. Deserialization cannot supply
+    /// this proof; the post-merge analysis recomputes it from current facts.
+    #[serde(skip)]
+    pub project_consumer_non_strict: bool,
+    /// An accepted inline invocation may read an accessor passed by reference,
+    /// but its call-scoped cardinality does not prove an invocation occurs.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub callback_invocation_unproven: bool,
+    /// The read was attributed to this call through another function's
+    /// interprocedural summary: the read runs inside that function's body, and
+    /// whether it runs while the call does (not from a timer, listener,
+    /// getter, returned accessor, effect compute or after an await) is not
+    /// established by the summary. Measured on 48 real projects, these
+    /// attributions were 73 false, 16 benign and 0 user-visible defects.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub summary_attributed: bool,
+    /// Reactive origin supplied by project-owned accessor transport. This
+    /// proves source identity for strict reads, not a synchronous condition
+    /// dependency; ordinary summary hops must preserve the distinction.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub transported: bool,
 }
 
 impl ReactiveRead {
     /// Whether a finding about this read is **uncertifiable** rather than a
     /// proven violation.
     ///
-    /// Two independent holes, either of which is enough: the reactive
+    /// Independent holes, any of which is enough: the reactive
     /// backing cannot be established because the component's callers cannot be
     /// enumerated ([`Self::uncertain`]), the execution context cannot be
     /// established because the compiler reported no census for the JSX region
-    /// ([`Self::missing_jsx_census`]).
+    /// ([`Self::missing_jsx_census`]), the host may run the read's callback
+    /// inside the strict-read window or after it
+    /// ([`Self::host_callback_timing`]), or the read's function literal is
+    /// handed to a project function not proven to invoke it during the call
+    /// ([`Self::callee_callback_timing`]), or an accepted callback invocation
+    /// is possible but not guaranteed ([`Self::callback_invocation_unproven`]),
+    /// or no fact places the read at all ([`ExecutionRole::Unknown`]).
     ///
     /// This is one predicate on purpose. The projection sets a finding's `kind`
     /// from it and each dialect's wording selects its hint from it; when the two
@@ -355,7 +494,12 @@ impl ReactiveRead {
     /// carrying a proof-obligation hint, or the reverse.
     #[must_use]
     pub fn is_uncertifiable(&self) -> bool {
-        self.uncertain || self.missing_jsx_census
+        self.uncertain
+            || self.missing_jsx_census
+            || self.host_callback_timing
+            || self.callee_callback_timing
+            || self.callback_invocation_unproven
+            || self.execution == ExecutionRole::Unknown
     }
 }
 
@@ -371,6 +515,16 @@ pub struct ReactiveWrite {
     pub execution: ExecutionRole,
     pub allowed_by_option: bool,
     pub context: Arc<str>,
+}
+
+impl ReactiveWrite {
+    /// Whether a finding about this write is an uncertifiable obligation: no
+    /// fact places the write ([`ExecutionRole::Unknown`]), so whether it runs
+    /// under a children-capable owner is neither proven nor ruled out.
+    #[must_use]
+    pub fn is_uncertifiable(&self) -> bool {
+        self.execution == ExecutionRole::Unknown
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -389,6 +543,15 @@ pub struct ActionInvocation {
     pub declaration: Location,
     pub execution: ExecutionRole,
     pub context: Arc<str>,
+}
+
+impl ActionInvocation {
+    /// Whether a finding about this invocation is an uncertifiable obligation,
+    /// for [`ReactiveWrite::is_uncertifiable`]'s reason.
+    #[must_use]
+    pub fn is_uncertifiable(&self) -> bool {
+        self.execution == ExecutionRole::Unknown
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -425,6 +588,11 @@ pub struct LeafOwnerOperation {
     /// violation.
     #[serde(default)]
     pub uncertain: bool,
+    /// The operation may not happen at this call: the helper performs it on
+    /// some completions only (ADR 0275). Projected as uncertifiable, like
+    /// [`Self::uncertain`].
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub possible: bool,
     /// The exactly-resolved helper the operation is reached through: the
     /// operation sits in the helper's synchronous extent and the helper is
     /// called from this leaf scope, so it executes here. The finding anchors
@@ -437,6 +605,10 @@ pub struct LeafOwnerOperation {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", tag = "kind", content = "primitive")]
 pub enum LeafOwnerOperationKind {
+    /// A present observer's per-key tracking either creates a missing signal
+    /// or reaches mandatory cleanup on the retained one. Both paths require
+    /// a children/cleanup-capable owner; this states neither cache state.
+    ObserverCacheTracking,
     Cleanup,
     Flush,
     Primitive(String),
@@ -444,18 +616,6 @@ pub enum LeafOwnerOperationKind {
     /// available. It may contain any of the forbidden operations above, so
     /// the leaf scope is a proof obligation rather than a clean result.
     UnresolvedCallback,
-}
-
-impl LeafOwnerOperationKind {
-    #[must_use]
-    pub fn primitive(&self) -> &str {
-        match self {
-            Self::Cleanup => "onCleanup",
-            Self::Flush => "flush",
-            Self::Primitive(primitive) => primitive,
-            Self::UnresolvedCallback => "unresolved leaf callback",
-        }
-    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -484,13 +644,38 @@ pub struct StaticViolation {
 /// [`StaticDefect::analysis_context`] of the obligation an exported helper
 /// raises when it invokes a member supplied by one of its own parameters.
 ///
-/// Named here rather than spelled twice because contract emission has to
-/// recognize the class in order to ask whether the published
-/// `parameter-member` reactive-read row already carries the same uncertainty
-/// — a question only that class raises. Producer:
-/// `solid-reactive-ir/src/interproc.rs`; consumer:
-/// `solid-facts-backend/src/main.rs`.
+/// Named here rather than spelled twice because the projection and the
+/// obligation attribution have to recognize the class. Producer:
+/// `solid-reactive-ir/src/interproc/reads.rs`; consumers: `projection.rs` and
+/// `attribution.rs`.
 pub const EXPORTED_PARAMETER_MEMBER_DISPATCH: &str = "exported-parameter-member-dispatch";
+
+/// ADR 0289: the `analysis_context` prefix of a dispatch obligation at a
+/// project Get of a member that a package analyzed as source (ADR 0284)
+/// defines as a reactive getter, where no proof carries the object to the
+/// Get. Its `callee` is the Get's text. Producer: `interproc.rs`; consumer:
+/// `projection.rs`, which words it.
+pub const DEPENDENCY_SOURCE_GETTER: &str = "dependency-source-getter:";
+
+/// ADR 0293: the `analysis_context` prefix of a dispatch obligation at an
+/// untracked store Get whose strict-read warning depends on a key
+/// solid-checker cannot decide; the rest is the reason. Its `callee` is the
+/// Get's text. Producer: `local_access.rs`; consumer: `projection.rs`.
+pub const STORE_KEY_UNDECIDED: &str = "store-key-undecided:";
+
+/// ADR 0294: the `analysis_context` of a dispatch obligation at a call or
+/// Get, in a role that reports an untracked read, of a value whose only
+/// evidence of being a reactive source is a dialect type alias
+/// (`Accessor<T>`, `Store<T>`) and whose implementation is not visible.
+/// Its `callee` is the read's text. Producers: `local_access.rs`,
+/// `static_rules.rs`; consumer: `projection.rs`.
+pub const TYPE_ONLY_SOURCE: &str = "type-only-source";
+
+/// The `analysis_context` of a dispatch obligation at a dialect primitive
+/// used as a value (`const eff = createEffect`, `Reflect.apply(createEffect,
+/// …)`): the calls it reaches are not followed. Its `callee` is the
+/// reference's text. Producer: `static_rules.rs`; consumer: `projection.rs`.
+pub const PRIMITIVE_VALUE: &str = "primitive-value";
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -520,33 +705,19 @@ pub enum StaticDefectKind {
     ReactiveReadAfterAwait {
         accessor: String,
     },
+    /// A call after an await whose callee reads `accessor` in its own body
+    /// (`await load(); return byUser(posts)`): that read runs after the await,
+    /// but nothing proves it runs on this call rather than on some paths, so
+    /// the finding is an obligation.
+    ReactiveReadAfterAwaitThroughCall {
+        accessor: String,
+        via: String,
+    },
     ComponentReturnsConditionally,
-    PackageContractExportMissing {
+    PackageBehaviorUnavailable {
         module: String,
         export: String,
         reexported: bool,
-    },
-    /// A package export has different certified summaries for different
-    /// conditional runtime targets. The current project analysis has no
-    /// selected package condition, so applying any one variant would be a
-    /// guess; keep the import uncertifiable until a human selects the target.
-    PackageContractEnvironmentDependent {
-        module: String,
-        export: String,
-        reexported: bool,
-    },
-    /// An exported callback reached an external call whose execution timing
-    /// is not certified. The fields are deliberately data, not a guessed
-    /// contract: the diagnostic identifies the exact open semantic leaf while
-    /// analysis remains blocked until that leaf is proved and receipted.
-    UnknownCallbackExecution {
-        package: String,
-        entrypoint: String,
-        function: String,
-        parameter: usize,
-        parameter_type: String,
-        required_execution: String,
-        claim_context: String,
     },
     MissingEffectFunction,
     ReactiveSourceUncaptured {
@@ -564,8 +735,18 @@ pub enum StaticDefectKind {
     /// An exact synchronous callback position is known, but the callback
     /// value's body is not an inspectable synchronous function literal. The
     /// enclosing operation is type-correct, so silence would certify behavior
-    /// that neither the AST nor a contract proves.
+    /// that neither the AST nor dependency source proves.
     ReactiveCallbackUnresolved {
+        callee: String,
+    },
+    /// A callback the dialect says runs when the call's **returned object is
+    /// read** ([`solid_dialect::Dialect::callback_runs_on_result_access`];
+    /// rc.9's `omit(props, hidden)` predicate) is not proven free of reactive
+    /// behaviour. It runs in whatever tracking scope and under whatever owner
+    /// the reader has, which the call site does not decide, so neither a
+    /// violation nor safety is provable. `analysis_context` names which proof
+    /// is missing (see `result_access_callbacks` in `static_rules`).
+    ResultAccessCallbackUnplaced {
         callee: String,
     },
     /// An exported structured return contains a shorthand value whose exact
@@ -595,6 +776,55 @@ pub enum StaticDefectKind {
         name: String,
         target: DirectMutationTarget,
     },
+    /// A value crosses the default server-function transport, which carries
+    /// plain JSON. Which way it fails is proven here; the serializer that
+    /// fixes it, and the module that installs it, are the dialect's to name.
+    ServerFunctionRichArgument {
+        transport: RichArgumentTransport,
+    },
+}
+
+/// The named reasons a [`StaticDefectKind::ResultAccessCallbackUnplaced`]
+/// carries in its `analysis_context`: which proof of an inert predicate is
+/// missing.
+///
+/// The predicate's body performs a reactive operation the engine records (a
+/// read, write, action invocation or async read), or references a reactive
+/// source, setter, action or props binding.
+pub(crate) const RESULT_ACCESS_REACTIVE_OPERATION: &str =
+    "result-access-callback-reactive-operation";
+/// The predicate's body calls something that does not resolve to a
+/// standard-library declaration; whatever it does runs in the reader's scope.
+pub(crate) const RESULT_ACCESS_OPAQUE_CALL: &str = "result-access-callback-opaque-call";
+/// The value at the predicate position is potentially callable, but no body
+/// for it is inspectable at this call: an import, a call result, a member, a
+/// binding that is not a function literal.
+pub(crate) const RESULT_ACCESS_BODY_UNRESOLVED: &str = "result-access-callback-body-unresolved";
+
+/// How a server-function argument fails the default JSON transport.
+///
+/// Four proofs about different things, not one claim with a flag: the
+/// argument's own resolved type, a value held by a closed object literal
+/// reaching the call, a primitive JSON cannot encode, and a transport proof
+/// that is open. A reader acts on the difference, and the last is an
+/// obligation rather than a violation.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", tag = "transport")]
+pub enum RichArgumentTransport {
+    ResolvedType {
+        function: String,
+        descriptor: String,
+        member: String,
+    },
+    NestedValue {
+        function: String,
+    },
+    NonJsonPrimitive {
+        function: String,
+    },
+    Unresolved {
+        reason: String,
+    },
 }
 
 /// The finding family a [`StaticDefectKind`] projects to.
@@ -617,22 +847,21 @@ pub enum StaticDefectFamily {
     ReactiveObjectDestructure,
     ReactiveReadAfterAwait,
     ComponentReturnsConditionally,
-    /// The contract-incomplete family: an import whose package contract does
-    /// not describe the surface the project uses.
-    PackageContractIncomplete,
-    /// Projects to the same dialect rule as
-    /// [`Self::PackageContractIncomplete`] but keeps its own dedup identity.
-    /// A contract-generation obligation and a contract-incomplete consumer
-    /// obligation are two separate claims about the same import, and a call
-    /// site can produce both at one start byte; sharing an identity would let
-    /// whichever the walk pushed first swallow the other.
-    UnknownCallbackExecution,
+    /// The package-behavior-unavailable family (`SC9005`): an import whose
+    /// package behavior is not available from analyzed source.
+    PackageBehaviorUnavailable,
     MissingEffectFunction,
     ReactiveSourceUncaptured,
     ReactiveDispatchUnresolved,
     ExpectedFunctionGotExpression,
     UncalledAccessor,
     DirectMutation,
+    /// A value crossing the default server-function transport. Deliberately
+    /// absent from [`StaticDefectKind::is_unresolved_obligation`]: the open
+    /// transport proof is reported as uncertifiable, but it was never part of
+    /// the `SC9xxx` obligation census the metrics read, and moving this rule off the static-violation channel did not change
+    /// what it counts.
+    ServerFunctionRichArgument,
 }
 
 impl StaticDefectFamily {
@@ -644,14 +873,14 @@ impl StaticDefectFamily {
             Self::ReactiveObjectDestructure => "no-destructure",
             Self::ReactiveReadAfterAwait => "reactive-read-after-await",
             Self::ComponentReturnsConditionally => "components-return-once",
-            Self::PackageContractIncomplete => "package-contract-incomplete",
-            Self::UnknownCallbackExecution => "unknown-callback-execution",
+            Self::PackageBehaviorUnavailable => "package-behavior-unavailable",
             Self::MissingEffectFunction => "missing-effect-function",
             Self::ReactiveSourceUncaptured => "reactive-source-uncaptured",
             Self::ReactiveDispatchUnresolved => "reactive-dispatch-unresolved",
             Self::ExpectedFunctionGotExpression => "expected-function-got-expression",
             Self::UncalledAccessor => "uncalled-accessor",
             Self::DirectMutation => "no-direct-mutation",
+            Self::ServerFunctionRichArgument => "server-function-rich-argument",
         }
     }
 }
@@ -666,19 +895,21 @@ impl StaticDefectKind {
     pub const fn family(&self) -> StaticDefectFamily {
         match self {
             Self::ReactiveObjectDestructure { .. } => StaticDefectFamily::ReactiveObjectDestructure,
-            Self::ReactiveReadAfterAwait { .. } => StaticDefectFamily::ReactiveReadAfterAwait,
+            Self::ReactiveReadAfterAwait { .. }
+            | Self::ReactiveReadAfterAwaitThroughCall { .. } => {
+                StaticDefectFamily::ReactiveReadAfterAwait
+            }
             Self::ComponentReturnsConditionally => {
                 StaticDefectFamily::ComponentReturnsConditionally
             }
-            Self::PackageContractExportMissing { .. }
-            | Self::PackageContractEnvironmentDependent { .. } => {
-                StaticDefectFamily::PackageContractIncomplete
+            Self::PackageBehaviorUnavailable { .. } => {
+                StaticDefectFamily::PackageBehaviorUnavailable
             }
-            Self::UnknownCallbackExecution { .. } => StaticDefectFamily::UnknownCallbackExecution,
             Self::MissingEffectFunction => StaticDefectFamily::MissingEffectFunction,
             Self::ReactiveSourceUncaptured { .. } => StaticDefectFamily::ReactiveSourceUncaptured,
             Self::ReactiveDispatchUnresolved { .. }
             | Self::ReactiveCallbackUnresolved { .. }
+            | Self::ResultAccessCallbackUnplaced { .. }
             | Self::StructuredReturnUnresolved { .. } => {
                 StaticDefectFamily::ReactiveDispatchUnresolved
             }
@@ -687,6 +918,9 @@ impl StaticDefectKind {
             }
             Self::UncalledAccessor { .. } => StaticDefectFamily::UncalledAccessor,
             Self::DirectMutation { .. } => StaticDefectFamily::DirectMutation,
+            Self::ServerFunctionRichArgument { .. } => {
+                StaticDefectFamily::ServerFunctionRichArgument
+            }
         }
     }
 
@@ -700,21 +934,20 @@ impl StaticDefectKind {
         match self {
             Self::ReactiveObjectDestructure { .. } => "ReactiveObjectDestructure",
             Self::ReactiveReadAfterAwait { .. } => "ReactiveReadAfterAwait",
+            Self::ReactiveReadAfterAwaitThroughCall { .. } => "ReactiveReadAfterAwaitThroughCall",
             Self::ComponentReturnsConditionally => "ComponentReturnsConditionally",
-            Self::PackageContractExportMissing { .. } => "PackageContractExportMissing",
-            Self::PackageContractEnvironmentDependent { .. } => {
-                "PackageContractEnvironmentDependent"
-            }
-            Self::UnknownCallbackExecution { .. } => "UnknownCallbackExecution",
+            Self::PackageBehaviorUnavailable { .. } => "PackageBehaviorUnavailable",
             Self::MissingEffectFunction => "MissingEffectFunction",
             Self::ReactiveSourceUncaptured { .. } => "ReactiveSourceUncaptured",
             Self::ReactiveDispatchUnresolved { .. } => "ReactiveDispatchUnresolved",
             Self::ReactiveCallbackUnresolved { .. } => "ReactiveCallbackUnresolved",
+            Self::ResultAccessCallbackUnplaced { .. } => "ResultAccessCallbackUnplaced",
             Self::StructuredReturnUnresolved { .. } => "StructuredReturnUnresolved",
             Self::ReactiveHandlerRead { .. } => "ReactiveHandlerRead",
             Self::HandlerValueUnresolved { .. } => "HandlerValueUnresolved",
             Self::UncalledAccessor { .. } => "UncalledAccessor",
             Self::DirectMutation { .. } => "DirectMutation",
+            Self::ServerFunctionRichArgument { .. } => "ServerFunctionRichArgument",
         }
     }
 
@@ -727,37 +960,20 @@ impl StaticDefectKind {
     }
 
     /// Whether this defect is an unresolved proof obligation — the `SC9xxx`
-    /// uncertifiable class — rather than a proven violation. Contract
-    /// emission refuses to describe a surface these are open against, and
-    /// the metrics count them as unresolved; both consult this so the
-    /// answer cannot drift between them.
+    /// uncertifiable class — rather than a proven violation. The metrics
+    /// count them as unresolved; every consumer consults this so the answer
+    /// cannot drift between them.
     #[must_use]
     pub fn is_unresolved_obligation(&self) -> bool {
         matches!(
             self,
-            Self::PackageContractExportMissing { .. }
-                | Self::PackageContractEnvironmentDependent { .. }
-                | Self::UnknownCallbackExecution { .. }
+            Self::PackageBehaviorUnavailable { .. }
                 | Self::ReactiveSourceUncaptured { .. }
                 | Self::ReactiveDispatchUnresolved { .. }
                 | Self::ReactiveCallbackUnresolved { .. }
+                | Self::ResultAccessCallbackUnplaced { .. }
                 | Self::StructuredReturnUnresolved { .. }
         )
-    }
-
-    /// Whether contract emission refuses this obligation through
-    /// [`Program::contract_generation_obligations`] rather than through the
-    /// project-wide defect list.
-    ///
-    /// Those obligations carry the exported surface identity and the callee
-    /// whose timing a contract author has to describe, so emission consults
-    /// them only after resolving the requested entrypoint's exports.
-    /// Refusing from the defect list first would ignore that filter and block
-    /// every entrypoint over an obligation in an unrelated file. The metrics
-    /// still count this class through [`Self::is_unresolved_obligation`].
-    #[must_use]
-    pub fn refused_through_generation_obligations(&self) -> bool {
-        matches!(self, Self::UnknownCallbackExecution { .. })
     }
 }
 
@@ -776,6 +992,11 @@ pub struct PrimitiveCreation {
     pub primitive: String,
     pub location: Location,
     pub returned_closure: bool,
+    /// The creation runs under an owner the analysis cannot decide
+    /// (`runWithOwner(owner, …)` in the apply phase): an obligation, not a
+    /// proven leak.
+    #[serde(default)]
+    pub uncertain: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -796,11 +1017,23 @@ pub struct OwnerRequirement {
     /// `runWithOwner`, rather than an exported function's unknown callers.
     #[serde(default, skip_serializing_if = "is_false")]
     pub conditional_owner: bool,
+    /// The uncertainty comes from a callback that runs under its caller's
+    /// owner only on its first run, and with no owner on every later run --
+    /// 2.0 `createRenderEffect`'s apply. The first run is owned exactly as the
+    /// call site is; whether a later run happens is a runtime fact.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub later_run_unowned: bool,
     /// The containing Solid 1 function is component-shaped only by a naming
     /// convention; JSX invocation and ordinary invocation imply different
     /// owner contexts.
     #[serde(default, skip_serializing_if = "is_false")]
     pub component_uncertain: bool,
+    /// The operation runs after an `await` on every path through its async
+    /// function's body: a promise continuation on an empty stack, where the
+    /// dialect says no owner is current. Proven unowned whatever context the
+    /// function was entered with.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub after_await: bool,
     /// The operation sits in a source-level JSX region for which the compiler
     /// emitted no execution census. The absence of an owner region is not a
     /// proof that a live operation runs unowned: the compiler may have deleted
@@ -808,6 +1041,11 @@ pub struct OwnerRequirement {
     /// reports an uncertifiable proof obligation rather than a violation.
     #[serde(default, skip_serializing_if = "is_false")]
     pub missing_jsx_census: bool,
+    /// ADR 0290: the operation is inside a package analyzed as source
+    /// (ADR 0284), at this location, and this requirement stands at the
+    /// project's call that runs it there, under the call's owner context.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub through_dependency: Option<Location>,
     pub report: bool,
 }
 
@@ -835,55 +1073,6 @@ impl OwnerRequirementOperation {
 
 const fn is_false(value: &bool) -> bool {
     !*value
-}
-
-fn validate_contract_return(returned: &ContractReturn) -> Result<(), &'static str> {
-    match returned.kind.as_str() {
-        "accessor" | "store-path" => {
-            if returned.label.is_empty() || returned.parameter.is_some() {
-                return Err("a reactive leaf requires a label");
-            }
-            if !returned.elements.is_empty() || !returned.properties.is_empty() {
-                return Err("a reactive leaf cannot contain elements or properties");
-            }
-        }
-        "tuple" => {
-            if !returned.label.is_empty()
-                || returned.parameter.is_some()
-                || returned.elements.is_empty()
-                || !returned.properties.is_empty()
-            {
-                return Err("a tuple requires elements only");
-            }
-            for element in returned.elements.iter().flatten() {
-                validate_contract_return(element)?;
-            }
-        }
-        "object" => {
-            if !returned.label.is_empty()
-                || returned.parameter.is_some()
-                || returned.properties.is_empty()
-                || !returned.elements.is_empty()
-                || returned.properties.keys().any(String::is_empty)
-            {
-                return Err("an object requires named properties only");
-            }
-            for property in returned.properties.values() {
-                validate_contract_return(property)?;
-            }
-        }
-        "argument" | "callback-result" | "callback-result-function" => {
-            if returned.parameter.is_none()
-                || !returned.label.is_empty()
-                || !returned.elements.is_empty()
-                || !returned.properties.is_empty()
-            {
-                return Err("a relational return requires a parameter only");
-            }
-        }
-        _ => return Err("the return kind is unsupported"),
-    }
-    Ok(())
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -928,389 +1117,53 @@ pub struct AsyncRead {
     /// missing server-entry import as proof of CSR.
     #[serde(default)]
     pub server_rendering_unresolved: bool,
+    /// The read sits in a callback a host API may invoke inside the component
+    /// body's strict-read window or after it
+    /// ([`ReactiveRead::host_callback_timing`]). Inside the window a pending
+    /// read throws `PENDING_ASYNC_UNTRACKED_READ` (dev); after it, a plain
+    /// `NotReadyError` (probed on rc.3 and rc.9), so SC5001 is a proof
+    /// obligation rather than a proven throw.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub host_callback_timing: bool,
+    /// The read's callback is handed to a callee whose invocation is not
+    /// proven on the current stack ([`ReactiveRead::callee_callback_timing`]).
+    /// The callee may defer the read or handle pending values, so SC5001 is
+    /// an open obligation rather than a proven pending-read exception.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub callee_callback_timing: bool,
+    /// Lexical nesting in a component does not prove this stored or returned
+    /// callback executes during that component's strict-read window.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub invocation_context_unproven: bool,
+    /// The read is rendered by a function whose callers are not all in the
+    /// analyzed project (an exported component, a route handed to a router, a
+    /// lazy page): no `Loading` boundary was found above it, but the boundary
+    /// that decides it may be written where the analysis cannot see. The
+    /// missing-boundary findings are uncertifiable then, not proven.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub mount_unresolved: bool,
 }
 
 fn default_async_provenance() -> bool {
     true
 }
 
-/// Generator-local package summary accumulator. It is never decoded from or
-/// encoded to a public contract document; `solid-facts-backend` immediately
-/// normalizes it into the semantic model.
-#[derive(Clone, Debug)]
-pub struct PackageContract {
-    pub package: ContractPackage,
-    pub entrypoints: BTreeMap<String, ContractEntrypoint>,
-    /// Diagnostic-only provenance for projected accepted semantics or local
-    /// generation. It has no wire meaning.
-    pub source_path: String,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ContractPackage {
-    pub name: String,
-    pub version: String,
-    pub integrity: String,
-}
-
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct ContractEntrypoint {
-    pub exports: BTreeMap<String, ContractExport>,
-}
-
-/// Generator-local knowledge for one inferred summary domain.
-///
-/// This is not a wire type. `Open` means the producer has not established an
-/// exhaustive answer; normalization maps it to the exact stable-v1 open
-/// semantic leaf. No sentinel object is serialized.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum ContractClaim<T> {
-    Open,
-    Known(T),
-}
-
-impl<T: Default> Default for ContractClaim<T> {
-    fn default() -> Self {
-        Self::Known(T::default())
-    }
-}
-
-impl<T> From<T> for ContractClaim<T> {
-    fn from(value: T) -> Self {
-        Self::Known(value)
-    }
-}
-
-impl<T> ContractClaim<T> {
-    #[must_use]
-    pub fn known(&self) -> Option<&T> {
-        match self {
-            Self::Known(value) => Some(value),
-            Self::Open => None,
-        }
-    }
-
-    #[must_use]
-    pub fn known_mut(&mut self) -> Option<&mut T> {
-        match self {
-            Self::Known(value) => Some(value),
-            Self::Open => None,
-        }
-    }
-
-    #[must_use]
-    pub const fn is_open(&self) -> bool {
-        matches!(self, Self::Open)
-    }
-}
-
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct ContractExport {
-    pub kind: String,
-    pub reactive_reads: ContractClaim<Vec<ContractReactiveRead>>,
-    pub returns: ContractClaim<Option<ContractReturn>>,
-    pub callbacks: ContractClaim<Vec<ContractCallback>>,
-    pub owner_requirements: ContractClaim<Vec<ContractOwnerRequirement>>,
-    pub async_behavior: ContractClaim<String>,
-    /// Wire-independent open domains retained when normalized partial
-    /// knowledge is projected into the existing analysis indexes. This field
-    /// is never decoded from or encoded into a package-contract document.
-    pub open_claims: BTreeSet<contract_semantics::ClaimDomain>,
-}
-
-impl ContractExport {
-    /// Whether this summary contains any domain that only a runtime function
-    /// may carry. A `value` export with one of these domains is internally
-    /// inconsistent even when the domain is open: absence of proof is not a
-    /// value-side effect summary.
-    #[must_use]
-    pub fn has_function_effects(&self) -> bool {
-        self.reactive_reads.is_open()
-            || self
-                .reactive_reads
-                .known()
-                .is_some_and(|reads| !reads.is_empty())
-            || self.returns.is_open()
-            || self.returns.known().is_some_and(Option::is_some)
-            || self.callbacks.is_open()
-            || self
-                .callbacks
-                .known()
-                .is_some_and(|callbacks| !callbacks.is_empty())
-            || self.owner_requirements.is_open()
-            || self
-                .owner_requirements
-                .known()
-                .is_some_and(|requirements| !requirements.is_empty())
-            || self.async_behavior.is_open()
-            || self
-                .async_behavior
-                .known()
-                .is_some_and(|behavior| !behavior.is_empty())
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ContractReactiveRead {
-    pub kind: String,
-    pub label: String,
-    pub parameter: Option<usize>,
-    /// Exact access path from the parameter for a `parameter-member` read,
-    /// when every access contributing to the row walks the same static
-    /// properties. `parsed.modifiers.includes(m)` is `["modifiers",
-    /// "includes"]`, not `["includes"]`: a consumer matches this as a *prefix*
-    /// of the observed access, so naming only the last segment describes a
-    /// property the parameter does not have and can never be witnessed.
-    ///
-    /// `None` where contributing accesses disagree, or where no segment could
-    /// be named exactly. Older contracts omit it and remain valid, but only a
-    /// named path can be runtime-probed without guessing which property to
-    /// instrument.
-    pub path: Option<Vec<String>>,
-}
-
-/// When a `tracked` callback row runs, relative to the export returning.
-///
-/// `execution: "tracked"` is an *attribution* word: it says the runtime
-/// subscribes the callback's reads, and says nothing about whether the export
-/// has already run it. `inline` and `deferred` carry their schedule in the word
-/// itself; `tracked` cannot, because 1.x `createMemo` runs its compute during
-/// the creating call while 1.x `createEffect` queues it, and 2.0 disagrees with
-/// 1.x on `createEffect`. The schedule is
-/// [`solid_dialect::Dialect::tracked_callback_timing`]'s to answer, and it is
-/// carried here rather than re-derived from the word — a consumer that reads
-/// "queued" out of "tracked" publishes a promise the runtime breaks, which is
-/// what `mergeProps` and `createMemo` rows did before this field existed.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CallbackSchedule {
-    /// The callback has run by the time the export returns.
-    SameStack,
-    /// The export queued it; it has not run when the export returns.
-    Queued,
-    /// The runtime hands it to an external scheduler.
-    External,
-    /// The dialect states no timing for this slot, so no schedule word is
-    /// honest. The emitted operation carries no execution point at all rather
-    /// than a guessed one.
-    Unestablished,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ContractCallback {
-    pub parameter: usize,
-    pub execution: String,
-    /// The schedule of a `tracked` row, where the producer established one.
-    /// `None` is a producer that did not compute a schedule for this row and
-    /// leaves the consumer's historical default in place; it is meaningless
-    /// for `inline` and `deferred`, whose word already carries the schedule.
-    pub schedule: Option<CallbackSchedule>,
-    /// Runtime arguments supplied when this callback is invoked. `null`
-    /// preserves an unmodeled ordinary value at that position; a structured
-    /// descriptor uses the same bounded accessor/store/tuple/object vocabulary
-    /// as exported returns.
-    pub arguments: Vec<Option<ContractReturn>>,
-    /// The owner context in which the runtime invokes this callback. Missing
-    /// means the package contract describes timing only; consumers must keep
-    /// the existing fail-closed owner behavior for that callback.
-    pub owner: Option<String>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ContractOwnerRequirement {
-    pub operation: OwnerRequirementOperation,
-}
-
-#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize)]
-pub struct ContractReturn {
-    pub kind: String,
-    pub label: String,
-    pub parameter: Option<usize>,
-    pub elements: Vec<Option<ContractReturn>>,
-    pub properties: BTreeMap<String, ContractReturn>,
-}
-
-impl PackageContract {
-    /// Validate the generator-local accumulator before normalization.
-    pub fn validate(&self) -> Result<(), String> {
-        if self.package.name.is_empty() || self.package.version.is_empty() {
-            return Err("package contract requires package.name and package.version".into());
-        }
-        if !self.package.integrity.is_empty() && !valid_sha512_integrity(&self.package.integrity) {
-            return Err("package contract package.integrity is invalid".into());
-        }
-        if self.entrypoints.is_empty()
-            || self.entrypoints.iter().any(|(name, entrypoint)| {
-                (name != "." && !name.starts_with("./"))
-                    || name == "./"
-                    || entrypoint.exports.is_empty()
-            })
-        {
-            return Err(
-                "inferred contract entrypoints require exact package subpaths and exports".into(),
-            );
-        }
-        for (entrypoint, exports) in self.export_maps() {
-            for (name, summary) in exports {
-                self.validate_export(entrypoint, name, summary)?;
-            }
-        }
-        Ok(())
-    }
-
-    fn validate_export(
-        &self,
-        entrypoint: &str,
-        name: &str,
-        summary: &ContractExport,
-    ) -> Result<(), String> {
-        if name.is_empty() || !matches!(summary.kind.as_str(), "function" | "value") {
-            return Err(format!(
-                "package contract export {entrypoint}:{name} has unsupported kind {:?}",
-                summary.kind
-            ));
-        }
-        if summary.kind == "value" && summary.has_function_effects() {
-            return Err(format!(
-                "package contract value export {entrypoint}:{name} cannot have function effects"
-            ));
-        }
-        for read in summary.reactive_reads.known().into_iter().flatten() {
-            let valid = match read.kind.as_str() {
-                "accessor" | "store-path" => {
-                    !read.label.is_empty() && read.parameter.is_none() && read.path.is_none()
-                }
-                // A stated path must name every one of its segments: an empty
-                // segment names no property, and the spelling for "no segment
-                // could be named" is an absent path, not a blank one.
-                "parameter-member" => {
-                    read.label.is_empty()
-                        && read.parameter.is_some()
-                        && read
-                            .path
-                            .as_ref()
-                            .is_none_or(|path| path.iter().all(|segment| !segment.is_empty()))
-                }
-                _ => false,
-            };
-            if !valid {
-                return Err(format!(
-                    "package contract export {entrypoint}:{name} has an invalid reactive read"
-                ));
-            }
-        }
-        if let Some(returned) = summary.returns.known().and_then(Option::as_ref) {
-            validate_contract_return(returned).map_err(|reason| {
-                format!(
-                    "package contract export {entrypoint}:{name} has an invalid reactive return: {reason}"
-                )
-            })?;
-        }
-        if summary
-            .callbacks
-            .known()
-            .into_iter()
-            .flatten()
-            .any(|callback| {
-                !matches!(
-                    callback.execution.as_str(),
-                    "inline" | "tracked" | "deferred"
-                )
-            })
-        {
-            return Err(format!(
-                "package contract export {entrypoint}:{name} has an invalid callback execution"
-            ));
-        }
-        for callback in summary.callbacks.known().into_iter().flatten() {
-            if callback.owner.as_deref().is_some_and(|owner| {
-                !matches!(
-                    owner,
-                    "inherited" | "created" | "unowned" | "conditional" | "leaf"
-                )
-            }) {
-                return Err(format!(
-                    "package contract export {entrypoint}:{name} has an invalid callback owner"
-                ));
-            }
-            for argument in callback.arguments.iter().flatten() {
-                validate_contract_return(argument).map_err(|reason| {
-                    format!(
-                        "package contract export {entrypoint}:{name} has an invalid callback argument: {reason}"
-                    )
-                })?;
-            }
-        }
-        if let Some(async_behavior) = summary.async_behavior.known()
-            && !async_behavior.is_empty()
-            && !matches!(async_behavior.as_str(), "promise" | "async-iterable")
-        {
-            return Err(format!(
-                "package contract export {entrypoint}:{name} has unsupported async behavior {:?}",
-                async_behavior
-            ));
-        }
-        Ok(())
-    }
-
-    pub fn exports_for_module(&self, module: &str) -> Option<&BTreeMap<String, ContractExport>> {
-        let suffix = module.strip_prefix(&self.package.name)?;
-        if !suffix.is_empty() && !suffix.starts_with('/') {
-            return None;
-        }
-        let entrypoint = if suffix.is_empty() {
-            "."
-        } else {
-            // Package export maps spell subpaths as "./foo".
-            // `suffix` starts with '/', so prefixing '.' produces that form.
-            return self
-                .entrypoints
-                .get(&format!(".{suffix}"))
-                .map(|entry| &entry.exports);
-        };
-        self.entrypoints.get(entrypoint).map(|entry| &entry.exports)
-    }
-
-    pub fn root_exports(&self) -> &BTreeMap<String, ContractExport> {
-        match self.entrypoints.get(".") {
-            Some(entrypoint) => &entrypoint.exports,
-            None => empty_contract_exports(),
-        }
-    }
-
-    pub fn export_count(&self) -> usize {
-        self.export_maps().map(|(_, exports)| exports.len()).sum()
-    }
-
-    fn export_maps(
-        &self,
-    ) -> Box<dyn Iterator<Item = (&str, &BTreeMap<String, ContractExport>)> + '_> {
-        Box::new(
-            self.entrypoints
-                .iter()
-                .map(|(name, entrypoint)| (name.as_str(), &entrypoint.exports)),
-        )
-    }
-}
-
-fn valid_sha512_integrity(integrity: &str) -> bool {
-    integrity.strip_prefix("sha512-").is_some_and(|digest| {
-        digest.len() == 88
-            && digest.ends_with("==")
-            && digest[..86]
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'/'))
-    })
-}
-
-fn empty_contract_exports() -> &'static BTreeMap<String, ContractExport> {
-    static EMPTY: std::sync::OnceLock<BTreeMap<String, ContractExport>> =
-        std::sync::OnceLock::new();
-    EMPTY.get_or_init(BTreeMap::new)
-}
+pub use summary_semantics::{CallbackSchedule, CallbackSummary, ReturnSummary};
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Program {
+    /// Message-only observations, recomputed from the current merged reads.
+    /// These apply sites also read the exact source in their paired compute.
+    #[serde(skip)]
+    pub apply_compute_reads: HashSet<Location>,
+    #[serde(
+        default,
+        skip_serializing_if = "RuntimeConfigurationPremise::permits_proof"
+    )]
+    pub runtime_configuration: RuntimeConfigurationPremise,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub development_feedback: Vec<development_feedback::DevelopmentFile>,
     pub reads: Vec<ReactiveRead>,
     pub writes: Vec<ReactiveWrite>,
     pub actions: Vec<ActionInvocation>,
@@ -1320,45 +1173,43 @@ pub struct Program {
     pub directive_creations: Vec<PrimitiveCreation>,
     pub missing_owners: Vec<OwnerRequirement>,
     pub async_reads: Vec<AsyncRead>,
-    #[serde(skip)]
-    pub contract_exports: Arc<BTreeMap<String, ContractExport>>,
-    pub contract_generation_obligations: Vec<ContractGenerationObligation>,
-    /// Which project functions can reach each unresolved proof obligation.
-    ///
-    /// Contract emission attributes an open claim to exactly the exports
-    /// that can reach the obligation; see [`ObligationReach`]. Empty when the
-    /// build produced no unresolved obligation, and empty for an obligation
-    /// whose location is outside every function body.
-    pub obligation_reach: Vec<ObligationReach>,
     pub obligation_counts: ObligationCounts,
-    /// How many import and `export … from` declarations a contract named and
-    /// the attested resolution then bound or refused.
-    #[serde(default)]
-    pub contract_binding: ContractBindingCounts,
+    /// Bodies of functions analyzed as components whose identity is not
+    /// proven ([`site_in_undecided_component`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub undecided_component_regions: Vec<UndecidedRegion>,
 }
 
-/// How contract binding answered across the program's declarations.
-///
-/// A refusal is deliberately silent in the findings — the import becomes
-/// uncertifiable on the rules' own terms — but silent is not the same as
-/// invisible. A defect in the span join, in the attestation scope, or in a
-/// host's specifier offsets degrades contract coverage toward nothing without
-/// an error, and this is what makes that countable: `refused` above zero on a
-/// project whose contracts are supposed to apply is the signal.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+/// The body of a function analyzed as a component because it returns JSX,
+/// although a reference hands it to code that may call it as a plain function
+/// (`items().map(Row)`, `{ badge: Row }`, a router config not read from
+/// source). Solid runs a function as a component only when `createComponent`
+/// calls it, so where the body runs is not proven. Callbacks a dialect
+/// primitive places itself are carved out: they run in the primitive's
+/// context however the function is entered.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ContractBindingCounts {
-    /// Declarations whose specifier a contract named and the resolution
-    /// confirmed.
-    pub bound: usize,
-    /// Declarations whose specifier a contract named and the resolution
-    /// refused.
-    pub refused: usize,
+pub struct UndecidedRegion {
+    pub body: Location,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub placed_callbacks: Vec<Location>,
+}
+
+/// Whether the byte range `start..end` of `path` lies in one of `program`'s
+/// [`UndecidedRegion`]s: no violation claimed there is proven.
+pub fn site_in_undecided_component(program: &Program, path: &str, start: u64, end: u64) -> bool {
+    let within = |location: &Location| {
+        location.path.as_ref() == path && location.start_byte <= start && end <= location.end_byte
+    };
+    program
+        .undecided_component_regions
+        .iter()
+        .any(|region| within(&region.body) && !region.placed_callbacks.iter().any(within))
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ContractGenerationObligation {
+pub struct UnresolvedCallbackObligation {
     pub function: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub function_symbol: String,
@@ -1371,10 +1222,6 @@ pub struct ContractGenerationObligation {
     pub entrypoint: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub parameter_type: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub required_execution: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub claim_context: String,
     pub location: Location,
     pub message: String,
 }
@@ -1386,8 +1233,6 @@ pub struct BuildTimings {
     pub reused: bool,
     pub source_discovery_reused_files: u64,
     pub source_discovery_recomputed_files: u64,
-    pub typed_accessor_reused_files: u64,
-    pub typed_accessor_recomputed_files: u64,
     pub interprocedural_graph_reused_files: u64,
     pub interprocedural_graph_recomputed_files: u64,
     pub interprocedural_result_reused_files: u64,
@@ -1409,7 +1254,7 @@ pub struct BuildTimings {
     pub alias_roots: Duration,
     pub entity_symbols: Duration,
     pub symbol_name_indexes: Duration,
-    pub contract_resolution: Duration,
+    pub boundary_defects: Duration,
     pub reachability: Duration,
     pub source_discovery: Duration,
     pub typed_accessors_and_prop_roots: Duration,
@@ -1422,7 +1267,6 @@ pub struct BuildTimings {
     pub interprocedural_direct_summaries: Duration,
     pub interprocedural_direct_index: Duration,
     pub interprocedural_direct_references: Duration,
-    pub interprocedural_typed_accessors: Duration,
     pub interprocedural_propagation: Duration,
     pub interprocedural_returned_direct: Duration,
     pub interprocedural_returned_delta: Duration,
@@ -1452,6 +1296,16 @@ pub struct BuildTimings {
 pub struct IncrementalBuilder {
     retained: Option<RetainedBuild>,
     caches: IncrementalCacheState,
+    /// ADR 0266: one scan per Type Facts snapshot. The snapshot generation
+    /// fixes the entity set the scan reads, so a repeated request for the
+    /// same generation reuses it instead of rescanning every file.
+    runtime_configuration: Option<(
+        (solid_dialect::Version, String, u64),
+        RuntimeConfigurationPremise,
+    )>,
+    /// Each file's part of that scan, reused across generations where the
+    /// Type Facts delta proves it unchanged.
+    runtime_configuration_scan: runtime_configuration::ScanCache,
 }
 
 /// How much derived cross-generation state an idle retained session keeps.
@@ -1477,13 +1331,8 @@ impl IncrementalBuilder {
         facts: &ProjectFacts,
         dialect: &dyn Dialect,
     ) -> Result<(Program, BuildTimings), BuildError> {
-        self.build_with_accepted_contracts_shared(
-            facts,
-            dialect,
-            &contract_semantics::AcceptedContractIndex::default(),
-            &RuleOptions::default(),
-        )
-        .map(|(program, timings)| ((*program).clone(), timings))
+        self.build_shared(facts, dialect)
+            .map(|(program, timings)| ((*program).clone(), timings))
     }
 
     /// Build a program behind shared ownership. This is the preferred service
@@ -1494,37 +1343,55 @@ impl IncrementalBuilder {
         facts: &ProjectFacts,
         dialect: &dyn Dialect,
     ) -> Result<(Arc<Program>, BuildTimings), BuildError> {
-        self.build_with_accepted_contracts_shared(
+        self.build_with_analysis_inputs_shared(
             facts,
             dialect,
-            &contract_semantics::AcceptedContractIndex::default(),
+            AnalysisInputs::empty(),
             &RuleOptions::default(),
         )
     }
 
-    /// Build from receipt-validated normalized semantics. The accepted index
-    /// supplies the complete cache identity, including exact import/artifact
-    /// bindings and the proof policy that authorized every closed claim.
-    pub fn build_with_accepted_contracts_shared(
+    /// A build given the package boundary and host, both part of the cache
+    /// identity.
+    pub fn build_with_analysis_inputs_shared(
         &mut self,
         facts: &ProjectFacts,
         dialect: &dyn Dialect,
-        contracts: &contract_semantics::AcceptedContractIndex,
+        inputs: AnalysisInputs<'_>,
         rule_options: &RuleOptions,
     ) -> Result<(Arc<Program>, BuildTimings), BuildError> {
         let total_started = Instant::now();
         let lookup_started = Instant::now();
+        let premise_key = (
+            dialect.version(),
+            facts.project_id.clone(),
+            facts.generation.get(),
+        );
+        let premise = match &self.runtime_configuration {
+            Some((key, premise)) if *key == premise_key => premise.clone(),
+            _ => {
+                let premise = runtime_configuration::scan_retained(
+                    facts,
+                    dialect,
+                    &mut self.runtime_configuration_scan,
+                );
+                self.runtime_configuration = Some((premise_key, premise.clone()));
+                premise
+            }
+        };
         let identity = BuildIdentity {
+            runtime_configuration: premise,
             dialect: dialect.version(),
             project_id: facts.project_id.clone(),
             generation: facts.generation.get(),
-            contracts: vec![contracts.cache_fingerprint()],
+            boundary_fingerprints: inputs.cache_fingerprints(),
             rule_options: rule_options.clone(),
         };
-        if self
-            .caches
-            .ensure_domain(identity.dialect, &identity.project_id, &identity.contracts)
-        {
+        if self.caches.ensure_domain(
+            identity.dialect,
+            &identity.project_id,
+            &identity.boundary_fingerprints,
+        ) {
             self.retained = None;
         }
         let cache_lookup = lookup_started.elapsed();
@@ -1541,12 +1408,13 @@ impl IncrementalBuilder {
                 },
             ));
         }
-        let (program, mut timings) = build_with_accepted_contracts_measured_incremental(
+        let (program, mut timings) = build_with_analysis_inputs_measured_incremental(
             facts,
             dialect,
-            contracts,
+            inputs,
             rule_options,
             self.caches.for_build(),
+            identity.runtime_configuration.clone(),
         )?;
         let program = Arc::new(program);
         self.retained = Some(RetainedBuild {
@@ -1560,6 +1428,7 @@ impl IncrementalBuilder {
 
     pub fn clear(&mut self) {
         self.retained = None;
+        self.runtime_configuration = None;
         self.caches.clear();
     }
 
@@ -1619,6 +1488,7 @@ fn push_unique_summary_read(reads: &mut Vec<SummaryRead>, read: SummaryRead) {
         existing.display == read.display
             && existing.origin == read.origin
             && existing.declaration == read.declaration
+            && existing.transported == read.transported
     }) {
         reads.push(read);
     }
@@ -1646,6 +1516,8 @@ fn propagate_summary_deltas(
     summaries: &mut [SummaryReads],
     reverse_edges: &[Vec<usize>],
     propagated_lengths: &mut [usize],
+    transported_edges: &HashSet<(usize, usize)>,
+    guaranteed_edges: &HashSet<(usize, usize)>,
 ) {
     let mut queued = summaries
         .iter()
@@ -1663,9 +1535,16 @@ fn propagate_summary_deltas(
         let propagated = summaries[target].ordered[start..].to_vec();
         propagated_lengths[target] = summaries[target].len();
         for owner in reverse_edges[target].iter().copied() {
+            let transported = transported_edges.contains(&(owner, target));
             let mut changed = false;
             for read in &propagated {
-                changed |= summaries[owner].push_unique(read.clone());
+                let mut read = read.clone();
+                read.transported |= transported;
+                // ADR 0276: past this edge the row's own completion standing
+                // is a hop below the caller, and the edge's is the caller's.
+                read.conditional |= read.local;
+                read.local = !guaranteed_edges.contains(&(owner, target));
+                changed |= summaries[owner].push_unique(read);
             }
             if changed && !queued[owner] {
                 queued[owner] = true;
@@ -1675,17 +1554,16 @@ fn propagate_summary_deltas(
     }
 }
 
-fn contract_callback_execution(execution: ExecutionRole) -> Option<&'static str> {
+fn callback_execution_word(execution: ExecutionRole) -> Option<&'static str> {
     match execution {
-        // Unknown timing is a contract-generation obligation, never an inline
-        // promise. A consumer must not execute user code eagerly because the
+        // Unknown timing is an open obligation, never an inline promise. A consumer must not execute user code eagerly because the
         // producer lacked an execution proof.
-        ExecutionRole::Unknown => None,
+        ExecutionRole::Unknown | ExecutionRole::Unreported => None,
         // A callback the compiler deleted has no execution timing to publish.
         // "inline" would be a promise that a consumer may run the callback
         // eagerly, and this role is evidence that nothing runs it at all — a
-        // positive claim dead code cannot support. The contract carries no
-        // execution for it, exactly as for unproven timing.
+        // positive claim dead code cannot support. The summary carries no
+        // execution word for it, exactly as for unproven timing.
         ExecutionRole::DiscardedRendering => None,
         ExecutionRole::ModuleInitialization => Some("inline"),
         ExecutionRole::TrackedJsx => Some("tracked"),
@@ -1697,7 +1575,7 @@ fn contract_callback_execution(execution: ExecutionRole) -> Option<&'static str>
     }
 }
 
-fn push_contract_callback(callbacks: &mut Vec<ContractCallback>, callback: ContractCallback) {
+fn push_callback_summary(callbacks: &mut Vec<CallbackSummary>, callback: CallbackSummary) {
     if !callbacks.contains(&callback) {
         callbacks.push(callback);
     }
@@ -1707,7 +1585,7 @@ fn function_indices_by_path<T>(functions: &[T]) -> HashMap<String, Vec<usize>>
 where
     T: FunctionBoundary,
 {
-    let mut by_path = HashMap::<String, Vec<usize>>::new();
+    let mut by_path = HashMap::<String, Vec<usize>>::default();
     for (index, function) in functions.iter().enumerate() {
         by_path
             .entry(function.path().to_owned())
@@ -1741,9 +1619,9 @@ fn function_lookup_for_path(
     by_path: &HashMap<String, Vec<usize>>,
     path: &str,
 ) -> FunctionLookup {
-    let mut by_symbol = HashMap::new();
-    let mut by_span = HashMap::new();
-    let mut parameter_owner = HashMap::new();
+    let mut by_symbol = HashMap::default();
+    let mut by_span = HashMap::default();
+    let mut parameter_owner = HashMap::default();
     for (index, function) in functions_for_path(functions, by_path, path) {
         by_span.entry(function.span).or_insert(index);
         if let Some(symbol) = &function.symbol {
@@ -1828,8 +1706,8 @@ fn location_order(left: &Location, right: &Location) -> std::cmp::Ordering {
 /// give it, which is why this type exists:
 ///
 /// 1. A name the dialect does not export is not an error. `useUser()` is a
-///    call like any other, and the bundled contracts are keyed by *spelling*,
-///    so an unrecognised callee has to keep the one it was written with.
+///    call like any other; an unrecognised callee retains its spelling for
+///    diagnostics without gaining built-in runtime semantics.
 /// 2. Even a recognised primitive is spelled into diagnostics and hints, and
 ///    the spelling is dialect-specific.
 ///
@@ -1842,19 +1720,25 @@ enum PrimitiveName {
     Known(Primitive, &'static str),
     /// A name this dialect does not export, carrying the spelling it was
     /// written with.
-    Other(String),
+    Other(Arc<str>),
 }
 
 impl PrimitiveName {
     /// Resolves a source-level name against the dialect's vocabulary.
     fn new(name: &str, dialect: &dyn Dialect) -> Self {
-        match dialect
+        Self::known(name, dialect).unwrap_or_else(|| Self::Other(name.into()))
+    }
+
+    /// [`Self::new`] for a symbol's name, sharing its text rather than
+    /// copying it: most names a call resolves to are not primitives.
+    fn from_symbol(name: &SymbolId, dialect: &dyn Dialect) -> Self {
+        Self::known(name, dialect).unwrap_or_else(|| Self::Other(name.shared()))
+    }
+
+    fn known(name: &str, dialect: &dyn Dialect) -> Option<Self> {
+        dialect
             .primitive(name)
-            .and_then(|primitive| Some((primitive, dialect.name_of(primitive)?)))
-        {
-            Some((primitive, spelling)) => Self::Known(primitive, spelling),
-            None => Self::Other(name.to_owned()),
-        }
+            .and_then(|primitive| Some(Self::Known(primitive, dialect.name_of(primitive)?)))
     }
 
     /// The dialect primitive this name denotes, or `None` when the dialect
@@ -1866,8 +1750,7 @@ impl PrimitiveName {
         }
     }
 
-    /// The source spelling. For messages and for the spelling-keyed bundled
-    /// contract table -- never for asking what a callee *is*.
+    /// The source spelling for messages, never for asking what a callee is.
     fn as_str(&self) -> &str {
         match self {
             Self::Known(_, spelling) => spelling,
@@ -1913,23 +1796,298 @@ fn primitive_name(
     symbol_names: &HashMap<SymbolId, SymbolId>,
     dialect: &dyn Dialect,
 ) -> Option<PrimitiveName> {
-    let location = location(path, span);
-    if let Some(symbol) = entities.get(&location) {
+    if let Some(symbol) = entities.at(path, span) {
         symbol_names
             .get(symbol)
-            .map(|name| PrimitiveName::new(name, dialect))
+            .map(|name| PrimitiveName::from_symbol(name, dialect))
             .or_else(|| {
                 let property = static_callee?.rsplit('.').next()?;
                 symbol_names
                     .get(format!("{symbol}::{property}").as_str())
-                    .map(|name| PrimitiveName::new(name, dialect))
+                    .map(|name| PrimitiveName::from_symbol(name, dialect))
             })
     } else {
         None
     }
 }
 
+/// The dialect primitive a reference names, resolved through the binder: an
+/// identifier whose declaration is a named import binding of a primitive, or a
+/// non-computed member (`Solid.createEffect`, given by its own span or its
+/// property's) of a namespace import binding. The answer is the symbol's at
+/// the import binding, which the demand plan always resolves; an entity that
+/// merely happens to sit at the reference proves nothing.
+fn referenced_primitive(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    dialect: &dyn Dialect,
+) -> Option<PrimitiveName> {
+    use solid_facts::ast::ImportKind;
+    let ast = &file.ast;
+    let import_binding = |declaration: Span| {
+        ast.imports
+            .iter()
+            .flat_map(|import| &import.bindings)
+            .find(|binding| binding.local.span == declaration)
+    };
+    let known = |name: Option<PrimitiveName>| name.filter(|name| name.primitive().is_some());
+    if let Some(declaration) = ast.reference_declaration(span) {
+        let binding = import_binding(declaration)?;
+        if binding.kind == ImportKind::Namespace {
+            return None;
+        }
+        return known(primitive_name(
+            file.path.as_str(),
+            declaration,
+            None,
+            entities,
+            symbol_names,
+            dialect,
+        ));
+    }
+    let member = ast
+        .members
+        .iter()
+        .find(|member| member.span == span || member.property == span)?;
+    if ast.computed_members.contains(&member.span) {
+        return None;
+    }
+    let declaration = ast.reference_declaration(ast.peel_ts_sugar_span(member.object))?;
+    if import_binding(declaration)?.kind != ImportKind::Namespace {
+        return None;
+    }
+    let namespace = entities.at(file.path.as_str(), declaration)?;
+    let property = file.source_text(member.property)?;
+    known(
+        symbol_names
+            .get(format!("{namespace}::{property}").as_str())
+            .map(|name| PrimitiveName::from_symbol(name, dialect)),
+    )
+}
+
+/// The primitive one concrete call denotes: [`primitive_name`] for its callee,
+/// then the dialect's [`solid_dialect::Dialect::call_form`] for its options.
+///
+/// Every classifier that holds a call asks this rather than resolving the
+/// callee alone, so a form the dialect distinguishes (2.0's
+/// `dynamic(source, { static: true })`) is the same form in every pass. The
+/// spelling stays the callee's: a form is a call of the export, not another
+/// name.
+/// [`jsx_primitive_name`], answered from `lookup`'s per-file memo under the
+/// same exact-identity conditions as [`call_primitive_name_cached`]: the
+/// element is the file's own fact, found by its place in that slice.
+fn jsx_primitive_name_cached(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    element: &solid_facts::ast::JsxElementFact,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    dialect: &dyn Dialect,
+) -> Option<PrimitiveName> {
+    let own_inputs = std::ptr::eq(entities, lookup.entities())
+        && std::ptr::eq(symbol_names, lookup.symbol_names())
+        && std::ptr::addr_eq(
+            std::ptr::from_ref::<dyn Dialect>(dialect),
+            std::ptr::from_ref::<dyn Dialect>(lookup.dialect),
+        )
+        && lookup
+            .file_by_path(file.path.as_str())
+            .is_some_and(|own| std::ptr::eq(own, file));
+    let index = file
+        .ast
+        .jsx_elements
+        .iter()
+        .position(|own| std::ptr::eq(own, element));
+    if own_inputs && let Some(index) = index {
+        return lookup.primitives(file).jsx[index].clone();
+    }
+    jsx_primitive_name(file, element, entities, symbol_names, dialect)
+}
+
+/// [`call_primitive_name`], answered from `lookup`'s per-file memo (which
+/// computes exactly it, once per call) when every input is the very one the
+/// lookup was built from, compared by pointer, and computed directly
+/// otherwise: a host analysis with its own entities, a file copy, a call
+/// that is not the file's own fact. The answer is the same either way.
+fn call_primitive_name_cached(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    dialect: &dyn Dialect,
+) -> Option<PrimitiveName> {
+    let own_inputs = std::ptr::eq(entities, lookup.entities())
+        && std::ptr::eq(symbol_names, lookup.symbol_names())
+        && std::ptr::addr_eq(
+            std::ptr::from_ref::<dyn Dialect>(dialect),
+            std::ptr::from_ref::<dyn Dialect>(lookup.dialect),
+        )
+        && lookup
+            .file_by_path(file.path.as_str())
+            .is_some_and(|own| std::ptr::eq(own, file));
+    if own_inputs
+        && let Some(index) = lookup.call_index(file, call.span)
+        && file
+            .ast
+            .calls
+            .get(index)
+            .is_some_and(|own| std::ptr::eq(own, call))
+    {
+        return lookup.primitives(file).calls[index].clone();
+    }
+    call_primitive_name(file, call, entities, symbol_names, dialect)
+}
+
+fn call_primitive_name(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    dialect: &dyn Dialect,
+) -> Option<PrimitiveName> {
+    // A callee that is itself a call (`untrack(() => props.ref)?.(fn)`,
+    // `factory()()`) is the *result* of that inner call. The compiler's entity
+    // at its span answers with the inner callee's symbol, which would make the
+    // outer call the primitive and hand its arguments to the primitive's
+    // callback slots.
+    if file
+        .ast
+        .call_at(file.ast.peel_ts_sugar_span(call.callee))
+        .is_some()
+    {
+        return None;
+    }
+    let name = primitive_name(
+        file.path.as_str(),
+        call.callee,
+        call.static_callee(&file.source),
+        entities,
+        symbol_names,
+        dialect,
+    )?;
+    // A whole member span may carry its receiver's symbol, so
+    // `createEffect.bind(x)` and `createEffect.call(this, …)` resolve to the
+    // primitive while calling a method of it, with other arguments in other
+    // slots. When the member's object is itself the primitive, the call is
+    // that method's, not the primitive's. A namespace member
+    // (`Solid.createEffect`), whose object is the namespace, keeps its answer.
+    let callee = file.ast.peel_ts_sugar_span(call.callee);
+    if let Some(member) = file.ast.member_at(callee)
+        && referenced_primitive(
+            file,
+            file.ast.peel_ts_sugar_span(member.object),
+            entities,
+            symbol_names,
+            dialect,
+        )
+        .is_some()
+    {
+        return None;
+    }
+    let PrimitiveName::Known(primitive, spelling) = name else {
+        return Some(name);
+    };
+    let form = dialect.call_form(primitive, &|argument, key| {
+        call_option_literal(file, call, argument, key)
+    });
+    Some(PrimitiveName::Known(form, spelling))
+}
+
+/// What `call`'s syntax proves about the boolean option `key` in its
+/// `argument`-th argument. See [`solid_dialect::OptionLiteral`] for the four
+/// answers; everything not proven is `Unknown`.
+fn call_option_literal(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    argument: usize,
+    key: &str,
+) -> solid_dialect::OptionLiteral {
+    use solid_dialect::OptionLiteral;
+    use solid_facts::ast::{ArgumentValueKind, RuntimeValueKind};
+    // A spread anywhere up to the slot moves arguments into it at runtime.
+    if call
+        .arguments
+        .iter()
+        .take(argument.saturating_add(1))
+        .any(|candidate| candidate.spread)
+    {
+        return OptionLiteral::Unknown;
+    }
+    let Some(options) = call.arguments.get(argument) else {
+        return OptionLiteral::Absent;
+    };
+    if matches!(
+        options.value,
+        ArgumentValueKind::Undefined | ArgumentValueKind::Null
+    ) || options.runtime_value_kind == RuntimeValueKind::Nullish
+    {
+        return OptionLiteral::Absent;
+    }
+    if !options.exact_object_literal {
+        return OptionLiteral::Unknown;
+    }
+    let named = |span: Span| file.source_text(span) == Some(key);
+    // A later duplicate key wins at runtime, so only the last one decides.
+    let Some(last) = options
+        .property_names
+        .iter()
+        .copied()
+        .filter(|span| named(*span))
+        .max_by_key(|span| span.start)
+    else {
+        return OptionLiteral::Absent;
+    };
+    // `boolean_properties` records only unwrapped `key: true|false` literals,
+    // so a key it does not carry has a value the syntax does not prove.
+    match options
+        .boolean_properties
+        .iter()
+        .find(|property| property.name == last)
+    {
+        Some(property) if property.value => OptionLiteral::True,
+        Some(_) => OptionLiteral::False,
+        None => OptionLiteral::Unknown,
+    }
+}
+
 fn jsx_primitive_name(
+    file: &solid_facts::FileFacts,
+    element: &solid_facts::ast::JsxElementFact,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    dialect: &dyn Dialect,
+) -> Option<PrimitiveName> {
+    exact_jsx_primitive_name(file, element, entities, symbol_names, dialect).or_else(|| {
+        // The spelling of an imported binding, for a tag the entity table does
+        // not resolve. A tag that resolves to another symbol, a local `For`
+        // shadowing the import, is that symbol and names no primitive.
+        let tag = entities.at(file.path.as_str(), element.name.span);
+        file.ast
+            .imports
+            .iter()
+            .filter(|import| dialect.owns_module(&import.module))
+            .flat_map(|import| &import.bindings)
+            .find_map(|binding| {
+                (binding.kind != solid_facts::ast::ImportKind::Namespace
+                    && file.source_text(binding.local.span) == file.source_text(element.name.span)
+                    && tag.is_none_or(|tag| {
+                        entities.at(file.path.as_str(), binding.local.span) == Some(tag)
+                    }))
+                .then_some(binding.imported.as_deref())
+                .flatten()
+            })
+            .map(|name| PrimitiveName::new(name, dialect))
+    })
+}
+
+/// The dialect primitive a JSX tag names by symbol identity: its own resolved
+/// entity, or a member of a dialect namespace import. Unlike
+/// [`jsx_primitive_name`], a local binding that shadows an imported spelling
+/// names nothing here.
+fn exact_jsx_primitive_name(
     file: &solid_facts::FileFacts,
     element: &solid_facts::ast::JsxElementFact,
     entities: &EntitySymbols,
@@ -1963,22 +2121,8 @@ fn jsx_primitive_name(
         namespace_import.then(|| {
             symbol_names
                 .get(format!("{object_symbol}::{property_name}").as_str())
-                .map(|name| PrimitiveName::new(name, dialect))
+                .map(|name| PrimitiveName::from_symbol(name, dialect))
         })?
-    })
-    .or_else(|| {
-        file.ast
-            .imports
-            .iter()
-            .filter(|import| dialect.owns_module(&import.module))
-            .flat_map(|import| &import.bindings)
-            .find_map(|binding| {
-                (binding.kind != solid_facts::ast::ImportKind::Namespace
-                    && file.source_text(binding.local.span) == file.source_text(element.name.span))
-                .then_some(binding.imported.as_deref())
-                .flatten()
-            })
-            .map(|name| PrimitiveName::new(name, dialect))
     })
 }
 
@@ -1987,1130 +2131,4 @@ fn location(path: impl Into<Arc<str>>, span: Span) -> Location {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::collections::HashSet;
-
-    use super::cache::{
-        CachedTypeScriptIndexes, InterproceduralResultDependency,
-        InterproceduralResultDependencyState, SourceDiscoveryIdentity,
-        SourceDiscoveryTypeScriptDelta,
-    };
-    use solid_facts::TypeScriptTable;
-    use solid_facts::core::SourceHash;
-    use typefacts::{Declaration, EntityFact, FileFact, SourceDigest, SymbolFact};
-
-    use super::interproc::InterproceduralResultView;
-    use super::pipeline::{AnalysisWorkerLimit, parallel_slice_results};
-    use super::source_discovery::source_discovery_identity_matches;
-    use super::symbols::{
-        alias_roots_and_source_declarations, entity_symbols, patch_typescript_indexes,
-        references_for_sources, source_discovery_symbol_semantics, symbol_alias_targets,
-        symbol_names, symbols_by_root,
-    };
-    use super::*;
-
-    #[test]
-    fn ordered_parallel_maps_respect_the_worker_budget() {
-        use std::sync::atomic::{AtomicUsize, Ordering};
-
-        let items = (0..512).collect::<Vec<_>>();
-        let active = AtomicUsize::new(0);
-        let peak = AtomicUsize::new(0);
-        let parallel = {
-            let _worker_limit = AnalysisWorkerLimit::enter(2);
-            parallel_slice_results(&items, |item| {
-                let current = active.fetch_add(1, Ordering::SeqCst) + 1;
-                peak.fetch_max(current, Ordering::SeqCst);
-                for _ in 0..32 {
-                    std::thread::yield_now();
-                }
-                active.fetch_sub(1, Ordering::SeqCst);
-                item * 2
-            })
-        };
-        let sequential = {
-            let _worker_limit = AnalysisWorkerLimit::enter(1);
-            parallel_slice_results(&items, |item| item * 2)
-        };
-
-        assert_eq!(parallel, sequential);
-        assert!(peak.load(Ordering::SeqCst) <= 2);
-        assert_eq!(active.load(Ordering::SeqCst), 0);
-    }
-
-    #[test]
-    fn primitive_names_resolve_through_the_dialect() {
-        assert!(matches!(
-            PrimitiveName::new("createEffect", &solid_dialect::Solid2),
-            PrimitiveName::Known(Primitive::CreateEffect, "createEffect")
-        ));
-        // A name outside the dialect's vocabulary keeps its own spelling and
-        // answers no vocabulary question.
-        assert!(matches!(
-            PrimitiveName::new("projectSpecificHelper", &solid_dialect::Solid2),
-            PrimitiveName::Other(_)
-        ));
-        // The same spelling can be vocabulary in one dialect and not the
-        // other: `flush` is 2.0-only, `batch` is 1.x-only.
-        assert!(matches!(
-            PrimitiveName::new("flush", &solid_dialect::Solid1x),
-            PrimitiveName::Other(_)
-        ));
-        assert!(matches!(
-            PrimitiveName::new("batch", &solid_dialect::Solid1x),
-            PrimitiveName::Known(Primitive::Batch, "batch")
-        ));
-    }
-
-    #[test]
-    fn runtime_environment_requires_exact_noncontradictory_selection() {
-        let mut environment = RuntimeEnvironment {
-            target: Some(RuntimeTarget::Browser),
-            build: Some(RuntimeBuild::Production),
-            rendering: Some(RuntimeRendering::Csr),
-            conditions: BTreeSet::from(["import".into()]),
-            framework_transforms: BTreeSet::from(["use-server".into()]),
-            program_boundary: None,
-        };
-        assert!(environment.validate().is_ok());
-        assert_eq!(
-            environment.selected_conditions(),
-            BTreeSet::from([
-                "browser".into(),
-                "import".into(),
-                "production".into(),
-                "csr".into(),
-                "use-server".into()
-            ])
-        );
-        // The program boundary is a build-wide premise, not a package export
-        // condition. Artifact/guard selection happens before the normalized
-        // accepted index reaches the analyzer.
-        environment.program_boundary = Some(ProgramBoundary::Closed);
-        assert!(environment.validate().is_ok());
-        assert!(!environment.selected_conditions().contains("closed"));
-        assert!(environment.program_is_closed());
-        environment.program_boundary = Some(ProgramBoundary::Open);
-        assert!(!environment.program_is_closed());
-        environment.program_boundary = None;
-        assert!(!environment.program_is_closed());
-        // Resolver-only condition labels do not get synthesized here.
-        assert!(!environment.selected_conditions().contains("default"));
-
-        environment.target = Some(RuntimeTarget::Node);
-        assert!(environment.validate().is_err());
-        environment.target = Some(RuntimeTarget::Browser);
-        environment.conditions.insert(String::new());
-        assert!(environment.validate().is_err());
-        environment.conditions.remove("");
-        environment.conditions.insert("node".into());
-        assert!(environment.validate().is_err());
-        environment.conditions.remove("node");
-        environment.conditions.insert("development".into());
-        assert!(environment.validate().is_err());
-    }
-
-    #[test]
-    fn inferred_structured_returns_reject_mixed_shapes() {
-        let leaf = ContractReturn {
-            kind: "accessor".into(),
-            label: "active".into(),
-            ..ContractReturn::default()
-        };
-        let structured = ContractReturn {
-            kind: "tuple".into(),
-            elements: vec![
-                Some(ContractReturn {
-                    kind: "store-path".into(),
-                    label: "query".into(),
-                    ..ContractReturn::default()
-                }),
-                Some(ContractReturn {
-                    kind: "object".into(),
-                    properties: BTreeMap::from([("active".into(), leaf.clone())]),
-                    ..ContractReturn::default()
-                }),
-            ],
-            ..ContractReturn::default()
-        };
-        assert!(validate_contract_return(&structured).is_ok());
-
-        let argument = ContractReturn {
-            kind: "argument".into(),
-            parameter: Some(0),
-            ..ContractReturn::default()
-        };
-        assert!(validate_contract_return(&argument).is_ok());
-
-        let callback_result = ContractReturn {
-            kind: "callback-result".into(),
-            parameter: Some(0),
-            ..ContractReturn::default()
-        };
-        assert!(validate_contract_return(&callback_result).is_ok());
-
-        let callback_result_function = ContractReturn {
-            kind: "callback-result-function".into(),
-            parameter: Some(0),
-            ..ContractReturn::default()
-        };
-        assert!(validate_contract_return(&callback_result_function).is_ok());
-
-        let mixed = ContractReturn {
-            kind: "object".into(),
-            label: "invalid".into(),
-            properties: BTreeMap::from([("active".into(), leaf)]),
-            ..ContractReturn::default()
-        };
-        assert!(validate_contract_return(&mixed).is_err());
-    }
-
-    fn summary_node(path: &str, span: Span, body: Span) -> SummaryNode {
-        SummaryNode {
-            path: path.into(),
-            span,
-            body,
-            name: None,
-            symbol: None,
-            runtime_identity: String::new(),
-            parameters: Vec::new(),
-            exported: false,
-            r#async: false,
-        }
-    }
-
-    fn summary_read(symbol: &str, display: &str, start: u64) -> SummaryRead {
-        SummaryRead {
-            symbol: symbol.into(),
-            display: display.into(),
-            kind: Some("accessor".into()),
-            declaration: Location {
-                path: "fixture.tsx".into(),
-                start_byte: start,
-                end_byte: start + 1,
-            },
-            origin: Location {
-                path: "fixture.tsx".into(),
-                start_byte: start + 10,
-                end_byte: start + 11,
-            },
-            origin_context: symbol.into(),
-        }
-    }
-
-    fn declaration(name: &str, path: &str, start: u64) -> Declaration {
-        Declaration {
-            name: name.into(),
-            kind: "const".into(),
-            location: Location {
-                path: path.into(),
-                start_byte: start,
-                end_byte: start + 1,
-            },
-        }
-    }
-
-    fn typescript_table(
-        generation: u64,
-        sources: Vec<SourceDigest>,
-        entities: Vec<EntityFact>,
-        symbols: Vec<SymbolFact>,
-        files: Vec<FileFact>,
-    ) -> TypeScriptTable {
-        TypeScriptTable::from_parts(3, generation, "fixture", sources, entities, symbols, files)
-    }
-
-    fn empty_project(generation: u64) -> ProjectFacts {
-        ProjectFacts {
-            generation: solid_facts::core::Generation::new(generation).unwrap(),
-            project_id: "fixture".into(),
-            files: Vec::new(),
-            typescript: typescript_table(
-                generation,
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-            ),
-            typescript_changes: None,
-            resolved_imports: None,
-            runtime_symbol_redirects: HashMap::new(),
-        }
-    }
-
-    #[test]
-    fn projected_references_include_every_alias_member_without_retaining_unrelated_symbols() {
-        let reference = |start| Location {
-            path: "fixture.ts".into(),
-            start_byte: start,
-            end_byte: start + 1,
-        };
-        let table = typescript_table(
-            1,
-            Vec::new(),
-            Vec::new(),
-            vec![
-                SymbolFact {
-                    id: "root".into(),
-                    alias_target: "".into(),
-                    declarations: Vec::new().into(),
-                    references: vec![reference(30)].into(),
-                },
-                SymbolFact {
-                    id: "alias".into(),
-                    alias_target: "root".into(),
-                    declarations: Vec::new().into(),
-                    references: vec![reference(10)].into(),
-                },
-                SymbolFact {
-                    id: "unrelated".into(),
-                    alias_target: "".into(),
-                    declarations: Vec::new().into(),
-                    references: vec![reference(20)].into(),
-                },
-            ],
-            Vec::new(),
-        );
-        let interner = SymbolInterner::from_table(&table);
-        let (aliases, _) = alias_roots_and_source_declarations(&table, &interner, &HashMap::new());
-        let roots = symbols_by_root(&table, &aliases, &interner);
-        let source = SymbolId::from("root");
-        let projected = references_for_sources(&table, &roots, std::iter::once(&source));
-
-        assert_eq!(
-            projected[&source]
-                .iter()
-                .map(|location| location.start_byte)
-                .collect::<Vec<_>>(),
-            vec![10, 30]
-        );
-        assert_eq!(projected.len(), 1);
-    }
-
-    #[test]
-    fn exact_runtime_redirects_replace_declaration_alias_roots() {
-        let table = typescript_table(
-            1,
-            Vec::new(),
-            Vec::new(),
-            vec![
-                SymbolFact {
-                    id: "import-alias".into(),
-                    alias_target: "declaration".into(),
-                    declarations: Vec::new().into(),
-                    references: Vec::new().into(),
-                },
-                SymbolFact {
-                    id: "declaration".into(),
-                    alias_target: "".into(),
-                    declarations: Vec::new().into(),
-                    references: Vec::new().into(),
-                },
-                SymbolFact {
-                    id: "runtime".into(),
-                    alias_target: "".into(),
-                    declarations: Vec::new().into(),
-                    references: Vec::new().into(),
-                },
-            ],
-            Vec::new(),
-        );
-        let interner = SymbolInterner::from_table(&table);
-        let redirects = HashMap::from([("declaration".into(), "runtime".into())]);
-        let (aliases, _) = alias_roots_and_source_declarations(&table, &interner, &redirects);
-
-        assert_eq!(aliases["import-alias"].as_str(), "runtime");
-        assert_eq!(aliases["declaration"].as_str(), "runtime");
-        assert_eq!(aliases["runtime"].as_str(), "runtime");
-    }
-
-    #[test]
-    fn compact_source_identity_reuses_only_exact_typefacts_manifests() {
-        let source_hash = SourceHash::of("source");
-        let cached = SourceDiscoveryIdentity {
-            source_hash: source_hash.clone(),
-            symbols: vec![SymbolId::from("source-symbol")],
-        };
-        let exact = SourceDiscoveryTypeScriptDelta {
-            entity_paths: HashSet::new(),
-            file_paths: HashSet::new(),
-            semantic_symbol_ids: HashSet::new(),
-        };
-        assert!(source_discovery_identity_matches(
-            &cached,
-            "fixture.ts",
-            &source_hash,
-            false,
-            Some(&exact),
-        ));
-        assert!(!source_discovery_identity_matches(
-            &cached,
-            "fixture.ts",
-            &source_hash,
-            false,
-            None,
-        ));
-
-        let affected = SourceDiscoveryTypeScriptDelta {
-            entity_paths: HashSet::from(["fixture.ts".into()]),
-            file_paths: HashSet::new(),
-            semantic_symbol_ids: HashSet::new(),
-        };
-        assert!(!source_discovery_identity_matches(
-            &cached,
-            "fixture.ts",
-            &source_hash,
-            false,
-            Some(&affected),
-        ));
-        let changed_symbol = SourceDiscoveryTypeScriptDelta {
-            entity_paths: HashSet::new(),
-            file_paths: HashSet::new(),
-            semantic_symbol_ids: HashSet::from([SymbolId::from("source-symbol")]),
-        };
-        assert!(!source_discovery_identity_matches(
-            &cached,
-            "fixture.ts",
-            &source_hash,
-            false,
-            Some(&changed_symbol),
-        ));
-    }
-
-    fn typescript_index_cache(table: &TypeScriptTable) -> CachedTypeScriptIndexes {
-        let interner = SymbolInterner::from_table(table);
-        let (aliases, source_declarations) =
-            alias_roots_and_source_declarations(table, &interner, &HashMap::new());
-        CachedTypeScriptIndexes {
-            symbol_alias_targets: symbol_alias_targets(table, &interner),
-            symbols_by_root: symbols_by_root(table, &aliases, &interner),
-            entities: entity_symbols(table, &aliases, &interner),
-            symbol_names: symbol_names(table, &aliases, &interner, &solid_dialect::Solid2),
-            source_discovery_symbol_semantics: source_discovery_symbol_semantics(table, &interner),
-            source_discovery_delta: None,
-            aliases,
-            source_declarations,
-            interner,
-        }
-    }
-
-    #[test]
-    fn incremental_builder_reuses_only_the_same_coherent_generation() {
-        let first = empty_project(1);
-        let fresh = build(&first, &solid_dialect::Solid2).unwrap();
-        let mut incremental = IncrementalBuilder::default();
-
-        let (initial, initial_timings) = incremental.build(&first, &solid_dialect::Solid2).unwrap();
-        let (reused, reused_timings) = incremental.build(&first, &solid_dialect::Solid2).unwrap();
-        let mut next_facts = empty_project(2);
-        next_facts.typescript_changes = Some(solid_facts::TypeScriptChanges {
-            unchanged: true,
-            ..solid_facts::TypeScriptChanges::default()
-        });
-        let (next, next_timings) = incremental
-            .build(&next_facts, &solid_dialect::Solid2)
-            .unwrap();
-
-        assert_eq!(initial, fresh);
-        assert_eq!(reused, fresh);
-        assert_eq!(next, fresh);
-        assert!(!initial_timings.reused);
-        assert!(reused_timings.reused);
-        assert!(!next_timings.reused);
-        assert!(next_timings.typescript_indexes_reused);
-    }
-
-    #[test]
-    fn idle_retention_preserves_results_and_rebuilds_released_indexes() {
-        let first = empty_project(1);
-        let fresh = build(&first, &solid_dialect::Solid2).unwrap();
-        let mut incremental = IncrementalBuilder::default();
-
-        let (initial, _) = incremental.build(&first, &solid_dialect::Solid2).unwrap();
-        incremental.retain_for_idle(CacheRetention::Balanced);
-        let (same_generation, same_timings) =
-            incremental.build(&first, &solid_dialect::Solid2).unwrap();
-        incremental.retain_for_idle(CacheRetention::Compact);
-
-        let mut next_facts = empty_project(2);
-        next_facts.typescript_changes = Some(solid_facts::TypeScriptChanges {
-            unchanged: true,
-            ..solid_facts::TypeScriptChanges::default()
-        });
-        let (next, next_timings) = incremental
-            .build(&next_facts, &solid_dialect::Solid2)
-            .unwrap();
-
-        assert_eq!(initial, fresh);
-        assert_eq!(same_generation, fresh);
-        assert_eq!(next, fresh);
-        assert!(same_timings.reused);
-        assert!(!next_timings.reused);
-        assert!(!next_timings.typescript_indexes_reused);
-    }
-
-    #[test]
-    fn shared_builder_reuses_the_program_allocation() {
-        let facts = empty_project(1);
-        let mut incremental = IncrementalBuilder::default();
-
-        let (initial, initial_timings) = incremental
-            .build_shared(&facts, &solid_dialect::Solid2)
-            .unwrap();
-        let (reused, reused_timings) = incremental
-            .build_shared(&facts, &solid_dialect::Solid2)
-            .unwrap();
-
-        assert!(Arc::ptr_eq(&initial, &reused));
-        assert!(!initial_timings.reused);
-        assert!(reused_timings.reused);
-    }
-
-    #[test]
-    fn source_declaration_index_skips_earlier_dts_only_symbols() {
-        let table = typescript_table(
-            1,
-            Vec::new(),
-            Vec::new(),
-            vec![
-                typefacts::SymbolFact {
-                    id: "early".into(),
-                    alias_target: "root".into(),
-                    declarations: (vec![declaration("Accessor", "solid-js.d.ts", 1)]).into(),
-                    references: (Vec::new()).into(),
-                },
-                typefacts::SymbolFact {
-                    id: "later".into(),
-                    alias_target: "root".into(),
-                    declarations: (vec![
-                        declaration("Accessor", "other.d.ts", 2),
-                        declaration("sourceAccessor", "source.ts", 3),
-                    ])
-                    .into(),
-                    references: (Vec::new()).into(),
-                },
-            ],
-            Vec::new(),
-        );
-
-        let interner = SymbolInterner::from_table(&table);
-        let (_, declarations) =
-            alias_roots_and_source_declarations(&table, &interner, &HashMap::new());
-
-        assert_eq!(declarations["root"].name, ("sourceAccessor").into());
-        assert_eq!(declarations["root"].location.path, ("source.ts").into());
-    }
-
-    #[test]
-    fn exact_index_patch_replaces_local_alias_ids_without_retargeting_the_graph() {
-        let symbol = |id: &str, target: &str, declarations: Vec<Declaration>| SymbolFact {
-            id: id.into(),
-            alias_target: target.into(),
-            declarations: declarations.into(),
-            references: Vec::new().into(),
-        };
-        let entity = |symbol: &str, start: u64| EntityFact {
-            location: Location {
-                path: "fixture.ts".into(),
-                start_byte: start,
-                end_byte: start + 1,
-            },
-            symbol: symbol.into(),
-            symbol_unresolved: false,
-            type_descriptor: None,
-            resolved_call: None,
-            callability: None,
-            constructability: None,
-            runtime_binding_kind: None,
-            runtime_value_domain: None,
-            primitive_value_domain: typefacts::PrimitiveValueDomain::default(),
-            primitive_literal_candidates: None,
-            call_result_domain: None,
-            constant_value: None,
-            array_shape: None,
-            tuple_shape: None,
-            library_types: None,
-            reference_space: None,
-            runtime_identity: "".into(),
-        };
-        let old = typescript_table(
-            1,
-            Vec::new(),
-            vec![entity("old-alias", 10)],
-            vec![
-                symbol("root", "", vec![declaration("root", "fixture.ts", 1)]),
-                SymbolFact {
-                    references: vec![Location {
-                        path: "fixture.ts".into(),
-                        start_byte: 10,
-                        end_byte: 11,
-                    }]
-                    .into(),
-                    ..symbol(
-                        "old-alias",
-                        "root",
-                        vec![declaration("root", "fixture.d.ts", 2)],
-                    )
-                },
-            ],
-            Vec::new(),
-        );
-        let current = typescript_table(
-            2,
-            Vec::new(),
-            vec![entity("new-alias", 12)],
-            vec![
-                symbol("root", "", vec![declaration("root", "fixture.ts", 3)]),
-                SymbolFact {
-                    references: vec![
-                        Location {
-                            path: "fixture.ts".into(),
-                            start_byte: 13,
-                            end_byte: 14,
-                        },
-                        Location {
-                            path: "fixture.ts".into(),
-                            start_byte: 12,
-                            end_byte: 13,
-                        },
-                        Location {
-                            path: "fixture.ts".into(),
-                            start_byte: 12,
-                            end_byte: 13,
-                        },
-                    ]
-                    .into(),
-                    ..symbol(
-                        "new-alias",
-                        "root",
-                        vec![declaration("root", "fixture.d.ts", 4)],
-                    )
-                },
-            ],
-            Vec::new(),
-        );
-        let symbols_by_id = current
-            .symbols()
-            .map(|symbol| (symbol.id(), symbol))
-            .collect::<HashMap<_, _>>();
-        let mut patched = typescript_index_cache(&old);
-        let changes = solid_facts::TypeScriptChanges {
-            unchanged: false,
-            entity_paths: vec!["fixture.ts".into()],
-            symbol_ids: vec!["new-alias".into(), "old-alias".into(), "root".into()],
-            file_paths: Vec::new(),
-        };
-
-        assert!(
-            patch_typescript_indexes(
-                &mut patched,
-                &current,
-                &symbols_by_id,
-                &solid_dialect::Solid2,
-                &changes
-            )
-            .is_some()
-        );
-        let fresh = typescript_index_cache(&current);
-        assert_eq!(patched.symbol_alias_targets, fresh.symbol_alias_targets);
-        assert_eq!(patched.aliases, fresh.aliases);
-        assert_eq!(patched.source_declarations, fresh.source_declarations);
-        assert_eq!(patched.entities, fresh.entities);
-        assert_eq!(patched.symbol_names, fresh.symbol_names);
-        assert_eq!(
-            patched.source_discovery_symbol_semantics,
-            fresh.source_discovery_symbol_semantics
-        );
-        assert_eq!(
-            patched
-                .source_discovery_delta
-                .as_ref()
-                .unwrap()
-                .semantic_symbol_ids,
-            ["new-alias", "old-alias"]
-                .into_iter()
-                .map(SymbolId::from)
-                .collect()
-        );
-    }
-
-    #[test]
-    fn exact_index_patch_does_not_treat_references_as_source_discovery_semantics() {
-        let table = |reference_start| {
-            typescript_table(
-                1,
-                Vec::new(),
-                Vec::new(),
-                vec![SymbolFact {
-                    id: "root".into(),
-                    alias_target: (String::new()).into(),
-                    declarations: (vec![declaration("root", "fixture.ts", 1)]).into(),
-                    references: (vec![Location {
-                        path: "fixture.ts".into(),
-                        start_byte: reference_start,
-                        end_byte: reference_start + 1,
-                    }])
-                    .into(),
-                }],
-                Vec::new(),
-            )
-        };
-        let old = table(10);
-        let current = table(20);
-        let symbols_by_id = current
-            .symbols()
-            .map(|symbol| (symbol.id(), symbol))
-            .collect::<HashMap<_, _>>();
-        let mut patched = typescript_index_cache(&old);
-        let changes = solid_facts::TypeScriptChanges {
-            unchanged: false,
-            entity_paths: Vec::new(),
-            symbol_ids: vec!["root".into()],
-            file_paths: Vec::new(),
-        };
-
-        assert!(
-            patch_typescript_indexes(
-                &mut patched,
-                &current,
-                &symbols_by_id,
-                &solid_dialect::Solid2,
-                &changes
-            )
-            .is_some()
-        );
-        assert!(
-            patched
-                .source_discovery_delta
-                .as_ref()
-                .unwrap()
-                .semantic_symbol_ids
-                .is_empty()
-        );
-    }
-
-    #[test]
-    fn exact_index_patch_does_not_treat_declaration_offsets_as_source_semantics() {
-        let table = |start| {
-            typescript_table(
-                1,
-                Vec::new(),
-                Vec::new(),
-                vec![SymbolFact {
-                    id: "root".into(),
-                    alias_target: (String::new()).into(),
-                    declarations: (vec![declaration("root", "fixture.ts", start)]).into(),
-                    references: (Vec::new()).into(),
-                }],
-                Vec::new(),
-            )
-        };
-        let old = table(10);
-        let current = table(30);
-        let symbols_by_id = current
-            .symbols()
-            .map(|symbol| (symbol.id(), symbol))
-            .collect::<HashMap<_, _>>();
-        let mut patched = typescript_index_cache(&old);
-        let changes = solid_facts::TypeScriptChanges {
-            unchanged: false,
-            entity_paths: Vec::new(),
-            symbol_ids: vec!["root".into()],
-            file_paths: Vec::new(),
-        };
-
-        assert!(
-            patch_typescript_indexes(
-                &mut patched,
-                &current,
-                &symbols_by_id,
-                &solid_dialect::Solid2,
-                &changes
-            )
-            .is_some()
-        );
-        assert_eq!(
-            patched.source_declarations,
-            typescript_index_cache(&current).source_declarations
-        );
-        assert!(
-            patched
-                .source_discovery_delta
-                .as_ref()
-                .unwrap()
-                .semantic_symbol_ids
-                .is_empty(),
-            "moving a declaration without changing its source semantics must not invalidate importers"
-        );
-    }
-
-    #[test]
-    fn exact_index_patch_does_not_invalidate_when_a_runtime_representative_moves_files() {
-        let table = |path| {
-            typescript_table(
-                1,
-                Vec::new(),
-                Vec::new(),
-                vec![SymbolFact {
-                    id: "root".into(),
-                    alias_target: (String::new()).into(),
-                    declarations: (vec![declaration("createSignal", path, 10)]).into(),
-                    references: (Vec::new()).into(),
-                }],
-                Vec::new(),
-            )
-        };
-        let old = table("a.ts");
-        let current = table("b.ts");
-        let symbols_by_id = current
-            .symbols()
-            .map(|symbol| (symbol.id(), symbol))
-            .collect::<HashMap<_, _>>();
-        let mut patched = typescript_index_cache(&old);
-        let changes = solid_facts::TypeScriptChanges {
-            unchanged: false,
-            entity_paths: Vec::new(),
-            symbol_ids: vec!["root".into()],
-            file_paths: Vec::new(),
-        };
-
-        assert!(
-            patch_typescript_indexes(
-                &mut patched,
-                &current,
-                &symbols_by_id,
-                &solid_dialect::Solid2,
-                &changes
-            )
-            .is_some()
-        );
-        assert_eq!(
-            patched.source_declarations["root"].location.path,
-            ("b.ts").into(),
-            "the current representative location must still be patched"
-        );
-        assert!(
-            patched
-                .source_discovery_delta
-                .as_ref()
-                .unwrap()
-                .semantic_symbol_ids
-                .is_empty(),
-            "choosing another runtime declaration for the same root must not invalidate importers"
-        );
-    }
-
-    #[test]
-    fn exact_index_patch_invalidates_a_root_when_an_alias_changes_its_source_declaration() {
-        let symbol = |id: &str, target: &str, declarations| SymbolFact {
-            id: id.into(),
-            alias_target: target.into(),
-            declarations,
-            references: (Vec::new()).into(),
-        };
-        let old = typescript_table(
-            1,
-            Vec::new(),
-            Vec::new(),
-            vec![
-                symbol("root", "", (Vec::new()).into()),
-                symbol(
-                    "old-alias",
-                    "root",
-                    (vec![declaration("root", "fixture.d.ts", 1)]).into(),
-                ),
-            ],
-            Vec::new(),
-        );
-        let current = typescript_table(
-            2,
-            Vec::new(),
-            Vec::new(),
-            vec![
-                symbol("root", "", (Vec::new()).into()),
-                symbol(
-                    "new-alias",
-                    "root",
-                    (vec![declaration("root", "fixture.ts", 1)]).into(),
-                ),
-            ],
-            Vec::new(),
-        );
-        let symbols_by_id = current
-            .symbols()
-            .map(|symbol| (symbol.id(), symbol))
-            .collect::<HashMap<_, _>>();
-        let mut patched = typescript_index_cache(&old);
-        let changes = solid_facts::TypeScriptChanges {
-            unchanged: false,
-            entity_paths: Vec::new(),
-            symbol_ids: vec!["new-alias".into(), "old-alias".into()],
-            file_paths: Vec::new(),
-        };
-
-        assert!(
-            patch_typescript_indexes(
-                &mut patched,
-                &current,
-                &symbols_by_id,
-                &solid_dialect::Solid2,
-                &changes
-            )
-            .is_some()
-        );
-        assert!(
-            patched
-                .source_discovery_delta
-                .as_ref()
-                .unwrap()
-                .semantic_symbol_ids
-                .contains("root")
-        );
-        assert_eq!(
-            patched.source_declarations,
-            typescript_index_cache(&current).source_declarations
-        );
-    }
-
-    #[test]
-    fn exact_index_patch_rejects_alias_retargeting() {
-        let table = |target: &str| {
-            typescript_table(
-                1,
-                Vec::new(),
-                Vec::new(),
-                vec![
-                    SymbolFact {
-                        id: "root-a".into(),
-                        alias_target: (String::new()).into(),
-                        declarations: (Vec::new()).into(),
-                        references: (Vec::new()).into(),
-                    },
-                    SymbolFact {
-                        id: "root-b".into(),
-                        alias_target: (String::new()).into(),
-                        declarations: (Vec::new()).into(),
-                        references: (Vec::new()).into(),
-                    },
-                    SymbolFact {
-                        id: "alias".into(),
-                        alias_target: target.into(),
-                        declarations: (Vec::new()).into(),
-                        references: (Vec::new()).into(),
-                    },
-                ],
-                Vec::new(),
-            )
-        };
-        let old = table("root-a");
-        let current = table("root-b");
-        let symbols_by_id = current
-            .symbols()
-            .map(|symbol| (symbol.id(), symbol))
-            .collect::<HashMap<_, _>>();
-        let mut patched = typescript_index_cache(&old);
-        let changes = solid_facts::TypeScriptChanges {
-            unchanged: false,
-            entity_paths: Vec::new(),
-            symbol_ids: vec!["alias".into()],
-            file_paths: Vec::new(),
-        };
-
-        assert!(
-            patch_typescript_indexes(
-                &mut patched,
-                &current,
-                &symbols_by_id,
-                &solid_dialect::Solid2,
-                &changes
-            )
-            .is_none()
-        );
-        assert_eq!(patched.aliases, typescript_index_cache(&old).aliases);
-    }
-
-    #[test]
-    fn summary_containment_selects_innermost_function() {
-        let nodes = vec![
-            summary_node(
-                "fixture.tsx",
-                Span { start: 0, end: 100 },
-                Span { start: 10, end: 90 },
-            ),
-            summary_node(
-                "fixture.tsx",
-                Span { start: 20, end: 60 },
-                Span { start: 30, end: 50 },
-            ),
-        ];
-        let by_path = function_indices_by_path(&nodes);
-
-        assert_eq!(
-            containing_summary_function_indexed(
-                &nodes,
-                &by_path,
-                "fixture.tsx",
-                Span { start: 35, end: 40 },
-            ),
-            Some(1)
-        );
-    }
-
-    #[test]
-    fn containing_function_buckets_assign_each_item_to_one_innermost_owner() {
-        let nodes = vec![
-            summary_node(
-                "fixture.tsx",
-                Span { start: 0, end: 100 },
-                Span { start: 10, end: 90 },
-            ),
-            summary_node(
-                "fixture.tsx",
-                Span { start: 20, end: 60 },
-                Span { start: 30, end: 50 },
-            ),
-        ];
-        let by_path = function_indices_by_path(&nodes);
-        let items = [
-            ("fixture.tsx", Span { start: 35, end: 40 }),
-            ("fixture.tsx", Span { start: 70, end: 75 }),
-            (
-                "fixture.tsx",
-                Span {
-                    start: 110,
-                    end: 115,
-                },
-            ),
-        ];
-
-        let buckets = items_by_containing_function(
-            &nodes,
-            &by_path,
-            items.iter().map(|(path, span)| (*path, span)),
-            |span| *span,
-        );
-
-        assert_eq!(buckets[0], vec![&items[1].1]);
-        assert_eq!(buckets[1], vec![&items[0].1]);
-    }
-
-    #[test]
-    fn function_lookup_preserves_first_symbol_and_parameter_owner_for_a_path() {
-        let mut first = summary_node(
-            "fixture.tsx",
-            Span { start: 0, end: 40 },
-            Span { start: 10, end: 30 },
-        );
-        first.symbol = Some("first-function".into());
-        first.parameters = vec!["shared-parameter".into()];
-        let mut second = summary_node(
-            "fixture.tsx",
-            Span { start: 50, end: 90 },
-            Span { start: 60, end: 80 },
-        );
-        second.symbol = Some("second-function".into());
-        second.parameters = vec!["shared-parameter".into(), "second-parameter".into()];
-        let nodes = vec![first, second];
-        let by_path = function_indices_by_path(&nodes);
-
-        let lookup = function_lookup_for_path(&nodes, &by_path, "fixture.tsx");
-
-        assert_eq!(lookup.by_symbol.get("first-function"), Some(&0));
-        assert_eq!(lookup.by_symbol.get("second-function"), Some(&1));
-        assert_eq!(lookup.by_span.get(&Span { start: 0, end: 40 }), Some(&0));
-        assert_eq!(lookup.by_span.get(&Span { start: 50, end: 90 }), Some(&1));
-        assert_eq!(
-            lookup.parameter_owner.get("shared-parameter"),
-            Some(&(0, 0))
-        );
-        assert_eq!(
-            lookup.parameter_owner.get("second-parameter"),
-            Some(&(1, 1))
-        );
-    }
-
-    #[test]
-    fn summary_membership_keeps_first_writer_and_ordered_insertions() {
-        let mut reads = SummaryReads::default();
-        let first = summary_read("first", "signal", 1);
-        let mut duplicate = first.clone();
-        duplicate.symbol = "second".into();
-        duplicate.kind = Some("store-path".into());
-        duplicate.origin_context = "different".into();
-
-        assert!(reads.push_unique(first));
-        assert!(!reads.push_unique(duplicate));
-        reads.insert(0, summary_read("typed", "typed accessor", 2));
-
-        assert_eq!(reads.len(), 2);
-        assert_eq!(reads[0].symbol, "typed");
-        assert_eq!(reads[1].symbol, "first");
-        assert_eq!(reads[1].kind.as_deref(), Some("accessor"));
-        assert_eq!(reads[1].origin_context, "first");
-    }
-
-    #[test]
-    fn returned_summary_deltas_preserve_fixed_edge_order() {
-        let mut summaries = vec![
-            SummaryReads::default(),
-            SummaryReads::default(),
-            SummaryReads::default(),
-        ];
-        summaries[1].push(summary_read("one", "one", 1));
-        summaries[2].push(summary_read("two", "two", 2));
-
-        propagate_returned_summary_deltas(&mut summaries, &[(0, 1), (1, 2), (0, 2)]);
-
-        assert_eq!(
-            summaries[0]
-                .iter()
-                .map(|read| read.symbol.as_str())
-                .collect::<Vec<_>>(),
-            vec!["one", "two"]
-        );
-        assert_eq!(
-            summaries[1]
-                .iter()
-                .map(|read| read.symbol.as_str())
-                .collect::<Vec<_>>(),
-            vec!["one", "two"]
-        );
-    }
-
-    #[test]
-    fn missing_result_dependency_invalidates_when_a_function_appears() {
-        let dependency = InterproceduralResultDependency::Symbol("helper".into());
-        let mut node = summary_node(
-            "fixture.tsx",
-            Span { start: 0, end: 10 },
-            Span { start: 2, end: 9 },
-        );
-        node.symbol = Some("helper".into());
-        let nodes = vec![node];
-        let indexes = HashMap::from([(("fixture.tsx".into(), nodes[0].span), 0)]);
-        let summaries = vec![SummaryReads::default()];
-        let invoked_parameters = vec![Vec::new()];
-        let invoked_parameter_members = vec![Vec::new()];
-        let returned_bindings = HashMap::new();
-        let missing = InterproceduralResultDependencyState::Missing;
-
-        let missing_by_symbol = HashMap::new();
-        let missing_view = InterproceduralResultView {
-            nodes: &nodes,
-            indexes: &indexes,
-            by_symbol: &missing_by_symbol,
-            summaries: &summaries,
-            invoked_parameters: &invoked_parameters,
-            invoked_parameter_members: &invoked_parameter_members,
-            returned_bindings: &returned_bindings,
-        };
-        assert!(missing_view.dependency_matches(&missing, &dependency));
-
-        let by_symbol = HashMap::from([("helper".into(), 0)]);
-        let present_view = InterproceduralResultView {
-            by_symbol: &by_symbol,
-            ..missing_view
-        };
-        assert!(!present_view.dependency_matches(&missing, &dependency));
-    }
-}
+mod tests;

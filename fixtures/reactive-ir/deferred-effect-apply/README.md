@@ -1,0 +1,3 @@
+# Deferred effect apply
+
+`defer: true` skips initial apply: a dependency-free compute cannot schedule apply later, so its reads and owner operations produce no finding; a compute reading a writable source on every completion supplies the later-run premise; unknown compute/defer values stay uncertifiable and omitted options, absent `defer` and `false` keep initial execution (ref callbacks created in apply follow the same premise). Effect, signal, `untrack`, cleanup declarations are copied from published `@solidjs/signals@2.0.0-rc.13` (JSDoc dropped; `$REFRESH` local, same brand); all cases check against real rc.13.

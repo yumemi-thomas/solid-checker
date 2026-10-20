@@ -5,7 +5,8 @@
 //! wrappers preserve string lookup ergonomics while making clones share one
 //! immutable allocation across all retained analysis stages.
 
-use std::{borrow::Borrow, collections::HashSet, fmt, ops::Deref, sync::Arc};
+use crate::HashSet;
+use std::{borrow::Borrow, fmt, ops::Deref, sync::Arc};
 
 use solid_facts::TypeScriptTable;
 
@@ -13,6 +14,11 @@ use solid_facts::TypeScriptTable;
 pub(super) struct SymbolId(Arc<str>);
 
 impl SymbolId {
+    /// The id's own shared text, for a value that keeps the spelling.
+    pub(super) fn shared(&self) -> std::sync::Arc<str> {
+        std::sync::Arc::clone(&self.0)
+    }
+
     pub(super) fn as_str(&self) -> &str {
         &self.0
     }
@@ -76,7 +82,7 @@ pub(super) struct SymbolInterner {
 
 impl SymbolInterner {
     pub(super) fn from_table(table: &TypeScriptTable) -> Self {
-        let mut values = HashSet::new();
+        let mut values = HashSet::default();
         for symbol in table.symbols() {
             values.insert(SymbolId::from(symbol.id()));
             if !symbol.alias_target().is_empty() {

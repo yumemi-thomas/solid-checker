@@ -1,0 +1,3 @@
+# fp-exec-true-defects
+
+Inverting the lexical default (body-time only when proven) must not remove defects Solid warns about for real: `Button` reads `props.variant` once in the body while `Filters` drives it from a signal, and `StopRow`'s `onClick={props.canAlight ? props.onAlight : props.onBoard}` is evaluated once at creation (`_$addEvent`) while `canAlight` follows a signal in a `<For>` row: both `SC1001` violations. Body-time controls: `fp-exec-stored-literals`, `fp-exec-control-flow-callback`. Stub: control-flow fixture's (published rc.9 `createSignal`, `For`, `Show`) plus an intrinsic element.

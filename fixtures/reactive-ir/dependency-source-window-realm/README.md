@@ -1,0 +1,3 @@
+# dependency-source-window-realm
+
+**Claim (ADR 0295).** Under a declared Window realm (`runtime.json` `"realm": "window"`, browser target, `dep-query` source), a package's `typeof window`/`typeof document` comparison with `"undefined"` is decided when the identifier is the unbound global, and a module-level `var` holding it carries it when every read runs after the initializer, dropping the proxy trap's server branch (the `@tanstack/solid-query` 6.0.0-rc.0 guard): SC1001; written aliases, shadowed `window`, `globalThis.window` and unsafe module orders are silent; `dependency-source-window-undeclared` lacks the realm. `createContext`/`useContext` are byte-faithful to published 2.0.0-rc.13 `types/client/core.d.ts`.

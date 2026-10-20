@@ -1,0 +1,3 @@
+# primitive-value-proofs
+
+**Claim (ADR 0320).** A forwarded (`unmodeled`) parameter use or handed-on literal member is settled at a caller only by a value proven primitive (and not `undefined`) from what produces it, never from a declared type; in a closed program the proof follows producers across functions and files (`CallGraph::value_is_primitive`). Primitive signals and setter writes, memo/effect-apply producers, helper and `Props` arguments, template-returning functions and string-literal members settle it; object writes, escaped setters, `undefined`, assertions, missing attributes and fall-through functions stay `SC9012`.

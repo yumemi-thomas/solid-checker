@@ -5,149 +5,52 @@
 //! the compiler-fact classifier plus the semantic (AST-driven) classifier and
 //! the two role-keyed read helpers that consume its result.
 
-use std::collections::{HashMap, HashSet};
+use crate::{HashMap, HashSet};
 
 use solid_dialect::{Dialect, Execution, Primitive};
 use solid_facts::core::Span;
 
 use super::{
-    EntitySymbols, ExecutionRole, PrimitiveName, SemanticLookup, SymbolId, jsx_primitive_name,
-    known_primitive, location, primitive_name,
+    EntitySymbols, ExecutionRole, PrimitiveName, SemanticLookup, SymbolId,
+    exact_jsx_primitive_name, jsx_primitive_name, known_primitive, location,
 };
+#[path = "project_consumer.rs"]
+mod project_consumer;
+
+mod jsx_census;
+pub(crate) use jsx_census::*;
+mod write_roles;
+pub(crate) use write_roles::*;
+mod events;
+pub(crate) use events::*;
+mod props_shape;
+use props_shape::*;
+mod body_roles;
+pub(crate) use body_roles::*;
+mod callee_roles;
+pub(crate) use callee_roles::*;
+mod callback_standing;
+pub(crate) use callback_standing::*;
+mod control_flow;
+pub(crate) use control_flow::*;
+mod named_callbacks;
+pub(crate) use named_callbacks::*;
+mod read_context;
+pub(crate) use read_context::*;
+mod invocation_flow;
+pub(crate) use invocation_flow::*;
+mod unowned_event_literals;
+pub(crate) use unowned_event_literals::*;
+mod flow_helpers;
+pub(crate) use flow_helpers::*;
+pub(crate) use project_consumer::ReadConsumerSummaries;
+
+use crate::indexes::ComponentStatus;
 use crate::owners::{
     callback_execution_at_call, callback_owner_at_call, containing_ast_function,
     enclosing_function_label, function_binding_name, returned_callback_execution_at_call,
     returned_callback_invocation_sites, returned_primitive_invocation,
 };
-
-/// Whether the untracked-rendering role at `span` rests on the *absence* of a
-/// compiler census entry rather than on a compiler fact.
-///
-/// `semantic_execution_role_within` reaches [`ExecutionRole::UntrackedRendering`]
-/// two ways. Either a compiler fact said so — an untracked region, a render
-/// callback role — or nothing in the execution map classified the span at all
-/// and the span is inside a component body. The second way is a proof only
-/// while the census is complete over the JSX the source actually contains, and
-/// it is not: each producer censuses the JSX *it* lowers, so a source-level JSX
-/// expression the producer dropped reaches the checker as a hole
-/// indistinguishable from "the compiler proved this never re-runs". Two ways a
-/// hole arrives, and this cannot tell them apart because it does not need to:
-/// the producer never censused the expression (a nested non-hydratable `<head>`
-/// under 1.x; a *template-root* void element's children under 2.0, whose
-/// `lower_dom_element` gates on `!is_void_element`), or it censused the
-/// expression and then **retracted** the site during lowering because the path
-/// discarded the child list (2.0's nested dynamic-`textContent` placeholder, the
-/// textarea `value` fold, the inert `<noscript>` fast path).
-///
-/// Absence of a fact is not a fact. Where the narrowest JSX region containing
-/// the read carries no census entry whatsoever, the read is an uncertifiable
-/// proof obligation — never a proven untracked read, and equally never a
-/// certification that the expression was deleted and is therefore safe, which
-/// would be a second claim this has no evidence for either.
-///
-pub(crate) fn missing_jsx_census(
-    file: &solid_facts::FileFacts,
-    span: Span,
-    execution: ExecutionRole,
-) -> bool {
-    // Any other role was decided by a fact — a dialect-proven primitive
-    // callback, an event or ref census entry, module initialization (an
-    // AST-proven one-shot context that needs no census at all), a discarded
-    // region (the compiler reported on the JSX and said the code is deleted) —
-    // so a census hole cannot be what put the read there.
-    if execution != ExecutionRole::UntrackedRendering {
-        return false;
-    }
-    missing_jsx_census_region(file, span)
-}
-
-/// Whether the narrowest JSX region containing `span` has no compiler census
-/// entry. Ownership uses the structural question directly: unlike a reactive
-/// read, an owner requirement does not carry an [`ExecutionRole`] whose
-/// fallback classification can gate the check.
-pub(crate) fn missing_jsx_census_region(file: &solid_facts::FileFacts, span: Span) -> bool {
-    narrowest_jsx_region_containing(file, span).is_some_and(|region| !census_touches(file, region))
-}
-
-/// The innermost source-level JSX region containing `span`: an attribute
-/// expression container, a spread container, or a child. solid-facts owns this
-/// syntax, and it is deliberately read from the AST rather than from the
-/// execution map — the whole question is what the source has that the census
-/// does not.
-///
-/// Fragments are reached only indirectly. A fragment has no element fact — no
-/// name, no attributes — so `jsx_containing` (which walks `jsx_elements`) never
-/// yields one; a read inside `<>…</>` is found only through the enclosing
-/// *element's* child span that covers the fragment. That is not a live hole at
-/// the current pins, probed rather than assumed: a fragment nested inside an
-/// element fails the compile outright in both producers ("Fragments and spread
-/// children are not implemented in the AST-native milestone yet"), so the only
-/// fragment reaching the checker is a component's top-level one, and its
-/// children are censused as tracked regions — the role never falls through to
-/// `UntrackedRendering`, so this function is not consulted for them. When a
-/// producer starts lowering nested fragments, the child-span path is where a
-/// fragment's own expression containers would need to appear.
-fn narrowest_jsx_region_containing(file: &solid_facts::FileFacts, span: Span) -> Option<Span> {
-    file.ast
-        .jsx_containing(span)
-        .flat_map(|element| {
-            let attributes = element
-                .attributes
-                .iter()
-                .filter(|attribute| {
-                    attribute.value_kind == solid_facts::ast::JsxAttributeValueKind::Expression
-                })
-                .filter_map(|attribute| attribute.value);
-            let spreads = element.spreads.iter().map(|spread| spread.span);
-            attributes
-                .chain(spreads)
-                .chain(element.children.iter().copied())
-        })
-        .filter(|region| region.contains(span))
-        .min_by_key(|region| region.end - region.start)
-}
-
-/// Whether the compiler deleted the code at `span`.
-///
-/// The one execution fact that is not a claim about *how* code runs but about
-/// whether it is emitted at all, which is why its consumers consult it before
-/// every other classification rather than alongside them.
-pub(crate) fn discarded_region_contains(file: &solid_facts::FileFacts, span: Span) -> bool {
-    file.compiler
-        .discarded_regions
-        .iter()
-        .any(|region| region.span.contains(span))
-}
-
-/// Whether the compiler's census says anything at all about `region`.
-///
-/// Overlap, not containment in either direction: a census entry inside the
-/// region and a wider entry covering it are both the compiler having reported
-/// on this JSX. Only a region no entry touches is a hole.
-fn census_touches(file: &solid_facts::FileFacts, region: Span) -> bool {
-    let overlaps = |candidate: Span| candidate.start < region.end && region.start < candidate.end;
-    let facts = &file.compiler;
-    facts
-        .jsx_operations
-        .iter()
-        .any(|operation| overlaps(operation.span))
-        || facts
-            .tracked_regions
-            .iter()
-            .any(|tracked| overlaps(tracked.span))
-        || facts
-            .untracked_regions
-            .iter()
-            .any(|untracked| overlaps(untracked.span))
-        // A discarded region is the compiler having reported on this JSX — it
-        // said the code is deleted. That is a fact, so the region is not a
-        // hole, and `missing_jsx_census` must not turn it into an obligation.
-        || facts
-            .discarded_regions
-            .iter()
-            .any(|discarded| overlaps(discarded.span))
-        || facts.callback_roles.iter().any(|role| overlaps(role.span))
-}
 
 /// The effect primitives: the ones 2.0 spells `(compute, apply)`.
 fn is_effect(primitive: Primitive) -> bool {
@@ -190,7 +93,7 @@ fn callback_runs_outside_tracking(
     match semantics.execution {
         None => false,
         // A tracked callback creates its own observer unless the primitive's
-        // exact runtime contract explicitly overrides that classification.
+        // exact runtime semantics explicitly override that classification.
         Some(Execution::Tracked) => !semantics.tracks_reads,
         // Deferred callbacks execute after/outside the current tracking pass.
         Some(Execution::Deferred) => true,
@@ -225,15 +128,19 @@ pub(super) fn execution_role(
     span: Span,
     allowed: &[Span],
 ) -> ExecutionRole {
-    execution_role_where(facts, span, allowed, |_| true)
+    execution_role_where(facts, span, allowed, None, |_| true)
 }
 
 fn execution_role_where(
     facts: &solid_facts::compiler::ExecutionMap,
     span: Span,
     allowed: &[Span],
+    within: Option<Span>,
     callback_applies: impl Fn(&solid_facts::compiler::CallbackRole) -> bool,
 ) -> ExecutionRole {
+    // Only facts strictly inside `within` place `span`, when given.
+    let inside =
+        |region: Span| within.is_none_or(|within| within.contains(region) && within != region);
     // Deletion dominates, rather than competing on region width like the rest.
     // A discarded region is code the emitter removed, and removed code cannot
     // contain code that runs: any narrower region inside it would describe
@@ -256,36 +163,39 @@ fn execution_role_where(
         return ExecutionRole::DeferredCallback;
     }
     let tracked = facts.tracked_regions.iter().filter_map(|region| {
-        region
-            .span
-            .contains(span)
-            .then_some((region.span, ExecutionRole::TrackedJsx, 2_u8))
+        (region.span.contains(span) && inside(region.span)).then_some((
+            region.span,
+            ExecutionRole::TrackedJsx,
+            2_u8,
+        ))
     });
     let untracked = facts.untracked_regions.iter().filter_map(|region| {
-        region
-            .span
-            .contains(span)
-            .then_some((region.span, ExecutionRole::UntrackedRendering, 1_u8))
+        (region.span.contains(span) && inside(region.span)).then_some((
+            region.span,
+            ExecutionRole::UntrackedRendering,
+            1_u8,
+        ))
     });
     let callbacks = facts.callback_roles.iter().filter_map(|callback| {
-        (callback.span.contains(span) && callback_applies(callback)).then_some((
-            callback.span,
-            match callback.role {
-                solid_facts::compiler::CallbackRoleKind::EventHandler => {
-                    ExecutionRole::EventCallback
-                }
-                solid_facts::compiler::CallbackRoleKind::Deferred => {
-                    ExecutionRole::DeferredCallback
-                }
-                solid_facts::compiler::CallbackRoleKind::DirectiveApply => {
-                    ExecutionRole::DirectiveApply
-                }
-                solid_facts::compiler::CallbackRoleKind::Render => {
-                    ExecutionRole::UntrackedRendering
-                }
-            },
-            0_u8,
-        ))
+        (callback.span.contains(span) && inside(callback.span) && callback_applies(callback))
+            .then_some((
+                callback.span,
+                match callback.role {
+                    solid_facts::compiler::CallbackRoleKind::EventHandler => {
+                        ExecutionRole::EventCallback
+                    }
+                    solid_facts::compiler::CallbackRoleKind::Deferred => {
+                        ExecutionRole::DeferredCallback
+                    }
+                    solid_facts::compiler::CallbackRoleKind::DirectiveApply => {
+                        ExecutionRole::DirectiveApply
+                    }
+                    solid_facts::compiler::CallbackRoleKind::Render => {
+                        ExecutionRole::UntrackedRendering
+                    }
+                },
+                0_u8,
+            ))
     });
     if let Some((_, role, _)) = tracked
         .chain(untracked)
@@ -309,16 +219,31 @@ fn source_execution_role(
     span: Span,
     allowed: &[Span],
 ) -> ExecutionRole {
-    execution_role_where(&file.compiler, span, allowed, |callback| {
-        matches!(
-            callback.role,
-            solid_facts::compiler::CallbackRoleKind::Deferred
-                | solid_facts::compiler::CallbackRoleKind::Render
-        ) || file
-            .ast
-            .functions_within(callback.span)
-            .max_by_key(|function| function.span.end - function.span.start)
-            .is_some_and(|function| function.body.contains(span))
+    // A component's function child is projected `Deferred` because the
+    // receiving component, not the compiler, invokes it
+    // (`solid_facts::compiler`): that says nothing about when, and neither
+    // does a tracked region around the element. Like an attribute's
+    // function, it is placed by the arms that follow the value into the
+    // component, or stays unproven; only facts inside it place code there.
+    let within = file
+        .ast
+        .functions_body_containing(span)
+        .filter(|function| component_child_function(file, function.span))
+        .min_by_key(|function| function.span.end - function.span.start)
+        .map(|function| function.span);
+    execution_role_where(&file.compiler, span, allowed, within, |callback| {
+        // A component's `ref` is a prop, not an ownerless ref application.
+        (callback.role != solid_facts::compiler::CallbackRoleKind::DirectiveApply
+            || crate::owners::ref_application_on_intrinsic(file, callback.span))
+            && (matches!(
+                callback.role,
+                solid_facts::compiler::CallbackRoleKind::Deferred
+                    | solid_facts::compiler::CallbackRoleKind::Render
+            ) || file
+                .ast
+                .functions_within(callback.span)
+                .max_by_key(|function| function.span.end - function.span.start)
+                .is_some_and(|function| function.body.contains(span)))
     })
 }
 
@@ -337,1229 +262,26 @@ pub(super) fn semantic_execution_role(
         entities,
         symbol_names,
         lookup,
-        &mut HashSet::new(),
+        &mut HashSet::default(),
     )
 }
 
-/// Classifies a write or action through resolved project call sites when its
-/// own source span has no compiler execution fact.
-///
-/// Any proven tracking-phase invocation makes the operation unsafe. Otherwise
-/// a proven imperative role is retained, while cycles with no independently
-/// classified call site remain `Unknown`.
-pub(super) fn semantic_write_execution_role(
-    file: &solid_facts::FileFacts,
-    span: Span,
-    allowed: &[Span],
-    entities: &EntitySymbols,
-    symbol_names: &HashMap<SymbolId, SymbolId>,
-    lookup: &SemanticLookup<'_>,
-) -> ExecutionRole {
-    semantic_write_execution_role_within(
-        file,
-        span,
-        allowed,
-        entities,
-        symbol_names,
-        lookup,
-        &mut HashSet::new(),
-    )
-}
-
-/// How the innermost containing callback changes a write's legality region,
-/// when it does. Never consulted for reads: reads keep their own classifier.
-enum WriteRegionAdjustment {
-    /// The write sits in a children-forbidden leaf callback
-    /// (`createTrackedEffect`, `onSettled`), which the runtime's write guard
-    /// exempts — the write is legal regardless of what surrounds the leaf.
-    LeafScope,
-    /// The write sits in an owner-transparent inline callback (`untrack`),
-    /// which clears tracking but keeps the caller's owner context; the write
-    /// is exactly as legal as at the wrapped call itself, so classify there.
-    CallSite(Span),
-}
-
-/// The write-legality adjustment for the innermost callback directly
-/// containing `span`, per the dialect's owner-context model.
-///
-/// Direct containment (the span's own function is the callback function)
-/// guarantees at most one candidate: a nested callback's contents are that
-/// callback's business on the next recursion step.
-fn write_region_adjustment(
-    file: &solid_facts::FileFacts,
-    span: Span,
-    lookup: &SemanticLookup<'_>,
-) -> Option<WriteRegionAdjustment> {
-    file.ast
-        .arguments_containing(span)
-        .find_map(|(call, index)| {
-            if !direct_callback_contains(file, call.arguments[index].span, span) {
-                return None;
-            }
-            let primitive = lookup.primitive_at_call(file, call.span)?;
-            if lookup.dialect.leaf_scopes_allow_writes()
-                && callback_owner_at_call(file, call, primitive, index, lookup)
-                    == Some(solid_dialect::CallbackOwner::Leaf)
-            {
-                return Some(WriteRegionAdjustment::LeafScope);
-            }
-            if lookup
-                .dialect
-                .callback_preserves_owner_write_context(primitive)
-                && callback_execution_at_call(file, call, primitive, index, lookup).is_some()
-            {
-                return Some(WriteRegionAdjustment::CallSite(call.span));
-            }
-            None
-        })
-}
-
-fn semantic_write_execution_role_within(
-    file: &solid_facts::FileFacts,
-    span: Span,
-    allowed: &[Span],
-    entities: &EntitySymbols,
-    symbol_names: &HashMap<SymbolId, SymbolId>,
-    lookup: &SemanticLookup<'_>,
-    visiting: &mut HashSet<(String, Span)>,
-) -> ExecutionRole {
-    // Write legality follows the runtime's *owner* context, which is not
-    // always the read-execution context: leaf scopes are write-legal though
-    // their reads track, and `untrack` writes answer to the enclosing owner
-    // though its reads do not subscribe. Resolve those two adjustments first
-    // (innermost outward) and only then classify normally.
-    let mut span = span;
-    loop {
-        match write_region_adjustment(file, span, lookup) {
-            Some(WriteRegionAdjustment::LeafScope) => return ExecutionRole::DeferredCallback,
-            Some(WriteRegionAdjustment::CallSite(outer)) => span = outer,
-            None => break,
-        }
-    }
-    let direct = semantic_execution_role(file, span, allowed, entities, symbol_names, lookup);
-    if direct != ExecutionRole::Unknown {
-        return direct;
-    }
-    let Some(function) = crate::owners::containing_ast_function(&file.ast, span) else {
-        return ExecutionRole::Unknown;
-    };
-    let key = (file.path.to_string(), function.span);
-    if !visiting.insert(key.clone()) {
-        return ExecutionRole::Unknown;
-    }
-    let mut imperative = None;
-    for (caller_file, callee) in lookup.function_call_sites(file.path.as_str(), function.span) {
-        let caller_allowed = allowed_callback_spans(caller_file, lookup);
-        let role = semantic_write_execution_role_within(
-            caller_file,
-            callee,
-            &caller_allowed,
-            entities,
-            symbol_names,
-            lookup,
-            visiting,
-        );
-        if role.reports_disallowed_write() {
-            visiting.remove(&key);
-            return role;
-        }
-        if role != ExecutionRole::Unknown {
-            imperative.get_or_insert(role);
-        }
-    }
-    visiting.remove(&key);
-    imperative.unwrap_or(ExecutionRole::Unknown)
-}
-
-/// `classifying` is the stack of spans whose role is currently being derived
-/// from their own invocation sites. A returned adapter invoked inside its own
-/// factory callback — `const a = on(() => a(), fn)`, or two adapters invoked
-/// in each other's callbacks — makes that derivation cyclic; a site already on
-/// the stack supplies no independent execution context and is skipped instead
-/// of re-entered.
-fn semantic_execution_role_within(
-    file: &solid_facts::FileFacts,
-    span: Span,
-    allowed: &[Span],
-    entities: &EntitySymbols,
-    symbol_names: &HashMap<SymbolId, SymbolId>,
-    lookup: &SemanticLookup<'_>,
-    classifying: &mut HashSet<(String, Span)>,
-) -> ExecutionRole {
-    // Before every semantic path, because the semantic paths answer a question
-    // that no longer applies. They classify *how* code executes — the callback
-    // that will invoke it, the primitive whose argument it is, the owner it
-    // answers to — and a discarded region is the compiler saying the code is
-    // not there to execute. Left below them, a read inside a deleted value
-    // would take its role from a dialect-proven `untrack()` or effect-apply
-    // position and be reported as a proven untracked read, or from a deferred
-    // position and be silently *certified*: a positive claim about dead code
-    // either way.
-    if discarded_region_contains(file, span) {
-        return ExecutionRole::DiscardedRendering;
-    }
-    if let Some(role) = context_provider_value_role(file, span, lookup) {
-        return role;
-    }
-    if assigned_member_function_contains(file, span, entities) {
-        return ExecutionRole::DeferredCallback;
-    }
-    if let Some(role) = named_callback_execution_role(file, span, lookup) {
-        return role;
-    }
-    if let Some(role) = returned_callback_execution_role(file, span, lookup, classifying) {
-        return role;
-    }
-    if let Some(role) = returned_factory_callback_execution_role(file, span, lookup, classifying) {
-        return role;
-    }
-    if let Some(role) = inline_callback_execution_role(file, span, allowed, lookup, classifying) {
-        return role;
-    }
-    let dialect = lookup.dialect;
-    if file.ast.arguments_containing(span).any(|(call, index)| {
-        primitive_name(
-            file.path.as_str(),
-            call.callee,
-            call.static_callee(&file.source),
-            entities,
-            symbol_names,
-            dialect,
-        )
-        .as_ref()
-        .and_then(PrimitiveName::primitive)
-        .and_then(|primitive| effect_apply_argument(dialect, primitive, call.arguments.len()))
-            == Some(index)
-            && direct_callback_contains(file, call.arguments[index].span, span)
-    }) {
-        return ExecutionRole::EffectApply;
-    }
-    if file.ast.arguments_containing(span).any(|(call, index)| {
-        primitive_name(
-            file.path.as_str(),
-            call.callee,
-            call.static_callee(&file.source),
-            entities,
-            symbol_names,
-            dialect,
-        )
-        .as_ref()
-        .and_then(PrimitiveName::primitive)
-        .is_some_and(|primitive| {
-            callback_execution_at_call(file, call, primitive, index, lookup).is_some()
-                && dialect.reports_untracked_reads_at(primitive, index, call.arguments.len())
-                && direct_callback_contains(file, call.arguments[index].span, span)
-        })
-    }) {
-        return ExecutionRole::UntrackedCallback;
-    }
-    if allowed.iter().any(|region| region.contains(span)) {
-        return ExecutionRole::DeferredCallback;
-    }
-    if let Some(role) = control_flow_execution_role(file, span, entities, symbol_names, dialect) {
-        return role;
-    }
-    if file
-        .compiler
-        .tracked_regions
-        .iter()
-        .any(|region| region.span.contains(span))
-    {
-        return ExecutionRole::TrackedJsx;
-    }
-    if file.ast.arguments_containing(span).any(|(call, index)| {
-        matches!(
-            call.arguments[index].value,
-            solid_facts::ast::ArgumentValueKind::Identifier
-                | solid_facts::ast::ArgumentValueKind::Function
-                | solid_facts::ast::ArgumentValueKind::AsyncFunction
-        ) && primitive_name(
-            file.path.as_str(),
-            call.callee,
-            call.static_callee(&file.source),
-            entities,
-            symbol_names,
-            dialect,
-        )
-        .as_ref()
-        .and_then(PrimitiveName::primitive)
-        .is_some_and(|primitive| {
-            callback_execution_at_call(file, call, primitive, index, lookup).is_some()
-                && dialect
-                    .callback_semantics_at(primitive, index, call.arguments.len())
-                    .tracks_reads
-        })
-    }) {
-        return ExecutionRole::TrackedJsx;
-    }
-    let compiler_role = source_execution_role(file, span, allowed);
-    if compiler_role != ExecutionRole::Unknown {
-        return compiler_role;
-    }
-    if lookup.inside_component(file, span) {
-        return ExecutionRole::UntrackedRendering;
-    }
-    if lookup.inside_possible_component(file, span) {
-        // Select the component execution branch so the relevant rule is
-        // projected, while LocalAccess marks the read uncertifiable. Leaving
-        // this Unknown would silently certify the ordinary-helper branch.
-        return ExecutionRole::UntrackedRendering;
-    }
-    // Module initialization is an AST-proven one-shot execution context. It
-    // is not a compiler-fact gap: no reactive owner or subscriber can be
-    // active before a containing function is invoked.
-    if !file.ast.any_function_body_containing(span) {
-        return ExecutionRole::ModuleInitialization;
-    }
-    ExecutionRole::Unknown
-}
-
-/// Inline callbacks that do not clear the reactive listener inherit the
-/// caller's execution role. This covers wrappers such as `batch`,
-/// `catchError`'s protected body, and `modifyMutable`; `untrack` and other
-/// explicit untracked callbacks are classified by the later dialect branch.
-fn inline_callback_execution_role(
-    file: &solid_facts::FileFacts,
-    span: Span,
-    allowed: &[Span],
-    lookup: &SemanticLookup<'_>,
-    classifying: &mut HashSet<(String, Span)>,
-) -> Option<ExecutionRole> {
-    file.ast
-        .arguments_containing(span)
-        .find_map(|(call, index)| {
-            if !direct_callback_contains(file, call.arguments[index].span, span) {
-                return None;
-            }
-            let primitive = lookup.primitive_at_call(file, call.span)?;
-            if callback_execution_at_call(file, call, primitive, index, lookup)?
-                != Execution::Inline
-                || callback_runs_outside_tracking(
-                    lookup.dialect,
-                    primitive,
-                    index,
-                    call.arguments.len(),
-                )
-            {
-                return None;
-            }
-            let key = (file.path.to_string(), call.span);
-            if !classifying.insert(key.clone()) {
-                return None;
-            }
-            let role = semantic_execution_role_within(
-                file,
-                call.span,
-                allowed,
-                lookup.entities(),
-                lookup.symbol_names(),
-                lookup,
-                classifying,
-            );
-            classifying.remove(&key);
-            Some(role)
-        })
-}
-
-/// Compose an inline callback of a higher-order factory with the proven use of
-/// the returned function. For example, `on` reads its dependency inline when
-/// the returned adapter runs: `createEffect(on(...))` therefore tracks that
-/// read, while a direct top-level adapter call does not.
-fn returned_factory_callback_execution_role(
-    file: &solid_facts::FileFacts,
-    span: Span,
-    lookup: &SemanticLookup<'_>,
-    classifying: &mut HashSet<(String, Span)>,
-) -> Option<ExecutionRole> {
-    // Every proof this composition needs starts from
-    // `callback_requires_return_invocation`, which Solid 2.0 leaves at its
-    // `false` default for every primitive.
-    if !lookup.models_returned_callbacks() {
-        return None;
-    }
-    file.ast
-        .arguments_containing(span)
-        .find_map(|(factory_call, index)| {
-            if !direct_callback_contains(file, factory_call.arguments[index].span, span) {
-                return None;
-            }
-            let primitive = lookup.primitive_at_call(file, factory_call.span)?;
-            let semantics = lookup.dialect.callback_semantics_at(
-                primitive,
-                index,
-                factory_call.arguments.len(),
-            );
-            if !semantics.requires_return_invocation
-                || semantics.execution != Some(Execution::Inline)
-            {
-                return None;
-            }
-
-            let mut roles = Vec::new();
-            for site in returned_callback_invocation_sites(file, factory_call, lookup) {
-                let role = match site.inherited_execution {
-                    Some(Execution::Tracked) => Some(ExecutionRole::TrackedJsx),
-                    Some(Execution::Deferred) => Some(ExecutionRole::DeferredCallback),
-                    Some(Execution::Inline) | None => {
-                        let key = (site.path.clone(), site.span);
-                        if classifying.contains(&key) {
-                            // A cyclic invocation site — the adapter calling
-                            // itself through its own callback — has no context
-                            // of its own to contribute.
-                            None
-                        } else {
-                            lookup
-                                .files()
-                                .iter()
-                                .find(|candidate| candidate.path.as_str() == site.path)
-                                .map(|use_file| {
-                                    classifying.insert(key.clone());
-                                    let role = semantic_execution_role_within(
-                                        use_file,
-                                        site.span,
-                                        &[],
-                                        lookup.entities(),
-                                        lookup.symbol_names(),
-                                        lookup,
-                                        classifying,
-                                    );
-                                    classifying.remove(&key);
-                                    role
-                                })
-                        }
-                    }
-                };
-                roles.extend(role);
-            }
-            roles.sort_by_key(|role| *role as u8);
-            roles.dedup();
-            match roles.as_slice() {
-                [] => None,
-                [role] => Some(*role),
-                // The same returned adapter is used in incompatible execution
-                // contexts. A single diagnostic site cannot truthfully claim one
-                // dominates, so preserve uncertainty instead of manufacturing a
-                // false positive in either direction.
-                _ => Some(ExecutionRole::DeferredCallback),
-            }
-        })
-}
-
-fn returned_callback_execution_role(
-    file: &solid_facts::FileFacts,
-    span: Span,
-    lookup: &SemanticLookup<'_>,
-    classifying: &mut HashSet<(String, Span)>,
-) -> Option<ExecutionRole> {
-    file.ast
-        .arguments_containing(span)
-        .find_map(|(call, index)| {
-            if !direct_callback_contains(file, call.arguments[index].span, span) {
-                return None;
-            }
-            let (primitive, result_slot) = returned_primitive_invocation(file, call, lookup)?;
-            match lookup
-                .dialect
-                .returned_callback_semantics_at(primitive, result_slot, index, call.arguments.len())
-                .execution?
-            {
-                Execution::Tracked => Some(ExecutionRole::TrackedJsx),
-                Execution::Deferred => Some(ExecutionRole::DeferredCallback),
-                // The returned function restores/inherits its caller's execution
-                // context. Classify the proven invocation span, outside the
-                // callback body itself, so a top-level transition remains
-                // untracked while one started from an effect remains tracked.
-                Execution::Inline => {
-                    let key = (file.path.to_string(), call.span);
-                    if !classifying.insert(key.clone()) {
-                        return None;
-                    }
-                    let role = semantic_execution_role_within(
-                        file,
-                        call.span,
-                        &[],
-                        lookup.entities(),
-                        lookup.symbol_names(),
-                        lookup,
-                        classifying,
-                    );
-                    classifying.remove(&key);
-                    Some(role)
-                }
-            }
-        })
-}
-
-/// Whether `span` is evaluated as the `value` getter of a resolved Solid 1.x
-/// `createContext().Provider`.
-///
-/// Both halves are semantic proof: the JSX member object resolves to the
-/// binding initialized by the exact Solid `createContext` primitive, and the
-/// final member is `Provider`. An arbitrary component named `SomeProvider` or
-/// object with a same-spelled property satisfies neither condition.
-fn context_provider_value_role(
-    file: &solid_facts::FileFacts,
-    span: Span,
-    lookup: &SemanticLookup<'_>,
-) -> Option<ExecutionRole> {
-    let provider_member = lookup.dialect.context_provider_member()?;
-    let element = file
-        .ast
-        .jsx_elements
-        .iter()
-        .filter(|element| {
-            element.attributes.iter().any(|attribute| {
-                file.source_text(attribute.local_name) == Some("value")
-                    && attribute
-                        .expression
-                        .is_some_and(|expression| expression.contains(span))
-            })
-        })
-        .min_by_key(|element| element.span.end - element.span.start)?;
-    let (Some(object), Some(property)) = (element.member_object, element.member_property) else {
-        return None;
-    };
-    if file.source_text(property) != Some(provider_member) {
-        return None;
-    }
-    if !lookup.is_context_reference(file.path.as_str(), object) {
-        return None;
-    }
-    // Solid 1.x's createProvider implementation eagerly reads props.value
-    // inside untrack. A function expression is the one exception: reading
-    // the getter only creates/stores the function; its body is not run.
-    let stores_function = file.ast.functions_body_containing(span).any(|function| {
-        element.attributes.iter().any(|attribute| {
-            attribute
-                .expression
-                .is_some_and(|expression| expression.contains(function.span))
-        })
-    });
-    Some(if stores_function {
-        ExecutionRole::DeferredCallback
-    } else {
-        ExecutionRole::UntrackedRendering
-    })
-}
-
-pub(super) fn assigned_member_function_contains(
-    file: &solid_facts::FileFacts,
-    span: Span,
-    entities: &EntitySymbols,
-) -> bool {
-    containing_ast_function(&file.ast, span).is_some_and(|function| {
-        file.ast.assignments.iter().any(|assignment| {
-            if assignment.value != solid_facts::ast::AssignmentValueKind::Function
-                || !assignment.value_span.contains(function.span)
-            {
-                return false;
-            }
-            let Some(member) = file
-                .ast
-                .members
-                .iter()
-                .find(|member| member.span == assignment.target)
-            else {
-                return false;
-            };
-            let Some(object_symbol) = entities.at(file.path.as_str(), member.object) else {
-                return false;
-            };
-            let Some(owner) = containing_ast_function(&file.ast, assignment.target) else {
-                return false;
-            };
-            let caller_owned = owner.parameters.iter().any(|parameter| {
-                parameter
-                    .names
-                    .iter()
-                    .any(|name| entities.at(file.path.as_str(), name.span) == Some(object_symbol))
-            });
-            let returned = file.ast.returns.iter().any(|returned| {
-                returned.value == solid_facts::ast::ReturnValueKind::Identifier
-                    && containing_ast_function(&file.ast, returned.span)
-                        .is_some_and(|candidate| candidate.span == owner.span)
-                    && entities.at(file.path.as_str(), returned.span) == Some(object_symbol)
-            });
-            caller_owned || returned
-        })
-    })
-}
-
-pub(super) fn control_flow_execution_role(
-    file: &solid_facts::FileFacts,
-    span: Span,
-    entities: &EntitySymbols,
-    symbol_names: &HashMap<SymbolId, SymbolId>,
-    dialect: &dyn Dialect,
-) -> Option<ExecutionRole> {
-    let element = file
-        .ast
-        .jsx_containing(span)
-        .filter(|element| {
-            jsx_primitive_name(file, element, entities, symbol_names, dialect)
-                .as_ref()
-                .and_then(PrimitiveName::primitive)
-                .is_some_and(|primitive| dialect.renders_children_through_callback(primitive))
-        })
-        .min_by_key(|element| element.span.end - element.span.start)?;
-    let callback = file
-        .ast
-        .functions_body_containing(span)
-        .filter(|function| element.span.contains(function.span))
-        .max_by_key(|function| function.body.end - function.body.start)?;
-    let owner = containing_ast_function(&file.ast, span)?;
-    if owner.span != callback.span {
-        return Some(ExecutionRole::DeferredCallback);
-    }
-    if file
-        .ast
-        .jsx_containing(span)
-        .any(|nested| callback.body.contains(nested.span))
-    {
-        Some(ExecutionRole::TrackedJsx)
-    } else {
-        Some(ExecutionRole::UntrackedRendering)
-    }
-}
-
-/// How this file's primitive calls and control-flow JSX name each of its own
-/// functions as a callback.
-///
-/// Every flag is a property of the *function*, not of the read being
-/// classified: which argument positions name it, and how the dialect executes
-/// those positions. Deriving them once per file replaces the whole-file call and
-/// JSX scans [`named_callback_execution_role`] used to run for every read it was
-/// asked about -- five of them per read in the worst case.
-#[derive(Default)]
-pub(super) struct NamedCallbackRoles {
-    by_function: HashMap<Span, NamedCallbackRole>,
-}
-
-/// The classification a named callback's positions support, in the order
-/// [`named_callback_execution_role`] consults them.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-struct NamedCallbackRole {
-    /// Some position naming this function is one an arm below can truthfully
-    /// classify. An effect's tracked compute and an inline adapter argument
-    /// (1.x `on`'s deps) satisfy none of them -- admitting those would fall
-    /// through to the rendering tail and misreport `createEffect(namedCompute)`
-    /// as untracked rendering. Answering None instead defers such reads to
-    /// compiler facts and the returned-adapter classifiers.
-    admitted: bool,
-    untracked_callback: bool,
-    effect_apply: bool,
-    tracked: bool,
-    deferred: bool,
-}
-
-impl NamedCallbackRoles {
-    fn entry(&mut self, function: Span) -> &mut NamedCallbackRole {
-        self.by_function.entry(function).or_default()
-    }
-
-    fn get(&self, function: Span) -> NamedCallbackRole {
-        self.by_function.get(&function).copied().unwrap_or_default()
-    }
-}
-
-/// Every way this file's callback positions can name one of its own functions.
-///
-/// The three maps are the *semantic* alternatives to comparing source text: an
-/// exact demanded entity, a proven TypeScript reference to the function's
-/// symbol, and -- for a function whose symbol carries a canonical Solid name --
-/// that name. Admitting a function because some identifier in a callback
-/// position happens to be spelled the same, which is what these replace,
-/// accepts a same-spelled binding from any other scope or module.
-struct NamedCallbackIndex<'a> {
-    /// This file's functions that resolve to a symbol, in AST order.
-    functions: Vec<Span>,
-    by_symbol: HashMap<&'a str, Vec<usize>>,
-    by_reference: HashMap<Span, Vec<usize>>,
-    by_canonical_name: HashMap<&'a str, Vec<usize>>,
-}
-
-impl<'a> NamedCallbackIndex<'a> {
-    fn new(
-        file: &solid_facts::FileFacts,
-        entities: &'a EntitySymbols,
-        symbol_names: &'a HashMap<SymbolId, SymbolId>,
-        lookup: &SemanticLookup<'_>,
-    ) -> Self {
-        let candidates = file
-            .ast
-            .functions
-            .iter()
-            .filter_map(|function| {
-                Some((function.span, function_symbol(file, function, entities)?))
-            })
-            .collect::<Vec<_>>();
-        let mut by_symbol = HashMap::<&str, Vec<usize>>::new();
-        let mut by_reference = HashMap::<Span, Vec<usize>>::new();
-        let mut by_canonical_name = HashMap::<&str, Vec<usize>>::new();
-        for (index, (_, symbol)) in candidates.iter().enumerate() {
-            by_symbol.entry(symbol.as_str()).or_default().push(index);
-            if let Some(name) = symbol_names.get(*symbol) {
-                by_canonical_name
-                    .entry(name.as_str())
-                    .or_default()
-                    .push(index);
-            }
-            for reference in lookup.symbol_references(symbol.as_str()) {
-                if reference.path.as_ref() != file.path.as_str() {
-                    continue;
-                }
-                let (Ok(start), Ok(end)) = (
-                    u32::try_from(reference.start_byte),
-                    u32::try_from(reference.end_byte),
-                ) else {
-                    continue;
-                };
-                by_reference
-                    .entry(Span::new(start, end))
-                    .or_default()
-                    .push(index);
-            }
-        }
-        Self {
-            functions: candidates.iter().map(|(span, _)| *span).collect(),
-            by_symbol,
-            by_canonical_name,
-            by_reference,
-        }
-    }
-
-    /// The functions an exact demanded entity at `span` names -- the whole of a
-    /// bare `createEffect(compute, applyValue)` argument, say.
-    fn identity_at(
-        &self,
-        file: &solid_facts::FileFacts,
-        entities: &EntitySymbols,
-        span: Span,
-    ) -> &[usize] {
-        entities
-            .at(file.path.as_str(), span)
-            .and_then(|symbol| self.by_symbol.get(symbol.as_str()))
-            .map_or(&[], Vec::as_slice)
-    }
-
-    /// The functions a use at `span` names, by any of the three proofs.
-    fn named_at(
-        &self,
-        file: &solid_facts::FileFacts,
-        entities: &EntitySymbols,
-        span: Span,
-        matched: &mut Vec<usize>,
-    ) {
-        matched.extend(self.identity_at(file, entities, span));
-        if let Some(references) = self.by_reference.get(&span) {
-            matched.extend(references.iter().copied());
-        }
-        if let Some(text) = file.source_text(span)
-            && let Some(named) = self.by_canonical_name.get(text)
-        {
-            matched.extend(named.iter().copied());
-        }
-    }
-}
-
-/// Derive [`NamedCallbackRoles`] for one file. Memoized by
-/// [`SemanticLookup::named_callback_roles`]; nothing else should call it.
-pub(super) fn named_callback_roles(
-    file: &solid_facts::FileFacts,
-    entities: &EntitySymbols,
-    symbol_names: &HashMap<SymbolId, SymbolId>,
-    lookup: &SemanticLookup<'_>,
-) -> NamedCallbackRoles {
-    let dialect = lookup.dialect;
-    let index = NamedCallbackIndex::new(file, entities, symbol_names, lookup);
-    let mut roles = NamedCallbackRoles::default();
-    if index.functions.is_empty() {
-        return roles;
-    }
-    let primitives = lookup.primitives(file);
-    let mut named = Vec::new();
-    for (call_index, call) in file.ast.calls.iter().enumerate() {
-        let direct_primitive = known_primitive(&primitives.calls[call_index]);
-        let returned_primitive = direct_primitive
-            .is_none()
-            .then(|| returned_primitive_invocation(file, call, lookup))
-            .flatten();
-        if direct_primitive.is_none() && returned_primitive.is_none() {
-            continue;
-        }
-        let count = call.arguments.len();
-        for (argument_index, argument) in call.arguments.iter().enumerate() {
-            // The argument itself, plus the callbacks an options object names
-            // through its `effect`/`error` properties.
-            named.clear();
-            index.named_at(file, entities, argument.span, &mut named);
-            for property in &argument.identifier_properties {
-                index.named_at(file, entities, property.span, &mut named);
-            }
-            named.sort_unstable();
-            named.dedup();
-            if named.is_empty() {
-                continue;
-            }
-            if let Some((_primitive, _result_slot)) = returned_primitive {
-                let execution =
-                    returned_callback_execution_at_call(file, call, argument_index, lookup);
-                let tracked = execution == Some(Execution::Tracked);
-                let deferred = execution == Some(Execution::Deferred);
-                // Returned-function contracts describe the argument itself,
-                // never a callback named inside an options object. Require
-                // exact TypeScript identity for the admitted function. Inline
-                // returned callbacks inherit the individual call site's role
-                // and therefore cannot be collapsed into this per-function
-                // index.
-                for candidate in index.identity_at(file, entities, argument.span) {
-                    let entry = roles.entry(index.functions[*candidate]);
-                    entry.admitted |= tracked || deferred;
-                    entry.tracked |= tracked;
-                    entry.deferred |= deferred;
-                }
-                continue;
-            }
-            let primitive = direct_primitive.expect("one primitive kind is proven above");
-            let proven =
-                callback_execution_at_call(file, call, primitive, argument_index, lookup).is_some();
-            let untracked = dialect.reports_untracked_reads_at(primitive, argument_index, count);
-            // Deliberately not gated on `proven`: an effect's apply position is
-            // read straight off the dialect signature, as it always was.
-            let effect_apply =
-                effect_apply_argument(dialect, primitive, count) == Some(argument_index);
-            let tracked = !is_effect(primitive)
-                && dialect
-                    .callback_semantics_at(primitive, argument_index, count)
-                    .tracks_reads;
-            let deferred =
-                callback_runs_outside_tracking(dialect, primitive, argument_index, count);
-            for candidate in &named {
-                let entry = roles.entry(index.functions[*candidate]);
-                entry.admitted |= proven && (untracked || effect_apply || tracked || deferred);
-                entry.untracked_callback |= proven && untracked;
-                entry.effect_apply |= effect_apply;
-            }
-            // The tracked and deferred arms have always demanded that the whole
-            // argument *be* the function, never that an options object mention
-            // it.
-            for candidate in index.identity_at(file, entities, argument.span) {
-                let entry = roles.entry(index.functions[*candidate]);
-                entry.tracked |= proven && tracked;
-                entry.deferred |= proven && deferred;
-            }
-        }
-    }
-    for (element_index, element) in file.ast.jsx_elements.iter().enumerate() {
-        if !known_primitive(&primitives.jsx[element_index])
-            .is_some_and(|primitive| dialect.renders_children_through_callback(primitive))
-        {
-            continue;
-        }
-        for identifier in file.ast.identifiers_within(element.span) {
-            if identifier.role != solid_facts::ast::IdentifierRole::Reference
-                || file
-                    .ast
-                    .jsx_containing(identifier.span)
-                    .any(|nested| nested.span != element.span && element.span.contains(nested.span))
-            {
-                continue;
-            }
-            named.clear();
-            index.named_at(file, entities, identifier.span, &mut named);
-            for candidate in &named {
-                roles.entry(index.functions[*candidate]).admitted = true;
-            }
-        }
-    }
-    roles
-}
-
-pub(super) fn named_callback_execution_role(
-    file: &solid_facts::FileFacts,
-    span: Span,
-    lookup: &SemanticLookup<'_>,
-) -> Option<ExecutionRole> {
-    let roles = lookup.named_callback_roles(file);
-    let callback = file
-        .ast
-        .functions_body_containing(span)
-        .find(|function| roles.get(function.span).admitted)?;
-    let owner = containing_ast_function(&file.ast, span)?;
-    if owner.span != callback.span {
-        return Some(ExecutionRole::DeferredCallback);
-    }
-    let role = roles.get(callback.span);
-    if role.untracked_callback {
-        return Some(ExecutionRole::UntrackedCallback);
-    }
-    if role.effect_apply {
-        return Some(ExecutionRole::EffectApply);
-    }
-    if role.tracked {
-        return Some(ExecutionRole::TrackedJsx);
-    }
-    if role.deferred {
-        return Some(ExecutionRole::DeferredCallback);
-    }
-    if file
-        .ast
-        .jsx_containing(span)
-        .any(|element| callback.body.contains(element.span))
-    {
-        Some(ExecutionRole::TrackedJsx)
-    } else {
-        Some(ExecutionRole::UntrackedRendering)
-    }
-}
-
-pub(super) fn function_symbol<'a>(
-    file: &solid_facts::FileFacts,
-    function: &solid_facts::ast::FunctionFact,
-    entities: &'a EntitySymbols,
-) -> Option<&'a SymbolId> {
-    let name = function
-        .name
-        .as_ref()
-        .or_else(|| function_binding_name(file, function))?;
-    entities.get(&location(file.path.shared(), name.span))
-}
-
-pub(super) fn argument_references_callback_symbol(
-    file: &solid_facts::FileFacts,
-    argument: &solid_facts::ast::ArgumentFact,
-    symbol: &str,
-    entities: &EntitySymbols,
-    symbol_names: &HashMap<SymbolId, SymbolId>,
-) -> bool {
-    entities
-        .get(&location(file.path.shared(), argument.span))
-        .map(SymbolId::as_str)
-        == Some(symbol)
-        || argument.identifier_properties.iter().any(|property| {
-            entities
-                .get(&location(file.path.shared(), property.span))
-                .map(SymbolId::as_str)
-                == Some(symbol)
-                || symbol_names.get(symbol).map(SymbolId::as_str) == file.source_text(property.span)
-        })
-}
-
-pub(super) fn direct_callback_contains(
-    file: &solid_facts::FileFacts,
-    argument: Span,
-    span: Span,
-) -> bool {
-    if !argument.contains(span) {
-        return false;
-    }
-    let callback = file
-        .ast
-        .functions_within(argument)
-        .max_by_key(|function| function.span.end - function.span.start);
-    let owner = containing_ast_function(&file.ast, span);
-    match (callback, owner) {
-        (Some(callback), Some(owner)) => callback.span == owner.span,
-        (None, None) => true,
-        _ => false,
-    }
-}
-
-pub(super) fn read_analysis_context(
-    file: &solid_facts::FileFacts,
-    span: Span,
-    execution: ExecutionRole,
-) -> String {
-    if execution == ExecutionRole::EffectApply {
-        "createEffect apply callback".into()
-    } else {
-        let context = enclosing_function_label(file, span);
-        format_read_context(&context, file.ast.any_conditional_test_containing(span))
-    }
-}
-
-fn format_read_context(context: &str, in_conditional_test: bool) -> String {
-    if in_conditional_test {
-        if context.is_empty() {
-            "while evaluating a condition".into()
-        } else {
-            format!("{context} while evaluating a condition")
-        }
-    } else {
-        context.into()
-    }
-}
-
-pub(super) fn async_execution_role(
-    file: &solid_facts::FileFacts,
-    span: Span,
-    execution: ExecutionRole,
-) -> ExecutionRole {
-    if execution == ExecutionRole::DeferredCallback && file.ast.any_jsx_containing(span) {
-        ExecutionRole::TrackedJsx
-    } else {
-        execution
-    }
-}
-
-pub(super) fn allowed_callback_spans(
-    file: &solid_facts::FileFacts,
-    lookup: &SemanticLookup<'_>,
-) -> Vec<Span> {
-    let dialect = lookup.dialect;
-    let primitives = lookup.primitives(file);
-    let mut spans = Vec::new();
-    for (call_index, call) in file.ast.calls.iter().enumerate() {
-        let mut indices =
-            known_primitive(&primitives.calls[call_index]).map_or_else(Vec::new, |primitive| {
-                deferred_callback_positions(dialect, primitive, call.arguments.len())
-                    .into_iter()
-                    .filter(|index| {
-                        callback_execution_at_call(file, call, primitive, *index, lookup).is_some()
-                    })
-                    .collect()
-            });
-        if let Some(symbol) = lookup.callee_symbol(file, call.callee) {
-            if let Some(callbacks) = lookup.contract_callbacks(symbol) {
-                for callback in callbacks {
-                    let exclusively_deferred = callbacks.iter().all(|candidate| {
-                        candidate.parameter != callback.parameter
-                            || candidate.execution == "deferred"
-                    });
-                    if callback.execution == "deferred"
-                        && exclusively_deferred
-                        && !indices.contains(&callback.parameter)
-                    {
-                        indices.push(callback.parameter);
-                    }
-                }
-            } else if lookup.unknown_contract_callback_export(symbol).is_some() {
-                // The contract explicitly does not prove when this callee runs
-                // a caller-supplied callback. The call site already carries
-                // that as an SC9005 obligation; additionally reporting a read
-                // inside the callback as a *proven* untracked read would
-                // assert exactly the timing the contract says it does not
-                // have. Treat every argument whose syntax leaves callability
-                // open as an unproven-timing callback so the read stays
-                // uncertifiable instead of becoming a violation.
-                for (index, argument) in call.arguments.iter().enumerate() {
-                    if !crate::runtime_semantics::literal_argument_is_not_callable(
-                        argument.runtime_value_kind,
-                    ) && !indices.contains(&index)
-                    {
-                        indices.push(index);
-                    }
-                }
-            }
-        }
-        for index in indices {
-            if let Some(argument) = call.arguments.get(index) {
-                spans.push(argument.span);
-            }
-        }
-    }
-    spans
+/// What the operation's runtime guard does when a root owner is the ambient
+/// owner, which is the case directly in a `createRoot` body
+/// ([`solid_dialect::Dialect::callback_runs_in_created_root`]) and, where the
+/// dialect says so, directly in a component body
+/// ([`solid_dialect::Dialect::component_body_runs_under_root`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum RootBodyGuard {
+    /// The guard rejects the operation under a root, as under any
+    /// children-capable owner: signal setters, `refresh` and action calls on
+    /// every Solid 2 release, store setters where the release's guard does not
+    /// exempt roots.
+    Rejects,
+    /// The guard exempts a root: store setters on a release whose guard tests
+    /// `!context._root` ([`solid_dialect::Dialect::store_setter_guard_exempts_roots`]).
+    Exempts,
 }
 
 #[cfg(test)]
-mod tests {
-    use std::sync::Arc;
-
-    use solid_facts::{
-        compiler::{
-            COMPILER_FACTS_PROTOCOL, CallbackRole, CallbackRoleKind, ExecutionMap, ExecutionRegion,
-            RegionReason,
-        },
-        core::{Generation, SourceHash, SourcePath, Span},
-    };
-
-    use super::{execution_role, format_read_context, missing_jsx_census};
-    use crate::ExecutionRole;
-
-    fn execution_map() -> ExecutionMap {
-        ExecutionMap {
-            compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
-            source_hash: SourceHash::of("value"),
-            semantic_model: Default::default(),
-            tracked_regions: vec![],
-            untracked_regions: vec![],
-            discarded_regions: vec![],
-            ownership_regions: vec![],
-            callback_roles: vec![],
-            jsx_operations: vec![],
-        }
-    }
-
-    #[test]
-    fn compiler_execution_distinguishes_explicit_untracked_from_unknown() {
-        let mut facts = execution_map();
-        assert_eq!(
-            execution_role(&facts, Span::new(0, 5), &[]),
-            ExecutionRole::Unknown
-        );
-        facts.untracked_regions.push(ExecutionRegion {
-            span: Span::new(0, 5),
-            reason: RegionReason::JsxChild,
-        });
-        assert_eq!(
-            execution_role(&facts, Span::new(0, 5), &[]),
-            ExecutionRole::UntrackedRendering
-        );
-    }
-
-    #[test]
-    fn smallest_compiler_region_wins_across_execution_fact_categories() {
-        let mut facts = execution_map();
-        facts.untracked_regions.push(ExecutionRegion {
-            span: Span::new(0, 100),
-            reason: RegionReason::JsxChild,
-        });
-        facts.callback_roles.push(CallbackRole {
-            span: Span::new(40, 60),
-            role: CallbackRoleKind::EventHandler,
-        });
-
-        assert_eq!(
-            execution_role(&facts, Span::new(50, 51), &[]),
-            ExecutionRole::EventCallback
-        );
-    }
-
-    /// One file with a real AST and a hand-built census.
-    fn file(source: &str, compiler: ExecutionMap) -> solid_facts::FileFacts {
-        const PATH: &str = "app.tsx";
-        solid_facts::FileFacts {
-            generation: Generation::new(1).unwrap(),
-            path: SourcePath::new(PATH).unwrap(),
-            source_hash: SourceHash::of(source),
-            source: Arc::from(source),
-            ast: Arc::new(solid_facts::ast::extract(PATH, source).unwrap()),
-            compiler: Arc::new(compiler),
-        }
-    }
-
-    /// The byte span of the first occurrence of `needle` in `source`.
-    fn span_of(source: &str, needle: &str) -> Span {
-        let start = source.find(needle).expect("needle occurs in source");
-        Span::new(
-            u32::try_from(start).unwrap(),
-            u32::try_from(start + needle.len()).unwrap(),
-        )
-    }
-
-    /// The spread arm of the source-level JSX-region lookup, which no fixture
-    /// reaches: both census-gap fixtures exercise the child and attribute arms,
-    /// because the shapes the pinned producers decline to census are a dropped
-    /// `<head>` and a void element's children rather than a spread.
-    ///
-    /// The census entry over the sibling child is what makes this the spread
-    /// arm rather than "nothing was censused at all": the element *is* covered,
-    /// and the read is still uncertifiable because the narrowest region
-    /// containing it is the spread container, which no entry touches.
-    #[test]
-    fn census_gap_is_detected_through_a_spread_container() {
-        let source = "const view = <div {...props}>{label()}</div>;\n";
-        let read = span_of(source, "props");
-        let mut census = execution_map();
-        census.source_hash = SourceHash::of(source);
-        census.tracked_regions.push(ExecutionRegion {
-            span: span_of(source, "label()"),
-            reason: RegionReason::JsxChild,
-        });
-
-        let facts = file(source, census.clone());
-        assert!(
-            missing_jsx_census(&facts, read, ExecutionRole::UntrackedRendering),
-            "the spread container carries no census entry"
-        );
-        // Any other role was decided by a fact, so the gap cannot be what put
-        // the read there.
-        assert!(!missing_jsx_census(
-            &facts,
-            read,
-            ExecutionRole::UntrackedCallback
-        ));
-
-        // A census entry that touches the spread closes the gap.
-        census.untracked_regions.push(ExecutionRegion {
-            span: span_of(source, "{...props}"),
-            reason: RegionReason::JsxChild,
-        });
-        assert!(!missing_jsx_census(
-            &file(source, census),
-            read,
-            ExecutionRole::UntrackedRendering
-        ));
-    }
-
-    /// Deletion dominates. A discarded region is not a narrower or weaker
-    /// untracked region: it says the code is gone, so a narrower live region
-    /// inside it describes lowering the deletion took with it, and no
-    /// width-based competition can be allowed to resurrect it.
-    #[test]
-    fn a_discarded_region_dominates_every_live_region_inside_it() {
-        let mut facts = execution_map();
-        facts.discarded_regions.push(ExecutionRegion {
-            span: Span::new(0, 100),
-            reason: RegionReason::JsxAttribute,
-        });
-        facts.tracked_regions.push(ExecutionRegion {
-            span: Span::new(40, 60),
-            reason: RegionReason::JsxChild,
-        });
-        facts.callback_roles.push(CallbackRole {
-            span: Span::new(45, 55),
-            role: CallbackRoleKind::EventHandler,
-        });
-
-        assert_eq!(
-            execution_role(&facts, Span::new(50, 51), &[]),
-            ExecutionRole::DiscardedRendering
-        );
-        // Outside it, nothing changed.
-        assert_eq!(
-            execution_role(&facts, Span::new(200, 201), &[]),
-            ExecutionRole::Unknown
-        );
-    }
-
-    /// A discarded region is a *fact*, so it is not a census hole. The compiler
-    /// reported on this JSX and said the value is deleted; turning that into an
-    /// uncertifiable obligation would claim something is missing when nothing
-    /// is.
-    #[test]
-    fn a_discarded_region_closes_the_census_gap_rather_than_being_one() {
-        let source = "const view = <span children={ignored()}>{visible()}</span>;\n";
-        let read = span_of(source, "ignored()");
-        let mut census = execution_map();
-        census.source_hash = SourceHash::of(source);
-        census
-            .jsx_operations
-            .push(solid_facts::compiler::JsxOperation {
-                span: span_of(source, "ignored()"),
-                kind: "dynamic-attribute".into(),
-            });
-        census.discarded_regions.push(ExecutionRegion {
-            span: span_of(source, "ignored()"),
-            reason: RegionReason::JsxAttribute,
-        });
-
-        assert!(!missing_jsx_census(
-            &file(source, census),
-            read,
-            ExecutionRole::UntrackedRendering
-        ));
-    }
-
-    #[test]
-    fn conditional_context_does_not_repeat_the_function_name_as_a_return_kind() {
-        assert_eq!(
-            format_read_context("ConditionalReturn", true),
-            "ConditionalReturn while evaluating a condition"
-        );
-        assert_eq!(
-            format_read_context("", true),
-            "while evaluating a condition"
-        );
-    }
-}
+mod tests;

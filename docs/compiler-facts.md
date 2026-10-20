@@ -112,9 +112,8 @@ configuration, and the same compiler revisions.
 
 This is compiler transformation evidence only. It does not certify network
 transport, serialization, authentication, deployment routing, or invocation
-success. The ordinary JSX adapter does not invent those facts, and package
-contract proof integration for the directive trace remains a later consumer
-step.
+success. The ordinary JSX adapter does not invent those facts, and package-source
+proof integration for the directive trace remains a later consumer step.
 
 ## Solid 1 normalization
 

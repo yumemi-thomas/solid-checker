@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "target": "esnext",
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "types": [],
+    "paths": { "@alias/*": ["./src/alias/*"] }
+  },
+  "files": ["node_modules/pkg/index.js"],
+  "include": ["src/**/*"]
+}

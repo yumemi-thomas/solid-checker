@@ -23,8 +23,7 @@ pub(crate) struct EffectCallSemantics {
     /// as a server-entry problem.
     pub(crate) missing_effect_uncertainty: EffectFunctionUncertainty,
     /// The client runtime reaches computation allocation. Solid 2 throws
-    /// before allocation for an absent/nullish apply argument; Solid 1.x
-    /// allocates its computation before invoking the callback.
+    /// before allocation for an absent/nullish apply argument.
     pub(crate) owner_registration: ProofStatus,
 }
 
@@ -112,7 +111,25 @@ pub(crate) fn classify_effect_call(
                 .with_server_entry_possible(server_entry_possible),
         };
     }
-    let version = lookup.dialect.version();
+    match lookup.dialect.version() {
+        Version::V2 => {}
+        // `Version::V1` survives for classification only (ADR 0110 § 1): a
+        // resolved major this build carries no dialect for is refused with
+        // `SC9013` before any file is analyzed, so this arm is unreachable
+        // rather than dead. It is kept exhaustive on purpose -- a variant
+        // added for a future major must be a compile error *here*, because
+        // where that dialect puts the apply slot is a question this seam has
+        // to be told rather than one it may inherit from 2.0 -- and it fails
+        // closed meanwhile: an unmodelled call shape proves nothing about a
+        // missing effect function or about reaching computation allocation.
+        Version::V1 => {
+            return EffectCallSemantics {
+                missing_effect_function: ProofStatus::Uncertain,
+                missing_effect_uncertainty: EffectFunctionUncertainty::ArgumentShape,
+                owner_registration: ProofStatus::Uncertain,
+            };
+        }
+    }
     let call_is_valid = lookup
         .resolved_callee_call(file, call.callee)
         .is_some_and(|resolved| resolved.validity == ResolvedCallValidity::Valid);
@@ -122,118 +139,67 @@ pub(crate) fn classify_effect_call(
         // union shapes stay explicit uncertainty. Even an exact spread does
         // not describe a hidden slot's value, so only proven absence (or a
         // visible argument preceding/following exact spreads) is classified.
-        return match version {
-            Version::V1 => {
-                let first = expanded_argument(file, call, 0, lookup);
-                let missing_effect_function = if !call_is_valid {
-                    ProofStatus::No
-                } else if let ExpandedArgument::Visible(argument) = first {
-                    v1_effect_function_status(file, Some(argument), lookup)
-                } else {
-                    ProofStatus::Uncertain
-                };
-                EffectCallSemantics {
-                    missing_effect_uncertainty: missing_effect_uncertainty(
-                        missing_effect_function,
-                        server_entry_possible,
-                    ),
-                    missing_effect_function: missing_effect_function
-                        .with_server_entry_possible(server_entry_possible),
-                    owner_registration: ProofStatus::Proven
-                        .with_server_entry_possible(server_entry_possible),
+        let apply = expanded_argument(file, call, 1, lookup);
+        let missing_effect_function = if !call_is_valid {
+            ProofStatus::No
+        } else {
+            match apply {
+                ExpandedArgument::Visible(argument) => {
+                    v2_effect_function_status(file, argument, lookup)
                 }
-            }
-            Version::V2 => {
-                let apply = expanded_argument(file, call, 1, lookup);
-                let missing_effect_function = if !call_is_valid {
-                    ProofStatus::No
-                } else {
-                    match apply {
-                        ExpandedArgument::Visible(argument) => {
-                            v2_effect_function_status(file, argument, lookup)
-                        }
-                        ExpandedArgument::Absent => ProofStatus::Proven,
-                        ExpandedArgument::HiddenBySpread | ExpandedArgument::Uncertain => {
-                            ProofStatus::Uncertain
-                        }
-                    }
-                };
-                let owner_registration = match apply {
-                    ExpandedArgument::Visible(argument) => {
-                        v2_owner_registration(file, argument, lookup)
-                            .with_server_entry_possible(server_entry_possible)
-                    }
-                    ExpandedArgument::Absent => ProofStatus::No,
-                    ExpandedArgument::HiddenBySpread | ExpandedArgument::Uncertain => {
-                        ProofStatus::Uncertain
-                    }
-                };
-                EffectCallSemantics {
-                    missing_effect_uncertainty: missing_effect_uncertainty(
-                        missing_effect_function,
-                        server_entry_possible,
-                    ),
-                    missing_effect_function: missing_effect_function
-                        .with_server_entry_possible(server_entry_possible),
-                    owner_registration,
+                ExpandedArgument::Absent => ProofStatus::Proven,
+                ExpandedArgument::HiddenBySpread | ExpandedArgument::Uncertain => {
+                    ProofStatus::Uncertain
                 }
             }
         };
+        let owner_registration = match apply {
+            ExpandedArgument::Visible(argument) => v2_owner_registration(file, argument, lookup)
+                .with_server_entry_possible(server_entry_possible),
+            ExpandedArgument::Absent => ProofStatus::No,
+            ExpandedArgument::HiddenBySpread | ExpandedArgument::Uncertain => {
+                ProofStatus::Uncertain
+            }
+        };
+        return EffectCallSemantics {
+            missing_effect_uncertainty: missing_effect_uncertainty(
+                missing_effect_function,
+                server_entry_possible,
+            ),
+            missing_effect_function: missing_effect_function
+                .with_server_entry_possible(server_entry_possible),
+            owner_registration,
+        };
     }
 
-    match version {
-        Version::V1 => {
-            // The real 1.x signature requires a callable first argument.
-            // Consequently this arm survives only through an explicit type
-            // escape (for example `as unknown as EffectFunction`).
-            let missing_effect_function = if call_is_valid {
-                v1_effect_function_status(file, call.arguments.first(), lookup)
-            } else {
-                ProofStatus::No
-            };
-            EffectCallSemantics {
-                missing_effect_uncertainty: missing_effect_uncertainty(
-                    missing_effect_function,
-                    server_entry_possible,
-                ),
-                missing_effect_function: missing_effect_function
-                    .with_server_entry_possible(server_entry_possible),
-                owner_registration: ProofStatus::Proven
-                    .with_server_entry_possible(server_entry_possible),
-            }
-        }
-        Version::V2 => {
-            let apply = call.arguments.get(1);
-            let missing_effect_function = if call_is_valid {
-                apply.map_or(ProofStatus::Proven, |argument| {
-                    v2_effect_function_status(file, argument, lookup)
-                })
-            } else {
-                ProofStatus::No
-            };
-            EffectCallSemantics {
-                // 2.0 retains a deprecated, type-correct one-argument
-                // overload returning `never`, while the client runtime
-                // throws MISSING_EFFECT_FN. Invalid raw arguments are owned
-                // by TypeScript and therefore cannot reach this diagnostic.
-                missing_effect_uncertainty: missing_effect_uncertainty(
-                    missing_effect_function,
-                    server_entry_possible,
-                ),
-                missing_effect_function: missing_effect_function
-                    .with_server_entry_possible(server_entry_possible),
-                // The shipped build (`@solidjs/signals@2.0.0-rc.0` exports
-                // only `dist/dev.js`) reads the apply argument before
-                // creating the effect node: it throws on `=== undefined`,
-                // then dereferences `.effect`. So absence and nullishness are
-                // proven pre-allocation throws; every other bad value is
-                // allocated first and fails later.
-                owner_registration: apply.map_or(ProofStatus::No, |argument| {
-                    v2_owner_registration(file, argument, lookup)
-                        .with_server_entry_possible(server_entry_possible)
-                }),
-            }
-        }
+    let apply = call.arguments.get(1);
+    let missing_effect_function = if call_is_valid {
+        apply.map_or(ProofStatus::Proven, |argument| {
+            v2_effect_function_status(file, argument, lookup)
+        })
+    } else {
+        ProofStatus::No
+    };
+    EffectCallSemantics {
+        // 2.0 retains a deprecated, type-correct one-argument overload
+        // returning `never`, while the client runtime throws
+        // MISSING_EFFECT_FN. Invalid raw arguments are owned by TypeScript
+        // and therefore cannot reach this diagnostic.
+        missing_effect_uncertainty: missing_effect_uncertainty(
+            missing_effect_function,
+            server_entry_possible,
+        ),
+        missing_effect_function: missing_effect_function
+            .with_server_entry_possible(server_entry_possible),
+        // The shipped build (`@solidjs/signals@2.0.0-rc.0` exports only
+        // `dist/dev.js`) reads the apply argument before creating the effect
+        // node: it throws on `=== undefined`, then dereferences `.effect`. So
+        // absence and nullishness are proven pre-allocation throws; every
+        // other bad value is allocated first and fails later.
+        owner_registration: apply.map_or(ProofStatus::No, |argument| {
+            v2_owner_registration(file, argument, lookup)
+                .with_server_entry_possible(server_entry_possible)
+        }),
     }
 }
 
@@ -277,48 +243,6 @@ fn expanded_argument<'a>(
         position = end;
     }
     ExpandedArgument::Absent
-}
-
-fn v1_effect_function_status(
-    file: &FileFacts,
-    argument: Option<&ArgumentFact>,
-    lookup: &SemanticLookup<'_>,
-) -> ProofStatus {
-    let Some(argument) = argument else {
-        // The published 1.x signature requires this argument, so a valid call
-        // cannot normally reach this arm. Preserve uncertainty if recovery or
-        // a permissive overload nevertheless says that it can.
-        return ProofStatus::Uncertain;
-    };
-    match argument.runtime_value_kind {
-        RuntimeValueKind::Function => ProofStatus::No,
-        RuntimeValueKind::Nullish
-        | RuntimeValueKind::Primitive
-        | RuntimeValueKind::Object
-        | RuntimeValueKind::Array => {
-            if argument.runtime_type_escape {
-                ProofStatus::Proven
-            } else {
-                // A raw non-callable should make the call invalid and be
-                // TypeScript-owned. If Type Facts nevertheless certified the
-                // call, do not guess which premise is stale.
-                ProofStatus::Uncertain
-            }
-        }
-        RuntimeValueKind::Unknown => match runtime_value_domain(file, argument, lookup) {
-            Some(domain) if only_callable(domain) && !argument.runtime_type_escape => {
-                ProofStatus::No
-            }
-            Some(domain)
-                if !domain.unknown()
-                    && !domain.may_be_callable()
-                    && argument.runtime_type_escape =>
-            {
-                ProofStatus::Proven
-            }
-            _ => ProofStatus::Uncertain,
-        },
-    }
 }
 
 fn v2_effect_function_status(

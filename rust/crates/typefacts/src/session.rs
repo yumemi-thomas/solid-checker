@@ -1,20 +1,18 @@
 use std::{
     collections::{HashMap, HashSet},
     ffi::OsString,
-    fs::File,
     io::{BufReader, BufWriter, Read},
     path::{Component, Path, PathBuf},
     process::{Child, ChildStdin, Command, Stdio},
     sync::{
         Arc, Mutex, Weak,
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         mpsc,
     },
     thread::JoinHandle,
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant},
 };
 
-use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::shared_transition_arena::SharedTransitionArena;
@@ -30,14 +28,6 @@ use crate::{
 
 type PendingResponses = Arc<Mutex<HashMap<u64, mpsc::SyncSender<Result<Response, String>>>>>;
 
-static SESSION_ID_COUNTER: AtomicU64 = AtomicU64::new(1);
-
-#[derive(Clone, Debug)]
-struct CertificationProducerPin {
-    executable_sha256: crate::SourceHash,
-    source_manifest_sha256: crate::SourceHash,
-}
-
 /// An explicitly located Type Facts producer.
 ///
 /// This type intentionally performs no environment or executable-relative
@@ -47,7 +37,6 @@ pub struct Producer {
     path: PathBuf,
     args: Vec<OsString>,
     shared_transition_arena: bool,
-    certification_pin: Option<CertificationProducerPin>,
 }
 
 impl Producer {
@@ -57,40 +46,7 @@ impl Producer {
             path: path.into(),
             args: Vec::new(),
             shared_transition_arena: true,
-            certification_pin: None,
         }
-    }
-
-    /// Locates an execution image whose bytes and source manifest were pinned
-    /// by trusted certification configuration.
-    ///
-    /// The backend is responsible for putting the image in a private execution
-    /// snapshot before calling this constructor. The client hashes that exact
-    /// path again immediately before every launch, including restart, so a
-    /// changed image cannot inherit the pin or live-session authority.
-    pub fn pinned_for_certification(
-        path: impl Into<PathBuf>,
-        executable_sha256: impl Into<String>,
-        source_manifest_sha256: impl Into<String>,
-    ) -> Result<Self, SessionError> {
-        let path = path.into();
-        let executable_sha256 = crate::SourceHash::parse(executable_sha256.into())?;
-        let source_manifest_sha256 = crate::SourceHash::parse(source_manifest_sha256.into())?;
-        let actual = sha256_file(&path)?;
-        if actual != executable_sha256 {
-            return Err(SessionError::ProducerProvenance(
-                "execution image digest does not match its certification pin".into(),
-            ));
-        }
-        Ok(Self {
-            path,
-            args: Vec::new(),
-            shared_transition_arena: true,
-            certification_pin: Some(CertificationProducerPin {
-                executable_sha256,
-                source_manifest_sha256,
-            }),
-        })
     }
 
     /// Uses the legacy inline transition payload instead of the default
@@ -98,7 +54,6 @@ impl Producer {
     #[must_use]
     pub fn without_shared_transition_arena(mut self) -> Self {
         self.shared_transition_arena = false;
-        self.certification_pin = None;
         self
     }
 
@@ -107,10 +62,6 @@ impl Producer {
     #[must_use]
     pub fn with_arg(mut self, argument: impl Into<OsString>) -> Self {
         self.args.push(argument.into());
-        // Certification launches one exact, policy-owned command line. A
-        // caller-added shim, preload, or diagnostic flag is a different
-        // runtime image and cannot inherit the executable pin.
-        self.certification_pin = None;
         self
     }
 
@@ -273,10 +224,9 @@ struct SentRequest {
     cancellable: bool,
 }
 
-struct Connection {
+/// A producer child process and the threads that serve its pipes.
+struct ProcessConnection {
     child: Child,
-    executable_sha256: crate::SourceHash,
-    handshake: Handshake,
     writer: Arc<Mutex<BufWriter<ChildStdin>>>,
     pending: PendingResponses,
     next_request_id: Arc<AtomicU64>,
@@ -316,15 +266,15 @@ impl Cancellation {
     }
 }
 
-impl Connection {
+impl ProcessConnection {
     fn spawn(producer: &Producer, project_id: &str) -> Result<Self, SessionError> {
-        let executable_sha256 = sha256_file(&producer.path)?;
-        if let Some(pin) = &producer.certification_pin
-            && executable_sha256 != pin.executable_sha256
-        {
-            return Err(SessionError::ProducerProvenance(
-                "execution image changed before launch".into(),
-            ));
+        if cfg!(target_family = "wasm") {
+            // A WASM build reaches its producer through a FrameBridge, never a
+            // child process.
+            return Err(SessionError::Spawn(std::io::Error::new(
+                std::io::ErrorKind::Unsupported,
+                "process producers are unavailable on this target",
+            )));
         }
         let transition_arena = producer
             .shared_transition_arena
@@ -394,22 +344,9 @@ impl Connection {
         };
         let handshake = handshake
             .map_err(|error| SessionError::Handshake(format!("invalid startup frame: {error}")))?;
-        let expected = (
-            v3::TYPE_FACTS_HANDSHAKE_PROTOCOL,
-            v3::TYPE_FACTS_SCHEMA_SHA256,
-            v3::TYPE_FACTS_BUILD_ID,
-        );
-        let actual = (
-            handshake.protocol,
-            handshake.schema_hash.as_str(),
-            handshake.build_id.as_str(),
-        );
-        if actual != expected {
+        if let Err(error) = check_handshake(&handshake) {
             terminate_child(&mut child);
-            return Err(SessionError::Handshake(format!(
-                "expected protocol {}, schema {}, build {:?}; got protocol {}, schema {}, build {:?}",
-                expected.0, expected.1, expected.2, actual.0, actual.1, actual.2
-            )));
+            return Err(error);
         }
 
         let writer = Arc::new(Mutex::new(BufWriter::new(input)));
@@ -425,23 +362,10 @@ impl Connection {
                         break;
                     }
                 };
-                let decode_started = Instant::now();
-                let response = match decode_trusted::<Response>(&payload) {
-                    Ok(mut response) => {
-                        response.client_response_bytes =
-                            u64::try_from(payload.len()).unwrap_or(u64::MAX);
-                        if let Some(arena) = &reader_arena
-                            && let Err(error) = arena.attach(&mut response)
-                        {
-                            fail_pending(&reader_pending, error.to_string());
-                            break;
-                        }
-                        response.client_decode_ns =
-                            u64::try_from(decode_started.elapsed().as_nanos()).unwrap_or(u64::MAX);
-                        response
-                    }
+                let response = match decode_response_payload(&payload, reader_arena.as_deref()) {
+                    Ok(response) => response,
                     Err(error) => {
-                        fail_pending(&reader_pending, error.to_string());
+                        fail_pending(&reader_pending, error);
                         break;
                     }
                 };
@@ -455,8 +379,6 @@ impl Connection {
 
         Ok(Self {
             child,
-            executable_sha256,
-            handshake,
             writer,
             pending,
             next_request_id: Arc::new(AtomicU64::new(1)),
@@ -521,42 +443,15 @@ impl Connection {
 
     /// Collects the response to an already-sent request.
     fn wait(&self, sent: SentRequest) -> Result<Response, SessionError> {
-        let SentRequest {
-            request_id,
-            receiver,
-            sent_at,
-            request_send,
-            request_bytes,
-            cancellable,
-        } = sent;
-        let response = receiver
+        let response = sent
+            .receiver
             .recv()
             .map_err(|_| SessionError::Process("producer response channel closed".into()))?
             .map_err(SessionError::Process);
-        if cancellable {
-            self.clear_active_request(request_id);
+        if sent.cancellable {
+            self.clear_active_request(sent.request_id);
         }
-        let mut response = response?;
-        response.client_roundtrip_ns =
-            u64::try_from(sent_at.elapsed().as_nanos()).unwrap_or(u64::MAX);
-        response.client_request_send_ns =
-            u64::try_from(request_send.as_nanos()).unwrap_or(u64::MAX);
-        response.client_request_bytes = request_bytes;
-        if response.request_id != request_id {
-            return Err(SessionError::InvalidResponse(
-                "request identity mismatch".into(),
-            ));
-        }
-        if !response.ok {
-            let error = response.error.ok_or_else(|| {
-                SessionError::InvalidResponse("error response has no body".into())
-            })?;
-            return Err(SessionError::Service {
-                code: error.code,
-                message: error.message,
-            });
-        }
-        Ok(response)
+        complete_response(response, &sent)
     }
 
     /// Waits only long enough for the optional graceful-close acknowledgement.
@@ -571,20 +466,12 @@ impl Connection {
         sent: SentRequest,
         timeout: Duration,
     ) -> Result<Response, SessionError> {
-        let SentRequest {
-            request_id,
-            receiver,
-            sent_at,
-            request_send,
-            request_bytes,
-            cancellable,
-        } = sent;
-        debug_assert!(!cancellable, "close requests are never cancellable");
-        let response = match receiver.recv_timeout(timeout) {
+        debug_assert!(!sent.cancellable, "close requests are never cancellable");
+        let response = match sent.receiver.recv_timeout(timeout) {
             Ok(response) => response.map_err(SessionError::Process),
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 if let Ok(mut pending) = self.pending.lock() {
-                    pending.remove(&request_id);
+                    pending.remove(&sent.request_id);
                 }
                 Err(SessionError::Process(
                     "producer did not acknowledge close before termination".into(),
@@ -593,33 +480,8 @@ impl Connection {
             Err(mpsc::RecvTimeoutError::Disconnected) => Err(SessionError::Process(
                 "producer response channel closed during close".into(),
             )),
-        }?;
-        let mut response = response;
-        response.client_roundtrip_ns =
-            u64::try_from(sent_at.elapsed().as_nanos()).unwrap_or(u64::MAX);
-        response.client_request_send_ns =
-            u64::try_from(request_send.as_nanos()).unwrap_or(u64::MAX);
-        response.client_request_bytes = request_bytes;
-        if response.request_id != request_id {
-            return Err(SessionError::InvalidResponse(
-                "request identity mismatch".into(),
-            ));
-        }
-        if !response.ok {
-            let error = response.error.ok_or_else(|| {
-                SessionError::InvalidResponse("error response has no body".into())
-            })?;
-            return Err(SessionError::Service {
-                code: error.code,
-                message: error.message,
-            });
-        }
-        Ok(response)
-    }
-
-    fn exchange(&self, request: &mut Request) -> Result<Response, SessionError> {
-        let sent = self.send(request)?;
-        self.wait(sent)
+        };
+        complete_response(response, &sent)
     }
 
     fn cancellation_handle(&self, project_id: String) -> Cancellation {
@@ -645,10 +507,330 @@ impl Connection {
     }
 }
 
-impl Drop for Connection {
+impl Drop for ProcessConnection {
     fn drop(&mut self) {
         self.terminate();
     }
+}
+
+/// The carrier of an owned, process-free producer: one program the bridge's
+/// owner has already opened, reached one synchronous frame at a time.
+///
+/// `handshake` returns the producer's startup frame and `exchange` takes
+/// exactly one length-prefixed request frame and returns exactly one
+/// length-prefixed response frame, the same bytes the stdio service writes.
+/// `close` releases the program; it is called exactly once, on every path,
+/// including failure. A bridge is no authority: it carries the answers of the
+/// producer its owner runs over the files its owner supplied, and it can never
+/// issue certification evidence.
+pub trait FrameBridge {
+    fn handshake(&mut self) -> Result<Vec<u8>, String>;
+    fn exchange(&mut self, request: &[u8]) -> Result<Vec<u8>, String>;
+    fn close(&mut self);
+}
+
+/// The owned producer's open envelope: which program to open, and the bytes
+/// overlaid at that logical path when the program is a generated one. Absent
+/// and empty configuration differ. Deterministic CBOR, as every frame is.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OwnedOpenRequest<'a> {
+    project_id: &'a str,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    has_config: bool,
+    #[serde(skip_serializing_if = "<[u8]>::is_empty", with = "serde_bytes")]
+    config: &'a [u8],
+}
+
+/// Encodes the open envelope an owned reactor's `typefacts_open` reads.
+pub fn owned_open_envelope(
+    project_id: &str,
+    config: Option<&[u8]>,
+) -> Result<Vec<u8>, TypeFactsError> {
+    crate::encode(&OwnedOpenRequest {
+        project_id,
+        has_config: config.is_some(),
+        config: config.unwrap_or_default(),
+    })
+}
+
+/// A producer reached through a [`FrameBridge`]. Every answer is ready when
+/// `send` returns: there is no overlap, no cancellation, and no recovery. The
+/// first transport, decode, or service failure poisons it for good.
+struct BridgedConnection {
+    bridge: Mutex<Option<Box<dyn FrameBridge + Send>>>,
+    next_request_id: AtomicU64,
+    poisoned: AtomicBool,
+}
+
+impl BridgedConnection {
+    fn connect(mut bridge: Box<dyn FrameBridge + Send>) -> Result<Self, SessionError> {
+        let handshake = bridge
+            .handshake()
+            .map_err(SessionError::Handshake)
+            .and_then(|frame| single_frame_payload(&frame).map_err(SessionError::Handshake))
+            .and_then(|payload| {
+                decode::<Handshake>(&payload).map_err(|error| {
+                    SessionError::Handshake(format!("invalid startup frame: {error}"))
+                })
+            })
+            .and_then(|handshake| check_handshake(&handshake).map(|()| handshake));
+        if let Err(error) = handshake {
+            bridge.close();
+            return Err(error);
+        }
+        Ok(Self {
+            bridge: Mutex::new(Some(bridge)),
+            next_request_id: AtomicU64::new(1),
+            poisoned: AtomicBool::new(false),
+        })
+    }
+
+    fn send(&self, request: &mut Request) -> Result<SentRequest, SessionError> {
+        if self.poisoned.load(Ordering::Acquire) {
+            return Err(SessionError::Closed);
+        }
+        request.request_id = self.next_request_id.fetch_add(1, Ordering::Relaxed);
+        let sent_at = Instant::now();
+        let payload = encode_sidecar_request(request)?;
+        let mut frame = Vec::with_capacity(payload.len() + 4);
+        write_frame(&mut frame, &payload)?;
+        let request_bytes = u64::try_from(frame.len()).unwrap_or(u64::MAX);
+        let answer = (|| {
+            let mut bridge = self
+                .bridge
+                .lock()
+                .map_err(|_| "producer bridge is poisoned".to_owned())?;
+            let bridge = bridge
+                .as_mut()
+                .ok_or_else(|| "producer bridge is closed".to_owned())?;
+            let reply = bridge.exchange(&frame)?;
+            let payload = single_frame_payload(&reply)?;
+            decode_response_payload(&payload, None)
+        })();
+        if answer.is_err() {
+            self.poisoned.store(true, Ordering::Release);
+        }
+        let request_send = sent_at.elapsed();
+        let (sender, receiver) = mpsc::sync_channel(1);
+        let _ = sender.send(answer);
+        Ok(SentRequest {
+            request_id: request.request_id,
+            receiver,
+            sent_at,
+            request_send,
+            request_bytes,
+            cancellable: false,
+        })
+    }
+
+    fn wait(&self, sent: SentRequest) -> Result<Response, SessionError> {
+        let response = sent
+            .receiver
+            .try_recv()
+            .map_err(|_| SessionError::Process("bridged answer is missing".into()))
+            .and_then(|response| response.map_err(SessionError::Process));
+        let result = complete_response(response, &sent);
+        if result.is_err() {
+            self.poisoned.store(true, Ordering::Release);
+        }
+        result
+    }
+
+    fn release(&mut self) {
+        if let Ok(mut bridge) = self.bridge.lock()
+            && let Some(mut bridge) = bridge.take()
+        {
+            bridge.close();
+        }
+    }
+}
+
+impl Drop for BridgedConnection {
+    fn drop(&mut self) {
+        self.release();
+    }
+}
+
+enum Connection {
+    Process(ProcessConnection),
+    Bridged(BridgedConnection),
+}
+
+impl Connection {
+    fn send(&self, request: &mut Request) -> Result<SentRequest, SessionError> {
+        match self {
+            Self::Process(connection) => connection.send(request),
+            Self::Bridged(connection) => connection.send(request),
+        }
+    }
+
+    fn wait(&self, sent: SentRequest) -> Result<Response, SessionError> {
+        match self {
+            Self::Process(connection) => connection.wait(sent),
+            Self::Bridged(connection) => connection.wait(sent),
+        }
+    }
+
+    fn wait_for_close(
+        &self,
+        sent: SentRequest,
+        timeout: Duration,
+    ) -> Result<Response, SessionError> {
+        match self {
+            Self::Process(connection) => connection.wait_for_close(sent, timeout),
+            Self::Bridged(connection) => connection.wait(sent),
+        }
+    }
+
+    fn exchange(&self, request: &mut Request) -> Result<Response, SessionError> {
+        let sent = self.send(request)?;
+        self.wait(sent)
+    }
+
+    fn cancellation_handle(&self, project_id: String) -> Option<Cancellation> {
+        match self {
+            Self::Process(connection) => Some(connection.cancellation_handle(project_id)),
+            Self::Bridged(_) => None,
+        }
+    }
+
+    fn terminate(&mut self) {
+        match self {
+            Self::Process(connection) => connection.terminate(),
+            Self::Bridged(connection) => connection.release(),
+        }
+    }
+}
+
+/// The startup frame must name exactly this client's protocol, schema and
+/// build. Compatibility only: it authenticates nothing.
+fn check_handshake(handshake: &Handshake) -> Result<(), SessionError> {
+    let expected = (
+        v3::TYPE_FACTS_HANDSHAKE_PROTOCOL,
+        v3::TYPE_FACTS_SCHEMA_SHA256,
+        v3::TYPE_FACTS_BUILD_ID,
+    );
+    let actual = (
+        handshake.protocol,
+        handshake.schema_hash.as_str(),
+        handshake.build_id.as_str(),
+    );
+    if actual == expected {
+        Ok(())
+    } else {
+        Err(SessionError::Handshake(format!(
+            "expected protocol {}, schema {}, build {:?}; got protocol {}, schema {}, build {:?}",
+            expected.0, expected.1, expected.2, actual.0, actual.1, actual.2
+        )))
+    }
+}
+
+/// Decodes one response payload exactly as the process reader does,
+/// attaching a shared transition arena when the connection has one.
+fn decode_response_payload(
+    payload: &[u8],
+    arena: Option<&SharedTransitionArena>,
+) -> Result<Response, String> {
+    let decode_started = Instant::now();
+    let mut response = decode_trusted::<Response>(payload).map_err(|error| error.to_string())?;
+    response.client_response_bytes = u64::try_from(payload.len()).unwrap_or(u64::MAX);
+    if let Some(arena) = arena {
+        arena
+            .attach(&mut response)
+            .map_err(|error| error.to_string())?;
+    }
+    response.client_decode_ns =
+        u64::try_from(decode_started.elapsed().as_nanos()).unwrap_or(u64::MAX);
+    Ok(response)
+}
+
+/// The payload of exactly one length-prefixed frame: no short, oversized or
+/// trailing bytes.
+fn single_frame_payload(frame: &[u8]) -> Result<Vec<u8>, String> {
+    let mut reader = frame;
+    let payload = read_frame(&mut reader).map_err(|error| format!("bridged frame: {error}"))?;
+    if !reader.is_empty() {
+        return Err(format!(
+            "bridged frame carries {} trailing bytes",
+            reader.len()
+        ));
+    }
+    Ok(payload)
+}
+
+/// Finishes one collected answer the same way for every carrier: timings,
+/// request correlation, and service errors.
+fn complete_response(
+    response: Result<Response, SessionError>,
+    sent: &SentRequest,
+) -> Result<Response, SessionError> {
+    let mut response = response?;
+    response.client_roundtrip_ns =
+        u64::try_from(sent.sent_at.elapsed().as_nanos()).unwrap_or(u64::MAX);
+    response.client_request_send_ns =
+        u64::try_from(sent.request_send.as_nanos()).unwrap_or(u64::MAX);
+    response.client_request_bytes = sent.request_bytes;
+    if response.request_id != sent.request_id {
+        return Err(SessionError::InvalidResponse(
+            "request identity mismatch".into(),
+        ));
+    }
+    if !response.ok {
+        let error = response
+            .error
+            .ok_or_else(|| SessionError::InvalidResponse("error response has no body".into()))?;
+        return Err(SessionError::Service {
+            code: error.code,
+            message: error.message,
+        });
+    }
+    Ok(response)
+}
+
+/// A successful answer must be about the program and generation it was asked
+/// about.
+fn validate_response_identity(
+    response: &Response,
+    project_id: &str,
+    generation: u64,
+) -> Result<(), SessionError> {
+    if response.schema != v3::TYPE_FACTS_SCHEMA_V1
+        || response.project_id != project_id
+        || response.generation != generation
+    {
+        return Err(SessionError::InvalidResponse(format!(
+            "answer names schema {}, project {}, generation {}; asked schema {}, project {project_id}, generation {generation}",
+            response.schema,
+            response.project_id,
+            response.generation,
+            v3::TYPE_FACTS_SCHEMA_V1
+        )));
+    }
+    Ok(())
+}
+
+/// What [`Session::close`] found when it said goodbye.
+///
+/// Closing is not the same question as whether the producer was still there to
+/// hear it, and this separates them. Every variant means the session is closed:
+/// `close` marks it closed and terminates the child on every path it can take.
+///
+/// Deliberately not `#[must_use]`: a caller that simply wants the session shut
+/// down is right not to inspect this, and the enclosing `Result` already forces
+/// a real failure to be handled. Requiring every `close()` to bind the outcome
+/// would add noise to the ~28 call sites that correctly do not care.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CloseOutcome {
+    /// The producer acknowledged the close request.
+    Acknowledged,
+    /// The producer was already gone -- it had died, or it did not answer
+    /// within the bound -- so the child was terminated without a goodbye.
+    ///
+    /// Not a failure. Nothing is left behind either way: the child is killed
+    /// and its reader joined by `Connection::terminate`, and a shared
+    /// transition arena is removed by its own `Drop` on this side of the pipe.
+    ProducerAlreadyGone,
 }
 
 /// A retained Type Facts session.
@@ -656,10 +838,12 @@ impl Drop for Connection {
 /// Framing, request identities, handshake validation, Wire table transitions,
 /// and subprocess recovery are private implementation details.
 pub struct Session {
-    producer: Producer,
+    /// The process to relaunch on recovery. `None` for a bridged session,
+    /// which never relaunches, replays, or re-acquires: its first failure
+    /// closes it.
+    producer: Option<Producer>,
     project_id: String,
     generation: u64,
-    session_id: crate::SourceHash,
     restart_epoch: u64,
     connection: Option<Connection>,
     /// Overlays to replay if the producer dies, one entry per accepted update.
@@ -730,13 +914,58 @@ impl Session {
         I: IntoIterator<Item = FileChange>,
     {
         let project_id = normalize_project_id(project_id.into())?;
-        let connection = Connection::spawn(&producer, &project_id)?;
-        let session_id = new_session_id(&project_id, &connection);
-        let mut session = Self {
+        let connection = Connection::Process(ProcessConnection::spawn(&producer, &project_id)?);
+        let mut session = Self::with_connection(Some(producer), project_id, connection);
+        session.exchange(request(
+            Operation::Open,
+            &session.project_id,
+            session.generation,
+        ))?;
+        let sources = sources.into_iter().collect::<Vec<_>>();
+        if !sources.is_empty() {
+            session.update(sources)?;
+        }
+        Ok(session)
+    }
+
+    /// Opens a session over a producer program its owner has already opened
+    /// for `project_id` (see [`FrameBridge`]). The answers decode, validate,
+    /// and expand exactly as a process session's do. A bridged session is
+    /// never relaunched or replayed, has no cancellation handle, and refuses
+    /// certification; its first failure closes it and drops its retained
+    /// state.
+    pub fn open_bridged(
+        bridge: Box<dyn FrameBridge + Send>,
+        project_id: impl Into<String>,
+    ) -> Result<Self, SessionError> {
+        let project_id = match normalize_project_id(project_id.into()) {
+            Ok(project_id) => project_id,
+            Err(error) => {
+                let mut bridge = bridge;
+                bridge.close();
+                return Err(error);
+            }
+        };
+        let connection = Connection::Bridged(BridgedConnection::connect(bridge)?);
+        let mut session = Self::with_connection(None, project_id, connection);
+        let opened = session.exchange(request(
+            Operation::Open,
+            &session.project_id,
+            session.generation,
+        ));
+        session.guard(opened)?;
+        Ok(session)
+    }
+
+    fn with_connection(
+        producer: Option<Producer>,
+        project_id: String,
+        connection: Connection,
+    ) -> Self {
+        Self {
             producer,
             project_id,
             generation: 1,
-            session_id,
             restart_epoch: 0,
             connection: Some(connection),
             replay_batches: Vec::new(),
@@ -751,17 +980,7 @@ impl Session {
             last_update_timings: None,
             last_table_changes: None,
             closed: false,
-        };
-        session.exchange(request(
-            Operation::Open,
-            &session.project_id,
-            session.generation,
-        ))?;
-        let sources = sources.into_iter().collect::<Vec<_>>();
-        if !sources.is_empty() {
-            session.update(sources)?;
         }
-        Ok(session)
     }
 
     #[must_use]
@@ -773,7 +992,7 @@ impl Session {
     pub fn cancellation_handle(&self) -> Option<Cancellation> {
         self.connection
             .as_ref()
-            .map(|connection| connection.cancellation_handle(self.project_id.clone()))
+            .and_then(|connection| connection.cancellation_handle(self.project_id.clone()))
     }
 
     pub fn take_last_exchange_timings(&mut self) -> Option<ExchangeTimings> {
@@ -816,6 +1035,14 @@ impl Session {
     /// `analyze` is a thin wrapper that groups a flat list and calls through to
     /// here, so there is one retained-analysis implementation rather than two.
     pub fn analyze_groups(
+        &mut self,
+        groups: &[DemandGroup<'_>],
+    ) -> Result<FactTable, SessionError> {
+        let result = self.analyze_groups_unguarded(groups);
+        self.guard(result)
+    }
+
+    fn analyze_groups_unguarded(
         &mut self,
         groups: &[DemandGroup<'_>],
     ) -> Result<FactTable, SessionError> {
@@ -883,10 +1110,47 @@ impl Session {
             &reference_locations,
             demand_roots_changed,
         ) {
-            Err(SessionError::Service { code, .. }) if code == "state-mismatch" => {
+            Err(SessionError::Service { code, .. })
+                if code == "state-mismatch" && self.can_recover() =>
+            {
                 // The producer lost the state this delta was relative to, so the
                 // next request must carry the complete demand set.
                 self.clear_retained_state();
+                Self::reject_foreign_locations(groups)?;
+                let complete = groups
+                    .iter()
+                    .flat_map(|group| group.demands().iter().cloned())
+                    .collect::<Vec<_>>();
+                let table =
+                    self.analyze_exchange(complete, Vec::new(), true, &reference_locations, true)?;
+                self.retain_all_groups(groups);
+                Ok(table)
+            }
+            // A producer that died *after* answering the analyze request, while
+            // the symbol phase was still talking to it.
+            //
+            // `exchange` restarts and replays around one failed request, and
+            // that covers the analyze exchange itself. It cannot cover the
+            // `Operation::Symbols` exchanges that follow, and those deliberately
+            // use `exchange_once`: each carries the `state_token` and the
+            // `release_analysis`/`reference_changes` flags of the analysis that
+            // just ran, so re-sending one to a freshly spawned producer would
+            // name retained state that process never had. Recovery has to redo
+            // the analysis, not the request -- which is why it belongs here,
+            // where the demand set is still known, rather than inside
+            // `close_symbols`.
+            //
+            // Reaching this arm therefore means nothing has recovered yet: the
+            // analyze exchange's own restart either was not entered or already
+            // succeeded. So restart, replay the update history, and re-ask for
+            // the complete demand set against the new process -- the same shape
+            // the `state-mismatch` arm uses, plus the restart it does not need.
+            //
+            // Exactly once. The re-ask is not wrapped again, so a producer that
+            // keeps dying surfaces its failure instead of being retried
+            // forever.
+            Err(error) if error.is_transport_failure() && self.can_recover() => {
+                self.restart_and_replay()?;
                 Self::reject_foreign_locations(groups)?;
                 let complete = groups
                     .iter()
@@ -957,6 +1221,18 @@ impl Session {
     where
         I: IntoIterator<Item = FileChange>,
     {
+        let result = self.update_during_unguarded(changes, work);
+        self.guard(result)
+    }
+
+    fn update_during_unguarded<I, T>(
+        &mut self,
+        changes: I,
+        work: impl FnOnce() -> T,
+    ) -> Result<T, SessionError>
+    where
+        I: IntoIterator<Item = FileChange>,
+    {
         self.ensure_open()?;
         let changes = changes.into_iter().collect::<Vec<_>>();
         if changes.is_empty() {
@@ -967,7 +1243,7 @@ impl Session {
         sending.changes.clone_from(&changes);
         let sent = match self.send_once(sending) {
             Ok(sent) => sent,
-            Err(error) if error.is_transport_failure() => {
+            Err(error) if error.is_transport_failure() && self.can_recover() => {
                 // The producer died before it could be told. Recover, then fall
                 // back to a plain update: nothing is in flight to overlap with.
                 self.restart_and_replay()?;
@@ -1014,12 +1290,16 @@ impl Session {
             .wait(sent);
         let wait = wait_started.elapsed();
         self.last_update_timings = Some(UpdateTimings { send, wait });
+        let generation = self.generation + 1;
+        let outcome = outcome.and_then(|response| {
+            validate_response_identity(&response, &self.project_id, generation).map(|()| response)
+        });
         match outcome {
             Ok(response) => {
                 self.commit_update(changes, response.affected);
                 Ok(())
             }
-            Err(error) if error.is_transport_failure() => {
+            Err(error) if error.is_transport_failure() && self.can_recover() => {
                 // This update is not in the replay state yet, so the replay
                 // restores everything before it and it is re-sent exactly once.
                 self.restart_and_replay()?;
@@ -1076,6 +1356,11 @@ impl Session {
     }
 
     pub fn configured_sources(&mut self) -> Result<Vec<SourceFile>, SessionError> {
+        let result = self.configured_sources_unguarded();
+        self.guard(result)
+    }
+
+    fn configured_sources_unguarded(&mut self) -> Result<Vec<SourceFile>, SessionError> {
         self.ensure_open()?;
         let response = self.exchange(request(
             Operation::Sources,
@@ -1102,6 +1387,14 @@ impl Session {
         &mut self,
         demand: &ModuleGraphDemand,
     ) -> Result<ModuleGraph, SessionError> {
+        let result = self.module_graph_unguarded(demand);
+        self.guard(result)
+    }
+
+    fn module_graph_unguarded(
+        &mut self,
+        demand: &ModuleGraphDemand,
+    ) -> Result<ModuleGraph, SessionError> {
         self.ensure_open()?;
         let mut modules = request(Operation::Modules, &self.project_id, self.generation);
         modules.module_graph = Some(ModuleGraphRequest {
@@ -1117,205 +1410,29 @@ impl Session {
         })
     }
 
-    /// Returns exact selected-signature, actual-to-formal, callable-path,
-    /// finite-domain and optional implementation-census facts for one live
-    /// generation. The operation is read-only and leaves retained analysis
-    /// state untouched.
-    pub fn invocations(
-        &mut self,
-        demands: &[crate::InvocationDemand],
-    ) -> Result<crate::InvocationAnswer, SessionError> {
-        self.ensure_open()?;
-        if demands
-            .iter()
-            .any(|demand| demand.callable_depth > crate::MAX_INVOCATION_CALLABLE_DEPTH)
-        {
-            return Err(SessionError::InvalidResponse(format!(
-                "invocation callable depth exceeds {}",
-                crate::MAX_INVOCATION_CALLABLE_DEPTH
-            )));
-        }
-        let mut request = request(Operation::Invocations, &self.project_id, self.generation);
-        request.invocation_demands = demands.to_vec();
-        let response = self.exchange(request)?;
-        let envelope = response.invocation_envelope.ok_or_else(|| {
-            SessionError::InvalidResponse("invocation response has no identity envelope".into())
-        })?;
-        if response.invocation_transcripts.len() != demands.len() {
-            return Err(SessionError::InvalidResponse(format!(
-                "invocation response has {} transcripts for {} demands",
-                response.invocation_transcripts.len(),
-                demands.len()
-            )));
-        }
-        for (index, (transcript, demand)) in response
-            .invocation_transcripts
-            .iter()
-            .zip(demands)
-            .enumerate()
-        {
-            if transcript.location != demand.location {
-                return Err(SessionError::InvalidResponse(format!(
-                    "invocation transcript {index} location does not match its demand"
-                )));
-            }
-            validate_invocation_transcript(transcript)?;
-        }
-        validate_invocation_envelope(&envelope, &self.project_id, self.generation, demands)?;
-        Ok(crate::InvocationAnswer {
-            transcripts: response.invocation_transcripts,
-            envelope,
-        })
-    }
-
-    /// Returns exact compiler value and recursive callable-path facts for
-    /// verifier-owned query expressions. It never selects or invents a call.
-    pub fn export_values(
-        &mut self,
-        demands: &[crate::ExportValueDemand],
-    ) -> Result<crate::ExportValueAnswer, SessionError> {
-        self.ensure_open()?;
-        if demands
-            .iter()
-            .any(|demand| demand.callable_depth > crate::MAX_INVOCATION_CALLABLE_DEPTH)
-        {
-            return Err(SessionError::InvalidResponse(format!(
-                "export-value callable depth exceeds {}",
-                crate::MAX_INVOCATION_CALLABLE_DEPTH
-            )));
-        }
-        let mut request = request(Operation::ExportValues, &self.project_id, self.generation);
-        request.export_value_demands = demands.to_vec();
-        let response = self.exchange(request)?;
-        let envelope = response.export_value_envelope.ok_or_else(|| {
-            SessionError::InvalidResponse("export-value response has no identity envelope".into())
-        })?;
-        if response.export_value_transcripts.len() != demands.len() {
-            return Err(SessionError::InvalidResponse(format!(
-                "export-value response has {} transcripts for {} demands",
-                response.export_value_transcripts.len(),
-                demands.len()
-            )));
-        }
-        for (index, (transcript, demand)) in response
-            .export_value_transcripts
-            .iter()
-            .zip(demands)
-            .enumerate()
-        {
-            if transcript.location != demand.location {
-                return Err(SessionError::InvalidResponse(format!(
-                    "export-value transcript {index} location does not match its demand"
-                )));
-            }
-            validate_export_value_transcript(transcript)?;
-        }
-        validate_export_value_envelope(&envelope, &self.project_id, self.generation, demands)?;
-        Ok(crate::ExportValueAnswer {
-            transcripts: response.export_value_transcripts,
-            envelope,
-        })
-    }
-
-    /// Acquires an exported-value answer from this exact pinned live process.
-    pub fn certification_export_values(
-        &mut self,
-        context: crate::CertificationInvocationContext,
-        demands: &[crate::ExportValueDemand],
-    ) -> Result<crate::LiveExportValueAnswer, SessionError> {
-        let pin = self.producer.certification_pin.clone().ok_or_else(|| {
-            SessionError::ProducerProvenance(
-                "ordinary producer sessions cannot issue certification evidence".into(),
-            )
-        })?;
-        let answer = self.export_values(demands)?;
-        let connection = self.connection.as_ref().ok_or(SessionError::Closed)?;
-        let demand_sha256 = crate::SourceHash::parse(answer.envelope.demand_sha256.to_string())?;
-        let schema_sha256 = crate::SourceHash::parse(connection.handshake.schema_hash.clone())?;
-        let evidence_root = live_invocation_evidence_root(
-            &self.session_id,
-            self.restart_epoch,
-            connection,
-            &pin,
-            &self.project_id,
-            self.generation,
-            &demand_sha256,
-            &context,
-        );
-        Ok(crate::LiveExportValueAnswer {
-            answer,
-            identity: crate::LiveProducerSessionIdentity {
-                session_id: self.session_id.clone(),
-                restart_epoch: self.restart_epoch,
-                process_id: connection.child.id(),
-                executable_sha256: connection.executable_sha256.clone(),
-                source_manifest_sha256: pin.source_manifest_sha256,
-                handshake_protocol: connection.handshake.protocol,
-                handshake_schema_sha256: schema_sha256,
-                handshake_build: connection.handshake.build_id.clone().into(),
-                project_id: self.project_id.clone().into(),
-                generation: self.generation,
-                demand_sha256,
-                context,
-                evidence_root,
-            },
-        })
-    }
-
-    /// Acquires a certification answer from the exact pinned process owned by
-    /// this live session.
+    /// Closes the session, returning what the producer did about it.
     ///
-    /// Unlike [`Self::invocations`], this refuses an ordinary unpinned
-    /// producer and returns a non-serializable authority token that binds the
-    /// response to the process/restart epoch, executable/source-manifest pin,
-    /// project generation, verifier-derived demand graph, and snapshot.
-    pub fn certification_invocations(
-        &mut self,
-        context: crate::CertificationInvocationContext,
-        demands: &[crate::InvocationDemand],
-    ) -> Result<crate::LiveInvocationAnswer, SessionError> {
-        let pin = self.producer.certification_pin.clone().ok_or_else(|| {
-            SessionError::ProducerProvenance(
-                "ordinary producer sessions cannot issue certification evidence".into(),
-            )
-        })?;
-        let answer = self.invocations(demands)?;
-        let connection = self.connection.as_ref().ok_or(SessionError::Closed)?;
-        let demand_sha256 = crate::SourceHash::parse(answer.envelope.demand_sha256.to_string())?;
-        let schema_sha256 = crate::SourceHash::parse(connection.handshake.schema_hash.clone())?;
-        let evidence_root = live_invocation_evidence_root(
-            &self.session_id,
-            self.restart_epoch,
-            connection,
-            &pin,
-            &self.project_id,
-            self.generation,
-            &demand_sha256,
-            &context,
-        );
-        Ok(crate::LiveInvocationAnswer {
-            answer,
-            identity: crate::LiveProducerSessionIdentity {
-                session_id: self.session_id.clone(),
-                restart_epoch: self.restart_epoch,
-                process_id: connection.child.id(),
-                executable_sha256: connection.executable_sha256.clone(),
-                source_manifest_sha256: pin.source_manifest_sha256,
-                handshake_protocol: connection.handshake.protocol,
-                handshake_schema_sha256: schema_sha256,
-                handshake_build: connection.handshake.build_id.clone().into(),
-                project_id: self.project_id.clone().into(),
-                generation: self.generation,
-                demand_sha256,
-                context,
-                evidence_root,
-            },
-        })
-    }
-
-    pub fn close(&mut self) -> Result<(), SessionError> {
+    /// **A producer that is already gone is not a failure to close it.**
+    /// Everything `close` promises has happened before this returns, on every
+    /// path: the session is marked closed and the child is terminated whether
+    /// or not the goodbye was acknowledged. A transport failure here says the
+    /// process died before it could answer -- which is the state `close` was
+    /// asking it to reach -- and the 250 ms bound means the same thing, because
+    /// the connection is torn down regardless of which wins.
+    ///
+    /// Reporting that as `Err` said "close failed" about a close that had
+    /// succeeded, and it was the only place in this API where a producer death
+    /// the session can absorb is an error: everywhere else the restart
+    /// machinery recovers one and answers `Ok`. The information is still worth
+    /// having, so it comes back as [`CloseOutcome`] rather than as a failure.
+    ///
+    /// Narrow on purpose: only transport failures become
+    /// [`CloseOutcome::ProducerAlreadyGone`]. A service-level refusal is the
+    /// producer answering and declining, which is a real answer and still
+    /// propagates.
+    pub fn close(&mut self) -> Result<CloseOutcome, SessionError> {
         if self.closed {
-            return Ok(());
+            return Ok(CloseOutcome::Acknowledged);
         }
         let mut close = request(Operation::Close, &self.project_id, self.generation);
         let result = self
@@ -1333,7 +1450,11 @@ impl Session {
         if let Some(mut connection) = self.connection.take() {
             connection.terminate();
         }
-        result.map(|_| ())
+        match result {
+            Ok(_) => Ok(CloseOutcome::Acknowledged),
+            Err(error) if error.is_transport_failure() => Ok(CloseOutcome::ProducerAlreadyGone),
+            Err(error) => Err(error),
+        }
     }
 
     fn analyze_exchange(
@@ -1789,7 +1910,7 @@ impl Session {
 
     fn exchange(&mut self, mut request: Request) -> Result<Response, SessionError> {
         match self.exchange_once(&mut request) {
-            Err(error) if error.is_transport_failure() => {
+            Err(error) if error.is_transport_failure() && self.can_recover() => {
                 self.restart_and_replay()?;
                 self.exchange_once(&mut request)
             }
@@ -1804,6 +1925,7 @@ impl Session {
             .as_ref()
             .ok_or(SessionError::Closed)?
             .exchange(request)?;
+        validate_response_identity(&response, &self.project_id, request.generation)?;
         if operation == Operation::Symbols
             && response.symbol_evidence.is_empty()
             && !response.table_transition.is_empty()
@@ -1835,11 +1957,16 @@ impl Session {
     }
 
     fn restart_and_replay(&mut self) -> Result<(), SessionError> {
+        let Some(producer) = self.producer.as_ref() else {
+            return Err(SessionError::Process(
+                "a bridged producer is never restarted or replayed".into(),
+            ));
+        };
+        let connection = ProcessConnection::spawn(producer, &self.project_id);
         if let Some(mut connection) = self.connection.take() {
             connection.terminate();
         }
-        let connection = Connection::spawn(&self.producer, &self.project_id)?;
-        self.connection = Some(connection);
+        self.connection = Some(Connection::Process(connection?));
         self.restart_epoch = self.restart_epoch.checked_add(1).ok_or_else(|| {
             SessionError::ProducerProvenance("producer restart epoch overflow".into())
         })?;
@@ -1872,88 +1999,26 @@ impl Session {
             Ok(())
         }
     }
-}
 
-fn sha256_file(path: &Path) -> Result<crate::SourceHash, SessionError> {
-    let mut file = File::open(path).map_err(|error| {
-        SessionError::ProducerProvenance(format!("could not open execution image: {error}"))
-    })?;
-    let mut hash = Sha256::new();
-    let mut buffer = [0_u8; 64 * 1024];
-    loop {
-        let read = file.read(&mut buffer).map_err(|error| {
-            SessionError::ProducerProvenance(format!("could not hash execution image: {error}"))
-        })?;
-        if read == 0 {
-            break;
+    /// Whether a failure may be recovered by relaunching and replaying. Only a
+    /// process session can; a bridged one has no producer to relaunch.
+    fn can_recover(&self) -> bool {
+        self.producer.is_some()
+    }
+
+    /// A bridged session's first failure of any kind closes it: its program
+    /// is released, its retained state dropped, and no later call reuses a
+    /// possibly partly applied answer. A process session is unaffected.
+    fn guard<T>(&mut self, result: Result<T, SessionError>) -> Result<T, SessionError> {
+        if result.is_err() && !self.can_recover() {
+            self.closed = true;
+            self.clear_retained_state();
+            if let Some(mut connection) = self.connection.take() {
+                connection.terminate();
+            }
         }
-        hash.update(&buffer[..read]);
+        result
     }
-    crate::SourceHash::parse(format!("sha256:{:x}", hash.finalize())).map_err(Into::into)
-}
-
-fn new_session_id(project_id: &str, connection: &Connection) -> crate::SourceHash {
-    let mut hash = Sha256::new();
-    hash_invocation_field(&mut hash, "solid-checker:typefacts:live-session:v1");
-    hash_invocation_field(&mut hash, project_id);
-    hash_invocation_field(&mut hash, connection.executable_sha256.as_str());
-    hash_invocation_field(&mut hash, &connection.child.id().to_string());
-    hash_invocation_field(
-        &mut hash,
-        &SESSION_ID_COUNTER
-            .fetch_add(1, Ordering::Relaxed)
-            .to_string(),
-    );
-    hash_invocation_field(
-        &mut hash,
-        &SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos()
-            .to_string(),
-    );
-    crate::SourceHash::parse(format!("sha256:{:x}", hash.finalize()))
-        .expect("a SHA-256 rendering is canonical")
-}
-
-#[allow(clippy::too_many_arguments)]
-fn live_invocation_evidence_root(
-    session_id: &crate::SourceHash,
-    restart_epoch: u64,
-    connection: &Connection,
-    pin: &CertificationProducerPin,
-    project_id: &str,
-    generation: u64,
-    demand_sha256: &crate::SourceHash,
-    context: &crate::CertificationInvocationContext,
-) -> crate::SourceHash {
-    let mut hash = Sha256::new();
-    hash_invocation_field(
-        &mut hash,
-        "solid-checker:typefacts:live-certification-evidence:v1",
-    );
-    for value in [
-        session_id.as_str(),
-        connection.executable_sha256.as_str(),
-        pin.source_manifest_sha256.as_str(),
-        &connection.handshake.protocol.to_string(),
-        &connection.handshake.schema_hash,
-        &connection.handshake.build_id,
-        project_id,
-        &generation.to_string(),
-        &restart_epoch.to_string(),
-        &connection.child.id().to_string(),
-        demand_sha256.as_str(),
-        context.snapshot_root(),
-        context.demand_graph_root(),
-    ] {
-        hash_invocation_field(&mut hash, value);
-    }
-    for demand_id in context.proof_demand_ids() {
-        hash_invocation_field(&mut hash, demand_id);
-    }
-    crate::SourceHash::parse(format!("sha256:{:x}", hash.finalize()))
-        .expect("a SHA-256 rendering is canonical")
 }
 
 impl Drop for Session {
@@ -1981,528 +2046,7 @@ fn request(operation: Operation, project_id: &str, generation: u64) -> Request {
         reference_paths: Vec::new(),
         cancel_request_id: 0,
         module_graph: None,
-        invocation_demands: Vec::new(),
-        export_value_demands: Vec::new(),
     }
-}
-
-fn validate_invocation_envelope(
-    envelope: &crate::InvocationEnvelope,
-    project_id: &str,
-    generation: u64,
-    demands: &[crate::InvocationDemand],
-) -> Result<(), SessionError> {
-    if &*envelope.project_id != project_id || envelope.generation != generation {
-        return Err(SessionError::InvalidResponse(
-            "invocation envelope project or generation mismatch".into(),
-        ));
-    }
-    if &*envelope.schema_sha256 != v3::TYPE_FACTS_SCHEMA_SHA256
-        || &*envelope.producer_build != v3::TYPE_FACTS_BUILD_ID
-    {
-        return Err(SessionError::InvalidResponse(
-            "invocation envelope does not match the live handshake".into(),
-        ));
-    }
-    for (name, digest) in [
-        ("demand", &*envelope.demand_sha256),
-        ("module graph", &*envelope.module_graph_sha256),
-        ("schema", &*envelope.schema_sha256),
-    ] {
-        crate::SourceHash::parse(digest.to_owned()).map_err(|_| {
-            SessionError::InvalidResponse(format!("invocation {name} digest is invalid"))
-        })?;
-    }
-    if envelope.demand_sha256.as_ref() != invocation_demand_digest(demands) {
-        return Err(SessionError::InvalidResponse(
-            "invocation envelope demand digest does not match the request".into(),
-        ));
-    }
-    let mut previous = None;
-    for source in &envelope.sources {
-        crate::SourceHash::parse(source.sha256.to_string()).map_err(|_| {
-            SessionError::InvalidResponse("invocation source digest is invalid".into())
-        })?;
-        if previous.is_some_and(|path: &str| path >= &*source.path) {
-            return Err(SessionError::InvalidResponse(
-                "invocation source digests are not uniquely sorted".into(),
-            ));
-        }
-        previous = Some(&*source.path);
-    }
-    Ok(())
-}
-
-fn validate_export_value_envelope(
-    envelope: &crate::InvocationEnvelope,
-    project_id: &str,
-    generation: u64,
-    demands: &[crate::ExportValueDemand],
-) -> Result<(), SessionError> {
-    if &*envelope.project_id != project_id || envelope.generation != generation {
-        return Err(SessionError::InvalidResponse(
-            "export-value envelope project or generation mismatch".into(),
-        ));
-    }
-    if &*envelope.schema_sha256 != v3::TYPE_FACTS_SCHEMA_SHA256
-        || &*envelope.producer_build != v3::TYPE_FACTS_BUILD_ID
-    {
-        return Err(SessionError::InvalidResponse(
-            "export-value envelope does not match the live handshake".into(),
-        ));
-    }
-    for (name, digest) in [
-        ("demand", &*envelope.demand_sha256),
-        ("module graph", &*envelope.module_graph_sha256),
-        ("schema", &*envelope.schema_sha256),
-    ] {
-        crate::SourceHash::parse(digest.to_owned()).map_err(|_| {
-            SessionError::InvalidResponse(format!("export-value {name} digest is invalid"))
-        })?;
-    }
-    if envelope.demand_sha256.as_ref() != export_value_demand_digest(demands) {
-        return Err(SessionError::InvalidResponse(
-            "export-value envelope demand digest does not match the request".into(),
-        ));
-    }
-    let mut previous = None;
-    for source in &envelope.sources {
-        crate::SourceHash::parse(source.sha256.to_string()).map_err(|_| {
-            SessionError::InvalidResponse("export-value source digest is invalid".into())
-        })?;
-        if previous.is_some_and(|path: &str| path >= &*source.path) {
-            return Err(SessionError::InvalidResponse(
-                "export-value source digests are not uniquely sorted".into(),
-            ));
-        }
-        previous = Some(&*source.path);
-    }
-    Ok(())
-}
-
-fn validate_export_value_transcript(
-    transcript: &crate::ExportValueTranscript,
-) -> Result<(), SessionError> {
-    validate_invocation_value(&transcript.value)?;
-    validate_callable_paths(
-        &transcript.callable_paths,
-        transcript.value.alternatives.len(),
-    )?;
-    if transcript.complete
-        && (transcript.query_name.is_empty()
-            || transcript.target.is_empty()
-            || transcript.declaration.is_none()
-            || !transcript.open_reasons.is_empty())
-    {
-        return Err(SessionError::InvalidResponse(
-            "complete export-value transcript lacks exact identity or remains open".into(),
-        ));
-    }
-    Ok(())
-}
-
-fn validate_invocation_transcript(
-    transcript: &crate::InvocationTranscript,
-) -> Result<(), SessionError> {
-    use crate::{ArgumentBindingDisposition, InvocationDomain};
-
-    let mut complete = HashSet::new();
-    if transcript
-        .completeness
-        .0
-        .iter()
-        .any(|domain| !complete.insert(*domain))
-    {
-        return Err(SessionError::InvalidResponse(
-            "invocation completeness contains a duplicate domain".into(),
-        ));
-    }
-
-    if let Some(signature) = &transcript.selected_signature {
-        if transcript.kind == crate::CallKind::Unknown
-            || !transcript
-                .completeness
-                .contains(InvocationDomain::Signature)
-            || !transcript
-                .completeness
-                .contains(InvocationDomain::Parameters)
-            || !transcript.completeness.contains(InvocationDomain::Result)
-        {
-            return Err(SessionError::InvalidResponse(
-                "selected signature lacks locally complete signature/value domains".into(),
-            ));
-        }
-        crate::SourceHash::parse(signature.identity.to_string()).map_err(|_| {
-            SessionError::InvalidResponse("selected signature identity is invalid".into())
-        })?;
-        if signature.overload_count == 0 || signature.overload_ordinal >= signature.overload_count {
-            return Err(SessionError::InvalidResponse(
-                "selected signature overload identity is outside its exact census".into(),
-            ));
-        }
-        for (index, parameter) in signature.parameters.iter().enumerate() {
-            if parameter.index != index
-                || (parameter.rest && index + 1 != signature.parameters.len())
-            {
-                return Err(SessionError::InvalidResponse(
-                    "selected signature formal indices or rest position are invalid".into(),
-                ));
-            }
-            validate_invocation_value(&parameter.value)?;
-            validate_callable_paths(
-                &parameter.callable_paths,
-                parameter.value.alternatives.len(),
-            )?;
-        }
-        validate_invocation_value(&signature.result)?;
-        validate_callable_paths(
-            &signature.result_callable_paths,
-            signature.result.alternatives.len(),
-        )?;
-        if signature.identity.as_ref() != selected_signature_digest(transcript.kind, signature) {
-            return Err(SessionError::InvalidResponse(
-                "selected signature identity does not match its inputs".into(),
-            ));
-        }
-    } else if transcript
-        .completeness
-        .contains(InvocationDomain::Signature)
-        || transcript
-            .completeness
-            .contains(InvocationDomain::Parameters)
-        || transcript.completeness.contains(InvocationDomain::Result)
-    {
-        return Err(SessionError::InvalidResponse(
-            "invocation closes signature/value domains without a selected signature".into(),
-        ));
-    }
-    let bindings_complete = transcript.completeness.contains(InvocationDomain::Bindings);
-    let mut next_expanded = 0;
-    let mut bound_parameters = HashSet::new();
-    for (argument_index, binding) in transcript.bindings.iter().enumerate() {
-        if binding.argument_index != argument_index {
-            return Err(SessionError::InvalidResponse(
-                "invocation argument bindings are not ordered by written argument".into(),
-            ));
-        }
-        match binding.disposition {
-            ArgumentBindingDisposition::Direct if binding.slots.len() != 1 => {
-                return Err(SessionError::InvalidResponse(
-                    "direct invocation binding must contain one slot".into(),
-                ));
-            }
-            ArgumentBindingDisposition::ExactTupleSpread if binding.slots.is_empty() => {
-                return Err(SessionError::InvalidResponse(
-                    "exact tuple spread must contain expanded slots".into(),
-                ));
-            }
-            ArgumentBindingDisposition::UnknownLengthSpread
-                if !binding.slots.is_empty() || binding.possible.is_none() =>
-            {
-                return Err(SessionError::InvalidResponse(
-                    "unknown spread must carry only a possible formal range".into(),
-                ));
-            }
-            ArgumentBindingDisposition::Unmapped if !binding.slots.is_empty() => {
-                return Err(SessionError::InvalidResponse(
-                    "unmapped argument carries exact slots".into(),
-                ));
-            }
-            _ => {}
-        }
-        if bindings_complete
-            && matches!(
-                binding.disposition,
-                ArgumentBindingDisposition::UnknownLengthSpread
-                    | ArgumentBindingDisposition::Unmapped
-            )
-        {
-            return Err(SessionError::InvalidResponse(
-                "complete invocation bindings contain an open mapping".into(),
-            ));
-        }
-        if let Some(range) = &binding.possible
-            && (range.end_exclusive.is_some_and(|end| end < range.start)
-                || (range.unbounded && range.end_exclusive.is_some()))
-        {
-            return Err(SessionError::InvalidResponse(
-                "invocation possible formal range is contradictory".into(),
-            ));
-        }
-        let mut next_tuple = 0;
-        if bindings_complete {
-            for slot in &binding.slots {
-                if slot.expanded_index != next_expanded {
-                    return Err(SessionError::InvalidResponse(
-                        "complete invocation bindings are not contiguous".into(),
-                    ));
-                }
-                next_expanded += 1;
-            }
-        }
-        for slot in &binding.slots {
-            let Some(signature) = transcript.selected_signature.as_ref() else {
-                return Err(SessionError::InvalidResponse(
-                    "invocation binding exists without a selected signature".into(),
-                ));
-            };
-            let Some(parameter) = signature.parameters.get(slot.parameter_index) else {
-                return Err(SessionError::InvalidResponse(
-                    "invocation binding names a missing formal parameter".into(),
-                ));
-            };
-            if slot.rest != parameter.rest {
-                return Err(SessionError::InvalidResponse(
-                    "invocation binding rest marker disagrees with its formal".into(),
-                ));
-            }
-            match binding.disposition {
-                ArgumentBindingDisposition::Direct if slot.tuple_index.is_some() => {
-                    return Err(SessionError::InvalidResponse(
-                        "direct invocation binding carries a tuple index".into(),
-                    ));
-                }
-                ArgumentBindingDisposition::ExactTupleSpread => {
-                    if slot.tuple_index != Some(next_tuple) {
-                        return Err(SessionError::InvalidResponse(
-                            "tuple spread slots are not contiguous".into(),
-                        ));
-                    }
-                    next_tuple += 1;
-                }
-                _ => {}
-            }
-            bound_parameters.insert(slot.parameter_index);
-        }
-    }
-    if transcript
-        .completeness
-        .contains(InvocationDomain::Omissions)
-        && !bindings_complete
-    {
-        return Err(SessionError::InvalidResponse(
-            "omissions are closed while bindings are open".into(),
-        ));
-    }
-    let mut omitted = HashSet::new();
-    for &index in &transcript.omitted_parameters {
-        let Some(parameter) = transcript
-            .selected_signature
-            .as_ref()
-            .and_then(|signature| signature.parameters.get(index))
-        else {
-            return Err(SessionError::InvalidResponse(
-                "omitted invocation parameter does not exist".into(),
-            ));
-        };
-        if !omitted.insert(index)
-            || bound_parameters.contains(&index)
-            || parameter.rest
-            || (!parameter.optional && !parameter.defaulted)
-        {
-            return Err(SessionError::InvalidResponse(
-                "omitted invocation parameter is contradictory".into(),
-            ));
-        }
-    }
-    let parameter_count = transcript
-        .selected_signature
-        .as_ref()
-        .map_or(0, |signature| signature.parameters.len());
-    if transcript
-        .parameter_uses
-        .iter()
-        .any(|usage| usage.parameter_index >= parameter_count)
-    {
-        return Err(SessionError::InvalidResponse(
-            "parameter-use census names a missing formal".into(),
-        ));
-    }
-    if transcript
-        .completeness
-        .contains(InvocationDomain::ControlFlow)
-        && transcript
-            .control_flow
-            .as_ref()
-            .is_none_or(|flow| !flow.unsupported.is_empty())
-    {
-        return Err(SessionError::InvalidResponse(
-            "control-flow census is closed while absent or unsupported".into(),
-        ));
-    }
-    Ok(())
-}
-
-fn validate_invocation_value(value: &crate::InvocationValueFact) -> Result<(), SessionError> {
-    for (index, alternative) in value.alternatives.iter().enumerate() {
-        if alternative.index != index {
-            return Err(SessionError::InvalidResponse(
-                "invocation value alternatives are not contiguous".into(),
-            ));
-        }
-    }
-    for partition in &value.partitions {
-        if partition.complete && partition.cases.is_empty() {
-            return Err(SessionError::InvalidResponse(
-                "complete finite partition is empty".into(),
-            ));
-        }
-    }
-    Ok(())
-}
-
-fn validate_callable_paths(
-    paths: &[crate::CallablePathFact],
-    alternative_count: usize,
-) -> Result<(), SessionError> {
-    use crate::{Callability, InvocationConstructability, PathPresence, PathSegmentKind};
-
-    let mut seen = HashSet::new();
-    for fact in paths {
-        if fact.alternative >= alternative_count {
-            return Err(SessionError::InvalidResponse(
-                "callable path names a missing value alternative".into(),
-            ));
-        }
-        let mut key = format!("{}:", fact.alternative);
-        for segment in &fact.path {
-            match segment.kind {
-                PathSegmentKind::Property
-                    if segment.property.is_empty() || segment.index.is_some() =>
-                {
-                    return Err(SessionError::InvalidResponse(
-                        "property path segment is malformed".into(),
-                    ));
-                }
-                PathSegmentKind::Tuple
-                    if !segment.property.is_empty() || segment.index.is_none() =>
-                {
-                    return Err(SessionError::InvalidResponse(
-                        "tuple path segment is malformed".into(),
-                    ));
-                }
-                _ => {}
-            }
-            key.push_str(&format!(
-                "{:?}:{}:{:?}/",
-                segment.kind, segment.property, segment.index
-            ));
-        }
-        if !seen.insert(key) {
-            return Err(SessionError::InvalidResponse(
-                "callable paths contain a duplicate alternative/path".into(),
-            ));
-        }
-        if fact.presence == PathPresence::Absent
-            && (fact.callability != Callability::Unknown
-                || fact.constructability != InvocationConstructability::Unknown
-                || fact.declaration.is_some()
-                || !fact.complete
-                || !fact.subtree_enumerated)
-        {
-            return Err(SessionError::InvalidResponse(
-                "absent callable path carries a positive or open fact".into(),
-            ));
-        }
-    }
-    Ok(())
-}
-
-fn invocation_demand_digest(demands: &[crate::InvocationDemand]) -> String {
-    let mut hasher = Sha256::new();
-    hash_invocation_field(&mut hasher, "solid-checker:typefacts:invocations:v1");
-    for demand in demands {
-        hash_invocation_field(&mut hasher, &demand.location.path);
-        hash_invocation_field(&mut hasher, &demand.location.start_byte.to_string());
-        hash_invocation_field(&mut hasher, &demand.location.end_byte.to_string());
-        hash_invocation_field(&mut hasher, &demand.callable_depth.to_string());
-        hash_invocation_field(&mut hasher, if demand.census { "true" } else { "false" });
-    }
-    format!("sha256:{:x}", hasher.finalize())
-}
-
-fn export_value_demand_digest(demands: &[crate::ExportValueDemand]) -> String {
-    let mut hasher = Sha256::new();
-    hash_invocation_field(&mut hasher, "solid-checker:typefacts:export-values:v1");
-    for demand in demands {
-        hash_invocation_field(&mut hasher, &demand.location.path);
-        hash_invocation_field(&mut hasher, &demand.location.start_byte.to_string());
-        hash_invocation_field(&mut hasher, &demand.location.end_byte.to_string());
-        if let Some(location) = &demand.implementation_location {
-            hash_invocation_field(&mut hasher, &location.path);
-            hash_invocation_field(&mut hasher, &location.start_byte.to_string());
-            hash_invocation_field(&mut hasher, &location.end_byte.to_string());
-        } else {
-            hash_invocation_field(&mut hasher, "");
-        }
-        hash_invocation_field(&mut hasher, &demand.callable_depth.to_string());
-    }
-    format!("sha256:{:x}", hasher.finalize())
-}
-
-fn selected_signature_digest(
-    kind: crate::CallKind,
-    signature: &crate::SelectedSignature,
-) -> String {
-    let mut hasher = Sha256::new();
-    hash_invocation_field(&mut hasher, "solid-checker:typefacts:selected-signature:v3");
-    hash_invocation_field(
-        &mut hasher,
-        match kind {
-            crate::CallKind::Call => "call",
-            crate::CallKind::Construct => "construct",
-            crate::CallKind::Unknown => "unknown",
-        },
-    );
-    hash_invocation_field(&mut hasher, &signature.declaration.symbol);
-    hash_invocation_field(&mut hasher, &signature.declaration.location.path);
-    hash_invocation_field(
-        &mut hasher,
-        &signature.declaration.location.start_byte.to_string(),
-    );
-    hash_invocation_field(
-        &mut hasher,
-        &signature.declaration.location.end_byte.to_string(),
-    );
-    hash_invocation_field(&mut hasher, &signature.overload_ordinal.to_string());
-    hash_invocation_field(&mut hasher, &signature.overload_count.to_string());
-    hash_invocation_field(&mut hasher, &signature.minimum_argument_count.to_string());
-    hash_invocation_field(
-        &mut hasher,
-        if signature.has_rest { "true" } else { "false" },
-    );
-    for parameter in &signature.parameters {
-        hash_invocation_field(
-            &mut hasher,
-            parameter
-                .value
-                .type_descriptor
-                .as_ref()
-                .map_or("", |descriptor| &descriptor.text),
-        );
-        if let Some(declared) = &parameter.declared_type {
-            hash_invocation_field(&mut hasher, &declared.module);
-            hash_invocation_field(&mut hasher, &declared.name);
-        } else {
-            hash_invocation_field(&mut hasher, "");
-            hash_invocation_field(&mut hasher, "");
-        }
-    }
-    hash_invocation_field(
-        &mut hasher,
-        signature
-            .result
-            .type_descriptor
-            .as_ref()
-            .map_or("", |descriptor| &descriptor.text),
-    );
-    format!("sha256:{:x}", hasher.finalize())
-}
-
-fn hash_invocation_field(hasher: &mut Sha256, value: &str) {
-    hasher.update(value.len().to_string().as_bytes());
-    hasher.update(b":");
-    hasher.update(value.as_bytes());
 }
 
 fn exchange_timings(response: &Response) -> ExchangeTimings {
@@ -2557,7 +2101,7 @@ fn prepare_analyze_response(
         let candidate = retained.as_ref().ok_or_else(|| {
             SessionError::InvalidResponse("reuse response has no retained table".into())
         })?;
-        if candidate.schema() != v3::TYPE_FACTS_TABLE_SCHEMA_V18
+        if candidate.schema() != v3::TYPE_FACTS_TABLE_SCHEMA_V20
             || candidate.project_id() != expected_project
             || candidate.generation() != response.generation
         {
@@ -2579,7 +2123,7 @@ fn prepare_analyze_response(
         .map_err(SessionError::InvalidResponse)?;
     if transition.project_id.as_ref() != response.project_id.as_str()
         || transition.target_generation != response.generation
-        || transition.table_schema != v3::TYPE_FACTS_TABLE_SCHEMA_V18
+        || transition.table_schema != v3::TYPE_FACTS_TABLE_SCHEMA_V20
     {
         return Err(SessionError::InvalidResponse(
             "table transition identity does not match response".into(),
@@ -2793,645 +2337,4 @@ fn terminate_child(child: &mut Child) {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{EntityFact, Location, SourceDigest, SourceHash, SymbolFact, v3::SymbolOp};
-    use serde::Deserialize;
-
-    #[test]
-    fn project_identity_matches_the_producers_absolute_clean_path() {
-        let current = std::env::current_dir().unwrap();
-        let dirty = current
-            .join("nested")
-            .join("..")
-            .join("project")
-            .join(".")
-            .join("tsconfig.json");
-        let normalized = normalize_project_id(dirty.to_string_lossy().into_owned()).unwrap();
-        assert_eq!(
-            normalized,
-            current.join("project/tsconfig.json").to_string_lossy()
-        );
-
-        let relative = normalize_project_id("project/../tsconfig.json".into()).unwrap();
-        assert_eq!(relative, current.join("tsconfig.json").to_string_lossy());
-        assert!(normalize_project_id("  ".into()).is_err());
-    }
-
-    fn location(path: &str, start: u64) -> Location {
-        Location {
-            path: path.into(),
-            start_byte: start,
-            end_byte: start + 1,
-        }
-    }
-
-    #[test]
-    fn absent_callable_path_requires_an_enumerated_empty_subtree() {
-        let mut fact = crate::CallablePathFact {
-            alternative: 0,
-            path: Vec::new(),
-            presence: crate::PathPresence::Absent,
-            callability: crate::Callability::Unknown,
-            constructability: crate::InvocationConstructability::Unknown,
-            declaration: None,
-            complete: true,
-            subtree_enumerated: false,
-            open_reasons: Vec::new(),
-        };
-        assert!(validate_callable_paths(std::slice::from_ref(&fact), 1).is_err());
-        fact.subtree_enumerated = true;
-        assert!(validate_callable_paths(&[fact], 1).is_ok());
-    }
-
-    #[test]
-    fn invocation_completeness_and_generation_identity_fail_closed_locally() {
-        let transcript = crate::InvocationTranscript {
-            location: location("/p/source.ts", 0),
-            validity: crate::ResolvedCallValidity::Unresolved,
-            kind: crate::CallKind::Unknown,
-            target: "".into(),
-            targets: None,
-            selected_signature: None,
-            bindings: Vec::new(),
-            omitted_parameters: Vec::new(),
-            parameter_uses: Vec::new(),
-            control_flow: None,
-            completeness: crate::InvocationCompleteness(vec![
-                crate::InvocationDomain::Bindings,
-                crate::InvocationDomain::Bindings,
-            ]),
-            open_reasons: Vec::new(),
-        };
-        assert!(matches!(
-            validate_invocation_transcript(&transcript),
-            Err(SessionError::InvalidResponse(_))
-        ));
-
-        let transcript = crate::InvocationTranscript {
-            completeness: crate::InvocationCompleteness(vec![crate::InvocationDomain::Signature]),
-            ..transcript
-        };
-        assert!(matches!(
-            validate_invocation_transcript(&transcript),
-            Err(SessionError::InvalidResponse(_))
-        ));
-
-        let demands = Vec::<crate::InvocationDemand>::new();
-        let envelope = crate::InvocationEnvelope {
-            project_id: "/p/tsconfig.json".into(),
-            generation: 7,
-            demand_sha256: invocation_demand_digest(&demands).into(),
-            module_graph_sha256: crate::SourceHash::of("module graph").as_str().into(),
-            schema_sha256: v3::TYPE_FACTS_SCHEMA_SHA256.into(),
-            producer_build: v3::TYPE_FACTS_BUILD_ID.into(),
-            sources: Vec::new(),
-            open_reasons: Vec::new(),
-        };
-        assert!(validate_invocation_envelope(&envelope, "/p/tsconfig.json", 7, &demands,).is_ok());
-        assert!(matches!(
-            validate_invocation_envelope(&envelope, "/p/tsconfig.json", 8, &demands),
-            Err(SessionError::InvalidResponse(_))
-        ));
-
-        let mut stale_producer = envelope;
-        stale_producer.producer_build = "stale-build".into();
-        assert!(matches!(
-            validate_invocation_envelope(&stale_producer, "/p/tsconfig.json", 7, &demands,),
-            Err(SessionError::InvalidResponse(_))
-        ));
-    }
-
-    #[test]
-    fn invocation_demand_digest_matches_the_go_producer_fixture() {
-        let demands = [
-            crate::InvocationDemand {
-                location: Location {
-                    path: "/p/a.ts".into(),
-                    start_byte: 4,
-                    end_byte: 12,
-                },
-                callable_depth: 3,
-                census: true,
-            },
-            crate::InvocationDemand {
-                location: Location {
-                    path: "/p/b.ts".into(),
-                    start_byte: 0,
-                    end_byte: 7,
-                },
-                callable_depth: 0,
-                census: false,
-            },
-        ];
-        assert_eq!(
-            invocation_demand_digest(&demands),
-            "sha256:68a28ae5071bb694387c8d372c3a3febd48636f783d4a5881ece0a15656fb88c"
-        );
-        let reversed = [demands[1].clone(), demands[0].clone()];
-        assert_ne!(
-            invocation_demand_digest(&reversed),
-            invocation_demand_digest(&demands)
-        );
-    }
-
-    #[test]
-    fn shared_demand_groups_retain_the_callers_allocation() {
-        let run: Arc<[EntityDemand]> = vec![EntityDemand {
-            location: location("/p/a.ts", 1),
-            symbol: true,
-            ..EntityDemand::default()
-        }]
-        .into();
-        let shared = DemandGroup::shared(&run).expect("non-empty shared run");
-        let retained = shared.retained();
-
-        assert!(Arc::ptr_eq(&run, &retained));
-        assert_eq!(retained.as_ref(), shared.demands());
-    }
-
-    fn table_with_symbol(symbol: SymbolFact) -> FactTable {
-        fact_table(Vec::new(), Vec::new(), vec![symbol], Vec::new())
-    }
-
-    fn fact_table(
-        sources: Vec<SourceDigest>,
-        entities: Vec<EntityFact>,
-        symbols: Vec<SymbolFact>,
-        files: Vec<crate::FileFact>,
-    ) -> FactTable {
-        FactTable::from_parts(
-            v3::TYPE_FACTS_TABLE_SCHEMA_V18,
-            1,
-            "/p/tsconfig.json",
-            sources,
-            entities,
-            symbols,
-            files,
-        )
-    }
-
-    fn delta_transition(
-        base_generation: u64,
-        target_generation: u64,
-        paths: Vec<v3::PathOp>,
-        symbols: Vec<SymbolOp>,
-    ) -> WireTableTransition {
-        WireTableTransition {
-            mode: TransitionMode::Delta,
-            table_schema: v3::TYPE_FACTS_TABLE_SCHEMA_V18,
-            base_generation,
-            target_generation,
-            project_id: "/p/tsconfig.json".into(),
-            base_state_token: format!("base-{base_generation}").into(),
-            paths,
-            symbols,
-        }
-    }
-
-    fn reference_transition(
-        id: &str,
-        path: &str,
-        references: Vec<Location>,
-    ) -> WireTableTransition {
-        delta_transition(
-            1,
-            2,
-            Vec::new(),
-            vec![SymbolOp::ReplaceReferencePath {
-                id: id.into(),
-                path: path.into(),
-                references,
-            }],
-        )
-    }
-
-    fn response(generation: u64, state_token: &str, table_transition: Vec<u8>) -> Response {
-        Response {
-            schema: v3::TYPE_FACTS_SCHEMA_V1,
-            request_id: 1,
-            project_id: "/p/tsconfig.json".into(),
-            generation,
-            ok: true,
-            table_transition,
-            symbol_evidence: Vec::new(),
-            reference_evidence: Vec::new(),
-            changed_reference_symbols: Vec::new(),
-            reference_changes_exact: false,
-            state_token: state_token.into(),
-            affected: Vec::new(),
-            sources: Vec::new(),
-            source_arena: String::new(),
-            source_lengths: Vec::new(),
-            timings: None,
-            error: None,
-            modules: Vec::new(),
-            module_imports: Vec::new(),
-            unknown_import_paths: Vec::new(),
-            invocation_transcripts: Vec::new(),
-            invocation_envelope: None,
-            export_value_transcripts: Vec::new(),
-            export_value_envelope: None,
-            client_decode_ns: 0,
-            client_response_bytes: 0,
-            client_request_send_ns: 0,
-            client_request_bytes: 0,
-            client_roundtrip_ns: 0,
-        }
-    }
-
-    fn materialize_full(frame: &[u8], label: &str) -> FactTable {
-        let transition = v3::decode_table_transition(frame)
-            .unwrap_or_else(|error| panic!("{label}: decode full transition: {error}"));
-        assert_eq!(
-            transition.mode,
-            TransitionMode::Full,
-            "{label}: expected full transition"
-        );
-        materialize_full_transition(transition).0
-    }
-
-    #[test]
-    fn repeated_edits_to_one_path_keep_only_the_newest_replay_overlay() {
-        // A long editing session sends the same handful of files over and over.
-        // Retaining every version would grow the session by the full source text
-        // of each edit; only the newest overlay per path changes what a replayed
-        // generation produces.
-        let mut session = Session {
-            producer: Producer::at("/nonexistent"),
-            project_id: "/p/tsconfig.json".into(),
-            generation: 1,
-            session_id: crate::SourceHash::of("test-session"),
-            restart_epoch: 0,
-            connection: None,
-            replay_batches: Vec::new(),
-            replay_index: HashMap::new(),
-            state_token: String::new(),
-            retained_demands: HashMap::new(),
-            retained_table: None,
-            affected_paths: HashSet::new(),
-            reference_tier: HashSet::new(),
-            symbols_by_path: HashMap::new(),
-            last_exchange_timings: None,
-            last_update_timings: None,
-            last_table_changes: None,
-            closed: false,
-        };
-        for version in 1..=32 {
-            let changes = vec![FileChange {
-                path: "/p/a.ts".into(),
-                version,
-                source: "x".repeat(1024).into_bytes(),
-                deleted: false,
-            }];
-            session.supersede_replayed_overlays(&changes);
-            session.replay_batches.push(changes);
-        }
-
-        // One batch per accepted update, because the producer advances a
-        // generation per update and replay must land on the same generation.
-        assert_eq!(session.replay_batches.len(), 32);
-        let retained: usize = session.replay_batches.iter().map(Vec::len).sum();
-        assert_eq!(
-            retained, 1,
-            "only the newest overlay for a path may be retained, found {retained}"
-        );
-        let newest = session
-            .replay_batches
-            .last()
-            .and_then(|batch| batch.first())
-            .expect("the newest batch keeps its overlay");
-        assert_eq!(newest.version, 32);
-    }
-
-    #[test]
-    fn certification_pin_is_lost_when_the_launch_recipe_changes() {
-        let executable = std::env::current_exe().unwrap();
-        let executable_sha256 = sha256_file(&executable).unwrap();
-        let source_manifest = crate::SourceHash::of("source-manifest");
-        let pinned = Producer::pinned_for_certification(
-            &executable,
-            executable_sha256.to_string(),
-            source_manifest.to_string(),
-        )
-        .unwrap();
-        assert!(pinned.certification_pin.is_some());
-        assert!(
-            pinned
-                .clone()
-                .with_arg("--shim")
-                .certification_pin
-                .is_none()
-        );
-        assert!(
-            pinned
-                .without_shared_transition_arena()
-                .certification_pin
-                .is_none()
-        );
-    }
-
-    /// A reference replacement touches only its own path's run and leaves the
-    /// surrounding path-sorted order intact.
-    #[test]
-    fn reference_transition_replaces_only_the_named_paths_run() {
-        let mut table = table_with_symbol(SymbolFact {
-            id: "shared".into(),
-            alias_target: "".into(),
-            declarations: Vec::new().into(),
-            references: vec![
-                location("a.ts", 1),
-                location("b.ts", 1),
-                location("c.ts", 1),
-            ]
-            .into(),
-        });
-        let transition = reference_transition(
-            "shared",
-            "b.ts",
-            vec![location("b.ts", 4), location("b.ts", 9)],
-        );
-        let changes =
-            apply_table_transition(&mut table, transition).expect("apply the reference transition");
-
-        assert_eq!(table.generation(), 2);
-        assert_eq!(
-            table
-                .symbol("shared")
-                .expect("shared symbol")
-                .references()
-                .map(|reference| (reference.path.as_ref(), reference.start_byte))
-                .collect::<Vec<_>>(),
-            vec![("a.ts", 1), ("b.ts", 4), ("b.ts", 9), ("c.ts", 1)],
-        );
-        assert_eq!(
-            changes,
-            TableChanges {
-                unchanged: false,
-                entity_paths: Vec::new(),
-                symbol_ids: vec!["shared".into()],
-                file_paths: Vec::new(),
-            }
-        );
-    }
-
-    /// Rows keyed by path or id are replaced, removed, and re-sorted.
-    #[test]
-    fn keyed_rows_are_replaced_removed_and_reordered() {
-        let mut table = fact_table(
-            vec![
-                SourceDigest {
-                    path: "a.ts".into(),
-                    sha256: SourceHash::of("a"),
-                },
-                SourceDigest {
-                    path: "b.ts".into(),
-                    sha256: SourceHash::of("b"),
-                },
-            ],
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-        );
-        let transition = delta_transition(
-            1,
-            2,
-            vec![
-                v3::PathOp {
-                    path: "a.ts".into(),
-                    source: SlotOp::Replace(SourceHash::of("a2")),
-                    entities: SlotOp::Unchanged,
-                    file: SlotOp::Unchanged,
-                },
-                v3::PathOp {
-                    path: "b.ts".into(),
-                    source: SlotOp::Remove,
-                    entities: SlotOp::Unchanged,
-                    file: SlotOp::Unchanged,
-                },
-            ],
-            Vec::new(),
-        );
-        apply_table_transition(&mut table, transition).expect("apply the keyed transition");
-
-        assert_eq!(table.source_count(), 1);
-        let source = table.source("a.ts").expect("retained a.ts source");
-        assert_eq!(source.path.as_ref(), "a.ts");
-        assert_eq!(source.sha256, SourceHash::of("a2"));
-    }
-
-    #[test]
-    fn invalid_candidate_never_mutates_the_retained_table() {
-        let retained = fact_table(
-            vec![SourceDigest {
-                path: "a.ts".into(),
-                sha256: SourceHash::of("old"),
-            }],
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-        );
-        let transition = delta_transition(
-            1,
-            2,
-            vec![v3::PathOp {
-                path: "a.ts".into(),
-                source: SlotOp::Replace(SourceHash::of("new")),
-                entities: SlotOp::Unchanged,
-                file: SlotOp::Unchanged,
-            }],
-            vec![SymbolOp::ReplaceReferencePath {
-                id: "missing".into(),
-                path: "a.ts".into(),
-                references: vec![location("a.ts", 1)],
-            }],
-        );
-        let mut candidate = retained.clone();
-        let candidate_root = candidate.path_root_identity();
-        assert!(matches!(
-            apply_table_transition(&mut candidate, transition),
-            Err(SessionError::InvalidResponse(_))
-        ));
-        assert_eq!(
-            candidate.path_root_identity(),
-            candidate_root,
-            "a rejected transition copied storage before validation finished"
-        );
-        assert_eq!(candidate, retained);
-        assert_eq!(
-            retained.source("a.ts").expect("a.ts").sha256,
-            SourceHash::of("old")
-        );
-        assert_eq!(retained.generation(), 1);
-    }
-
-    #[test]
-    fn sparse_transition_copies_only_the_touched_leaf() {
-        let table = || {
-            fact_table(
-                (0..128)
-                    .map(|index| SourceDigest {
-                        path: format!("file-{index:03}.ts").into(),
-                        sha256: SourceHash::of("old"),
-                    })
-                    .collect(),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-            )
-        };
-        let transition = delta_transition(
-            1,
-            2,
-            vec![v3::PathOp {
-                path: "file-000.ts".into(),
-                source: SlotOp::Replace(SourceHash::of("new")),
-                entities: SlotOp::Unchanged,
-                file: SlotOp::Unchanged,
-            }],
-            Vec::new(),
-        );
-
-        let mut shared = table();
-        let held = shared.clone();
-        let touched_leaf = shared.path_leaf_identity("file-000.ts");
-        let untouched_leaf = shared.path_leaf_identity("file-127.ts");
-        apply_table_transition(&mut shared, transition).unwrap();
-        assert_ne!(shared.path_leaf_identity("file-000.ts"), touched_leaf);
-        assert_eq!(shared.path_leaf_identity("file-127.ts"), untouched_leaf);
-        assert_eq!(
-            shared.source("file-000.ts").expect("new source").sha256,
-            SourceHash::of("new")
-        );
-        assert_eq!(
-            held.source("file-000.ts").expect("held source").sha256,
-            SourceHash::of("old")
-        );
-    }
-
-    #[test]
-    fn broad_transition_uses_one_canonical_merge() {
-        const BROAD_OPERATION_COUNT: usize = 32;
-        let sources = (0..64)
-            .map(|index| {
-                let path: Arc<str> = format!("file-{index:03}.ts").into();
-                SourceDigest {
-                    path,
-                    sha256: SourceHash::of("old"),
-                }
-            })
-            .collect::<Vec<_>>();
-        let paths = (0..BROAD_OPERATION_COUNT)
-            .map(|index| v3::PathOp {
-                path: format!("file-{index:03}.ts").into(),
-                source: SlotOp::Replace(SourceHash::of("new")),
-                entities: SlotOp::Unchanged,
-                file: SlotOp::Unchanged,
-            })
-            .collect();
-        let mut table = fact_table(sources, Vec::new(), Vec::new(), Vec::new());
-        let original_root = table.path_root_identity();
-
-        apply_table_transition(&mut table, delta_transition(1, 2, paths, Vec::new()))
-            .expect("apply the broad transition");
-
-        assert_ne!(
-            table.path_root_identity(),
-            original_root,
-            "the broad branch should build one merged index"
-        );
-        assert_eq!(table.source_count(), 64);
-        let sources = table.sources().collect::<Vec<_>>();
-        assert!(sources.windows(2).all(|pair| pair[0].path < pair[1].path));
-        assert!(
-            sources[..BROAD_OPERATION_COUNT]
-                .iter()
-                .all(|source| source.sha256 == SourceHash::of("new"))
-        );
-        assert!(
-            sources[BROAD_OPERATION_COUNT..]
-                .iter()
-                .all(|source| source.sha256 == SourceHash::of("old"))
-        );
-    }
-
-    #[test]
-    fn reuse_requires_the_retained_table_generation() {
-        let retained = fact_table(Vec::new(), Vec::new(), Vec::new(), Vec::new());
-        let valid = response(1, "successor", Vec::new());
-        let mut valid_retained = Some(retained.clone());
-        let (reused, changes) =
-            prepare_analyze_response(&valid, "/p/tsconfig.json", 1, &mut valid_retained, "base")
-                .expect("reuse the retained table");
-        assert_eq!(reused, retained);
-        assert!(changes.unchanged);
-
-        let invalid = response(2, "successor", Vec::new());
-        let mut invalid_retained = Some(retained.clone());
-        assert!(matches!(
-            prepare_analyze_response(
-                &invalid,
-                "/p/tsconfig.json",
-                2,
-                &mut invalid_retained,
-                "base"
-            ),
-            Err(SessionError::InvalidResponse(_))
-        ));
-        assert_eq!(invalid_retained.as_ref(), Some(&retained));
-    }
-
-    #[derive(Deserialize)]
-    #[serde(rename_all = "camelCase", deny_unknown_fields)]
-    struct TransitionGoldenStep {
-        label: String,
-        base_token: String,
-        #[serde(with = "serde_bytes")]
-        base_transition: Vec<u8>,
-        #[serde(with = "serde_bytes")]
-        transition: Vec<u8>,
-        #[serde(with = "serde_bytes")]
-        expected_transition: Vec<u8>,
-    }
-
-    #[derive(Deserialize)]
-    #[serde(rename_all = "camelCase", deny_unknown_fields)]
-    struct TransitionGolden {
-        steps: Vec<TransitionGoldenStep>,
-    }
-
-    /// The production Go encoder and this decoder/applier must assign exactly
-    /// the same meaning to full and delta transitions.
-    #[test]
-    fn applies_the_producers_transitions_exactly() {
-        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../../benchmarks/typefacts/phase1/typefacts-v5-transition-golden.cbor");
-        let bytes =
-            std::fs::read(&path).unwrap_or_else(|error| panic!("read {}: {error}", path.display()));
-        let golden: TransitionGolden = crate::decode(&bytes).expect("decode the transition golden");
-        assert_eq!(golden.steps.len(), 4, "fixture lost a transition");
-
-        for step in &golden.steps {
-            let mut actual = materialize_full(&step.base_transition, &step.label);
-            let expected = materialize_full(&step.expected_transition, &step.label);
-            let transition = v3::decode_table_transition(&step.transition)
-                .unwrap_or_else(|error| panic!("{}: decode delta: {error}", step.label));
-            assert_eq!(transition.mode, TransitionMode::Delta, "{}", step.label);
-            assert_eq!(
-                transition.base_state_token.as_ref(),
-                step.base_token,
-                "{}",
-                step.label
-            );
-            assert_eq!(
-                actual.generation(),
-                transition.base_generation,
-                "{}",
-                step.label
-            );
-            apply_table_transition(&mut actual, transition)
-                .unwrap_or_else(|error| panic!("{}: apply delta: {error}", step.label));
-            assert_eq!(actual, expected, "{} produced the wrong table", step.label);
-        }
-    }
-}
+mod tests;

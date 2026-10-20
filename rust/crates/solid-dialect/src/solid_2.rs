@@ -11,13 +11,115 @@
 //! and a fixture or focused regression test.
 
 use crate::{
-    Boundary, CallbackOwner, CleanupRule, Dialect, Execution, Primitive, TrackedCallbackTiming,
-    Version, lookup, reverse,
+    Boundary, CallbackOwner, CleanupRule, ContextRole, Dialect, Execution, Primitive, ReactiveRole,
+    ResultSlot, TrackedCallbackTiming, Version, lookup, reverse,
 };
 
-/// Solid 2.0.
+mod releases;
+
+#[path = "../../../dialects/solid-v2/runtime_configuration.rs"]
+mod runtime_configuration;
+
+/// Solid 2.0, answering for one installation of its three archives.
+///
+/// Almost every answer is the same on every release this vocabulary was read
+/// on, so the releases are carried as data rather than as more types: one field
+/// per answer the reviewed releases disagree on, each decided by the resolved
+/// release of the package that declares it (`releases.rs`, which builds the
+/// value from the resolved `solid-js`, `@solidjs/signals` and `@solidjs/web`).
+/// `Solid2` the value is the conservative vocabulary
+/// ([`Solid2::CONSERVATIVE`]); [`Solid2::RC3`] and [`Solid2::RC9`] are those
+/// triples', and [`Solid2::RC13`] carries the new audited store-key premise. The audited vocabulary, the
+/// conservative one variant ids are spelled against ([`Solid2::CONSERVATIVE`])
+/// and the one a project with no `solid-js` is analyzed under
+/// ([`Solid2::DEFAULTED`]) are three names, not one (`releases.rs`).
 #[derive(Clone, Copy, Debug, Default)]
-pub struct Solid2;
+pub struct Solid2 {
+    /// Strict store-key witnesses read on exact @solidjs/signals rc.13.
+    /// Other owners/releases remain unaudited for this new premise.
+    store_strict_keys_audited: bool,
+    /// B1, from `@solidjs/signals`.
+    store_root: releases::StoreRootTyping,
+    /// B3: whether this release's `omit` has the predicate form, a lone function
+    /// argument the returned view invokes
+    /// ([`Solid2::callback_runs_on_result_access`]).
+    ///
+    /// A runtime difference, not only a typing one:
+    ///
+    /// - `@solidjs/signals@2.0.0-rc.3`'s `omit(props, ...keys)` never invokes
+    ///   a key. Every build only tests membership, `keys.includes(property)`
+    ///   in the view's `get`/`has`/`keys` traps and in the non-`Proxy` copy,
+    ///   and `new Set(keys)` above four keys: `dist/dev.js:9334-9369` (sha256
+    ///   `cc68ed0f…1a79`), `dist/prod/store/utils.js:169-199`
+    ///   (`ff62f6f1…acb9`) and `dist/node.cjs:7816` (`bc0e35d3…5c1c`) of the
+    ///   published rc.3 `@solidjs/signals` archive.
+    ///   A function passed there is a key that matches no property.
+    /// - `2.0.0-rc.9` selects the predicate by
+    ///   `keys.length === 1 && typeof keys[0] === "function"`
+    ///   (`dist/dev.js:4380`) and calls it on every read of the view.
+    ///
+    /// TypeScript separates the two only where types exist (rc.3 rejects a
+    /// function key with TS2345; rc.9 accepts it). In an untyped artifact
+    /// nothing in the call does, so the answer comes from the release of the
+    /// package that implements `omit`, the resolved `@solidjs/signals`
+    /// (`solid-js` only re-exports it): `true` on rc.9 alone, since no
+    /// runtime before it tests `typeof keys[0]` (the rc.1-rc.8 review § 3.3).
+    /// A signals release nobody compared, or none resolved, keeps `false`,
+    /// under its `SC9014` notice.
+    omit_predicate_form: bool,
+    /// B4: whether `until` is a name this installation exports, from
+    /// `solid-js` and `@solidjs/signals` together. `false` answers `None` for
+    /// the name everywhere the vocabulary is asked about it, so nothing reaches
+    /// the `until` rows or SC2005.
+    until: bool,
+    /// N4 of the rc.9 review: whether `flush` throws `FLUSH_IN_ACTION` in dev
+    /// while an action step is on the stack, from `@solidjs/signals`.
+    ///
+    /// `2.0.0-rc.8` added the guard (`dist/dev-shared.js:1904-1913`; rc.9
+    /// `:2210-2219`): `if (actionStepDepth > 0) throw new Error("[FLUSH_IN_ACTION]
+    /// …")` opens `flush`, before its `fn` argument is read, so `flush()` and
+    /// `flush(fn)` both throw. `actionStepDepth` is raised only by `action`'s
+    /// `step`, around `it.next(v)`/`it.throw(v)` (rc.8 `dist/dev.js:1682-1690`,
+    /// rc.9 `:2016-2024`). The production and observe builds take the same
+    /// branch and return `fn?.()` without draining (rc.9
+    /// `dist/prod/core/scheduler.js:1182-1184`), so nothing throws there. No
+    /// release before rc.8 has `actionStepDepth` at all (the rc.1-rc.8 review
+    /// § 3, probe R). `true` only for a signals release some review read at
+    /// rc.8 or later; an unread or unresolved one keeps `false`, which states
+    /// nothing, under its `SC9014` notice.
+    flush_in_action: bool,
+    /// B2, from `@solidjs/web`.
+    dynamic_options: releases::DynamicOptions,
+    /// N3, from `@solidjs/signals`: whether its dev store-setter guard
+    /// exempts a root owner ([`Dialect::store_setter_guard_exempts_roots`]).
+    store_setter_roots: releases::StoreSetterRootGuard,
+    /// N5, from `@solidjs/signals`: whether an optimistic-store setter meets
+    /// the owned-scope write guard at all
+    /// ([`Dialect::optimistic_store_setter_guarded`]).
+    optimistic_store_setter: releases::OptimisticStoreSetterGuard,
+    /// ADR 0292, from `solid-js`: whether `lazy` renders the loaded `default`
+    /// through `createComponent` ([`Dialect::renders_loaded_default_argument`]).
+    ///
+    /// A runtime difference. `solid-js@2.0.0-rc.13`'s wrapper renders
+    /// `createComponent(Comp, props)` (`dist/solid.dev.js:1425`), whose
+    /// `observedComponent` runs the body as `untrack(() => Comp(props),
+    /// label)` (`:59`), the strict-read window a JSX-rendered component body
+    /// has. rc.3 and rc.9 call `untrack(() => Comp(props))` themselves, with
+    /// no label (rc.9 `dist/solid.dev.js:1175-1179`), so the loaded body opens
+    /// no strict-read window there. `true` on rc.13 alone; every other
+    /// release, unread and unresolved included, keeps `false`.
+    lazy_renders_component: bool,
+}
+
+/// The Solid 2 language's own vocabulary, [`Solid2::CONSERVATIVE`], spelled
+/// like the unit struct it used to be so the value keeps its name everywhere
+/// the engine and its tests hold it. It is not the audited release's: the
+/// engine's tests pin the conservative answers, and a release-dependent
+/// answer is tested on the variant that gives it.
+/// A braced struct lives only in the type namespace, which leaves the value
+/// namespace free for this constant.
+#[allow(non_upper_case_globals)]
+pub const Solid2: Solid2 = Solid2::CONSERVATIVE;
 
 /// Source: the pre-ADR-0006 hardcoded name list `solid-reactive-ir` used to
 /// carry (26 names), plus the four the namespace-import expansion adds in
@@ -81,6 +183,13 @@ const TABLE: &[(&str, Primitive)] = &[
     ("Show", Primitive::Show),
     ("snapshot", Primitive::Snapshot),
     ("Switch", Primitive::Switch),
+    // New in `2.0.0-rc.5`: `until<T>(fn: () => T, options?: UntilOptions):
+    // Promise<Truthy<T>>` (`@solidjs/signals` `dist/types/signals.d.ts:601`
+    // on rc.5, `:608` on rc.9), re-exported from the `solid-js` root
+    // (`types/index.d.ts:1`) from the same release. rc.3's typings do not
+    // export it (TS2305), so the row answers only where the installation has
+    // it (`Solid2::until`); everywhere else the name is unknown.
+    ("until", Primitive::Until),
     ("untrack", Primitive::Untrack),
     ("useContext", Primitive::UseContext),
     ("useHead", Primitive::UseHead),
@@ -95,7 +204,49 @@ pub(crate) fn names() -> Vec<&'static str> {
     TABLE.iter().map(|(name, _)| *name).collect()
 }
 
+/// The [`TABLE`] names only some installations export (`Solid2::exports`).
+#[cfg(test)]
+pub(crate) const RELEASE_GATED_NAMES: &[&str] = &["until"];
+
 impl Dialect for Solid2 {
+    fn host_boolean_exports(&self) -> &'static [crate::HostBooleanExport] {
+        &[crate::HostBooleanExport {
+            module: "@solidjs/web",
+            export: "isServer",
+            version: "2.0.0-rc.13",
+            client: false,
+            server: true,
+            runtime_targets: &[
+                "dist/web.js",
+                "dist/web.dev.js",
+                "dist/web.observe.js",
+                "dist/server.js",
+                "dist/server.dev.js",
+                "dist/server.observe.js",
+            ],
+        }]
+    }
+
+    fn runtime_configuration_api(
+        &self,
+        path: &str,
+        start: u64,
+        end: u64,
+    ) -> Option<crate::RuntimeConfigurationApi> {
+        runtime_configuration::api(path, start, end)
+    }
+
+    fn hydration_host_member_read_is_harmless(&self, member: &str, truthiness_only: bool) -> bool {
+        runtime_configuration::harmless_host_read(member, truthiness_only)
+    }
+
+    // rc.9 dev-shared.js core read() explicitly excludes pendingCheckActive
+    // from the strict pending-read safeguard; verdict.isPending supplies it.
+    // Store proxy traps have a different guard, so this is accessor-only.
+    fn callback_handles_pending_accessor_read(&self, primitive: Primitive, index: usize) -> bool {
+        primitive == Primitive::IsPending && index == 0
+    }
+
     fn version(&self) -> Version {
         Version::V2
     }
@@ -111,6 +262,7 @@ impl Dialect for Solid2 {
     fn modules(&self) -> &'static [&'static str] {
         &[
             "solid-js",
+            "solid-js/internal",
             "solid-js/refresh",
             "@solidjs/web",
             "@solidjs/web/frames",
@@ -128,19 +280,82 @@ impl Dialect for Solid2 {
         ]
     }
 
-    /// `pkg/contracts/bundled/solid-v2/solid-js.json`, the artifact
-    /// `solid-facts-backend` compiles in for this dialect.
-    fn bundled_contract_label(&self) -> &'static str {
-        "solid-v2/solid-js.json"
+    /// 2.0 splits the definitions across three archives: the reactive core
+    /// lives in `@solidjs/signals`, the DOM primitives in `@solidjs/web`, and
+    /// `solid-js` re-exports the core under the dialect's public spellings
+    /// while declaring some of its own. The other `@solidjs/*` packages
+    /// (`router`, `meta`, `start`, `element`) are consumers of these three and
+    /// are deliberately absent.
+    fn primitive_defining_packages(&self) -> &'static [&'static str] {
+        &["solid-js", "@solidjs/signals", "@solidjs/web"]
+    }
+
+    fn ecosystem_scopes(&self) -> &'static [&'static str] {
+        &["@solidjs/"]
     }
 
     fn primitive(&self, name: &str) -> Option<Primitive> {
         static INDEX: crate::NameIndex = crate::NameIndex::new();
-        lookup(&INDEX, &[TABLE], name)
+        lookup(&INDEX, &[TABLE], name).filter(|primitive| self.exports(*primitive))
     }
 
+    /// The two `dynamic` call forms have no row of their own in [`TABLE`]: a
+    /// form is reached from the name, never the other way round, so both
+    /// spell as the export they are a call of.
     fn name_of(&self, primitive: Primitive) -> Option<&'static str> {
-        reverse(TABLE, primitive)
+        match primitive {
+            Primitive::DynamicStatic | Primitive::DynamicUnknownForm => Some("dynamic"),
+            _ if !self.exports(primitive) => None,
+            _ => reverse(TABLE, primitive),
+        }
+    }
+
+    /// `dynamic(source, options?)` is the one 2.0 export whose runtime is
+    /// chosen by an option. `@solidjs/web@2.0.0-rc.9` opens every build of it
+    /// with `if (options?.static) …` (`dist/web.dev.js:2199`,
+    /// `dist/web.js:2034`, `dist/web.observe.js:2056`, `dist/server.js:3729`,
+    /// `dist/server.dev.js:3977`, `dist/server.observe.js:3817`), a
+    /// truthiness test, so:
+    ///
+    /// - a literal `static: true` is [`Primitive::DynamicStatic`];
+    /// - no options, a `null`/`undefined` literal, an exact literal without
+    ///   `static`, or `static: false` is the default runtime, unchanged: the
+    ///   first statement is skipped and the lazy tracked memo is built exactly
+    ///   as rc.3 builds it;
+    /// - anything the syntax does not prove is
+    ///   [`Primitive::DynamicUnknownForm`], which states nothing. Keeping the
+    ///   default model there instead would record `tracked` in a callback
+    ///   summary, and claim a created owner, for a source the runtime may run
+    ///   once, untracked, under the caller's owner.
+    ///
+    /// Answered from the resolved `@solidjs/web` (`Solid2::dynamic_options`),
+    /// because only rc.9's runtime reads the option. On rc.0-rc.8 every call
+    /// is the default form, whatever it passes: rc.0-rc.6 declare
+    /// `dynamic(source)` with one parameter (TS2554 on a second), and rc.7 and
+    /// rc.8 accept `DynamicOptions { deferStream }` (TS2353 on `static`) that
+    /// the client bundle never reads. Modelling rc.9's static form there would
+    /// state rc.9 behaviour -- no owner, an untracked source -- about a runtime
+    /// that creates the memo and its owner as always (the rc.1-rc.8 review
+    /// § 6). On a web release nobody read, an option-bearing call is
+    /// [`Primitive::DynamicUnknownForm`], which states nothing.
+    fn call_form(
+        &self,
+        primitive: Primitive,
+        option: &dyn Fn(usize, &str) -> crate::OptionLiteral,
+    ) -> Primitive {
+        use crate::OptionLiteral;
+        if primitive != Primitive::Dynamic {
+            return primitive;
+        }
+        match (self.dynamic_options, option(1, "static")) {
+            (releases::DynamicOptions::Ignored, _)
+            | (_, OptionLiteral::Absent | OptionLiteral::False) => Primitive::Dynamic,
+            (releases::DynamicOptions::StaticForm, OptionLiteral::True) => Primitive::DynamicStatic,
+            (releases::DynamicOptions::StaticForm, OptionLiteral::Unknown)
+            | (releases::DynamicOptions::Unread, OptionLiteral::True | OptionLiteral::Unknown) => {
+                Primitive::DynamicUnknownForm
+            }
+        }
     }
 
     /// Source: `solid-reactive-ir/src/execution_role.rs`, the argument-index
@@ -167,18 +382,26 @@ impl Dialect for Solid2 {
             | Primitive::CreateOptimistic
             | Primitive::CreateOptimisticStore
             | Primitive::Dynamic
+            // Both `dynamic` call forms keep the source at 0; the form
+            // changes how it runs, not where it sits.
+            | Primitive::DynamicStatic
+            | Primitive::DynamicUnknownForm
             | Primitive::ClientOnly
             | Primitive::Flush
             | Primitive::Untrack
             | Primitive::OnSettled
             | Primitive::CreateReaction
             | Primitive::Action
-            // latest(fn), isPending(fn), resolve(fn) each take one thunk.
+            // latest(fn), isPending(fn), resolve(fn), until(fn, options?)
+            // each take one thunk.
             | Primitive::Latest
             | Primitive::IsPending
             | Primitive::Resolve
+            | Primitive::Until
             | Primitive::Lazy
             | Primitive::UseHead
+            // ADR 0323: `children(fn)` is a lazy memo over `fn`.
+            | Primitive::Children
             | Primitive::CreateRevealOrder => &[0],
             _ => &[],
         }
@@ -201,12 +424,25 @@ impl Dialect for Solid2 {
     /// clears tracking, so reads inside them subscribe in the caller's scope
     /// exactly as a bare `fn()` would. Listing them here would erase those
     /// read obligations; their `callback_executions` rows say the same thing.
+    ///
+    /// `flush(fn)` is absent for the same reason. It runs `fn()` inline
+    /// between a `syncDepth` increment and the drain and touches neither
+    /// `context` nor the listener (`@solidjs/signals@2.0.0-rc.0`
+    /// `dist/dev.js:1085-1099`, rc.3 `dist/dev.js:1788-1802`, rc.9
+    /// `dist/dev-shared.js:2202-2230`), so its callback inherits the caller's
+    /// read role exactly as [`Solid2::callback_preserves_owner_write_context`]
+    /// already makes it inherit the caller's write role. Probed on every
+    /// published rc.0-rc.9 client build, dev and prod: `createMemo(() =>
+    /// flush(() => count()))` re-runs when `count` is written, as the bare
+    /// read does and `untrack` does not; `getObserver()` inside `flush(fn)` is
+    /// the memo's; an effect compute reading through `flush(fn)` re-runs; and
+    /// `flush(() => count())` in a component body raises
+    /// `STRICT_READ_UNTRACKED` (dev) exactly as `count()` there does.
     fn runs_callback_deferred(&self, primitive: Primitive) -> bool {
         matches!(
             primitive,
             Primitive::CreateRoot
                 | Primitive::CreateRevealOrder
-                | Primitive::Flush
                 | Primitive::Untrack
                 | Primitive::OnSettled
                 | Primitive::CreateReaction
@@ -216,7 +452,15 @@ impl Dialect for Solid2 {
                 // resolve(fn) returns a Promise -- the thunk's reads settle
                 // outside the current computation.
                 | Primitive::Resolve
+                // until(fn) is resolve's shape (see `callback_executions`):
+                // its predicate is the compute of a user effect under a fresh
+                // root, and the caller has no observer for it to subscribe.
+                | Primitive::Until
                 | Primitive::Lazy
+                // dynamic(source, { static: true }) is
+                // `staticDynamic(untrack(source))`: the signals `untrack`,
+                // which clears the listener around the call.
+                | Primitive::DynamicStatic
         )
     }
 
@@ -240,8 +484,119 @@ impl Dialect for Solid2 {
     /// for write legality `untrack` is transparent to its call site. (The
     /// official RFC text claims `untrack` blocks allow writes; the rc.0
     /// runtime contradicts it — the runtime wins.)
+    ///
+    /// `dynamic(source, { static: true })` runs its source through that same
+    /// `untrack` (`@solidjs/web@2.0.0-rc.9` `dist/web.dev.js:2199`), with no
+    /// owner of its own, so a write in a static source is exactly as legal as
+    /// at the `dynamic` call.
+    ///
+    /// `flush(fn)` runs `fn()` inline between a `syncDepth` increment and the
+    /// drain, touching neither `context` nor the listener
+    /// (`@solidjs/signals@2.0.0-rc.0` `dist/dev.js:1085-1099`, rc.3
+    /// `dist/dev.js:1788-1802`, rc.9 `dist/dev-shared.js:2202-2230`). Probed
+    /// on every published rc.0-rc.9 dev client build: `getOwner()`
+    /// inside `flush(fn)` is the caller's owner, and a signal setter inside
+    /// `flush(fn)` throws `REACTIVE_WRITE_IN_OWNED_SCOPE` in a memo compute,
+    /// a component body and a `createRoot` body, inline or passed by name,
+    /// while the same call at module scope succeeds.
     fn callback_preserves_owner_write_context(&self, primitive: Primitive) -> bool {
-        primitive == Primitive::Untrack
+        matches!(
+            primitive,
+            Primitive::Untrack | Primitive::DynamicStatic | Primitive::Flush
+        )
+    }
+
+    /// Source: `createRoot(init)` is `createOwner()` then `runWithOwner(owner,
+    /// init)` (`@solidjs/signals@2.0.0-rc.3` `dist/dev.js:2275-2281` for
+    /// `createOwner`, which marks every owner it makes `_root: true`; the rc.9
+    /// review § 3.3 finds the `createRoot` slice byte-identical, and rc.9's
+    /// own `solid-js` export only forwards to it). So `init` runs during the
+    /// call with that root as the ambient `context` the write guards read.
+    ///
+    /// Probed on the published rc.0-rc.9 triples, dev client builds: a signal
+    /// setter, and `refresh(memo)`, directly in a `createRoot` body throw
+    /// `REACTIVE_WRITE_IN_OWNED_SCOPE` on every release, whether the root is at
+    /// module scope, in a component body, in a memo compute or in an effect
+    /// apply. Prod builds carry no guard and throw nothing.
+    ///
+    /// Only `createRoot`. `runWithOwner(owner, fn)` also runs `fn` inline under
+    /// an owner, but a supplied owner can be a leaf (`getOwner()` in a tracked
+    /// effect), where every write is legal; `render`, `hydrate` and
+    /// `createRevealOrder` create a root too but were not probed for this.
+    fn callback_runs_in_created_root(&self, primitive: Primitive, argument: usize) -> bool {
+        primitive == Primitive::CreateRoot && argument == 0
+    }
+
+    /// ADR 0323 (review round 10). `createRoot(init)` is `runWithOwner(createOwner(),
+    /// () => init(dispose))` (`@solidjs/signals@2.0.0-rc.13`
+    /// `dist/dev-shared.js:3478-3481`) and `runWithOwner` swaps `context` and
+    /// sets `tracking = false` around `fn()` and nothing else
+    /// (`dist/dev-shared.js:6919-6947`); `strictRead` is never touched, and a
+    /// read warns whenever it is set (`dist/dev-shared.js:6511-6516`). A
+    /// component body runs under `untrack(() => Comp(props), label)`, which sets
+    /// it for the synchronous call (`:5863-5888`). So a read in either callback
+    /// warns exactly where the same read written at the call would, and
+    /// nowhere else (an event handler or a timer has no window). `untrack(fn)`
+    /// without a label *sets* `strictRead = false`, so it is the explicit
+    /// untracked intent and stays out of this set. `flush` clears neither and
+    /// is already modelled as inheriting the caller's role; `batch` is not an
+    /// export of this vocabulary. 1.x had no strict-read window at all. The
+    /// other primitives the dialect lists as `runs_callback_deferred` were read
+    /// the same way: `onSettled`, `action` and `clientOnly` run their callback
+    /// from a queue or an invocation, never at the call; `resolve` and `until`
+    /// evaluate it as an effect compute (`recompute` clears `strictRead`,
+    /// `dist/dev-shared.js:4890-4896`); and
+    /// `createReaction`'s invalidation callback and `lazy`'s loader are
+    /// reporting slots already, because the runtime runs them in a window of
+    /// its own.
+    fn callback_inherits_calling_window(&self, primitive: Primitive, argument: usize) -> bool {
+        matches!(
+            (primitive, argument),
+            (Primitive::CreateRoot, 0)
+                | (Primitive::RunWithOwner, 1)
+                // `createOwner()` then `runWithOwner(owner, () => { const value
+                // = fn(); ... })` (`@solidjs/signals@2.0.0-rc.13` `dist/dev.js:10170-10179`).
+                | (Primitive::CreateRevealOrder, 0)
+        )
+    }
+
+    /// Source: `solid-js`'s dev `createComponent` is `devComponent`, which runs
+    /// the component as `createRoot(() => { …; return untrack(() =>
+    /// Comp(props)) }, { transparent: true })` (`solid-js@2.0.0-rc.3`
+    /// `dist/dev.js:35-53` and `:1116-1118`; rc.0 the same shape; rc.9 renames
+    /// it `observedComponent`, `dist/solid.dev.js:35-58` and `:1148-1150`).
+    /// `untrack` keeps the owner, so the owner a write directly in the body
+    /// meets is that root (`_root: true`, probed on rc.3 and rc.9). The prod
+    /// build calls `untrack(() => Comp(props))` with no root, and carries no
+    /// write guard either.
+    ///
+    /// Probed on every published rc.0-rc.9 dev client build, a store setter
+    /// directly in a component body (inline, through `untrack` or `flush(fn)`,
+    /// through a helper, and in a nested component) answers exactly as one in
+    /// a `createRoot` body: `createStore`'s throws on rc.0 and rc.9 and not on
+    /// rc.1-rc.8, `createOptimisticStore`'s throws on rc.9 only. A signal,
+    /// optimistic-signal or action call there throws on every release.
+    fn component_body_runs_under_root(&self) -> bool {
+        true
+    }
+
+    /// Answered from the resolved `@solidjs/signals` (`releases.rs`, N3 of the
+    /// rc.9 review). rc.1-rc.8's `devGuardStoreSetterWrite` opens with
+    /// `if (context && !context._root && …)`; rc.9 drops `!context._root`
+    /// (`dist/dev-shared.js:5878`, citing #3500), so `false` there only. rc.0
+    /// has no setter-entry guard, and its `createStore` and
+    /// `createOptimisticStore` setters disagree under a root (probed), so it
+    /// keeps `true`, which claims nothing.
+    fn store_setter_guard_exempts_roots(&self) -> bool {
+        self.store_setter_roots == releases::StoreSetterRootGuard::Exempt
+    }
+
+    /// Answered from the resolved `@solidjs/signals` (`releases.rs`, N5):
+    /// `false` on rc.0 only, whose optimistic store writes take the engine's
+    /// path and meet no owned-scope guard (probed: legal in a memo and an
+    /// effect compute on rc.0, `REACTIVE_WRITE_IN_OWNED_SCOPE` on rc.1-rc.9).
+    fn optimistic_store_setter_guarded(&self) -> bool {
+        self.optimistic_store_setter == releases::OptimisticStoreSetterGuard::Guarded
     }
 
     /// Source: rc.0 `onSettled` (`dev.js:4855-4893`). Called under a live
@@ -256,12 +611,158 @@ impl Dialect for Solid2 {
         primitive == Primitive::OnSettled
     }
 
+    /// The owner is a synchronous dynamic scope: `@solidjs/signals` sets it
+    /// around each computation and `runWithOwner` and restores it before
+    /// returning, so no owner is current on an empty stack. Probed on
+    /// `solid-js`/`@solidjs/signals` 2.0.0-rc.3 and rc.9, dev and prod builds,
+    /// in Chromium 153, for every one of the fourteen reviewed fresh-stack
+    /// schedulers (`queueMicrotask`, `setTimeout`, `setInterval`,
+    /// `requestAnimationFrame`, `requestIdleCallback`, `Promise.then`/`catch`/
+    /// `finally`, `scheduler.postTask`, and the `IntersectionObserver`,
+    /// `ResizeObserver`, `MutationObserver`, `PerformanceObserver` and
+    /// `ReportingObserver` callbacks), each scheduled inside a `createRoot`,
+    /// inside a `createMemo` compute and at module scope: `getOwner()` is
+    /// `null` in the callback; an `onCleanup` there raises `NO_OWNER_CLEANUP`
+    /// (dev) and never runs on the root's disposal; a `createEffect` there
+    /// raises `NO_OWNER_EFFECT` (dev); an `onSettled` returning a cleanup
+    /// raises `SETTLED_CLEANUP_UNOWNED` (dev) and the cleanup never runs.
+    /// Control: a `createRoot` created in the callback owns its `onCleanup`,
+    /// which runs on that root's disposal.
+    ///
+    /// The same answer covers code after an `await` (`owners::AwaitContinuations`):
+    /// it resumes from a promise continuation, on the same empty stack. Probed
+    /// on the published `@solidjs/signals` 2.0.0-rc.0, rc.3, rc.6, rc.8 and
+    /// rc.9 dev builds and the rc.9 prod build, under Node 24: inside a
+    /// `createRoot`, `getOwner()` is non-null before the `await` and `null`
+    /// after it; an `onCleanup` after it raises `NO_OWNER_CLEANUP` (dev) and
+    /// does not run when the root is disposed, while one before it does; a
+    /// `createEffect` after it raises `NO_OWNER_EFFECT` (dev).
+    fn fresh_stack_callback_owner(&self) -> Option<CallbackOwner> {
+        Some(CallbackOwner::None)
+    }
+
     /// `createStore` returns `Readonly<T>` over the root record
-    /// (`@solidjs/signals@2.0.0-rc.0`), so a write to one of its own properties
-    /// is TS2540 and belongs to TypeScript. Nested records and props objects are
-    /// not readonly and stay this checker's.
+    /// (`@solidjs/signals@2.0.0-rc.0` and `rc.3`), so a write to one of its own
+    /// properties is TS2540 and belongs to TypeScript. Nested records and props
+    /// objects are not readonly and stay this checker's.
+    ///
+    /// From `@solidjs/signals@2.0.0-rc.7` it declares `Store<T> = T`: the
+    /// write type-checks and the runtime still drops it, so a vocabulary built
+    /// from such a signals answers `false` and SC2003 reports it
+    /// (`releases.rs`).
     fn store_root_properties_are_readonly(&self) -> bool {
-        true
+        self.store_root == releases::StoreRootTyping::Readonly
+    }
+
+    fn release_owners(&self) -> &'static [crate::ReleaseOwner] {
+        releases::OWNERS
+    }
+
+    /// ADR 0324. The audited `@solidjs/router` releases, each read in full on
+    /// the installed bytes (`dist/index.js` for the default condition, and for
+    /// the `solid` condition `dist/index.jsx` re-exporting `routing.js` and
+    /// `utils.js`):
+    ///
+    /// | release | `dist/index.js` sha256 | `routing.js` | `utils.js` |
+    /// | --- | --- | --- | --- |
+    /// | `2.0.0-next.26` | `b657bc8d…baa35` | `639f16fd…153ea` | `562b280a…7e2a` |
+    ///
+    /// What was read: `createMatcher` assigns `match.params[key] = locSegment`
+    /// (a segment of `location.split("/")`) and a splat's remainder string
+    /// (`index.js:76,85`; `utils.js:81,91`); `mergeParams` is an
+    /// `Object.assign` of those (`index.js:1040-1046`; `routing.js:483-489`);
+    /// `useParams()` is `useRoute().params` (`index.js:700-702`;
+    /// `routing.js:163-165`), `createMemoObject` of that merge unless
+    /// `utils.paramsWrapper` replaces it (`index.js:1306`; `routing.js:725-728`,
+    /// `954`), a Proxy whose `get` is a memo of `fn()[property]`
+    /// (`index.js:113`; `utils.js:124-`). The declared type is
+    /// `Record<string, string | undefined>` (`types.d.ts:27`). Versions
+    /// before `2.0.0-next.26` (`next.16` to `next.19` in the corpus, and
+    /// `0.15.3`) were not read and are not claimed.
+    fn router_params_are_url_strings(&self, version: &str) -> bool {
+        releases::AUDITED_ROUTER_RELEASES.contains(&version)
+    }
+
+    fn audited_router_releases(&self) -> &'static [&'static str] {
+        releases::AUDITED_ROUTER_RELEASES
+    }
+
+    fn audited_router_digest(&self, version: &str) -> Option<&'static str> {
+        releases::AUDITED_ROUTER_DIGESTS
+            .iter()
+            .find_map(|(audited, digest)| (*audited == version).then_some(*digest))
+    }
+
+    /// ADR 0335. The audited `@solidjs/router` releases for route
+    /// definitions: `2.0.0-next.16`, `next.18` and `next.26`, each read on
+    /// `dist/` (the `solid` condition's `index.jsx` and its modules, and the
+    /// `dist/index.js` bundle). `createRoutes` copies a definition's
+    /// `component` into the route record (`routing.js:328-332` next.16,
+    /// `363-367` next.18, `381-385` next.26); its only render is
+    /// `createComponent(component, …)` in the outlet (`routing.js:810-811`,
+    /// `882-883`, `968-969`); `preloadRoute` and `createRouteContext` read
+    /// `component.preload` only. `createBranches` recurses into `children`
+    /// arrays the same way. Nothing else reads `component`, and nothing calls
+    /// it. Project code can reach it as a value (`useRouteMatches()()[i].route`,
+    /// `instance.routes`), which the premise's key-read veto closes.
+    fn audited_route_config_digest(&self, version: &str) -> Option<&'static str> {
+        releases::AUDITED_ROUTE_CONFIG_DIGESTS
+            .iter()
+            .find_map(|(audited, digest)| (*audited == version).then_some(*digest))
+    }
+
+    /// ADR 0334. The audited `@tanstack/solid-router` releases, read on all
+    /// three builds (`dist/source` for the `solid` condition, `dist/esm`,
+    /// `dist/cjs` by call pattern) and the `@tanstack/router-core` each loads:
+    ///
+    /// | release | router-core |
+    /// | --- | --- |
+    /// | `2.0.0-beta.29` | `1.171.15` |
+    /// | `2.0.0-rc.0` | `1.171.16` |
+    /// | `2.0.0-rc.4` | `1.171.22` |
+    /// | `2.0.0-rc.6` | `1.171.22` |
+    ///
+    /// What was read: every factory (`createFileRoute`, `createRoute`,
+    /// `createRootRoute`, `createRootRouteWithContext`, `createLazyRoute`,
+    /// `createLazyFileRoute`; `route.jsx`, `fileRoute.js`) stores its options
+    /// as `route.options` and reads none of the four keys. `Match.jsx` reads
+    /// `options.component` into a memo rendered as
+    /// `<Dynamic component={OutComponent()}/>`; `pendingComponent`,
+    /// `errorComponent` and `notFoundComponent` are rendered as `<X/>` or
+    /// through `Dynamic` (`CatchBoundary.jsx` renders its `errorComponent`
+    /// prop through `Dynamic`; `renderRouteNotFound.jsx` as `<X {...data}/>`),
+    /// or tested for truth. router-core reads them only for
+    /// `route.options[type]?.preload?.()`, truth tests, and
+    /// `Object.assign(route.options, lazyRoute.options)`. None of the four
+    /// values is called.
+    fn audited_route_components(&self, version: &str) -> Option<crate::AuditedRouteRelease> {
+        releases::AUDITED_ROUTE_RELEASES
+            .iter()
+            .find(|release| release.version == version)
+            .copied()
+    }
+
+    fn audited_installation(&self) -> &'static [(&'static str, &'static str)] {
+        releases::AUDITED_INSTALLATION
+    }
+
+    fn review_installation(
+        &self,
+        installed: &[crate::InstalledRelease<'_>],
+    ) -> crate::InstallationReview {
+        releases::review(installed)
+    }
+
+    fn variant_key(&self) -> Option<&'static str> {
+        self.key()
+    }
+
+    fn variants(&self) -> &'static [&'static dyn Dialect] {
+        &releases::OTHER_VARIANTS
+    }
+
+    fn defaulted_vocabulary(&self) -> Option<&'static dyn Dialect> {
+        Some(Solid2::DEFAULTED.interned())
     }
 
     /// Source: rc.0 store setters put the store into the Writing set for the
@@ -272,6 +773,24 @@ impl Dialect for Solid2 {
     /// dropped too).
     fn store_setter_callback_enables_proxy_writes(&self) -> bool {
         true
+    }
+
+    /// Audited rc.13 @solidjs/signals store Get: the strict-read warning
+    /// tests typeof key == "string" and excludes "then" before reading a
+    /// tracked node. Symbol/protocol keys are not strict-read witnesses.
+    fn store_key_warns_strict_read(&self, key: &str) -> bool {
+        self.store_strict_keys_audited && key != "then"
+    }
+
+    /// ADR 0293. rc.9 and rc.13 `@solidjs/signals` store Get test
+    /// `typeof key === "string" && key !== "then"` before warning (rc.9
+    /// `dist/dev.js:6229-6235`, rc.13 `dist/dev.js:6660-6675`): a promise
+    /// resolution probes `.then`, and that is not a read the user wrote.
+    /// rc.3's gate has no `then` clause (`dist/dev.js:7662`), but no
+    /// vocabulary carries that difference, so every release withholds `then`:
+    /// only a violation is lost there, never one invented.
+    fn store_key_may_skip_strict_read(&self, key: &str) -> bool {
+        key == "then"
     }
 
     /// Source: rc.0 `devComponent` (`solid-js` dev entry `dev.js:35-50`)
@@ -340,7 +859,17 @@ impl Dialect for Solid2 {
             | Primitive::CreateProjection
             | Primitive::CreateOptimistic
             | Primitive::CreateOptimisticStore
+            // ADR 0323: the memo `children` creates owns `fn`'s runs.
+            | Primitive::Children
             | Primitive::Resolve => &[(0, CallbackOwner::Creates)],
+            // `@solidjs/signals@2.0.0-rc.9` `until` (`dist/dev.js:2717-2785`,
+            // `dist/prod/signals.js:530`): `new Promise(… createRoot(dispose =>
+            // { …; effect(fn, …) }))`, the predicate is the compute of an
+            // effect created under that fresh root -- except when
+            // `options.signal` is already aborted, where it rejects before
+            // `createRoot` and never runs `fn` at all (`:2734`). Either way no owner of
+            // the caller's is used.
+            Primitive::Until => &[(0, CallbackOwner::Creates)],
             // The supplied owner is nullable. The call-site classifier
             // sharpens this to Creates or None when its value is proven.
             Primitive::RunWithOwner => &[(1, CallbackOwner::Conditional)],
@@ -353,14 +882,34 @@ impl Dialect for Solid2 {
             Primitive::CreateErrorBoundary | Primitive::CreateLoadingBoundary => {
                 &[(0, CallbackOwner::Creates), (1, CallbackOwner::Creates)]
             }
-            Primitive::CreateEffect | Primitive::CreateRenderEffect => {
-                &[(0, CallbackOwner::Creates), (1, CallbackOwner::None)]
-            }
+            // `createEffect` queues its apply (`effect()` enqueues every
+            // `EFFECT_USER` run), so the apply always runs from the flush,
+            // where no owner is current.
+            Primitive::CreateEffect => &[(0, CallbackOwner::Creates), (1, CallbackOwner::None)],
+            // `createRenderEffect` does not. `effect()` ends
+            // `recompute(node, true); !options?.defer && (… || options?.schedule
+            // ? node._queue.enqueue(…) : runEffect(node))`
+            // (`@solidjs/signals@2.0.0-rc.3` `dist/dev.js:5285-5289`, the same
+            // in `dist/prod/core/effect.js:16-17`; rc.9 `dist/dev.js:1612-1620`),
+            // and `runEffect` sets neither `context` nor `tracking`, so the
+            // first apply runs before the call returns under the caller's
+            // owner. Probed on both prereleases, dev and prod: `getOwner()` in
+            // the first apply is the enclosing root, a render effect created
+            // there raises no `NO_OWNER_EFFECT`, and a setter there throws
+            // `REACTIVE_WRITE_IN_OWNED_SCOPE` (dev builds) under a root or a
+            // component.
+            // Every later run comes from the flush, where `getOwner()` is
+            // `null` and a render effect created there raises
+            // `NO_OWNER_EFFECT`.
+            Primitive::CreateRenderEffect => &[
+                (0, CallbackOwner::Creates),
+                (1, CallbackOwner::InheritsFirstRun),
+            ],
             // `createReaction` is deliberately absent from this arm: 1.x
             // runs its invalidation callback as a leaf owner, but the
             // RC.0 runtime allocates the reaction a computation like
             // `createEffect` does, so 2.0 does not end the ownership chain
-            // there. The `dialect-solid-1x` / `dialect-solid-2` fixture
+            // there. The `dialect-solid-2` fixture
             // pair pins the difference.
             Primitive::CreateTrackedEffect | Primitive::OnSettled => &[(0, CallbackOwner::Leaf)],
             // Not a leaf (1.x's model — the `dialect-solid-2` fixture pins
@@ -388,6 +937,13 @@ impl Dialect for Solid2 {
             // component owner the wrapper creates, so primitives created in
             // the thunk are disposed with the dynamic node.
             Primitive::Dynamic => &[(0, CallbackOwner::Creates)],
+            // The static form builds no memo and no wrapper computation: the
+            // source is `untrack(source)` at the `dynamic` call itself
+            // (`@solidjs/web@2.0.0-rc.9` `dist/web.dev.js:2199`,
+            // `dist/server.js:3730`), under whatever owner the caller has.
+            Primitive::DynamicStatic => &[(0, CallbackOwner::Inherits)],
+            // `DynamicUnknownForm` is absent: its two runtimes disagree
+            // (Creates versus Inherits), and absent is "unmodelled".
             _ => &[],
         }
     }
@@ -439,12 +995,81 @@ impl Dialect for Solid2 {
     }
 
     /// `createStore` and `createOptimisticStore` return `[store, setStore]`;
-    /// `createProjection` returns the store itself, which the contract also
-    /// describes.
+    /// `createProjection` returns the store itself, which the result-slot
+    /// table also describes.
     fn returns_store(&self, primitive: Primitive) -> bool {
         matches!(
             primitive,
             Primitive::CreateStore | Primitive::CreateOptimisticStore | Primitive::CreateProjection
+        )
+    }
+
+    /// `createRoot` returns `runWithOwner(owner, () => init(dispose))`.
+    /// Source: rc.9 signals-negative-rows audit § 3.1; rc.13 runtime audit
+    /// row `createRoot` records both the core and hydration bodies unchanged.
+    /// This says nothing about the dispose parameter's value or lifetime.
+    fn returned_callback_value(&self, primitive: Primitive) -> Option<usize> {
+        (primitive == Primitive::CreateRoot).then_some(0)
+    }
+
+    /// Source: the published declarations, read from the exact package
+    /// artifacts of the audited prerelease. In
+    /// `solid-js@2.0.0-rc.3/types/server/signals.d.ts`:
+    /// `createSignal<T>(value: Exclude<T, Function>, options?): Signal<T>`,
+    /// `createMemo<T>(compute, options?): SourceAccessor<T>`, and
+    /// `type SourceAccessor<T> = Refreshable<SignalAccessor<T>>`. `Signal` is
+    /// re-exported from `@solidjs/signals@2.0.0-rc.3`, whose
+    /// `dist/types/signals.d.ts` declares
+    /// `type Signal<T> = [get: SourceAccessor<T>, set: Setter<T>]`. rc.3 is
+    /// the prerelease this repository's fixtures and ecosystem corpus pin; the
+    /// same three declarations were checked in rc.0 and rc.5 and are
+    /// unchanged. `SourceAccessor` is one of the names
+    /// [`Dialect::type_role`] already classifies as an accessor, so these rows
+    /// restate an audited 2.0 declaration.
+    ///
+    /// A single-value `returns` summary is *not* the authority for this
+    /// question: it cannot express a tuple, so its silence for `createSignal`
+    /// is not the 2.0 vocabulary's negative claim.
+    ///
+    /// `createOptimistic` also returns a `Signal<T>` and `createProjection` a
+    /// store; both stay absent until a proof needs them and their own review
+    /// lands.
+    fn reactive_result_slot(&self, primitive: Primitive, slot: ResultSlot) -> Option<ReactiveRole> {
+        match (primitive, slot) {
+            (Primitive::CreateSignal, ResultSlot::TupleItem(0)) => Some(ReactiveRole::Accessor),
+            (Primitive::CreateSignal, ResultSlot::TupleItem(1)) => Some(ReactiveRole::Setter),
+            (Primitive::CreateMemo, ResultSlot::Whole) => Some(ReactiveRole::Accessor),
+            _ => None,
+        }
+    }
+
+    /// ADR 0183. Source: `@solidjs/signals@2.0.0-rc.9`, `dist/dev-shared.js`
+    /// `computed` and `setupComputedNode`: `createMemo(fn, options)` builds a
+    /// computed node and ends with `!options?.lazy && recompute(self, true)`,
+    /// so with no options argument `fn` runs during the call, once, with the
+    /// new node as the current owner. The node is children-capable
+    /// (`CONFIG_CHILDREN_FORBIDDEN` is set only on leaf owners), so a signal
+    /// write there trips `setSignal`'s owned-scope guard. Probed on the rc.9 dev
+    /// and prod builds under Node 24, inside a `createRoot`: a memo with no
+    /// options ran its compute once at creation; one with `{ lazy: true }` did
+    /// not run; a compute that writes a signal raised
+    /// `REACTIVE_WRITE_IN_OWNED_SCOPE` in dev, rethrown when the memo was read
+    /// (prod has no guard). Only the one-argument call is stated: an options
+    /// argument can carry `lazy`.
+    ///
+    /// `createEffect(compute, effect)`'s compute is the same: probed the same
+    /// way, it ran once during the call (the effect function is queued), and a
+    /// write in it is caught and logged by the effect rather than thrown. Only
+    /// the two-argument call is stated, so no options argument is in play.
+    fn eager_owned_computation_slot(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+        argument_count: usize,
+    ) -> bool {
+        matches!(
+            (primitive, argument, argument_count),
+            (Primitive::CreateMemo, 0, 1) | (Primitive::CreateEffect, 0, 2)
         )
     }
 
@@ -493,15 +1118,101 @@ impl Dialect for Solid2 {
         )
     }
 
-    /// Source: the checked Solid 2 RC.3 normalized authorities, held to the
-    /// receipt-issued bundles by
-    /// `the_callback_executions_agree_with_the_bundled_contract`.
-    ///
-    /// The four `createX(fn, …)` derived forms are not in that table and were
-    /// read from the runtime bundled by `solid-js@2.0.0-rc.0` instead:
-    /// `createSignal`,
-    /// `createOptimistic`, `createStore` and `createOptimisticStore` all branch
-    /// on `typeof first === "function"` and build a computed from it, so
+    /// `merge(...sources)` replaces each function source with
+    /// `createMemo(source)` (`@solidjs/signals@2.0.0-rc.9` `dist/dev.js:4290`).
+    fn wraps_function_arguments_in_memo(&self, primitive: Primitive) -> bool {
+        primitive == Primitive::Merge
+    }
+
+    /// Reuses the audited slot and schedule facts below. Deferred slots retain
+    /// their exact trigger; registration alone cannot establish delivery.
+    fn browser_callback_trigger(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+        argument_count: usize,
+    ) -> Option<crate::BrowserCallbackTrigger> {
+        use crate::BrowserCallbackTrigger as Trigger;
+        self.callback_execution_at(primitive, argument, argument_count)?;
+        // The public MemoOptions excludes lazy, but JS and an assertion can
+        // still pass it to computed(compute, options). No option object is
+        // proved by an argument-count-only question.
+        if primitive == Primitive::CreateMemo && argument == 0 && argument_count > 1 {
+            return Some(Trigger::ComputationDemand);
+        }
+        if self.synchronous_callback_slot(primitive, argument, argument_count) {
+            return Some(Trigger::DuringCall);
+        }
+        match (primitive, argument) {
+            (
+                Primitive::CreateMemo | Primitive::CreateEffect | Primitive::CreateRenderEffect,
+                0,
+            ) if self.tracked_callback_timing(primitive, argument, argument_count)
+                == Some(TrackedCallbackTiming::DuringCall) =>
+            {
+                Some(Trigger::DuringCall)
+            }
+            (Primitive::CreateEffect | Primitive::CreateRenderEffect, 1)
+            | (Primitive::CreateTrackedEffect, 0) => Some(Trigger::EffectFlush),
+            (Primitive::OnCleanup, 0) => Some(Trigger::OwnerDisposal),
+            (Primitive::OnSettled, 0) => Some(Trigger::Settlement),
+            _ => None,
+        }
+    }
+
+    fn browser_children_trigger(
+        &self,
+        primitive: Primitive,
+    ) -> Option<crate::BrowserCallbackTrigger> {
+        (self.renders_children_through_callback(primitive)
+            || matches!(primitive, Primitive::Loading | Primitive::Errored))
+        .then_some(crate::BrowserCallbackTrigger::RenderSelection)
+    }
+
+    fn browser_callback_member_trigger(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+        argument_count: usize,
+        member: &str,
+    ) -> Option<crate::BrowserCallbackTrigger> {
+        (matches!(
+            primitive,
+            Primitive::CreateEffect | Primitive::CreateRenderEffect
+        ) && argument == 1
+            && argument_count >= 2
+            && matches!(member, "effect" | "error"))
+        .then_some(if member == "error" {
+            crate::BrowserCallbackTrigger::ComputationError
+        } else {
+            crate::BrowserCallbackTrigger::EffectFlush
+        })
+    }
+
+    fn effect_apply_defer_options(&self, primitive: Primitive, argument: usize) -> Option<usize> {
+        (matches!(
+            primitive,
+            Primitive::CreateEffect | Primitive::CreateRenderEffect
+        ) && argument == 1)
+            .then_some(2)
+    }
+
+    fn browser_children_dead(
+        &self,
+        primitive: Primitive,
+        when_false: bool,
+        each_empty: bool,
+        count_zero: bool,
+    ) -> bool {
+        (when_false && matches!(primitive, Primitive::Show | Primitive::Match))
+            || (each_empty && primitive == Primitive::For)
+            || (count_zero && primitive == Primitive::Repeat)
+    }
+
+    /// The four `createX(fn, ...)` derived forms were read from the runtime
+    /// bundled by `solid-js@2.0.0-rc.0`: `createSignal`, `createOptimistic`,
+    /// `createStore` and `createOptimisticStore` all branch on
+    /// `typeof first === "function"` and build a computed from it, so
     /// argument 0 is a tracked compute exactly when a function is passed.
     ///
     /// `latest` and `isPending` are `Inline` and it is worth saying why, since
@@ -510,20 +1221,36 @@ impl Dialect for Solid2 {
     /// primitive re-runs it", which neither does.
     ///
     /// `flush` is `Inline` too, and since the engine's call graph follows
-    /// these execution contracts, a callback handed to `flush` is reachable.
+    /// these execution rows, a callback handed to `flush` is reachable.
     /// `flushSync(fn)` does invoke `fn`, so the row is the truthful one; its
     /// callbacks are deferred scopes, so that reachability changes no read
     /// or owner diagnostic.
     ///
-    /// This row now also decides contract bytes, through
-    /// [`Dialect::runs_callback_synchronously`], so the evidence is worth
-    /// stating exactly: `@solidjs/signals`' `flush(fn)` is
+    /// The effect apply at argument 1 is `Deferred` for both effect
+    /// constructors, and for `createRenderEffect` that is an attribution
+    /// answer, not a schedule. Its first apply runs *during* the call
+    /// (see [`Solid2::callback_owners`]), with the caller's `tracking` still
+    /// set, so a read there does subscribe an enclosing tracked computation
+    /// (probed: a memo whose compute creates the render effect re-runs when a
+    /// signal read only in that apply changes). What `Deferred` keeps true is
+    /// the part the strict-read rule mirrors: `runEffect` opens the
+    /// `"an effect callback"` strict-read window on every run, the first
+    /// included, and a read in any later run subscribes nothing. The first
+    /// run's owner, and with it the fact that its reads are the caller's, is
+    /// stated by `callback_owners` (`CallbackOwner::InheritsFirstRun`, which
+    /// the engine reads to keep those reads in the caller's summary); neither
+    /// is read off this word.
+    ///
+    /// This row also decides [`Dialect::runs_callback_synchronously`], so the
+    /// evidence is worth stating exactly: `@solidjs/signals`' `flush(fn)` is
     /// `syncDepth++; try { return fn() } finally { flush(); syncDepth-- }`
     /// (2.0.0-rc dev bundle), so the callback is invoked and its value returned
-    /// **during** the call. Moving it to `Deferred` would publish
-    /// `execution: "deferred"` for every package export that forwards a
-    /// callback through `flush`, promising the callback has not run when the
-    /// export returns — which the runtime contradicts.
+    /// **during** the call; moving it to `Deferred` would claim the callback
+    /// has not run when the call returns, which the runtime contradicts.
+    /// `onCleanup(fn)` only registers `fn` on the current owner, or returns it
+    /// when there is none (`@solidjs/signals@2.0.0-rc.9` `dist/dev.js:2174`
+    /// and `cleanup`, `dist/dev-shared.js:2855`; `dist/prod/signals.js:57`).
+    /// It never calls `fn` during the call.
     fn callback_executions(&self, primitive: Primitive) -> &'static [(usize, Execution)] {
         match primitive {
             Primitive::CreateMemo
@@ -534,7 +1261,15 @@ impl Dialect for Solid2 {
             | Primitive::CreateOptimistic
             | Primitive::CreateOptimisticStore
             | Primitive::Dynamic
-            | Primitive::UseHead => &[(0, Execution::Tracked)],
+            | Primitive::UseHead
+            // ADR 0323: `children(fn)` is `createMemo(fn, { lazy: true })`
+            // (`solid-js@2.0.0-rc.13` `dist/solid.js:21-24`,
+            // `dist/solid.dev.js:20-23`; the same bytes in rc.0, rc.6, rc.8
+            // and rc.9), so `fn` is a computation of its own and a read in it
+            // subscribes that memo, never the body that wrote the literal.
+            // Lazy: it first runs when the result is read, not during the
+            // call, so no `TrackedCallbackTiming` is stated for it.
+            | Primitive::Children => &[(0, Execution::Tracked)],
             Primitive::CreateEffect | Primitive::CreateRenderEffect => {
                 &[(0, Execution::Tracked), (1, Execution::Deferred)]
             }
@@ -543,9 +1278,21 @@ impl Dialect for Solid2 {
             }
             Primitive::MapArray => &[(1, Execution::Tracked)],
             Primitive::RepeatMap => &[(0, Execution::Tracked), (1, Execution::Inline)],
-            Primitive::CreateReaction
+            // `onCleanup(fn)` registers `fn` on the current owner and returns;
+            // the runtime runs it when that owner is disposed or re-runs,
+            // never inside the strict-read window of the body that registered
+            // it (probed on 2.0.0-rc.9, dev, from a component body: a read in
+            // the callback raises no `STRICT_READ_UNTRACKED`). It is attributed
+            // `Deferred`, as `onSettled` is. The execution *word* is stated
+            // separately (`callback_execution_word_at`) and is unchanged.
+            Primitive::OnCleanup
+            | Primitive::CreateReaction
             | Primitive::OnSettled
             | Primitive::Resolve
+            // The same attribution answer as `resolve`, on the same reading:
+            // the predicate subscribes the effect `until` creates, never the
+            // caller (who has no observer, or the call throws).
+            | Primitive::Until
             | Primitive::Lazy
             | Primitive::Action
             | Primitive::ClientOnly => &[(0, Execution::Deferred)],
@@ -553,6 +1300,10 @@ impl Dialect for Solid2 {
             | Primitive::CreateRevealOrder
             | Primitive::Flush
             | Primitive::Untrack
+            // `staticDynamic(untrack(source))`: invoked once, before
+            // `dynamic` returns, and never again (`@solidjs/web@2.0.0-rc.9`
+            // `dist/web.dev.js:2199`, `dist/web.js:2034`).
+            | Primitive::DynamicStatic
             | Primitive::Latest
             | Primitive::IsPending => &[(0, Execution::Inline)],
             Primitive::RunWithOwner => &[(1, Execution::Inline)],
@@ -566,7 +1317,7 @@ impl Dialect for Solid2 {
     }
 
     /// Read from `@solidjs/signals@2.0.0-rc.0` `dist/dev.js`, the bundle the
-    /// oracle install under `rust/target/tsc-oracle/v2` resolves — line numbers
+    /// rc.0 install resolves — line numbers
     /// are that file's. Every answer below was also measured against that
     /// bundle under `--conditions browser` with the probe worker's own
     /// observation shape.
@@ -602,8 +1353,93 @@ impl Dialect for Solid2 {
     /// Deliberately unestablished: `createStore` and `createOptimisticStore`
     /// (their derived overloads did not accept the probe's call shape, so no
     /// measurement backs a claim), `dynamic`, `useHead`, the two boundary
-    /// primitives and `mapArray`/`repeat`. Contract emission answers the
+    /// primitives and `mapArray`/`repeat`. The callback summary leaves the
     /// exact callback leaf open for those rather than assuming they follow `computed`.
+    /// 2.0's execution words, moved off `interproc.rs`'s hardcoded
+    /// table by ADR 0111.
+    ///
+    /// `createEffect` defers to the attribution answer: argument 0 is the
+    /// tracked compute and argument 1 the effect function, which `effect()`
+    /// always enqueues (`options.user` selects `EFFECT_USER`), so `deferred`
+    /// is a true promise about it. Everything else is stated directly,
+    /// because the execution word is not derivable from the attribution one --
+    /// `createRenderEffect`'s apply is attributed `Deferred` and has no
+    /// execution word.
+    ///
+    /// `createRenderEffect`'s apply has **no** word, and that is the answer
+    /// the bytes support rather than a gap. `deferred` promises the callback
+    /// has not run when the export returns, and the plain two-argument call
+    /// runs it before returning (`@solidjs/signals@2.0.0-rc.3`
+    /// `dist/dev.js:5285-5289`; probed on rc.3 and rc.9, dev and prod, inside
+    /// no owner, a root, a memo compute, a render-effect compute and a
+    /// component body under `render`: `compute,apply,returned` every time).
+    /// `inline` would be false too: the same call leaves the first apply for
+    /// later when `options.defer` (skipped) or `options.schedule` (queued)
+    /// is set, when the compute returns a promise or reads a source that is
+    /// still pending (probed: the apply runs after the source settles), and
+    /// on rc.9 when the first pass was staged into a live transaction
+    /// (`dist/dev.js:1617`); and every later run comes from the flush. A
+    /// callback leaf left open is the fail-closed reading of both.
+    ///
+    /// Three arms of the old shared table are absent rather than ported:
+    /// `createResource`, `on` and `mergeProps` are Solid 1.x names this
+    /// dialect does not carry.
+    fn callback_execution_word_at(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+        argument_count: usize,
+    ) -> Option<Execution> {
+        match (primitive, argument) {
+            (Primitive::CreateEffect, _) | (Primitive::CreateRenderEffect, 0) => {
+                self.callback_execution_at(primitive, argument, argument_count)
+            }
+            (
+                Primitive::CreateMemo
+                | Primitive::CreateTrackedEffect
+                | Primitive::CreateSignal
+                | Primitive::CreateStore
+                | Primitive::CreateProjection
+                | Primitive::CreateOptimistic
+                | Primitive::CreateOptimisticStore
+                | Primitive::Dynamic,
+                0,
+            ) => Some(Execution::Tracked),
+            (
+                Primitive::OnSettled
+                | Primitive::Action
+                | Primitive::CreateReaction
+                | Primitive::OnCleanup,
+                0,
+            ) => Some(Execution::Deferred),
+            // The static `dynamic` form is `untrack(source)` at the call
+            // (`@solidjs/web@2.0.0-rc.9` `dist/web.dev.js:2199`,
+            // `dist/server.js:3730`): the source has run and returned before
+            // `dynamic` does, so it is `inline`, with `untrack`'s clearing
+            // travelling separately exactly as it does for `untrack`.
+            (
+                Primitive::CreateRoot
+                | Primitive::Untrack
+                | Primitive::Flush
+                | Primitive::DynamicStatic,
+                0,
+            )
+            | (Primitive::RunWithOwner, 1) => Some(Execution::Inline),
+            // Deliberately unanswered, so a forwarded parameter opens the
+            // unknown-callback sentinel:
+            //
+            // - `DynamicUnknownForm`: `tracked` or `inline` depending on a
+            //   value the syntax does not prove.
+            // - `until`: its predicate runs during the call (the effect's
+            //   first compute), again after it whenever a dependency changes
+            //   until one run is truthy, and not at all when `options.signal`
+            //   is already aborted (`@solidjs/signals@2.0.0-rc.9`
+            //   `dist/dev.js:2734`). No one word is that; `resolve`,
+            //   the same shape, is unanswered for the same reason.
+            _ => None,
+        }
+    }
+
     fn tracked_callback_timing(
         &self,
         primitive: Primitive,
@@ -634,7 +1470,20 @@ impl Dialect for Solid2 {
     /// `@solidjs/signals` sets `tracking = false` around the call (see
     /// [`Solid2::runs_callback_deferred`]), so reads inside it register
     /// nothing either. `mapArray`/`repeat` are deliberately absent: unlike
-    /// 1.x, their map callbacks run tracked (see the bundled contract rows).
+    /// 1.x, their map callbacks run tracked.
+    /// `createEffect(compute, apply)` and `createRenderEffect(compute, apply)`
+    /// are the two with an apply slot; `createTrackedEffect(compute, options?)`
+    /// has none. Matches the `(1, Execution::Deferred)` row in
+    /// `callback_executions`, which is the same fact seen from the attribution
+    /// side.
+    fn apply_callback_argument(&self, primitive: Primitive) -> Option<usize> {
+        matches!(
+            primitive,
+            Primitive::CreateEffect | Primitive::CreateRenderEffect
+        )
+        .then_some(1)
+    }
+
     fn reports_untracked_reads_at(
         &self,
         primitive: Primitive,
@@ -650,6 +1499,21 @@ impl Dialect for Solid2 {
             Primitive::Hydrate | Primitive::Lazy | Primitive::Render | Primitive::CreateReaction
         ) && argument == 0)
             || (primitive == Primitive::RunWithOwner && argument == 1)
+    }
+
+    /// `mapArray(list, map, { name })` and `repeat(count, map, { name })` wrap
+    /// the map function in `setStrictRead(options.name)` (rc.13
+    /// `@solidjs/signals` `mapArray`, `repeat`), so any options argument may
+    /// open a labelled window around it.
+    fn callback_may_open_strict_window(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+        argument_count: usize,
+    ) -> bool {
+        argument == 1
+            && argument_count > 2
+            && matches!(primitive, Primitive::MapArray | Primitive::RepeatMap)
     }
 
     /// The callbacks nothing runs until the returned value is used:
@@ -753,6 +1617,13 @@ impl Dialect for Solid2 {
     /// Source: the control-flow component lists `solid-reactive-ir`
     /// hardcoded before ADR 0006, extracted unchanged; this table is now the
     /// only place they live.
+    /// Source: `solid-js@2.0.0-rc.13` `dist/solid.dev.js:1476` (`Show`) and
+    /// `:1523` (`Match`): `typeof child === "function" && child.length > 0`
+    /// selects the callback path; otherwise the function itself is the child.
+    fn children_callback_requires_parameters(&self, primitive: Primitive) -> bool {
+        matches!(primitive, Primitive::Show | Primitive::Match)
+    }
+
     fn renders_children_through_callback(&self, primitive: Primitive) -> bool {
         matches!(
             primitive,
@@ -765,8 +1636,8 @@ impl Dialect for Solid2 {
     }
 
     /// Source: the source-discovery gate in `solid-reactive-ir/src/lib.rs`,
-    /// extracted unchanged. Every one returns a tuple or a store the contract's
-    /// `returns` column cannot describe.
+    /// extracted unchanged. Every one returns a tuple or a store a single-value
+    /// `returns` summary cannot describe.
     fn creates_reactive_source(&self, primitive: Primitive) -> bool {
         matches!(
             primitive,
@@ -779,15 +1650,304 @@ impl Dialect for Solid2 {
         )
     }
 
-    /// The removal half of the same probe: a literal `false` removes the
-    /// attribute on the client and omits it in SSR (RFC 07 — "Boolean
-    /// literals add/remove the attribute"). 1.x stringifies instead, so
-    /// only this dialect answers true.
-    fn false_attribute_value_removes_attribute(&self) -> bool {
-        true
+    /// Source: `@solidjs/signals@2.0.0-rc.9` `enforceLoadingBoundary`, probed
+    /// in dev: `ASYNC_OUTSIDE_LOADING_BOUNDARY` is emitted for a *render
+    /// effect* whose read is pending with no `Loading` ancestor during the
+    /// synchronous `render()` window, and never for a memo or a user effect's
+    /// compute. `createRenderEffect` is the one user-callable render effect;
+    /// compiled JSX positions are classified from compiler facts instead.
+    fn computation_read_is_render(&self, primitive: Primitive) -> bool {
+        primitive == Primitive::CreateRenderEffect
+    }
+
+    /// Source: `@solidjs/web@2.0.0-rc.9` exports `render(code, element)` and
+    /// `hydrate(fn, node)`, whose first argument is the root of the mounted
+    /// tree and which have no other caller.
+    fn mounts_component_tree(&self, primitive: Primitive) -> bool {
+        matches!(primitive, Primitive::Render | Primitive::Hydrate)
     }
 
     /// Source: `solid-reactive-ir/src/directives.rs` `is_created_primitive`.
+    /// 2.0 renamed `mergeProps` to `merge`. `omit` and `pick`, the
+    /// `splitProps` replacements, are deliberately absent for the same reason
+    /// 1.x leaves `splitProps` out: their result is a tuple, not the merged
+    /// object.
+    fn merges_props_reactivity(&self, primitive: Primitive) -> bool {
+        primitive == Primitive::Merge
+    }
+
+    /// 2.0 replaced `splitProps` with `omit`; `store/utils.d.ts` declares
+    /// `omit(props: T, ...keys: K)`, the same props-plus-key-lists shape.
+    /// rc.9's predicate overload is the one argument this does not cover; see
+    /// [`Solid2::callback_runs_on_result_access`].
+    fn splits_props(&self, primitive: Primitive) -> bool {
+        primitive == Primitive::Omit
+    }
+
+    /// `@solidjs/signals@2.0.0-rc.9` adds
+    /// `omit(props: T, hidden: (key: keyof T & (string | symbol)) => boolean):
+    /// Partial<T>` (`dist/types/store/utils.d.ts:251`), and the runtime picks
+    /// that form by
+    /// `keys.length === 1 && typeof keys[0] === "function"` (`dist/dev.js:4380`,
+    /// the same test at `dist/prod/store/utils.js:982` and
+    /// `dist/observe/store/utils.js:984`; `solid-js` re-exports this `omit`,
+    /// server build included, `dist/server.js:2`). So only a call with exactly
+    /// two arguments can carry a predicate, and it is argument 1.
+    ///
+    /// When it runs, read from the same bytes:
+    ///
+    /// - **Wherever `Proxy` exists** (`SUPPORTS_PROXY = typeof Proxy ===
+    ///   "function"`, `dist/dev-shared.js:273`), `omit` only stores it:
+    ///   `new Proxy(new OmitView(source, kind, hidden), omitTraps)`
+    ///   (`dist/dev.js:4406`). `isHidden(view, key)` then calls it on every
+    ///   `get`, `has` and key enumeration of the returned view
+    ///   (`omitTraps`, `:4178-4241`; `isHidden`, `:3495-3498`), and on every
+    ///   walk of the view by `merge` and the spread helpers (`:3557-3703`,
+    ///   `:3826-3870`, `:3984`, `:4071`, `:4113-4128`). Nothing around those
+    ///   calls touches the listener, so the predicate's reads subscribe
+    ///   whatever computation is reading the view, and its writes run under
+    ///   that reader's owner.
+    /// - **Without `Proxy`**, it is called once per own property name during
+    ///   the `omit` call itself, in the caller's scope (`:4408-4427`).
+    ///
+    /// Neither is a schedule the `Execution` vocabulary can state, and the
+    /// first is the one every supported runtime takes.
+    ///
+    /// Answered from the resolved `@solidjs/signals`
+    /// (`Solid2::omit_predicate_form`). rc.3's `omit` has no predicate form:
+    /// `typeof keys[0]` is never read and every build only tests membership
+    /// (`keys.includes(key)`, rc.3 `dist/dev.js:9334-9369`), and its
+    /// declaration rejects a function there (TS2345). So the audited
+    /// vocabulary answers `false` -- for typed code that is TypeScript's
+    /// boundary, and for an untyped artifact it is what rc.3's bytes do -- and
+    /// only a vocabulary built from signals rc.9 answers the predicate slot.
+    fn callback_runs_on_result_access(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+        argument_count: usize,
+    ) -> bool {
+        self.omit_predicate_form
+            && primitive == Primitive::Omit
+            && argument == 1
+            && argument_count == 2
+    }
+
+    /// `action(genFn)`'s generator, argument 0. Every release the reviews read
+    /// drives it the same way: `const it = genFn(...args)` inside the returned
+    /// wrapper's promise executor, then `step()`, which runs `it.next(v)` (or
+    /// `it.throw(v)` for a rejected yielded thenable) and settles or schedules
+    /// the next step from the result (`@solidjs/signals@2.0.0-rc.9`
+    /// `dist/dev.js:1961-2066`). From rc.8 `step` brackets that call with
+    /// `enterActionStep()`/`exitActionStep()`; the stepping itself is older,
+    /// and answering it on every release is what lets the throw below be the
+    /// one release-keyed fact.
+    fn callback_runs_as_action_steps(&self, primitive: Primitive, argument: usize) -> bool {
+        primitive == Primitive::Action && argument == 0
+    }
+
+    /// `createComponent(Comp, props)`, argument 0, on every release the
+    /// reviews read. The export is `solid-js`'s; `@solidjs/web` re-exports it
+    /// unchanged in every build (`export { …, createComponent, … } from
+    /// 'solid-js'`, rc.3 and rc.9 `dist/web.js:2`, `dist/server.js:2`, and the
+    /// dev and observe builds). Each `solid-js` build calls `Comp` exactly once,
+    /// synchronously, before it returns, and retains nothing it later invokes:
+    ///
+    /// | build | rc.0-rc.9 | owner `Comp` runs under |
+    /// | --- | --- | --- |
+    /// | client prod (`solid.js`; rc.9 `:1122-1124`, rc.3 `:1095-1097`) | `untrack(() => Comp(props \|\| {}))` | the caller's |
+    /// | client dev (`dev.js`/`solid.dev.js`; rc.3 `devComponent` `:35-53`, rc.9 `observedComponent` `:35-57`) | `createRoot(() => untrack(() => Comp(props)), { transparent: true })` | a transparent child root of the caller's |
+    /// | client observe (rc.8, rc.9 `solid.observe.js:36-46`) | as dev, without the dev checks | as dev |
+    /// | server prod (`server.js`; rc.9 `:1644-1646`, rc.3 `:1466-1468`), and rc.7/rc.8's server dev and observe | `Comp(props \|\| {})` | the caller's |
+    /// | server dev/observe (rc.9 `server.dev.js:1748-1755`, `server.observe.js:1721-1725`) | `runWithOwner(createComponentOwner(…), () => Comp(props \|\| {}))`, or `Comp(props \|\| {})` with no owner | a child of the caller's |
+    ///
+    /// `createRoot` runs its function in place (`runWithOwner(owner, …)` on
+    /// the caller's stack), so no build defers the call. Every one of the ten
+    /// releases' builds was read for the three shapes above.
+    /// The dev builds also store `Comp` on the owner (`owner._component = { fn:
+    /// Comp, … }`) and tag it with `$DEVCOMP`; no build of `solid-js`,
+    /// `@solidjs/signals` or `@solidjs/web` at rc.3 or rc.9 reads
+    /// `_component` back, so neither is a second entry. Probed on the
+    /// published triples (`createComponent` inside a memo, then a write to a
+    /// signal `Comp` read): every one of rc.3's four builds and rc.9's six ran
+    /// `Comp` once, between the statements before and after the call, and
+    /// never again.
+    fn renders_component_argument(&self, name: &str) -> Option<usize> {
+        (name == "createComponent").then_some(0)
+    }
+
+    /// ADR 0292, read on the published `solid-js@2.0.0-rc.13` builds
+    /// (`dist/solid.js`, `dist/solid.observe.js` and `dist/solid.dev.js`, which
+    /// adds only a throw for a string second argument; `dist/server.js`
+    /// selects the same member):
+    ///
+    /// ```js
+    /// function lazy(fn, options, moduleUrl) {
+    ///   const exportName = options?.export;
+    ///   ...
+    ///   const load = () => { ... const cur = p = fn();
+    ///     cur.then(mod => { comp = () => exportName ? mod[exportName] : mod.default; }, ...);
+    ///     return cur; };
+    ///   const wrap = props => { ...
+    ///     local = createMemo$1(() => load().then(mod => exportName ? mod[exportName] : mod.default));
+    ///     ...
+    ///     return createMemo$1(() => (Comp = (comp || local)()) ? createComponent(Comp, props) : "", { sync: true }); };
+    ///   wrap.preload = load;
+    ///   ...
+    ///   return wrap; }
+    /// ```
+    ///
+    /// `fn` is called only by `load`, which the wrapper and `.preload()`
+    /// reach; the selected member is `default` exactly when no `options`
+    /// object is passed, and it is rendered through `createComponent`. With a
+    /// second argument the selected member is data, so only the one-argument
+    /// form answers. Earlier releases render the member without
+    /// `createComponent` (`Solid2::lazy_renders_component`), so only a
+    /// vocabulary read on rc.13 answers at all.
+    fn renders_loaded_default_argument(
+        &self,
+        primitive: Primitive,
+        arguments: usize,
+    ) -> Option<usize> {
+        (self.lazy_renders_component && primitive == Primitive::Lazy && arguments == 1).then_some(0)
+    }
+
+    /// ADR 0153, read on every bundle of the audited `solid-js` archives
+    /// (rc.3 and rc.9: `dist/solid.js`, `dist/dev.js`, `dist/server.js`, and
+    /// rc.9's observe variants) and on `@solidjs/signals` rc.3, rc.6 and rc.9
+    /// (`dist/prod/core/context.js`):
+    ///
+    /// ```js
+    /// function createContext(defaultValue, options) {
+    ///   const id = Symbol(options && options.name || "");
+    ///   function provider(props) {
+    ///     return createRoot(() => {
+    ///       setContext(provider, props.value);
+    ///       return children(() => props.children);
+    ///     });
+    ///   }
+    ///   provider.id = id;
+    ///   provider.defaultValue = defaultValue;
+    ///   return provider;
+    /// }
+    /// function useContext(context) { return getContext(context); }
+    /// function createComponent(Comp, props) { return untrack(() => Comp(props || {})); }
+    /// ```
+    ///
+    /// `getContext(e, t = getOwner())` throws `NoOwnerError` without an owner,
+    /// answers the owner's map at `e.id` (rc.9 `t.ze[e.id]`, rc.3 `hasContext`
+    /// then `t.we[e.id]`) or else `e.defaultValue`, and throws
+    /// `ContextNotFoundError` when that is `undefined`; the server bundle's
+    /// `useContext` rethrows the same error. `setContext(e, t, r = getOwner())`
+    /// stores `t`, or `e.defaultValue` when `t` is `undefined`, under `e.id` in a
+    /// copy of the owner's map. The server `createComponent` is
+    /// `Comp(props || {})` without `untrack`. So a context made with no
+    /// arguments reads only values stored under its fresh symbol, and storing
+    /// one takes the context object itself.
+    fn context_role(&self, name: &str) -> Option<ContextRole> {
+        match name {
+            "createContext" => Some(ContextRole::Create),
+            "useContext" => Some(ContextRole::Read),
+            "createComponent" => Some(ContextRole::Render),
+            _ => None,
+        }
+    }
+
+    /// `Dynamic`'s `component`, on every release the reviews read. `Dynamic`
+    /// is `@solidjs/web`'s, the same function in every build of rc.3 and rc.9
+    /// (rc.3 `web.js:1865`, `dev.js:1935`, `server.js:3208`; rc.9 `web.js:2099`,
+    /// `web.dev.js:2271`, `web.observe.js:2121`, `server.js:3764`,
+    /// `server.dev.js:4013`, `server.observe.js:3852`):
+    ///
+    /// ```js
+    /// function Dynamic(props) {
+    ///   const Comp = dynamic(() => props.component);
+    ///   return createComponent(Comp, omit(props, "component"));
+    /// }
+    /// ```
+    ///
+    /// `dynamic(source)` keeps the value in a memo it creates (`cached`) and
+    /// returns a component that, rendered, creates one more memo reading it:
+    /// a function is called there as `component(props)` (or its
+    /// `Symbol.for("solid.component-binding")` target, when it carries one),
+    /// a string builds an element, and nothing else is done with it. The value
+    /// reaches no other invocation: `bindingOf` and the thenable test read a
+    /// property of it, and the dev and observe builds' `Object.assign(component,
+    /// { [$DEVCOMP]: true })` writes one. The `props` it receives are
+    /// `omit(props, "component")`. `createComponent` runs `Dynamic`, and then
+    /// `Comp`, in place (ADR 0136), so the component is invoked only inside
+    /// computations the render creates.
+    ///
+    /// Probed on the published triples: `createComponent(Dynamic, { get
+    /// component() { return Selected(); } })` with `Selected = createMemo(() =>
+    /// flag() ? A : B)`, inside a root. In all six rc.9 builds and rc.3's
+    /// four, `A` ran once, between the statements before and after the call,
+    /// with no `component` in its props, under an owner below the render's
+    /// (one level in prod, three in dev and observe; rc.3's client prod owners
+    /// do not expose the link). The client builds ran `B` once when `flag` was
+    /// written and flushed, under the same owner depth; the server builds,
+    /// which do not re-run, never did. A data property (`{ component: A }`)
+    /// behaved the same.
+    fn component_prop_renderers(&self) -> &'static [(&'static str, &'static str)] {
+        &[("Dynamic", "component")]
+    }
+
+    /// ADR 0313: `<Dynamic component="button" …/>`. Read on the audited
+    /// `@solidjs/web@2.0.0-rc.13` client builds: `Dynamic(props)` renders
+    /// `createComponent(dynamic(() => props.component), omit(props,
+    /// "component"))` (`dist/web.dev.js:2403`), and `dynamic`'s returned
+    /// component answers a string with `staticElement(component, props)`
+    /// (`:2375`), which creates the element and runs `spread(el, props)`
+    /// (`:2396-2399`) -- the helper a compiled JSX spread onto an intrinsic
+    /// element calls. Its `assignProp` turns an un-namespaced `on…` key into an
+    /// event listener (`:1803`). The production and observe builds are the same
+    /// code (`dist/web.js:2137`, `:2154-2157`, `:1578`;
+    /// `dist/web.observe.js:2185`, `:2202-2205`, `:1626`). Earlier releases were
+    /// not re-read for this answer; they take the audited release's under their
+    /// `SC9014` notice. A server build creates no element and dispatches no
+    /// event.
+    fn intrinsic_tag_renderers(&self) -> &'static [(&'static str, &'static str)] {
+        &[("Dynamic", "component")]
+    }
+
+    /// `createMemo(compute)`, one argument, `compute` taking no parameters. The
+    /// value `compute` returns is the node's value, and the node is reachable
+    /// from program code only through the accessor `createMemo` returns
+    /// (`accessor(computed(compute, undefined))` in `@solidjs/signals`, rc.9
+    /// `prod/signals.js:77`; the accessor is `read.bind(null, node)`, and its
+    /// `$REFRESH` slot re-runs `compute`). With no options there is no
+    /// `loadingValue`, `equals` or `ssrSource`; a parameterless compute cannot
+    /// read its previous value. `solid-js`'s client `createMemo` is the
+    /// hydration wrapper (rc.9 `solid.js:596-601`, `770-772`): while hydrating
+    /// it may yield a serialized value instead of calling `compute`, which is
+    /// another value, never a second path for this one. The server
+    /// `createMemo` runs `compute` in place.
+    fn accessor_yields_only_its_compute(&self, primitive: Primitive) -> bool {
+        primitive == Primitive::CreateMemo
+    }
+
+    /// `flush` inside an action step: the `FLUSH_IN_ACTION` dev throw, on the
+    /// releases that have it (`Solid2::flush_in_action`).
+    fn throws_inside_action_step(&self, primitive: Primitive) -> bool {
+        self.flush_in_action && primitive == Primitive::Flush
+    }
+
+    /// `createSignal` and `createOptimistic` both return
+    /// `Signal<T> = [get: SourceAccessor<T>, set: Setter<T>]`; `createStore`
+    /// and `createOptimisticStore` both return
+    /// `[get: Store<T>, set: StoreSetter<T>]`. `createProjection` returns the
+    /// store itself, so it is deliberately absent, and `createResource` is not
+    /// 2.0 vocabulary at all.
+    fn returns_reactive_tuple(&self, primitive: Primitive) -> bool {
+        matches!(
+            primitive,
+            Primitive::CreateSignal
+                | Primitive::CreateStore
+                | Primitive::CreateOptimistic
+                | Primitive::CreateOptimisticStore
+        )
+    }
+
     fn creates_directive_owner(&self, primitive: Primitive) -> bool {
         matches!(
             primitive,
@@ -818,6 +1978,9 @@ impl Dialect for Solid2 {
     /// the shape allows it — reports both, and importing it from either
     /// resolves.
     fn export_modules(&self, name: &str, position: crate::ExportPosition) -> Vec<&'static str> {
+        if name == "until" && !self.until {
+            return Vec::new();
+        }
         let mut found = crate::exports::modules(
             crate::exports::solid_v2_solid_js::VALUES,
             crate::exports::solid_v2_solid_js::TYPES,
@@ -845,6 +2008,8 @@ impl Dialect for Solid2 {
     fn namespace_import_primitives(&self, module: &str) -> &'static [&'static str] {
         if module == "solid-js" {
             NAMESPACE_SOLID_JS
+        } else if module == "solid-js/internal" {
+            NAMESPACE_SOLID_JS_INTERNAL
         } else if module == "@solidjs/web" {
             NAMESPACE_SOLIDJS_WEB
         } else {
@@ -853,9 +2018,19 @@ impl Dialect for Solid2 {
     }
 }
 
+/// The names a `solid-js/internal` namespace import exposes: the three
+/// boundary primitives `solid-js@2.0.0-rc.13` declares there and no longer at
+/// the root (ADR 0194).
+const NAMESPACE_SOLID_JS_INTERNAL: &[&str] = &[
+    "createErrorBoundary",
+    "createLoadingBoundary",
+    "createRevealOrder",
+];
+
 /// The names a `solid-js` namespace import exposes.
 ///
-/// The invariant is the one `solid_1x.rs` enforces: every modelled primitive
+/// The invariant, which `solid_1x.rs` enforced too before the 1.x dialect was
+/// retired: every modelled primitive
 /// the module exports must keep its namespace spelling, so a primitive
 /// cannot be reachable as `import { x }` but invisible as `Solid.x`. The
 /// list used to stop short of that (19 names, `children`/`For`/`Repeat`
@@ -908,6 +2083,7 @@ const NAMESPACE_SOLID_JS: &[&str] = &[
     "resolve",
     "runWithOwner",
     "snapshot",
+    "until",
     "untrack",
     "useContext",
 ];
@@ -935,288 +2111,4 @@ const NAMESPACE_SOLIDJS_WEB: &[&str] = &[
 ];
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// The three `<For>` overloads from rc.0's `flow.d.ts`, plus the two
-    /// forms that must claim nothing: a dynamic boolean flag (either overload
-    /// may run — RFC 03 tells authors to prefer a literal or key function),
-    /// and — for `Show`/`Match`, whose `keyed` is boolean-only — any
-    /// expression form at all.
-    #[test]
-    fn keyed_forms_claim_only_proven_callback_shapes() {
-        use crate::KeyForm;
-        assert_eq!(
-            Solid2.children_accessor_parameters(Primitive::For, KeyForm::Absent),
-            &[1]
-        );
-        assert_eq!(
-            Solid2.children_accessor_parameters(Primitive::For, KeyForm::Keyed),
-            &[1]
-        );
-        assert_eq!(
-            Solid2.children_accessor_parameters(Primitive::For, KeyForm::Unkeyed),
-            &[0]
-        );
-        assert_eq!(
-            Solid2.children_accessor_parameters(Primitive::For, KeyForm::CustomKey),
-            &[0, 1]
-        );
-        assert!(
-            Solid2
-                .children_accessor_parameters(Primitive::For, KeyForm::DynamicFlag)
-                .is_empty()
-        );
-        for primitive in [Primitive::Show, Primitive::Match] {
-            assert_eq!(
-                Solid2.children_accessor_parameters(primitive, KeyForm::Absent),
-                &[0]
-            );
-            for form in [KeyForm::Keyed, KeyForm::CustomKey, KeyForm::DynamicFlag] {
-                assert!(
-                    Solid2
-                        .children_accessor_parameters(primitive, form)
-                        .is_empty()
-                );
-            }
-        }
-    }
-
-    /// The vocabulary, pinned by name rather than by count.
-    ///
-    /// This test used to assert `TABLE.len() == 30` on the grounds that the
-    /// table was an extraction of what `solid-reactive-ir` hardcoded, so a
-    /// moved count meant drift. That premise expired: the engine now reads
-    /// this table rather than the other way round, and the table is sourced
-    /// from the published package. A count cannot say which name changed, and
-    /// bumping one is not review. A list can and is.
-    ///
-    /// Adding a name here is a behaviour change -- it starts resolving, and
-    /// the fixture snapshots will say what moved.
-    #[test]
-    fn the_vocabulary_is_pinned_by_name() {
-        assert_eq!(
-            names(),
-            [
-                "action",
-                "affects",
-                "children",
-                "clientOnly",
-                "createContext",
-                "createEffect",
-                "createErrorBoundary",
-                "createLoadingBoundary",
-                "createMemo",
-                "createOptimistic",
-                "createOptimisticStore",
-                "createOwner",
-                "createProjection",
-                "createReaction",
-                "createRenderEffect",
-                "createRevealOrder",
-                "createRoot",
-                "createSignal",
-                "createStore",
-                "createTrackedEffect",
-                "deep",
-                "dynamic",
-                "Errored",
-                "flush",
-                "For",
-                "getOwner",
-                "httpHeader",
-                "httpStatus",
-                "hydrate",
-                "isPending",
-                "latest",
-                "lazy",
-                "Loading",
-                "mapArray",
-                "Match",
-                "merge",
-                "omit",
-                "onCleanup",
-                "onSettled",
-                "reconcile",
-                "refresh",
-                "render",
-                "Repeat",
-                "repeat",
-                "resolve",
-                "runWithOwner",
-                "Show",
-                "snapshot",
-                "Switch",
-                "untrack",
-                "useContext",
-                "useHead",
-            ]
-        );
-    }
-
-    #[test]
-    fn the_table_is_sorted_and_free_of_duplicates() {
-        let mut sorted = TABLE.to_vec();
-        sorted.sort_by_key(|(name, _)| name.to_lowercase());
-        let actual: Vec<_> = TABLE.iter().map(|(name, _)| name.to_lowercase()).collect();
-        let expected: Vec<_> = sorted.iter().map(|(name, _)| name.to_lowercase()).collect();
-        assert_eq!(actual, expected, "keep the table sorted for review");
-
-        let mut seen = std::collections::HashSet::new();
-        for (name, primitive) in TABLE {
-            assert!(seen.insert(*name), "{name} is listed twice");
-            assert_eq!(
-                reverse(TABLE, *primitive),
-                Some(*name),
-                "{name} maps to a primitive another name already claims"
-            );
-        }
-    }
-
-    /// The same invariant `solid_1x.rs` enforces: a namespace import must
-    /// retain every modelled runtime obligation the module exports, so a
-    /// primitive cannot be reachable as `import { x }` but invisible as
-    /// `Solid.x`.
-    #[test]
-    fn every_modelled_export_resolves_through_its_namespace_module() {
-        for module in Solid2.modules() {
-            let mut expected = TABLE
-                .iter()
-                .filter_map(|(name, _)| {
-                    Solid2
-                        .export_modules(name, crate::ExportPosition::Value)
-                        .contains(module)
-                        .then_some(*name)
-                })
-                .collect::<Vec<_>>();
-            expected.sort_unstable();
-            let mut actual = Solid2.namespace_import_primitives(module).to_vec();
-            actual.sort_unstable();
-            assert_eq!(
-                actual, expected,
-                "namespace imports from {module} must retain every modelled runtime obligation"
-            );
-        }
-    }
-
-    #[test]
-    fn named_and_namespace_imports_can_resolve_run_with_owner() {
-        assert!(
-            Solid2
-                .namespace_import_primitives("solid-js")
-                .contains(&"runWithOwner")
-        );
-    }
-
-    #[test]
-    fn rc_0_web_primitives_have_distinct_callback_roles() {
-        assert_eq!(Solid2.primitive("clientOnly"), Some(Primitive::ClientOnly));
-        assert_eq!(Solid2.primitive("useHead"), Some(Primitive::UseHead));
-        assert_eq!(
-            Solid2.callback_executions(Primitive::ClientOnly),
-            &[(0, Execution::Deferred)]
-        );
-        assert_eq!(
-            Solid2.callback_executions(Primitive::UseHead),
-            &[(0, Execution::Tracked)]
-        );
-        assert!(Solid2.runs_callback_deferred(Primitive::ClientOnly));
-        assert!(!Solid2.runs_callback_deferred(Primitive::UseHead));
-        assert_eq!(
-            Solid2.export_modules("clientOnly", crate::ExportPosition::Value),
-            vec!["@solidjs/web"]
-        );
-        assert_eq!(
-            Solid2.export_modules("useHead", crate::ExportPosition::Value),
-            vec!["@solidjs/web"]
-        );
-        assert!(
-            Solid2
-                .namespace_import_primitives("@solidjs/web")
-                .contains(&"clientOnly")
-        );
-        assert!(
-            Solid2
-                .namespace_import_primitives("@solidjs/web")
-                .contains(&"useHead")
-        );
-    }
-
-    /// Solid 2.0 exports that take a callback and are deliberately **not**
-    /// modelled, with the reason. The list exists so that "every
-    /// callback-taking export is in the vocabulary" can be asserted rather
-    /// than asserted-with-exceptions-nobody-wrote-down.
-    ///
-    /// These names are contract-owned helpers rather than dialect primitives.
-    /// They stay outside the native vocabulary so their exact
-    /// package, artifact-case, and locally open normalized semantics are
-    /// consumed through accepted contracts instead of being flattened into
-    /// one dialect-wide execution role.
-    ///
-    /// The generator records the same reviewed callback shapes in the checked-
-    /// in contract, which the completeness test below reads directly.
-    const UNMODELLED_CALLBACK_TAKERS: &[&str] = &["applyRef", "renderToStream", "renderToString"];
-
-    /// Every `solid-js` 2.0 export that takes a callback is either in the
-    /// vocabulary or on the exclusion list above.
-    ///
-    /// This is the completeness criterion for the 2.0 side. A name that takes
-    /// a callback is one whose body the engine may need to reason about --
-    /// who owns it, whether its reads track, whether calling the primitive
-    /// reaches it -- and a name absent from the vocabulary answers none of
-    /// those questions. Names that take no callback and return no reactive
-    /// value carry no obligation and are out of scope by construction.
-    ///
-    /// Reads the checked-in contract rather than `node_modules`, so it runs
-    /// without an install; the contract is verified against the published
-    /// package by `contracts_process.rs`.
-    #[test]
-    fn every_callback_taking_export_is_modelled_or_excluded() {
-        // Both package authorities: `render`/`hydrate` live in `@solidjs/web`,
-        // and reading only the core bundle is exactly how an unmodelled mount
-        // entry point went unnoticed.
-        let exports =
-            crate::callback_exports_from_bundles("solid-v2", &["solid-js", "@solidjs/web"]);
-
-        // The contract records callbacks it knows about; the vocabulary is
-        // this crate's. Anything in the first and not the second is a gap.
-        let mut unmodelled = Vec::new();
-        for (name, callbacks) in &exports {
-            if callbacks.is_empty() {
-                continue;
-            }
-            if Solid2.primitive(name).is_none()
-                && !UNMODELLED_CALLBACK_TAKERS
-                    .iter()
-                    .any(|excluded| excluded == name)
-            {
-                unmodelled.push(name.clone());
-            }
-        }
-        assert!(
-            unmodelled.is_empty(),
-            "solid-js exports declaring callbacks that the vocabulary does not model: {unmodelled:?}"
-        );
-
-        // The exclusions must stay real exports; a stale one hides a gap.
-        for name in UNMODELLED_CALLBACK_TAKERS {
-            assert!(
-                exports.contains_key(*name),
-                "{name} is excluded but is not an export of solid-js any more"
-            );
-            assert!(
-                Solid2.primitive(name).is_none(),
-                "{name} is on the exclusion list and in the vocabulary; pick one"
-            );
-        }
-    }
-
-    #[test]
-    fn only_callback_bearing_primitives_report_positions() {
-        // A tag is not a call; asking for its callback positions is a caller
-        // error that should answer empty rather than guess index 0.
-        assert!(Solid2.callback_positions(Primitive::For).is_empty());
-        assert!(Solid2.callback_positions(Primitive::Loading).is_empty());
-        assert!(Solid2.callback_positions(Primitive::Children).is_empty());
-    }
-}
+mod tests;

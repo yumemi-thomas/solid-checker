@@ -1,0 +1,3 @@
+# feedback-tiers-open
+
+**Claim (ADR 0202, 0205).** In an open program (no `package.json` above the fixture), the exported helper `forward` still owes nothing for a package no one generates: no `SC9005` is raised (it was one before package contracts were removed, ADR 0312). The unresolved member dispatch in `ageOf` is reported where its call runs in the component body (line 18, `SC1001` and `SC9012`, both uncertifiable) and not in a click handler (line 20). `feedback-tiers` has the same `App.tsx` with a private `package.json` and today the same findings. `diagnostics_process::default_output_groups_coverage_gaps_after_findings_to_review` pins the default output's tiers on both. The stubs are copied from `forwarded-event-prop`.

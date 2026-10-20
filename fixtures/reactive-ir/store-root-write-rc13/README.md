@@ -1,0 +1,3 @@
+# store-root-write-rc13
+
+Audited-release control of ADR 0194: `store-root-write-rc9` on rc.13. `@solidjs/signals@2.0.0-rc.13` still declares `Store<T> = T` (`dist/types/store/store.d.ts:4`), so a root property write type-checks (real rc.13 `tsc` reports nothing; the stub is byte-faithful for `Store`, `StoreSetter`, `StoreOptions`, `NoFn`, the plain `createStore` overload) and the runtime drops it: SC2003 at lines 9 and 12, none inside `setProfile(...)` (the `setProfile` calls are SC2001 uncertifiable: nothing calls the exported function, so no role places them), and no `SC9014` (rc.13 is the audited release).

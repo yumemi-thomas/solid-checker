@@ -1,0 +1,3 @@
+# host-dead-return-wildcard
+
+**Claim (ADR 0288).** `host-dead-return`'s `Loop` in a project that also holds `Object.assign(target, source)` with an open source (ADR 0273 wildcard veto): ADR 0282 premises `Array.prototype[Symbol.iterator]` stable and its amendment refuses the unresolved target (it may name `Array.prototype` or an iterator prototype), so `Loop` is SC9012 uncertifiable at `start()`, like `host-dead-return-prototype`; the shape kept `createRAF`'s `start()` silent under `--dependency-source @solid-primitives/raf` in the rc.13 corpus. Stubs and `node_modules` copy `host-dead-return`.

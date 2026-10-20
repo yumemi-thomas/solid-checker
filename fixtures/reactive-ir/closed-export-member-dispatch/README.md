@@ -1,0 +1,3 @@
+# closed-export-member-dispatch
+
+**Claim (ADR 0203).** In a closed program (private `package.json`, ADR 0193), an exported helper invoking a member of its own parameter raises no declaration obligation when every entry is a call expression (each call selects the implementation from its argument or keeps its own obligation): `describe` clean (open twin `closed-export-member-dispatch-open`, no `package.json`, `SC9012` at `helpers.tsx:5`); `escapes` (handed out as a value), `Card` (entered through JSX) and `describe(props.item)` stay `SC9012`; `describe({ label() {...} })` clean. Stubs from `feedback-tiers`.

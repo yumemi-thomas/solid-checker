@@ -21,12 +21,24 @@ pub struct StaticDefectTerms {
     pub missing_effect_message: &'static str,
     pub missing_effect_hint: &'static str,
     pub store_mutation_hint: fn(&str) -> String,
-    /// A dialect-owned override for the missing-contract-export hint: when
-    /// the dialect knows the export was removed or renamed upstream (the
+    /// A dialect-owned override for the unavailable-package-behavior hint:
+    /// when the dialect knows the export was removed or renamed upstream (the
     /// Solid 2.0 catalog's removed-1.x-API map), the hint should point at
-    /// the migration, not at writing a contract entry for an export that no
-    /// longer exists. Returning `None` keeps the generic contract hint.
+    /// the migration, not at making the source of an export that no longer
+    /// exists available. Returning `None` keeps the generic hint.
     pub removed_export_hint: fn(module: &str, export: &str) -> Option<String>,
+    /// What the runtime throws when a value that is not JSON-serializable
+    /// reaches the default server-function transport, quoted so the message
+    /// matches what the developer will see in their console.
+    pub rich_argument_transport_throw: &'static str,
+    /// The four rich-argument remedies. The message states the fact the
+    /// analysis proved, which is the same in any dialect with this transport;
+    /// the hint names the serializer to install and the module it comes from,
+    /// which is not.
+    pub rich_argument_resolved_hint: &'static str,
+    pub rich_argument_nested_hint: &'static str,
+    pub rich_argument_primitive_hint: &'static str,
+    pub rich_argument_unresolved_hint: &'static str,
 }
 
 pub struct StaticDefectText {
@@ -65,91 +77,28 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
             ),
             "Read reactive values before the first await and carry the results through the async work. If the value must stay live after the await, split the read into its own synchronous computation.".into(),
         ),
+        StaticDefectKind::ReactiveReadAfterAwaitThroughCall { accessor, via } => (
+            format!(
+                "{via} reads reactive accessor {accessor:?} and is called after an await, where dependency tracking has ended; whether it reads {accessor:?} on this call, rather than only on some paths or later, is not proven, so this untracked read is uncertifiable"
+            ),
+            "Read reactive values before the first await and pass the results to the helper. If the value must stay live after the await, split the read into its own synchronous computation.".into(),
+        ),
         StaticDefectKind::ComponentReturnsConditionally => (
             "this component's return value depends on a reactive condition, but a component body runs once; whichever branch is taken at setup renders forever, and the condition is never re-evaluated".into(),
             "Return a single JSX tree and move the branch into it: wrap the alternatives in <Show when={...} fallback={...}> (or <Switch>/<Match> for multiple cases), or use a ternary inside JSX where it stays tracked.".into(),
         ),
-        StaticDefectKind::PackageContractExportMissing {
+        StaticDefectKind::PackageBehaviorUnavailable {
             module,
             export,
             reexported,
-        } => {
-            if defect.analysis_context.starts_with("obsolete-policy1-receipt:") {
-                (
-                    format!(
-                        "the discovered reactivity contract for {module} was authorized only by obsolete proof policy 1; its claims cannot be used for {} export {export}",
-                        if *reexported { "re-exported" } else { "imported" }
-                    ),
-                    "Policy-1 receipts cannot be grandfathered. Reacquire the exact package artifact and run policy-2 certification; until every demanded witness and the mandatory probe gate verify, this import remains uncertifiable.".into(),
-                )
-            } else if let Some(claims) = defect
-                .analysis_context
-                .strip_prefix("unbound-contract-claims:")
-            {
-                (
-                    format!(
-                        "the reactivity contract for {module} states {claims} for {} export {export}, but this call site gives the claim nothing to bind to, so what the callback receives cannot be certified",
-                        if *reexported { "re-exported" } else { "imported" }
-                    ),
-                    format!(
-                        "Pass the callback to {export} as an inline function literal so the contract's argument claims land on its parameters. A callback passed by name, or a claim shape solid-checker does not model, keeps the call uncertifiable. See docs/package-contracts.md for the format."
-                    ),
-                )
-            } else if let Some(claims) = defect
-                .analysis_context
-                .strip_prefix("unknown-contract-claims:")
-            {
-                (
-                    format!(
-                        "the reactivity contract for {module} leaves {claims} unknown for {} export {export}; code whose proof depends on those claims cannot be certified",
-                        if *reexported { "re-exported" } else { "imported" }
-                    ),
-                    format!(
-                        "Audit {module} export {export} against the exact selected runtime artifact. Prove the open semantic leaves, issue a receipt for the finalized stable-v1 document, and register that exact document/receipt pair in .solid-checker/accepted-contracts.json. An open leaf is not negative proof. See docs/package-contracts.md for the workflow."
-                    ),
-                )
-            } else {
-                (
-                    format!(
-                        "the reactivity contract for {module} has no entrypoint/export summary for {} export {export}; solid-checker cannot tell whether it reads reactive values, takes tracked callbacks, or returns accessors, so code flowing through it cannot be certified",
-                        if *reexported { "re-exported" } else { "imported" }
-                    ),
-                    (terms.removed_export_hint)(module, export).unwrap_or_else(|| {
-                        format!(
-                            "Generate a stable-v1 proposal for the exact installed artifact, prove export {export}'s required semantic leaves (including any complete-negative claims), issue its receipt, and register the exact document/receipt pair in .solid-checker/accepted-contracts.json. See docs/package-contracts.md for the workflow."
-                        )
-                    }),
-                )
-            }
-        }
-        StaticDefectKind::PackageContractEnvironmentDependent {
-            module,
-            export,
-            reexported,
+            ..
         } => (
             format!(
-                "the reactivity contract for {module} has different certified behavior for conditional runtime targets at {} export {export}; no contract branch matches the selected runtime environment, so applying one would be a guess",
+                "{module} is not analyzed from source here, so the behaviour of {} export {export} is unknown; solid-checker cannot tell whether it reads reactive values, takes tracked callbacks, or returns accessors, so code flowing through it cannot be certified",
                 if *reexported { "re-exported" } else { "imported" }
             ),
-            format!(
-                "Supply the exact runtime selection facts needed to choose one finite guard partition for {export}, or prove one artifact-independent summary. Unresolved guard selection joins possible operations monotonically and cannot certify guaranteed behavior. See docs/package-contracts.md for the workflow."
-            ),
-        ),
-        StaticDefectKind::UnknownCallbackExecution {
-            package,
-            entrypoint,
-            function,
-            parameter,
-            parameter_type,
-            required_execution,
-            claim_context,
-        } => (
-            format!(
-                "callback parameter {parameter} ({parameter_type}) of {package}{entrypoint}:{function} reaches a call whose execution timing is unknown; this callback cannot be certified"
-            ),
-            format!(
-                "Audit the implementation for {package}{entrypoint} export {function}, callback parameter {parameter}. Required behavior: {required_execution}. Generate an exact stable-v1 proposal with `solid-checker contract generate --package-root <package-root> --integrity <SRI> --entrypoint {entrypoint}`, prove the local open claim, issue a receipt, and register it in .solid-checker/accepted-contracts.json. Open-claim context: {claim_context}"
-            ),
+            (terms.removed_export_hint)(module, export)
+                .unwrap_or_else(|| PACKAGE_BEHAVIOUR_UNKNOWN_HINT.to_owned()),
         ),
         StaticDefectKind::MissingEffectFunction => {
             let mut message = terms.missing_effect_message.to_string();
@@ -186,11 +135,58 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         }
         StaticDefectKind::ReactiveSourceUncaptured { source, callee } => (
             format!(
-                "the reactive source {source:?} is passed to {callee}, whose reactive behaviour is not described anywhere: it has no body in this project, no package contract entry, and is not a Solid primitive; whether reads through it stay tracked cannot be certified"
+                "the reactive source {source:?} is passed to {callee}, whose reactive behaviour is not described anywhere: it has no body this analysis reads and is not a Solid primitive; whether reads through it stay tracked cannot be certified"
             ),
             format!(
-                "If {callee} comes from a package, add a receipt-issued stable-v1 contract for its exact artifact and callback operation. Otherwise, route the call through a project-local adapter whose body makes invocation or retention explicit. See docs/package-contracts.md."
+                "If {callee} comes from a package, it is not analyzed from source here: {PACKAGE_SOURCE_PREMISE} Otherwise, route the call through a project-local adapter whose body makes invocation or retention explicit."
             ),
+        ),
+        StaticDefectKind::ReactiveDispatchUnresolved {
+            callee,
+            member: None,
+        } if defect
+            .analysis_context
+            .starts_with(crate::DEPENDENCY_SOURCE_GETTER) =>
+        {
+            (
+                format!(
+                    "{callee} may run a getter that a package analyzed as source defines and that reads reactive state, but no proof carries the object, its member and this read's execution from the package to this Get; whether the read is untracked can be neither proven nor ruled out"
+                ),
+                "Read the member inside JSX or a memo (ADR 0272).".into(),
+            )
+        }
+        StaticDefectKind::ReactiveDispatchUnresolved {
+            callee,
+            member: None,
+        } if defect
+            .analysis_context
+            .starts_with(crate::STORE_KEY_UNDECIDED) =>
+        {
+            let reason = &defect.analysis_context[crate::STORE_KEY_UNDECIDED.len()..];
+            (
+                format!(
+                    "{callee} reads a store outside tracking, but whether this Get warns STRICT_READ_UNTRACKED depends on its key: {reason}; whether the read is a strict-read violation can be neither proven nor ruled out"
+                ),
+                "Read the member inside JSX, a createMemo, or an effect's compute function, or use a known string key solid-checker can decide (ADR 0293).".into(),
+            )
+        }
+        StaticDefectKind::ReactiveDispatchUnresolved {
+            callee,
+            member: None,
+        } if defect.analysis_context == crate::TYPE_ONLY_SOURCE => (
+            format!(
+                "{callee} runs where a reactive read would not be tracked, but its only evidence of reading reactive state is its declared type, a Solid source alias that a plain function or object also satisfies; no implementation or source flow proves what it reads, so whether this is an untracked reactive read can be neither proven nor ruled out"
+            ),
+            "Read it inside JSX, a createMemo, or an effect's compute function, or make its source visible to solid-checker: create it with a Solid primitive in the project, or pass one through a path the analysis follows (ADR 0294).".into(),
+        ),
+        StaticDefectKind::ReactiveDispatchUnresolved {
+            callee,
+            member: None,
+        } if defect.analysis_context == crate::PRIMITIVE_VALUE => (
+            format!(
+                "Solid primitive {callee} is used as a value here, so the calls that reach it are not followed; the owner, tracking and write rules that apply where it runs are not checked"
+            ),
+            "Call the primitive directly by its imported name, so solid-checker can see each call.".into(),
         ),
         StaticDefectKind::ReactiveDispatchUnresolved { callee, member } => (
             if let Some(member) = member {
@@ -210,6 +206,23 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
             ),
             "Pass an exact synchronous function literal directly, or keep the callback body in the project in a form solid-checker can inspect.".into(),
         ),
+        StaticDefectKind::ResultAccessCallbackUnplaced { callee } => {
+            let reason = match defect.analysis_context.as_str() {
+                crate::RESULT_ACCESS_REACTIVE_OPERATION => {
+                    "reads or writes reactive state (a signal, store, prop, setter or action)"
+                }
+                crate::RESULT_ACCESS_OPAQUE_CALL => {
+                    "calls code outside the standard library, whose reactive behaviour would run in that scope"
+                }
+                _ => "has a body solid-checker cannot inspect at this call",
+            };
+            (
+                format!(
+                    "{callee} calls this predicate whenever the object it returns is read (a property get, an `in` test, a key enumeration, a spread or merge), in the reading computation's tracking scope and under its owner, or once per property during the call where Proxy is unavailable; the predicate {reason}, and the reader's scope is not known here, so whether it subscribes, goes stale, or writes in an owned scope cannot be certified"
+                ),
+                "Keep the predicate a pure function of its key, with no signal, store, props or setter access and no calls outside the standard library, or pass the hidden keys as a list instead of a predicate.".into(),
+            )
+        }
         StaticDefectKind::StructuredReturnUnresolved {
             function,
             property,
@@ -218,7 +231,7 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
             format!(
                 "exported function {function} returns shorthand property {property:?}, but its runtime value cannot be resolved exactly ({reason}); whether that property is a reactive accessor or store path cannot be certified"
             ),
-            "Use an exact project-relative named/default import, return an explicitly resolved local binding, or provide an audited package contract for the external value.".into(),
+            "Use an exact project-relative named/default import, return an explicitly resolved local binding, or make the external value's source available to the analysis.".into(),
         ),
         StaticDefectKind::ReactiveHandlerRead {
             attribute,
@@ -264,8 +277,52 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         StaticDefectKind::DirectMutation { name, target } => {
             crate::direct_mutation_wording(name, *target, terms.store_mutation_hint)
         }
+        StaticDefectKind::ServerFunctionRichArgument { transport } => match transport {
+            crate::RichArgumentTransport::ResolvedType {
+                function,
+                descriptor,
+                member,
+            } => (
+                format!(
+                    "server function {function} receives an argument typed {descriptor} ({member}); server-function arguments travel as plain JSON by default, and a value JSON cannot carry faithfully throws at the transport: {:?}",
+                    terms.rich_argument_transport_throw
+                ),
+                terms.rich_argument_resolved_hint.into(),
+            ),
+            crate::RichArgumentTransport::NestedValue { function } => (
+                format!(
+                    "server function {function} receives an object holding a Date, Map, Set, RegExp, or typed array; the default server-function transport is plain JSON, which reaches nested values, so the nested one is silently flattened rather than sent"
+                ),
+                terms.rich_argument_nested_hint.into(),
+            ),
+            crate::RichArgumentTransport::NonJsonPrimitive { function } => (
+                format!(
+                    "server function {function} receives a bigint, symbol, or undefined value; the default server-function transport is plain JSON and cannot encode that primitive faithfully"
+                ),
+                terms.rich_argument_primitive_hint.into(),
+            ),
+            crate::RichArgumentTransport::Unresolved { reason } => (
+                format!(
+                    "a client call to a server function has an unresolved rich-argument transport proof: {reason}"
+                ),
+                terms.rich_argument_unresolved_hint.into(),
+            ),
+        },
     };
     let evidence = match &defect.kind {
+        // The nested claim is about a value the argument *holds*, not the
+        // argument's own resolved type, so it cannot borrow the sentence
+        // below: that one would assert a fact the analysis never proved. The
+        // open-proof case keeps the resolved-type sentence it has always
+        // carried; its own uncertainty is what its message says.
+        StaticDefectKind::ServerFunctionRichArgument {
+            transport: crate::RichArgumentTransport::NestedValue { .. },
+        } => {
+            "the callee carries a \"use server\" directive, a closed object literal reaching it holds a value in the JSON-unsafe set, and nothing in the project installs an argument serializer"
+        }
+        StaticDefectKind::ServerFunctionRichArgument { .. } => {
+            "the callee carries a \"use server\" directive, the argument's resolved type is in the JSON-unsafe set, and nothing in the project installs an argument serializer"
+        }
         StaticDefectKind::ReactiveObjectDestructure {
             component_props: true,
             ..
@@ -281,34 +338,17 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         StaticDefectKind::ComponentReturnsConditionally => {
             "a proven reactive read controls the component's return shape"
         }
-        StaticDefectKind::PackageContractExportMissing { .. }
-            if defect
-                .analysis_context
-                .starts_with("unbound-contract-claims:") =>
-        {
-            "the imported package contract carries a claim about this callback that the call site does not let solid-checker bind"
-        }
-        StaticDefectKind::PackageContractExportMissing { .. }
-            if defect
-                .analysis_context
-                .starts_with("unknown-contract-claims:") =>
-        {
-            "the imported package contract explicitly marks a required effect claim as unknown"
-        }
-        StaticDefectKind::PackageContractExportMissing { .. } => {
-            "the imported package has a contract, but this export has no effect summary"
-        }
-        StaticDefectKind::PackageContractEnvironmentDependent { .. } => {
-            "the imported package has conditional effect summaries, but no runtime environment was selected"
-        }
-        StaticDefectKind::UnknownCallbackExecution { .. } => {
-            "TypeScript resolved the callable parameter, but no exact runtime contract proves when the external helper invokes it"
+        StaticDefectKind::PackageBehaviorUnavailable { .. } => {
+            "the imported package's behavior is not available from analyzed source"
         }
         StaticDefectKind::ReactiveDispatchUnresolved { .. } => {
             "the call is type-correct, but exact runtime dispatch or equivalent reactive summaries are not proven"
         }
         StaticDefectKind::ReactiveCallbackUnresolved { .. } => {
             "the built-in callback position is type-correct and synchronous, but the callback body's reactive reads are not available for proof"
+        }
+        StaticDefectKind::ResultAccessCallbackUnplaced { .. } => {
+            "the predicate runs on reads of the returned object, in the reader's tracking scope and ownership, which the call site does not determine"
         }
         StaticDefectKind::StructuredReturnUnresolved { .. } => {
             "the exported shorthand value is type-correct, but its exact runtime binding and reactive return behavior are not proven"
@@ -329,9 +369,18 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
                 }
             }
         }
+        // The argument position is what the facts establish. Neither a valid
+        // call nor an exact callee proves the call runs or what it does with
+        // the accessor, so the claim stays conditional: it asserts no
+        // invocation, no invalid API, and no untracked read.
+        StaticDefectKind::ReactiveSourceUncaptured { .. } => {
+            "a reference bound to a reactive accessor occupies this call expression's argument position; if the call executes, the available analysis does not establish whether reads through that accessor stay tracked"
+        }
+        StaticDefectKind::ReactiveReadAfterAwaitThroughCall { .. } => {
+            "this call runs after the computation's first await, and the callee's body reads the accessor"
+        }
         StaticDefectKind::ReactiveReadAfterAwait { .. }
         | StaticDefectKind::MissingEffectFunction
-        | StaticDefectKind::ReactiveSourceUncaptured { .. }
         | StaticDefectKind::ReactiveHandlerRead { .. }
         | StaticDefectKind::HandlerValueUnresolved { .. }
         | StaticDefectKind::UncalledAccessor { .. }
@@ -394,57 +443,13 @@ impl CatalogCapabilities {
     };
 }
 
-/// Why an imported Solid-aware package cannot provide usable summaries.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum PackageContractIssueKind {
-    Missing,
-    Unverified,
-    /// A contract exists and is well-formed, but describes a different release
-    /// of the package than the one installed. It is evidence about an artifact
-    /// this project no longer has, so it is dropped rather than applied.
-    ///
-    /// `Bundled` is the same fact about this checker's own audited contract,
-    /// which the consumer cannot regenerate; the two carry different remedies
-    /// and so cannot share one kind.
-    Stale {
-        contract_version: String,
-        installed_version: String,
-    },
-    StaleBundled {
-        audited_version: String,
-        installed_version: String,
-    },
-    /// A contract records the npm integrity of the tarball it was audited
-    /// against, and the project's lockfile records a different integrity for
-    /// the installed copy of the same version.
-    ///
-    /// A version string is not a pin — a republished, patched, or
-    /// locally-overridden install keeps its version — so this is the same
-    /// epistemic state as [`Self::Stale`] reached through a different fact,
-    /// and it is refused the same way. `bundled` splits the remedy, exactly as
-    /// [`Self::Stale`] and [`Self::StaleBundled`] do: a consumer can
-    /// regenerate a project-owned contract but not this checker's own audited
-    /// artifact.
-    IntegrityMismatch {
-        contract_integrity: String,
-        installed_integrity: String,
-        bundled: bool,
-    },
-}
-
-/// The backend-owned package discovery facts a catalog words as SC9005.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PackageContractIssue {
-    pub package: String,
-    pub contract_path: String,
-    pub status: PackageContractIssueKind,
-    pub location: Location,
-}
-
 /// Every analysis result that can become a finding.
 #[derive(Clone, Copy, Debug)]
 pub enum FindingSeed<'a> {
-    StrictRead(&'a ReactiveRead),
+    StrictRead {
+        read: &'a ReactiveRead,
+        compute_reads_source: bool,
+    },
     OwnedWrite(&'a ReactiveWrite),
     Action(&'a ActionInvocation),
     LeafOperation(&'a LeafOwnerOperation),
@@ -453,7 +458,6 @@ pub enum FindingSeed<'a> {
     DirectiveCreation(&'a PrimitiveCreation),
     OwnerRequirement(&'a OwnerRequirement),
     AsyncRead(&'a AsyncRead),
-    PackageContractIssue(&'a PackageContractIssue),
 }
 
 /// The catalog-owned sentences and identity for one typed seed.
@@ -509,11 +513,20 @@ pub fn project_findings(
             .reads
             .iter()
             .filter(|read| {
-                read.execution.reports_untracked_read()
+                (read.execution.reports_untracked_read() || read.execution.reports_unplaced())
+                    && !read.project_consumer_non_strict
                     && (capabilities.module_scope_strict_reads
                         || read.execution != crate::ExecutionRole::ModuleInitialization)
             })
-            .map(|read| project_finding(FindingSeed::StrictRead(read), catalog)),
+            .map(|read| {
+                project_finding(
+                    FindingSeed::StrictRead {
+                        read,
+                        compute_reads_source: program.apply_compute_reads.contains(&read.location),
+                    },
+                    catalog,
+                )
+            }),
     );
     findings.extend(
         program
@@ -521,7 +534,8 @@ pub fn project_findings(
             .iter()
             .filter(|write| {
                 !write.allowed_by_option
-                    && write.execution.reports_disallowed_write()
+                    && (write.execution.reports_disallowed_write()
+                        || write.execution.reports_unplaced())
                     && (capabilities.untracked_rendering_writes
                         || write.execution != crate::ExecutionRole::UntrackedRendering)
             })
@@ -535,12 +549,10 @@ pub fn project_findings(
                 .map(|operation| project_finding(FindingSeed::LeafOperation(operation), catalog)),
         );
     }
-    findings.extend(
-        program
-            .static_defects
-            .iter()
-            .map(|defect| project_finding(FindingSeed::StaticDefect(defect), catalog)),
-    );
+    findings.extend(collapse_unanalyzed_package_defects(
+        &program.static_defects,
+        catalog,
+    ));
     findings.extend(
         program
             .static_violations
@@ -621,11 +633,19 @@ pub fn project_findings(
             program
                 .actions
                 .iter()
-                .filter(|action| action.execution.reports_disallowed_write())
+                .filter(|action| {
+                    action.execution.reports_disallowed_write()
+                        || action.execution.reports_unplaced()
+                })
                 .map(|action| project_finding(FindingSeed::Action(action), catalog)),
         );
     }
 
+    for finding in &mut findings {
+        if finding.kind == "violation" {
+            program.runtime_configuration.apply(finding);
+        }
+    }
     finish_findings(findings, total_started, construction_started)
 }
 
@@ -667,7 +687,7 @@ pub fn suppress_findings_owned_by_enabled_rules(
             })
             .collect::<std::collections::HashSet<_>>()
     } else {
-        std::collections::HashSet::new()
+        std::collections::HashSet::default()
     };
     findings.retain(|finding| {
         if finding.id != "SC1001" {
@@ -689,7 +709,106 @@ pub fn suppress_findings_owned_by_enabled_rules(
     });
 }
 
-/// Projects one seed. Used by the backend for package-contract issues that
+/// What lets ordinary analysis read a package's runtime source (ADR 0297),
+/// stated where a package's behaviour is reported unknown.
+const PACKAGE_SOURCE_PREMISE: &str = "installed Solid packages are analyzed from their runtime source when the run declares a runtime target and build (--runtime-target, --runtime-build) and a Solid Vite plugin resolves from the project, or when --dependency-source names them.";
+
+/// The hint of the package-behaviour-unknown form of `SC9005`.
+const PACKAGE_BEHAVIOUR_UNKNOWN_HINT: &str = "Installed Solid packages are analyzed from their runtime source when the run declares a runtime target and build (--runtime-target, --runtime-build) and a Solid Vite plugin resolves from the project, or when --dependency-source names them. A package source analysis cannot read stays uncertifiable.";
+
+/// An unavailable-package-behavior obligation says one thing -- "this
+/// package's behavior is not available from analyzed source" -- and it would
+/// say it once per import site. The remedy is one action per package, not per
+/// import, and nothing distinguishes the sites, so the defects of one package
+/// collapse to one finding, anchored at the first site and carrying every
+/// other site in `related_locations`. **Nothing is dropped**; the same
+/// locations reach the same consumers, grouped by the thing that would fix
+/// them. A group of one keeps its exact original wording.
+///
+/// Every grouped finding names its subject (`subject_kind` `package`), which
+/// is what tells a per-file reporter that its related locations are further
+/// sites of the same finding rather than supporting context. The ESLint
+/// adapter reports such a finding in each file holding one of its sites, so
+/// collapsing across a project never hides a file's sites from a per-file
+/// consumer.
+fn collapse_unanalyzed_package_defects(
+    defects: &[StaticDefect],
+    catalog: &impl CatalogWording,
+) -> Vec<Finding> {
+    /// The package an unavailable-behavior defect is about. Every site in one
+    /// package has the same answer, so the package is what makes two of these
+    /// defects interchangeable.
+    fn package_of(defect: &StaticDefect) -> Option<&str> {
+        match &defect.kind {
+            StaticDefectKind::PackageBehaviorUnavailable { module, .. } => Some(module.as_str()),
+            _ => None,
+        }
+    }
+
+    // First-seen order, so the anchor of each group is the first site the
+    // analysis reached and the output order does not depend on a hash.
+    let mut order: Vec<&str> = Vec::new();
+    let mut grouped: std::collections::HashMap<&str, Vec<&StaticDefect>> =
+        std::collections::HashMap::default();
+    let mut findings = Vec::new();
+    for defect in defects {
+        match package_of(defect) {
+            Some(module) => {
+                let group = grouped.entry(module).or_insert_with(|| {
+                    order.push(module);
+                    Vec::new()
+                });
+                group.push(defect);
+            }
+            // Everything else keeps its own finding, in place.
+            None => findings.push(project_finding(FindingSeed::StaticDefect(defect), catalog)),
+        }
+    }
+    for module in order {
+        let group = &grouped[module];
+        let mut finding = project_finding(FindingSeed::StaticDefect(group[0]), catalog);
+        finding.subject_kind = "package".into();
+        if group.len() > 1 {
+            let mut exports = group
+                .iter()
+                .filter_map(|defect| match &defect.kind {
+                    StaticDefectKind::PackageBehaviorUnavailable { export, .. } => {
+                        Some(export.as_str())
+                    }
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            exports.sort_unstable();
+            exports.dedup();
+            let named = exports.len().min(6);
+            let listed = exports[..named].join(", ");
+            let remainder = exports.len() - named;
+            finding.message = format!(
+                "{module} is not analyzed from source here, so its behaviour is unknown; \
+                 solid-checker cannot tell whether its exports read reactive values, take tracked \
+                 callbacks, or return accessors, so code flowing through them cannot be \
+                 certified. {} export{} used across {} import site{}: {listed}{}",
+                exports.len(),
+                if exports.len() == 1 { "" } else { "s" },
+                group.len(),
+                if group.len() == 1 { "" } else { "s" },
+                if remainder == 0 {
+                    String::new()
+                } else {
+                    format!(", and {remainder} more")
+                }
+            );
+            finding.hint = PACKAGE_BEHAVIOUR_UNKNOWN_HINT.to_owned();
+            finding
+                .related_locations
+                .extend(group[1..].iter().map(|defect| defect.location.clone()));
+        }
+        findings.push(finding);
+    }
+    findings
+}
+
+/// Projects one seed. Used by the backend for package-behavior issues that
 /// are discovered after the reactive [`Program`] has been built.
 #[must_use]
 pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> Finding {
@@ -710,7 +829,7 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
     };
 
     match seed {
-        FindingSeed::StrictRead(read) => {
+        FindingSeed::StrictRead { read, .. } => {
             finding.analysis_context = read.context.to_string();
             finding.subject_kind = read.kind.to_string();
             finding.related_locations = crate::strict_read_related_locations(read);
@@ -725,8 +844,19 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             // A child the pinned fork lowers and the shipped compiler deletes
             // is the third: the fact is present and truthful about its producer,
             // and still proves nothing about the build the user will run.
+            // A host callback that may run inside the strict-read window or
+            // after it (`ReactiveRead::host_callback_timing`) is a fourth.
             if read.is_uncertifiable() {
                 finding.kind = "uncertifiable".into();
+            }
+            // A read attributed through another function's summary: whether
+            // it runs while this call does is not established.
+            if read.summary_attributed && finding.kind != "uncertifiable" {
+                finding.kind = "uncertifiable".into();
+                finding.message = format!(
+                    "{}; this read happens inside {}'s body, and nothing proves it runs while this call does, rather than only on some of its paths or later (from a timer, listener, getter, returned accessor or effect), so it is not proven to be read untracked here",
+                    finding.message, read.via
+                );
             }
         }
         FindingSeed::OwnedWrite(write) => {
@@ -736,6 +866,9 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
                 write.context.to_string()
             };
             finding.related_locations = vec![write.declaration.clone()];
+            if write.is_uncertifiable() {
+                finding.kind = "uncertifiable".into();
+            }
         }
         FindingSeed::LeafOperation(operation) => {
             finding.fixes = operation.fix.clone().into_iter().collect();
@@ -743,9 +876,12 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             // requirements: when the leaf owner's call site cannot be proven
             // owned (exported helper, conditional owner), the finding is a
             // proof obligation, not a proven runtime violation.
-            if operation.uncertain {
+            if operation.uncertain || operation.possible {
                 finding.kind = "uncertifiable".into();
             }
+        }
+        FindingSeed::DirectiveCreation(creation) if creation.uncertain => {
+            finding.kind = "uncertifiable".into();
         }
         FindingSeed::StaticViolation(violation) => {
             finding.analysis_context = violation.analysis_context.clone();
@@ -776,24 +912,99 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             if read.options_opaque && finding.id == "SC5001" {
                 finding.kind = "uncertifiable".into();
             }
+            // The same escalation for the execution window: a host that may
+            // run the read's callback inside the component body's strict-read
+            // window or after it makes the untracked-read throw one of two
+            // outcomes (`PENDING_ASYNC_UNTRACKED_READ` inside, a plain
+            // `NotReadyError` after), so it is not a proven throw.
+            if read.host_callback_timing && finding.id == "SC5001" {
+                finding.kind = "uncertifiable".into();
+            }
+            // Lexical placement cannot prove an unknown callee runs the
+            // callback in this window or leaves pending values unhandled.
+            if (read.callee_callback_timing || read.invocation_context_unproven)
+                && finding.id == "SC5001"
+            {
+                finding.kind = "uncertifiable".into();
+            }
             if read.server_rendering_unresolved {
                 finding.kind = "uncertifiable".into();
             }
+            // A missing boundary is proven only for a function whose every
+            // render chain was followed to a mount root. Where a chain ends at
+            // a function the project never renders, the boundary above it may
+            // be written elsewhere (a router root layout, a lazy page).
+            if read.mount_unresolved && matches!(finding.id.as_str(), "SC5003" | "SC5005") {
+                finding.kind = "uncertifiable".into();
+                finding.message = format!(
+                    "the component rendering this read is never traced to a render or hydrate root in this project, so whether a Loading boundary is above it (for example in a router layout or around a lazy route) cannot be proven; if none is: {}",
+                    finding.message
+                );
+            }
         }
-        FindingSeed::PackageContractIssue(_) => {
-            finding.analysis_context = "package contract completeness".into();
-            finding.subject_kind = "package".into();
+        FindingSeed::Action(action) => {
+            if action.is_uncertifiable() {
+                finding.kind = "uncertifiable".into();
+            }
         }
-        FindingSeed::Action(_)
-        | FindingSeed::DirectiveCreation(_)
-        | FindingSeed::OwnerRequirement(_) => {}
+        FindingSeed::DirectiveCreation(_) | FindingSeed::OwnerRequirement(_) => {}
+    }
+    if let Some((family, subject)) = coverage_group(seed) {
+        finding.coverage_family = family.into();
+        finding.coverage_subject = subject;
     }
     finding
 }
 
+/// ADR 0205: the coverage family and subject of an analysis-coverage gap, for
+/// a reporter to group by. `None` for every finding that is a claim about the
+/// user's code.
+fn coverage_group(seed: FindingSeed<'_>) -> Option<(&'static str, String)> {
+    match seed {
+        FindingSeed::StaticDefect(defect) => match &defect.kind {
+            StaticDefectKind::PackageBehaviorUnavailable { module, .. } => {
+                Some(("package-boundary", package_of_specifier(module).to_owned()))
+            }
+            StaticDefectKind::ReactiveDispatchUnresolved { callee, .. } => {
+                let context = defect.analysis_context.as_str();
+                Some((
+                    if context.starts_with("parameter-member")
+                        || context == crate::EXPORTED_PARAMETER_MEMBER_DISPATCH
+                    {
+                        "caller-supplied-member"
+                    } else {
+                        "call-target"
+                    },
+                    callee.clone(),
+                ))
+            }
+            StaticDefectKind::ReactiveSourceUncaptured { callee, .. } => {
+                Some(("undescribed-callee", callee.clone()))
+            }
+            _ => None,
+        },
+        FindingSeed::LeafOperation(operation)
+            if operation.kind == crate::LeafOwnerOperationKind::UnresolvedCallback =>
+        {
+            Some(("leaf-callback", operation.owner.clone()))
+        }
+        _ => None,
+    }
+}
+
+/// The package a bare import specifier names: `@scope/name` or `name`, without
+/// a subpath. Anything else is returned unchanged.
+fn package_of_specifier(specifier: &str) -> &str {
+    let segments = if specifier.starts_with('@') { 2 } else { 1 };
+    specifier
+        .match_indices('/')
+        .nth(segments - 1)
+        .map_or(specifier, |(index, _)| &specifier[..index])
+}
+
 fn primary_location(seed: FindingSeed<'_>) -> Location {
     match seed {
-        FindingSeed::StrictRead(value) => value.location.clone(),
+        FindingSeed::StrictRead { read, .. } => read.location.clone(),
         FindingSeed::OwnedWrite(value) => value.location.clone(),
         FindingSeed::Action(value) => value.location.clone(),
         FindingSeed::LeafOperation(value) => value.location.clone(),
@@ -802,231 +1013,8 @@ fn primary_location(seed: FindingSeed<'_>) -> Location {
         FindingSeed::DirectiveCreation(value) => value.location.clone(),
         FindingSeed::OwnerRequirement(value) => value.location.clone(),
         FindingSeed::AsyncRead(value) => value.location.clone(),
-        FindingSeed::PackageContractIssue(value) => value.location.clone(),
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use std::sync::Arc;
-
-    use super::*;
-    use crate::{ActionInvocation, AsyncRead, ExecutionRole};
-
-    struct RecordingCatalog(CatalogCapabilities);
-
-    impl CatalogWording for RecordingCatalog {
-        fn capabilities(&self) -> CatalogCapabilities {
-            self.0
-        }
-
-        fn wording(&self, seed: FindingSeed<'_>) -> FindingWording {
-            let message = match seed {
-                FindingSeed::StrictRead(_) => "read",
-                FindingSeed::OwnedWrite(_) => "write",
-                FindingSeed::Action(_) => "action",
-                FindingSeed::LeafOperation(_) => "leaf",
-                FindingSeed::StaticViolation(_) => "static-violation",
-                FindingSeed::StaticDefect(_) => "static-defect",
-                FindingSeed::DirectiveCreation(_) => "directive",
-                FindingSeed::OwnerRequirement(_) => "owner",
-                FindingSeed::AsyncRead(_) => "async",
-                FindingSeed::PackageContractIssue(_) => "package",
-            };
-            FindingWording::new(
-                RuleMetadata {
-                    code: "TEST00",
-                    name: "test",
-                    severity: "warning",
-                    uncertifiable: false,
-                    default_enabled: true,
-                    presets: &[],
-                },
-                message,
-                "",
-            )
-        }
-    }
-
-    fn location(index: u64) -> Location {
-        Location {
-            path: "projection.tsx".into(),
-            start_byte: index,
-            end_byte: index + 1,
-        }
-    }
-
-    fn finding(code: &'static str, start: u64, end: u64) -> Finding {
-        Finding::new(
-            RuleMetadata {
-                code,
-                name: "test",
-                severity: "warning",
-                uncertifiable: false,
-                default_enabled: true,
-                presets: &[],
-            },
-            "test".into(),
-            Location {
-                path: "projection.tsx".into(),
-                start_byte: start,
-                end_byte: end,
-            },
-        )
-    }
-
-    #[test]
-    fn enabled_specific_defects_own_their_strict_reads() {
-        let mut findings = vec![
-            finding("SC1001", 10, 11),
-            finding("SC5001", 10, 11),
-            finding("SC1001", 21, 22),
-            finding("SC1004", 20, 25),
-            finding("SC1001", 27, 28),
-            finding("SC1007", 27, 28),
-            finding("SC1001", 30, 31),
-        ];
-
-        suppress_findings_owned_by_enabled_rules(&mut findings, CatalogCapabilities::SOLID_2);
-
-        assert_eq!(
-            findings
-                .iter()
-                .map(|finding| (finding.id.as_str(), finding.primary_location.start_byte))
-                .collect::<Vec<_>>(),
-            [
-                ("SC5001", 10),
-                ("SC1004", 20),
-                ("SC1007", 27),
-                ("SC1001", 30),
-            ]
-        );
-    }
-
-    #[test]
-    fn solid_one_keeps_the_handler_rule_split() {
-        let mut findings = vec![finding("SC1001", 10, 11), finding("SC1007", 10, 11)];
-
-        suppress_findings_owned_by_enabled_rules(&mut findings, CatalogCapabilities::SOLID_1);
-
-        assert_eq!(findings.len(), 2);
-    }
-
-    #[test]
-    fn catalog_capabilities_gate_whole_program_tables() {
-        let program = Program {
-            actions: vec![ActionInvocation {
-                action: "save".into(),
-                location: location(1),
-                declaration: location(2),
-                execution: ExecutionRole::TrackedJsx,
-                context: "App".into(),
-            }],
-            async_reads: vec![AsyncRead {
-                accessor: Arc::from("user()"),
-                location: location(3),
-                declaration: location(4),
-                execution: ExecutionRole::TrackedJsx,
-                leaf_owner: None,
-                under_loading: false,
-                async_provenance: true,
-                declared_loading: false,
-                options_opaque: false,
-                ssr_client_hole: false,
-                server_rendering_unresolved: false,
-            }],
-            ..Program::default()
-        };
-
-        let (solid_one, _) =
-            project_findings(&program, &RecordingCatalog(CatalogCapabilities::SOLID_1));
-        assert!(solid_one.is_empty());
-
-        let (solid_two, _) =
-            project_findings(&program, &RecordingCatalog(CatalogCapabilities::SOLID_2));
-        assert_eq!(
-            solid_two
-                .iter()
-                .map(|finding| finding.message.as_str())
-                .collect::<Vec<_>>(),
-            ["action", "async"]
-        );
-    }
-
-    /// A deleted async read is not an async read. The leaf-owner clause
-    /// short-circuits ahead of every role test, so before the discarded-role
-    /// exclusion was ordered in front of it a leaf-owned read inside a value
-    /// the compiler removed would have been reported as a pending read that
-    /// throws at runtime -- about code neither compiler emits.
-    #[test]
-    fn a_discarded_async_read_is_excluded_ahead_of_the_leaf_owner_short_circuit() {
-        let program = Program {
-            async_reads: vec![AsyncRead {
-                accessor: Arc::from("user()"),
-                location: location(3),
-                declaration: location(4),
-                execution: ExecutionRole::DiscardedRendering,
-                leaf_owner: Some(Arc::from("onSettled")),
-                under_loading: false,
-                async_provenance: true,
-                declared_loading: false,
-                options_opaque: false,
-                ssr_client_hole: false,
-                server_rendering_unresolved: false,
-            }],
-            ..Program::default()
-        };
-        let (findings, _) =
-            project_findings(&program, &RecordingCatalog(CatalogCapabilities::SOLID_2));
-        assert!(findings.is_empty());
-
-        // The control: the same row with a live role is still reported, so the
-        // exclusion cannot pass by disabling the clause.
-        let program = Program {
-            async_reads: vec![AsyncRead {
-                execution: ExecutionRole::UntrackedRendering,
-                ..program.async_reads.into_iter().next().unwrap()
-            }],
-            ..Program::default()
-        };
-        let (findings, _) =
-            project_findings(&program, &RecordingCatalog(CatalogCapabilities::SOLID_2));
-        assert_eq!(
-            findings
-                .iter()
-                .map(|finding| finding.message.as_str())
-                .collect::<Vec<_>>(),
-            ["async"]
-        );
-    }
-
-    #[test]
-    fn selection_filters_safe_rows_before_the_catalog_seam() {
-        let program = Program {
-            actions: vec![ActionInvocation {
-                action: "save".into(),
-                location: location(1),
-                declaration: location(2),
-                execution: ExecutionRole::EventCallback,
-                context: "handler".into(),
-            }],
-            async_reads: vec![AsyncRead {
-                accessor: Arc::from("user()"),
-                location: location(3),
-                declaration: location(4),
-                execution: ExecutionRole::TrackedJsx,
-                leaf_owner: None,
-                under_loading: true,
-                async_provenance: true,
-                declared_loading: false,
-                options_opaque: false,
-                ssr_client_hole: false,
-                server_rendering_unresolved: false,
-            }],
-            ..Program::default()
-        };
-        let (findings, _) =
-            project_findings(&program, &RecordingCatalog(CatalogCapabilities::SOLID_2));
-        assert!(findings.is_empty());
-    }
-}
+mod tests;

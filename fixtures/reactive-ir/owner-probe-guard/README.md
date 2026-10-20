@@ -1,0 +1,3 @@
+# owner-probe-guard
+
+An owner-requiring operation (`onCleanup`) that runs only after the invocation has seen a non-null owner is not an `SC4001`: the right operand of `getOwner() && ...` or the consequent of `getOwner() ? ... : ...`/`if (getOwner())`, with `getOwner` resolved by symbol (`owners::guarded_by_owner_probe`; the shape of `@solidjs/router`'s `data/action.js`). Unguarded `onCleanup`, `getOwner() || onCleanup(...)` and a local `getOwner` are violations; bindings, `!getOwner() || ...`, early returns and after-`await` operations are not guards. `getOwner`, `onCleanup`, `Disposable`, `createRoot` verbatim from rc.9.

@@ -16,14 +16,23 @@
 // path, byte span, and whether a fix was offered. Messages and hints are
 // deliberately excluded -- rewording a hint should not churn 30 files.
 
-import { execFile, execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { execFile } from "node:child_process";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync
+} from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import process from "node:process";
 import { promisify } from "node:util";
 
+import { dialectStubProblems } from "./lib/dialect-stubs.mjs";
 import { ancestorChainDigest, hashTree, openGateCache } from "./lib/gate-cache.mjs";
 import { gateConcurrency, mapPool } from "./lib/pool.mjs";
+import { runCoverageUnit } from "./lib/coverage-cache.mjs";
 
 const run = promisify(execFile);
 const root = resolve(import.meta.dirname, "..");
@@ -64,74 +73,47 @@ function fixtureProjects() {
       if (!entry.isDirectory()) continue;
       const directory = join(base, entry.name);
       const tsconfig = join(directory, "tsconfig.json");
-      if (existsSync(tsconfig)) found.push({ id: `${group}/${entry.name}`, directory, tsconfig });
+      if (!existsSync(tsconfig)) continue;
+      found.push({
+        id: `${group}/${entry.name}`,
+        directory,
+        tsconfig
+      });
+      // Variants of one fixture share its `node_modules` (published package
+      // bytes copied once) by Node's own lookup: each `variants/<name>/` is a
+      // project of its own, whose snapshot id is `<fixture>-<name>`.
+      const variants = join(directory, "variants");
+      if (existsSync(variants)) {
+        for (const variant of readdirSync(variants, { withFileTypes: true })) {
+          const variantTsconfig = join(variants, variant.name, "tsconfig.json");
+          if (!variant.isDirectory() || !existsSync(variantTsconfig)) continue;
+          found.push({
+            id: `${group}/${entry.name}-${variant.name}`,
+            directory: join(variants, variant.name),
+            tsconfig: variantTsconfig
+          });
+        }
+      }
+      // No package contract is consumed any more, so a fixture asking for an
+      // authorized one would silently test nothing.
+      if (existsSync(join(directory, ".solid-checker", "authorize-contract.json"))) {
+        throw new Error(`${group}/${entry.name}: authorize-contract.json is retired`);
+      }
     }
   }
   return found.sort((a, b) => a.id.localeCompare(b.id));
 }
 
-/**
- * Holds every fixture dialect stub to being present, parseable, and tracked.
- *
- * Dialect selection follows the nearest `node_modules/solid-js/package.json`
- * above the project, and a stub that is missing, empty, or unparseable falls
- * back silently to the 2.0 default. Two ways that happens leave no other
- * trace: an empty `node_modules/solid-js/` directory (git cannot record an
- * empty directory, so the stub never arrives), and a stub with no
- * `.gitignore` exception under the repository-wide `**\/node_modules/` rule
- * (present locally, absent in CI). Either one turns a 1.x fixture into a 2.0
- * fixture whose snapshot then records the wrong catalog as if intended.
- *
- * `eslint-plugin-corpus-v1` shipped the first shape and `solid-reexport` the
- * second, so this is a check, not a hypothetical.
- */
-function checkDialectStubs() {
-  const tracked = new Set(
-    execFileSync("git", ["ls-files", "-z", "fixtures"], { cwd: root, encoding: "utf8" })
-      .split("\0")
-      .filter(Boolean)
-  );
-  const problems = [];
-  const groups = ["reactive-ir", "engine", "package-contracts", "ownership-cases", "partial-audit"];
-  for (const group of groups) {
-    const base = join(root, "fixtures", group);
-    if (!existsSync(base)) continue;
-    for (const entry of readdirSync(base, { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue;
-      const stubDirectory = join(base, entry.name, "node_modules", "solid-js");
-      if (!existsSync(stubDirectory)) continue;
-      const manifest = join(stubDirectory, "package.json");
-      const id = relative(root, manifest);
-      if (!existsSync(manifest)) {
-        problems.push(`${id}: missing -- the fixture falls back to the 2.0 default dialect`);
-        continue;
-      }
-      let version;
-      try {
-        version = JSON.parse(readFileSync(manifest, "utf8")).version;
-      } catch (error) {
-        problems.push(`${id}: unparseable (${error.message})`);
-        continue;
-      }
-      if (typeof version !== "string" || version === "") {
-        problems.push(`${id}: no "version" -- dialect selection cannot resolve it`);
-      }
-      if (!tracked.has(id)) {
-        problems.push(
-          `${id}: not tracked by git -- add '!${relative(root, join(base, entry.name))}/node_modules/'` +
-            ` and its '/**' twin to .gitignore, or the stub is absent in CI`
-        );
-      }
-    }
-  }
-  if (problems.length > 0) {
-    console.error("fixture dialect stubs are not usable:");
-    for (const problem of problems) console.error(`  ${problem}`);
-    process.exit(2);
-  }
+// Dialect stubs decide which catalog each fixture is checked under, so an
+// unusable one silently rewrites what a snapshot means. The check and its
+// reasoning live in `lib/dialect-stubs.mjs`, where a test can drive its failure
+// paths against a throwaway tree.
+const stubProblems = dialectStubProblems({ projectRoot: root });
+if (stubProblems.length > 0) {
+  console.error("fixture dialect stubs are not usable:");
+  for (const problem of stubProblems) console.error(`  ${problem}`);
+  process.exit(2);
 }
-
-checkDialectStubs();
 
 /**
  * Projects whose snapshots keep the message and hint text.
@@ -156,15 +138,21 @@ checkDialectStubs();
  * `rust/crates/solid-reactive-ir/src/findings.rs` instead.
  */
 const KEEPS_WORDING = new Set([
-  "reactive-ir/dialect-solid-1x",
   "reactive-ir/dialect-solid-2",
-  "reactive-ir/import-location",
-  "reactive-ir/jsx-census-gap-solid-1x",
   "reactive-ir/jsx-census-gap-solid-2",
-  "reactive-ir/jsx-void-child-divergence-solid-1x",
   "reactive-ir/jsx-void-child-divergence-solid-2",
-  "reactive-ir/no-owner-v1",
-  "reactive-ir/solid-1x-leftovers"
+  // Not a 1.x fixture despite the name: it is a 2.0 project importing four
+  // names 2.0 removed, and the removed-export *message* is the whole claim.
+  "reactive-ir/retired-1x-spellings",
+  // SC8014's two messages differ only in wording: the one-parameter arrow gets
+  // a `<For>` rewrite and a fix, and everything else is told which component to
+  // reach for instead. That second message named `<Index />` until 2026-09-16
+  // -- a component Solid 2.0 does not export -- and nothing pinned it.
+  "reactive-ir/ported-structure-v2",
+  // SC1001's read context named `createEffect` for every effect apply until
+  // 2026-09-26, `createRenderEffect`'s included; only the text can say which
+  // primitive a read's apply belongs to.
+  "reactive-ir/render-effect-apply-root"
 ]);
 
 /**
@@ -175,26 +163,46 @@ const KEEPS_WORDING = new Set([
  * If these stop matching, the snapshot diff between them stops meaning "the
  * dialect changed the answer" and starts meaning nothing at all.
  */
+// Both entries were dialect pairs, and both lost their 1.x half when the 1.x
+// dialect was retired (ADR 0110). The list is kept rather than deleted: it is
+// the mechanism for "these two projects must stay byte-identical or their
+// snapshot diff stops meaning anything", and the next divergence pair needs it.
 const IDENTICAL_SOURCES = [
-  {
-    projects: ["reactive-ir/dialect-solid-1x", "reactive-ir/dialect-solid-2"],
-    files: ["App.tsx", "tsconfig.json"]
-  },
-  // The void-child divergence pair duplicates its source for the opposite
-  // reason: the mitigation policy is shared while its tag set is
-  // dialect-supplied, so the *same* source must pin each producer's answer.
-  // Their snapshots differ in exactly three rows — one reworded message (the
-  // template-root void child, which 1.x lowers and 2.0 does not) and two
-  // findings absent under 2.0 (keygen/menuitem, void only in 1.x's parity
-  // target) — and those differences are the pair's whole claim. Let the
-  // sources drift and the diff stops meaning "the producer changed the
-  // answer".
+  // ADR 0295: the same project and package with and without a declared
+  // Window realm; only `.solid-checker/runtime.json` (and the README) differ.
   {
     projects: [
-      "reactive-ir/jsx-void-child-divergence-solid-1x",
-      "reactive-ir/jsx-void-child-divergence-solid-2"
+      "reactive-ir/dependency-source-window-realm",
+      "reactive-ir/dependency-source-window-undeclared"
     ],
-    files: ["App.tsx", "solid-js.d.ts", "tsconfig.json"]
+    files: [
+      "App.tsx",
+      "solid-js.d.ts",
+      "tsconfig.json",
+      "node_modules/solid-js/package.json",
+      "node_modules/solid-js/dist/solid.js",
+      "node_modules/dep-query/package.json",
+      "node_modules/dep-query/dist/index.d.ts",
+      "node_modules/dep-query/src/index.js",
+      "node_modules/dep-query/src/early.js",
+      "node_modules/dep-query/src/cyclic.js",
+      "node_modules/dep-query/src/cycle-back.js",
+      // Review round 1 of ADR 0295.
+      "Review.tsx",
+      "node_modules/dep-query/src/tdz.js",
+      "node_modules/dep-query/src/hoisted.js",
+      "node_modules/dep-array/package.json",
+      "node_modules/dep-array/dist/index.d.ts",
+      "node_modules/dep-array/src/index.js",
+      "node_modules/dep-bridge/package.json",
+      "node_modules/dep-bridge/cycle.js",
+      "node_modules/dep-bridge/leaf.js",
+      "node_modules/dep-self/package.json",
+      "node_modules/dep-self/dist/index.d.ts",
+      "node_modules/dep-self/src/index.js",
+      "node_modules/dep-self/node_modules/dep-self/package.json",
+      "node_modules/dep-self/node_modules/dep-self/src/index.js"
+    ]
   }
 ];
 
@@ -204,6 +212,7 @@ const IDENTICAL_SOURCES = [
  * repository-relative paths so snapshots do not carry anyone's home directory.
  */
 function comparable(finding, keepWording) {
+  const rebase = (path) => relative(root, path);
   const location = finding.primaryLocation ?? {};
   const portable = (value) =>
     typeof value === "string" ? value.split(root).join("<ROOT>") : value;
@@ -212,7 +221,7 @@ function comparable(finding, keepWording) {
     code: finding.id,
     kind: finding.kind,
     severity: finding.severity,
-    path: location.path ? relative(root, location.path) : null,
+    path: location.path ? rebase(location.path) : null,
     start: location.startByte ?? null,
     end: location.endByte ?? null,
     fixes: Array.isArray(finding.fixes) ? finding.fixes.length : 0,
@@ -252,6 +261,8 @@ function runtimeArguments(tsconfig) {
   for (const [key, flag] of [
     ["target", "--runtime-target"],
     ["build", "--runtime-build"],
+    // ADR 0295: the declared realm of the dependency sources (`window`).
+    ["realm", "--runtime-realm"],
     ["rendering", "--rendering"],
     ["programBoundary", "--program-boundary"]
   ]) {
@@ -261,25 +272,45 @@ function runtimeArguments(tsconfig) {
   for (const transform of runtime.frameworkTransforms ?? []) {
     args.push("--framework-transform", transform);
   }
+  // ADR 0284: installed packages whose runtime source is analyzed as project code.
+  for (const specifier of runtime.dependencySources ?? []) {
+    args.push("--dependency-source", specifier);
+  }
+  // ADR 0297: a declared target and build analyze every Solid package from
+  // source by default. The opt-out is retired.
+  if (runtime.dependencySource !== undefined) {
+    throw new Error(`${metadata}: dependencySource is retired with package contracts`);
+  }
   return args;
 }
 
 async function analyze(tsconfig, keepWording) {
   const { stdout: output } = await run(
     checker,
-    ["--format", "json", "--project", tsconfig, ...runtimeArguments(tsconfig)],
+    [
+      "--format",
+      "json",
+      "--project",
+      tsconfig,
+      ...runtimeArguments(tsconfig)
+    ],
     {
       cwd: root,
       encoding: "utf8",
       maxBuffer: 256 * 1024 * 1024,
       env: {
         ...process.env,
+        // One retained daemon per fixture would outlive the gate by its idle
+        // limit, hundreds at once; a gate run is one-shot.
+        SOLID_CHECKER_DAEMON: "0",
         SOLID_TYPEFACTS_BIN: typefacts
       }
     }
   );
   const snapshot = JSON.parse(output);
-  const findings = (snapshot.findings ?? []).map((finding) => comparable(finding, keepWording));
+  const findings = (snapshot.findings ?? []).map((finding) =>
+    comparable(finding, keepWording)
+  );
   findings.sort(
     (a, b) =>
       (a.path ?? "").localeCompare(b.path ?? "") ||
@@ -317,9 +348,10 @@ if (projects.length === 0) {
 // up now misses instead of replaying pre-install findings while `checkDialectStubs`
 // (the thing that catches a substituted dialect) never runs.
 //
-// With that added, a project's findings are a function of exactly its tree, the
-// dialect-selection chain above it, the two binaries, and the environment --
-// which is what makes running the 83 of them concurrently sound.
+// These keys cover explicit-target units. No-target units bypass result reuse:
+// inference additionally observes ancestors/dependencies of the materialized
+// project, including absent PostCSS/config/package candidates, that this key
+// does not enumerate. A native daemon's revalidation cannot protect a gate hit.
 const cache = openGateCache({
   gate: "coverage",
   scriptPath: import.meta.filename,
@@ -334,14 +366,29 @@ const unitParts = (project) => () => [
   `project:${project.id}`,
   `wording:${KEEPS_WORDING.has(project.id)}`,
   hashTree(project.directory),
-  ancestorChainDigest(project.directory, "node_modules/solid-js/package.json")
+  hashTree(join(root, "fixtures/reactive-ir/node_modules/@solidjs/vite-plugin")),
+  ancestorChainDigest(project.directory, "node_modules/solid-js/package.json"),
+  // The installation review reads two more manifests the same way
+  // (`resolved_releases` in dialect.rs): `@solidjs/web` from the project, and
+  // `@solidjs/signals` from the installed `solid-js`'s directory, which for a
+  // stub-less project or an ancestor stub lies on this same chain -- either
+  // hoisted beside `solid-js` or nested under it.
+  ancestorChainDigest(project.directory, "node_modules/@solidjs/signals/package.json"),
+  ancestorChainDigest(
+    project.directory,
+    "node_modules/solid-js/node_modules/@solidjs/signals/package.json"
+  ),
+  ancestorChainDigest(project.directory, "node_modules/@solidjs/web/package.json")
 ];
 
 const computed = await mapPool(
   projects,
   (project) =>
-    cache.run(unitParts(project), () =>
-      analyze(project.tsconfig, KEEPS_WORDING.has(project.id))
+    runCoverageUnit(
+      cache,
+      unitParts(project),
+      () => analyze(project.tsconfig, KEEPS_WORDING.has(project.id)),
+      runtimeArguments(project.tsconfig)
     ),
   { concurrency }
 );
@@ -406,6 +453,7 @@ for (const entry of readdirSync(snapshots)) {
 const verb = update ? "recorded" : "compared";
 console.log(`${verb} ${projects.length} fixture projects, ${total} findings`);
 console.log(`${cache.summary()}; concurrency ${concurrency}`);
+console.log(`inference cache bypass: ${computed.filter((unit) => unit.inferenceCacheBypassed).length} unit(s)`);
 if (changed > 0) {
   console.error(`${changed} project(s) differ -- re-run with --update if intended`);
   process.exit(1);

@@ -45,9 +45,7 @@ jobs:
       - run: cargo clippy --manifest-path rust/Cargo.toml --workspace --all-targets
       - name: Check single-dialect composition builds
         run: |
-          cargo +1.97 check --manifest-path rust/Cargo.toml -p solid-facts-backend --all-targets --no-default-features --features dialect-v1
           cargo +1.97 check --manifest-path rust/Cargo.toml -p solid-facts-backend --all-targets --no-default-features --features dialect-v2
-          cargo +1.97 check --manifest-path rust/Cargo.toml -p solid-checker-wasm --all-targets --no-default-features --features dialect-v1
           cargo +1.97 check --manifest-path rust/Cargo.toml -p solid-checker-wasm --all-targets --no-default-features --features dialect-v2
       - run: make test-rust
       # The two fixture gates: "no finding moved" over every fixture project,
@@ -63,25 +61,6 @@ jobs:
       # packages/cli, and the workspace and both binaries are already built by
       # the steps above, so this is one Bun install plus the audited installs.
       - run: make tsc-oracle
-      # The contract drift gate against real installed packages: install the
-      # exact pins the checked-in artifacts were generated from, regenerate,
-      # and diff. The workspace is already built, so this is one Bun install
-      # plus three cargo runs.
-      - name: Install the pinned contract packages
-        run: |
-          mkdir -p /tmp/contract-packages
-          cd /tmp/contract-packages
-          bun init -y >/dev/null
-          bun add --exact --ignore-scripts --no-progress \
-            solid-js-1x@npm:solid-js@1.9.14 \
-            solid-js@2.0.0-rc.0 \
-            @solidjs/web@2.0.0-rc.0
-      - name: Check the contracts against the installed packages
-        run: |
-          SOLID_V1_SOLID_JS_PACKAGE=/tmp/contract-packages/node_modules/solid-js-1x \
-          SOLID_V2_SOLID_JS_PACKAGE=/tmp/contract-packages/node_modules/solid-js \
-          SOLID_V2_SOLIDJS_WEB_PACKAGE=/tmp/contract-packages/node_modules/@solidjs/web \
-            make contracts-check
 
   rust-package:
     strategy:
@@ -171,11 +150,17 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.97
         with:
-          targets: wasm32-wasip1-threads
+          targets: wasm32-wasip1-threads, wasm32-wasip1
       # The action's targets input covers only the toolchain it installs;
       # the build resolves its toolchain through rust-toolchain.toml, which
       # needs its own copy of the target's std.
-      - run: rustup target add wasm32-wasip1-threads --toolchain 1.97
+      - run: rustup target add wasm32-wasip1-threads wasm32-wasip1 --toolchain 1.97
+      # The owned check's producer reactor is the Type Facts producer built
+      # for wasip1 (packages/wasm/scripts/build-owned.mjs).
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache-dependency-path: go.sum
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.0
@@ -195,7 +180,7 @@ jobs:
       - run: bun pm pack --dry-run
         working-directory: packages/wasm
 
-  contracts:
+  scripts-and-cli:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -209,17 +194,4 @@ jobs:
       - run: bun install --cwd packages/cli --ignore-scripts --no-progress --frozen-lockfile
       - run: bun packages/cli/node_modules/vitest/vitest.mjs run --config packages/cli/vitest.config.mjs scripts/*.test.mjs
       - run: jq empty schema/*.json
-      - run: find pkg/contracts/bundled -type f -name '*.json' -exec jq empty {} +
-      # The bundled contracts ship semantics compiled into the backend, so a
-      # stale artifact ships wrong semantics. contract-conformance runs three
-      # gates: check-bundled-contracts.mjs probes the 2.0 contracts against
-      # the exact pinned packages, check-contract-pins.mjs holds every bundled
-      # pin to the registry tarball it was audited against (which is what
-      # covers the contracts probing never installs), and
-      # generate-bundled-solid1-contract.mjs --check catches drift between the
-      # 1.x artifact and its inputs. The
-      # separate drift gate against *real installed* packages
-      # (`make contracts-check`) runs in the rust-engine job, which installs
-      # the exact pins and regenerates all three artifacts.
-      - run: make contract-conformance
       - run: make test-cli

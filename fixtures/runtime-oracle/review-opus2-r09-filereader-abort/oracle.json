@@ -1,0 +1,11 @@
+{
+  "note": "Opus review round 2 (r09-filereader-abort): class fields, generators, and synchronous DOM dispatch",
+  "steps": [
+    {
+      "action": "assert-text",
+      "selector": "#ran-a",
+      "text": "ran",
+      "id": "runtime-observation-0"
+    }
+  ]
+}

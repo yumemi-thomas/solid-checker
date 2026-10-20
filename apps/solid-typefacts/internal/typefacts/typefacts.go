@@ -518,8 +518,8 @@ const (
 // implementation, and records nothing joining them — so the two are unrelated
 // modules that happen to share a name on disk, and no field here will ever say
 // otherwise. Recovering that edge by matching file names is the substitution
-// this fact exists to avoid. See
-// docs/adr/0018-v1-attested-resolved-module-graph.md.
+// this fact exists to avoid (Type Facts ADR 0018, archived under the tag
+// docs-archive-2026-10-19).
 //
 // Both fields are always populated; which one equals the module's own path
 // says whether the program holds the input or the output.
@@ -799,12 +799,24 @@ type Call struct {
 	Validity       ResolvedCallValidity
 	Kind           CallKind
 	Declaration    *ResolvedDeclaration
+	// DefaultLibraryBinding identifies a default-library declaration of the
+	// same direct global callee symbol, independently of the selected overload.
+	// It is binding identity, not signature substitution or a mutation proof.
+	DefaultLibraryBinding *ResolvedDeclaration
 	// Targets carries the exact candidate declarations of a composite
 	// (union) callee when the compiler proves the set exhaustive. It is
 	// complementary to Declaration, which stays nil for composite callees
 	// because no single signature was selected.
 	Targets   *CallTargetSet
 	Arguments []ArgumentMapping
+	// AssertionSignature: the selected signature carries an `asserts`
+	// type predicate (`asserts x`, `asserts this`, `asserts x is T`). Such
+	// a call may throw instead of returning, depending on its argument, as
+	// a `never` return always does (table schema v19).
+	AssertionSignature bool
+	// NeverReturns: the selected signature's return type is the `never`
+	// type itself, so the call never completes normally (table schema v19).
+	NeverReturns bool
 }
 
 // FileChange is one monotonically-versioned editor overlay change.

@@ -1,0 +1,3 @@
+# callee-callback-timing
+
+**Claim.** A read in a function literal in a component body handed to a *project* function (directly or in an array/object literal argument) is `SC1001` **uncertifiable** unless the callee's own body calls that parameter during the call, then a proven violation (`execution_role::callee_callback_timing`): `InvokedDuringCall`, `InvokedCrossFile` and `InvokedThroughNamespace` are violations, `InvokedByMethod` (`bus.run`) is still uncertifiable (`SC9012` and `SC1001`). A callee seen only through declarations (`ext-lib`, no runtime bytes; `PackageCallee`) is uncertifiable. `Props.tsx`/`Async.tsx` (`SC5001`) apply it to prop callbacks and pending reads. Stub holds `createSignal` verbatim from rc.9.

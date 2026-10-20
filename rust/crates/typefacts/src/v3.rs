@@ -6,11 +6,10 @@ use serde::{Deserialize, Serialize};
 use crate::{
     ArgumentMapping, ArgumentMappingReason, ArgumentMappingStatus, ArrayShape, AsyncFunctionFact,
     CallKind, CallTargetSet, Callability, ConstantValue, ConstantValueKind, Constructability,
-    ConstructionWitness, Declaration, DeclarationOwner, EntityFact, ExportValueDemand,
-    ExportValueTranscript, FileFact, InvocationDemand, InvocationEnvelope, InvocationTranscript,
-    Location, ModuleFact, ModuleImportFact, ObjectConstructionProperty, ObjectConstructionShape,
-    ParameterFact, PrimitiveLiteralCandidate, PrimitiveLiteralKind, PrimitiveValueDomain,
-    ReferenceSpace, ResolvedCall, ResolvedCallValidity, ResolvedDeclaration, RuntimeBindingKind,
+    ConstructionWitness, Declaration, DeclarationOwner, EntityFact, FileFact, Location, ModuleFact,
+    ModuleImportFact, ObjectConstructionProperty, ObjectConstructionShape, ParameterFact,
+    PrimitiveLiteralCandidate, PrimitiveLiteralKind, PrimitiveValueDomain, ReferenceSpace,
+    ResolvedCall, ResolvedCallValidity, ResolvedDeclaration, RuntimeBindingKind,
     RuntimeValueDomain, SourceBinding, SourceCall, SourceFunction, SourceHash, SymbolFact,
     TupleShape, TypeDescriptor,
 };
@@ -35,19 +34,418 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V15: u64 = 15;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
+/// v19 appends a flag word to every resolved call: bit 0 is
+/// `ResolvedCall::assertion_signature`, bit 1 `ResolvedCall::never_returns`.
+pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V19: u64 = 19;
+pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V20: u64 = 20;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:aeb7900e0c359221ef14f0bd705358d516249d50a67db5063a33c00dcbac3c84";
-/// 10 reports exact per-callable return-carry edges for an exported runtime
-/// implementation. A consumer can compose a callable returned by a callable
-/// the implementation returns without treating byte nesting, storage, or an
-/// unproven return site as execution.
+    "sha256:2533cc3d559a1318cd62a6adc256bd96aa610a7a9e4b1d6fea985e0996e6d527";
+/// 17 says that an empty uncensused-form census includes the reviewed
+/// ECMAScript case `value == null` / `value != null`: an exact null literal
+/// takes the loose-equality nullish arm and does not invoke a coercion hook on
+/// the other operand. The wire shape is unchanged, so the handshake is the
+/// discriminator between producers with and without that classifier premise.
 ///
-/// A protocol-9 client rejects the new field and a protocol-9 producer omits
-/// it, so this is a break
-/// rather than a compatible extension and the number is what says so. The
-/// digest and build id still move with it, and the handshake refuses a producer
-/// that differs on any one of the three.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 10;
+/// 16 adds an explicit unchanged whole-parameter identity on return sites.
+/// Missing identity is open, independently of concrete type completeness.
+///
+/// 15 stops the producer answering a question about a jump region with silence,
+/// and says which of two different things a control-flow marker means.
+///
+/// The implementation call census used to **drop** every row lying in a region
+/// a `break` or `continue` makes non-universal, so as to keep an
+/// over-optimistic `reachable` off the wire. It now emits the row with
+/// `reach: unknown` — the weakest non-negative value, strictly weaker than the
+/// row that was withheld, so no positive claim gains anything. What dropping
+/// cost was the claim in the other direction: a dropped call is a
+/// `CallExpression`, so it leaves no `uncensusedInvokingForms` row either, and
+/// `switch (kind) { case "mount": render(App, el); break; }` published nothing
+/// at all about `render`.
+///
+/// [`crate::ControlFlowCensus::incompleteness`] then classifies each
+/// `unsupported` marker, per construct and at its location.
+/// `reachability-lower-bound` is a construct walked in full — a loop, a
+/// `switch`, a `try` — whose every enclosed site is recorded and none of which
+/// is called `unreachable` on its account, so only the *guarantee* is
+/// unmodelled and a may-execute enumeration of the callables inside stands.
+/// `flow-unaccounted` is a construct whose flow the census cannot account for
+/// in either direction, and it is the producer's classifier default, so a
+/// marker nobody classified refuses on arrival rather than passing as the
+/// admissible arm. `unsupported` keeps its exact meaning and its consumers.
+///
+/// **The number moves for the same reason as 14.** An absent `incompleteness`
+/// beside a nonempty `unsupported` is a producer with no classification, a
+/// present empty one is the claim that nothing is unmodelled, and serde cannot
+/// separate them. A protocol-14 producer's silence would read to a protocol-15
+/// consumer as the admissible arm, which is the unsound direction, so the
+/// handshake is the discriminator. In the other direction a protocol-14
+/// consumer rejects a protocol-15 census outright: `ControlFlowCensus` denies
+/// unknown fields.
+///
+/// 14 added the two facts an implementation census needs and neither the call
+/// census nor `complete` could carry.
+///
+/// `uncensusedInvokingForms` on
+/// [`crate::ExportImplementationTranscript`] names, per form, every syntactic
+/// position that can invoke user code and that `calls` does not record —
+/// `calls` holds `CallExpression` and `NewExpression` only. Its classifier's
+/// default is refusal: a node kind that is neither classified nor on the
+/// producer's reviewed list of provably non-invoking kinds arrives as
+/// `unclassified-invoking-form`, so a form nobody has thought of refuses
+/// rather than passing in silence.
+///
+/// **This is the whole reason the number moves rather than the field merely
+/// being additive.** An absent list and a present empty one are different
+/// facts — no opinion versus "every form I walked was a call, a construction,
+/// or provably non-invoking" — and serde cannot tell them apart, because the
+/// field defaults to empty. A protocol-13 producer's silence would therefore
+/// read to a protocol-14 consumer as the positive claim, which is exactly the
+/// unsound direction. The handshake is the discriminator, so the handshake has
+/// to move. (In the other direction a protocol-13 consumer rejects a
+/// protocol-14 transcript outright: `ExportImplementationTranscript` denies
+/// unknown fields.)
+///
+/// `localDeclarationLocation` on [`crate::ExportValueDemand`], answered by
+/// `localDeclaration` on [`crate::ExportValueTranscript`], asks for an
+/// implementation transcript of the function-like declaration at an exact
+/// source range. A census recurses into module-local helpers, and
+/// `implementationLocation` cannot reach one: it starts from an identifier and
+/// resolves through the export's runtime binding. The demand is hashed into
+/// the export-value demand digest, so a protocol-13 producer would answer a
+/// protocol-14 demand under a digest it computes differently.
+///
+/// 13 added `calleeSources` to the implementation call census: the traced value
+/// provenance of the *callee expression*, from the same
+/// `returnValueSourcesLocked` walk and under the same gates that answer
+/// `argumentSources` for an argument. It answers "what created the value being
+/// called", which no other field on `ImplementationCall` answers — `target`,
+/// `target_name`, `target_module`, `declaration` and `callee_parameter` state
+/// the callee's *resolution* and are unchanged. An empty list is the producer's
+/// silence, never a negative claim about the callee.
+///
+/// It is a break in both directions even though it is only additive:
+/// `ImplementationCall` denies unknown fields, so a protocol-12 consumer
+/// rejects a protocol-13 census outright, and a protocol-12 producer's silence
+/// on the field is indistinguishable from "traced nothing" for every call — a
+/// protocol-13 consumer reading it would conclude that no callee anywhere has
+/// provenance. The digest and build id move with the number, and the handshake
+/// refuses a producer that differs on any one of the three.
+///
+/// 12 added `argumentSources`: per written argument slot, the traced value
+/// provenance of the expression written there, from the same tracer that
+/// already answers it for a return site. It also *narrowed* that tracer's
+/// identifier arm, which followed a symbol's first declaration and so traced a
+/// reassignable binding to an initializer that may not be the value — a
+/// `ReturnSite.sources` a protocol-11 producer states and a protocol-12
+/// producer withholds.
+///
+/// 11 split the callable-path census into the members a value declares and the
+/// members it carries only through the compiler's apparent-type augmentation.
+// Protocol 42 marks original-input evidence limited to a loop's first entry.
+// Protocol 41 also binds the first receiver before a plain parameter assignment.
+// Protocol 40 binds original caller roots at exact opening-prefix property uses.
+// Protocol 39 adds affirmative unwritten parameter bindings tied to exact
+// implementation signature slots. These establish source identity, not shape.
+// Protocol 38 includes every union constituent in the premise identity and
+// spells complete imported unions in helper twins.
+// Protocol 37 binds an exact anonymous local callable through its own
+// compiler symbol rather than requiring a named enclosing variable.
+// Protocol 36 adds localLiteralResult: exact call, callee, allocation and
+// complete return sites for one local data-only result. The consumer binds
+// this derivation to the local execution census before granting access.
+// Protocol 35 classifies an explicit never type as non-object even though its
+// distributed constituent set is empty (ADR 0051). Coercions and completion
+// facts share this predicate: never states no normal object-valued completion,
+// never an unavailable type. Call-argument premises and helper echoes bind it.
+// Protocol 34 widens the `parameter` subject derivation to a binding the file
+// **writes**, when every value it can hold is rooted at one parameter
+// (ADR 0050). No flow analysis is involved: if every value is the caller's,
+// whichever one the read sees is the caller's.
+// Protocol 33 lets a `callArgumentPremise` cover the slots a call does **not**
+// write (ADR 0049): such a parameter receives `undefined` at run time, a
+// primitive, which is a stronger premise than an unannotated parameter's `any`
+// and is what lets a premise chain survive a caller that omits an optional
+// argument.
+// Protocol 32 adds the `parameter-result` subject derivation (ADR 0048): the
+// value a call to a caller-supplied callee handed back, carrying the slot the
+// callee was rooted at.
+// Protocol 31 lets an `instanceof` form state whose `Symbol.hasInstance` its
+// operator can reach (ADR 0047), through the same `subjectRoot` vocabulary:
+// `parameter`/`parameter-default` for a caller-supplied constructor,
+// `default-library` for the engine's own, and `own-class` with
+// `subjectDeclaration` naming a class this program declares with no heritage
+// clause and no computed member.
+// Protocol 30 adds `spelling` on a `parameterPremise` (ADR 0046): a form of
+// the premise's type that resolves from a module which cannot name it
+// directly, `import("<specifier>").<Name>`. A helper premise is written into a
+// JavaScript module as a JSDoc `@param`, where a bare `Axis` resolves to
+// nothing; the caller's twin is where the spelling can be computed. The type
+// text and the identity remain the whole falsifier, and this side echoes the
+// spelling byte for byte — which is why the number moves: a protocol-29
+// consumer would demand a premise without it and refuse the transcript that
+// echoed one.
+// Protocol 29 adds `coercionPremise` on a `coercion` form and
+// `primitiveCompletion` on every implementation transcript (ADR 0045). A call
+// to a module-local helper types as `any` in compiled JavaScript however well
+// the package's declarations type that helper, so a sum of one refused
+// wherever the premise had typed everything else. The premise names the calls
+// the form's clearance rests on; the completion is the callee's own answer,
+// belonging to the premise its census was classified under.
+// Protocol 28 adds a third `subjectRoot` value, `own-literal` (ADR 0044): the
+// subject is a binding this program initialized from an object or array
+// literal, or from an object pattern's rest element, whose every own property
+// the specification creates with CreateDataPropertyOrThrow. It carries
+// `subjectDeclaration` and **no** `subjectParameter`, so a protocol-27
+// consumer requiring the index beside the derivation would refuse it.
+// Protocol 27 accompanies every stated `subjectParameter` with `subjectRoot`,
+// the derivation that rooted the subject at that slot, over a closed two-value
+// set (ADR 0043). `parameter` is ADR 0034's premise unchanged and now covers
+// three spellings of the same value — the parameter, a name its own object
+// binding pattern bound, and a name a local declaration bound from an
+// already-rooted initializer — because naming an intermediate does not change
+// whose value it is. `parameter-default` is the new claim: the slot carries a
+// default naming another rooted slot, so the value is caller-supplied under
+// either branch. A protocol-26 consumer received a subject with no derivation
+// and would read the second as the first.
+// Protocol 26 lets an iteration form state the parameter its iterated value is
+// rooted at, and a call state `calleeIteratedParameter` — the parameter-rooted
+// iterable whose iteration produced the callee (ADR 0042). A rest parameter's
+// array also stops being recorded as an iteration form: the engine builds it,
+// so iterating or spreading it reaches `Array.prototype` and nothing else.
+// Protocol 25 lets an object or JSX prop spread's operand and an object
+// binding pattern's source carry `subjectParameter` as well, so every form
+// that reads properties of a caller-supplied value states where that value
+// came from (ADR 0041). A protocol-24 producer roots only a property or
+// element access.
+// Protocol 24 lets an uncensused accessor form state its subject parameter in
+// **write** position as well, with `subjectWrite` saying which position it is
+// (ADR 0040). A protocol-23 consumer only ever saw a subject for a read, so
+// reading the field without the position would read a write into the caller's
+// object as a read of it.
+// Protocol 23 carries a premise to a local helper: a premised census states
+// `callArgumentPremises` — the type of each informative argument slot at every
+// call to a runtime-source declaration, on the twin — a local-declaration
+// demand may carry them back as `parameterPremises`, and the helper's
+// transcript echoes the entries its own twin bound (ADR 0038, helper
+// premises). A protocol-22 consumer refused any premise on a local declaration
+// and never asked for one, so the number moves although every field is
+// additive.
+// Protocol 22 lets an export's root implementation transcript state
+// `parameterPremises`: its uncensused-form census was classified with each
+// parameter bound to the type the export's declared call signature gives that
+// position rather than an unannotated JavaScript parameter's `any` (ADR 0038).
+// An empty form list on such a transcript means "no form under the declared
+// signature"; a protocol-21 consumer would read it as "no form at all".
+// Protocol 21 makes `overloadOrdinal` and `overloadCount` range over the
+// declarations that state a call signature — TypeScript's overload set, the
+// bodiless declarations — instead of every declaration of the signature's kind.
+// A protocol-20 producer counted an overloaded function's implementation body
+// when it analyzed source rather than a `.d.ts`, reported `overloadCount ==
+// len + 1`, and `require_complete_overload_set` refused the set as incomplete;
+// the selected-signature identity digest carries the count and moves with it.
+// Protocol 20 lets an implementation transcript state `implementationOf`: the
+// declaration whose body it walked when its declaration is a binding that
+// aliases that function by identity (`const defaultScheduler =
+// systemSetTimeoutZero`, followed through a sibling `.d.ts` to the runtime
+// module's export). A protocol-19 producer refused such a binding as
+// `implementationUnavailable`; a transcript without the field is a body of its
+// own declaration, on either protocol.
+// Protocol 19 states an implementation transcript's completion form — plain,
+// async, generator, async generator — so a `returns` census can refuse a
+// callable that hands its caller a promise or an iterator whatever its body
+// does (ADR 0035). An absent form on an older producer is not "plain".
+// Protocol 18 lets an uncensused form and a `.call`/`.apply` row state the
+// parameter their subject is rooted at (ADR 0034); an absent fact on an older
+// producer is never "not rooted".
+// Protocol 17 includes exact-null loose equality in the positive
+// uncensused-form classifier. Protocol 16 added unchanged-parameter identity.
+// Protocol 44 adds runtime export initializer derivations. These bind source
+// subjects only; imported call behavior still requires dependency evidence.
+// Protocol 46 binds one-hop original-input helper reads.
+// Protocol 47 adds the `parameter-default-literal` subject derivation
+// (ADR 0090): a parameter with a data-only literal default that its body never
+// writes holds either the caller's argument or the object that default freshly
+// created, and an accessor read is excused on each by a derivation already
+// reviewed. Spelled apart from `parameter-default`, which is caller-rooted on
+// both arms; the root does not propagate through a local binding.
+// Protocol 48 adds the diagnostic `subjectRootRefusal`: why an accessor form
+// rooted no subject. Never a premise; nothing is admitted on its account.
+// Protocol 49 widens `parameter` to a written parameter whose every assigned
+// value is rooted at that same slot (ADR 0091).
+// Protocol 50 refines the diagnostic `subjectRootRefusal` binding legs.
+// Protocol 51 adds the diagnostic `coercionSubjectRoot` and
+// `coercionSubjectRootRefusal`: the derivation every one of a coercion's
+// ToPrimitive operands agreed on, or why they did not. Never a premise, and
+// separate from `subjectRoot`, which is an accessor's receiver.
+// Protocol 52 adds `coercionSubjectParameters` and makes the caller-provenance
+// derivations of `coercionSubjectRoot` a premise (ADR 0092): the slots the
+// operands rooted at, which is what a receipt names. A consumer that reviewed
+// only protocol 51 read the derivation as a diagnostic, so the number moves.
+// Protocol 53 adds the `parameter-or-own-result` derivation and
+// `subjectLocalLiteralResults` (ADR 0093): a written parameter each of whose
+// values is either the caller's argument at this slot or a value this program
+// allocated and returned. Only one arm is the caller's, so the spelling is
+// apart from `parameter`.
+// Protocol 54 stops recording a form for a numeric-literal element access into
+// an engine-owned indexed container (ADR 0094). An index signature declares no
+// property symbol, so such a read resolved nothing and arrived as an unknown
+// accessor; where the container is one the engine allocated, the member reached
+// is its own storage and nothing user-written runs. This *removes* rows, so a
+// consumer that reviewed only protocol 53 would read the silence as a weaker
+// claim than it is, and the number moves.
+// Protocol 55 makes a class a callee (ADR 0095): a local-declaration demand
+// naming a class answers the constructor `new C(…)` runs, in both spellings,
+// with the class itself as the resolved declaration and the constructor as the
+// censused body. A heritage clause, a field initializer, a static block, a
+// computed member name, a decorator, a parameter property and an implicit
+// constructor each refuse by name through openReasons. A protocol-54 consumer
+// received `declarationNotExact` for every one of these, so the positive answer
+// is new and the number moves.
+// Protocol 56 states that a value export cannot be invoked (ADR 0099): an
+// export whose runtime value type has no call and no construct signature on
+// any constituent, and is neither any/unknown/never nor instantiable, answers
+// an implementation demand with `notCallableValue` beside its declaration and
+// the single open reason `valueNotCallable`, where protocol 55 answered
+// `callSignatureNotUnique`. A protocol-55 consumer would read the new open
+// reason as a refusal, so the number moves.
+// Protocol 57 states that an export is a default-library member by identity
+// (ADR 0103): a `const` binding, never written in its file, whose initializer
+// is a property access whose object and member both resolve to default-library
+// symbols, with the member declared on the named container's interface and
+// neither container nor member written, deleted or escaping as anything but a
+// read or a call, answers an implementation demand with `defaultLibraryAlias`
+// naming the container and member. The fact is stated *beside* the existing
+// open reason, never instead of it, so a protocol-56 consumer would still
+// refuse on `callSignatureNotUnique` or `implementationUnavailable` exactly as
+// before — but it would drop the new field, and a `deny_unknown_fields`
+// consumer would reject the transcript outright, so the number moves.
+// Protocol 60 admits one escape of a default-library container instead of
+// refusing the file's aliases for it (ADR 0112). `Container.member.bind(
+// Container)` hands the container over as a `thisArg`, and protocol 59 read
+// that as "this file may have rewritten the library value" and withdrew the
+// identity of every alias in the file — which is what
+// `const defaultEquals = Object.is.bind(Object)` did to
+// `@solid-primitives/utils@7.0.0-next.4`'s `Object.entries` and `Object.keys`,
+// and why ADR 0103 closed zero corpus rows. `Function.prototype.bind` neither
+// mutates its argument nor invokes the target, so the producer now states the
+// alias and names the escape on `DefaultLibraryAlias::container_escapes`; a
+// consumer must require every named member to be one it has reviewed. A
+// protocol-59 consumer decodes with `deny_unknown_fields` and would reject the
+// transcript outright, so the number moves.
+// Protocol 61 states the arms of a returned conditional or array literal
+// (ADR 0115). `ReturnSite::arms` lists the leaves of a returned conditional
+// tree, after identity-preserving wrappers and with a branch a literal
+// condition excludes left out, each with its own value fact and
+// unwritten-parameter identity; an array-literal arm lists its elements the same
+// way. Present means exhaustive, and a tree past the producer's bounds states
+// none. A protocol-60 consumer decodes with `deny_unknown_fields` and would
+// reject the transcript outright, so the number moves.
+// Protocol 62 names the parameter a call arm invokes (ADR 0116):
+// `ReturnArm::invoked` is the unchanged whole input binding a non-optional call
+// arm calls, and a returned call of one is decomposed as a one-arm root. A
+// protocol-61 consumer decodes with `deny_unknown_fields` and would reject the
+// transcript outright, so the number moves.
+// Protocol 63 roots a literal-keyed element access (item B of ways-to-improve
+// § 3.3): `handler[0]` is `handler`'s parameter at a tuple segment and
+// `options["run"]` at a property segment, in `calleeParameter`,
+// `argumentParameters` and `calleeIteratedParameter` alike, exactly as
+// `options.run` is. No field changes; a protocol-62 consumer never saw a tuple
+// segment on a callee and would read one under its old meaning, so the number
+// moves.
+// Protocol 64 decomposes a returned member read of an unwritten parameter
+// (item B round 2 of ways-to-improve § 3.3): a non-call property access or
+// literal-keyed element access chain rooted at one is a `returns` root whose
+// arm carries the member's path in `parameter`, and an optional chain adds a
+// second arm with `ReturnArm::undefined`. A protocol-63 consumer decodes with
+// `deny_unknown_fields` and would reject the new field, so the number moves.
+// Protocol 65 states what a construction keeps for its members (ADR 0139):
+// `ExportImplementationTranscript::retained_arguments`, beside invocation
+// `construct`, names each constructor parameter stored once on the instance
+// under a fixed key whose only readers are member calls no construction
+// reaches. A protocol-64 consumer decodes with `deny_unknown_fields` and would
+// reject the new field, so the number moves.
+// Protocol 66 states the location of a returned function or arrow expression
+// (ADR 0145): `ReturnSite::callable` and `ReturnArm::callable`, so a consumer
+// can demand that node's transcript and census what the returned value runs,
+// and `ReturnSite::primitive_syntax`, a returned value primitive by grammar;
+// ADR 0146 adds `ReturnSite::call` and a call-result source's
+// `arguments_primitive_syntax`. A protocol-65 consumer decodes with `deny_unknown_fields` and would reject
+// the new field, so the number moves.
+// Protocol 67 (the 2026-09-28 amendment to ADR 0113) holds a `plain` return to
+// evidence no reassignable binding's declared type can fake:
+// `ReturnSite::primitive_syntax` now also answers a never-written `const`
+// whose initializer is one and the intrinsic `undefined`,
+// `ReturnSite::default_library_call` names the built-in a returned
+// `Receiver.member(...)` call invokes by identity, and
+// `ReturnSite::type_script_source` states a return in a TypeScript source file.
+// A protocol-66 consumer decodes with `deny_unknown_fields` and would reject
+// the new fields, so the number moves.
+// Protocol 68 (ADR 0149) states when a
+// default-library call invokes its declaration by identity:
+// `ImplementationCall::standard_library_identity`, for a callee whose receiver
+// is nothing, an unshadowed global the file never writes, or a fresh built-in
+// value the expression itself makes -- never a binding whose declared type is
+// all that names the built-in. A protocol-67 consumer decodes with
+// `deny_unknown_fields` and would reject the new field, so the number moves.
+// Protocol 70 (ADR 0153; 69 was never issued) states a member read of a
+// package-owned context value:
+// `UncensusedInvokingForm::context_member` names the chain of local calls that
+// reaches a dialect `useContext` read, the context's provision census (reads,
+// read helpers, `createComponent` providers and the object literals they
+// provide, exports), and every call in the program's runtime source that could
+// turn the member into an accessor. A protocol-69 consumer decodes with
+// `deny_unknown_fields` and would reject the new field, so the number moves.
+// Protocol 71 (ADR 0152) states, per implementation call, the parameter of
+// the censused implementation its callee is by binding identity
+// (`ImplementationCall::callee_unwritten_parameter`, at any depth of nesting)
+// and whether it runs exactly once on every normal completion of its flow
+// owner (`ImplementationCall::unconditional`). A protocol-70 consumer decodes
+// with `deny_unknown_fields` and would reject the new fields, so the number
+// moves.
+// The 2026-09-28 amendment to ADR 0149 narrows, with no field change and so
+// no new number, what the producer leaves unrecorded: a coercion is omitted
+// only when every operand is proved a primitive, never by a JavaScript type
+// alone, and `ReturnSite::primitive_syntax` reaches a `let` or `var` every
+// value of which is one. The client is unchanged; producer and client still
+// ship as a pair by the build id.
+//
+// Protocol 74 (ADR 0168) states, per call, which of its written arguments are
+// primitives by grammar (`ImplementationCall::arguments_primitive_syntax`), so a
+// dialect row whose reading is conditional on a non-function argument can be
+// replayed at the call site. A protocol-73 consumer decodes with
+// `deny_unknown_fields` and would reject the new field, so the number moves.
+//
+// Protocol 73 (ADR 0153 item C; 72 was reserved for the coercion amendment,
+// which took no number) states, per implementation, the run-time accessor
+// installations of its own installed package
+// (`ExportImplementationTranscript::accessor_installations`): whether each installation's target is an allocation its function makes
+// fresh, every operation the package performs on that target, the named
+// functions that may execute one, and whether this implementation is one of
+// them. A protocol-71 consumer decodes with `deny_unknown_fields` and would
+// reject the new field, so the number moves.
+//
+// Protocol 75 (ADR 0166; 74 belongs to a concurrent change) lets an
+// `invocations` or `export-values` request carry `hostConstants`: named imports
+// whose value the certification's declared host fixes, which the producer reads
+// as literals wherever it decides a condition (branch reachability, loop exits,
+// `ImplementationCall::unconditional`). A protocol-73 producer decodes with
+// unknown fields refused and would reject the request, so the number moves.
+//
+// Protocol 76 (ADR 0162) states, per call-result source, which of its written
+// arguments are not functions by grammar
+// (`ImplementationValueSource::arguments_not_function_syntax`) and which is a
+// plain options literal (`arguments_plain_options_syntax`), so the inert
+// accessor row of ADR 0146 can be discharged at the creating call.
+// `arguments_non_spread_syntax` proves undisplaced slots, so a memo's
+// computation argument cannot also supply options callbacks through a spread.
+// A protocol-75
+// consumer decodes with `deny_unknown_fields` and would reject the new fields,
+// so the number moves.
+// Protocol 77 (ADR 0172) adds exhaustive fresh literal return structures.
+// Protocol 78 removes the certification reads `invocations` and
+// `export-values` with their request and response fields.
+// Protocol 79 carries the independent default-library binding in Wire v20.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 79;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",
@@ -73,12 +471,6 @@ pub enum Operation {
     /// `Sources` it is a read of the retained program: it carries no state
     /// token, edits no retained demand set, and advances no generation.
     Modules,
-    /// Demand-shaped invocation proof transcripts. This read does not retain
-    /// facts or disturb the editor-analysis state token.
-    Invocations,
-    /// Exact compiler value facts for verifier-owned exported-value query
-    /// expressions. This is distinct from a call transcript by construction.
-    ExportValues,
     Cancel,
     Close,
 }
@@ -175,10 +567,6 @@ pub struct Request {
     /// inventory alone.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub module_graph: Option<ModuleGraphRequest>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub invocation_demands: Vec<InvocationDemand>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub export_value_demands: Vec<ExportValueDemand>,
 }
 
 /// The wire form of a module-graph demand.
@@ -287,14 +675,6 @@ pub struct Response {
     pub module_imports: Vec<ModuleImportFact>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub unknown_import_paths: Vec<Arc<str>>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub invocation_transcripts: Vec<InvocationTranscript>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub invocation_envelope: Option<InvocationEnvelope>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub export_value_transcripts: Vec<ExportValueTranscript>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub export_value_envelope: Option<InvocationEnvelope>,
     #[serde(skip)]
     pub client_decode_ns: u64,
     #[serde(skip)]
@@ -729,12 +1109,31 @@ impl<'a> PackedCursor<'a> {
                 parameter,
             });
         }
+        let (assertion_signature, never_returns) = if table_schema >= TYPE_FACTS_TABLE_SCHEMA_V19 {
+            let flags = self.u64()?;
+            if flags & !3 != 0 {
+                return Err(format!("packed resolved call has unknown flags {flags}"));
+            }
+            (flags & 1 != 0, flags & 2 != 0)
+        } else {
+            (false, false)
+        };
+        let default_library_binding = if table_schema >= TYPE_FACTS_TABLE_SCHEMA_V20
+            && self.boolean("default-library binding presence")?
+        {
+            Some(Arc::new(self.resolved_declaration(strings)?))
+        } else {
+            None
+        };
         Ok(ResolvedCall {
             target,
             return_type_text,
+            assertion_signature,
+            never_returns,
             validity,
             kind,
             declaration,
+            default_library_binding,
             targets,
             arguments: arguments.into(),
         })
@@ -836,7 +1235,9 @@ fn decode_entity_run(
         let flags = cursor.u64()?;
         let known_flags = match table_schema {
             TYPE_FACTS_TABLE_SCHEMA_V16 | TYPE_FACTS_TABLE_SCHEMA_V17 => 32767,
-            TYPE_FACTS_TABLE_SCHEMA_V18 => 65535,
+            TYPE_FACTS_TABLE_SCHEMA_V18
+            | TYPE_FACTS_TABLE_SCHEMA_V19
+            | TYPE_FACTS_TABLE_SCHEMA_V20 => 65535,
             TYPE_FACTS_TABLE_SCHEMA_V15 | TYPE_FACTS_TABLE_SCHEMA_V14 => 16383,
             TYPE_FACTS_TABLE_SCHEMA_V13 => 8191,
             TYPE_FACTS_TABLE_SCHEMA_V12 => 4095,
@@ -1314,6 +1715,8 @@ pub(crate) fn decode_table_transition(input: &[u8]) -> Result<WireTableTransitio
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V16
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V17
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V18
+        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V19
+        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V20
     {
         return Err(format!("unsupported Wire table schema {table_schema}"));
     }
@@ -1651,746 +2054,4 @@ pub fn compact_demands(demands: &[EntityDemand]) -> CompactDemands {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::sync::Arc;
-
-    use sha2::{Digest, Sha256};
-
-    use crate::{
-        ArgumentMappingReason, ArgumentMappingStatus, CallKind, Callability, Constructability,
-        PrimitiveLiteralCandidate, PrimitiveLiteralKind, ReferenceSpace, ResolvedCallValidity,
-    };
-
-    use super::{
-        SlotOp, TYPE_FACTS_SCHEMA_SHA256, TYPE_FACTS_TABLE_SCHEMA_V3, TYPE_FACTS_TABLE_SCHEMA_V14,
-        TYPE_FACTS_TABLE_SCHEMA_V15, TYPE_FACTS_TABLE_SCHEMA_V16, TYPE_FACTS_TABLE_SCHEMA_V17,
-        TYPE_FACTS_TABLE_SCHEMA_V18, TransitionMode, decode_table_transition,
-        parse_argument_mapping_reason, parse_argument_mapping_status, parse_call_kind,
-        parse_callability, parse_constructability, parse_reference_space,
-        parse_resolved_call_validity, push_uvarint,
-    };
-
-    fn push_test_string(frame: &mut Vec<u8>, value: &str) {
-        push_uvarint(frame, 0);
-        push_uvarint(frame, 0);
-        push_uvarint(frame, value.len() as u64);
-        frame.extend_from_slice(value.as_bytes());
-    }
-
-    fn empty_full_transition() -> Vec<u8> {
-        let mut frame = Vec::new();
-        for value in [1, 0, 3, 0, 1, 2] {
-            push_uvarint(&mut frame, value);
-        }
-        push_test_string(&mut frame, "");
-        push_test_string(&mut frame, "/p/tsconfig.json");
-        // project, empty base token, no path operations, no symbol operations.
-        for value in [1, 0, 0, 0] {
-            push_uvarint(&mut frame, value);
-        }
-        frame
-    }
-
-    fn runtime_value_domain_transition(table_schema: u64, domain_bits: u64) -> Vec<u8> {
-        let mut frame = Vec::new();
-        for value in [1, 0, table_schema, 0, 1, 3] {
-            push_uvarint(&mut frame, value);
-        }
-        push_test_string(&mut frame, "");
-        push_test_string(&mut frame, "/p/tsconfig.json");
-        push_test_string(&mut frame, "/p/a.ts");
-        // Project, empty base token, one path; path index, entity-replace tag.
-        for value in [1, 0, 1, 2, 4] {
-            push_uvarint(&mut frame, value);
-        }
-        // One entity: start 0, length 1, no symbol, value-domain field.
-        for value in [1, 0, 1, 0, 32, domain_bits, 0] {
-            push_uvarint(&mut frame, value);
-        }
-        frame
-    }
-
-    fn primitive_literal_candidates_transition(table_schema: u64) -> Vec<u8> {
-        let mut frame = Vec::new();
-        for value in [1, 0, table_schema, 0, 1, 4] {
-            push_uvarint(&mut frame, value);
-        }
-        push_test_string(&mut frame, "");
-        push_test_string(&mut frame, "/p/tsconfig.json");
-        push_test_string(&mut frame, "/p/a.ts");
-        push_test_string(&mut frame, "alpha");
-        for value in [1, 0, 1, 2, 4] {
-            push_uvarint(&mut frame, value);
-        }
-        // One entity with string "alpha", number 2, and boolean true.
-        for value in [1, 0, 1, 0, 16384, 3, 0, 3, 1, 2.0_f64.to_bits(), 2, 1, 0] {
-            push_uvarint(&mut frame, value);
-        }
-        frame
-    }
-
-    fn call_result_domain_transition(table_schema: u64, domain_bits: u64) -> Vec<u8> {
-        let mut frame = Vec::new();
-        for value in [1, 0, table_schema, 0, 1, 3] {
-            push_uvarint(&mut frame, value);
-        }
-        push_test_string(&mut frame, "");
-        push_test_string(&mut frame, "/p/tsconfig.json");
-        push_test_string(&mut frame, "/p/a.ts");
-        for value in [1, 0, 1, 2, 4] {
-            push_uvarint(&mut frame, value);
-        }
-        // One entity: start 0, length 1, no symbol, call-result field.
-        for value in [1, 0, 1, 0, 128, domain_bits, 0] {
-            push_uvarint(&mut frame, value);
-        }
-        frame
-    }
-
-    fn array_shape_transition(table_schema: u64, tag: u64) -> Vec<u8> {
-        let mut frame = Vec::new();
-        for value in [1, 0, table_schema, 0, 1, 3] {
-            push_uvarint(&mut frame, value);
-        }
-        push_test_string(&mut frame, "");
-        push_test_string(&mut frame, "/p/tsconfig.json");
-        push_test_string(&mut frame, "/p/a.ts");
-        for value in [1, 0, 1, 2, 4] {
-            push_uvarint(&mut frame, value);
-        }
-        // One entity: start 0, length 1, no symbol, array-shape field.
-        for value in [1, 0, 1, 0, 512, tag, 0] {
-            push_uvarint(&mut frame, value);
-        }
-        frame
-    }
-
-    fn library_types_transition(table_schema: u64, count: u64) -> Vec<u8> {
-        let mut frame = Vec::new();
-        for value in [1, 0, table_schema, 0, 1, 4] {
-            push_uvarint(&mut frame, value);
-        }
-        push_test_string(&mut frame, "");
-        push_test_string(&mut frame, "/p/tsconfig.json");
-        push_test_string(&mut frame, "/p/a.ts");
-        push_test_string(&mut frame, "Date");
-        for value in [1, 0, 1, 2, 4] {
-            push_uvarint(&mut frame, value);
-        }
-        // One entity: start 0, length 1, no symbol, library-types field.
-        let mut row = vec![1, 0, 1, 0, 2048, count];
-        row.extend(std::iter::repeat_n(3, usize::try_from(count).unwrap()));
-        row.push(0);
-        for value in row {
-            push_uvarint(&mut frame, value);
-        }
-        frame
-    }
-
-    fn primitive_value_domain_transition(table_schema: u64, domain_bits: u64) -> Vec<u8> {
-        let mut frame = Vec::new();
-        for value in [1, 0, table_schema, 0, 1, 3] {
-            push_uvarint(&mut frame, value);
-        }
-        push_test_string(&mut frame, "");
-        push_test_string(&mut frame, "/p/tsconfig.json");
-        push_test_string(&mut frame, "/p/a.ts");
-        for value in [1, 0, 1, 2, 4] {
-            push_uvarint(&mut frame, value);
-        }
-        // One entity: start 0, length 1, no symbol, primitive-domain field.
-        for value in [1, 0, 1, 0, 4096, domain_bits, 0] {
-            push_uvarint(&mut frame, value);
-        }
-        frame
-    }
-
-    fn constructability_transition(table_schema: u64, tag: u64) -> Vec<u8> {
-        let mut frame = Vec::new();
-        for value in [1, 0, table_schema, 0, 1, 3] {
-            push_uvarint(&mut frame, value);
-        }
-        push_test_string(&mut frame, "");
-        push_test_string(&mut frame, "/p/tsconfig.json");
-        push_test_string(&mut frame, "/p/a.ts");
-        for value in [1, 0, 1, 2, 4] {
-            push_uvarint(&mut frame, value);
-        }
-        // One entity: start 0, length 1, no symbol, constructability field.
-        for value in [1, 0, 1, 0, 8192, tag, 0] {
-            push_uvarint(&mut frame, value);
-        }
-        frame
-    }
-
-    fn callability_transition(table_schema: u64, tag: u64) -> Vec<u8> {
-        let mut frame = Vec::new();
-        for value in [1, 0, table_schema, 0, 1, 3] {
-            push_uvarint(&mut frame, value);
-        }
-        push_test_string(&mut frame, "");
-        push_test_string(&mut frame, "/p/tsconfig.json");
-        push_test_string(&mut frame, "/p/a.ts");
-        for value in [1, 0, 1, 2, 4] {
-            push_uvarint(&mut frame, value);
-        }
-        // One entity: start 0, length 1, no symbol, callability field. The flag
-        // bit and the row layout are identical at v14 and v15 — only the tag
-        // space differs, which is exactly what the freeze below checks.
-        for value in [1, 0, 1, 0, 4, tag, 0] {
-            push_uvarint(&mut frame, value);
-        }
-        frame
-    }
-
-    fn tuple_shape_transition(
-        table_schema: u64,
-        packed: u64,
-        element_zero: u64,
-        min_parameters: u64,
-        exact_length_plus_one: u64,
-    ) -> Vec<u8> {
-        let mut frame = Vec::new();
-        for value in [1, 0, table_schema, 0, 1, 3] {
-            push_uvarint(&mut frame, value);
-        }
-        push_test_string(&mut frame, "");
-        push_test_string(&mut frame, "/p/tsconfig.json");
-        push_test_string(&mut frame, "/p/a.ts");
-        for value in [1, 0, 1, 2, 4] {
-            push_uvarint(&mut frame, value);
-        }
-        // One entity: start 0, length 1, no symbol, tuple-shape field. V13
-        // appends exactLength + 1, reserving zero for absence.
-        let mut row = vec![1, 0, 1, 0, 1024, packed, element_zero, min_parameters];
-        if table_schema >= 13 {
-            row.push(exact_length_plus_one);
-        }
-        row.push(0);
-        for value in row {
-            push_uvarint(&mut frame, value);
-        }
-        frame
-    }
-
-    fn constant_value_transition(table_schema: u64, tag: u64, payload: u64) -> Vec<u8> {
-        let mut frame = Vec::new();
-        let dictionary_count = if tag == 0 { 4 } else { 3 };
-        for value in [1, 0, table_schema, 0, 1, dictionary_count] {
-            push_uvarint(&mut frame, value);
-        }
-        push_test_string(&mut frame, "");
-        push_test_string(&mut frame, "/p/tsconfig.json");
-        push_test_string(&mut frame, "/p/a.ts");
-        if tag == 0 {
-            push_test_string(&mut frame, "value");
-        }
-        for value in [1, 0, 1, 2, 4] {
-            push_uvarint(&mut frame, value);
-        }
-        // One entity: start 0, length 1, no symbol, constant-value field.
-        for value in [1, 0, 1, 0, 256, tag, payload, 0] {
-            push_uvarint(&mut frame, value);
-        }
-        frame
-    }
-
-    fn unresolved_symbol_transition(table_schema: u64) -> Vec<u8> {
-        let mut frame = Vec::new();
-        for value in [1, 0, table_schema, 0, 1, 3] {
-            push_uvarint(&mut frame, value);
-        }
-        push_test_string(&mut frame, "");
-        push_test_string(&mut frame, "/p/tsconfig.json");
-        push_test_string(&mut frame, "/p/a.ts");
-        // Project, empty base token, one path; path index, entity-replace tag.
-        for value in [1, 0, 1, 2, 4] {
-            push_uvarint(&mut frame, value);
-        }
-        // One entity: start 0, length 1, no symbol, explicit-unresolved flag.
-        for value in [1, 0, 1, 0, 64, 0] {
-            push_uvarint(&mut frame, value);
-        }
-        frame
-    }
-
-    #[test]
-    fn handshake_hash_matches_frozen_schema() {
-        let actual = format!(
-            "sha256:{:x}",
-            Sha256::digest(include_bytes!(
-                "../../../../schema/typefacts-v1.schema.json"
-            ))
-        );
-        assert_eq!(actual, TYPE_FACTS_SCHEMA_SHA256);
-    }
-
-    #[test]
-    fn full_transition_header_is_strict_and_self_identifying() {
-        let valid = empty_full_transition();
-        let transition = decode_table_transition(&valid).unwrap();
-        assert_eq!(transition.mode, TransitionMode::Full);
-        assert_eq!(transition.table_schema, 3);
-        assert_eq!(transition.base_generation, 0);
-        assert_eq!(transition.target_generation, 1);
-        assert_eq!(transition.project_id.as_ref(), "/p/tsconfig.json");
-        assert!(transition.base_state_token.is_empty());
-        assert!(transition.paths.is_empty());
-        assert!(transition.symbols.is_empty());
-
-        assert!(decode_table_transition(&valid[..valid.len() - 1]).is_err());
-        assert!(decode_table_transition(&[1, 0, 3, 0, 1]).is_err());
-        let mut trailing = valid.to_vec();
-        trailing.push(0);
-        assert!(decode_table_transition(&trailing).is_err());
-
-        let mut overlong_version = vec![0x81, 0];
-        overlong_version.extend_from_slice(&valid[1..]);
-        assert!(decode_table_transition(&overlong_version).is_err());
-    }
-
-    #[test]
-    fn wire_table_v4_decodes_runtime_value_domains_and_v3_stays_frozen() {
-        let transition = decode_table_transition(&runtime_value_domain_transition(4, 3)).unwrap();
-        let SlotOp::Replace(entities) = &transition.paths[0].entities else {
-            panic!("entity row was not replaced");
-        };
-        assert_eq!(
-            entities[0].runtime_value_domain,
-            Some(crate::RuntimeValueDomain::new(true, true, false, false))
-        );
-        assert!(decode_table_transition(&runtime_value_domain_transition(4, 16)).is_err());
-        assert!(decode_table_transition(&runtime_value_domain_transition(3, 3)).is_err());
-    }
-
-    #[test]
-    fn wire_table_v5_decodes_explicit_unresolved_symbols_and_v4_stays_frozen() {
-        let transition = decode_table_transition(&unresolved_symbol_transition(5)).unwrap();
-        let SlotOp::Replace(entities) = &transition.paths[0].entities else {
-            panic!("entity row was not replaced");
-        };
-        assert!(entities[0].symbol.is_empty());
-        assert!(entities[0].symbol_unresolved);
-        assert!(decode_table_transition(&unresolved_symbol_transition(4)).is_err());
-    }
-
-    #[test]
-    fn wire_table_v7_decodes_call_result_domains_and_v6_stays_frozen() {
-        let transition = decode_table_transition(&call_result_domain_transition(7, 4)).unwrap();
-        let SlotOp::Replace(entities) = &transition.paths[0].entities else {
-            panic!("entity row was not replaced");
-        };
-        assert_eq!(
-            entities[0].call_result_domain,
-            Some(crate::RuntimeValueDomain::new(false, false, true, false))
-        );
-        assert!(decode_table_transition(&call_result_domain_transition(7, 16)).is_err());
-        assert!(decode_table_transition(&call_result_domain_transition(6, 4)).is_err());
-    }
-
-    #[test]
-    fn wire_table_v8_decodes_constant_values_and_v7_stays_frozen() {
-        let string_transition =
-            decode_table_transition(&constant_value_transition(8, 0, 3)).unwrap();
-        let SlotOp::Replace(string_entities) = &string_transition.paths[0].entities else {
-            panic!("entity row was not replaced");
-        };
-        assert_eq!(
-            string_entities[0].constant_value,
-            Some(crate::ConstantValue {
-                kind: crate::ConstantValueKind::String,
-                string: "value".into(),
-                number: 0.0,
-            })
-        );
-
-        let number_transition =
-            decode_table_transition(&constant_value_transition(8, 1, 42.5_f64.to_bits())).unwrap();
-        let SlotOp::Replace(number_entities) = &number_transition.paths[0].entities else {
-            panic!("entity row was not replaced");
-        };
-        assert_eq!(
-            number_entities[0].constant_value,
-            Some(crate::ConstantValue {
-                kind: crate::ConstantValueKind::Number,
-                string: "".into(),
-                number: 42.5,
-            })
-        );
-        assert!(decode_table_transition(&constant_value_transition(7, 0, 3)).is_err());
-        assert!(decode_table_transition(&constant_value_transition(8, 2, 0)).is_err());
-        assert!(
-            decode_table_transition(&constant_value_transition(8, 1, f64::NAN.to_bits())).is_err()
-        );
-    }
-
-    #[test]
-    fn wire_table_v9_decodes_array_shapes_and_v8_stays_frozen() {
-        for (tag, expected) in [
-            (0, crate::ArrayShape::Array),
-            (1, crate::ArrayShape::NotArray),
-            (2, crate::ArrayShape::Mixed),
-            (3, crate::ArrayShape::Unknown),
-        ] {
-            let transition = decode_table_transition(&array_shape_transition(9, tag)).unwrap();
-            let SlotOp::Replace(entities) = &transition.paths[0].entities else {
-                panic!("entity row was not replaced");
-            };
-            assert_eq!(entities[0].array_shape, Some(expected));
-        }
-        // The field is v9-only, and an out-of-range tag is a decode error rather
-        // than a silently dropped fact.
-        assert!(decode_table_transition(&array_shape_transition(8, 0)).is_err());
-        assert!(decode_table_transition(&array_shape_transition(9, 4)).is_err());
-    }
-
-    #[test]
-    fn wire_table_v11_decodes_tuple_shapes_and_v10_stays_frozen() {
-        // packed = fixed_length << 1 | has_rest; element zero code 0 = callable.
-        let transition = decode_table_transition(&tuple_shape_transition(11, 5, 0, 2, 0)).unwrap();
-        let SlotOp::Replace(entities) = &transition.paths[0].entities else {
-            panic!("entity row was not replaced");
-        };
-        assert_eq!(
-            entities[0].tuple_shape,
-            Some(
-                crate::TupleShape::try_new(2, true, Some(Callability::Callable), 2, None,).unwrap()
-            )
-        );
-        assert!(entities[0].tuple_shape.unwrap().element_zero_accepts(2));
-        // The same callable slot, asked for one fewer argument than it requires.
-        assert!(!entities[0].tuple_shape.unwrap().element_zero_accepts(1));
-
-        let plain = decode_table_transition(&tuple_shape_transition(11, 4, 1, 0, 0)).unwrap();
-        let SlotOp::Replace(plain_entities) = &plain.paths[0].entities else {
-            panic!("entity row was not replaced");
-        };
-        assert_eq!(
-            plain_entities[0].tuple_shape,
-            Some(
-                crate::TupleShape::try_new(2, false, Some(Callability::NonCallable), 0, None,)
-                    .unwrap()
-            )
-        );
-        assert!(
-            !plain_entities[0]
-                .tuple_shape
-                .unwrap()
-                .element_zero_accepts(2)
-        );
-
-        assert!(decode_table_transition(&tuple_shape_transition(10, 4, 0, 0, 0)).is_err());
-
-        let exact = decode_table_transition(&tuple_shape_transition(13, 4, 0, 2, 3)).unwrap();
-        let SlotOp::Replace(exact_entities) = &exact.paths[0].entities else {
-            panic!("entity row was not replaced");
-        };
-        assert_eq!(
-            exact_entities[0].tuple_shape.unwrap().exact_length(),
-            Some(2)
-        );
-    }
-
-    // Tuple shape's elementZero shares parse_callability (and so tag 4) with
-    // the top-level Callability field, and TupleShape's own packed
-    // representation carries UntypedCallable as arm 5 (see element_zero's
-    // match in lib.rs). Neither side had a regression test for the two
-    // meeting at the wire boundary until now.
-    #[test]
-    fn wire_table_v15_decodes_untyped_callable_tuple_element_zero() {
-        // packed = 2 -> fixed_length 1, has_rest false.
-        let transition = decode_table_transition(&tuple_shape_transition(15, 2, 4, 0, 0)).unwrap();
-        let SlotOp::Replace(entities) = &transition.paths[0].entities else {
-            panic!("entity row was not replaced");
-        };
-        assert_eq!(
-            entities[0].tuple_shape,
-            Some(
-                crate::TupleShape::try_new(1, false, Some(Callability::UntypedCallable), 0, None)
-                    .unwrap()
-            )
-        );
-        assert_eq!(
-            entities[0].tuple_shape.unwrap().element_zero(),
-            Some(Callability::UntypedCallable)
-        );
-        // element_zero_accepts is deliberately false for this rung: it is
-        // callable, but no argument count can be checked against it.
-        assert!(!entities[0].tuple_shape.unwrap().element_zero_accepts(0));
-
-        // The field's tag space is frozen exactly like the top-level one: a
-        // v14 row never expressed tag 4 and refuses it rather than reading it
-        // forward.
-        assert!(decode_table_transition(&tuple_shape_transition(14, 2, 4, 0, 0)).is_err());
-    }
-
-    #[test]
-    fn wire_table_v12_decodes_library_type_sets_and_v11_stays_frozen() {
-        let transition = decode_table_transition(&library_types_transition(12, 2)).unwrap();
-        let SlotOp::Replace(entities) = &transition.paths[0].entities else {
-            panic!("entity row was not replaced");
-        };
-        let names = entities[0].library_types.as_deref().unwrap();
-        assert_eq!(names.len(), 2);
-        assert_eq!(&*names[0], "Date");
-        // An absent set stays None rather than an empty list, so "not demanded"
-        // and "nothing from the standard library" remain distinguishable.
-        assert!(decode_table_transition(&library_types_transition(11, 1)).is_err());
-        assert!(decode_table_transition(&tuple_shape_transition(11, 4, 9, 0, 0)).is_err());
-    }
-
-    #[test]
-    fn wire_table_v13_decodes_primitive_value_domains_and_v12_stays_frozen() {
-        // string | boolean | null | undefined
-        let transition =
-            decode_table_transition(&primitive_value_domain_transition(13, 1 | 4 | 32 | 64))
-                .unwrap();
-        let SlotOp::Replace(entities) = &transition.paths[0].entities else {
-            panic!("entity row was not replaced");
-        };
-        let domain = entities[0]
-            .primitive_value_domain
-            .present()
-            .expect("primitive domain is present");
-        assert!(domain.may_be_string());
-        assert!(domain.may_be_boolean());
-        assert!(domain.may_be_null());
-        assert!(domain.may_be_undefined());
-        assert!(!domain.may_be_number());
-        assert!(!domain.may_be_object());
-        assert!(!domain.unknown());
-
-        let finite =
-            decode_table_transition(&primitive_value_domain_transition(13, 2 | 512)).unwrap();
-        let SlotOp::Replace(finite_entities) = &finite.paths[0].entities else {
-            panic!("entity row was not replaced");
-        };
-        assert!(
-            finite_entities[0]
-                .primitive_value_domain
-                .numbers_are_finite()
-        );
-
-        assert!(decode_table_transition(&primitive_value_domain_transition(12, 1)).is_err());
-        assert!(decode_table_transition(&primitive_value_domain_transition(13, 1024)).is_err());
-    }
-
-    #[test]
-    fn wire_table_v14_decodes_constructability_and_v13_stays_frozen() {
-        for (tag, expected) in [
-            (0, Constructability::Constructable),
-            (1, Constructability::NonConstructable),
-            (2, Constructability::Mixed),
-            (3, Constructability::Unknown),
-        ] {
-            let transition =
-                decode_table_transition(&constructability_transition(14, tag)).unwrap();
-            let SlotOp::Replace(entities) = &transition.paths[0].entities else {
-                panic!("entity row was not replaced");
-            };
-            assert_eq!(entities[0].constructability, Some(expected));
-            // The fact is independent: nothing else on the row is invented.
-            assert_eq!(entities[0].callability, None);
-        }
-
-        // v13 froze at flag bit 12, so bit 13 is an unknown flag there.
-        assert!(decode_table_transition(&constructability_transition(13, 0)).is_err());
-        assert!(decode_table_transition(&constructability_transition(14, 4)).is_err());
-    }
-
-    #[test]
-    fn wire_table_v15_decodes_untyped_callable_and_v14_stays_frozen() {
-        for (tag, expected) in [
-            (0, Callability::Callable),
-            (1, Callability::NonCallable),
-            (2, Callability::Mixed),
-            (3, Callability::Unknown),
-            (4, Callability::UntypedCallable),
-        ] {
-            let transition = decode_table_transition(&callability_transition(15, tag)).unwrap();
-            let SlotOp::Replace(entities) = &transition.paths[0].entities else {
-                panic!("entity row was not replaced");
-            };
-            assert_eq!(entities[0].callability, Some(expected));
-            assert_eq!(entities[0].constructability, None);
-        }
-
-        // v15 adds no flag bit and no field, so a v14 row decodes unchanged for
-        // every tag v14 ever emitted — and refuses the one it never could.
-        for (tag, expected) in [
-            (0, Callability::Callable),
-            (1, Callability::NonCallable),
-            (2, Callability::Mixed),
-            (3, Callability::Unknown),
-        ] {
-            let transition = decode_table_transition(&callability_transition(14, tag)).unwrap();
-            let SlotOp::Replace(entities) = &transition.paths[0].entities else {
-                panic!("entity row was not replaced");
-            };
-            assert_eq!(entities[0].callability, Some(expected));
-        }
-        assert!(decode_table_transition(&callability_transition(14, 4)).is_err());
-        assert!(decode_table_transition(&callability_transition(13, 4)).is_err());
-        assert!(decode_table_transition(&callability_transition(15, 5)).is_err());
-    }
-
-    #[test]
-    fn wire_table_v16_decodes_primitive_literal_candidates_and_v15_stays_frozen() {
-        let transition =
-            decode_table_transition(&primitive_literal_candidates_transition(16)).unwrap();
-        let SlotOp::Replace(entities) = &transition.paths[0].entities else {
-            panic!("entity row was not replaced");
-        };
-        assert_eq!(
-            entities[0]
-                .primitive_literal_candidates
-                .as_deref()
-                .unwrap()
-                .as_slice(),
-            [
-                PrimitiveLiteralCandidate {
-                    kind: PrimitiveLiteralKind::String,
-                    string: Arc::from("alpha"),
-                    number: 0.0,
-                    boolean: false,
-                },
-                PrimitiveLiteralCandidate {
-                    kind: PrimitiveLiteralKind::Number,
-                    string: Arc::from(""),
-                    number: 2.0,
-                    boolean: false,
-                },
-                PrimitiveLiteralCandidate {
-                    kind: PrimitiveLiteralKind::Boolean,
-                    string: Arc::from(""),
-                    number: 0.0,
-                    boolean: true,
-                },
-            ]
-        );
-        assert!(decode_table_transition(&primitive_literal_candidates_transition(15)).is_err());
-        assert_eq!(TYPE_FACTS_TABLE_SCHEMA_V16, 16);
-        assert_eq!(TYPE_FACTS_TABLE_SCHEMA_V17, 17);
-        assert_eq!(TYPE_FACTS_TABLE_SCHEMA_V18, 18);
-    }
-
-    #[test]
-    fn numeric_enum_tags_decode_the_dense_go_golden() {
-        let response: super::Response = crate::decode(include_bytes!(
-            "../../../../benchmarks/typefacts/phase1/typefacts-v3-response-golden.cbor"
-        ))
-        .expect("decode response golden");
-        let transition =
-            decode_table_transition(&response.table_transition).expect("decode transition");
-        let entity = transition
-            .paths
-            .iter()
-            .find_map(|path| match &path.entities {
-                SlotOp::Replace(entities) => entities.first(),
-                SlotOp::Unchanged | SlotOp::Remove => None,
-            })
-            .expect("golden entity");
-        assert_eq!(entity.callability, Some(Callability::Callable));
-        assert_eq!(entity.reference_space, Some(ReferenceSpace::Both));
-        let call = entity.resolved_call.as_ref().expect("golden resolved call");
-        assert_eq!(call.validity, ResolvedCallValidity::Valid);
-        assert_eq!(call.kind, CallKind::Call);
-        assert_eq!(call.arguments[0].status, ArgumentMappingStatus::Resolved);
-        assert_eq!(call.arguments[0].unresolved, None);
-        assert_eq!(
-            call.arguments[0]
-                .parameter
-                .as_ref()
-                .expect("golden parameter")
-                .callability,
-            Callability::Callable
-        );
-    }
-
-    #[test]
-    fn closed_wire_enum_tags_reject_unknown_and_inconsistent_values() {
-        for schema in [TYPE_FACTS_TABLE_SCHEMA_V14, TYPE_FACTS_TABLE_SCHEMA_V15] {
-            assert_eq!(parse_callability(0, schema).unwrap(), Callability::Callable);
-            assert_eq!(
-                parse_callability(1, schema).unwrap(),
-                Callability::NonCallable
-            );
-            assert_eq!(parse_callability(2, schema).unwrap(), Callability::Mixed);
-            assert_eq!(parse_callability(3, schema).unwrap(), Callability::Unknown);
-            assert!(parse_callability(5, schema).is_err());
-        }
-        // Tag 4 belongs to v15's vocabulary and to no earlier one. A frozen
-        // schema refuses it instead of reading it forward.
-        assert_eq!(
-            parse_callability(4, TYPE_FACTS_TABLE_SCHEMA_V15).unwrap(),
-            Callability::UntypedCallable
-        );
-        assert!(parse_callability(4, TYPE_FACTS_TABLE_SCHEMA_V14).is_err());
-        assert!(parse_callability(4, TYPE_FACTS_TABLE_SCHEMA_V3).is_err());
-
-        assert_eq!(
-            parse_constructability(0).unwrap(),
-            Constructability::Constructable
-        );
-        assert_eq!(
-            parse_constructability(1).unwrap(),
-            Constructability::NonConstructable
-        );
-        assert_eq!(parse_constructability(2).unwrap(), Constructability::Mixed);
-        assert_eq!(
-            parse_constructability(3).unwrap(),
-            Constructability::Unknown
-        );
-        assert!(parse_constructability(4).is_err());
-
-        assert_eq!(parse_reference_space(0).unwrap(), ReferenceSpace::Value);
-        assert_eq!(parse_reference_space(1).unwrap(), ReferenceSpace::Type);
-        assert_eq!(parse_reference_space(2).unwrap(), ReferenceSpace::Both);
-        assert_eq!(parse_reference_space(3).unwrap(), ReferenceSpace::Neither);
-        assert!(parse_reference_space(4).is_err());
-
-        assert_eq!(
-            parse_resolved_call_validity(0).unwrap(),
-            ResolvedCallValidity::Valid
-        );
-        assert_eq!(
-            parse_resolved_call_validity(1).unwrap(),
-            ResolvedCallValidity::Recovery
-        );
-        assert_eq!(
-            parse_resolved_call_validity(2).unwrap(),
-            ResolvedCallValidity::Unresolved
-        );
-        assert!(parse_resolved_call_validity(3).is_err());
-
-        assert_eq!(parse_call_kind(0).unwrap(), CallKind::Unknown);
-        assert_eq!(parse_call_kind(1).unwrap(), CallKind::Call);
-        assert_eq!(parse_call_kind(2).unwrap(), CallKind::Construct);
-        assert!(parse_call_kind(3).is_err());
-
-        assert_eq!(
-            parse_argument_mapping_status(0).unwrap(),
-            ArgumentMappingStatus::Resolved
-        );
-        assert_eq!(
-            parse_argument_mapping_status(1).unwrap(),
-            ArgumentMappingStatus::Unresolved
-        );
-        assert!(parse_argument_mapping_status(2).is_err());
-        assert_eq!(
-            parse_argument_mapping_reason(ArgumentMappingStatus::Resolved, 0).unwrap(),
-            None
-        );
-        assert_eq!(
-            parse_argument_mapping_reason(ArgumentMappingStatus::Unresolved, 1).unwrap(),
-            Some(ArgumentMappingReason::CallUnresolved)
-        );
-        assert_eq!(
-            parse_argument_mapping_reason(ArgumentMappingStatus::Unresolved, 5).unwrap(),
-            Some(ArgumentMappingReason::ParameterUnavailable)
-        );
-        assert!(parse_argument_mapping_reason(ArgumentMappingStatus::Resolved, 1).is_err());
-        assert!(parse_argument_mapping_reason(ArgumentMappingStatus::Unresolved, 0).is_err());
-        assert!(parse_argument_mapping_reason(ArgumentMappingStatus::Unresolved, 6).is_err());
-    }
-}
+mod tests;

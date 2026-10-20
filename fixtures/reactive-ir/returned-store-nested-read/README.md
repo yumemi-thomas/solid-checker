@@ -1,0 +1,3 @@
+# returned-store-nested-read
+
+**Claim (ADR 0281).** A hook naming the store root inside a call argument keeps its store (the `@tanstack/solid-query` `useMutation` shape: a render effect reading `state.isError` and throwing): a root reference in an argument escapes only when it can hand the root or a sub-proxy to other code (bare root, a chain that is an argument or callee, a returned chain; `member_chain_escapes`): SC1001 on `thing.search`, with the `Escaped*` cases refused. ADR 0282: reads are SC9012 while the iteration veto holds. Stubs from `returned-store-source` plus `fp-owner-loading-cover`.

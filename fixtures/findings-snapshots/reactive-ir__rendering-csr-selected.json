@@ -1,10 +1,10 @@
 {
-  "status": "violation",
+  "status": "uncertifiable",
   "findings": [
     {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rendering-csr-selected/App.tsx",
       "start": 2198,

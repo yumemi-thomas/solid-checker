@@ -16,17 +16,18 @@ Fact ownership is deliberately split:
 - `crates/typefacts`: checker-derived facts and the retained producer session;
   the paired Go producer lives at `../apps/solid-typefacts`;
 - `crates/solid-facts-backend`: orchestration, retained caches, certification
-  snapshots, contracts, and the CLI;
+  snapshots, dependency source, and the CLI;
 - `crates/solid-dialect`: the Solid vocabulary seam — the version-specific
   answers (primitives, callback positions, boundary tags) the engine asks for
   instead of knowing;
 - `crates/solid-reactive-ir`: native analysis, producing the reactive program
   IR and the dialect-neutral `Finding` model;
-- `dialects/solid-v2/rules` and `dialects/solid-v1/rules`: each version's
-  rule catalog and finding construction (32 rules for 2.0, 22 for 1.x);
-- `dialects/solid-v2/compiler` and `dialects/solid-v1/compiler`: the Solid
-  compiler's semantic-only fork and the separate Solid 1.x compiler fork, each adapted to the
-  `CompilerFactsProvider` seam.
+- `dialects/solid-v2/rules`: the dialect's rule catalog and finding
+  construction. One dialect ships today; Solid 1.x was retired in 2026-09
+  (ADR 0110) and `dialects/` stays plural because the seam is what a second
+  dialect re-enters through;
+- `dialects/solid-v2/compiler`: the Solid compiler's semantic-only fork,
+  adapted to the `CompilerFactsProvider` seam.
 
 The AST package contains no regular expressions. TypeScript facts contain no
 syntax-discovery fallback. Both choices are architectural constraints: Oxc owns
@@ -66,14 +67,11 @@ include/exclude and project resolution are authoritative rather than
 reimplemented by a directory walk.
 
 The CLI defaults to text output. `--format json` emits the stable certification
-snapshot (`status`, findings, package summaries, and metrics), and `--certify`
-returns exit code 1 unless the status is `certified`. Package behavior is loaded
-only from receipt-issued stable-v1 documents registered with exact import
-resolutions in `.solid-checker/accepted-contracts.json`; the old `--contract`
-override and schema-1 validation path do not exist. Proposal generation,
-review, probes, and proof verification are exposed through the Node
-`solid-checker contract` workflow, while Rust remains the only semantic
-normalizer and receipt authority.
+snapshot (`status`, findings, and metrics), and `--certify` returns exit code 1
+unless the status is `certified`. Package behavior requires selected dependency
+source or reviewed dialect runtime premises. Unknown package behavior remains
+explicitly uncertifiable. Contract generation, certification and consumption
+have been removed; see ADR 0312.
 
 Implemented rule slices are:
 
@@ -105,11 +103,11 @@ Implemented rule slices are:
   identities.
 
 The slices above are the engine's analyses under Solid 2.0 vocabulary and
-the `solid-v2-rules` catalog. The Solid 1.x dialect projects the same IR
-onto its own 22-rule catalog (`v1/<rule>` names): the engine slices under
-1.x vocabulary plus the eslint-plugin-solid file-local surface (imports, JSX
-hygiene, structural preferences, and the decomposed `reactivity` rules). The
-dialect is auto-detected from the project's resolved `solid-js` version;
+the `solid-v2-rules` catalog, which is the only catalog this build ships. The
+eslint-plugin-solid file-local surface it inherited (imports, JSX hygiene,
+structural preferences, and the decomposed `reactivity` rules) now runs
+unconditionally rather than under a 1.x gate. The dialect is auto-detected from
+the project's resolved `solid-js` version;
 `--dialect` overrides it.
 
 Oxc discovers bindings, options, calls, callback nesting, and function graphs;

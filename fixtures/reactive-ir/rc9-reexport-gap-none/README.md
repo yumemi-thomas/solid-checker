@@ -1,0 +1,5 @@
+# rc9-reexport-gap-none
+
+The rc.9 re-export gap is scoped to the names it loses: `solid-js@2.0.0-rc.9`'s `types/index.d.ts` re-exports `$DEVCOMP`, `sharedConfig`, `createErrorBoundary`, `createLoadingBoundary`, `createRevealOrder` from files that do not declare them (`KNOWN_GAPS`, `release_scope.rs`). This project imports only `untrack`, so the `SC9014` notice does not carry the gap; positives are `rc9-reexport-gap-*`. The stubs keep the two defective re-exports (same five TS2305 as published rc.9 with `skipLibCheck: false`); `untrack` is byte-faithful to `@solidjs/signals@2.0.0-rc.9` `dist/types/core/core.d.ts:105`.
+
+All seven `rc9-reexport-gap-*` snapshots hold the same single `SC9014` notice (rc.9 is not the audited release). Which re-export gap the notice carries lives in its evidence messages, which snapshots exclude, so the pin for every one of them is `rc9_re_export_gap_is_due_only_where_a_project_reaches_it` in `rust/crates/solid-facts-backend/tests/dialects_process.rs`, which asserts the gap clause, its single occurrence, and the located evidence step.

@@ -45,9 +45,10 @@ tree hash is unchanged (`git rev-parse <tip>^{tree}` before and after).
 ## Slice-boundary traps
 
 - **The dialect seam moves as one piece.** When the seam changes
-  (vocabulary methods, defect-vs-violation projection), solid-dialect,
-  the solid-reactive-ir engine, and both rules catalogs cannot land in
-  separate commits — no intermediate compiles.
+  (vocabulary methods, defect-vs-violation projection), solid-dialect, the
+  solid-reactive-ir engine, and every rules catalog cannot land in separate
+  commits — no intermediate compiles. One catalog ships today, which makes the
+  slice smaller, not optional.
 - **A new fixture's node_modules stub needs its `.gitignore` exception lines
   in the same commit**, or the fixture un-dialects only in CI (see
   `.claude/skills/add-fixture/SKILL.md`).

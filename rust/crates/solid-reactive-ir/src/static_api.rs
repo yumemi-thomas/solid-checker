@@ -1,6 +1,6 @@
 //! Static validation for Solid 2.0 API shapes and explicit refresh writes.
 
-use std::collections::{HashMap, HashSet};
+use crate::{HashMap, HashSet};
 
 use solid_dialect::Primitive;
 use solid_facts::FileFacts;
@@ -9,14 +9,13 @@ use solid_facts::core::Span;
 use typefacts::Location;
 
 use crate::effect_api::{ProofStatus, classify_effect_call};
-use crate::execution_role::{allowed_callback_spans, semantic_write_execution_role};
+use crate::execution_role::{RootBodyGuard, allowed_callback_spans, semantic_write_execution_role};
 use crate::identity::SymbolId;
 use crate::indexes::{EntitySymbols, SemanticLookup};
-use crate::owners::{analysis_context, computation_is_async_with_contracts};
+use crate::owners::{analysis_context, computation_is_async};
 use crate::pipeline::{AnalysisContext, ProgramDraft, parallel_file_results};
 use crate::{
     ReactiveSourceKind, ReactiveWrite, StaticDefect, StaticDefectKind, StaticViolation, location,
-    primitive_name,
 };
 
 pub(super) struct StaticDirectiveFileResult {
@@ -38,7 +37,6 @@ pub(crate) fn check_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft)
         value_form_stores: ctx.value_form_stores,
         accessors: ctx.accessors,
         reachable_calls: ctx.reachable_calls,
-        contracted: ctx.contracted,
     };
     for result in parallel_file_results(&ctx.facts.files, |file| checker.check_file(file)) {
         draft.static_defects.extend(result.defects);
@@ -59,7 +57,6 @@ pub(super) struct StaticApiContext<'a> {
     pub(super) value_form_stores: &'a HashSet<SymbolId>,
     pub(super) accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
     pub(super) reachable_calls: &'a HashMap<Location, usize>,
-    pub(super) contracted: &'a HashMap<SymbolId, crate::contracts::ResolvedContractBinding>,
 }
 
 impl StaticApiContext<'_> {
@@ -73,10 +70,10 @@ impl StaticApiContext<'_> {
         let allowed = allowed_callback_spans(file, self.lookup);
         let dialect = self.lookup.dialect;
         for call in &file.ast.calls {
-            let Some(primitive) = primitive_name(
-                file.path.as_str(),
-                call.callee,
-                call.static_callee(&file.source),
+            let Some(primitive) = crate::call_primitive_name_cached(
+                self.lookup,
+                file,
+                call,
                 self.entities,
                 self.symbol_names,
                 dialect,
@@ -110,20 +107,42 @@ impl StaticApiContext<'_> {
             let options_index = kind
                 .filter(|kind| dialect.supports_sync_option(*kind))
                 .and_then(|kind| dialect.options_argument(kind));
-            if let Some(options_index) = options_index
-                && call.arguments.get(options_index).is_some_and(|argument| {
-                    argument.boolean_properties.iter().any(|property| {
-                        file.source_text(property.name) == Some("sync") && property.value
-                    })
-                })
-                && call.arguments.first().is_some_and(|argument| {
-                    computation_is_async_with_contracts(
-                        self.lookup,
-                        file,
-                        argument.span,
-                        self.contracted,
-                    )
-                })
+            let sync_literal = options_index.map(|options_index| {
+                (
+                    call.arguments.get(options_index).is_some_and(|argument| {
+                        argument.boolean_properties.iter().any(|property| {
+                            file.source_text(property.name) == Some("sync") && property.value
+                        })
+                    }),
+                    crate::call_option_literal(file, call, options_index, "sync"),
+                )
+            });
+            let async_compute = || {
+                call.arguments
+                    .first()
+                    .is_some_and(|argument| computation_is_async(self.lookup, file, argument.span))
+            };
+            // Options the syntax cannot read (`createMemo(fn, opts)`, a spread,
+            // a non-literal `sync:` value) may assert `sync: true`: with an
+            // async computation that is an obligation, not a silent clean.
+            if let Some((false, solid_dialect::OptionLiteral::Unknown)) = sync_literal
+                && async_compute()
+            {
+                result.violations.push(StaticViolation {
+                    id: "SC7002".into(),
+                    rule: "sync-computation-received-async".into(),
+                    message: format!(
+                        "{primitive}'s computation can return a Promise or AsyncIterable, and its options cannot be read statically; if they set sync: true, dev throws SYNC_NODE_RECEIVED_ASYNC and production stores the unawaited value, and whether they do cannot be proven either way"
+                    ),
+                    hint: "Pass the options as an object literal with a literal sync value, so solid-checker can read it; drop sync: true for an async computation.".into(),
+                    location: location(file.path.shared(), call.callee),
+                    analysis_context: String::new(),
+                    fixes: vec![],
+                    uncertain: true,
+                });
+            }
+            if let Some((true, _)) = sync_literal
+                && async_compute()
             {
                 result.violations.push(StaticViolation {
                     id: "SC7002".into(),
@@ -161,6 +180,118 @@ impl StaticApiContext<'_> {
                         "resolve() is called inside {scope}; resolve() reads the expression once and never tracks updates, and an active observer makes Solid throw \"Cannot call resolve inside a reactive scope\" here in dev"
                     ),
                     hint: "Call resolve() from imperative code — an event handler, onSettled, or an effect's apply function. To depend on a pending value inside a computation, read the accessor directly: tracked reads suspend and re-run on their own. A deliberate one-shot read can be wrapped in untrack(), which clears the observer the runtime guards on.".into(),
+                    location: location(file.path.shared(), call.callee),
+                    analysis_context: String::new(),
+                    fixes: vec![],
+                    uncertain: false,
+                });
+            }
+            // The same guard where nothing places the call: a helper that a
+            // tracked scope may reach (`createMemo(() => waitReady())`).
+            if kind == Some(Primitive::Resolve)
+                && resolve_scope_unplaced(file, call, &allowed, self)
+            {
+                result.violations.push(StaticViolation {
+                    id: "SC2004".into(),
+                    rule: "resolve-in-tracked-scope".into(),
+                    message: "resolve() is called in code the analysis cannot place; if an observer is active when it runs (a memo or effect compute, or tracked JSX, that reaches it through a helper), Solid throws \"Cannot call resolve inside a reactive scope\" in dev, and whether one is cannot be proven either way".into(),
+                    hint: "Call resolve() from imperative code — an event handler, onSettled, or an effect's apply function. To depend on a pending value inside a computation, read the accessor directly: tracked reads suspend and re-run on their own. A deliberate one-shot read can be wrapped in untrack(), which clears the observer the runtime guards on.".into(),
+                    location: location(file.path.shared(), call.callee),
+                    analysis_context: String::new(),
+                    fixes: vec![],
+                    uncertain: true,
+                });
+            }
+            // SC2005: until() in a tracked scope. `@solidjs/signals@2.0.0-rc.9`
+            // opens `until` with the same observer guard `resolve` has
+            // (`dist/dev.js:2718-2722`, `if (getObserver()) throw new
+            // Error("Cannot call until inside a reactive scope; …")`), and the
+            // production bundle drops it (`dist/prod/signals.js:530`, no
+            // guard), so the scopes, the dev throw and the proof are
+            // resolve's. `until` does not exist before rc.9, so nothing
+            // compiled against rc.3's typings reaches this arm.
+            if kind == Some(Primitive::Until)
+                && let Some(scope) = resolve_tracked_scope(file, call, &allowed, self)
+            {
+                result.violations.push(StaticViolation {
+                    id: "SC2005".into(),
+                    rule: "until-in-tracked-scope".into(),
+                    message: format!(
+                        "until() is called inside {scope}; an active observer makes Solid throw \"Cannot call until inside a reactive scope\" here in dev, and in production every run of the scope starts another root and effect that wait on the predicate"
+                    ),
+                    hint: "Await until() from imperative code — an action step (`yield until(...)`), an event handler, onSettled, or an effect's apply function. Inside a computation, read the condition directly: tracked reads re-run the computation when it changes.".into(),
+                    location: location(file.path.shared(), call.callee),
+                    analysis_context: String::new(),
+                    fixes: vec![],
+                    uncertain: false,
+                });
+            }
+            // The same guard where nothing places the call: a helper that a
+            // tracked scope may reach (`createMemo(() => waitReady())`).
+            if kind == Some(Primitive::Until) && resolve_scope_unplaced(file, call, &allowed, self)
+            {
+                result.violations.push(StaticViolation {
+                    id: "SC2005".into(),
+                    rule: "until-in-tracked-scope".into(),
+                    message: "until() is called in code the analysis cannot place; if an observer is active when it runs (a memo or effect compute, or tracked JSX, that reaches it through a helper), Solid throws \"Cannot call until inside a reactive scope\" in dev, and whether one is cannot be proven either way".into(),
+                    hint: "Await until() from imperative code — an action step (`yield until(...)`), an event handler, onSettled, or an effect's apply function. Inside a computation, read the condition directly: tracked reads re-run the computation when it changes.".into(),
+                    location: location(file.path.shared(), call.callee),
+                    analysis_context: String::new(),
+                    fixes: vec![],
+                    uncertain: true,
+                });
+            }
+            // SC2007: a promise-valued source for rc.9's static `dynamic`
+            // form. `DynamicStatic` is only ever the dialect's answer where
+            // the resolved `@solidjs/web` has the form (`call_form`), so no
+            // other release reaches this arm. Every build calls the source
+            // once, untracked, before `dynamic` returns; the dev builds then
+            // throw on a thenable (`dist/web.dev.js:2249`,
+            // `dist/server.dev.js:3979`) and the production builds fall
+            // through to `() => undefined` (`dist/web.js:2080-2090`,
+            // `dist/server.js:3729-3733`). `DynamicOptions.static` is a plain
+            // `boolean` beside a source typed `() => T | Promise<T> | ...`,
+            // so `tsc` accepts every source proven here.
+            if kind == Some(Primitive::DynamicStatic)
+                && let Some(source) = call.arguments.first()
+                && let Some(proof) = static_source_promise(file, source, self)
+            {
+                result.violations.push(StaticViolation {
+                    id: "SC2007".into(),
+                    rule: "static-dynamic-async-source".into(),
+                    message: format!(
+                        "dynamic() is called with {{ static: true }} and a source that {proof}; the static form calls the source once and renders what it returns synchronously, so the dev builds throw \"dynamic(): a static source must resolve synchronously, not to a promise\" here and the production builds render nothing"
+                    ),
+                    hint: format!(
+                        "Drop static: true so dynamic() settles the source in its memo (and render it under a <{}> boundary), or resolve the component before calling dynamic() and pass a synchronous source.",
+                        dialect.boundary_name(solid_dialect::Boundary::Async)
+                    ),
+                    location: location(file.path.shared(), call.callee),
+                    analysis_context: String::new(),
+                    fixes: vec![],
+                    uncertain: false,
+                });
+            }
+            // SC2006: flush() in an action step. `@solidjs/signals` from
+            // 2.0.0-rc.8 opens `flush` with `if (actionStepDepth > 0) throw
+            // new Error("[FLUSH_IN_ACTION] …")` in dev (rc.9
+            // `dist/dev-shared.js:2210-2219`), and `action`'s `step` raises
+            // that depth only around the generator's own `next()`/`throw()`.
+            // The production build takes the same branch and returns
+            // `fn?.()` without draining. Which primitive throws, on which
+            // release, and which callback is stepped are the dialect's; the
+            // position proof below is the language's.
+            if let Some(kind) = kind
+                && dialect.throws_inside_action_step(kind)
+                && let Some(body) = action_step_body(file, call, self)
+            {
+                result.violations.push(StaticViolation {
+                    id: "SC2006".into(),
+                    rule: "flush-in-action".into(),
+                    message: format!(
+                        "{primitive}() is called in an action's {body} body, inside one of its steps; the installed @solidjs/signals throws FLUSH_IN_ACTION here in dev, and in production the call drains nothing, so the writes it was meant to reveal stay held until the action settles"
+                    ),
+                    hint: "Remove the flush(): an action's writes are held by its transaction and commit when the action settles, so no flush inside the body can reveal them. To observe the result, read after the action resolves (`await save(); …`).".into(),
                     location: location(file.path.shared(), call.callee),
                     analysis_context: String::new(),
                     fixes: vec![],
@@ -250,7 +381,7 @@ impl StaticApiContext<'_> {
             // can re-run. A value-form `createStore(obj)` store — or any
             // child record of one — is not refreshable, and refresh() on it
             // throws INVALID_REFRESH_TARGET in dev (probed, rc.0). A store
-            // whose construction form is unknown (contracts, unproven
+            // whose construction form is unknown (opaque packages, unproven
             // argument shapes) is never in this set, so acceptance is kept.
             // The value form's return type is not `Refreshable`: only
             // `createStore(fn, initial)`, `createProjection`, and the
@@ -300,6 +431,8 @@ impl StaticApiContext<'_> {
                         ),
                     ),
                     declaration: declaration.clone(),
+                    // `refresh`'s guard has no root exemption on any release
+                    // (probed rc.0-rc.9, dev).
                     execution: semantic_write_execution_role(
                         file,
                         call.callee,
@@ -307,6 +440,7 @@ impl StaticApiContext<'_> {
                         self.entities,
                         self.symbol_names,
                         self.lookup,
+                        RootBodyGuard::Rejects,
                     ),
                     allowed_by_option: self
                         .source_owned_write
@@ -398,6 +532,258 @@ fn resolve_tracked_scope(
         .then(|| "tracked JSX".to_owned())
 }
 
+/// Whether a `resolve`/`until` call that [`resolve_tracked_scope`] does not
+/// report is still not proven free of an observer: an obligation unless a
+/// fact proves no observer is active where it runs.
+///
+/// A callback of a primitive whose callback execution the dialect states is
+/// that function's to judge. Otherwise the call is proven only in a role that
+/// clears the observer (a component body, `untrack`, an effect apply, an
+/// event, a directive application, module scope, a deferred callback, or
+/// deleted code), and only when a body-written literal is not handed to a
+/// consumer that may run it later. A tracked role [`resolve_tracked_scope`]
+/// did not place (a named callback, `createMemo(read)`), `Unreported` (whose
+/// mix may hold a tracked run) and `Unknown` are obligations.
+fn resolve_scope_unplaced(
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    allowed: &[Span],
+    context: &StaticApiContext<'_>,
+) -> bool {
+    use crate::ExecutionRole;
+    if resolve_tracked_scope(file, call, allowed, context).is_some() {
+        return false;
+    }
+    let judged_by_primitive = file
+        .ast
+        .arguments_containing(call.span)
+        .any(|(container, index)| {
+            crate::execution_role::direct_callback_contains(
+                file,
+                container.arguments[index].span,
+                call.span,
+            ) && context
+                .lookup
+                .primitive_at_call(file, container.span)
+                .is_some_and(|primitive| {
+                    crate::owners::callback_execution_at_call(
+                        file,
+                        container,
+                        primitive,
+                        index,
+                        context.lookup,
+                    )
+                    .is_some()
+                })
+        });
+    if judged_by_primitive {
+        return false;
+    }
+    let role = crate::execution_role::semantic_execution_role(
+        file,
+        call.span,
+        allowed,
+        context.entities,
+        context.symbol_names,
+        context.lookup,
+    );
+    let observer_cleared = matches!(
+        role,
+        ExecutionRole::UntrackedRendering
+            | ExecutionRole::UntrackedCallback
+            | ExecutionRole::EffectApply
+            | ExecutionRole::EventCallback
+            | ExecutionRole::DirectiveApply
+            | ExecutionRole::ModuleInitialization
+            | ExecutionRole::DeferredCallback
+            | ExecutionRole::DiscardedRendering
+    );
+    !observer_cleared
+        || crate::execution_role::callee_callback_timing(file, call.span, role, context.lookup)
+}
+
+/// Why a `dynamic` source provably returns a Promise, phrased for the
+/// message, or `None` where that is not proven.
+///
+/// Two proofs, and nothing else:
+///
+/// - the source is an `async` function (not an async generator, whose
+///   iterator has no `then`), which returns a native Promise on every call;
+/// - the source is an expression-bodied, non-async arrow whose returned
+///   expression is exactly a call the compiler resolved to the standard
+///   library's `PromiseConstructor.resolve` or its construct signature
+///   (`Promise.resolve(...)`, `new Promise(...)`). A same-named project
+///   declaration, a shadowed `Promise`, or an unresolved call proves nothing.
+///
+/// The source may be written inline or named by an identifier that resolves,
+/// through Type Facts, to a same-file `function` declaration or a `const`
+/// initialized with a function literal. A block-bodied non-async function, a
+/// parameter, an import, a reassignable binding, and every other source stay
+/// silent: whether they return a Promise is not decided here.
+fn static_source_promise(
+    file: &FileFacts,
+    source: &solid_facts::ast::ArgumentFact,
+    context: &StaticApiContext<'_>,
+) -> Option<&'static str> {
+    if source.spread {
+        return None;
+    }
+    let function = match source.value {
+        ArgumentValueKind::Function | ArgumentValueKind::AsyncFunction => {
+            crate::cleanup::callback_argument_literal(file, source.span)?
+        }
+        ArgumentValueKind::Identifier => {
+            let declaration = source.binding_declaration?;
+            let function = crate::static_rules::same_file_function(file, declaration)?;
+            // The binder's declaration only chose what to ask; the proof is
+            // that the compiler resolves the reference and the declared name
+            // to one symbol.
+            let path = file.path.as_str();
+            let referenced = context.entities.at(path, source.span)?;
+            let declared = context.entities.at(path, declaration)?;
+            if referenced != declared {
+                return None;
+            }
+            function
+        }
+        _ => return None,
+    };
+    if function.generator {
+        return None;
+    }
+    if function.r#async {
+        return Some("is an async function, which always returns a Promise");
+    }
+    if !function.expression_body {
+        return None;
+    }
+    let returned = function.expression_return.as_ref()?;
+    let callee = returned.callee?;
+    let call = file
+        .ast
+        .calls
+        .iter()
+        .find(|call| call.callee == callee && call.span == returned.span)?;
+    let resolved = context.lookup.resolved_callee_call(file, call.callee)?;
+    if resolved.validity != typefacts::ResolvedCallValidity::Valid {
+        return None;
+    }
+    let declaration = resolved.declaration.as_ref()?;
+    if !declaration.standard_library {
+        return None;
+    }
+    match (
+        declaration.qualified_name.as_ref(),
+        resolved.kind,
+        call.construct,
+    ) {
+        ("PromiseConstructor.resolve", typefacts::CallKind::Call, false) => {
+            Some("returns Promise.resolve(...)")
+        }
+        ("PromiseConstructor.construct", typefacts::CallKind::Construct, true) => {
+            Some("returns new Promise(...)")
+        }
+        _ => None,
+    }
+}
+
+/// The action body a call provably runs inside a step of, named for the
+/// message, or `None` where that is not proven.
+///
+/// Probed on `@solidjs/signals` rc.0-rc.9, dev and prod (`step` brackets
+/// `it.next(v)` with the action-step marker):
+///
+/// - The call must sit **directly** in the body of a generator function
+///   written as the stepped argument ([`Dialect::callback_runs_as_action_steps`])
+///   -- not in a nested function (a helper, an `untrack` callback, a
+///   `setTimeout` or `.then` callback), and not in a parameter initializer,
+///   which runs when `genFn(...args)` creates the generator, before the first
+///   step. A helper called synchronously from the body does throw at runtime;
+///   the proof is lexical and does not claim it.
+/// - A **sync generator's** body runs entirely inside steps: after a `yield`,
+///   a `yield promise` or a `yield*`, the next step resumes it synchronously.
+/// - An **async generator's** body is inside a step only until its first
+///   suspension; the continuation of an `await`, a `for await` or a `yield*`
+///   runs from a microtask with no step on the stack. So the call is claimed
+///   only when no suspension of this body can run before it: every `await` of
+///   the body that starts before the call ends must contain it (it is the
+///   awaited operand, evaluated first), no implicit suspension may start
+///   before it, and no loop around it may contain a suspension that a later
+///   iteration would pass first. A call after a suspension that a later
+///   `yield` re-enters a step for is not claimed.
+fn action_step_body(
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    context: &StaticApiContext<'_>,
+) -> Option<&'static str> {
+    let (container, index) =
+        file.ast
+            .arguments_containing(call.span)
+            .find(|(container, index)| {
+                crate::execution_role::direct_callback_contains(
+                    file,
+                    container.arguments[*index].span,
+                    call.span,
+                )
+            })?;
+    let argument = &container.arguments[index];
+    if argument.spread {
+        return None;
+    }
+    let primitive = context.lookup.primitive_at_call(file, container.span)?;
+    if !context
+        .lookup
+        .dialect
+        .callback_runs_as_action_steps(primitive, index)
+    {
+        return None;
+    }
+    // The generator must *be* the argument (behind TypeScript sugar at
+    // most): `action(wrap(function* () { … }))` steps whatever `wrap`
+    // returns.
+    let written = argument.value_span.unwrap_or(argument.span);
+    let body = crate::owners::containing_ast_function(&file.ast, call.span)
+        .filter(|function| function.span == written && function.generator)?;
+    if !body.r#async {
+        return Some("sync generator");
+    }
+    let own = |span: Span| {
+        crate::owners::containing_ast_function(&file.ast, span)
+            .is_some_and(|function| function.span == body.span)
+    };
+    let awaits = file
+        .ast
+        .awaits
+        .iter()
+        .copied()
+        .filter(|span| body.body.contains(*span) && own(*span))
+        .collect::<Vec<_>>();
+    let implicit = file
+        .ast
+        .implicit_suspensions
+        .iter()
+        .copied()
+        .filter(|span| body.body.contains(*span) && own(*span))
+        .collect::<Vec<_>>();
+    let before = |suspension: &Span| suspension.start < call.span.end;
+    if awaits
+        .iter()
+        .any(|suspension| before(suspension) && !suspension.contains(call.span))
+        || implicit.iter().any(before)
+    {
+        return None;
+    }
+    let repeated_past_a_suspension = file.ast.loop_statements.iter().any(|looped| {
+        looped.contains(call.span)
+            && body.body.contains(*looped)
+            && awaits
+                .iter()
+                .chain(&implicit)
+                .any(|suspension| looped.contains(*suspension))
+    });
+    (!repeated_past_a_suspension).then_some("async generator")
+}
+
 /// The root expression span of a member/call chain: `state.user` and
 /// `state.messages.at(-1)` both resolve to `state`. Property accesses
 /// (static and computed) and calls on member callees are followed because a
@@ -408,12 +794,7 @@ fn resolve_tracked_scope(
 fn member_chain_root(file: &FileFacts, span: Span) -> Option<Span> {
     let mut current = span;
     for _ in 0..64 {
-        if let Some(member) = file
-            .ast
-            .members
-            .iter()
-            .find(|member| member.span == current)
-        {
+        if let Some(member) = file.ast.member_at(current) {
             current = member.object;
             continue;
         }

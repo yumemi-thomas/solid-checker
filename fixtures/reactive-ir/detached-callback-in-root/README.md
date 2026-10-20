@@ -1,0 +1,3 @@
+# detached-callback-in-root
+
+An owner-requiring operation in a callback that runs with no owner on every run is a proven `SC4001` violation inside `createRoot` as in a component (the root owns only its synchronous extent): `createEffect` apply, event handlers, `createReaction` invalidation, `runWithOwner(null, fn)`, `setTimeout` callbacks, `onSettled`'s cleanup (`SETTLED_CLEANUP_UNOWNED`); a root created in the apply, compiled JSX children, a `createEffect` compute and root-body `onSettled` are clean (`owners::root_owned_at`). Stub: `render-effect-apply-root`'s (published rc.3) plus `createReaction`, `onSettled`, `runWithOwner`.

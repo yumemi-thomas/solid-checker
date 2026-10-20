@@ -12,10 +12,9 @@ mod rules;
 
 use solid_reactive_ir::{
     CatalogCapabilities, CatalogWording, ExecutionRole, FindingSeed, FindingWording,
-    LeafOwnerOperationKind, OwnerRequirementOperation, PackageContractIssue,
-    PackageContractIssueKind, Program, ReactiveSourceKind, ReactiveWriteOperation, StaticDefect,
-    StaticDefectFamily, StaticDefectKind, project_finding, project_findings, strict_read_evidence,
-    strict_read_message,
+    LeafOwnerOperationKind, OwnerRequirementOperation, Program, ReactiveSourceKind,
+    ReactiveWriteOperation, StaticDefect, StaticDefectFamily, StaticDefectKind, project_findings,
+    strict_read_evidence, strict_read_message_with_compute,
 };
 
 pub use rules::{Rule, docs_url, manifest_json};
@@ -35,19 +34,18 @@ pub fn solve_measured(program: &Program) -> (Vec<Finding>, SolveTimings) {
     project_findings(program, &Catalog)
 }
 
-#[must_use]
-pub fn package_contract_finding(issue: &PackageContractIssue) -> Finding {
-    project_finding(FindingSeed::PackageContractIssue(issue), &Catalog)
-}
-
 // The trailing sentence is the only clause that differs between a proven
 // violation and an uncertifiable finding, so it is split out here rather than
 // duplicating the whole hint body per kind. A violation's read is proven
 // untracked in a proven tracking context, so Solid provably warns there — the
 // flat "Solid warns ... here in dev" claim is earned. An uncertifiable read is
 // not: it rests on unenumerable callers (`ReactiveRead::uncertain`), a census
-// hole (`ReactiveRead::missing_jsx_census`), and in either case the flat claim
-// asserts a runtime behavior the finding's own message says cannot be proven.
+// hole (`ReactiveRead::missing_jsx_census`), a host callback whose
+// invocation window is not proven (`ReactiveRead::host_callback_timing`), or a
+// callback handed to a callee not proven to invoke it during the call
+// (`ReactiveRead::callee_callback_timing`), and
+// in each case the flat claim asserts a runtime behavior the finding's own
+// message says cannot be proven.
 // The conditional phrasing stays true regardless of which uncertainty caused
 // the finding.
 const STRICT_READ_UNTRACKED_WARNS: &str = "Solid warns STRICT_READ_UNTRACKED here in dev.";
@@ -77,8 +75,8 @@ impl CatalogWording for Catalog {
 
     fn wording(&self, seed: FindingSeed<'_>) -> FindingWording {
         match seed {
-            FindingSeed::StrictRead(read) => {
-                let mut message = strict_read_message(read);
+            FindingSeed::StrictRead { read, compute_reads_source } => {
+                let mut message = strict_read_message_with_compute(read, compute_reads_source);
                 if read.uncertain {
                     // Signal-backing is a caller-decided fact in 2.0 (probed:
                     // devComponent's strict-read window only warns for props
@@ -102,15 +100,27 @@ impl CatalogWording for Catalog {
             FindingSeed::OwnedWrite(write) => owned_write_wording(write),
             FindingSeed::Action(action) => FindingWording::new(
                 Rule::ActionCalledInOwnedScope.metadata(),
-                format!(
-                    "action {:?} is called inside owned scope {}; invoking an action starts a write transaction (optimistic writes, refresh) under a children-capable owner, which re-triggers the scope that called it",
-                    action.action, action.context
-                ),
+                if action.is_uncertifiable() {
+                    format!(
+                        "action {:?} is called in {}, but no compiler or semantic fact places where this code runs, so whether it starts a write transaction under a children-capable owner cannot be proven either way",
+                        action.action,
+                        unplaced_context(&action.context)
+                    )
+                } else {
+                    format!(
+                        "action {:?} is called inside owned scope {}; invoking an action starts a write transaction (optimistic writes, refresh) under a children-capable owner, which re-triggers the scope that called it",
+                        action.action, action.context
+                    )
+                },
                 "Call the action from an event handler, onSettled, createTrackedEffect, or another imperative boundary; untrack() does not lift the restriction. To load data reactively you don't need an action: return the Promise from a computation and read it under a <Loading> boundary.",
             )
             .with_evidence(vec![EvidenceStep {
-                message: "invoking an action starts a write transaction while a children-capable owner is active"
-                    .into(),
+                message: if action.is_uncertifiable() {
+                    "no compiler or semantic fact places where this invocation runs".into()
+                } else {
+                    "invoking an action starts a write transaction while a children-capable owner is active"
+                        .into()
+                },
                 location: Some(action.location.clone()),
             }]),
             FindingSeed::LeafOperation(operation) => leaf_operation_wording(operation),
@@ -158,74 +168,16 @@ impl CatalogWording for Catalog {
                 FindingWording::new(metadata, message, hint)
             }
             FindingSeed::AsyncRead(read) => async_read_wording(read),
-            FindingSeed::PackageContractIssue(issue) => {
-                let (condition, hint) = match &issue.status {
-                    PackageContractIssueKind::Stale {
-                        contract_version,
-                        installed_version,
-                    } => (
-                        format!(
-                            "has a reactivity contract for version {contract_version}, but version {installed_version} is installed"
-                        ),
-                        format!(
-                            "The accepted document is evidence about a release this project no longer installs. Generate a stable-v1 proposal for node_modules/{package} with its exact registry integrity, prove the open claims, issue a new receipt, and update .solid-checker/accepted-contracts.json.",
-                            package = issue.package
-                        ),
-                    ),
-                    PackageContractIssueKind::StaleBundled {
-                        audited_version,
-                        installed_version,
-                    } => (
-                        format!(
-                            "is audited by this checker at version {audited_version}, but version {installed_version} is installed"
-                        ),
-                        format!(
-                            "Bundled contracts describe one exact release. Install {} {audited_version}, or upgrade solid-checker to a release that audits {installed_version}.",
-                            issue.package
-                        ),
-                    ),
-                    PackageContractIssueKind::IntegrityMismatch {
-                        contract_integrity,
-                        installed_integrity,
-                        bundled,
-                    } => (
-                        format!(
-                            "has a reactivity contract audited against npm integrity {contract_integrity}, but the project's lockfile installs {installed_integrity}"
-                        ),
-                        if *bundled {
-                            format!(
-                                "A version string is not a pin: the installed bytes were republished, patched, or overridden. Install the artifact this checker audited for {}, or upgrade solid-checker to a release that audits the installed one.",
-                                issue.package
-                            )
-                        } else {
-                            format!(
-                                "A version string is not a pin: the installed bytes were republished, patched, or overridden, so the accepted document is evidence about a tarball this project does not have. Generate a stable-v1 proposal for node_modules/{package} with its exact registry integrity, prove it, issue a receipt, and update .solid-checker/accepted-contracts.json.",
-                                package = issue.package
-                            )
-                        },
-                    ),
-                    PackageContractIssueKind::Unverified => (
-                        "has only an unaccepted stable-v1 reactivity proposal".to_owned(),
-                        "Replay the proposal's required proof plan against the exact artifact. Only the Rust verifier may finalize closed claims and issue the receipt referenced by .solid-checker/accepted-contracts.json; probes may falsify but cannot accept closure.".into(),
-                    ),
-                    PackageContractIssueKind::Missing => (
-                        "has no reactivity contract".to_owned(),
-                        format!(
-                            "Generate a stable-v1 proposal for {} at {}, verify its required proofs, and add the proof-issued receipt plus exact import identity to .solid-checker/accepted-contracts.json. Missing evidence remains uncertifiable. See docs/package-contracts.md for the workflow.",
-                            issue.package, issue.contract_path
-                        ),
-                    ),
-                };
-                FindingWording::new(
-                    Rule::PackageContractIncomplete.metadata(),
-                    format!(
-                        "imported Solid package {:?} {condition}; solid-checker cannot rely on its export summaries, so every use of them is uncertifiable",
-                        issue.package
-                    ),
-                    hint,
-                )
-            }
         }
+    }
+}
+
+/// Where an unplaced site is written, for a message that claims no role.
+fn unplaced_context(context: &str) -> &str {
+    if context.is_empty() {
+        "code the analysis cannot place"
+    } else {
+        context
     }
 }
 
@@ -235,7 +187,7 @@ fn owned_write_wording(write: &solid_reactive_ir::ReactiveWrite) -> FindingWordi
     } else {
         &write.context
     };
-    let (message, hint, provenance) = match write.operation {
+    let (mut message, hint, provenance) = match write.operation {
         ReactiveWriteOperation::Refresh => (
             format!(
                 "refresh() is called inside owned scope {context}; a write transaction cannot start while an owner is tracking, and Solid throws here in dev"
@@ -261,24 +213,47 @@ fn owned_write_wording(write: &solid_reactive_ir::ReactiveWrite) -> FindingWordi
             )
         }
     };
-    FindingWording::new(
-        Rule::ReactiveWriteInOwnedScope.metadata(),
-        message,
-        hint,
+    let scope = if write.is_uncertifiable() {
+        let call = match write.operation {
+            ReactiveWriteOperation::Refresh => "refresh()".to_owned(),
+            ReactiveWriteOperation::Setter => format!("setter {:?}", write.setter),
+        };
+        message = format!(
+            "{call} is called in {}, but no compiler or semantic fact places where this code runs, so whether it runs under a children-capable owner, where Solid throws, cannot be proven either way",
+            unplaced_context(&write.context)
+        );
+        "no compiler or semantic fact places where this write runs".into()
+    } else {
+        "this scope runs under a children-capable owner; writes are only legal outside one — event handlers, actions, effect apply callbacks, and the leaf scopes onSettled and createTrackedEffect — and untrack() keeps the enclosing owner".into()
+    };
+    FindingWording::new(Rule::ReactiveWriteInOwnedScope.metadata(), message, hint).with_evidence(
+        vec![
+            EvidenceStep {
+                message: provenance,
+                location: Some(write.declaration.clone()),
+            },
+            EvidenceStep {
+                message: scope,
+                location: Some(write.location.clone()),
+            },
+        ],
     )
-    .with_evidence(vec![
-        EvidenceStep {
-            message: provenance,
-            location: Some(write.declaration.clone()),
-        },
-        EvidenceStep {
-            message: "this scope runs under a children-capable owner; writes are only legal outside one — event handlers, actions, effect apply callbacks, and the leaf scopes onSettled and createTrackedEffect — and untrack() keeps the enclosing owner".into(),
-            location: Some(write.location.clone()),
-        },
-    ])
 }
 
 fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> FindingWording {
+    if matches!(
+        operation.kind,
+        LeafOwnerOperationKind::ObserverCacheTracking
+    ) {
+        let member = operation.via.as_deref().unwrap_or("prototype member");
+        return FindingWording::new(Rule::LeafOwnerForbiddenCall.metadata(),
+            format!("{member} performs observer-cache tracking inside {}; a missing per-key signal requires child creation and a retained signal requires cleanup registration, and this leaf owner forbids both paths, so Solid throws in dev", operation.owner),
+            format!("Read the collection in JSX or a children-capable tracked computation instead of inside {}.", operation.owner))
+            .with_evidence(vec![EvidenceStep {
+                message: "the dialect's new-instance model states a getObserver-gated per-key cache recipe; the observer is present at this synchronous invocation".into(),
+                location: Some(operation.location.clone()),
+            }]);
+    }
     let (rule, mut message, hint) = match &operation.kind {
         LeafOwnerOperationKind::Cleanup => (
             Rule::LeafOwnerForbiddenCall,
@@ -313,6 +288,7 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
                 operation.owner
             ),
         ),
+        LeafOwnerOperationKind::ObserverCacheTracking => unreachable!("handled above"),
         LeafOwnerOperationKind::UnresolvedCallback => (
             Rule::ReactiveDispatchUnresolved,
             format!(
@@ -325,15 +301,27 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
     if let Some(via) = &operation.via
         && !matches!(operation.kind, LeafOwnerOperationKind::UnresolvedCallback)
     {
-        message.push_str(&format!(
-            " — reached through {via}(), which performs the operation in its synchronous extent and is called from this scope"
-        ));
+        message.push_str(&if operation.possible {
+            // ADR 0275: behind a branch, an early return or a loop in the
+            // helper, on a path this call's arguments may or may not take.
+            format!(
+                " — reached through {via}(), whose synchronous extent performs the operation on some calls but not on every completion, so whether this call performs it is not proven and the finding is a proof obligation"
+            )
+        } else {
+            format!(
+                " — reached through {via}(), which performs the operation in its synchronous extent and is called from this scope"
+            )
+        });
     }
     let mut evidence = vec![EvidenceStep {
         message: if matches!(operation.kind, LeafOwnerOperationKind::UnresolvedCallback) {
             "the leaf callback's exact synchronous target is not available in the project and is not a resolved standard-library operation".into()
         } else {
             match &operation.via {
+                Some(via) if operation.possible => format!(
+                    "the exactly resolved helper {via}() runs the operation synchronously on some completions only, and this call site is inside the {} callback",
+                    operation.owner
+                ),
                 Some(via) => format!(
                     "the exactly resolved helper {via}() runs the operation synchronously, and this call site is inside the {} callback",
                     operation.owner
@@ -365,6 +353,37 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
 }
 
 fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
+    if read.invocation_context_unproven {
+        return FindingWording::new(
+            Rule::PendingAsyncUnsuspendableRead.metadata(),
+            format!("async accessor {:?} is read in a stored or nested callback whose invocation during the component's strict-read window is unproven; this does not establish that the read throws", read.accessor),
+            "Establish when the callback runs and how pending values are handled. Use a tracking scope when the result needs suspension and retry.".to_owned(),
+        );
+    }
+    if read.callee_callback_timing {
+        let mut metadata = Rule::PendingAsyncUnsuspendableRead.metadata();
+        if read.leaf_owner.is_some() {
+            metadata.severity = "warning";
+        }
+        return FindingWording::new(
+            metadata,
+            format!(
+                "async accessor {:?} is read in a callback whose callee's invocation context and pending handling are unproven; this does not establish that the read throws",
+                read.accessor
+            ),
+            "Inspect when the callee invokes this callback and whether it handles pending values. Read async values in a tracking scope when the callback needs suspension and retry.".to_owned(),
+        )
+        .with_evidence(vec![
+            EvidenceStep {
+                message: "the source's computation is async; the callback's callee does not prove an unhandled pending read".to_owned(),
+                location: Some(read.declaration.clone()),
+            },
+            EvidenceStep {
+                message: "callback invocation remains an open obligation".to_owned(),
+                location: Some(read.location.clone()),
+            },
+        ]);
+    }
     // Declared first paint (probed against rc.0): a loadingValue /
     // seedLoadingValue node is born committed, so its *first flight* cannot
     // throw anywhere — but once the first real answer lands, a pending
@@ -398,7 +417,12 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
         match read.execution {
             ExecutionRole::ModuleInitialization | ExecutionRole::UntrackedRendering => (
                 Rule::PendingAsyncUnsuspendableRead,
-                if declared {
+                if read.host_callback_timing {
+                    format!(
+                        "async accessor {:?} may be read here while pending, in a callback a host API retains; if the host invokes the callback inside the component body's strict-read window the read cannot suspend or retry and throws PENDING_ASYNC_UNTRACKED_READ in dev, and if it invokes it later the read throws a plain NotReadyError, and nothing here proves which",
+                        read.accessor
+                    )
+                } else if declared {
                     format!(
                         "async accessor {:?} declares a loadingValue, so this untracked read serves the declared value during the first flight, but after the first real answer lands a pending re-ask (input change or refresh) makes it throw PENDING_ASYNC_UNTRACKED_READ in dev",
                         read.accessor
@@ -448,6 +472,7 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
             // compiler deleted cannot throw, so selection excludes it exactly
             // as it excludes an unclassified span.
             ExecutionRole::Unknown
+            | ExecutionRole::Unreported
             | ExecutionRole::TrackedJsx
             | ExecutionRole::DeferredCallback
             | ExecutionRole::UntrackedCallback
@@ -474,6 +499,14 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
     {
         provenance.push_str(
             "; the source's options argument cannot be read statically, so a loadingValue declaration (which would make the first flight safe) can be neither proven nor ruled out — this finding is a proof obligation, not a proven throw",
+        );
+    }
+    if read.host_callback_timing
+        && rule == Rule::PendingAsyncUnsuspendableRead
+        && read.leaf_owner.is_none()
+    {
+        provenance.push_str(
+            "; the read sits in a callback a host API retains (an event listener, a bound argument, a thenable callback or a Geolocation callback), which the host may invoke inside the component body's strict-read window, where a pending read throws PENDING_ASYNC_UNTRACKED_READ in dev, or after it, where it throws a plain NotReadyError — this finding is a proof obligation, not a proven throw",
         );
     }
     let mut metadata = rule.metadata();
@@ -508,22 +541,20 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         Rule::ResolveInReactiveScope => {
             "the resolve() call runs directly in a tracked scope, where the runtime's observer guard throws in dev"
         }
+        Rule::UntilInTrackedScope => {
+            "the until() call runs directly in a tracked scope, where the runtime's observer guard throws in dev"
+        }
+        Rule::FlushInAction => {
+            "the flush() call runs directly in an action body, inside a step, where the installed @solidjs/signals throws FLUSH_IN_ACTION in dev"
+        }
+        Rule::StaticDynamicAsyncSource => {
+            "the static-form dynamic() source is proven to return a Promise, which the dev builds reject at the call and the production builds render as nothing"
+        }
         Rule::HttpResponseAfterFlush => {
             "the call's scope renders below a Loading boundary, but request-time ordering does not prove whether the boundary settles before or after the response head commits"
         }
         Rule::ServerFunctionModuleDirective => {
             "the module's directive prologue contains \"use server\" and this export is provably not a direct function declaration"
-        }
-        // The nested claim is about a value the argument *holds*, not the
-        // argument's own resolved type, so it cannot borrow the top-level
-        // sentence: that one would assert a fact the analysis never proved.
-        Rule::ServerFunctionRichArgument
-            if violation.analysis_context == "nested-rich-argument" =>
-        {
-            "the callee carries a \"use server\" directive, a closed object literal reaching it holds a value in the JSON-unsafe set, and nothing in the project installs an argument serializer"
-        }
-        Rule::ServerFunctionRichArgument => {
-            "the callee carries a \"use server\" directive, the argument's resolved type is in the JSON-unsafe set, and nothing in the project installs an argument serializer"
         }
         Rule::JsxNoDuplicateProps => {
             "the intrinsic element uses more than one competing source of DOM child content"
@@ -547,7 +578,18 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         | Rule::AsyncOutsideLoadingBoundary
         | Rule::PrimitiveInDirectiveApplication
         | Rule::MissingEffectFunction
-        | Rule::PackageContractIncomplete => panic!(
+        | Rule::PackageBehaviorUnavailable
+        // Moved to the static-defect channel, where the analysis states which
+        // of the four transport proofs it made and this catalog names the
+        // serializer that fixes it.
+        | Rule::ServerFunctionRichArgument
+        // Never reaches any wording channel: dialect detection emits it
+        // directly, with the message built at the refusal site because the
+        // manifest path and installed version are what it has to say.
+        | Rule::UnsupportedSolidRuntime
+        // Likewise: the backend builds it beside the analysis from the
+        // detected release and the dialect's review of it.
+        | Rule::UnauditedSolidRelease => panic!(
             "rule {} is not emitted through the static-violation channel",
             rule.metadata().name
         ),
@@ -572,14 +614,14 @@ fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
         StaticDefectFamily::ReactiveObjectDestructure => Rule::ComponentPropsDestructure,
         StaticDefectFamily::ReactiveReadAfterAwait => Rule::ReactiveReadAfterAwait,
         StaticDefectFamily::ComponentReturnsConditionally => Rule::ComponentReturnsConditionally,
-        StaticDefectFamily::PackageContractIncomplete
-        | StaticDefectFamily::UnknownCallbackExecution => Rule::PackageContractIncomplete,
+        StaticDefectFamily::PackageBehaviorUnavailable => Rule::PackageBehaviorUnavailable,
         StaticDefectFamily::MissingEffectFunction => Rule::MissingEffectFunction,
         StaticDefectFamily::ReactiveSourceUncaptured => Rule::ReactiveSourceUncaptured,
         StaticDefectFamily::ReactiveDispatchUnresolved => Rule::ReactiveDispatchUnresolved,
         StaticDefectFamily::ExpectedFunctionGotExpression => Rule::ExpectedFunctionGotExpression,
         StaticDefectFamily::UncalledAccessor => Rule::UncalledAccessor,
         StaticDefectFamily::DirectMutation => Rule::NoDirectMutation,
+        StaticDefectFamily::ServerFunctionRichArgument => Rule::ServerFunctionRichArgument,
     };
     let text = solid_reactive_ir::static_defect_text(defect, &V2_STATIC_TERMS);
     let mut message = text.message;
@@ -595,8 +637,14 @@ fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
             StaticDefectKind::MissingEffectFunction
                 | StaticDefectKind::ReactiveDispatchUnresolved { .. }
                 | StaticDefectKind::ReactiveCallbackUnresolved { .. }
+                | StaticDefectKind::ResultAccessCallbackUnplaced { .. }
                 | StaticDefectKind::StructuredReturnUnresolved { .. }
                 | StaticDefectKind::HandlerValueUnresolved { .. }
+                // The open transport proof names its own reason in the
+                // message; there is no component whose call sites could be
+                // enumerated, so the props sentence would describe a
+                // different obligation than the one raised.
+                | StaticDefectKind::ServerFunctionRichArgument { .. }
         )
     {
         if defect.analysis_context == "draggable-default-uncertain" {
@@ -623,6 +671,11 @@ const V2_STATIC_TERMS: solid_reactive_ir::StaticDefectTerms =
         missing_effect_hint: "Split the callback: reactive reads go in the compute function, the side effect in the apply function, and cleanup is returned from apply. For error handling, pass { effect, error } as the second argument.",
         store_mutation_hint: v2_store_mutation_hint,
         removed_export_hint: v2_removed_export_hint,
+        rich_argument_transport_throw: "Server function arguments are sent as JSON by default and these arguments are not JSON-serializable",
+        rich_argument_resolved_hint: "Call enableRichArguments() from \"@solidjs/web/server-functions/rich-args\" once at client startup to send Dates, Maps, Sets, and typed arrays through the codec (~5 KB gz), or convert the argument to a JSON-safe shape at the call site (date.toISOString(), Array.from(set)).",
+        rich_argument_nested_hint: "Convert the nested value to a JSON-safe shape where the object is built (date.toISOString(), Array.from(set)), or call enableRichArguments() from \"@solidjs/web/server-functions/rich-args\" once at client startup.",
+        rich_argument_primitive_hint: "Convert the argument to a JSON value at the call site, or install the rich-argument serializer once at client startup.",
+        rich_argument_unresolved_hint: "Resolve the argument type and configure the serializer through the exact @solidjs/web server-functions API, or pass a JSON-safe value explicitly.",
     };
 
 fn v2_store_mutation_hint(name: &str) -> String {
@@ -634,10 +687,10 @@ fn v2_store_mutation_hint(name: &str) -> String {
 /// The Solid 1.x APIs removed or renamed in 2.0 that a project migrating to
 /// the v2 dialect is most likely to still import, mapped to their 2.0
 /// replacement. Derived from the official 2.0 migration guide's rename and
-/// removal tables; each name is verified absent from the bundled
-/// `solid-v2/solid-js.json` contract by
-/// `removed_exports_are_absent_from_the_bundled_contract` — anything the
-/// contract still exports is not removed and must not appear here.
+/// removal tables; each name is verified absent from the audited
+/// `solid-js` export table by
+/// `removed_exports_are_absent_from_the_export_table` — anything the
+/// table still exports is not removed and must not appear here.
 const V2_REMOVED_EXPORTS: &[(&str, &str)] = &[
     (
         "batch",
@@ -664,8 +717,8 @@ const V2_REMOVED_EXPORTS: &[(&str, &str)] = &[
         "use an async computation (createMemo(async ...) or createStore(fn)) read under a <Loading> boundary",
     ),
     // `createRenderEffect` and `untrack` are deliberately NOT here: both
-    // still exist in 2.0 (bundled contract exports them), so a missing
-    // summary for them is a real contract gap, not a removed API.
+    // still exist in 2.0 (the export table lists them), so unavailable
+    // behavior for them is a real source gap, not a removed API.
     (
         "createComputed",
         "use createEffect(compute, apply), a function-form createSignal/createStore, or createMemo",
@@ -720,10 +773,10 @@ const V2_REMOVED_EXPORTS: &[(&str, &str)] = &[
 ];
 
 /// Migration-oriented SC9005 hint for the removed 1.x APIs: telling the user
-/// to write a contract entry for `batch` would send them to document an
+/// to make the source of `batch` available would send them to chase an
 /// export that no longer exists. Applies to the packages the v2 dialect
-/// itself contracts (`solid-js`, `@solidjs/web`); a same-named export of a
-/// third-party package keeps the generic contract hint.
+/// itself models (`solid-js`, `@solidjs/web`); a same-named export of a
+/// third-party package keeps the generic hint.
 fn v2_removed_export_hint(module: &str, export: &str) -> Option<String> {
     if module != "solid-js" && module != "@solidjs/web" && !module.starts_with("@solidjs/web/") {
         return None;
@@ -740,35 +793,16 @@ fn v2_removed_export_hint(module: &str, export: &str) -> Option<String> {
 mod removed_export_tests {
     use super::{V2_REMOVED_EXPORTS, v2_removed_export_hint};
 
-    /// A name the bundled 2.0 contract still exports is not removed: hinting
-    /// "migrate away" for it would be wrong, and SC9005 for it is a genuine
-    /// contract gap. This holds the map to the shipped export list.
+    /// A name `solid-js` still exports is not removed: hinting "migrate away"
+    /// for it would be wrong. This holds the map to the audited export table.
     #[test]
-    fn removed_exports_are_absent_from_the_bundled_contract() {
-        let contract = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../../crates/solid-dialect/contracts/solid-v2/solid-js.json");
-        let contract: serde_json::Value =
-            serde_json::from_str(&std::fs::read_to_string(&contract).unwrap()).unwrap();
-        let entrypoints = contract["entrypoints"]
-            .as_object()
-            .expect("bundled contract has entrypoints");
-        let exports = entrypoints
-            .values()
-            .flat_map(|entrypoint| {
-                entrypoint["cases"]
-                    .as_array()
-                    .expect("bundled entrypoint has artifact cases")
-            })
-            .map(|case| {
-                case["exports"]
-                    .as_object()
-                    .expect("bundled artifact case has exact exports")
-            })
-            .collect::<Vec<_>>();
+    fn removed_exports_are_absent_from_the_export_table() {
         for (name, _) in V2_REMOVED_EXPORTS {
             assert!(
-                exports.iter().all(|case| !case.contains_key(*name)),
-                "{name} is exported by the bundled solid-v2 contract, so it is not a removed API and must leave V2_REMOVED_EXPORTS"
+                solid_dialect::exports::solid_v2_solid_js::VALUES
+                    .iter()
+                    .all(|(exported, _)| exported != name),
+                "{name} is exported by solid-js, so it is not a removed API and must leave V2_REMOVED_EXPORTS"
             );
         }
     }
@@ -815,5 +849,41 @@ mod strict_read_hint_tests {
             assert!(hint.contains("If this read executes untracked in dev, Solid warns"));
             assert!(hint.contains("this finding does not establish that it does"));
         }
+    }
+}
+
+#[cfg(test)]
+mod source_argument_evidence_tests {
+    use solid_reactive_ir::{FindingSeed, StaticDefect, project_finding};
+
+    use super::Catalog;
+
+    /// The evidence is anchored at the argument the defect names and is
+    /// conditional: `observe` is an opaque callable, so nothing here says the
+    /// call runs, is an invalid API, or reads untracked.
+    #[test]
+    fn the_evidence_is_the_conditional_sentence_at_the_argument() {
+        let defect: StaticDefect = serde_json::from_value(serde_json::json!({
+            "kind": {
+                "kind": "reactive-source-uncaptured",
+                "source": "count",
+                "callee": "observe",
+            },
+            "location": { "path": "App.tsx", "startByte": 120, "endByte": 125 },
+        }))
+        .unwrap();
+        let finding = project_finding(FindingSeed::StaticDefect(&defect), &Catalog);
+        assert_eq!(finding.id, "SC9011");
+        assert_eq!(finding.kind, "uncertifiable");
+        assert_eq!(finding.evidence.len(), 1);
+        assert_eq!(
+            finding.evidence[0].message,
+            "a reference bound to a reactive accessor occupies this call expression's argument position; if the call executes, the available analysis does not establish whether reads through that accessor stay tracked"
+        );
+        assert_eq!(
+            finding.evidence[0].location.as_ref(),
+            Some(&defect.location)
+        );
+        assert_eq!(finding.primary_location, defect.location);
     }
 }

@@ -154,7 +154,6 @@ impl BuildTimings {
         self.interprocedural_direct_summaries = timings.direct_summaries;
         self.interprocedural_direct_index = timings.direct_index;
         self.interprocedural_direct_references = timings.direct_references;
-        self.interprocedural_typed_accessors = timings.typed_accessors;
         self.interprocedural_propagation = timings.propagation;
         self.interprocedural_returned_direct = timings.returned_direct;
         self.interprocedural_returned_delta = timings.returned_delta;
@@ -163,8 +162,6 @@ impl BuildTimings {
         self.interprocedural_results_and_exports = timings.results_and_exports;
         self.interprocedural_result_reads = timings.result_reads;
         self.interprocedural_export_summaries = timings.export_summaries;
-        self.typed_accessor_reused_files = timings.typed_accessor_reused_files;
-        self.typed_accessor_recomputed_files = timings.typed_accessor_recomputed_files;
         self.interprocedural_graph_reused_files = timings.graph_reused_files;
         self.interprocedural_graph_recomputed_files = timings.graph_recomputed_files;
         self.interprocedural_result_reused_files = timings.result_reused_files;

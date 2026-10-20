@@ -1,0 +1,11 @@
+[package]
+name = "path-control"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# A standalone wasm32-wasip1 control program for the WASM parity gate; not a
+# member of the rust/ workspace.
+[workspace]
+
+[dependencies]
