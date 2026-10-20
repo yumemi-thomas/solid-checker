@@ -445,3 +445,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/imported-const-commonjs/node_modules/**
 !fixtures/reactive-ir/unplaced-site-obligations/node_modules/
 !fixtures/reactive-ir/unplaced-site-obligations/node_modules/**
+!fixtures/reactive-ir/write-legality-proofs/node_modules/
+!fixtures/reactive-ir/write-legality-proofs/node_modules/**

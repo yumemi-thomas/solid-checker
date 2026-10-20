@@ -128,6 +128,16 @@ pub struct AstFacts {
     /// core the after-await member-read check builds on.
     #[serde(default)]
     pub unconditional_awaits: Vec<Span>,
+    /// `(await, region)`: an await written at statement level of its
+    /// innermost block (no conditional, logical, loop, switch or try construct
+    /// between the block's start and the expression, not in a skippable
+    /// chain), and the rest of that block. A block is entered only at its
+    /// start, so code in the region runs only after that await suspended.
+    /// Unlike [`Self::unconditional_awaits`] the block may be a `try` block or
+    /// a branch's block; a `catch` or `finally` is never in the region, since
+    /// a synchronous throw of the operand reaches it unsuspended.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dominating_awaits: Vec<(Span, Span)>,
     /// The call expressions written in their innermost enclosing function's
     /// straight-line flow, as [`Self::unconditional_awaits`] are, and outside
     /// any optional chain (`a?.b(c())` evaluates `c()` only when `a` is not
@@ -1638,6 +1648,7 @@ impl AstFacts {
             reference_declarations: Vec::new(),
             awaits: Vec::new(),
             unconditional_awaits: Vec::new(),
+            dominating_awaits: Vec::new(),
             straight_line_calls: Vec::new(),
             straight_line_constructs: Vec::new(),
             completion_sites: Vec::new(),

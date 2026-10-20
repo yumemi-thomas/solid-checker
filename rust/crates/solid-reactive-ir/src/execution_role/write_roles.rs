@@ -315,6 +315,12 @@ pub(super) fn semantic_write_execution_role_within(
     {
         return unknown;
     }
+    // Past an await that dominates it, the write runs on a later task with no
+    // owner, whatever its lexical role or its function's callers: legal, and
+    // proven so, though in no single role.
+    if follows_dominating_await(file, span) {
+        return ExecutionRole::Unreported;
+    }
     // Code after an `await` in an async function runs on a later task, with no
     // owner; neither the lexical role nor the role at the function's call sites
     // describes it. Not proven to follow an await on every path (an `await`

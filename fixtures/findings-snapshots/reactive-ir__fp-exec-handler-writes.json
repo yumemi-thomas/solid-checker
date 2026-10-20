@@ -167,16 +167,6 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/fp-exec-handler-writes/hook.ts",
-      "start": 332,
-      "end": 350,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-write-in-owned-scope",
-      "code": "SC2001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/fp-exec-handler-writes/hook.ts",
       "start": 372,
       "end": 384,
       "fixes": 0

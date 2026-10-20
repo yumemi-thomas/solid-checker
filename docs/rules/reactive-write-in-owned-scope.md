@@ -101,7 +101,10 @@ invocation is proven. It is proven for:
 - a named closure whose call site is itself in the body.
 
 Anywhere else the write takes the role its invocation sites prove, and with
-none it is **uncertifiable**. That covers a literal handed to a function that
+none it is **uncertifiable**. One proof makes it legal (ADR 0333): it runs
+after an await that dominates it (later in the await's block, a `try` block
+included, never its `catch` or `finally`; not in a generator, JSX or an
+instance field). That covers a literal handed to a function that
 stores it (`later(() => setCount(1))` with a timer calling it), a closure a
 callback returns (`keep(() => () => setCount(1))`), and a literal handed to a
 package export whose behavior is unavailable from source. The write may throw, if the

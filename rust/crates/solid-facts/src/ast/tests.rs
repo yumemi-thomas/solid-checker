@@ -35,6 +35,60 @@ fn straight_line_calls_exclude_every_conditional_construct() {
     assert_eq!(lines, [4, 5, 13], "{lines:?}");
 }
 
+/// Facts schema 65: an await dominates the rest of its innermost block when
+/// nothing between that block's start and the await can skip it. A `try`
+/// block and a branch's block are blocks; `catch`, `finally`, the code after
+/// a `try` statement, and an await under a conditional expression are not.
+#[test]
+fn dominating_awaits_cover_the_rest_of_their_block() {
+    let source = concat!(
+        "declare const p: Promise<number>; declare const c: boolean;\n",
+        "declare function w(n: number): void;\n",
+        "async function f() {\n",
+        "  try {\n",
+        "    const r = await p;\n",
+        "    w(r);\n",
+        "  } catch {\n",
+        "    w(0);\n",
+        "  } finally {\n",
+        "    w(1);\n",
+        "  }\n",
+        "  w(2);\n",
+        "  if (c) {\n",
+        "    await p;\n",
+        "    w(3);\n",
+        "  }\n",
+        "  w(4);\n",
+        "  const x = c ? await p : 0;\n",
+        "  w(x);\n",
+        "  await p;\n",
+        "  w(5);\n",
+        "}\n",
+    );
+    let facts = super::extract("dominating.ts", source).unwrap();
+    let line_of = |offset: u32| source[..offset as usize].matches('\n').count() + 1;
+    let dominated = |line: usize| {
+        let start = source
+            .match_indices('\n')
+            .nth(line - 2)
+            .map_or(0, |(index, _)| index + 1);
+        let call = start + source[start..].find("w(").unwrap();
+        let call = u32::try_from(call).unwrap();
+        facts
+            .dominating_awaits
+            .iter()
+            .any(|(_, region)| region.start <= call && call < region.end)
+    };
+    let awaits = facts
+        .dominating_awaits
+        .iter()
+        .map(|(awaited, _)| line_of(awaited.start))
+        .collect::<Vec<_>>();
+    assert_eq!(awaits, [5, 14, 20], "{awaits:?}");
+    assert!(dominated(6) && dominated(15) && dominated(21));
+    assert!(!dominated(8) && !dominated(10) && !dominated(12) && !dominated(17) && !dominated(19));
+}
+
 /// ADR 0320 (facts schema 64): an await is unconditional only when no
 /// construct that can skip it lies between the function entry and it:
 /// logical assignments, optional chains, destructuring defaults and

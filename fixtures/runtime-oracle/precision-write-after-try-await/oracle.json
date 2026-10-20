@@ -1,0 +1,3 @@
+{
+  "note": "Step 4 (dominating awaits): a write after an await in the same try block runs with no owner and is silent; the control write before the await runs in the body's window and is an SC2001 violation."
+}

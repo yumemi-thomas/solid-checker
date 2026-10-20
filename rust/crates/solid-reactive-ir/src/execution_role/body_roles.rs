@@ -109,7 +109,10 @@ pub(super) fn enclosed_by_stored_function(
 /// render window or a tracking scope.
 pub(crate) fn follows_unconditional_await(file: &solid_facts::FileFacts, span: Span) -> bool {
     containing_ast_function(&file.ast, span).is_some_and(|function| {
+        // An async generator is resumed by its caller after each `yield`,
+        // synchronously, in whatever window or owner that caller has.
         function.r#async
+            && !function.generator
             && file.ast.unconditional_awaits.iter().any(|awaited| {
                 awaited.end <= span.start
                     && function.body.contains(*awaited)
@@ -117,6 +120,45 @@ pub(crate) fn follows_unconditional_await(file: &solid_facts::FileFacts, span: S
                         .is_some_and(|owner| owner.span == function.span)
             })
     })
+}
+
+/// Whether `span` runs only after an await of its own function suspended: it
+/// lies in the rest of the block an await dominates (`dominating_awaits`),
+/// in the same function as that await. A closure written there, an instance
+/// field initializer and a JSX expression run whenever they are called,
+/// constructed or rendered, which may be under an owner again, so they are
+/// not included.
+pub(crate) fn follows_dominating_await(file: &solid_facts::FileFacts, span: Span) -> bool {
+    // An instance field initializer is written in the function but runs when
+    // an instance is constructed, which may be later and under an owner.
+    if inside_instance_field(file, span) {
+        return false;
+    }
+    // A JSX expression written there runs inside a render effect the
+    // compiler creates, under an owner, not on the await's continuation
+    // (review round 2).
+    if file.ast.jsx_containing(span).next().is_some()
+        || file
+            .compiler
+            .tracked_regions
+            .iter()
+            .any(|region| region.span.contains(span))
+    {
+        return false;
+    }
+    let Some(function) = containing_ast_function(&file.ast, span) else {
+        return false;
+    };
+    // An async generator suspends again at each `yield`, and its caller may
+    // resume it under an owner (`runWithOwner(owner, () => it.next())`), so
+    // an await clears the owner only until the next yield (review round 3).
+    function.r#async
+        && !function.generator
+        && file.ast.dominating_awaits.iter().any(|(awaited, region)| {
+            region.contains(span)
+                && containing_ast_function(&file.ast, *awaited)
+                    .is_some_and(|owner| owner.span == function.span)
+        })
 }
 
 /// The functions whose body holds `span`, innermost first and short of the
@@ -559,7 +601,9 @@ pub(super) fn semantic_execution_role_within(
     // only no single role. An implicit suspension (`for await`, `await using`)
     // is placed by position alone, which does not prove it runs (a loop under
     // a branch), so there the read is unplaced, not proven silent.
-    if role.reports_untracked_read() && follows_unconditional_await(file, span) {
+    if role.reports_untracked_read()
+        && (follows_unconditional_await(file, span) || follows_dominating_await(file, span))
+    {
         return ExecutionRole::Unreported;
     }
     if role.reports_untracked_read() && follows_any_suspension(file, span) {

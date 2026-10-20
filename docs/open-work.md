@@ -21,6 +21,7 @@ Strict read in a setup body (`strict-read-untracked`, SC1001):
 
 Write in an owned scope (`reactive-write-in-owned-scope`, SC2001):
 
+- A named handler both attached as `onClick` and called directly in the component body hides the write in a helper it calls; the runtime warns at that call (review probe `r2-event-reuse`, step 4; present before it).
 - A setter call in a component's default parameter initializer runs in the owned component scope; the write rule places nothing there (reviewer case `r4-param-write`).
 
 Async read outside a loading boundary (`async-outside-loading-boundary`, SC5003):
@@ -50,6 +51,7 @@ Not a miss: `r4c-leak` line 43 is listed open only because the runtime names the
 
 ## 2. Decisions not to build
 
+- A write is not proven legal because every invocation of its function is an event dispatch (built in step 4, dropped): a synchronous `click()`/`dispatchEvent` from an owned scope runs the handler under that owner (review round 4, probe `r4-sync-event`). About 110 corpus SC2001 obligations stay open. Reopen with an owner-at-dispatch fact.
 - Host-origin proof (DOM objects handed to Solid-package helpers, `makeEventListener(window, ...)`). Built as a prototype: 29 uncertifiable removed, 0 violations moved. It needs a premise that project code never installs members on host DOM objects, and app-game has 1,232 unknown-key writes. Reopen when a sweep shows a violation, not an uncertifiable, that hinges on it, and the owner states that premise.
 - Anonymous arrows as their own summary owners. It detached captured parameter member calls from the enclosing function and silently dropped `execute(input) { return invoke(() => input.callback()); }`, which must keep SC9012 at an opaque caller (control in `fixtures/reactive-ir/accessor-provenance/Anonymous.tsx`). Reopen when captured-parameter behavior and unknown callback timing compose across separate source summaries; Relay's `() => props.environment` is the first user.
 - A shared reference/identity layer (`Resolved<T> | Unknown`). Not started. Every false positive in the seven ADR 0326 review rounds was a proof re-deriving "is this still the same value" (props aliases, `arguments`, `delete`, redeclaration, reassigned tags, views of props). Reopen when the next proof needs that question answered.
@@ -71,7 +73,7 @@ A violation withheld, or turned uncertifiable, to keep zero false positives. Eac
 - A signal read inside a JSX element passed as a prop does not make that prop reactive; reads of it are uncertifiable.
 - A generator body is never placed where it is written. A call to a generator runs none of its body.
 - A function returning JSX with no rendering tag is a proven component only when every reference to it is its declaration, module surface, a dialect callback, a dialect renderer prop or a `lazy` default; otherwise (alias, object storage, a call argument, a router config not read from source, a method, an anonymous default export) its body reads and writes are uncertifiable. Solid makes a function a component only where `createComponent` calls it (`precision-map-renderer`, `precision-method-renderer`).
-- A read, write or action no fact places (`ExecutionRole::Unknown`: a JSX attribute function, a closure stored in a tracked scope, a write after an `await` not proven to dominate it, a helper with no resolved caller) is an uncertifiable finding of its rule, never silent; `Unreported` (several non-reporting roles, or past the strict-read window) stays silent. The same holds for `resolve`/`until` in such code (SC2004/SC2005), a read in a helper called after an `await` (SC1002), options the syntax cannot read beside an async computation (SC7002), and a primitive used as a value (SC9012; the shapes not yet followed are in section 1). A coverage rule disabled by options still keeps the result from certifying.
+- A read, write or action no fact places (`ExecutionRole::Unknown`: a JSX attribute function, a closure stored in a tracked scope, a write after an `await` not proven to dominate it, a helper with no resolved caller) is an uncertifiable finding of its rule, never silent; `Unreported` (several non-reporting roles, or past the strict-read window or a dominating await) stays silent. A write in `catch`/`finally` after an await stays uncertifiable: a synchronous throw of the awaited operand reaches it unsuspended (about 510 corpus sites). The same holds for `resolve`/`until` in such code (SC2004/SC2005), a read in a helper called after an `await` (SC1002), options the syntax cannot read beside an async computation (SC7002), and a primitive used as a value (SC9012; the shapes not yet followed are in section 1). A coverage rule disabled by options still keeps the result from certifying.
 - Mixed invocation of one callback (owned setup and event dispatch) refuses the owner proof as a whole (ADR 0327). A callback run only by events is proven unowned.
 
 Known false-positive shapes left open (fire today, wanted gone):

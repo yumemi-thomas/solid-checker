@@ -613,6 +613,7 @@ pub(crate) fn same_reachability_ast(
         && previous.identifiers == current.identifiers
         && previous.awaits == current.awaits
         && previous.unconditional_awaits == current.unconditional_awaits
+        && previous.dominating_awaits == current.dominating_awaits
         && previous.returns == current.returns
         && previous.jsx_elements == current.jsx_elements
         && previous.members == current.members

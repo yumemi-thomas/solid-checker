@@ -809,6 +809,15 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         {
             self.unconditional_awaits.push(await_span);
         }
+        let level = self.function_flow_depths.len();
+        if !skippable
+            && let Some(&(block, depth, block_level)) = self.open_blocks.last()
+            && block_level == level
+            && depth == self.conditional_flow_depth
+        {
+            self.dominating_awaits
+                .push((await_span, Span::new(await_span.end, block.end)));
+        }
         walk::walk_await_expression(self, expression);
     }
 
@@ -1141,6 +1150,26 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         self.conditional_flow_depth += 1;
         walk::walk_do_while_statement(self, statement);
         self.conditional_flow_depth -= 1;
+    }
+
+    fn visit_block_statement(&mut self, block: &oxc_ast::ast::BlockStatement<'a>) {
+        self.open_blocks.push((
+            span(block.span),
+            self.conditional_flow_depth,
+            self.function_flow_depths.len(),
+        ));
+        walk::walk_block_statement(self, block);
+        self.open_blocks.pop();
+    }
+
+    fn visit_function_body(&mut self, body: &oxc_ast::ast::FunctionBody<'a>) {
+        self.open_blocks.push((
+            span(body.span),
+            self.conditional_flow_depth,
+            self.function_flow_depths.len(),
+        ));
+        walk::walk_function_body(self, body);
+        self.open_blocks.pop();
     }
 
     fn visit_try_statement(&mut self, statement: &oxc_ast::ast::TryStatement<'a>) {
