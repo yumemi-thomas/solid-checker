@@ -59,3 +59,12 @@ export function AsyncIife() {
   });
   return <Loading fallback="loading"><span>{data()}</span></Loading>;
 }
+
+export function ForAwaitThenRead() {
+  const [value] = createSignal(1);
+  const data = createMemo(async () => {
+    for await (const item of [pause()]) void item;
+    return value();
+  });
+  return <Loading fallback="loading"><span>{data()}</span></Loading>;
+}

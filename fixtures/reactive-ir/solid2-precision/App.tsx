@@ -46,9 +46,11 @@ export function FilterAfterAwait() {
 }
 
 // A promise handler is deferred and does not inherit Array.prototype.filter's
-// synchronous proof from a filter inside it. The read is still after the await:
-// the handler runs from a microtask on the promise the memo returns, which the
-// runtime attributes (ADR 0340, runtime-oracle `ThenAfterAwaitFilter`).
+// synchronous proof from a filter inside it. The read is after the await, but
+// the async memo returns the chain without awaiting it, and over an
+// already-resolved receiver the handler runs before the memo adopts the
+// promise, with no frame of the computation below it: the runtime stays
+// silent, so the read is uncertifiable, not a violation (ADR 0340).
 export function PromiseCallbackAfterAwait() {
   const [id] = createSignal("42");
   const posts = createMemo(async () => {

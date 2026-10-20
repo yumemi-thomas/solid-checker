@@ -54,11 +54,20 @@ export function ThenReturnedFromAsync() {
   return <Loading fallback="loading"><span>{data()}</span></Loading>;
 }
 
+export function ThenOnAllReturnedFromAsync() {
+  const [value] = createSignal(1);
+  const data = createMemo(async () => Promise.all([1]).then(() => value()));
+  return <Loading fallback="loading"><span>{data()}</span></Loading>;
+}
+
 // The handler runs after the awaiting function returned, from a microtask: the
 // returned promise carries it, so the filter inside it reads past the await.
-// (Over an already-resolved promise the handler queues in the same microtask
-// window as the continuation and the runtime's per-window cache hides the
-// warning, a documented false negative in `dev-shared.js`; the read is the same.)
+// The receiver is pending (a timer), so the memo has adopted the returned
+// promise before the handler runs and the async stack reaches the computation.
+// Over an already-resolved receiver the handler is queued before the adoption
+// job, no frame of the computation is below it, and `attributedFlight` finds
+// none: the runtime is silent on every run (ADR 0340, SC1002 stays
+// uncertifiable there; the shapes are in `read-after-await-reach`).
 export function ThenAfterAwaitFilter() {
   const [value] = createSignal(1);
   const data = createMemo(async () => {

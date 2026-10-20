@@ -32,22 +32,41 @@ there, and the reads in it are then reported with the same two proofs:
 - **A callback the call invokes inline.** A function written directly in an
   argument slot an exact standard-library declaration invokes before it
   returns (`Array`/`ReadonlyArray` `map`, `forEach`, `filter`, `some`, `every`,
-  `find`, `findIndex`, `flatMap`, `reduce`, `sort`, `Set`/`Map`/`NodeList`
+  `find`, `findIndex`, `flatMap`, `reduce`, `Set`/`Map`/`NodeList`
   `forEach`, `Array.from`'s mapper, the `Promise` executor), and an
   immediately invoked function expression, runs inside the region it is
   called from, nested ones too. It needs a call after a dominating await (a
   `try` around the await is enough). An empty receiver never invokes its
-  callback: the read is reported as where the callback would run.
+  callback: the read is reported as where the callback would run. A `sort`
+  comparator and a `replace`/`replaceAll` replacer are the exception: whether
+  they run depends on the contents (no comparator call under two elements) or
+  on a match, so a read in one is **uncertifiable**.
 - **A promise handler.** The callback of `.then`/`.catch`/`.finally` on a
   proven native `Promise` runs from a microtask with no owner. It is in the
   continuation when the call's result is the promise the computation returns
   or awaits (`createMemo(() => pause().then(() => count()))`, `await
-  pause().then(...)`, `return` of it from an `async` computation, a handler
-  chain). The receiver is proven native by `new Promise`, `Promise.resolve`
-  and the other statics of the global `Promise`, a call of an `async` project
-  function, a project function that returns one of these, or a handler call
-  on one; a `PromiseLike`, a typed `Promise<T>` parameter or an unknown
-  receiver is not proof, since a thenable may call back inline.
+  pause().then(...)`, a handler chain). The receiver is proven native by
+  `new Promise`, `Promise.resolve` and the other statics of the global
+  `Promise`, a call of an `async` project function, a project function that
+  returns one of these, or a handler call on one; a `PromiseLike`, a typed
+  `Promise<T>` parameter or an unknown receiver is not proof, since a thenable
+  may call back inline. Two limits keep a handler uncertifiable:
+  - *An `async` function returns the chain without awaiting it* (the
+    computation itself, or an `async` helper): the function adopts the promise
+    in a later microtask. A receiver that may already be settled
+    (`Promise.resolve(1)`, `Promise.reject(e)`, an `async` helper, a handler
+    chain on one) queues the handler before that, so no frame of the
+    computation is below it and the runtime raises nothing, even on a re-run.
+    The handler is a violation only if `await` holds the call (`return await
+    ...`), or the receiver is proven still pending: `new Promise` whose
+    executor is one standard timer call, a combinator over at least one
+    element, a project function returning one of these, or a handler call on
+    one. A synchronous computation that returns the chain is not adopted: the
+    handler is a violation there.
+  - *A rejection handler* (`.catch`'s callback, `.then`'s second argument) runs
+    only if the receiver rejects, and a fulfillment handler on
+    `Promise.reject(...)` never runs: a read in one is **uncertifiable**.
+    `.finally` runs on both paths.
 - **An `async` helper the computation awaits.** An exactly resolved `async`
   project function whose promise the computation returns or awaits, directly
   or through `Promise.all`/`allSettled` (of calls, or of `items.map(async ...)`
@@ -73,6 +92,8 @@ Each of these keeps it from applying:
   except one of the `async` helpers above;
 - a `.then` whose result is dropped, or a `setTimeout`/`queueMicrotask`
   callback (a deferred callback is not on the continuation's stack).
+- a read after `for await` is not claimed even though the runtime warns (a
+  known miss, `docs/open-work.md`).
 
 **A source already tracked is exempt** (ADR 0195). A read after the await of
 an accessor that the same function already called *on every run, before its

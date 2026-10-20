@@ -592,6 +592,25 @@ pub(super) fn is_inline_standard_callback(
             == Some(RuntimeArgumentBehavior::InlineCallback)
 }
 
+/// Whether the valid resolved call is the standard `setTimeout` or
+/// `setInterval`: HTML timer initialization steps, which queue the callback as
+/// a task of its own. The timer's callback never runs before the caller's
+/// microtasks have drained.
+pub(super) fn is_timer_call(call: &ResolvedCall) -> bool {
+    call.validity == ResolvedCallValidity::Valid
+        && call.kind == CallKind::Call
+        && runtime_declaration(call).is_some_and(|declaration| {
+            declaration.standard_library
+                && matches!(
+                    declaration.qualified_name.as_ref(),
+                    "setTimeout"
+                        | "setInterval"
+                        | "WindowOrWorkerGlobalScope.setTimeout"
+                        | "WindowOrWorkerGlobalScope.setInterval"
+                )
+        })
+}
+
 /// The qualified name of the exact standard-library declaration a valid
 /// resolved call selected (`Promise.then`, `PromiseConstructor.all`, ...), or
 /// `None` for a project, package, unresolved or invalid call.

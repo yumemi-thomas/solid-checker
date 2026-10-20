@@ -69,8 +69,7 @@ export function StandardFamily() {
     const index = [1].findIndex(() => value() > 0);
     const flat = [1].flatMap(() => [value()]);
     const sum = [1].reduce((total) => total + value(), 0);
-    const sorted = [2, 1].sort(() => value());
-    return [some, every, found, index, flat, sum, sorted];
+    return [some, every, found, index, flat, sum];
   });
   return <div>{String(data())}</div>;
 }
@@ -117,12 +116,6 @@ export function ThenOnNewPromise() {
 export function FinallyCallback() {
   const [value] = createSignal(1);
   const data = createMemo(() => pause().finally(() => void value()));
-  return <div>{data()}</div>;
-}
-
-export function CatchCallback() {
-  const [value] = createSignal(1);
-  const data = createMemo(() => Promise.reject(new Error("no")).catch(() => value()));
   return <div>{data()}</div>;
 }
 
@@ -374,6 +367,198 @@ export function ThenResultDropped() {
 export function ThenReturnedFromAsync() {
   const [value] = createSignal(1);
   const data = createMemo(async () => pause().then(() => value()));
+  return <div>{data()}</div>;
+}
+
+// Positives: the same promise reaches the computation's flight by a path that
+// holds a reaction on it before the handler runs.
+export function ThenReturnedFromSync() {
+  const [value] = createSignal(1);
+  const [tick] = createSignal(0);
+  const data = createMemo(() => {
+    tick();
+    return Promise.resolve(1).then(() => value());
+  });
+  return <div>{data()}</div>;
+}
+
+export function ThenReturnedAwaitedFromAsync() {
+  const [value] = createSignal(1);
+  const data = createMemo(async () => {
+    await pause();
+    return await Promise.resolve(1).then(() => value());
+  });
+  return <div>{data()}</div>;
+}
+
+export function ThenOnPendingAfterAwait() {
+  const [value] = createSignal(1);
+  const data = createMemo(async () => {
+    await pause();
+    return pause().then(() => value());
+  });
+  return <div>{data()}</div>;
+}
+
+export function ThenOnPendingAllFromAsync() {
+  const [value] = createSignal(1);
+  const data = createMemo(async () => Promise.all([1]).then(() => value()));
+  return <div>{data()}</div>;
+}
+
+// Uncertifiable: an `async` function returns a promise it did not await. A
+// receiver that may already be settled queues the handler before the function
+// adopts the promise (a resolve-thenable job), so no frame of the computation
+// is below the handler and rc.13 raises nothing, even on a re-run.
+export function ResolvedThenReturnedFromAsync() {
+  const [value] = createSignal(1);
+  const [tick] = createSignal(0);
+  const data = createMemo(async () => {
+    tick();
+    return Promise.resolve(1).then(() => value());
+  });
+  return <div>{data()}</div>;
+}
+
+export function ResolvedThenReturnedAfterAwait() {
+  const [value] = createSignal(1);
+  const data = createMemo(async () => {
+    await pause();
+    return Promise.resolve(1).then(() => value());
+  });
+  return <div>{data()}</div>;
+}
+
+async function one() {
+  return 1;
+}
+
+export function AwaitlessHelperThenReturned() {
+  const [value] = createSignal(1);
+  const data = createMemo(async () => {
+    await pause();
+    return one().then(() => value());
+  });
+  return <div>{data()}</div>;
+}
+
+export function RejectedCatchReturnedFromAsync() {
+  const [value] = createSignal(1);
+  const data = createMemo(async () => {
+    await pause();
+    return Promise.reject(new Error("no")).catch(() => value());
+  });
+  return <div>{data()}</div>;
+}
+
+export function ResolvedFinallyReturnedFromAsync() {
+  const [value] = createSignal(1);
+  const data = createMemo(async () => {
+    await pause();
+    return Promise.resolve(1).finally(() => void value());
+  });
+  return <div>{data()}</div>;
+}
+
+export function HelperReturnsResolvedThen() {
+  const [value] = createSignal(1);
+  async function inner() {
+    await pause();
+    return Promise.resolve(1).then(() => value());
+  }
+  const data = createMemo(() => inner());
+  return <div>{data()}</div>;
+}
+
+export function AwaitedHelperReturnsResolvedThen() {
+  const [value] = createSignal(1);
+  async function inner() {
+    await pause();
+    return Promise.resolve(1).then(() => value());
+  }
+  const data = createMemo(async () => await inner());
+  return <div>{data()}</div>;
+}
+
+export function ResolvedChainSecondHandler() {
+  const [value] = createSignal(1);
+  const data = createMemo(async () => {
+    await pause();
+    return Promise.resolve(1)
+      .then(() => 1)
+      .then(() => value());
+  });
+  return <div>{data()}</div>;
+}
+
+// Uncertifiable: a rejection handler runs only if the receiver rejects, and a
+// fulfillment handler never runs on a receiver that is provably rejected.
+export function RejectionHandlerOfThen() {
+  const [value] = createSignal(1);
+  const data = createMemo(() => pause().then(() => 1, () => value()));
+  return <div>{data()}</div>;
+}
+
+export function CatchOfPending() {
+  const [value] = createSignal(1);
+  const data = createMemo(() => pause().catch(() => value()));
+  return <div>{String(data())}</div>;
+}
+
+export function CatchOfResolved() {
+  const [value] = createSignal(1);
+  const data = createMemo(async () => {
+    await pause();
+    return Promise.resolve(1).catch(() => value());
+  });
+  return <div>{data()}</div>;
+}
+
+export function CatchCallback() {
+  const [value] = createSignal(1);
+  const data = createMemo(() => Promise.reject(new Error("no")).catch(() => value()));
+  return <div>{data()}</div>;
+}
+
+export function ThenOnRejected() {
+  const [value] = createSignal(1);
+  const data = createMemo(() => Promise.reject(new Error("no")).then(() => value()));
+  return <div>{data()}</div>;
+}
+
+// Positive: `finally` runs on both paths.
+export function FinallyOfRejected() {
+  const [value] = createSignal(1);
+  const data = createMemo(() => Promise.reject(new Error("no")).finally(() => void value()));
+  return <div>{data()}</div>;
+}
+
+// Uncertifiable: whether the callback runs depends on the receiver's contents
+// or on the match.
+export function SortComparator() {
+  const [value] = createSignal(1);
+  const data = createMemo(async () => {
+    await pause();
+    return [1].sort(() => value());
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function ReplaceReplacer() {
+  const [value] = createSignal(1);
+  const data = createMemo(async () => {
+    await pause();
+    return "abc".replace("z", () => String(value()));
+  });
+  return <div>{data()}</div>;
+}
+
+export function ReplaceAllReplacer() {
+  const [value] = createSignal(1);
+  const data = createMemo(async () => {
+    await pause();
+    return "abc".replaceAll("z", () => String(value()));
+  });
   return <div>{data()}</div>;
 }
 

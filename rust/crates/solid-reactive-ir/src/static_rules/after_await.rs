@@ -15,7 +15,12 @@
 //!   `Promise`, when the call's result is the promise the computation
 //!   returns or awaits, runs from a microtask with no owner: rc.13 attributes
 //!   every read on the async stack below the computation's returned promise
-//!   (`dist/dev-shared.js` `checkPostAwaitRead`, `attributedFlight`);
+//!   (`dist/dev-shared.js` `checkPostAwaitRead`, `attributedFlight`). An
+//!   `async` function that returns the chain without awaiting it adopts the
+//!   promise one job later, so a handler on a receiver that may be settled
+//!   has no frame of the computation below it (see [`Carried`]); a rejection
+//!   handler, a `sort` comparator and a `replace` replacer run only
+//!   conditionally. Those reads are proof obligations, never violations;
 //! - an `async` project function the computation calls, exactly resolved, and
 //!   whose promise the computation returns or awaits (directly, or through
 //!   `Promise.all`/`allSettled`), continues the computation after its own
@@ -37,7 +42,7 @@ use crate::cleanup::callback_argument_literal;
 use crate::identity::SymbolId;
 use crate::owners::{containing_ast_function, written_directly_in};
 use crate::pipeline::{AnalysisContext, ProgramDraft};
-use crate::runtime_semantics::{is_inline_standard_callback, standard_call_name};
+use crate::runtime_semantics::{is_inline_standard_callback, is_timer_call, standard_call_name};
 use crate::{StaticDefect, StaticDefectKind, location};
 use solid_facts::FileFacts;
 use solid_facts::ast::{CallFact, FunctionFact, FunctionKind};
@@ -67,6 +72,8 @@ struct Walk<'m> {
     visited: HashSet<Span>,
     /// Function literals queued as members, which own their obligations.
     queued: HashSet<(String, Span)>,
+    /// How the promise chain being followed reaches the flight.
+    carried: Carried,
 }
 
 struct Reach<'f, 'a> {
@@ -164,13 +171,31 @@ fn awaited_call(file: &FileFacts, awaited: Span) -> Option<&CallFact> {
         .filter(|call| !call.construct)
 }
 
+/// How a call's promise reaches the computation's flight.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Carried {
+    /// The operand of an `await`, or the promise a synchronous function
+    /// returns: the computation's runtime holds a reaction on it from the
+    /// moment it exists, so every handler below it runs on the flight.
+    Held,
+    /// Returned, not awaited, by an `async` function. The function adopts the
+    /// promise in a later microtask (a resolve-thenable job): a handler
+    /// queued before that job runs, on a receiver that was already settled,
+    /// has no `async` frame of the computation below it, and rc.13's
+    /// `attributedFlight` finds none. Only a receiver that stays pending past
+    /// the job is on the flight.
+    Adopted,
+}
+
 /// The calls whose promise a function hands to whoever awaits it: the
 /// operands of its own `await`s (an `async` function only) and the calls it
 /// returns. An `async` function that returns a promise adopts it: its own
-/// promise settles only after the returned one does, and the runtime
-/// attributes reads on the returned promise's continuation to the same
-/// flight (measured on rc.13: `fixtures/runtime-oracle/after-await-*`).
-fn chain_calls<'f>(file: &'f FileFacts, function: &'f FunctionFact) -> Vec<&'f CallFact> {
+/// promise settles only after the returned one does (measured on rc.13:
+/// `fixtures/runtime-oracle/after-await-*`).
+fn chain_calls<'f>(
+    file: &'f FileFacts,
+    function: &'f FunctionFact,
+) -> Vec<(&'f CallFact, Carried)> {
     if function.generator {
         return Vec::new();
     }
@@ -186,16 +211,25 @@ fn chain_calls<'f>(file: &'f FileFacts, function: &'f FunctionFact) -> Vec<&'f C
                         && written_directly_in(&file.ast, function, *awaited)
                 })
                 .filter_map(|awaited| awaited_call(file, awaited))
+                .map(|call| (call, Carried::Held))
         })
         .into_iter()
         .flatten();
+    let carried = if function.r#async {
+        Carried::Adopted
+    } else {
+        Carried::Held
+    };
     let returned = file
         .ast
         .own_returns(function)
         .chain(function.expression_return.iter())
-        .filter_map(|returned| {
+        .filter_map(move |returned| {
             let span = file.ast.peel_ts_sugar_span(returned.argument?);
-            file.ast.call_at(span).filter(|call| !call.construct)
+            file.ast
+                .call_at(span)
+                .filter(|call| !call.construct)
+                .map(|call| (call, carried))
         });
     awaited.chain(returned).collect()
 }
@@ -259,24 +293,26 @@ impl<'f, 'a> Reach<'f, 'a> {
         let Some((file, ast_function)) = ast_function(&self.files, function) else {
             return false;
         };
-        chain_calls(file, ast_function).into_iter().any(|call| {
-            async_helper(self.ctx, file, call).is_some()
-                || self
-                    .ctx
-                    .semantic_lookup
-                    .resolved_callee_call(file, call.callee)
-                    .and_then(standard_call_name)
-                    .is_some_and(|name| {
-                        matches!(
-                            name,
-                            "Promise.then"
-                                | "Promise.catch"
-                                | "Promise.finally"
-                                | "PromiseConstructor.all"
-                                | "PromiseConstructor.allSettled"
-                        )
-                    })
-        })
+        chain_calls(file, ast_function)
+            .into_iter()
+            .any(|(call, _)| {
+                async_helper(self.ctx, file, call).is_some()
+                    || self
+                        .ctx
+                        .semantic_lookup
+                        .resolved_callee_call(file, call.callee)
+                        .and_then(standard_call_name)
+                        .is_some_and(|name| {
+                            matches!(
+                                name,
+                                "Promise.then"
+                                    | "Promise.catch"
+                                    | "Promise.finally"
+                                    | "PromiseConstructor.all"
+                                    | "PromiseConstructor.allSettled"
+                            )
+                        })
+            })
     }
 
     /// Whether the window's tracking already made `symbol` a dependency.
@@ -303,6 +339,7 @@ impl<'f, 'a> Reach<'f, 'a> {
             reported: HashSet::default(),
             visited: HashSet::default(),
             queued: HashSet::default(),
+            carried: Carried::Held,
         };
         // The producer's dominance facts: accessor calls after the first
         // await that dominates them.
@@ -380,7 +417,8 @@ impl<'f, 'a> Reach<'f, 'a> {
         // The promise chain first: it records which function literals become
         // members, so the callback walk below leaves their obligations to them.
         if let Some((file, ast_function)) = ast_function(&self.files, function) {
-            for call in chain_calls(file, ast_function) {
+            for (call, carried) in chain_calls(file, ast_function) {
+                walk.carried = carried;
                 self.expand(draft, &mut walk, queue, file, call, 0);
             }
         }
@@ -443,6 +481,19 @@ impl<'f, 'a> Reach<'f, 'a> {
                 continue;
             }
             match callback_argument_literal(file, argument.span) {
+                // Whether these run depends on the contents: a comparator is
+                // never called for fewer than two elements, a replacer when
+                // nothing matches. A read in one is a proof obligation.
+                Some(callback)
+                    if !callback.r#async
+                        && !callback.generator
+                        && matches!(
+                            standard_call_name(resolved),
+                            Some("Array.sort" | "String.replace" | "String.replaceAll")
+                        ) =>
+                {
+                    self.report_conditional_region(draft, walk, file, callback, depth);
+                }
                 Some(callback) if !callback.r#async && !callback.generator => {
                     self.report_region(draft, walk, file, callback, depth);
                 }
@@ -560,6 +611,28 @@ impl<'f, 'a> Reach<'f, 'a> {
         }
     }
 
+    /// A function literal's body that runs only on some executions or some
+    /// receivers (a comparator, a replacer, a rejection handler, a handler
+    /// whose receiver may already be settled): the reads in it are past the
+    /// await when it runs, and whether it runs is not proven, so they are
+    /// proof obligations and never violations.
+    fn report_conditional_region(
+        &self,
+        draft: &mut ProgramDraft,
+        walk: &mut Walk<'_>,
+        file: &'f FileFacts,
+        callback: &'f FunctionFact,
+        depth: usize,
+    ) {
+        let mark = draft.static_defects.len();
+        self.report_region(draft, walk, file, callback, depth);
+        for defect in &mut draft.static_defects[mark..] {
+            if matches!(defect.kind, StaticDefectKind::ReactiveReadAfterAwait { .. }) {
+                defect.uncertain = true;
+            }
+        }
+    }
+
     /// The accessor read a call written in a region performs.
     fn report_call_read(
         &self,
@@ -640,14 +713,32 @@ impl<'f, 'a> Reach<'f, 'a> {
                     return;
                 }
                 let handlers = if name == "Promise.then" { 2 } else { 1 };
-                for argument in call.arguments.iter().take(handlers) {
+                // A handler on a receiver that may already be settled is
+                // queued before an `async` function adopts the promise it
+                // returns, and no frame of the computation is below it.
+                let on_flight =
+                    walk.carried == Carried::Held || self.pending_promise(file, receiver, 0);
+                let receiver_rejected =
+                    name == "Promise.then" && self.rejected_promise(file, receiver);
+                for (index, argument) in call.arguments.iter().take(handlers).enumerate() {
                     if argument.spread {
                         continue;
                     }
-                    if let Some(callback) = callback_argument_literal(file, argument.span)
-                        && !callback.r#async
-                        && !callback.generator
-                    {
+                    let Some(callback) = callback_argument_literal(file, argument.span) else {
+                        continue;
+                    };
+                    if callback.r#async || callback.generator {
+                        continue;
+                    }
+                    // A rejection handler runs only if the receiver rejects;
+                    // a fulfillment handler never runs on a receiver that is
+                    // provably rejected. `finally` runs either way.
+                    let rejection_only =
+                        name == "Promise.catch" || (name == "Promise.then" && index == 1);
+                    let dead = name == "Promise.then" && index == 0 && receiver_rejected;
+                    if rejection_only || dead || !on_flight {
+                        self.report_conditional_region(draft, walk, file, callback, depth);
+                    } else {
                         self.report_region(draft, walk, file, callback, depth);
                     }
                 }
@@ -768,6 +859,185 @@ impl<'f, 'a> Reach<'f, 'a> {
             context: walk.member.context.clone(),
             windows,
         });
+    }
+
+    /// Whether `span` is provably a promise already rejected when it is
+    /// created: `Promise.reject(...)` of the global `Promise`.
+    fn rejected_promise(&self, file: &FileFacts, span: Span) -> bool {
+        let span = file.ast.peel_ts_sugar_span(span);
+        let Some(call) = file.ast.call_at(span).filter(|call| !call.construct) else {
+            return false;
+        };
+        self.ctx
+            .semantic_lookup
+            .resolved_callee_call(file, call.callee)
+            .and_then(standard_call_name)
+            == Some("PromiseConstructor.reject")
+            && is_global_promise_static(file, call.callee)
+    }
+
+    /// Whether `span` is a promise proven still pending after the microtasks
+    /// queued by its creation and by the `return` of an `async` function have
+    /// run: a `new Promise` whose executor only starts a timer, a combinator
+    /// over at least one element (each element is settled through a
+    /// reaction job of its own), a project function that returns one of
+    /// these on every path, and a handler call on one. An `async` function's
+    /// promise, a `Promise.resolve`, a `Promise.reject` and a typed value are
+    /// not proof: each may be settled already.
+    fn pending_promise(&self, file: &FileFacts, span: Span, depth: usize) -> bool {
+        if depth > MAX_DEPTH {
+            return false;
+        }
+        let ctx = self.ctx;
+        let span = file.ast.peel_ts_sugar_span(span);
+        let Some(call) = file.ast.call_at(span) else {
+            return false;
+        };
+        let standard = ctx
+            .semantic_lookup
+            .resolved_callee_call(file, call.callee)
+            .and_then(standard_call_name);
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        match (call.construct, standard) {
+            (true, Some("PromiseConstructor.construct")) => {
+                is_global_promise(file, call.callee) && self.timer_executor(file, call)
+            }
+            (
+                false,
+                Some(
+                    "PromiseConstructor.all"
+                    | "PromiseConstructor.allSettled"
+                    | "PromiseConstructor.race"
+                    | "PromiseConstructor.any",
+                ),
+            ) => {
+                is_global_promise_static(file, callee)
+                    && call
+                        .arguments
+                        .first()
+                        .filter(|argument| !argument.spread)
+                        .and_then(|argument| {
+                            file.ast
+                                .array_literal_at(file.ast.peel_ts_sugar_span(argument.span))
+                        })
+                        .is_some_and(|array| {
+                            !array.elements.is_empty()
+                                && array.elements.iter().all(|element| {
+                                    element.kind == solid_facts::ast::ArrayElementKind::Value
+                                })
+                        })
+            }
+            (false, Some("Promise.then" | "Promise.catch" | "Promise.finally")) => file
+                .ast
+                .member_at(callee)
+                .filter(|_| !file.ast.computed_members.contains(&callee))
+                .is_some_and(|member| self.pending_promise(file, member.object, depth + 1)),
+            (false, None) => self.returns_pending_promise(file, call, depth),
+            _ => false,
+        }
+    }
+
+    /// `new Promise((done) => setTimeout(done, 20))`: the executor is one
+    /// call of a standard timer and nothing else, so it cannot settle the
+    /// promise or throw before the timer's task runs. The other arguments
+    /// are plain identifiers or numbers, whose evaluation cannot throw.
+    fn timer_executor(&self, file: &FileFacts, construct: &CallFact) -> bool {
+        let [executor] = construct.arguments.as_slice() else {
+            return false;
+        };
+        if executor.spread {
+            return false;
+        }
+        let Some(function) = callback_argument_literal(file, executor.span) else {
+            return false;
+        };
+        if function.r#async || function.generator {
+            return false;
+        }
+        let mut own = file
+            .ast
+            .calls_within(function.body)
+            .filter(|call| written_directly_in(&file.ast, function, call.span));
+        let (Some(timer), None) = (own.next(), own.next()) else {
+            return false;
+        };
+        let Some(body) = file.source_text(function.body) else {
+            return false;
+        };
+        let body = body.trim();
+        let body = body
+            .strip_prefix('{')
+            .and_then(|inner| inner.strip_suffix('}'))
+            .unwrap_or(body);
+        let body = body.trim().trim_end_matches(';').trim();
+        if file.source_text(timer.span).map(str::trim) != Some(body) || timer.construct {
+            return false;
+        }
+        if !self
+            .ctx
+            .semantic_lookup
+            .resolved_callee_call(file, timer.callee)
+            .is_some_and(is_timer_call)
+        {
+            return false;
+        }
+        timer.arguments.iter().enumerate().all(|(index, argument)| {
+            if argument.spread {
+                return false;
+            }
+            if index == 0 && callback_argument_literal(file, argument.span).is_some() {
+                return true;
+            }
+            let Some(text) = file.source_text(argument.span).map(str::trim) else {
+                return false;
+            };
+            let numeric = text.starts_with(|c: char| c.is_ascii_digit());
+            !text.is_empty()
+                && text
+                    .chars()
+                    .all(|c| c.is_alphanumeric() || c == '_' || c == '$' || (numeric && c == '.'))
+        })
+    }
+
+    /// A call to a synchronous project function that returns a pending
+    /// promise on every path (`const pause = () => new Promise(...)`).
+    fn returns_pending_promise(&self, file: &FileFacts, call: &CallFact, depth: usize) -> bool {
+        let ctx = self.ctx;
+        if call.construct {
+            return false;
+        }
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        if file.ast.member_at(callee).is_some() {
+            return false;
+        }
+        let Some((helper_file, helper)) = ctx
+            .semantic_lookup
+            .function_called_at(file.path.as_str(), callee)
+        else {
+            return false;
+        };
+        if helper.r#async
+            || helper.generator
+            || helper.method_name.is_some()
+            || !ctx
+                .semantic_lookup
+                .function_value_is_current(helper_file, helper)
+        {
+            return false;
+        }
+        let mut returned = helper_file
+            .ast
+            .own_returns(helper)
+            .chain(helper.expression_return.iter())
+            .peekable();
+        if returned.peek().is_none() {
+            return false;
+        }
+        returned.all(|returned| {
+            returned
+                .argument
+                .is_some_and(|argument| self.pending_promise(helper_file, argument, depth + 1))
+        })
     }
 
     /// Whether `span` is provably a native `Promise` (constructor `Promise`):
