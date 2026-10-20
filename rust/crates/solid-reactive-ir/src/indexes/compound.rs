@@ -24,7 +24,18 @@
 //!   JSX tag (`<Split.Panel>`, `<Split.Group.Item>`, a closing tag) whose
 //!   keys name a member of the literal tree, ending at a value; a plain
 //!   `<Tabs>` tag counts only for an `Object.assign` target;
-//! - no reflective prototype write exists in the program (as ADR 0292).
+//! - no reflective prototype write exists in the program (as ADR 0292), no
+//!   direct `eval` exists (it can replace a member with no reference), and
+//!   an `Object.assign` holder needs the standard library's `Object.assign`
+//!   untouched ([`SemanticLookup::object_assign_may_be_patched`]);
+//! - the holder is declared at module top level and every identifier it
+//!   stores, and its `Object.assign` target, is a hoisted function
+//!   declaration, an import or a binding declared earlier there, so no
+//!   function that runs earlier reaches an uninitialized binding and throws
+//!   before anything renders;
+//! - an `Object.assign` literal names no own non-writable property of a
+//!   function (`name`, `length`, `prototype`, `arguments`, `caller`), which
+//!   would make the call throw.
 //!
 //! A member value some such tag renders is then accounted for in the census
 //! of the function it names ([`SemanticLookup::compound_value`]); the
@@ -159,8 +170,19 @@ impl<'a> SemanticLookup<'a> {
         }) {
             return accounted;
         }
+        // A direct `eval` can replace a member of any holder in scope with no
+        // reference to it.
+        if self.facts.files.iter().any(|file| {
+            file.ast
+                .module_hazards
+                .iter()
+                .any(|hazard| hazard.kind == solid_facts::ast::ModuleHazardKind::Eval)
+        }) {
+            return accounted;
+        }
         let mut tags = HashMap::<&'a str, HashMap<Span, Vec<String>>>::default();
         let mut vetoed = None;
+        let mut patched = None;
         for file in &self.facts.files {
             let mut literals = None;
             for binding in &file.ast.bindings {
@@ -171,6 +193,11 @@ impl<'a> SemanticLookup<'a> {
                 let Some(holder) = self.holder(file, literals, binding) else {
                     continue;
                 };
+                if matches!(holder.target, Target::Function(_))
+                    && *patched.get_or_insert_with(|| self.object_assign_may_be_patched())
+                {
+                    continue;
+                }
                 if *vetoed.get_or_insert_with(|| {
                     crate::interproc::accessor_provenance::reflective_prototype_write(self)
                 }) {
@@ -191,10 +218,17 @@ impl<'a> SemanticLookup<'a> {
     ) -> Option<Holder> {
         let ast = &file.ast;
         let initializer = ast.peel_ts_sugar_span(binding.initializer?);
+        // A function that runs before the holder's statement reaches its
+        // values uninitialized (`const Sub` below it) and throws, and a
+        // function-local holder is built by such a call.
+        if !module_top_level(file, binding.declaration) {
+            return None;
+        }
         if binding.initializer_value_kind == RuntimeValueKind::Object {
-            return Some(Holder {
+            let members = self.literal_tree(file, literals, initializer, 0)?;
+            return members_initialized(file, &members, initializer.start).then_some(Holder {
                 target: Target::Object,
-                members: self.literal_tree(file, literals, initializer, 0)?,
+                members,
             });
         }
         let call = ast.call_at(initializer)?;
@@ -238,14 +272,27 @@ impl<'a> SemanticLookup<'a> {
                         && candidate.names[0].span == declaration
                 })
             });
-        if !function_target {
+        if !function_target || !initialized_before(file, first, initializer.start) {
             return None;
         }
         let mut members: Vec<(String, Member)> = Vec::new();
         for argument in &call.arguments[1..] {
             let tree =
                 self.literal_tree(file, literals, ast.peel_ts_sugar_span(argument.span), 0)?;
+            if !members_initialized(file, &tree, initializer.start) {
+                return None;
+            }
             for (key, member) in tree {
+                // A function's own `name`, `length` and (for a constructor)
+                // `prototype` are non-writable, `arguments` and `caller` are
+                // poisoned on some functions: `Object.assign` throws and
+                // nothing renders.
+                if matches!(
+                    key.as_str(),
+                    "name" | "length" | "prototype" | "arguments" | "caller"
+                ) {
+                    return None;
+                }
                 // The later literal wins at runtime; a repeated key is not
                 // followed.
                 if members.iter().any(|(existing, _)| *existing == key) {
@@ -419,6 +466,111 @@ impl<'a> SemanticLookup<'a> {
                 ))
             })
             .collect()
+    }
+}
+
+/// Whether `span` is written at module top level: inside no function, class
+/// body (a static block) or namespace.
+fn module_top_level(file: &FileFacts, span: Span) -> bool {
+    crate::owners::containing_ast_function(&file.ast, span).is_none()
+        && !file
+            .ast
+            .classes
+            .iter()
+            .any(|class| class.span.contains(span) && class.span.start < span.start)
+        && !file.ast.is_inside_module_block(span)
+}
+
+/// Whether every identifier `members` stores is initialized when the holder
+/// whose initializer starts at `holder` runs.
+fn members_initialized(file: &FileFacts, members: &[(String, Member)], holder: u32) -> bool {
+    members.iter().all(|(_, member)| match member {
+        Member::Value(value) => initialized_before(file, *value, holder),
+        Member::Data => true,
+        Member::Namespace(inner) => members_initialized(file, inner, holder),
+    })
+}
+
+/// Whether the value at `value` is initialized when the module-level
+/// statement whose initializer starts at `holder` runs: a function literal, an
+/// import, a hoisted function declaration, or a top-level binding or class
+/// declared earlier. Anything else (a later `const`, a global, a name that does
+/// not resolve) is not.
+fn initialized_before(file: &FileFacts, value: Span, holder: u32) -> bool {
+    let ast = &file.ast;
+    if ast.function_at(value).is_some() {
+        return true;
+    }
+    let Some(declaration) = ast.reference_declaration(value) else {
+        // No declaration in this file's scope tree: an import binds the name.
+        let name = file.source_text(value);
+        return name.is_some()
+            && ast.imports.iter().any(|import| {
+                import
+                    .bindings
+                    .iter()
+                    .any(|binding| file.source_text(binding.local.span) == name)
+            });
+    };
+    if !module_top_level(file, declaration) {
+        return false;
+    }
+    if ast.functions.iter().any(|function| {
+        function.kind == FunctionKind::Declaration
+            && function
+                .name
+                .as_ref()
+                .is_some_and(|name| name.span == declaration)
+    }) {
+        return true;
+    }
+    declaration.end <= holder
+        && (ast
+            .bindings
+            .iter()
+            .any(|binding| binding.names.iter().any(|name| name.span == declaration))
+            || ast.classes.iter().any(|class| {
+                class
+                    .name
+                    .as_ref()
+                    .is_some_and(|name| name.span == declaration)
+            }))
+}
+
+impl SemanticLookup<'_> {
+    /// Whether the project may replace the standard library's
+    /// `Object.assign`, which an `Object.assign` holder needs to store its
+    /// members as plain data properties. The analogue of ADR 0338's
+    /// `function_bind_may_be_patched`, over what the project visibly writes: a
+    /// write to a member named `assign` (`Object.assign = …`), a prototype
+    /// write whose owner is not proven, a write to the global `Object`, or a
+    /// reflective write (`Object.defineProperty(Object, "assign", …)`,
+    /// `Reflect.set(globalThis.Object, …)`) whose target is the global object
+    /// or `Object`. A local `Object` that shadows the global is refused where
+    /// the call resolves (`mutation_builtin`).
+    fn object_assign_may_be_patched(&self) -> bool {
+        let assigned = self.assigned_members();
+        if assigned.global
+            || assigned.hosts.iter().any(|(_, dom)| !dom)
+            || assigned.names.contains("assign")
+            || super::global_identifier_written(self.facts, "Object")
+        {
+            return true;
+        }
+        self.facts.files.iter().any(|file| {
+            file.ast.calls.iter().any(|call| {
+                let Some(target) = call.arguments.first() else {
+                    return false;
+                };
+                let text = file
+                    .source_text(file.ast.peel_ts_sugar_span(target.span))
+                    .unwrap_or_default();
+                crate::interproc::accessor_provenance::mutation_builtin(file, call, self).is_some()
+                    && (target.spread
+                        || matches!(text, "Object" | "globalThis" | "window" | "self" | "global")
+                        || text.ends_with(".Object"))
+            })
+        })
     }
 }
 

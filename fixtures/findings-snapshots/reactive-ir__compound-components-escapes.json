@@ -116,6 +116,26 @@
       "code": "SC1001",
       "kind": "uncertifiable",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Intrinsic.tsx",
+      "start": 197,
+      "end": 204,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Intrinsic.tsx",
+      "start": 273,
+      "end": 280,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/compound-components-escapes/Passed.tsx",
       "start": 111,
       "end": 118,
@@ -229,6 +249,26 @@
       "path": "fixtures/reactive-ir/compound-components-escapes/Targets.tsx",
       "start": 306,
       "end": 313,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Tdz.tsx",
+      "start": 490,
+      "end": 497,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Tdz.tsx",
+      "start": 589,
+      "end": 596,
       "fixes": 0
     }
   ]
