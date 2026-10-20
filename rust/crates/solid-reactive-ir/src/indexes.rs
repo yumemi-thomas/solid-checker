@@ -1577,6 +1577,24 @@ impl<'a> SemanticLookup<'a> {
                     self.facts,
                     self.dialect,
                     &self.router_install,
+                    &|file, name| {
+                        let symbol = self.entities.at(file.path.as_str(), name)?;
+                        let references = self.symbol_references_if_present(symbol.as_str())?;
+                        references
+                            .iter()
+                            .map(|reference| {
+                                Some((
+                                    reference.path.to_string(),
+                                    Span::new(
+                                        u32::try_from(reference.start_byte).ok()?,
+                                        u32::try_from(reference.end_byte).ok()?,
+                                    ),
+                                ))
+                            })
+                            .collect()
+                    },
+                    crate::object_members::namespace_exposed_modules(self.facts, self).as_ref(),
+                    crate::interproc::accessor_provenance::reflective_prototype_write(self),
                 )
             })
             .contains(&(path.to_owned(), span))

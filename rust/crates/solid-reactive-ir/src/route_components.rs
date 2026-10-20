@@ -19,7 +19,7 @@
 use std::collections::HashSet;
 
 use solid_dialect::Dialect;
-use solid_facts::ast::ImportKind;
+use solid_facts::ast::{FunctionKind, ImportKind};
 use solid_facts::core::Span;
 use solid_facts::{FileFacts, ProjectFacts, SpecifierAttestation};
 
@@ -30,6 +30,10 @@ pub const ROUTE_PACKAGE: &str = "@tanstack/solid-router";
 
 /// The package the router stores and loads route options with.
 pub const ROUTE_CORE_PACKAGE: &str = "@tanstack/router-core";
+
+/// The compiler's references to the binding named at a span, as
+/// `(path, span)`; `None` when it knows no symbol there.
+pub type BindingReferences<'a> = dyn Fn(&FileFacts, Span) -> Option<Vec<(String, Span)>> + 'a;
 
 /// The route option keys whose values the audited releases only render.
 const COMPONENT_KEYS: [&str; 4] = [
@@ -67,14 +71,31 @@ pub struct RouteInstall {
 /// The option values the premises account for, as `(file path, value span)`:
 /// TanStack route options, and `@solidjs/router` route definitions
 /// ([`router_config_values`]). Empty where neither applies.
+///
+/// `references` answers the compiler's references to the binding named at a
+/// span, as `(path, span)`, or `None` when it knows no symbol there;
+/// `namespace_exposed` the modules reached as a namespace (`None`: unknown);
+/// `prototype_written` whether an analyzed file writes through a `prototype`
+/// reflectively (ADR 0292's veto).
 #[must_use]
 pub fn route_component_values(
     facts: &ProjectFacts,
     dialect: &dyn Dialect,
     install: &RouterInstallEvidence,
+    references: &BindingReferences<'_>,
+    namespace_exposed: Option<&HashSet<String>>,
+    prototype_written: bool,
 ) -> HashSet<(String, Span)> {
     let mut values = tanstack_values(facts, dialect, install);
-    values.extend(router_config_values(facts, dialect, install));
+    if !prototype_written {
+        values.extend(router_config_values(
+            facts,
+            dialect,
+            install,
+            references,
+            namespace_exposed,
+        ));
+    }
     values
 }
 
@@ -295,9 +316,12 @@ fn router_config_values(
     facts: &ProjectFacts,
     dialect: &dyn Dialect,
     install: &RouterInstallEvidence,
+    references: &BindingReferences<'_>,
+    namespace_exposed: Option<&HashSet<String>>,
 ) -> HashSet<(String, Span)> {
     let mut values = HashSet::new();
-    let Some(audited) = router_directories(facts, dialect, install) else {
+    let Some(audited) = router_directories(facts, dialect, install, references, namespace_exposed)
+    else {
         return values;
     };
     for file in unaudited_files(facts, &audited) {
@@ -320,8 +344,25 @@ fn router_config_values(
             if !creates || config.spread || !config.exact_object_literal {
                 continue;
             }
-            for member in config.literal_members.iter().filter(|m| m.key == "routes") {
-                definitions(file, ast.peel_ts_sugar_span(member.value), 0, &mut values);
+            // The router calls `config.transformUrl(...)` on the config
+            // (`routers/factory.jsx:188`), so the config holds no callable
+            // that could bind `this` to it and its `routes`.
+            let routes_literal = |property: &solid_facts::ast::ObjectPropertyFact| {
+                ast.array_literal_elements
+                    .iter()
+                    .any(|array| array.span == ast.peel_ts_sugar_span(property.value))
+            };
+            let Some(own) = this_free_properties(
+                file,
+                ast.peel_ts_sugar_span(config.span),
+                &|key, property| (key == "routes").then(|| routes_literal(property)),
+            ) else {
+                continue;
+            };
+            for property in own {
+                if file.source_text(property.key) == Some("routes") {
+                    definitions(file, ast.peel_ts_sugar_span(property.value), 0, &mut values);
+                }
             }
         }
     }
@@ -335,6 +376,13 @@ fn router_config_values(
 /// member), so its `component` data property is the final value the router
 /// reads; with static keys only, a property inside another property's value
 /// is that value's, not the definition's.
+///
+/// The router reads a definition's keys and calls `route.preload(...)` on its
+/// route record (`routers/components.jsx:133`, `server.js:150`), so a getter,
+/// a method or a `this`-binding function there receives the definition or a
+/// record holding it. A definition counts, with its subtree, only when it has
+/// no getter or method and every key but `component` holds a non-callable
+/// literal or an arrow function (`children` an array literal or an arrow).
 fn definitions(file: &FileFacts, array: Span, depth: u32, values: &mut HashSet<(String, Span)>) {
     let ast = &*file.ast;
     let Some(literal) = ast
@@ -347,52 +395,34 @@ fn definitions(file: &FileFacts, array: Span, depth: u32, values: &mut HashSet<(
     if depth > 32 {
         return;
     }
-    let text = |span: Span| file.source.get(span.start as usize..span.end as usize);
+    let peeled = |span: Span| ast.peel_ts_sugar_span(span);
     for element in &literal.elements {
         if element.kind != solid_facts::ast::ArrayElementKind::Value {
             continue;
         }
-        let definition = ast.peel_ts_sugar_span(element.span);
-        let Some(shape) = ast
-            .object_get_shapes
-            .iter()
-            .find(|shape| shape.span == definition && shape.closed)
+        let Some(own) =
+            this_free_properties(file, peeled(element.span), &|key, property| match key {
+                "component" => Some(true),
+                "children" => Some(
+                    arrow(file, property.value)
+                        || ast
+                            .array_literal_elements
+                            .iter()
+                            .any(|array| array.span == peeled(property.value)),
+                ),
+                _ => None,
+            })
         else {
             continue;
         };
-        let data_key = |key: &str| {
-            shape
-                .properties
-                .iter()
-                .any(|property| property.key == key && property.getter.is_none())
-        };
-        let inside = |span: Span| definition.contains(span) && span != definition;
-        let own = ast
-            .object_properties
-            .iter()
-            .filter(|property| inside(property.span))
-            .filter(|property| {
-                !ast.object_properties
-                    .iter()
-                    .any(|outer| inside(outer.span) && outer.value.contains(property.span))
-            })
-            .filter(|property| property.data && !property.method && !property.computed);
         for property in own {
-            match text(property.key) {
-                Some("component") if data_key("component") => {
+            match file.source_text(property.key) {
+                Some("component") => {
                     values.insert((file.path.to_string(), property.value));
-                    values.insert((
-                        file.path.to_string(),
-                        ast.peel_ts_sugar_span(property.value),
-                    ));
+                    values.insert((file.path.to_string(), peeled(property.value)));
                 }
-                Some("children") if data_key("children") => {
-                    definitions(
-                        file,
-                        ast.peel_ts_sugar_span(property.value),
-                        depth + 1,
-                        values,
-                    );
+                Some("children") => {
+                    definitions(file, peeled(property.value), depth + 1, values);
                 }
                 _ => {}
             }
@@ -400,14 +430,75 @@ fn definitions(file: &FileFacts, array: Span, depth: u32, values: &mut HashSet<(
     }
 }
 
+/// Whether `span` is an arrow function: it has no `this` of its own.
+fn arrow(file: &FileFacts, span: Span) -> bool {
+    let span = file.ast.peel_ts_sugar_span(span);
+    file.ast
+        .functions
+        .iter()
+        .any(|function| function.span == span && function.kind == FunctionKind::Arrow)
+}
+
+/// The own properties of the object literal at `object`, when nothing in it
+/// can bind `this` to it: the literal is closed (no spread, computed key,
+/// duplicate, setter or prototype member; with static keys only, a property
+/// inside another property's value is that value's), has no getter, every
+/// property is a data property and not a method, and every value is a
+/// non-callable literal or an arrow function, except where `special`
+/// answers for a key. `None` otherwise.
+fn this_free_properties<'f>(
+    file: &'f FileFacts,
+    object: Span,
+    special: &dyn Fn(&str, &solid_facts::ast::ObjectPropertyFact) -> Option<bool>,
+) -> Option<Vec<&'f solid_facts::ast::ObjectPropertyFact>> {
+    let ast = &*file.ast;
+    let shape = ast
+        .object_get_shapes
+        .iter()
+        .find(|shape| shape.span == object && shape.closed)?;
+    if shape
+        .properties
+        .iter()
+        .any(|property| property.getter.is_some())
+    {
+        return None;
+    }
+    let inside = |span: Span| object.contains(span) && span != object;
+    let own = ast
+        .object_properties
+        .iter()
+        .filter(|property| inside(property.span))
+        .filter(|property| {
+            !ast.object_properties
+                .iter()
+                .any(|outer| inside(outer.span) && outer.value.contains(property.span))
+        })
+        .collect::<Vec<_>>();
+    let safe = own.len() == shape.properties.len()
+        && own.iter().all(|property| {
+            property.data
+                && !property.method
+                && !property.computed
+                && file.source_text(property.key).is_some_and(|key| {
+                    special(key, property).unwrap_or_else(|| {
+                        property.value_kind.is_proven_noncallable() || arrow(file, property.value)
+                    })
+                })
+        });
+    safe.then_some(own)
+}
+
 /// The directory of every audited `@solidjs/router` install, when the
 /// premise applies: every runtime import of the router reaches an audited
 /// release's bytes, nothing records a replacement, and no analyzed file
-/// outside those installs reads a component key back.
+/// outside those installs can obtain a route definition
+/// ([`definitions_exposed`]).
 fn router_directories(
     facts: &ProjectFacts,
     dialect: &dyn Dialect,
     install: &RouterInstallEvidence,
+    references: &BindingReferences<'_>,
+    namespace_exposed: Option<&HashSet<String>>,
 ) -> Option<Vec<String>> {
     if install.replacement_recorded {
         return None;
@@ -455,8 +546,146 @@ fn router_directories(
     }
     directories.sort();
     directories.dedup();
-    (!directories.is_empty() && !unaudited_files(facts, &directories).any(reads_component_key))
-        .then_some(directories)
+    (!directories.is_empty()
+        && !definitions_exposed(facts, &directories, references, namespace_exposed?))
+    .then_some(directories)
+}
+
+/// The router's exports that hand project code route records or
+/// definitions in the audited releases: `useRouteMatches()` returns matches
+/// whose `route` holds `key` (the definition) and `component`, and
+/// `useContext(RouterContext)` holds the same matches. Route props
+/// (`params`, `location`, `data`, `children`), `preload` arguments and every
+/// other hook hold none.
+const EXPOSING_EXPORTS: [&str; 2] = ["useRouteMatches", "RouterContext"];
+
+/// Whether an analyzed file outside the audited installs can obtain a route
+/// definition, so a `component` read off some value could be one. A
+/// definition written in `createRouter`'s literal is held only by the
+/// router, which exposes it through [`EXPOSING_EXPORTS`] and the instance's
+/// `routes` and `config`. So the router may be imported only by name, never
+/// those exports, never as a namespace, default, deep path, dynamic load or
+/// re-export; and every `createRouter` call must be the initializer of a
+/// `const` whose every reference is its declaration, its module surface or a
+/// JSX tag (`<Router/>`), in a module no file reaches as a namespace
+/// (`namespace_exposed`; `Routes["Router"]` names no reference). Any
+/// non-literal load or module hazard already withheld the premise.
+fn definitions_exposed(
+    facts: &ProjectFacts,
+    audited: &[String],
+    references: &BindingReferences<'_>,
+    namespace_exposed: &HashSet<String>,
+) -> bool {
+    let names_router = |module: &str| {
+        module == ROUTER_PACKAGE || module.starts_with(concat!("@solidjs/router", "/"))
+    };
+    for file in unaudited_files(facts, audited) {
+        let ast = &*file.ast;
+        // Vite's `import.meta.glob` loads modules no load fact names.
+        if file.source.contains("import.meta.glob") {
+            return true;
+        }
+        // The config and definitions are checked for own callables only; an
+        // inherited one (`Object.prototype.transformUrl = …`) binds `this` to
+        // them as well. Any prototype spelling withholds the premise, beside
+        // the reflective writes `prototype_written` covers.
+        if ast.members.iter().any(|member| {
+            matches!(
+                file.source_text(member.property),
+                Some("prototype" | "__proto__" | "setPrototypeOf")
+            )
+        }) || ast.object_properties.iter().any(|property| {
+            file.source_text(property.key)
+                .is_some_and(|key| key.trim_matches(['"', '\'']) == "__proto__")
+        }) {
+            return true;
+        }
+        if ast
+            .exports
+            .iter()
+            .any(|export| !export.type_only && export.module.as_deref().is_some_and(names_router))
+            || ast
+                .module_loads
+                .iter()
+                .any(|load| load.specifier.as_deref().is_none_or(names_router))
+            || ast
+                .import_equals
+                .iter()
+                .any(|import| !import.type_only && names_router(import.module.as_str()))
+        {
+            return true;
+        }
+        let mut creators = Vec::new();
+        for import in &ast.imports {
+            if import.type_only || !names_router(import.module.as_str()) {
+                continue;
+            }
+            for binding in import.bindings.iter().filter(|binding| !binding.type_only) {
+                if import.module.as_str() != ROUTER_PACKAGE || binding.kind != ImportKind::Named {
+                    return true;
+                }
+                match binding.imported.as_deref() {
+                    Some(name) if EXPOSING_EXPORTS.contains(&name) => return true,
+                    Some("createRouter") => creators.push(binding.local.span),
+                    _ => {}
+                }
+            }
+        }
+        if !creators.is_empty() && namespace_exposed.contains(file.path.as_str()) {
+            return true;
+        }
+        for creator in creators {
+            for reference in ast
+                .reference_declarations
+                .iter()
+                .filter(|(_, declaration)| *declaration == creator)
+                .map(|(reference, _)| *reference)
+            {
+                let Some(call) = ast
+                    .calls
+                    .iter()
+                    .find(|call| call.callee == reference && call.direct_callee && !call.construct)
+                else {
+                    return true;
+                };
+                let Some(name) = ast
+                    .bindings
+                    .iter()
+                    .find(|binding| {
+                        binding.immutable
+                            && binding.shape == solid_facts::ast::BindingShape::Identifier
+                            && binding.call_initializer == Some(call.span)
+                    })
+                    .and_then(|binding| binding.names.first())
+                else {
+                    return true;
+                };
+                let Some(uses) = references(file, name.span) else {
+                    return true;
+                };
+                if !uses.iter().all(|(path, span)| {
+                    facts
+                        .files
+                        .iter()
+                        .find(|candidate| candidate.path.as_str() == path)
+                        .is_some_and(|candidate| rendered_or_surface(candidate, *span))
+                }) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Whether `span` in `file` is a binding's declaration or module surface, or
+/// the name of a JSX tag (`<Router>` or its closing tag; not `<a.Router>`).
+fn rendered_or_surface(file: &FileFacts, span: Span) -> bool {
+    crate::indexes::reference_is_declaration_or_module_surface(file, span)
+        || file.ast.jsx_elements.iter().any(|element| {
+            element.member_object.is_none()
+                && (element.name.span == span || element.closing_name == Some(span))
+        })
 }
 
 /// The local names a file gives the router's `createRouter`.

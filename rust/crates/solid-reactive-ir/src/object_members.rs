@@ -172,6 +172,18 @@ fn receiver_symbols(facts: &ProjectFacts, symbol: &SymbolId) -> HashSet<String> 
     }
 }
 
+/// ADR 0335: the analyzed modules some file reaches as a namespace (a
+/// namespace import, a namespace re-export, a dynamic load or `import =`,
+/// through barrels), or `None` when a load or module hazard leaves that
+/// unknown: what a namespace reaches, no identifier reference enumerates.
+pub(crate) fn namespace_exposed_modules(
+    facts: &ProjectFacts,
+    lookup: &SemanticLookup<'_>,
+) -> Option<HashSet<String>> {
+    let census = ModuleCensus::new(facts, lookup);
+    (!census.unknown_load).then_some(census.exposed)
+}
+
 /// Namespace bindings and module loads are separate export channels: their
 /// references need not contain a receiver identifier at all. Until those uses
 /// can be censused exactly, refuse the entire exposed module (and its barrels).

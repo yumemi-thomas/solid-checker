@@ -469,3 +469,15 @@ packages/wasm/owned/
 !fixtures/reactive-ir/route-config-key-read/node_modules/**
 !fixtures/reactive-ir/route-config-patched/node_modules/
 !fixtures/reactive-ir/route-config-patched/node_modules/**
+!fixtures/reactive-ir/route-config-namespace/node_modules/
+!fixtures/reactive-ir/route-config-namespace/node_modules/**
+!fixtures/reactive-ir/route-config-instance-escaped/node_modules/
+!fixtures/reactive-ir/route-config-instance-escaped/node_modules/**
+!fixtures/reactive-ir/route-config-context/node_modules/
+!fixtures/reactive-ir/route-config-context/node_modules/**
+!fixtures/reactive-ir/route-config-module-namespace/node_modules/
+!fixtures/reactive-ir/route-config-module-namespace/node_modules/**
+!fixtures/reactive-ir/route-config-dynamic-load/node_modules/
+!fixtures/reactive-ir/route-config-dynamic-load/node_modules/**
+!fixtures/reactive-ir/route-config-prototype/node_modules/
+!fixtures/reactive-ir/route-config-prototype/node_modules/**

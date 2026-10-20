@@ -1,6 +1,5 @@
 import { createSignal } from "solid-js";
 import { createRouter } from "@solidjs/router";
-import * as Routing from "@solidjs/router";
 
 const [count] = createSignal(0);
 
@@ -33,14 +32,6 @@ export const OtherRouter = createRouter({
   routes: [wrap({ path: "/wrapped", component: Wrapped }), { path: "/info", info: { component: Described } }],
 });
 
-// Uncertifiable: a namespace member is not an exact import.
-function Spaced() {
-  const value = count();
-  return <p>{value}</p>;
-}
-
-export const SpacedRouter = Routing.createRouter({ routes: [{ path: "/spaced", component: Spaced }] });
-
 // Uncertifiable: an element that is not itself a definition literal, a
 // `component` inside a computed key, and one a spread can overwrite.
 function Picked() {
@@ -66,4 +57,42 @@ export const ShapedRouter = createRouter({
     { path: "/keyed", [JSON.stringify({ component: Keyed })]: true },
     { path: "/over", component: Overwritten, ...override },
   ],
+});
+
+// Uncertifiable: the router calls `route.preload(...)` on the route record,
+// so a method, or a named function that may bind `this`, receives a record
+// holding `component`.
+function Bound() {
+  const value = count();
+  return <p>{value}</p>;
+}
+
+function Named() {
+  const value = count();
+  return <p>{value}</p>;
+}
+
+function loadNamed() {
+  return undefined;
+}
+
+export const BoundRouter = createRouter({
+  routes: [
+    { path: "/bound", component: Bound, preload() { return undefined; } },
+    { path: "/named", component: Named, preload: loadNamed },
+  ],
+});
+
+// Uncertifiable: the router calls `config.transformUrl(...)` on the config,
+// so a method there could reach `this.routes`.
+function Transformed() {
+  const value = count();
+  return <p>{value}</p>;
+}
+
+export const TransformRouter = createRouter({
+  routes: [{ path: "/transformed", component: Transformed }],
+  transformUrl(url: string) {
+    return url;
+  },
 });
