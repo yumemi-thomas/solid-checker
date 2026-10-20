@@ -236,6 +236,24 @@ function StaticMemberOuter(props: Wide) {
   );
 }
 
+// Babel's `filterChildren` drops newline-led text that is whitespace by
+// JavaScript's `\s`, which includes U+FEFF; the only child below is a newline,
+// a U+FEFF and a newline, so the callee gets the props object. Uncertifiable.
+function BomReader(props: Wide) {
+  const count = props.count;
+  return <span>{count}</span>;
+}
+function BomOuter(props: Wide) {
+  return (
+    <div>
+      <WipeByDelete {...props}>
+﻿
+      </WipeByDelete>
+      <BomReader {...props} />
+    </div>
+  );
+}
+
 export function App() {
   const [count] = createSignal(1);
   return (
@@ -257,6 +275,7 @@ export function App() {
       <ChildrenAttrOuter count={count()} />
       <ChildrenAttrSelfOuter count={count()} />
       <StaticMemberOuter count={count()} />
+      <BomOuter count={count()} />
     </div>
   );
 }

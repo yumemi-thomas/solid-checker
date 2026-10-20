@@ -205,10 +205,13 @@ pub(super) fn component_element_builds_view(
     }
     if element.children.iter().any(|child| {
         file.source_text(*child).is_some_and(|text| {
-            let text = text.trim();
+            // JavaScript's `\s` (Babel's `filterChildren`) also counts U+FEFF
+            // as whitespace; Rust's `trim` does not.
+            let js_space = |c: char| c.is_whitespace() || c == '\u{FEFF}';
+            let text = text.trim_matches(js_space);
             match text.strip_prefix('{') {
                 Some(inner) => {
-                    let inner = inner.trim_start();
+                    let inner = inner.trim_start_matches(js_space);
                     !inner.starts_with('}')
                         && !inner.starts_with("...")
                         && !inner.starts_with("/*")
