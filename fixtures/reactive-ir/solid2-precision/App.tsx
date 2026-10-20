@@ -45,8 +45,10 @@ export function FilterAfterAwait() {
   return <div>{posts()}</div>;
 }
 
-// Promise callbacks are deferred and must not inherit Array.prototype.filter's
-// synchronous proof merely because a filter appears inside them.
+// A promise handler is deferred and does not inherit Array.prototype.filter's
+// synchronous proof from a filter inside it. The read is still after the await:
+// the handler runs from a microtask on the promise the memo returns, which the
+// runtime attributes (ADR 0340, runtime-oracle `ThenAfterAwaitFilter`).
 export function PromiseCallbackAfterAwait() {
   const [id] = createSignal("42");
   const posts = createMemo(async () => {

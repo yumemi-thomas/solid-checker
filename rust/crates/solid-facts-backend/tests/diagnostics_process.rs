@@ -1545,8 +1545,15 @@ fn solid2_precision_corrections_are_end_to_end() {
     };
 
     // Each count pins one side of a proof. SC1002: the accessor call and the
-    // store member read inside the exact `Array#filter` callback, and nothing
-    // for the Promise, shadowed, unresolved, or wrapper-built callbacks.
+    // store member read inside the exact `Array#filter` callback, and the
+    // read in `PromiseCallbackAfterAwait` (ADR 0340): the handler of a native
+    // `Promise.resolve(..).then(..)` returned from the async memo runs from a
+    // microtask on the memo's returned promise, which the rc.13 runtime
+    // attributes (runtime-oracle `after-await-promises`,
+    // `ThenAfterAwaitFilter`, the same shape over a timer promise; over an
+    // already-resolved one the runtime's per-window cache hides its warning,
+    // the defect is the same); nothing for the shadowed, unresolved, or
+    // wrapper-built callbacks.
     // The cleanup-return *value* rules are gone (every illegal return is a
     // TypeScript error against the real `EffectFunction` signature), so the
     // contextual, explicit, parenthesized, `as`-cast, member, and returned-call
@@ -1563,7 +1570,7 @@ fn solid2_precision_corrections_are_end_to_end() {
     // cleanup); a produced function, `(() => void) | undefined`, and `void`
     // are legal and silent.
     for (rule, expected) in [
-        ("reactive-read-after-await", 2),
+        ("reactive-read-after-await", 3),
         ("invalid-cleanup-return", 0),
         ("cleanup-return-unresolved", 0),
         // Five placed reads, and three reads in the Promise, wrapper-built and

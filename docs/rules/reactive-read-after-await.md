@@ -21,29 +21,58 @@ member reads follow the component's caller classification (see
 [strict-read-untracked](strict-read-untracked.md)): proven-static props are not
 reactive and stay silent; unprovable ones are reported as **uncertifiable**.
 A call after the await to a project function whose body reads an accessor
-(`await load(); return byUser(posts)`) is **uncertifiable**: the read is past
-the await, but whether the callee reads on this call is not proven.
+only on some paths (`await load(); return byUser(posts)`) is
+**uncertifiable**: the read is past the await, but whether the callee reads on
+this call is not proven.
 
-Both proofs exclude nested closures by default, with one proven exception. A
-function written **directly** in the argument of the exact built-in
-`Array`/`ReadonlyArray.prototype.filter` runs inline, before the awaiting
-computation resumes, so both proofs continue into that callback's body with the
-callback as the owning function. The exception is deliberately narrow, and each
-of these keeps it from applying:
+Both proofs exclude nested closures by default. The continuation reaches code
+past the awaiting function's body only where the execution model proves it runs
+there, and the reads in it are then reported with the same two proofs:
 
-- a `.filter` that does not resolve to the built-in declaration — a
-  project-defined or shadowed method, or an unresolved/package callee;
-- an argument that is not the literal function — `filter(makePredicate(fn))`
-  hands the callback to a wrapper that may run it later;
-- an `async` callback, which suspends at its own first await;
-- a deferred standard callback such as `Promise#then`;
-- an awaiting function with no *straight-line* await, since the member-read
-  site the extension hangs off requires one — a `try`-wrapped await disables
-  it even though accessor-call dominance alone would have proven the read.
+- **A callback the call invokes inline.** A function written directly in an
+  argument slot an exact standard-library declaration invokes before it
+  returns (`Array`/`ReadonlyArray` `map`, `forEach`, `filter`, `some`, `every`,
+  `find`, `findIndex`, `flatMap`, `reduce`, `sort`, `Set`/`Map`/`NodeList`
+  `forEach`, `Array.from`'s mapper, the `Promise` executor), and an
+  immediately invoked function expression, runs inside the region it is
+  called from, nested ones too. It needs a call after a dominating await (a
+  `try` around the await is enough). An empty receiver never invokes its
+  callback: the read is reported as where the callback would run.
+- **A promise handler.** The callback of `.then`/`.catch`/`.finally` on a
+  proven native `Promise` runs from a microtask with no owner. It is in the
+  continuation when the call's result is the promise the computation returns
+  or awaits (`createMemo(() => pause().then(() => count()))`, `await
+  pause().then(...)`, `return` of it from an `async` computation, a handler
+  chain). The receiver is proven native by `new Promise`, `Promise.resolve`
+  and the other statics of the global `Promise`, a call of an `async` project
+  function, a project function that returns one of these, or a handler call
+  on one; a `PromiseLike`, a typed `Promise<T>` parameter or an unknown
+  receiver is not proof, since a thenable may call back inline.
+- **An `async` helper the computation awaits.** An exactly resolved `async`
+  project function whose promise the computation returns or awaits, directly
+  or through `Promise.all`/`allSettled` (of calls, or of `items.map(async ...)`
+  or `items.map(helper)`), reads after its own first await in the computation's
+  continuation, and it is reported with the computation's primitive. A helper
+  whose promise is dropped, or called from an event handler, is not.
+- **A synchronous helper's straight-line read.** A call after the await to an
+  exactly resolved synchronous project function runs its body on the
+  continuation's stack: an accessor call the body makes on every normal
+  completion (ADR 0276's completion fact) is a violation at that read. A read
+  on some paths, or one reached through a further helper, stays the
+  uncertifiable through-call obligation above.
 
-Nothing else in the standard library is treated as synchronous yet, and the
-extension reports only inside the awaiting function's own directly written
-filter callbacks (it does not recurse into a filter nested in another one).
+Each of these keeps it from applying:
+
+- a method that does not resolve to the built-in or standard declaration: a
+  project-defined or shadowed `map`, `then` or `Promise`, an unresolved or
+  package callee;
+- an argument that is not the literal function: `rows.map(makeRow(fn))` hands
+  the callback to a wrapper; an opaque slot of an exact standard callback is
+  an uncertifiable obligation;
+- an `async` or generator callback, which suspends at its own first await,
+  except one of the `async` helpers above;
+- a `.then` whose result is dropped, or a `setTimeout`/`queueMicrotask`
+  callback (a deferred callback is not on the continuation's stack).
 
 **A source already tracked is exempt** (ADR 0195). A read after the await of
 an accessor that the same function already called *on every run, before its

@@ -27,28 +27,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
-      "start": 1885,
-      "end": 1889,
-      "fixes": 0
-    },
-    {
-      "rule": "async-outside-loading-boundary",
-      "code": "SC5003",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
-      "start": 1915,
-      "end": 1922,
-      "fixes": 0
-    },
-    {
-      "rule": "async-outside-loading-boundary",
-      "code": "SC5003",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
-      "start": 2447,
-      "end": 2454,
+      "start": 2052,
+      "end": 2056,
       "fixes": 0
     },
     {
@@ -57,8 +37,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
-      "start": 2827,
-      "end": 2839,
+      "start": 2052,
+      "end": 2054,
       "fixes": 0
     },
     {
@@ -67,8 +47,38 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
-      "start": 2863,
-      "end": 2870,
+      "start": 2082,
+      "end": 2089,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
+      "start": 2614,
+      "end": 2621,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
+      "start": 2994,
+      "end": 3006,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
+      "start": 3030,
+      "end": 3037,
       "fixes": 0
     },
     {
@@ -77,8 +87,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
-      "start": 3405,
-      "end": 3449,
+      "start": 3572,
+      "end": 3616,
       "fixes": 0
     },
     {
@@ -87,8 +97,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
-      "start": 3443,
-      "end": 3447,
+      "start": 3610,
+      "end": 3614,
       "fixes": 0
     },
     {
@@ -97,8 +107,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
-      "start": 3473,
-      "end": 3480,
+      "start": 3640,
+      "end": 3647,
       "fixes": 0
     },
     {
@@ -107,8 +117,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
-      "start": 3784,
-      "end": 3788,
+      "start": 3951,
+      "end": 3955,
       "fixes": 0
     },
     {
@@ -117,8 +127,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
-      "start": 3813,
-      "end": 3820,
+      "start": 3980,
+      "end": 3987,
       "fixes": 0
     },
     {
@@ -127,8 +137,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
-      "start": 6303,
-      "end": 6318,
+      "start": 6470,
+      "end": 6485,
       "fixes": 0
     },
     {
@@ -137,8 +147,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
-      "start": 7093,
-      "end": 7106,
+      "start": 7260,
+      "end": 7273,
       "fixes": 0
     },
     {
@@ -147,8 +157,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
-      "start": 7115,
-      "end": 7128,
+      "start": 7282,
+      "end": 7295,
       "fixes": 0
     },
     {
@@ -157,8 +167,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
-      "start": 7151,
-      "end": 7163,
+      "start": 7318,
+      "end": 7330,
       "fixes": 0
     },
     {
@@ -167,8 +177,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
-      "start": 7552,
-      "end": 7569,
+      "start": 7719,
+      "end": 7736,
       "fixes": 0
     },
     {
@@ -177,8 +187,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
-      "start": 7968,
-      "end": 8012,
+      "start": 8135,
+      "end": 8179,
       "fixes": 0
     },
     {
@@ -187,8 +197,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
-      "start": 8078,
-      "end": 8085,
+      "start": 8245,
+      "end": 8252,
       "fixes": 0
     },
     {
@@ -197,8 +207,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
-      "start": 8441,
-      "end": 8463,
+      "start": 8608,
+      "end": 8630,
       "fixes": 0
     },
     {
@@ -207,8 +217,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
-      "start": 8446,
-      "end": 8457,
+      "start": 8613,
+      "end": 8624,
       "fixes": 0
     },
     {
@@ -217,8 +227,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
-      "start": 8657,
-      "end": 8670,
+      "start": 8824,
+      "end": 8837,
       "fixes": 0
     },
     {
@@ -227,8 +237,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
-      "start": 8892,
-      "end": 8901,
+      "start": 9059,
+      "end": 9068,
       "fixes": 1
     },
     {
@@ -237,8 +247,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
-      "start": 9261,
-      "end": 9306,
+      "start": 9428,
+      "end": 9473,
       "fixes": 0
     },
     {
@@ -247,8 +257,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
-      "start": 9280,
-      "end": 9289,
+      "start": 9447,
+      "end": 9456,
       "fixes": 0
     },
     {
@@ -257,8 +267,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
-      "start": 9588,
-      "end": 9597,
+      "start": 9755,
+      "end": 9764,
       "fixes": 0
     },
     {
@@ -267,8 +277,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
-      "start": 10319,
-      "end": 10328,
+      "start": 10486,
+      "end": 10495,
       "fixes": 0
     },
     {
@@ -277,8 +287,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
-      "start": 10401,
-      "end": 10415,
+      "start": 10568,
+      "end": 10582,
       "fixes": 0
     },
     {
@@ -287,8 +297,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
-      "start": 10813,
-      "end": 10830,
+      "start": 10980,
+      "end": 10997,
       "fixes": 0
     },
     {
@@ -297,8 +307,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
-      "start": 11336,
-      "end": 11358,
+      "start": 11503,
+      "end": 11525,
       "fixes": 0
     },
     {
@@ -307,8 +317,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
-      "start": 11371,
-      "end": 11386,
+      "start": 11538,
+      "end": 11553,
       "fixes": 0
     },
     {
@@ -317,8 +327,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
-      "start": 11399,
-      "end": 11449,
+      "start": 11566,
+      "end": 11616,
       "fixes": 0
     },
     {

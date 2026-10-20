@@ -569,23 +569,40 @@ fn timing_behavior(
     }
 }
 
-/// Whether the compiler-resolved call is the synchronous callback position of
-/// the built-in Array/ReadonlyArray `filter`. The standard-library bit and
-/// owner chain are both required; a project-defined or unresolved `.filter`
-/// must not inherit Array runtime behavior from its spelling.
-pub(super) fn is_proven_array_filter(
+/// Whether `argument` of the compiler-resolved call is a callback an exact
+/// standard-library declaration invokes before it returns (the audited
+/// [`RuntimeArgumentBehavior::InlineCallback`] rows: `Array`/`ReadonlyArray`
+/// `map`, `forEach`, `filter`, `some`, `every`, `find`, `findIndex`,
+/// `flatMap`, `reduce`, `sort`, ..., `Set`/`Map`/`NodeList` `forEach`,
+/// `Array.from`'s mapper, the `Promise` executor).
+///
+/// The standard-library bit is required of the selected declaration: a
+/// project-defined or shadowed method with the same name resolves elsewhere
+/// and inherits nothing from its spelling. "Invoked before it returns" is a
+/// timing claim, not a count: an empty receiver never invokes the callback.
+pub(super) fn is_inline_standard_callback(
     call: &ResolvedCall,
     actual_callability: Option<Callability>,
+    argument: usize,
 ) -> bool {
-    call.declaration.as_ref().is_some_and(|declaration| {
-        declaration.standard_library
-            && matches!(
-                declaration.qualified_name.as_ref(),
-                "Array.filter" | "ReadonlyArray.filter"
-            )
-            && argument_behavior(call, actual_callability, 0)
-                == Some(RuntimeArgumentBehavior::InlineCallback)
-    })
+    call.declaration
+        .as_ref()
+        .is_some_and(|declaration| declaration.standard_library)
+        && argument_behavior(call, actual_callability, argument)
+            == Some(RuntimeArgumentBehavior::InlineCallback)
+}
+
+/// The qualified name of the exact standard-library declaration a valid
+/// resolved call selected (`Promise.then`, `PromiseConstructor.all`, ...), or
+/// `None` for a project, package, unresolved or invalid call.
+pub(super) fn standard_call_name(call: &ResolvedCall) -> Option<&str> {
+    if call.validity != ResolvedCallValidity::Valid {
+        return None;
+    }
+    call.declaration
+        .as_ref()
+        .filter(|declaration| declaration.standard_library)
+        .map(|declaration| declaration.qualified_name.as_ref())
 }
 
 pub(super) fn resolved_parameter(call: &ResolvedCall, argument: usize) -> Option<&ParameterFact> {

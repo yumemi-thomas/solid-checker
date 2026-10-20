@@ -11,13 +11,14 @@ use crate::owners::{
     enclosing_function_label, function_binding_name,
 };
 use crate::pipeline::{AnalysisContext, ProgramDraft};
-use crate::runtime_semantics::is_proven_array_filter;
 use crate::symbols::AsyncSymbolRoots;
 use crate::{
     ReactiveRead, ReactiveSourceKind, StaticDefect, StaticDefectKind, known_primitive, location,
 };
 use solid_facts::core::Span;
 use typefacts::Location;
+
+mod after_await;
 
 /// The static-prepass stage: every prepass rule, in their pipeline order.
 pub(crate) fn static_prepass(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
@@ -365,196 +366,7 @@ fn binding_initializes_reactive_store(
 /// dominance, no nested closures except the separately proven synchronous
 /// Array#filter callback path.
 fn reactive_read_after_await(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
-    // The producer reports an async-function fact for every project
-    // function, so both per-function steps below must stay cheap: the file
-    // lookup goes through this index instead of a linear scan, and the
-    // tracked-computation proof — a whole-project call scan — runs only for
-    // a function that has something to report. A function with no
-    // after-await calls and no unconditional await cannot produce a finding,
-    // so resolving its computation context is pure cost.
-    let files_by_path: std::collections::HashMap<&str, &solid_facts::FileFacts> = ctx
-        .facts
-        .files
-        .iter()
-        .map(|file| (file.path.as_str(), file))
-        .collect();
-    // Built on first use: only a function with something to report needs it.
-    let mut computations: Option<AsyncComputations> = None;
-    for typescript_file in ctx.facts.typescript.files() {
-        for function in typescript_file.async_functions.iter() {
-            let member_site = ctx
-                .dialect
-                .reports_member_reads_after_await()
-                .then(|| member_read_site(&files_by_path, function))
-                .flatten();
-            if function.calls_after_await.is_empty() && member_site.is_none() {
-                continue;
-            }
-            let index = computations
-                .get_or_insert_with(|| AsyncComputations::new(ctx, &ctx.facts.typescript));
-            let Some(analysis_context) = tracked_async_computation_context(ctx, function, index)
-            else {
-                continue;
-            };
-            let mut reported_calls = HashSet::default();
-            for call in &function.calls_after_await {
-                let ast_call = ctx
-                    .facts
-                    .files
-                    .iter()
-                    .find(|file| *file.path.as_str() == *call.path)
-                    .and_then(|file| {
-                        file.ast
-                            .calls
-                            .iter()
-                            .find(|candidate| {
-                                u64::from(candidate.callee.start) == call.start_byte
-                                    && u64::from(candidate.callee.end) == call.end_byte
-                            })
-                            .map(|candidate| (file, candidate))
-                    });
-                // Whole member spans may retain their receiver's symbol.
-                // The exact property demand carries the callable member's
-                // identity; a reactive receiver does not prove its method
-                // invokes that receiver or reads an accessor.
-                let symbol =
-                    ast_call.and_then(|(file, candidate)| {
-                        if let Some(member) = file.ast.members.iter().find(|member| {
-                            member.span == file.ast.peel_ts_sugar_span(candidate.callee)
-                        }) {
-                            (!file.ast.computed_members.contains(&member.span))
-                                .then(|| ctx.entities.at(file.path.as_str(), member.property))
-                                .flatten()
-                        } else {
-                            ctx.entities.get(call)
-                        }
-                    });
-                let Some((name, _)) = symbol.and_then(|symbol| ctx.accessors.get(symbol)) else {
-                    // ADR 0294: a typed candidate's read after the await is
-                    // an obligation; its type is the only reactive evidence.
-                    if let (Some(symbol), Some((file, candidate))) = (symbol, ast_call)
-                        && typed_unknown(ctx, symbol)
-                        && reported_calls.insert((
-                            call.path.to_string(),
-                            call.start_byte,
-                            call.end_byte,
-                        ))
-                    {
-                        draft.push_defect(typed_after_await_obligation(file, candidate.callee));
-                    }
-                    continue;
-                };
-                // The same source read on every run before the first
-                // suspension is a dependency already (ADR 0195), and rc.13's
-                // own `UNTRACKED_READ_AFTER_AWAIT` stays silent for it.
-                if symbol.is_some_and(|symbol| {
-                    tracked_before_first_suspension(ctx, &files_by_path, function, symbol)
-                }) {
-                    continue;
-                }
-                let display = ast_call
-                    .and_then(|(file, candidate)| candidate.static_callee(&file.source))
-                    .unwrap_or(name);
-                let diagnostic_location = Location {
-                    path: call.path.clone(),
-                    start_byte: call.start_byte,
-                    end_byte: call.end_byte,
-                };
-                reported_calls.insert((call.path.to_string(), call.start_byte, call.end_byte));
-                draft.push_defect(StaticDefect {
-                    kind: StaticDefectKind::ReactiveReadAfterAwait {
-                        accessor: display.to_string(),
-                    },
-                    location: diagnostic_location,
-                    analysis_context: analysis_context.clone(),
-                    fixes: vec![],
-                    uncertain: false,
-                });
-            }
-            if let Some(site) = member_site {
-                member_reads_after_await(ctx, draft, site, &analysis_context);
-                let (file, ast_function, boundary) = site;
-                for filter in file.ast.calls_within(ast_function.body) {
-                    if filter.span.start < boundary
-                        || containing_ast_function(&file.ast, filter.span)
-                            .is_none_or(|owner| owner.span != ast_function.span)
-                    {
-                        continue;
-                    }
-                    let Some(callback) = inline_standard_callback(ctx, file, filter) else {
-                        report_opaque_standard_callback(
-                            ctx,
-                            draft,
-                            file,
-                            filter,
-                            &analysis_context,
-                        );
-                        continue;
-                    };
-                    // The callback body runs before the awaiting computation
-                    // resumes, so its reads are the awaiting function's reads:
-                    // the same accessor-call and member-read proofs apply, with
-                    // the callback itself as the owning function.
-                    member_reads_after_await(
-                        ctx,
-                        draft,
-                        (file, callback, boundary),
-                        &analysis_context,
-                    );
-                    for callback_call in file.ast.calls_within(callback.body) {
-                        if callback_call.span.start < boundary
-                            || containing_ast_function(&file.ast, callback_call.span)
-                                .is_none_or(|owner| owner.span != callback.span)
-                        {
-                            continue;
-                        }
-                        let Some(symbol) = ctx
-                            .entities
-                            .get(&location(file.path.shared(), callback_call.callee))
-                        else {
-                            continue;
-                        };
-                        let Some((name, _)) = ctx.accessors.get(symbol) else {
-                            if typed_unknown(ctx, symbol)
-                                && reported_calls.insert((
-                                    file.path.to_string(),
-                                    u64::from(callback_call.callee.start),
-                                    u64::from(callback_call.callee.end),
-                                ))
-                            {
-                                draft.push_defect(typed_after_await_obligation(
-                                    file,
-                                    callback_call.callee,
-                                ));
-                            }
-                            continue;
-                        };
-                        if tracked_before_first_suspension(ctx, &files_by_path, function, symbol) {
-                            continue;
-                        }
-                        let key = (
-                            file.path.to_string(),
-                            u64::from(callback_call.callee.start),
-                            u64::from(callback_call.callee.end),
-                        );
-                        if !reported_calls.insert(key) {
-                            continue;
-                        }
-                        let display = callback_call.static_callee(&file.source).unwrap_or(name);
-                        draft.push_defect(StaticDefect {
-                            kind: StaticDefectKind::ReactiveReadAfterAwait {
-                                accessor: display.to_string(),
-                            },
-                            location: location(file.path.shared(), callback_call.callee),
-                            analysis_context: analysis_context.clone(),
-                            fixes: vec![],
-                            uncertain: false,
-                        });
-                    }
-                }
-            }
-        }
-    }
+    after_await::run(ctx, draft);
 }
 
 /// SC1002 through a call: a call after the first await of a tracked async
@@ -591,6 +403,10 @@ pub(crate) fn reactive_read_after_await_through_calls(
     }
     let mut computations: Option<AsyncComputations> = None;
     let mut defects = Vec::new();
+    let proven_identity = StaticDefectKind::ReactiveReadAfterAwait {
+        accessor: String::new(),
+    }
+    .dedup_identity();
     for typescript_file in ctx.facts.typescript.files() {
         for function in typescript_file.async_functions.iter() {
             let calls: Vec<(
@@ -640,6 +456,18 @@ pub(crate) fn reactive_read_after_await_through_calls(
                     {
                         continue;
                     }
+                    // The prepass already proved this read: the helper reads
+                    // on every completion of the call, so the obligation the
+                    // summary leaves is discharged at the read itself.
+                    if read.origin.as_ref().is_some_and(|origin| {
+                        draft.seen_diagnostics.contains(&(
+                            proven_identity,
+                            origin.path.clone(),
+                            origin.start_byte,
+                        ))
+                    }) {
+                        continue;
+                    }
                     defects.push(StaticDefect {
                         kind: StaticDefectKind::ReactiveReadAfterAwaitThroughCall {
                             accessor: read.accessor.to_string(),
@@ -682,79 +510,6 @@ fn typed_after_await_obligation(
         fixes: vec![],
         uncertain: true,
     }
-}
-
-/// The function a standard-library method provably invokes *inline*, or
-/// `None` when nothing proves that.
-///
-/// Three separate facts have to hold, and none of them follows from the
-/// spelling `.filter`:
-///
-/// - the callee resolves to the exact built-in `Array`/`ReadonlyArray`
-///   `filter` declaration (a project-defined or shadowed `filter` resolves
-///   elsewhere and a `Promise#then` callback is deferred, not inline);
-/// - the argument itself is potentially callable — sampled at the *argument*
-///   span, the position `argument_behavior` classifies, never at the callee,
-///   whose callability answers a different question;
-/// - the callback is the literal function written in argument position.
-///   `rows.filter(makePredicate(post => …))` hands the arrow to a wrapper that
-///   may stash it and run it under a later tracking scope, so it is not proof.
-///
-/// An `async` callback suspends at its own first await, so its body is not one
-/// synchronous extent and stays outside this proof.
-fn inline_standard_callback<'f>(
-    ctx: &AnalysisContext<'_>,
-    file: &'f solid_facts::FileFacts,
-    call: &solid_facts::ast::CallFact,
-) -> Option<&'f solid_facts::ast::FunctionFact> {
-    let argument = call.arguments.first()?;
-    let resolved = ctx
-        .semantic_lookup
-        .resolved_callee_call(file, call.callee)?;
-    let callability = ctx
-        .semantic_lookup
-        .smallest_contained_callability(file.path.as_str(), argument.span);
-    if !is_proven_array_filter(resolved, callability) {
-        return None;
-    }
-    let callback = callback_argument_literal(file, argument.span)?;
-    (!callback.r#async).then_some(callback)
-}
-
-/// Preserve the proof obligation for an exact built-in synchronous callback
-/// position whose body cannot be inspected. Invalid argument shapes do not
-/// reach `is_proven_array_filter` and remain TypeScript-owned.
-fn report_opaque_standard_callback(
-    ctx: &AnalysisContext<'_>,
-    draft: &mut ProgramDraft,
-    file: &solid_facts::FileFacts,
-    call: &solid_facts::ast::CallFact,
-    analysis_context: &str,
-) {
-    let Some(argument) = call.arguments.first() else {
-        return;
-    };
-    let Some(resolved) = ctx.semantic_lookup.resolved_callee_call(file, call.callee) else {
-        return;
-    };
-    let callability = ctx
-        .semantic_lookup
-        .smallest_contained_callability(file.path.as_str(), argument.span);
-    if !is_proven_array_filter(resolved, callability) {
-        return;
-    }
-    draft.push_defect(StaticDefect {
-        kind: StaticDefectKind::ReactiveCallbackUnresolved {
-            callee: call
-                .static_callee(&file.source)
-                .unwrap_or("Array.prototype.filter")
-                .to_owned(),
-        },
-        location: location(file.path.shared(), argument.span),
-        analysis_context: analysis_context.to_owned(),
-        fixes: vec![],
-        uncertain: false,
-    });
 }
 
 /// The resolved location of an async function's member-read analysis: its
@@ -810,7 +565,9 @@ fn tracked_before_first_suspension(
             && containing_ast_function(&file.ast, span)
                 .is_some_and(|owner| owner.span == ast_function.span)
     };
-    let Some(first_suspension) = file
+    // A function that never suspends (a computation returning a promise it
+    // did not `await`) runs entirely inside its tracking window.
+    let first_suspension = file
         .ast
         .awaits
         .iter()
@@ -818,9 +575,7 @@ fn tracked_before_first_suspension(
         .filter(|suspension| own(**suspension))
         .map(|suspension| suspension.start)
         .min()
-    else {
-        return false;
-    };
+        .unwrap_or(u32::MAX);
     file.ast.straight_line_calls.iter().any(|span| {
         span.end <= first_suspension
             && own(*span)

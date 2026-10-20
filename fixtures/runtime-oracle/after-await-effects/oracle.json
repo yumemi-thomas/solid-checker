@@ -1,0 +1,1 @@
+{"note": "SC1002 reach: the computation of an effect is a tracked async computation like a memo's; a tracked effect returns no promise the runtime attributes"}
