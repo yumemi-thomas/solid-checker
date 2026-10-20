@@ -79,6 +79,21 @@ function fixtureProjects() {
         directory,
         tsconfig
       });
+      // Variants of one fixture share its `node_modules` (published package
+      // bytes copied once) by Node's own lookup: each `variants/<name>/` is a
+      // project of its own, whose snapshot id is `<fixture>-<name>`.
+      const variants = join(directory, "variants");
+      if (existsSync(variants)) {
+        for (const variant of readdirSync(variants, { withFileTypes: true })) {
+          const variantTsconfig = join(variants, variant.name, "tsconfig.json");
+          if (!variant.isDirectory() || !existsSync(variantTsconfig)) continue;
+          found.push({
+            id: `${group}/${entry.name}-${variant.name}`,
+            directory: join(variants, variant.name),
+            tsconfig: variantTsconfig
+          });
+        }
+      }
       // No package contract is consumed any more, so a fixture asking for an
       // authorized one would silently test nothing.
       if (existsSync(join(directory, ".solid-checker", "authorize-contract.json"))) {

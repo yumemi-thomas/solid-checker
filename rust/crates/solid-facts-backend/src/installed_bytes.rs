@@ -404,7 +404,8 @@ mod tests {
         );
         let core = route_core_root(&router).expect("router-core beside the router");
         assert_eq!(package_digest(&core).as_deref(), Some(audited.core_digest));
-        let modified = route_core_root(&tanstack("route-components-core-modified")).unwrap();
+        let modified =
+            route_core_root(&tanstack("route-components/variants/core-modified")).unwrap();
         assert_ne!(
             package_digest(&modified).as_deref(),
             Some(audited.core_digest)
