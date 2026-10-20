@@ -33,8 +33,16 @@ pub(super) fn call_argument_invocation_unproven(
     }
     let argument = &call.arguments[index];
     let direct = !argument.spread && file.ast.peel_ts_sugar_span(argument.span) == literal.span;
-    if let Some((callee_file, callee, exact)) =
-        project_callee_at_parameter(file, call, index, lookup)
+    // The compiler's resolved signature names the called declaration exactly;
+    // a project function reached only through the receiver's root (`list` in
+    // `list().filter(…)`, whose binding is a `createMemo` call) is not it.
+    let standard = lookup
+        .resolved_callee_call(file, call.callee)
+        .and_then(|resolved| resolved.declaration.as_ref())
+        .is_some_and(|declaration| declaration.standard_library);
+    if !standard
+        && let Some((callee_file, callee, exact)) =
+            project_callee_at_parameter(file, call, index, lookup)
     {
         return !(direct
             && exact
