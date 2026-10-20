@@ -457,3 +457,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/route-components/variants/*/node_modules/**
 !fixtures/reactive-ir/route-config/variants/*/node_modules/
 !fixtures/reactive-ir/route-config/variants/*/node_modules/**
+!fixtures/reactive-ir/arrow-bound-helper-reachability/node_modules/
+!fixtures/reactive-ir/arrow-bound-helper-reachability/node_modules/**

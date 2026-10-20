@@ -115,6 +115,58 @@ fn effective_reachability_topology(
     }
 }
 
+/// The symbol a call edge resolves to for this function node.
+///
+/// A declaration (and a function expression's own name) answers by its own
+/// name. A function expression or arrow bound to a `const` identifier is
+/// reached by calling that binding -- `const useMenu = () => ...; useMenu()` --
+/// so its node takes the binding's symbol, which the call's callee resolves to
+/// exactly. Only an immutable single-identifier binding qualifies: a `let` or
+/// `var` may be reassigned between the declaration and the call, so a call
+/// through it does not prove this function runs. This only lets call edges
+/// find the node; it grants no owner, role, or root.
+fn reachability_function_symbol(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    entities: &EntitySymbols,
+) -> Option<SymbolId> {
+    if function.kind != solid_facts::ast::FunctionKind::Declaration
+        && let Some(name) = exact_const_binding_name(file, function)
+    {
+        return entities
+            .get(&location(file.path.shared(), name.span))
+            .cloned();
+    }
+    function.name.as_ref().and_then(|name| {
+        entities
+            .get(&location(file.path.shared(), name.span))
+            .cloned()
+    })
+}
+
+fn exact_const_binding_name<'a>(
+    file: &'a solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> Option<&'a solid_facts::ast::NamedSpan> {
+    file.ast
+        .bindings_initializer_containing(function.span)
+        .find(|binding| {
+            binding.initializer_function
+                && binding.initializer.is_some_and(|initializer| {
+                    file.ast
+                        .functions_within(initializer)
+                        .max_by_key(|candidate| candidate.span.end - candidate.span.start)
+                        .is_some_and(|candidate| candidate.span == function.span)
+                })
+        })
+        .filter(|binding| {
+            binding.immutable
+                && binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding.names.len() == 1
+        })
+        .and_then(|binding| binding.names.first())
+}
+
 fn discover_reachability_file(
     file: &solid_facts::FileFacts,
     indexes: &ProjectIndexes<'_>,
@@ -127,11 +179,7 @@ fn discover_reachability_file(
         .functions
         .iter()
         .map(|function| {
-            let symbol = function.name.as_ref().and_then(|name| {
-                entities
-                    .get(&location(file.path.shared(), name.span))
-                    .cloned()
-            });
+            let symbol = reachability_function_symbol(file, function, entities);
             FunctionNode {
                 path: file.path.to_string(),
                 span: function.span,
