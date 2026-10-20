@@ -41,18 +41,31 @@ pub(super) fn props_root_is_current(
     symbol: &SymbolId,
     entities: &EntitySymbols,
 ) -> bool {
+    props_root_unaccounted_uses(file, declaration, symbol, entities)
+        .is_some_and(|uses| uses.is_empty())
+}
+
+/// The uses of a props root that may alias or escape it (every use that is
+/// not a member access or erased TypeScript syntax), or `None` when the
+/// binding or a member through it is written in its file.
+pub(super) fn props_root_unaccounted_uses(
+    file: &solid_facts::FileFacts,
+    declaration: &Location,
+    symbol: &SymbolId,
+    entities: &EntitySymbols,
+) -> Option<Vec<solid_facts::core::Span>> {
     use solid_facts::core::Span;
     if declaration.path.as_ref() != file.path.as_str() {
-        return false;
+        return None;
     }
     let (Ok(start), Ok(end)) = (
         u32::try_from(declaration.start_byte),
         u32::try_from(declaration.end_byte),
     ) else {
-        return false;
+        return None;
     };
     if crate::indexes::binding_written(file, Span::new(start, end)) {
-        return false;
+        return None;
     }
     let names_root = |span| {
         let span = file.ast.peel_ts_sugar_span(span);
@@ -77,18 +90,28 @@ pub(super) fn props_root_is_current(
     // Every unaccounted use of the object can alias or escape it, including
     // shorthand properties, returns and nested parameter defaults. Erased
     // parts of transparent TS wrappers do not evaluate the object.
-    let escapes = file.ast.identifiers.iter().any(|identifier| {
-        names_root(identifier.span)
-            && !file.ast.transparent_wrappers.iter().any(|wrapper| {
-                wrapper.span.contains(identifier.span) && !wrapper.inner.contains(identifier.span)
-            })
-            && !file
-                .ast
-                .members
-                .iter()
-                .any(|member| file.ast.peel_ts_sugar_span(member.object) == identifier.span)
-    });
-    !member_written && !escapes
+    if member_written {
+        return None;
+    }
+    let escapes = file
+        .ast
+        .identifiers
+        .iter()
+        .filter(|identifier| {
+            names_root(identifier.span)
+                && !file.ast.transparent_wrappers.iter().any(|wrapper| {
+                    wrapper.span.contains(identifier.span)
+                        && !wrapper.inner.contains(identifier.span)
+                })
+                && !file
+                    .ast
+                    .members
+                    .iter()
+                    .any(|member| file.ast.peel_ts_sugar_span(member.object) == identifier.span)
+        })
+        .map(|identifier| identifier.span)
+        .collect();
+    Some(escapes)
 }
 
 pub(crate) struct LocalAccessContext<'a, 'facts> {

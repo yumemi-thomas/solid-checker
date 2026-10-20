@@ -1,0 +1,5 @@
+# spread-prop-backing
+
+**Claim.** A call site whose last spread is the enclosing component's own props object (`<Inner {...props} />`) forwards the reactive direction of every parent prop that the element does not set after the spread. `@solidjs/signals@2.0.0-rc.13` `merge` resolves each key lazily from the last source that has it, so `Inner`'s read of such a prop runs the parent's getter. The spread still proves nothing static: the receiving component escapes enumeration as before.
+
+A lone spread into a component that only spreads its props on keeps the getter (`ChainOuter`). Kept uncertifiable: a later attribute or child setting the name (`OverriddenOuter`), a later spread of another object (`LaterSpreadOuter`), a `merge` view (`ViewOuter`), a reassigned props parameter (`ReassignedOuter`), a lone spread into a receiver that deletes the getter (`DeletingOuter`: `createComponent(Child, props)` hands over the object itself, while any other attribute, spread or child makes it a `mergeProps` view whose writes are no-ops), and a parent whose callers pass only literals (`StaticOuter`). `solid-js.d.ts` is copied from `forwarded-prop-backing`.
