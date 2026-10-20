@@ -3,6 +3,7 @@ import {
   createFileRoute,
   createRootRouteWithContext,
   createRoute,
+  createRouter,
 } from "@tanstack/solid-router";
 
 const [count] = createSignal(0);
@@ -56,3 +57,20 @@ export const about = createRoute({
   path: "/about",
   component: About,
 });
+
+// Positive: an inline component value, and a router default.
+export const inline = createRoute({
+  getParentRoute: () => root,
+  path: "/inline",
+  component: () => {
+    const value = count();
+    return <p>{value}</p>;
+  },
+});
+
+function Lost() {
+  const value = count();
+  return <p>{value}</p>;
+}
+
+export const router = createRouter({ routeTree: root, defaultNotFoundComponent: Lost });

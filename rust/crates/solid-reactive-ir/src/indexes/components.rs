@@ -128,6 +128,14 @@ impl<'a> SemanticLookup<'a> {
         {
             return ComponentStatus::Proven;
         }
+        // ADR 0334/0335: a function written as an audited router's component
+        // value is rendered there, and an anonymous inline value has no other
+        // reference (a named function expression has its own name in its
+        // body, which can hand it on: `invoke = Inline`).
+        if function.name.is_none() && self.route_component_value(file.path.as_str(), function.span)
+        {
+            return ComponentStatus::Proven;
+        }
         let binding_name = crate::owners::component_binding_name(file, function);
         let directly_contains_jsx = |span: Span| {
             file.ast.jsx_within(span).any(|element| {

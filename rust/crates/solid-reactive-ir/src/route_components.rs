@@ -43,6 +43,16 @@ const COMPONENT_KEYS: [&str; 4] = [
     "notFoundComponent",
 ];
 
+/// ADR 0334: the `createRouter` options the audited releases render the same
+/// way as a route's (`Match.jsx`: `route().options.component ??
+/// router.options.defaultComponent`; `renderRouteNotFound.jsx`).
+const ROUTER_DEFAULT_KEYS: [&str; 4] = [
+    "defaultComponent",
+    "defaultPendingComponent",
+    "defaultErrorComponent",
+    "defaultNotFoundComponent",
+];
+
 /// Factories called with the options directly: `createRoute(options)`.
 const DIRECT_FACTORIES: [&str; 2] = ["createRoute", "createRootRoute"];
 
@@ -110,7 +120,10 @@ fn tanstack_values(
     };
     for file in unaudited_files(facts, &audited) {
         let factories = factory_locals(file);
-        if factories.direct.is_empty() && factories.curried.is_empty() {
+        if factories.direct.is_empty()
+            && factories.curried.is_empty()
+            && factories.router.is_empty()
+        {
             continue;
         }
         let ast = &*file.ast;
@@ -124,15 +137,21 @@ fn tanstack_values(
             call.direct_callee && !call.construct && resolves_to(call.callee, locals)
         };
         for call in &ast.calls {
+            let router = factory_call(call, &factories.router);
             let direct = factory_call(call, &factories.direct);
             let curried = !call.construct
                 && ast.calls.iter().any(|inner| {
                     inner.span == ast.peel_ts_sugar_span(call.callee)
                         && factory_call(inner, &factories.curried)
                 });
-            if !direct && !curried {
+            if !direct && !curried && !router {
                 continue;
             }
+            let keys: &[&str] = if router {
+                &ROUTER_DEFAULT_KEYS
+            } else {
+                &COMPONENT_KEYS
+            };
             let [options] = call.arguments.as_slice() else {
                 continue;
             };
@@ -140,7 +159,7 @@ fn tanstack_values(
                 continue;
             }
             for member in &options.literal_members {
-                if COMPONENT_KEYS.contains(&member.key.as_str()) {
+                if keys.contains(&member.key.as_str()) {
                     values.insert((file.path.to_string(), member.value));
                     values.insert((file.path.to_string(), ast.peel_ts_sugar_span(member.value)));
                 }
@@ -251,7 +270,7 @@ fn unaudited_files<'a>(
 /// decoded; a member name spelled with an escape counts as a read.
 fn reads_component_key(file: &FileFacts) -> bool {
     let ast = &*file.ast;
-    let is_key = |text: &str| COMPONENT_KEYS.contains(&text);
+    let is_key = |text: &str| COMPONENT_KEYS.contains(&text) || ROUTER_DEFAULT_KEYS.contains(&text);
     ast.members.iter().any(|member| {
         file.source
             .get(member.property.start as usize..member.property.end as usize)
@@ -275,12 +294,14 @@ fn reads_component_key(file: &FileFacts) -> bool {
 struct FactoryLocals {
     direct: Vec<Span>,
     curried: Vec<Span>,
+    router: Vec<Span>,
 }
 
 fn factory_locals(file: &FileFacts) -> FactoryLocals {
     let mut locals = FactoryLocals {
         direct: Vec::new(),
         curried: Vec::new(),
+        router: Vec::new(),
     };
     for import in &file.ast.imports {
         if import.module.as_str() != ROUTE_PACKAGE || import.type_only {
@@ -297,6 +318,7 @@ fn factory_locals(file: &FileFacts) -> FactoryLocals {
                 Some(name) if CURRIED_FACTORIES.contains(&name) => {
                     locals.curried.push(binding.local.span);
                 }
+                Some("createRouter") => locals.router.push(binding.local.span),
                 _ => {}
             }
         }
@@ -324,49 +346,192 @@ fn router_config_values(
     else {
         return values;
     };
+    // `routes` values that name a binding, by `(path, span)`: a constant
+    // array counts only when every reference to it is one of these.
+    let mut named_routes = HashSet::new();
     for file in unaudited_files(facts, &audited) {
-        let locals = router_creation_locals(file);
-        if locals.is_empty() {
+        let locals = RouterLocals::of(file);
+        if locals.create.is_empty() {
             continue;
         }
         let ast = &*file.ast;
         for call in &ast.calls {
-            let creates = call.direct_callee
-                && !call.construct
-                && ast
-                    .reference_declarations
-                    .binary_search_by_key(&call.callee, |(span, _)| *span)
-                    .ok()
-                    .is_some_and(|at| locals.contains(&ast.reference_declarations[at].1));
             let [config] = call.arguments.as_slice() else {
                 continue;
             };
-            if !creates || config.spread || !config.exact_object_literal {
+            // `this_free_properties` requires a closed literal; a shorthand
+            // `{ routes }` is one, though not an `exact_object_literal`.
+            if !locals.calls(file, call, &locals.create) || config.spread {
                 continue;
             }
             // The router calls `config.transformUrl(...)` on the config
             // (`routers/factory.jsx:188`), so the config holds no callable
-            // that could bind `this` to it and its `routes`.
-            let routes_literal = |property: &solid_facts::ast::ObjectPropertyFact| {
-                ast.array_literal_elements
-                    .iter()
-                    .any(|array| array.span == ast.peel_ts_sugar_span(property.value))
-            };
+            // that could bind `this` to it and its `routes`. A stock history
+            // is a fresh integration whose methods bind `this` to itself
+            // (ADR 0324).
             let Some(own) = this_free_properties(
                 file,
                 ast.peel_ts_sugar_span(config.span),
-                &|key, property| (key == "routes").then(|| routes_literal(property)),
+                &|key, property| match key {
+                    "routes" => Some(true),
+                    "history" => Some(locals.stock_history(file, property.value)),
+                    _ => None,
+                },
             ) else {
                 continue;
             };
             for property in own {
-                if file.source_text(property.key) == Some("routes") {
-                    definitions(file, ast.peel_ts_sugar_span(property.value), 0, &mut values);
+                if file.source_text(property.key) != Some("routes") {
+                    continue;
+                }
+                let value = ast.peel_ts_sugar_span(property.value);
+                match locals.route_array(file, value) {
+                    Some(array) => definitions(file, &locals, array, 0, &mut values),
+                    None => {
+                        named_routes.insert((file.path.to_string(), value));
+                    }
                 }
             }
         }
     }
+    // A constant route array (`export const routes = [...]`, possibly through
+    // `defineRoutes`), whose every reference is its declaration, its module
+    // surface or a `routes` value above, in a module no file reaches as a
+    // namespace: no project code holds it otherwise.
+    let Some(namespace_exposed) = namespace_exposed else {
+        return values;
+    };
+    for file in unaudited_files(facts, &audited) {
+        if namespace_exposed.contains(file.path.as_str()) {
+            continue;
+        }
+        let locals = RouterLocals::of(file);
+        for binding in &file.ast.bindings {
+            if !binding.immutable || binding.shape != solid_facts::ast::BindingShape::Identifier {
+                continue;
+            }
+            let (Some(name), Some(initializer)) = (binding.names.first(), binding.initializer)
+            else {
+                continue;
+            };
+            let Some(array) = locals.route_array(file, file.ast.peel_ts_sugar_span(initializer))
+            else {
+                continue;
+            };
+            let Some(uses) = references(file, name.span) else {
+                continue;
+            };
+            let held_only_by_routers = uses.iter().all(|(path, span)| {
+                named_routes.contains(&(path.clone(), *span))
+                    || facts
+                        .files
+                        .iter()
+                        .find(|candidate| candidate.path.as_str() == path)
+                        .is_some_and(|candidate| {
+                            crate::indexes::reference_is_declaration_or_module_surface(
+                                candidate, *span,
+                            )
+                        })
+            });
+            if held_only_by_routers && uses.iter().any(|use_| named_routes.contains(use_)) {
+                definitions(file, &locals, array, 0, &mut values);
+            }
+        }
+    }
     values
+}
+
+/// The local names a file gives the router exports the premise reads.
+struct RouterLocals {
+    create: Vec<Span>,
+    define_route: Vec<Span>,
+    define_routes: Vec<Span>,
+    histories: Vec<Span>,
+}
+
+impl RouterLocals {
+    fn of(file: &FileFacts) -> Self {
+        let mut locals = Self {
+            create: Vec::new(),
+            define_route: Vec::new(),
+            define_routes: Vec::new(),
+            histories: Vec::new(),
+        };
+        for import in &file.ast.imports {
+            if import.module.as_str() != ROUTER_PACKAGE || import.type_only {
+                continue;
+            }
+            for binding in import
+                .bindings
+                .iter()
+                .filter(|binding| !binding.type_only && binding.kind == ImportKind::Named)
+            {
+                let local = binding.local.span;
+                match binding.imported.as_deref() {
+                    Some("createRouter") => locals.create.push(local),
+                    Some("defineRoute") => locals.define_route.push(local),
+                    Some("defineRoutes") => locals.define_routes.push(local),
+                    Some(name) if crate::router_params::STOCK_HISTORIES.contains(&name) => {
+                        locals.histories.push(local);
+                    }
+                    _ => {}
+                }
+            }
+        }
+        locals
+    }
+
+    /// Whether `call` is a direct call of one of `locals`.
+    fn calls(&self, file: &FileFacts, call: &solid_facts::ast::CallFact, locals: &[Span]) -> bool {
+        let ast = &*file.ast;
+        call.direct_callee
+            && !call.construct
+            && ast
+                .reference_declarations
+                .binary_search_by_key(&call.callee, |(span, _)| *span)
+                .ok()
+                .is_some_and(|at| locals.contains(&ast.reference_declarations[at].1))
+    }
+
+    /// The single argument of a direct call at `span` of one of `locals`
+    /// (`defineRoute`, `defineRoutes`: identity helpers in the audited
+    /// releases), peeled.
+    fn identity_argument(&self, file: &FileFacts, span: Span, locals: &[Span]) -> Option<Span> {
+        let call = file.ast.calls.iter().find(|call| call.span == span)?;
+        let [argument] = call.arguments.as_slice() else {
+            return None;
+        };
+        (self.calls(file, call, locals) && !argument.spread)
+            .then(|| file.ast.peel_ts_sugar_span(argument.span))
+    }
+
+    /// The array literal at `span`, or the one `defineRoutes([...])` returns.
+    fn route_array(&self, file: &FileFacts, span: Span) -> Option<Span> {
+        let span = self
+            .identity_argument(file, span, &self.define_routes)
+            .unwrap_or(span);
+        file.ast
+            .array_literal_elements
+            .iter()
+            .any(|array| array.span == span)
+            .then_some(span)
+    }
+
+    /// The definition literal at `span`, or the one `defineRoute({...})`
+    /// returns.
+    fn definition(&self, file: &FileFacts, span: Span) -> Span {
+        self.identity_argument(file, span, &self.define_route)
+            .unwrap_or(span)
+    }
+
+    /// Whether `span` is a direct call of a stock history.
+    fn stock_history(&self, file: &FileFacts, span: Span) -> bool {
+        let span = file.ast.peel_ts_sugar_span(span);
+        file.ast
+            .calls
+            .iter()
+            .any(|call| call.span == span && self.calls(file, call, &self.histories))
+    }
 }
 
 /// Collect the `component` values of the object-literal definitions written
@@ -383,7 +548,13 @@ fn router_config_values(
 /// record holding it. A definition counts, with its subtree, only when it has
 /// no getter or method and every key but `component` holds a non-callable
 /// literal or an arrow function (`children` an array literal or an arrow).
-fn definitions(file: &FileFacts, array: Span, depth: u32, values: &mut HashSet<(String, Span)>) {
+fn definitions(
+    file: &FileFacts,
+    locals: &RouterLocals,
+    array: Span,
+    depth: u32,
+    values: &mut HashSet<(String, Span)>,
+) {
     let ast = &*file.ast;
     let Some(literal) = ast
         .array_literal_elements
@@ -400,19 +571,18 @@ fn definitions(file: &FileFacts, array: Span, depth: u32, values: &mut HashSet<(
         if element.kind != solid_facts::ast::ArrayElementKind::Value {
             continue;
         }
-        let Some(own) =
-            this_free_properties(file, peeled(element.span), &|key, property| match key {
-                "component" => Some(true),
-                "children" => Some(
-                    arrow(file, property.value)
-                        || ast
-                            .array_literal_elements
-                            .iter()
-                            .any(|array| array.span == peeled(property.value)),
-                ),
-                _ => None,
-            })
-        else {
+        let definition = locals.definition(file, peeled(element.span));
+        let Some(own) = this_free_properties(file, definition, &|key, property| match key {
+            "component" => Some(true),
+            "children" => Some(
+                arrow(file, property.value)
+                    || ast
+                        .array_literal_elements
+                        .iter()
+                        .any(|array| array.span == peeled(property.value)),
+            ),
+            _ => None,
+        }) else {
             continue;
         };
         for property in own {
@@ -422,7 +592,7 @@ fn definitions(file: &FileFacts, array: Span, depth: u32, values: &mut HashSet<(
                     values.insert((file.path.to_string(), peeled(property.value)));
                 }
                 Some("children") => {
-                    definitions(file, peeled(property.value), depth + 1, values);
+                    definitions(file, locals, peeled(property.value), depth + 1, values);
                 }
                 _ => {}
             }
@@ -469,9 +639,12 @@ fn this_free_properties<'f>(
         .iter()
         .filter(|property| inside(property.span))
         .filter(|property| {
-            !ast.object_properties
-                .iter()
-                .any(|outer| inside(outer.span) && outer.value.contains(property.span))
+            // A shorthand `{ routes }` is its own value: not another's.
+            !ast.object_properties.iter().any(|outer| {
+                outer.span != property.span
+                    && inside(outer.span)
+                    && outer.value.contains(property.span)
+            })
         })
         .collect::<Vec<_>>();
     let safe = own.len() == shape.properties.len()
@@ -686,20 +859,4 @@ fn rendered_or_surface(file: &FileFacts, span: Span) -> bool {
             element.member_object.is_none()
                 && (element.name.span == span || element.closing_name == Some(span))
         })
-}
-
-/// The local names a file gives the router's `createRouter`.
-fn router_creation_locals(file: &FileFacts) -> Vec<Span> {
-    file.ast
-        .imports
-        .iter()
-        .filter(|import| import.module.as_str() == ROUTER_PACKAGE && !import.type_only)
-        .flat_map(|import| &import.bindings)
-        .filter(|binding| {
-            !binding.type_only
-                && binding.kind == ImportKind::Named
-                && binding.imported.as_deref() == Some("createRouter")
-        })
-        .map(|binding| binding.local.span)
-        .collect()
 }

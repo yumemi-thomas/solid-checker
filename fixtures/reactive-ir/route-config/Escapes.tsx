@@ -3,7 +3,8 @@ import { createRouter } from "@solidjs/router";
 
 const [count] = createSignal(0);
 
-// Uncertifiable: definitions held in a constant, not written at `routes`.
+// Uncertifiable: definitions held in a constant that something else also
+// reads (`held.length`), so project code holds the definitions.
 function Held() {
   const value = count();
   return <p>{value}</p>;
@@ -11,6 +12,7 @@ function Held() {
 
 const held = [{ path: "/held", component: Held }];
 export const HeldRouter = createRouter({ routes: held });
+export const heldCount = held.length;
 
 // Uncertifiable: a definition built by a project call, which may call it.
 function Wrapped() {
@@ -96,3 +98,32 @@ export const TransformRouter = createRouter({
     return url;
   },
 });
+
+// Uncertifiable: a constant route table also held by shorthand
+// (`{ shared }`), so project code holds the definitions.
+function Shared() {
+  const value = count();
+  return <p>{value}</p>;
+}
+
+const shared = [{ path: "/shared", component: Shared }];
+export const SharedRouter = createRouter({ routes: shared });
+export const sharedHolder = { shared };
+
+// Uncertifiable: a named function expression can hand itself on by its own
+// name (`invoke = Inline`), so its only visible reference is not its only use.
+let invoke: () => unknown = () => undefined;
+
+export const NamedInlineRouter = createRouter({
+  routes: [
+    {
+      path: "/named-inline",
+      component: function Inline() {
+        invoke = Inline;
+        const value = count();
+        return <p>{value}</p>;
+      },
+    },
+  ],
+});
+export const later = () => invoke();

@@ -6,6 +6,6 @@ Solid runs a function as a component only when `createComponent` calls it (a JSX
 - `Row` passed to `items().map(Row)` and the object method `renderers.badge()` (uncertifiable): both run as plain calls inside tracked JSX; both were false violations, runtime-probed on rc.13 with no `STRICT_READ_UNTRACKED`.
 - `Cell` handed as `<List component={Cell}/>` to a project component that calls it in tracked JSX (uncertifiable): the prop's spelling proves nothing.
 - `Route.tsx`: a route component in an opaque router config. Its body read is uncertifiable; the `For` children callback read inside it stays a violation, since a dialect callback is placed by its primitive.
-- `Stored.tsx` (uncertifiable): stored in an object (`parts.badge()`) and through an alias (`[1].map(chip)`). A nested `Inner` rendered by its tag inside the stored `Shell` is carved out of the region and stays a violation.
+- `Stored.tsx` (uncertifiable): stored in an object (`parts.badge()`), by shorthand (`{ Chip2 }`: a reference of the binding since the Type Facts reference index records shorthand values), and through an alias (`[1].map(chip)`). A nested `Inner` rendered by its tag inside the stored `Shell` is carved out of the region and stays a violation.
 - `Writes.tsx` (uncertifiable): a setter call in `Step`, handed to `map` in an event handler, directly and through an inline `untrack`; the owned-scope role of an undecided component body is not proven (SC2001).
 - `Default.tsx` (uncertifiable): an anonymous `export default` arrow; its importers' uses are not enumerated.

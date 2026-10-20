@@ -44,7 +44,7 @@ const REPLACEMENT_SPELLINGS: [&str; 5] = [
 /// returns a fresh integration whose `utils` the package itself writes
 /// (`routers/history.js:91,131,178`: `go`, `renderPath`, `parsePath`,
 /// `beforeLeave`) and none of which is `paramsWrapper`.
-const STOCK_HISTORIES: [&str; 3] = ["browserHistory", "hashHistory", "memoryHistory"];
+pub(crate) const STOCK_HISTORIES: [&str; 3] = ["browserHistory", "hashHistory", "memoryHistory"];
 
 /// What a namespace import of the router may be used for: hooks that read
 /// the router's state and build nothing the integration reads. Any other

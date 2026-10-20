@@ -67,8 +67,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/route-components/Routes.tsx",
-      "start": 446,
-      "end": 453,
+      "start": 462,
+      "end": 469,
       "fixes": 0
     },
     {
@@ -77,8 +77,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/route-components/Routes.tsx",
-      "start": 520,
-      "end": 527,
+      "start": 536,
+      "end": 543,
       "fixes": 0
     },
     {
@@ -87,8 +87,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/route-components/Routes.tsx",
-      "start": 593,
-      "end": 600,
+      "start": 609,
+      "end": 616,
       "fixes": 0
     },
     {
@@ -97,8 +97,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/route-components/Routes.tsx",
-      "start": 667,
-      "end": 674,
+      "start": 683,
+      "end": 690,
       "fixes": 0
     },
     {
@@ -107,8 +107,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/route-components/Routes.tsx",
-      "start": 1005,
-      "end": 1012,
+      "start": 1021,
+      "end": 1028,
       "fixes": 0
     },
     {
@@ -117,8 +117,28 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/route-components/Routes.tsx",
-      "start": 1172,
-      "end": 1179,
+      "start": 1188,
+      "end": 1195,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/route-components/Routes.tsx",
+      "start": 1519,
+      "end": 1526,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/route-components/Routes.tsx",
+      "start": 1599,
+      "end": 1606,
       "fixes": 0
     }
   ]

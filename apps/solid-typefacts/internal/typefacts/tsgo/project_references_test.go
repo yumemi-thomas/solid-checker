@@ -356,3 +356,45 @@ func TestReferencesDropFileThatLeftProgram(t *testing.T) {
 		t.Fatalf("expected the main.ts reference to remain, got none")
 	}
 }
+
+// A shorthand property `{ makeThing }` reads the value binding: it is a
+// reference of the function, in its own file and through an import.
+func TestShorthandPropertyIsAReferenceOfItsValue(t *testing.T) {
+	dir := t.TempDir()
+	write := writeProject(t, dir)
+	write("tsconfig.json", `{"compilerOptions":{"module":"esnext","moduleResolution":"bundler","target":"esnext"},"include":["*.ts"]}`)
+	aSource := "import { makeThing } from \"./b\";\n\nexport const value = makeThing();\nexport const held = { makeThing };\n"
+	aPath := write("a.ts", aSource)
+	bSource := "export function makeThing(): number {\n  return 1;\n}\nexport const local = { makeThing };\n"
+	bPath := write("b.ts", bSource)
+
+	ctx := context.Background()
+	opened, err := OpenProject(ctx, filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	calls, err := opened.(typefacts.CallDiscoverer).SourceCalls(ctx, aPath)
+	if err != nil || len(calls) != 1 {
+		t.Fatalf("expected one source call in a.ts, got %d (%v)", len(calls), err)
+	}
+	references, err := opened.References(ctx, calls[0].Target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]int{
+		filepath.Clean(aPath): strings.LastIndex(aSource, "makeThing"),
+		filepath.Clean(bPath): strings.LastIndex(bSource, "makeThing"),
+	}
+	for path, start := range want {
+		found := false
+		for _, reference := range references {
+			if filepath.Clean(reference.Path) == path && reference.StartByte == start {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("shorthand at %s:%d is not a reference: %+v", path, start, references)
+		}
+	}
+}

@@ -390,8 +390,18 @@ func (r *referenceIndex) scan(p *project, path string, sourceFile *ast.SourceFil
 	durable := true
 	var visit func(*ast.Node) bool
 	visit = func(node *ast.Node) bool {
-		if ast.IsIdentifier(node) && !ast.IsDeclarationNameOrImportPropertyName(node) {
-			if symbol := p.checker.GetSymbolAtLocation(node); symbol != nil {
+		if ast.IsIdentifier(node) {
+			var symbol *ast.Symbol
+			if !ast.IsDeclarationNameOrImportPropertyName(node) {
+				symbol = p.checker.GetSymbolAtLocation(node)
+			} else if parent := node.Parent; parent != nil && ast.IsShorthandPropertyAssignment(parent) && parent.Name() == node {
+				// `{ value }` names the property it declares and reads the
+				// value binding at once. The name is a declaration name, so
+				// without this the read of `value` is in no reference list,
+				// and a census of its references misses the object holding it.
+				symbol = p.checker.GetShorthandAssignmentValueSymbol(parent)
+			}
+			if symbol != nil {
 				referenceID := p.idFor(symbol)
 				id := p.idFor(p.canonicalSymbol(symbol))
 				if !durableSymbolID(id) || !durableSymbolID(referenceID) {

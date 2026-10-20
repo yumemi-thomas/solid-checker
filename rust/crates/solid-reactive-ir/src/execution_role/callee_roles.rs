@@ -1108,6 +1108,13 @@ pub(super) fn callee_callback_timing_within(
         let Some(literal) = containing_ast_function(&file.ast, span) else {
             return false;
         };
+        // ADR 0334/0335: an audited router renders a function written as its
+        // component value with `createComponent`; it is no callback of the
+        // call it is written in, and its body is a component body.
+        if literal.name.is_none() && lookup.route_component_value(file.path.as_str(), literal.span)
+        {
+            return false;
+        }
         // Calling a generator function runs none of its body: it runs on
         // the returned iterator's `next()`, wherever that is.
         if literal.generator {

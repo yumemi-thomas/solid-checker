@@ -25,9 +25,19 @@ function Shell() {
   return <Inner />;
 }
 
+// Uncertifiable: stored by shorthand (`{ Chip2 }`) and called as a plain
+// function inside tracked JSX. A shorthand reads the binding, so it is one of
+// its references.
+function Chip2() {
+  const value = count();
+  return <b>{value}</b>;
+}
+
+const holder = { Chip2 };
+
 const parts = { badge: Badge, shell: Shell };
 const chip = Chip;
 
 export function Panel() {
-  return <p>{parts.badge()}{[1].map(chip)}{parts.shell()}</p>;
+  return <p>{parts.badge()}{[1].map(chip)}{parts.shell()}{holder.Chip2()}</p>;
 }
