@@ -1,7 +1,7 @@
 //! Conservative identity invalidation for mutable consumer bindings.
+use crate::HashSet;
 use crate::{identity::SymbolId, indexes::EntitySymbols};
 use solid_facts::{FileFacts, ast::IdentifierRole, core::Span};
-use std::collections::HashSet;
 
 fn symbol_at<'a>(
     file: &FileFacts,
@@ -9,10 +9,8 @@ fn symbol_at<'a>(
     span: Span,
 ) -> Option<&'a SymbolId> {
     file.ast
-        .reference_declarations
-        .iter()
-        .find(|(reference, _)| *reference == span)
-        .and_then(|(_, declaration)| entities.at(file.path.as_str(), *declaration))
+        .reference_declaration(span)
+        .and_then(|declaration| entities.at(file.path.as_str(), declaration))
         .or_else(|| entities.at(file.path.as_str(), span))
 }
 
@@ -42,7 +40,7 @@ pub(crate) fn structural_binding_is_stable(
     if shape.kind == "tuple" && tuple_iteration_veto {
         return false;
     }
-    let mut aliases = HashSet::from([root.clone()]);
+    let mut aliases = HashSet::from_iter([root.clone()]);
     loop {
         let before = aliases.len();
         for binding in &file.ast.bindings {
@@ -169,11 +167,12 @@ pub(crate) fn structural_binding_is_stable(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::HashMap;
     use solid_facts::{
         compiler::{COMPILER_FACTS_PROTOCOL, ExecutionMap},
         core::{Generation, SourceHash, SourcePath},
     };
-    use std::{collections::HashMap, sync::Arc};
+    use std::sync::Arc;
 
     #[test]
     fn structural_identity_refuses_alias_writes_deletes_and_escapes() {
@@ -210,7 +209,7 @@ mod tests {
         ] {
             let source = format!("const result = make(); {body}");
             let ast = solid_facts::ast::extract("test.ts", &source).unwrap();
-            let mut symbols = HashMap::new();
+            let mut symbols = HashMap::default();
             for binding in &ast.bindings {
                 for name in &binding.names {
                     symbols.insert(
@@ -221,7 +220,7 @@ mod tests {
             }
             let root = symbols[&(6, 12)].clone();
             let entities = EntitySymbols {
-                by_path: HashMap::from([("test.ts".into(), symbols)]),
+                by_path: HashMap::from_iter([("test.ts".into(), symbols)]),
             };
             let file = FileFacts {
                 generation: Generation::new(1).unwrap(),

@@ -2,7 +2,7 @@
 //! are deliberately not evidence here. This join retains an implementation
 //! or source identity; the interprocedural consumer decides execution.
 
-use std::collections::{HashMap, HashSet};
+use crate::{HashMap, HashSet};
 
 use solid_dialect::ContextRole;
 use solid_facts::{FileFacts, ProjectFacts, ast, core::Span};

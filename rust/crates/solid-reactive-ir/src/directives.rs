@@ -1,14 +1,12 @@
 //! Interprocedural discovery of reactive primitives created during directive
 //! application.
 
-use std::collections::{HashMap, HashSet};
+use crate::{HashMap, HashSet};
 
 use solid_dialect::Dialect;
 use solid_facts::core::Span;
 
-use super::{
-    PrimitiveCreation, PrimitiveName, SemanticLookup, SymbolId, call_primitive_name, location,
-};
+use super::{PrimitiveCreation, PrimitiveName, SemanticLookup, SymbolId, location};
 use crate::owners::containing_ast_function;
 use crate::pipeline::{AnalysisContext, ProgramDraft};
 
@@ -33,7 +31,7 @@ impl<'a, 'c> DirectiveCreationCollector<'a, 'c> {
         Self {
             lookup,
             symbol_names,
-            visiting: HashSet::new(),
+            visiting: HashSet::default(),
             creations,
             seen,
             uncertain,
@@ -71,12 +69,7 @@ impl<'a, 'c> DirectiveCreationCollector<'a, 'c> {
         {
             match returned.value {
                 solid_facts::ast::ReturnValueKind::Function => {
-                    if let Some(returned_function) = file
-                        .ast
-                        .functions
-                        .iter()
-                        .find(|candidate| candidate.span == returned.span)
-                    {
+                    if let Some(returned_function) = file.ast.function_at(returned.span) {
                         self.collect_function(file, returned_function, uncertain);
                     }
                 }
@@ -109,7 +102,8 @@ impl<'a, 'c> DirectiveCreationCollector<'a, 'c> {
             containing_ast_function(&file.ast, call.span)
                 .is_some_and(|owner| owner.span == function.span)
         }) {
-            if let Some(primitive) = call_primitive_name(
+            if let Some(primitive) = crate::call_primitive_name_cached(
+                self.lookup,
                 file,
                 call,
                 self.lookup.entities(),
@@ -340,9 +334,15 @@ fn nested_owner(
                     && file.ast.peel_ts_sugar_span(call.arguments[*index].span) == function
             })
             .find_map(|(call, index)| {
-                let primitive =
-                    call_primitive_name(file, call, ctx.entities, ctx.symbol_names, ctx.dialect)
-                        .and_then(|primitive| primitive.primitive())?;
+                let primitive = crate::call_primitive_name_cached(
+                    ctx.semantic_lookup,
+                    file,
+                    call,
+                    ctx.entities,
+                    ctx.symbol_names,
+                    ctx.dialect,
+                )
+                .and_then(|primitive| primitive.primitive())?;
                 Some((call, index, primitive))
             });
         if let Some((call, index, primitive)) = slot {
@@ -427,18 +427,22 @@ fn nested_owner(
 /// The directive-creation stage: primitives created in directive-apply
 /// positions, from direct calls and from functions returned into them.
 pub(crate) fn discover_directive_creations(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
-    let mut seen_directive_creations = HashSet::new();
+    let mut seen_directive_creations = HashSet::default();
     for file in &ctx.facts.files {
         for call in &file.ast.calls {
             let phase = ref_phase(file, call.callee);
             let owner = nested_owner(ctx, file, call.callee);
             if matches!(phase, RefPhase::Apply | RefPhase::Undecided)
                 && owner != NestedOwner::CreatedRoot
-                && let Some(primitive) =
-                    call_primitive_name(file, call, ctx.entities, ctx.symbol_names, ctx.dialect)
-                        .filter(|primitive| {
-                            creation_registers_work(ctx.dialect, file, call, primitive)
-                        })
+                && let Some(primitive) = crate::call_primitive_name_cached(
+                    ctx.semantic_lookup,
+                    file,
+                    call,
+                    ctx.entities,
+                    ctx.symbol_names,
+                    ctx.dialect,
+                )
+                .filter(|primitive| creation_registers_work(ctx.dialect, file, call, primitive))
             {
                 push_directive_creation(
                     &mut draft.directive_creations,

@@ -54,12 +54,7 @@ impl Resolver<'_, '_> {
             return None;
         }
         let span = file.ast.peel_ts_sugar_span(span);
-        if let Some(choice) = file
-            .ast
-            .conditional_expressions
-            .iter()
-            .find(|c| c.span == span)
-        {
+        if let Some(choice) = file.ast.conditional_at(span) {
             // Both runtime alternatives must close. A missing alternative is
             // not permission to keep only the known package object.
             let mut values = self.closed_dependency_objects(file, choice.consequent, depth - 1)?;
@@ -73,7 +68,7 @@ impl Resolver<'_, '_> {
         if let Some(shape) = file.ast.object_get_shapes.iter().find(|s| s.span == span) {
             return shape.closed.then(|| vec![(file.path.to_string(), span)]);
         }
-        if let Some(member) = file.ast.members.iter().find(|m| m.span == span) {
+        if let Some(member) = file.ast.member_at(span) {
             if file.ast.computed_members.contains(&span) {
                 return None;
             }
@@ -297,7 +292,7 @@ impl Resolver<'_, '_> {
                     &object,
                     self.lookup,
                     32,
-                    &mut HashSet::new(),
+                    &mut HashSet::default(),
                 )
             })
         {
@@ -332,7 +327,7 @@ impl Resolver<'_, '_> {
                     &object,
                     self.lookup,
                     32,
-                    &mut HashSet::new(),
+                    &mut HashSet::default(),
                 )
             })
     }
@@ -348,7 +343,7 @@ impl Resolver<'_, '_> {
     /// is never a proof: its one consumer is an uncertifiable obligation.
     pub fn dependency_getters(&self, file: &FileFacts, span: Span, name: &str) -> Vec<Location> {
         let mut objects = Vec::new();
-        let mut visited = HashSet::new();
+        let mut visited = HashSet::default();
         self.derived_objects(file, span, 24, &mut visited, &mut objects);
         let mut getters = Vec::new();
         for (path, object) in objects {
@@ -384,7 +379,7 @@ impl Resolver<'_, '_> {
     /// Whether the getter function at `getter` calls an exact accessor
     /// directly in its body: the read a Get of it may perform.
     fn getter_reads_accessor(&self, file: &FileFacts, getter: Span) -> bool {
-        let Some(function) = file.ast.functions.iter().find(|f| f.span == getter) else {
+        let Some(function) = file.ast.function_at(getter) else {
             return false;
         };
         file.ast.calls.iter().any(|call| {
@@ -409,12 +404,7 @@ impl Resolver<'_, '_> {
         if depth == 0 || !visited.insert(location(file.path.shared(), span)) {
             return;
         }
-        if let Some(choice) = file
-            .ast
-            .conditional_expressions
-            .iter()
-            .find(|c| c.span == span)
-        {
+        if let Some(choice) = file.ast.conditional_at(span) {
             // May-provenance retains each known alternative even when its
             // sibling cannot supply the complete proof above.
             self.derived_objects(file, choice.consequent, depth - 1, visited, objects);
@@ -440,7 +430,7 @@ impl Resolver<'_, '_> {
             objects.push((file.path.to_string(), span));
             return;
         }
-        if let Some(member) = file.ast.members.iter().find(|m| m.span == span) {
+        if let Some(member) = file.ast.member_at(span) {
             if file.ast.computed_members.contains(&span) {
                 return;
             }
@@ -602,7 +592,8 @@ impl Resolver<'_, '_> {
         if call.construct || !file.ast.straight_line_calls.contains(&call.span) {
             return false;
         }
-        if let Some(primitive) = crate::call_primitive_name(
+        if let Some(primitive) = crate::call_primitive_name_cached(
+            self.lookup,
             file,
             call,
             self.lookup.entities(),

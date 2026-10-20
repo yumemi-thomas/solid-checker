@@ -1,6 +1,6 @@
 //! ADRs 0266/0268: an assumed runtime condition, with positive visible vetoes only.
 
-use std::collections::{HashMap, HashSet};
+use crate::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 use solid_dialect::{Dialect, RuntimeConfigurationApi};
@@ -63,7 +63,7 @@ fn canonical_symbol_declaration(
     package_roots: &[(String, String)],
 ) -> Option<(String, u64, u64)> {
     let mut current = symbol;
-    let mut seen = HashSet::new();
+    let mut seen = HashSet::default();
     loop {
         if !seen.insert(current) {
             return None;
@@ -243,129 +243,264 @@ fn is_dependency_source(facts: &ProjectFacts, file: &solid_facts::FileFacts) -> 
 }
 
 pub(crate) fn scan(facts: &ProjectFacts, dialect: &dyn Dialect) -> RuntimeConfigurationPremise {
-    let roots = package_roots(facts);
-    let mut identities = HashMap::new();
+    scan_retained(facts, dialect, &mut ScanCache::default())
+}
+
+/// Each file's part of [`scan`], retained across generations. A file's answer
+/// is a function of its source, its own Type Facts entities, and the
+/// configuration identity of each symbol its lookups asked about; reuse
+/// checks each of those directly against the current facts rather than
+/// trusting a change set, which may describe a table other than the one this
+/// cache read (a cancelled exchange).
+#[derive(Default)]
+pub(crate) struct ScanCache {
+    basis: Option<ScanBasis>,
+    /// The table the retained answers were read from: a file's entities are
+    /// compared with the ones read there.
+    table: Option<TypeScriptTable>,
+    files: HashMap<String, FileScan>,
+}
+
+#[derive(Eq, PartialEq)]
+struct ScanBasis {
+    dialect: solid_dialect::Version,
+    project_id: String,
+    roots: Vec<(String, String)>,
+    dependency_roots: Vec<String>,
+}
+
+struct FileScan {
+    source_hash: solid_facts::core::SourceHash,
+    /// Each symbol the file's lookups resolved and the identity it had.
+    asked: Vec<(String, Option<RuntimeConfigurationApi>)>,
+    veto: Option<Location>,
+}
+
+/// [`scan`], reusing a file's retained answer only under the same dialect,
+/// project, package roots and dependency-source roots, when the file's
+/// source hash is unchanged, its entities equal the ones read before, and every
+/// symbol it asked about still has the configuration identity it had. The
+/// answer is the first veto in file order, as a full scan's.
+pub(crate) fn scan_retained(
+    facts: &ProjectFacts,
+    dialect: &dyn Dialect,
+    cache: &mut ScanCache,
+) -> RuntimeConfigurationPremise {
+    let basis = ScanBasis {
+        dialect: dialect.version(),
+        project_id: facts.project_id.clone(),
+        roots: package_roots(facts),
+        dependency_roots: facts.dependency_source_roots.clone(),
+    };
+    let previous_table = cache
+        .table
+        .take()
+        .filter(|_| cache.basis.as_ref() == Some(&basis));
+    let mut identities = HashMap::default();
+    let mut files = HashMap::default();
+    let mut premise = RuntimeConfigurationPremise::Assumed;
     for file in facts
         .files
         .iter()
         .filter(|file| !is_dependency_source(facts, file))
     {
-        // Index only entities already supplied by the analysis. A duplicate
-        // exact span is ambiguous; contained entities are never substitutes.
-        let mut symbols = HashMap::new();
-        for entity in facts.typescript.entities_for_path(file.path.as_str()) {
-            let key = (entity.location.start_byte, entity.location.end_byte);
-            let symbol = (!entity.symbol_unresolved && !entity.symbol.is_empty())
-                .then_some(entity.symbol.as_ref());
-            symbols
-                .entry(key)
-                .and_modify(|value| *value = None)
-                .or_insert(symbol);
+        let path = file.path.as_str();
+        let retained = previous_table
+            .as_ref()
+            .and_then(|table| Some((table, cache.files.remove(path)?)))
+            .filter(|(table, previous)| {
+                previous.source_hash == file.source_hash
+                    && same_scanned_entities(
+                        table.entities_for_path(path),
+                        facts.typescript.entities_for_path(path),
+                    )
+                    && previous.asked.iter().all(|(symbol, api)| {
+                        identity(facts, dialect, &basis.roots, &mut identities, symbol).0 == *api
+                    })
+            })
+            .map(|(_, previous)| previous);
+        let scanned = retained.unwrap_or_else(|| {
+            let mut asked = Vec::new();
+            let veto = scan_file(
+                facts,
+                file,
+                dialect,
+                &basis.roots,
+                &mut identities,
+                &mut asked,
+            );
+            asked.sort_unstable_by(|left, right| left.0.cmp(&right.0));
+            asked.dedup_by(|left, right| left.0 == right.0);
+            FileScan {
+                source_hash: file.source_hash.clone(),
+                asked,
+                veto,
+            }
+        });
+        if premise == RuntimeConfigurationPremise::Assumed
+            && let Some(location) = &scanned.veto
+        {
+            premise = RuntimeConfigurationPremise::Vetoed {
+                location: location.clone(),
+            };
         }
-        let mut api_at = |span: Span| {
-            let symbol = symbols
-                .get(&(u64::from(span.start), u64::from(span.end)))
-                .copied()
-                .flatten()?;
-            *identities
-                .entry(symbol)
-                .or_insert_with(|| configuration_api(&facts.typescript, symbol, dialect, &roots))
-        };
-        let member_properties = file
-            .ast
-            .members
-            .iter()
-            .map(|member| (member.span, member.property))
-            .collect::<HashMap<_, _>>();
-        // The existing Oxc binder proves a value use, excluding type-only
-        // imports and value-as-type (`typeof DEV`) queries. No Type Facts
-        // reference list is fetched or required, including for namespaces.
-        for import in &file.ast.imports {
-            if import.type_only {
-                continue;
-            }
-            for binding in &import.bindings {
-                if binding.type_only
-                    || !binding.runtime_referenced
-                    || matches!(binding.kind, ImportKind::Namespace | ImportKind::SideEffect)
-                {
-                    continue;
-                }
-                let veto = match api_at(binding.local.span) {
-                    Some(
-                        RuntimeConfigurationApi::DevelopmentHooks
-                        | RuntimeConfigurationApi::Observation,
-                    ) => !only_truthiness_tests(&file.ast, binding.local.span),
-                    Some(RuntimeConfigurationApi::HydrationHost) => {
-                        !only_harmless_hydration_host_uses(
-                            &file.ast,
-                            &file.source,
-                            binding.local.span,
-                            dialect,
-                        )
-                    }
-                    _ => false,
-                };
-                if veto {
-                    return RuntimeConfigurationPremise::Vetoed {
-                        location: binding.local.span.location(file.path.shared()),
-                    };
-                }
-            }
+        files.insert(path.to_owned(), scanned);
+    }
+    *cache = ScanCache {
+        basis: Some(basis),
+        table: Some(facts.typescript.clone()),
+        files,
+    };
+    premise
+}
+
+/// Whether two entity lists agree on everything [`scan_file`] reads of them:
+/// each entity's exact span, symbol and whether it is unresolved, in order.
+fn same_scanned_entities(left: &[typefacts::EntityFact], right: &[typefacts::EntityFact]) -> bool {
+    std::ptr::eq(left, right)
+        || left.len() == right.len()
+            && left.iter().zip(right).all(|(left, right)| {
+                left.location.start_byte == right.location.start_byte
+                    && left.location.end_byte == right.location.end_byte
+                    && left.symbol_unresolved == right.symbol_unresolved
+                    && left.symbol == right.symbol
+            })
+}
+
+/// The configuration identity of `symbol` in the current table, memoized.
+fn identity<'m>(
+    facts: &ProjectFacts,
+    dialect: &dyn Dialect,
+    roots: &[(String, String)],
+    identities: &'m mut HashMap<String, Option<RuntimeConfigurationApi>>,
+    symbol: &str,
+) -> (
+    Option<RuntimeConfigurationApi>,
+    &'m mut HashMap<String, Option<RuntimeConfigurationApi>>,
+) {
+    if let Some(api) = identities.get(symbol) {
+        return (*api, identities);
+    }
+    let api = configuration_api(&facts.typescript, symbol, dialect, roots);
+    identities.insert(symbol.to_owned(), api);
+    (api, identities)
+}
+
+/// One file's first veto, if any; `asked` receives every symbol resolved and
+/// the identity it had.
+fn scan_file(
+    facts: &ProjectFacts,
+    file: &solid_facts::FileFacts,
+    dialect: &dyn Dialect,
+    roots: &[(String, String)],
+    identities: &mut HashMap<String, Option<RuntimeConfigurationApi>>,
+    asked: &mut Vec<(String, Option<RuntimeConfigurationApi>)>,
+) -> Option<Location> {
+    // Index only entities already supplied by the analysis. A duplicate
+    // exact span is ambiguous; contained entities are never substitutes.
+    let mut symbols = HashMap::default();
+    for entity in facts.typescript.entities_for_path(file.path.as_str()) {
+        let key = (entity.location.start_byte, entity.location.end_byte);
+        let symbol = (!entity.symbol_unresolved && !entity.symbol.is_empty())
+            .then_some(entity.symbol.as_ref());
+        symbols
+            .entry(key)
+            .and_modify(|value| *value = None)
+            .or_insert(symbol);
+    }
+    let mut api_at = |span: Span| {
+        let symbol = symbols
+            .get(&(u64::from(span.start), u64::from(span.end)))
+            .copied()
+            .flatten()?;
+        let (api, _) = identity(facts, dialect, roots, identities, symbol);
+        asked.push((symbol.to_owned(), api));
+        api
+    };
+    let member_properties = file
+        .ast
+        .members
+        .iter()
+        .map(|member| (member.span, member.property))
+        .collect::<HashMap<_, _>>();
+    // The existing Oxc binder proves a value use, excluding type-only
+    // imports and value-as-type (`typeof DEV`) queries. No Type Facts
+    // reference list is fetched or required, including for namespaces.
+    for import in &file.ast.imports {
+        if import.type_only {
+            continue;
         }
-        // Includes exact namespace members, TS wrappers, and first references
-        // before aliasing/destructuring/escape; unrelated members do not veto.
-        for export in &file.ast.exports {
-            if export.type_only {
-                continue;
-            }
-            for specifier in &export.specifiers {
-                if !specifier.type_only
-                    && api_at(specifier.local.span) == Some(RuntimeConfigurationApi::HydrationHost)
-                {
-                    return RuntimeConfigurationPremise::Vetoed {
-                        location: specifier.local.span.location(file.path.shared()),
-                    };
-                }
-            }
-        }
-        for member in &file.ast.members {
-            if runtime_span(&file.ast, member.span)
-                && match api_at(member.property) {
-                    Some(
-                        RuntimeConfigurationApi::DevelopmentHooks
-                        | RuntimeConfigurationApi::Observation,
-                    ) => true,
-                    Some(RuntimeConfigurationApi::HydrationHost) => {
-                        !harmless_hydration_host_use(&file.ast, &file.source, member.span, dialect)
-                    }
-                    _ => false,
-                }
+        for binding in &import.bindings {
+            if binding.type_only
+                || !binding.runtime_referenced
+                || matches!(binding.kind, ImportKind::Namespace | ImportKind::SideEffect)
             {
-                return RuntimeConfigurationPremise::Vetoed {
-                    location: member.span.location(file.path.shared()),
-                };
-            }
-        }
-        // Merely importing or reading enableExternalSource is not a call.
-        for call in &file.ast.calls {
-            if call.construct || !runtime_span(&file.ast, call.span) {
                 continue;
             }
-            let callee = file.ast.peel_ts_sugar_span(call.callee);
-            let property = member_properties.get(&callee).copied();
-            if api_at(call.callee)
-                .or_else(|| api_at(callee))
-                .or_else(|| property.and_then(&mut api_at))
-                == Some(RuntimeConfigurationApi::ExternalSource)
-            {
-                return RuntimeConfigurationPremise::Vetoed {
-                    location: call.span.location(file.path.shared()),
-                };
+            let veto = match api_at(binding.local.span) {
+                Some(
+                    RuntimeConfigurationApi::DevelopmentHooks
+                    | RuntimeConfigurationApi::Observation,
+                ) => !only_truthiness_tests(&file.ast, binding.local.span),
+                Some(RuntimeConfigurationApi::HydrationHost) => !only_harmless_hydration_host_uses(
+                    &file.ast,
+                    &file.source,
+                    binding.local.span,
+                    dialect,
+                ),
+                _ => false,
+            };
+            if veto {
+                return Some(binding.local.span.location(file.path.shared()));
             }
         }
     }
-    RuntimeConfigurationPremise::Assumed
+    // Includes exact namespace members, TS wrappers, and first references
+    // before aliasing/destructuring/escape; unrelated members do not veto.
+    for export in &file.ast.exports {
+        if export.type_only {
+            continue;
+        }
+        for specifier in &export.specifiers {
+            if !specifier.type_only
+                && api_at(specifier.local.span) == Some(RuntimeConfigurationApi::HydrationHost)
+            {
+                return Some(specifier.local.span.location(file.path.shared()));
+            }
+        }
+    }
+    for member in &file.ast.members {
+        if runtime_span(&file.ast, member.span)
+            && match api_at(member.property) {
+                Some(
+                    RuntimeConfigurationApi::DevelopmentHooks
+                    | RuntimeConfigurationApi::Observation,
+                ) => true,
+                Some(RuntimeConfigurationApi::HydrationHost) => {
+                    !harmless_hydration_host_use(&file.ast, &file.source, member.span, dialect)
+                }
+                _ => false,
+            }
+        {
+            return Some(member.span.location(file.path.shared()));
+        }
+    }
+    // Merely importing or reading enableExternalSource is not a call.
+    for call in &file.ast.calls {
+        if call.construct || !runtime_span(&file.ast, call.span) {
+            continue;
+        }
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        let property = member_properties.get(&callee).copied();
+        if api_at(call.callee)
+            .or_else(|| api_at(callee))
+            .or_else(|| property.and_then(&mut api_at))
+            == Some(RuntimeConfigurationApi::ExternalSource)
+        {
+            return Some(call.span.location(file.path.shared()));
+        }
+    }
+    None
 }
 
 #[cfg(test)]

@@ -185,7 +185,7 @@ pub(crate) fn returned_primitive_invocation(
 ) -> Option<(Primitive, Option<usize>)> {
     let mut reference_path = file.path.as_str();
     let mut reference_span = call.callee;
-    let mut seen = HashSet::new();
+    let mut seen = HashSet::default();
     loop {
         // Callee result values do not always receive an entity fact of their
         // own (tuple slots are the motivating case). Resolve them from the

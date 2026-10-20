@@ -170,8 +170,8 @@ fn merge_file_source_contributions(
         semantic_lookup,
         ..
     } = *ctx;
-    let mut retained_source_paths = HashSet::<String>::new();
-    let mut changed_source_symbols = HashSet::<SymbolId>::new();
+    let mut retained_source_paths = HashSet::<String>::default();
+    let mut changed_source_symbols = HashSet::<SymbolId>::default();
     match source_discovery_cache {
         None => {
             let contributions = parallel_file_results(&facts.files, |file| {
@@ -689,16 +689,22 @@ fn discover_effect_store_parameters(ctx: &StageContext<'_>, tables: &mut SourceT
     } = tables;
     for file in &facts.files {
         for call in &file.ast.calls {
-            if !call_primitive_name(file, call, entities, symbol_names, semantic_lookup.dialect)
-                .as_ref()
-                .and_then(PrimitiveName::primitive)
-                .is_some_and(|primitive| {
-                    matches!(
-                        primitive,
-                        Primitive::CreateEffect | Primitive::CreateRenderEffect
-                    )
-                })
-            {
+            if !crate::call_primitive_name_cached(
+                semantic_lookup,
+                file,
+                call,
+                entities,
+                symbol_names,
+                semantic_lookup.dialect,
+            )
+            .as_ref()
+            .and_then(PrimitiveName::primitive)
+            .is_some_and(|primitive| {
+                matches!(
+                    primitive,
+                    Primitive::CreateEffect | Primitive::CreateRenderEffect
+                )
+            }) {
                 continue;
             }
             let Some(compute) = call.arguments.first().and_then(|argument| {

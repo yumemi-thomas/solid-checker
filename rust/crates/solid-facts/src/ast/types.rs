@@ -1463,6 +1463,50 @@ pub enum ReturnValueKind {
 }
 
 impl AstFacts {
+    /// The first element of `facts` (sorted by span, as extraction leaves
+    /// every list below) whose span is exactly `span`: what a linear
+    /// `iter().find(|fact| fact.span == span)` returns, by binary search.
+    fn at_span<T>(facts: &[T], span: Span, of: impl Fn(&T) -> Span) -> Option<&T> {
+        let index = facts.partition_point(|fact| of(fact) < span);
+        facts.get(index).filter(|fact| of(fact) == span)
+    }
+
+    /// The member expression at exactly `span`.
+    #[must_use]
+    pub fn member_at(&self, span: Span) -> Option<&MemberFact> {
+        Self::at_span(&self.members, span, |fact| fact.span)
+    }
+
+    /// The conditional expression at exactly `span`.
+    #[must_use]
+    pub fn conditional_at(&self, span: Span) -> Option<&ConditionalExpressionFact> {
+        Self::at_span(&self.conditional_expressions, span, |fact| fact.span)
+    }
+
+    /// The logical expression at exactly `span`.
+    #[must_use]
+    pub fn logical_at(&self, span: Span) -> Option<&LogicalExpressionFact> {
+        Self::at_span(&self.logical_expressions, span, |fact| fact.span)
+    }
+
+    /// The function at exactly `span`.
+    #[must_use]
+    pub fn function_at(&self, span: Span) -> Option<&FunctionFact> {
+        Self::at_span(&self.functions, span, |fact| fact.span)
+    }
+
+    /// The JSX element at exactly `span`.
+    #[must_use]
+    pub fn jsx_element_at(&self, span: Span) -> Option<&JsxElementFact> {
+        Self::at_span(&self.jsx_elements, span, |fact| fact.span)
+    }
+
+    /// The array literal (with its elements) at exactly `span`.
+    #[must_use]
+    pub fn array_literal_at(&self, span: Span) -> Option<&ArrayLiteralFact> {
+        Self::at_span(&self.array_literal_elements, span, |fact| fact.span)
+    }
+
     /// The declaration the binder resolved the reference at `span` to.
     ///
     /// `None` when `span` is not an identifier reference, or when the binder

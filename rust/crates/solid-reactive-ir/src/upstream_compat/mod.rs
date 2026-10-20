@@ -27,7 +27,7 @@ mod shared_reactivity;
 mod structure;
 mod syntax;
 
-use std::collections::{HashMap, HashSet};
+use crate::{HashMap, HashSet};
 
 use crate::cache::SourceReferenceLocations;
 use crate::indexes::SemanticLookup;
@@ -56,7 +56,7 @@ pub(super) struct ReactiveReadIndex {
 
 impl ReactiveReadIndex {
     fn new(reads: &[crate::ReactiveRead]) -> Self {
-        let mut by_path = HashMap::<String, Vec<IndexedReactiveRead>>::new();
+        let mut by_path = HashMap::<String, Vec<IndexedReactiveRead>>::default();
         for read in reads {
             let (Ok(start), Ok(end)) = (
                 u32::try_from(read.location.start_byte),
@@ -180,14 +180,9 @@ pub(super) fn source_symbol_at<'a>(
 
 /// The object a member chain is rooted at: `store.a.b` -> `store`.
 pub(super) fn member_root(file: &FileFacts, span: Span) -> Option<Span> {
-    let mut current = file.ast.members.iter().find(|member| member.span == span)?;
+    let mut current = file.ast.member_at(span)?;
     loop {
-        match file
-            .ast
-            .members
-            .iter()
-            .find(|member| member.span == current.object)
-        {
+        match file.ast.member_at(current.object) {
             Some(outer) => current = outer,
             None => return Some(current.object),
         }
@@ -409,7 +404,7 @@ pub(super) fn static_string_expression(
     file: &FileFacts,
     span: Span,
 ) -> Option<String> {
-    static_string_expression_inner(context, file, span, &mut HashSet::new())
+    static_string_expression_inner(context, file, span, &mut HashSet::default())
 }
 
 fn static_string_expression_inner(

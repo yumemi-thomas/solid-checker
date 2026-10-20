@@ -5,10 +5,8 @@
 //! These are the "static API" inputs the reactive pipeline queries; the module
 //! owns both the full build and the incremental patch.
 
-use std::{
-    collections::{HashMap, HashSet},
-    time::{Duration, Instant},
-};
+use crate::{HashMap, HashSet};
+use std::time::{Duration, Instant};
 
 use solid_dialect::Dialect;
 use solid_facts::{ProjectFacts, TypeScriptSymbol, TypeScriptTable};
@@ -102,15 +100,15 @@ fn undeclared(facts: &ProjectFacts, symbol: &SymbolId) -> bool {
 pub(super) fn alias_roots_and_source_declarations(
     table: &TypeScriptTable,
     interner: &SymbolInterner,
-    runtime_redirects: &HashMap<String, String>,
+    runtime_redirects: &std::collections::HashMap<String, String>,
 ) -> (HashMap<SymbolId, SymbolId>, HashMap<SymbolId, Declaration>) {
     let targets = symbol_alias_targets(table, interner);
     // Preserve the ordinary-analysis path byte for byte. Runtime redirects are
     // generation-only facts; an empty map must not perturb declaration
     // selection or alias-root ordering for every other project.
     if runtime_redirects.is_empty() {
-        let mut roots = HashMap::new();
-        let mut declarations = HashMap::new();
+        let mut roots = HashMap::default();
+        let mut declarations = HashMap::default();
         for symbol in table.symbols() {
             let mut root = interner.intern(symbol.id());
             for _ in 0..=targets.len() {
@@ -131,7 +129,7 @@ pub(super) fn alias_roots_and_source_declarations(
         }
         return (roots, declarations);
     }
-    let mut roots = HashMap::new();
+    let mut roots = HashMap::default();
     for symbol in table.symbols() {
         let mut root = interner.intern(symbol.id());
         for _ in 0..=targets.len() {
@@ -165,7 +163,7 @@ pub(super) fn alias_roots_and_source_declarations(
             break;
         }
     }
-    let mut declarations = HashMap::new();
+    let mut declarations = HashMap::default();
     for symbol in table.symbols() {
         let root = roots
             .get(symbol.id())
@@ -219,7 +217,7 @@ pub(super) fn symbols_by_root(
     aliases: &HashMap<SymbolId, SymbolId>,
     interner: &SymbolInterner,
 ) -> HashMap<SymbolId, Vec<SymbolId>> {
-    let mut by_root = HashMap::<SymbolId, Vec<SymbolId>>::new();
+    let mut by_root = HashMap::<SymbolId, Vec<SymbolId>>::default();
     for symbol in table.symbols() {
         let root = aliases
             .get(symbol.id())
@@ -498,7 +496,7 @@ impl<'a> AsyncSymbolRoots<'a> {
         'a: 's,
     {
         let mut current = symbol;
-        let mut seen = HashSet::new();
+        let mut seen = HashSet::default();
         while seen.insert(current) {
             let Some(target) = self.aliases.get(current).copied() else {
                 break;
@@ -514,7 +512,7 @@ pub(super) fn entity_symbols(
     roots: &HashMap<SymbolId, SymbolId>,
     interner: &SymbolInterner,
 ) -> EntitySymbols {
-    let mut by_path = HashMap::<String, HashMap<(u64, u64), SymbolId>>::new();
+    let mut by_path = HashMap::<String, HashMap<(u64, u64), SymbolId>>::default();
     for entity in table.entities().filter(|entity| !entity.symbol.is_empty()) {
         by_path
             .entry(entity.location.path.to_string())
@@ -536,7 +534,7 @@ pub(super) fn symbol_names(
     interner: &SymbolInterner,
     dialect: &dyn Dialect,
 ) -> HashMap<SymbolId, SymbolName> {
-    let mut names = HashMap::new();
+    let mut names = HashMap::default();
     for symbol in table.symbols() {
         let root = roots
             .get(symbol.id())
@@ -556,7 +554,7 @@ pub(super) fn references_for_sources<'a>(
     symbols_by_root: &HashMap<SymbolId, Vec<SymbolId>>,
     sources: impl Iterator<Item = &'a SymbolId>,
 ) -> HashMap<SymbolId, Vec<Location>> {
-    let mut references = HashMap::<SymbolId, Vec<Location>>::new();
+    let mut references = HashMap::<SymbolId, Vec<Location>>::default();
     for root in sources {
         let locations = references.entry(root.clone()).or_default();
         if let Some(members) = symbols_by_root.get(root.as_str()) {
@@ -591,11 +589,11 @@ pub(super) fn source_reference_locations<'a>(
     symbols_by_root: &HashMap<SymbolId, Vec<SymbolId>>,
     sources: impl Iterator<Item = &'a SymbolId>,
 ) -> SourceReferenceLocations {
-    let mut index = SourceReferenceLocations::new();
+    let mut index = SourceReferenceLocations::default();
     let mut record = |root: &SymbolId, reference: &Location| {
         let path = reference.path.as_ref();
         if !index.contains_key(path) {
-            index.insert(path.to_owned(), HashMap::new());
+            index.insert(path.to_owned(), HashMap::default());
         }
         index
             .get_mut(path)

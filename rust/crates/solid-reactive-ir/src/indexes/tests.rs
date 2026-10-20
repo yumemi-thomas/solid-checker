@@ -52,14 +52,14 @@ fn project(source: &str) -> ProjectFacts {
         typescript_changes: None,
         resolved_imports: None,
         runtime_resolutions: None,
-        runtime_symbol_redirects: HashMap::new(),
+        runtime_symbol_redirects: std::collections::HashMap::default(),
         dependency_source_roots: Vec::new(),
     }
 }
 
 fn entity_symbols(spans: &[(Span, &str)]) -> EntitySymbols {
     EntitySymbols {
-        by_path: HashMap::from([(
+        by_path: HashMap::from_iter([(
             PATH.to_string(),
             spans
                 .iter()
@@ -82,8 +82,8 @@ fn with_lookup<T>(
 ) -> T {
     let facts = project(source);
     let entities = entity_symbols(spans);
-    let ast_indexes = HashMap::new();
-    let symbol_names = HashMap::new();
+    let ast_indexes = HashMap::default();
+    let symbol_names = HashMap::default();
     let dialect = solid_dialect::Solid2;
     let lookup = SemanticLookup::new(
         &facts,
@@ -463,9 +463,9 @@ fn only_an_identifier_binding_inherits_its_initializer_identity() {
     ];
     let (aliased, destructured) = with_lookup(source, &entities, |lookup| {
         let file = &lookup.facts.files[0];
-        let mut visited = HashSet::new();
+        let mut visited = HashSet::default();
         let aliased = lookup.direct_value_symbols(file, span_of(source, "alias", 1), &mut visited);
-        let mut visited = HashSet::new();
+        let mut visited = HashSet::default();
         let destructured =
             lookup.direct_value_symbols(file, span_of(source, "href", 1), &mut visited);
         (aliased, destructured)
@@ -519,7 +519,7 @@ fn member_callee_path(
         .map(|file| (file.path.clone(), CachedAstFileIndex::new(file)))
         .collect::<HashMap<_, _>>();
     let entities = entity_symbols(spans);
-    let symbol_names = HashMap::new();
+    let symbol_names = HashMap::default();
     let dialect = solid_dialect::Solid2;
     let lookup = SemanticLookup::new(
         &facts,

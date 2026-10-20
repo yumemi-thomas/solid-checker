@@ -193,7 +193,7 @@ pub(super) fn push_unaccounted_parameter_escapes(
     if owners.is_empty() {
         return;
     }
-    let mut retained = HashSet::new();
+    let mut retained = HashSet::default();
     for property in file
         .ast
         .object_properties
@@ -265,7 +265,7 @@ pub(super) fn push_unaccounted_parameter_escapes(
             retained.insert(member.object);
         }
     }
-    let mut seen = HashSet::new();
+    let mut seen = HashSet::default();
     for identifier in &file.ast.identifiers {
         if identifier.role != solid_facts::ast::IdentifierRole::Reference
             || !retained.contains(&identifier.span)
@@ -314,12 +314,7 @@ pub(super) fn member_root_is_parameter(
 ) -> bool {
     let mut current = target;
     for _ in 0..32 {
-        let Some(member) = file
-            .ast
-            .members
-            .iter()
-            .find(|member| member.span == current)
-        else {
+        let Some(member) = file.ast.member_at(current) else {
             break;
         };
         current = member.object;
@@ -354,14 +349,9 @@ pub(super) fn parameter_declaration_owners(
     nodes_by_path: &HashMap<String, Vec<usize>>,
     entities: &EntitySymbols,
 ) -> HashMap<Span, (usize, usize)> {
-    let mut owners = HashMap::new();
+    let mut owners = HashMap::default();
     for (index, node) in functions_for_path(nodes, nodes_by_path, file.path.as_str()) {
-        let Some(function) = file
-            .ast
-            .functions
-            .iter()
-            .find(|function| function.span == node.span)
-        else {
+        let Some(function) = file.ast.function_at(node.span) else {
             continue;
         };
         let spans = function
@@ -502,7 +492,7 @@ pub(super) fn direct_protocol_parameters(
     // function a summary node names. Everything below is keyed by the
     // declaration span, so each table is walked once per file however many
     // functions it holds.
-    let mut parameters = HashMap::<Span, (Span, usize, Span)>::new();
+    let mut parameters = HashMap::<Span, (Span, usize, Span)>::default();
     for node in indices.iter().map(|index| &nodes[*index]) {
         let Some(function) = functions_by_body.get(&node.body) else {
             continue;

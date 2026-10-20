@@ -13,18 +13,15 @@
 //! not expressible as a type. The ledger entry and the `tsc` evidence are in
 //! `fixtures/tsc-oracle/README.md`.
 
+use crate::{HashMap, HashSet};
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
 
 use solid_dialect::{CleanupRule, Primitive};
 use solid_facts::FileFacts;
 use solid_facts::core::Span;
 use typefacts::{ResolvedCallValidity, RuntimeValueDomain};
 
-use super::{
-    Fix, LeafOwnerOperation, PrimitiveName, SemanticLookup, SymbolId, TextEdit,
-    call_primitive_name, location,
-};
+use super::{Fix, LeafOwnerOperation, PrimitiveName, SemanticLookup, SymbolId, TextEdit, location};
 use crate::execution_role::direct_callback_contains;
 use crate::owners::{callback_owner_at_call, containing_ast_function};
 use crate::pipeline::{AnalysisContext, ProgramDraft, parallel_file_results};
@@ -105,7 +102,14 @@ pub(super) fn leaf_owner_operations_for_file(
         if crate::execution_role::discarded_region_contains(file, owner_call.span) {
             continue;
         }
-        let owner = call_primitive_name(file, owner_call, entities, symbol_names, dialect);
+        let owner = crate::call_primitive_name_cached(
+            lookup,
+            file,
+            owner_call,
+            entities,
+            symbol_names,
+            dialect,
+        );
         let Some(owner) = owner.as_ref() else {
             continue;
         };
@@ -244,8 +248,14 @@ pub(super) fn leaf_owner_operations_for_file(
             if !direct_callback_contains(callback_file, leaf_callback.span, call.span) {
                 continue;
             }
-            let primitive =
-                call_primitive_name(callback_file, call, entities, symbol_names, dialect);
+            let primitive = crate::call_primitive_name_cached(
+                lookup,
+                callback_file,
+                call,
+                entities,
+                symbol_names,
+                dialect,
+            );
             let Some(primitive) = primitive else {
                 // Not a primitive: an exactly-resolved in-project helper
                 // called here runs its synchronous extent in this leaf
@@ -387,9 +397,7 @@ fn callback_argument_function<'a>(
     match returned.value {
         solid_facts::ast::ReturnValueKind::Function => factory_file
             .ast
-            .functions
-            .iter()
-            .find(|function| function.span == returned_value)
+            .function_at(returned_value)
             .map(|function| (factory_file, function)),
         solid_facts::ast::ReturnValueKind::Identifier => {
             let returned_symbol = lookup
@@ -635,11 +643,7 @@ fn exact_instance_method<'a>(
         return None;
     }
     let callee = file.ast.peel_ts_sugar_span(call.callee);
-    let member = file
-        .ast
-        .members
-        .iter()
-        .find(|member| member.span == callee)?;
+    let member = file.ast.member_at(callee)?;
     let name = file.source_text(member.property)?;
     let receiver = file.ast.peel_ts_sugar_span(member.object);
     let through_this = file.source_text(receiver) == Some("this");
@@ -746,13 +750,10 @@ fn helper_forbidden_operations(
         .get(&location(call_file.path.shared(), call.callee))
     {
         Some(target @ crate::interproc::accessor_provenance::Callable::Function { path, span }) => {
-            let Some((helper_file, helper)) = lookup.file_by_path(path).and_then(|file| {
-                file.ast
-                    .functions
-                    .iter()
-                    .find(|function| function.span == *span)
-                    .map(|function| (file, function))
-            }) else {
+            let Some((helper_file, helper)) = lookup
+                .file_by_path(path)
+                .and_then(|file| file.ast.function_at(*span).map(|function| (file, function)))
+            else {
                 return false;
             };
             let values = crate::argument_values::parameter_values_for_transported_call(
@@ -966,22 +967,17 @@ fn member_call_operations(
             | "NewableFunction.apply"
     );
     if invokes_receiver {
-        complete &= file
-            .ast
-            .members
-            .iter()
-            .find(|member| member.span == callee)
-            .is_some_and(|member| {
-                argument_body_operations(
-                    resolution,
-                    file,
-                    member.object,
-                    kinds,
-                    visited,
-                    depth,
-                    guaranteed,
-                )
-            });
+        complete &= file.ast.member_at(callee).is_some_and(|member| {
+            argument_body_operations(
+                resolution,
+                file,
+                member.object,
+                kinds,
+                visited,
+                depth,
+                guaranteed,
+            )
+        });
     }
     complete
 }
@@ -1391,8 +1387,15 @@ fn function_forbidden_operations(
     for inner in parameter_calls {
         let mut possible = Vec::new();
         let mut scratch = visited.clone();
-        complete &= call_primitive_name(helper_file, inner, entities, symbol_names, dialect)
-            .is_none()
+        complete &= crate::call_primitive_name_cached(
+            lookup,
+            helper_file,
+            inner,
+            entities,
+            symbol_names,
+            dialect,
+        )
+        .is_none()
             && helper_forbidden_operations(
                 resolution,
                 helper_file,
@@ -1479,7 +1482,14 @@ fn function_forbidden_operations(
             Some(solid_facts::ast::SiteStanding::Possible) => false,
             None => reached_on_every_call(resolution, helper_file, helper, inner.span, entry),
         };
-        let primitive = call_primitive_name(helper_file, inner, entities, symbol_names, dialect);
+        let primitive = crate::call_primitive_name_cached(
+            lookup,
+            helper_file,
+            inner,
+            entities,
+            symbol_names,
+            dialect,
+        );
         let Some(primitive) = primitive else {
             complete &= helper_forbidden_operations(
                 resolution,

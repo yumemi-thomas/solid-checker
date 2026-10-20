@@ -29,7 +29,7 @@ pub(crate) fn find_missing_owners(
     let mut contexts = seed_contexts(&nodes);
     let mut edges = Vec::<(usize, usize, OwnerEdgeKind)>::new();
     let mut requirements = Vec::new();
-    let mut seen = HashSet::new();
+    let mut seen = HashSet::default();
     for (file_index, file) in facts.files.iter().enumerate() {
         for (call_index, call) in file.ast.calls.iter().enumerate() {
             let owner =
@@ -117,7 +117,7 @@ pub(crate) fn find_missing_owners(
     propagate_owner_contexts(&mut contexts, &outgoing);
 
     let continuations = AwaitContinuations::new(facts, lookup);
-    let mut settled_gates = SettledGateDecisions::new();
+    let mut settled_gates = SettledGateDecisions::default();
     for (file_index, file) in facts.files.iter().enumerate() {
         let file_nodes = nodes_by_path
             .get(file.path.as_str())
@@ -228,11 +228,7 @@ pub(crate) fn find_missing_owners(
                                 .files
                                 .iter()
                                 .find(|candidate| candidate.path.as_str() == node.path)?;
-                            let callback = callback_file
-                                .ast
-                                .functions
-                                .iter()
-                                .find(|candidate| candidate.span == node.span)?;
+                            let callback = callback_file.ast.function_at(node.span)?;
                             Some(function_cleanup_return_proof(
                                 lookup,
                                 callback_file,
@@ -330,8 +326,14 @@ pub(crate) fn find_missing_owners(
             }
         }
         for element in &file.ast.jsx_elements {
-            let boundary =
-                jsx_primitive_name(file, element, entities, symbol_names, lookup.dialect);
+            let boundary = crate::jsx_primitive_name_cached(
+                lookup,
+                file,
+                element,
+                entities,
+                symbol_names,
+                lookup.dialect,
+            );
             if !boundary
                 .as_deref()
                 .is_some_and(|tag| lookup.dialect.is_async_boundary(tag))
@@ -412,9 +414,7 @@ pub(super) fn call_edge_symbol<'e>(
     let callee = file.ast.peel_ts_sugar_span(call.callee);
     let receiver = file
         .ast
-        .members
-        .iter()
-        .find(|member| member.span == callee)
+        .member_at(callee)
         .map(|member| file.ast.peel_ts_sugar_span(member.object));
     if receiver
         .is_some_and(|object| entities.get(&location(file.path.shared(), object)) == Some(symbol))
@@ -551,7 +551,7 @@ pub(crate) fn attribute_dependency_requirements(
         // Per package function on a path to the operation: the sites in it
         // that lead there, whether one of them is on the function's
         // every-completion path, and whether every hop below it is.
-        let mut best = HashMap::<usize, (Vec<Span>, bool, bool)>::new();
+        let mut best = HashMap::<usize, (Vec<Span>, bool, bool)>::default();
         best.insert(
             owner,
             (
@@ -623,12 +623,7 @@ pub(crate) fn attribute_dependency_requirements(
             let Some(node_file) = lookup.file_by_path(&nodes[node].path) else {
                 continue;
             };
-            let Some(node_function) = node_file
-                .ast
-                .functions
-                .iter()
-                .find(|function| function.span == nodes[node].span)
-            else {
+            let Some(node_function) = node_file.ast.function_at(nodes[node].span) else {
                 continue;
             };
             for &(caller, kind) in &incoming[node] {
@@ -717,12 +712,7 @@ pub(crate) fn attribute_dependency_requirements(
             let Some(node_file) = lookup.file_by_path(&nodes[node].path) else {
                 continue;
             };
-            let Some(node_function) = node_file
-                .ast
-                .functions
-                .iter()
-                .find(|function| function.span == nodes[node].span)
-            else {
+            let Some(node_function) = node_file.ast.function_at(nodes[node].span) else {
                 continue;
             };
             for file in &facts.files {
@@ -782,12 +772,7 @@ pub(super) fn frontier_call_completes(
     function_span: Span,
     site: Span,
 ) -> bool {
-    let Some(function) = file
-        .ast
-        .functions
-        .iter()
-        .find(|function| function.span == function_span)
-    else {
+    let Some(function) = file.ast.function_at(function_span) else {
         return false;
     };
     let inside = |span: Span| function.body.contains(span) && span.contains(site);

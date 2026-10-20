@@ -174,7 +174,14 @@ pub(crate) fn discover_owner_file(
         }
     }
     for element in &file.ast.jsx_elements {
-        let boundary = jsx_primitive_name(file, element, entities, symbol_names, dialect);
+        let boundary = crate::jsx_primitive_name_cached(
+            lookup,
+            file,
+            element,
+            entities,
+            symbol_names,
+            dialect,
+        );
         if boundary
             .as_deref()
             .is_some_and(|tag| dialect.is_async_boundary(tag))
@@ -274,7 +281,7 @@ pub(crate) fn find_missing_owners_incremental(
             nodes.extend(fragment.nodes.iter().cloned());
         }
     }
-    let mut nodes_by_span = HashMap::<String, HashMap<Span, usize>>::new();
+    let mut nodes_by_span = HashMap::<String, HashMap<Span, usize>>::default();
     for (index, node) in nodes.iter().enumerate() {
         nodes_by_span
             .entry(node.path.clone())
@@ -322,8 +329,8 @@ pub(crate) fn find_missing_owners_incremental(
     let requirements_started = Instant::now();
     let mut requirements = Vec::new();
     let continuations = AwaitContinuations::new(facts, lookup);
-    let mut settled_gates = SettledGateDecisions::new();
-    let mut seen = HashSet::new();
+    let mut settled_gates = SettledGateDecisions::default();
+    let mut seen = HashSet::default();
     for file in &facts.files {
         let Some(fragment) = cache.get(file.path.as_str()) else {
             continue;
@@ -377,11 +384,7 @@ pub(crate) fn find_missing_owners_incremental(
                     .and_then(|index| {
                         let node = &nodes[index];
                         let callback_file = indexes.files_by_path.get(node.path.as_str())?;
-                        let callback = callback_file
-                            .ast
-                            .functions
-                            .iter()
-                            .find(|function| function.span == node.span)?;
+                        let callback = callback_file.ast.function_at(node.span)?;
                         Some(function_cleanup_return_proof(
                             lookup,
                             callback_file,
@@ -441,11 +444,7 @@ pub(crate) fn find_missing_owners_incremental(
                     .and_then(|index| {
                         let node = &nodes[index];
                         let callback_file = indexes.files_by_path.get(node.path.as_str())?;
-                        let callback = callback_file
-                            .ast
-                            .functions
-                            .iter()
-                            .find(|function| function.span == node.span)?;
+                        let callback = callback_file.ast.function_at(node.span)?;
                         Some(function_cleanup_return_proof(
                             lookup,
                             callback_file,

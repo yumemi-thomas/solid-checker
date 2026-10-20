@@ -111,7 +111,7 @@ pub(super) fn mutation_target_projected(
                 )
             });
     }
-    if let Some(logical) = file.ast.logical_expressions.iter().find(|e| e.span == span) {
+    if let Some(logical) = file.ast.logical_at(span) {
         return mutation_target_projected(
             file,
             logical.left,
@@ -130,12 +130,7 @@ pub(super) fn mutation_target_projected(
             visited,
         );
     }
-    if let Some(choice) = file
-        .ast
-        .conditional_expressions
-        .iter()
-        .find(|e| e.span == span)
-    {
+    if let Some(choice) = file.ast.conditional_at(span) {
         return mutation_target_projected(
             file,
             choice.consequent,
@@ -154,7 +149,7 @@ pub(super) fn mutation_target_projected(
             visited,
         );
     }
-    if let Some(member) = file.ast.members.iter().find(|m| m.span == span) {
+    if let Some(member) = file.ast.member_at(span) {
         let key = if file.ast.computed_members.contains(&span) {
             file.ast
                 .literal_computed_members
@@ -724,7 +719,7 @@ pub(super) fn slot_arrow(
             Some(declaration),
         )
     };
-    let function = file.ast.functions.iter().find(|f| f.span == arrow)?;
+    let function = file.ast.function_at(arrow)?;
     (function.kind == ast::FunctionKind::Arrow && !function.r#async && !function.generator)
         .then_some((arrow, declaration))
 }
@@ -904,15 +899,13 @@ pub(crate) fn closed_properties(
                 })
         })
         .collect::<Vec<_>>();
-    let mut names = HashSet::new();
+    let mut names = HashSet::default();
     for property in &properties {
         let name = file.source_text(property.key)?.trim_matches(['\'', '"']);
         let inert_method = property.method
             && file
                 .ast
-                .functions
-                .iter()
-                .find(|function| function.span == property.value)
+                .function_at(property.value)
                 .is_some_and(|function| crate::object_members::receiver_inert(file, function));
         if property.computed
             || !(property.data || inert_method)

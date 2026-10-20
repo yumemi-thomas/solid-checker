@@ -12,8 +12,8 @@ use crate::{
     UnresolvedCallbackObligation,
 };
 
+use crate::{HashMap, HashSet};
 use std::{
-    collections::{HashMap, HashSet},
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -394,7 +394,7 @@ pub(crate) fn build_typescript_indexes(
     table: &solid_facts::TypeScriptTable,
     dialect: &dyn Dialect,
     project_files: usize,
-    runtime_redirects: &HashMap<String, String>,
+    runtime_redirects: &std::collections::HashMap<String, String>,
 ) -> (CachedTypeScriptIndexes, Duration, Duration) {
     let parallel =
         project_files >= PARALLEL_INDEX_FILE_THRESHOLD && available_analysis_workers() > 1;
@@ -839,7 +839,7 @@ impl ReusePlan {
                     interprocedural: None,
                     missing_owners: None,
                     settled_gates: None,
-                    owner_files: HashMap::new(),
+                    owner_files: HashMap::default(),
                     compat_reference_locations: None,
                 });
             }

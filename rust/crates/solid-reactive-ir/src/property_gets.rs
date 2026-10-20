@@ -122,10 +122,7 @@ fn getter_function(
     file: &solid_facts::FileFacts,
     getter: Span,
 ) -> Option<&solid_facts::ast::FunctionFact> {
-    file.ast
-        .functions
-        .iter()
-        .find(|function| function.span == getter)
+    file.ast.function_at(getter)
 }
 
 /// Whether `getter` may reach its receiver. The receiver is a fresh
@@ -294,7 +291,7 @@ pub(super) fn parameter_reads(
     has_summary_node: impl Fn(&str, Span) -> bool,
 ) -> (Vec<ReactiveRead>, HashSet<InterproceduralResultDependency>) {
     let mut reads = Vec::new();
-    let mut dependencies = HashSet::new();
+    let mut dependencies = HashSet::default();
     // Invalid calls belong to TypeScript. A construction runs a class body
     // whose fields and `super` call this slice does not model.
     if !context.valid || context.call.construct {

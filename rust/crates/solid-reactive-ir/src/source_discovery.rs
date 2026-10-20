@@ -11,10 +11,11 @@ use crate::owners::{
 use crate::pipeline::{parallel_file_chunk_results, parallel_file_results, parallel_slice_results};
 use crate::{
     BuildTimings, PrimitiveName, ReactiveSourceKind, ReturnSummary, RuntimeEnvironment,
-    RuntimeRendering, call_primitive_name, jsx_primitive_name, known_primitive, location,
+    RuntimeRendering, jsx_primitive_name, known_primitive, location,
 };
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use crate::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::identity::{SymbolId, symbol_id};
 use crate::indexes::{CachedAstFileIndex, EntitySymbols, ProjectIndexes, SemanticLookup};
@@ -41,7 +42,7 @@ pub(crate) fn source_discovery_identity(
     file: &FileFacts,
     indexes: &ProjectIndexes<'_>,
 ) -> SourceDiscoveryIdentity {
-    let mut symbol_ids = HashSet::<SymbolId>::new();
+    let mut symbol_ids = HashSet::<SymbolId>::default();
     for entity in indexes.entities_for_path(file.path.as_str()) {
         if !entity.symbol.is_empty() {
             symbol_ids.insert(symbol_id(entity.symbol.as_ref()));

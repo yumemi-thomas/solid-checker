@@ -100,25 +100,15 @@ impl<'a> SemanticLookup<'a> {
         if primitive_literal_text(text) {
             return true;
         }
-        if let Some(conditional) = file
-            .ast
-            .conditional_expressions
-            .iter()
-            .find(|conditional| conditional.span == value)
-        {
+        if let Some(conditional) = file.ast.conditional_at(value) {
             return self.proven_primitive(file, conditional.consequent, depth - 1)
                 && self.proven_primitive(file, conditional.alternate, depth - 1);
         }
-        if let Some(logical) = file
-            .ast
-            .logical_expressions
-            .iter()
-            .find(|logical| logical.span == value)
-        {
+        if let Some(logical) = file.ast.logical_at(value) {
             return self.proven_primitive(file, logical.left, depth - 1)
                 && self.proven_primitive(file, logical.right, depth - 1);
         }
-        if let Some(member) = file.ast.members.iter().find(|member| member.span == value) {
+        if let Some(member) = file.ast.member_at(value) {
             return file.source_text(member.property) == Some("length")
                 && file
                     .ast
@@ -394,12 +384,7 @@ impl<'a> SemanticLookup<'a> {
         if let Some(call) = file.ast.call_at(value) {
             return self.call_origin(file, call, depth, assumed);
         }
-        if let Some(conditional) = file
-            .ast
-            .conditional_expressions
-            .iter()
-            .find(|conditional| conditional.span == value)
-        {
+        if let Some(conditional) = file.ast.conditional_at(value) {
             let arm = |span| {
                 matches!(
                     self.value_origin_assuming(
@@ -416,12 +401,7 @@ impl<'a> SemanticLookup<'a> {
                 .then_some(ValueOrigin::Builtin);
         }
         // `a ?? b`, `a || b`, `a && b`: the value is one operand or the other.
-        if let Some(logical) = file
-            .ast
-            .logical_expressions
-            .iter()
-            .find(|logical| logical.span == value)
-        {
+        if let Some(logical) = file.ast.logical_at(value) {
             let operand = |span| {
                 matches!(
                     self.value_origin_assuming(
@@ -532,7 +512,7 @@ impl<'a> SemanticLookup<'a> {
                 .then_some(ValueOrigin::Builtin);
         }
         let callee = file.ast.peel_ts_sugar_span(call.callee);
-        let member = file.ast.members.iter().find(|member| member.span == callee);
+        let member = file.ast.member_at(callee);
         // A member of a proven built-in receiver is that receiver's own: its
         // class's prototype selects it, so no declaration is needed. An
         // unproven receiver falls through to the declaration below.

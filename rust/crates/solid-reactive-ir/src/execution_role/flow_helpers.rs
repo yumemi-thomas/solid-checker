@@ -359,12 +359,7 @@ pub(super) fn origin_member_ignores_receiver(
             value_ignores_receiver(file, property.value, &FlowOrigin::Unknown, lookup, depth)
         }
         FlowOrigin::Element(file, element, enclosing) => {
-            let Some(element) = file
-                .ast
-                .jsx_elements
-                .iter()
-                .find(|candidate| candidate.span == *element)
-            else {
+            let Some(element) = file.ast.jsx_element_at(*element) else {
                 return false;
             };
             if !element.spreads.is_empty() {
@@ -419,12 +414,7 @@ pub(super) fn value_ignores_receiver(
     depth: usize,
 ) -> bool {
     let value = jsx_value_expression(file, value);
-    if let Some(function) = file
-        .ast
-        .functions
-        .iter()
-        .find(|function| function.span == value)
-    {
+    if let Some(function) = file.ast.function_at(value) {
         return function.kind == solid_facts::ast::FunctionKind::Arrow
             || !function_uses_receiver(file, function);
     }
@@ -454,18 +444,14 @@ pub(super) fn value_ignores_receiver(
     }
     // `props.x` of the component the enclosing element renders, read in
     // that component: the enclosing element's member `x`.
-    if let Some(member) = file.ast.members.iter().find(|member| member.span == value)
+    if let Some(member) = file.ast.member_at(value)
         && file
             .ast
             .computed_members
             .binary_search(&member.span)
             .is_err()
         && let FlowOrigin::Element(element_file, element, _) = enclosing
-        && let Some(element) = element_file
-            .ast
-            .jsx_elements
-            .iter()
-            .find(|candidate| candidate.span == *element)
+        && let Some(element) = element_file.ast.jsx_element_at(*element)
         && let Some((component_file, component)) =
             lookup.function_called_at(element_file.path.as_str(), element.name.span)
         && component_file.path == file.path

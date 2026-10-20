@@ -24,8 +24,8 @@ impl Resolver<'_, '_> {
         }
     }
     pub fn calls(&self) -> (HashMap<Location, Callable>, HashSet<Location>) {
-        let mut calls = HashMap::new();
-        let mut unavailable = HashSet::new();
+        let mut calls = HashMap::default();
+        let mut unavailable = HashSet::default();
         for call_file in &self.facts.files {
             for call in &call_file.ast.calls {
                 if let Some(targets) = self.array_members(call_file, call) {
@@ -37,12 +37,7 @@ impl Resolver<'_, '_> {
                             .lookup
                             .file_by_path(path)
                             .expect("resolved array member file");
-                        let function = file
-                            .ast
-                            .functions
-                            .iter()
-                            .find(|f| f.span == *span)
-                            .expect("resolved array member");
+                        let function = file.ast.function_at(*span).expect("resolved array member");
                         file.ast
                             .calls
                             .iter()
@@ -76,12 +71,8 @@ impl Resolver<'_, '_> {
                                 .lookup
                                 .file_by_path(&path)
                                 .expect("resolved function file");
-                            let function = file
-                                .ast
-                                .functions
-                                .iter()
-                                .find(|f| f.span == span)
-                                .expect("resolved function span");
+                            let function =
+                                file.ast.function_at(span).expect("resolved function span");
                             // Preserve the missing implementation obligation without
                             // admitting a synthetic node or inferring its summary.
                             if file
@@ -127,11 +118,7 @@ impl Resolver<'_, '_> {
             return None;
         }
         let callback_span = file.ast.peel_ts_sugar_span(call.arguments[0].span);
-        let callback = file
-            .ast
-            .functions
-            .iter()
-            .find(|f| f.span == callback_span)?;
+        let callback = file.ast.function_at(callback_span)?;
         if callback.kind != ast::FunctionKind::Arrow
             || callback.r#async
             || callback.generator
@@ -209,13 +196,7 @@ impl Resolver<'_, '_> {
             else {
                 return None;
             };
-            let selected = self
-                .lookup
-                .file_by_path(&path)?
-                .ast
-                .functions
-                .iter()
-                .find(|f| f.span == span)?;
+            let selected = self.lookup.file_by_path(&path)?.ast.function_at(span)?;
             if selected.kind != ast::FunctionKind::Arrow || selected.r#async || selected.generator {
                 return None;
             }
@@ -248,7 +229,8 @@ impl Resolver<'_, '_> {
     }
 
     pub(super) fn role(&self, file: &FileFacts, call: &ast::CallFact) -> Option<ContextRole> {
-        let primitive = crate::call_primitive_name(
+        let primitive = crate::call_primitive_name_cached(
+            self.lookup,
             file,
             call,
             self.lookup.entities(),

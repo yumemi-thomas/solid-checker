@@ -52,7 +52,14 @@ pub(crate) fn discover_file_sources(
             }
             continue;
         }
-        let primitive = call_primitive_name(file, call, entities, symbol_names, lookup.dialect);
+        let primitive = crate::call_primitive_name_cached(
+            lookup,
+            file,
+            call,
+            entities,
+            symbol_names,
+            lookup.dialect,
+        );
         let resolved = known_primitive(&primitive);
         if resolved.is_none()
             && binding.immutable
@@ -261,7 +268,14 @@ pub(crate) fn discover_file_sources(
             continue;
         };
         let symbol = entities.at(file.path.as_str(), name);
-        let primitive = call_primitive_name(file, call, entities, symbol_names, lookup.dialect);
+        let primitive = crate::call_primitive_name_cached(
+            lookup,
+            file,
+            call,
+            entities,
+            symbol_names,
+            lookup.dialect,
+        );
         let resolved = known_primitive(&primitive);
         // Same seam as above, and the same reason.
         if !resolved.is_some_and(|primitive| lookup.dialect.returns_reactive_tuple(primitive)) {

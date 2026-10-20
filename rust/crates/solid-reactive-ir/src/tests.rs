@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use crate::HashSet;
 
 use super::cache::{
     CachedTypeScriptIndexes, InterproceduralResultDependency, InterproceduralResultDependencyState,
@@ -192,7 +192,7 @@ fn empty_project(generation: u64) -> ProjectFacts {
         typescript_changes: None,
         resolved_imports: None,
         runtime_resolutions: None,
-        runtime_symbol_redirects: HashMap::new(),
+        runtime_symbol_redirects: std::collections::HashMap::default(),
         dependency_source_roots: Vec::new(),
     }
 }
@@ -231,7 +231,11 @@ fn projected_references_include_every_alias_member_without_retaining_unrelated_s
         Vec::new(),
     );
     let interner = SymbolInterner::from_table(&table);
-    let (aliases, _) = alias_roots_and_source_declarations(&table, &interner, &HashMap::new());
+    let (aliases, _) = alias_roots_and_source_declarations(
+        &table,
+        &interner,
+        &std::collections::HashMap::default(),
+    );
     let roots = symbols_by_root(&table, &aliases, &interner);
     let source = SymbolId::from("root");
     let projected = references_for_sources(&table, &roots, std::iter::once(&source));
@@ -275,7 +279,7 @@ fn exact_runtime_redirects_replace_declaration_alias_roots() {
         Vec::new(),
     );
     let interner = SymbolInterner::from_table(&table);
-    let redirects = HashMap::from([("declaration".into(), "runtime".into())]);
+    let redirects = std::collections::HashMap::from([("declaration".into(), "runtime".into())]);
     let (aliases, _) = alias_roots_and_source_declarations(&table, &interner, &redirects);
 
     assert_eq!(aliases["import-alias"].as_str(), "runtime");
@@ -291,9 +295,9 @@ fn compact_source_identity_reuses_only_exact_typefacts_manifests() {
         symbols: vec![SymbolId::from("source-symbol")],
     };
     let exact = SourceDiscoveryTypeScriptDelta {
-        entity_paths: HashSet::new(),
-        file_paths: HashSet::new(),
-        semantic_symbol_ids: HashSet::new(),
+        entity_paths: HashSet::default(),
+        file_paths: HashSet::default(),
+        semantic_symbol_ids: HashSet::default(),
     };
     assert!(source_discovery_identity_matches(
         &cached,
@@ -311,9 +315,9 @@ fn compact_source_identity_reuses_only_exact_typefacts_manifests() {
     ));
 
     let affected = SourceDiscoveryTypeScriptDelta {
-        entity_paths: HashSet::from(["fixture.ts".into()]),
-        file_paths: HashSet::new(),
-        semantic_symbol_ids: HashSet::new(),
+        entity_paths: HashSet::from_iter(["fixture.ts".into()]),
+        file_paths: HashSet::default(),
+        semantic_symbol_ids: HashSet::default(),
     };
     assert!(!source_discovery_identity_matches(
         &cached,
@@ -323,9 +327,9 @@ fn compact_source_identity_reuses_only_exact_typefacts_manifests() {
         Some(&affected),
     ));
     let changed_symbol = SourceDiscoveryTypeScriptDelta {
-        entity_paths: HashSet::new(),
-        file_paths: HashSet::new(),
-        semantic_symbol_ids: HashSet::from([SymbolId::from("source-symbol")]),
+        entity_paths: HashSet::default(),
+        file_paths: HashSet::default(),
+        semantic_symbol_ids: HashSet::from_iter([SymbolId::from("source-symbol")]),
     };
     assert!(!source_discovery_identity_matches(
         &cached,
@@ -338,8 +342,11 @@ fn compact_source_identity_reuses_only_exact_typefacts_manifests() {
 
 fn typescript_index_cache(table: &TypeScriptTable) -> CachedTypeScriptIndexes {
     let interner = SymbolInterner::from_table(table);
-    let (aliases, source_declarations) =
-        alias_roots_and_source_declarations(table, &interner, &HashMap::new());
+    let (aliases, source_declarations) = alias_roots_and_source_declarations(
+        table,
+        &interner,
+        &std::collections::HashMap::default(),
+    );
     CachedTypeScriptIndexes {
         symbol_alias_targets: symbol_alias_targets(table, &interner),
         symbols_by_root: symbols_by_root(table, &aliases, &interner),
@@ -453,7 +460,11 @@ fn source_declaration_index_skips_earlier_dts_only_symbols() {
     );
 
     let interner = SymbolInterner::from_table(&table);
-    let (_, declarations) = alias_roots_and_source_declarations(&table, &interner, &HashMap::new());
+    let (_, declarations) = alias_roots_and_source_declarations(
+        &table,
+        &interner,
+        &std::collections::HashMap::default(),
+    );
 
     assert_eq!(declarations["root"].name, ("sourceAccessor").into());
     assert_eq!(declarations["root"].location.path, ("source.ts").into());
@@ -1042,8 +1053,8 @@ fn transported_summary_edges_keep_provenance_through_ordinary_hops() {
         &mut summaries,
         &reverse_edges,
         &mut [0; 4],
-        &HashSet::from([(2, 3)]),
-        &HashSet::from([(0, 1), (1, 2), (2, 3)]),
+        &HashSet::from_iter([(2, 3)]),
+        &HashSet::from_iter([(0, 1), (1, 2), (2, 3)]),
     );
     assert!(
         !summaries[3][0].transported,
@@ -1073,8 +1084,8 @@ fn summary_edges_carry_completion_standing() {
         &mut summaries,
         &reverse_edges,
         &mut [0; 4],
-        &HashSet::new(),
-        &HashSet::from([(0, 1), (0, 2), (1, 3)]),
+        &HashSet::default(),
+        &HashSet::from_iter([(0, 1), (0, 2), (1, 3)]),
     );
     let standing = |index: usize| {
         summaries[index]
@@ -1106,14 +1117,14 @@ fn missing_result_dependency_invalidates_when_a_function_appears() {
     );
     node.symbol = Some("helper".into());
     let nodes = vec![node];
-    let indexes = HashMap::from([(("fixture.tsx".into(), nodes[0].span), 0)]);
+    let indexes = HashMap::from_iter([(("fixture.tsx".into(), nodes[0].span), 0)]);
     let summaries = vec![SummaryReads::default()];
     let invoked_parameters = vec![Vec::new()];
     let invoked_parameter_members = vec![Vec::new()];
-    let returned_bindings = HashMap::new();
+    let returned_bindings = HashMap::default();
     let missing = InterproceduralResultDependencyState::Missing;
 
-    let missing_by_symbol = HashMap::new();
+    let missing_by_symbol = HashMap::default();
     let missing_view = InterproceduralResultView {
         nodes: &nodes,
         indexes: &indexes,
@@ -1125,7 +1136,7 @@ fn missing_result_dependency_invalidates_when_a_function_appears() {
     };
     assert!(missing_view.dependency_matches(&missing, &dependency));
 
-    let by_symbol = HashMap::from([("helper".into(), 0)]);
+    let by_symbol = HashMap::from_iter([("helper".into(), 0)]);
     let present_view = InterproceduralResultView {
         by_symbol: &by_symbol,
         ..missing_view

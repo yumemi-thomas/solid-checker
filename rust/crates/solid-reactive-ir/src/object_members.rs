@@ -2,7 +2,7 @@
 //! Export/import is a channel into the same receiver census, not an escape
 //! waiver. No structural signature or composite entity supplies a target.
 
-use std::collections::{HashMap, HashSet};
+use crate::{HashMap, HashSet};
 
 use solid_facts::{FileFacts, ProjectFacts, ast, core::Span};
 use typefacts::Location;
@@ -23,12 +23,12 @@ pub(crate) fn index(facts: &ProjectFacts, lookup: &SemanticLookup<'_>) -> Target
             .iter()
             .any(|hazard| hazard.kind == ast::ModuleHazardKind::Eval)
     }) {
-        return HashMap::new();
+        return HashMap::default();
     }
     let stability = MemberStability::index(facts, lookup);
     let modules = ModuleCensus::new(facts, lookup);
-    let mut targets = HashMap::new();
-    let mut closed = HashMap::new();
+    let mut targets = HashMap::default();
+    let mut closed = HashMap::default();
     for file in &facts.files {
         let members = file
             .ast
@@ -115,7 +115,7 @@ fn references(file: &FileFacts) -> HashSet<Span> {
 /// object literal, as `(path, member span)`. Built once per build: the
 /// predicate below is asked for every call by several passes.
 pub(crate) fn literal_receiver_members(lookup: &SemanticLookup<'_>) -> HashSet<(String, Span)> {
-    let mut found = HashSet::new();
+    let mut found = HashSet::default();
     for file in lookup.files() {
         let references = references(file);
         for member in &file.ast.members {
@@ -157,7 +157,7 @@ pub(crate) fn call_withheld(file: &FileFacts, callee: Span, lookup: &SemanticLoo
 }
 
 fn receiver_symbols(facts: &ProjectFacts, symbol: &SymbolId) -> HashSet<String> {
-    let mut symbols = HashSet::from([symbol.to_string()]);
+    let mut symbols = HashSet::from_iter([symbol.to_string()]);
     loop {
         let mut changed = false;
         for (declaration, runtime) in &facts.runtime_symbol_redirects {
@@ -196,7 +196,7 @@ struct ModuleCensus {
 
 impl ModuleCensus {
     fn new(facts: &ProjectFacts, lookup: &SemanticLookup<'_>) -> Self {
-        let mut redirects = HashMap::<String, HashSet<String>>::new();
+        let mut redirects = HashMap::<String, HashSet<String>>::default();
         for (declaration, runtime) in &facts.runtime_symbol_redirects {
             let (Some(declarations), Some(implementations)) = (
                 lookup.symbol_declarations(declaration),
@@ -236,15 +236,15 @@ impl ModuleCensus {
                 )?
                 .to_string()
             };
-            let mut paths = HashSet::from([path.clone()]);
+            let mut paths = HashSet::from_iter([path.clone()]);
             if let Some(runtime) = redirects.get(&path) {
                 paths.extend(runtime.iter().cloned());
             }
             Some(paths)
         };
         let mut result = Self::default();
-        let mut graph = HashMap::<String, HashSet<String>>::new();
-        let mut barrels = HashMap::<String, HashSet<String>>::new();
+        let mut graph = HashMap::<String, HashSet<String>>::default();
+        let mut barrels = HashMap::<String, HashSet<String>>::default();
         for file in lookup.files() {
             let path = file.path.to_string();
             for import in file.ast.imports.iter().filter(|import| !import.type_only) {
@@ -394,7 +394,7 @@ fn cyclic_modules(graph: &HashMap<String, HashSet<String>>) -> HashSet<String> {
     let mut on_stack = vec![false; nodes.len()];
     let mut stack = Vec::new();
     let mut next = 0;
-    let mut cyclic = HashSet::new();
+    let mut cyclic = HashSet::default();
     for start in 0..nodes.len() {
         if index[start] != usize::MAX {
             continue;
@@ -631,11 +631,11 @@ fn receiver_closed<'a>(
     {
         return false;
     }
-    let mut references = HashSet::new();
+    let mut references = HashSet::default();
     // Binder references remain essential when a dependency import's Type
     // Facts references still name its .d.ts symbol before runtime redirects.
     for file in lookup.files() {
-        let mut bindings = HashSet::new();
+        let mut bindings = HashSet::default();
         if file.path == owner.path {
             bindings.insert(declaration);
         }
@@ -817,7 +817,7 @@ fn literal_function<'a>(
         .find(|(property, key)| !property.computed && key.key == name)?
         .0;
     let value = file.ast.peel_ts_sugar_span(property.value);
-    if let Some(function) = file.ast.functions.iter().find(|f| f.span == value) {
+    if let Some(function) = file.ast.function_at(value) {
         return Some((file, function));
     }
     // Shorthand is one declared function, not a callable type or an alias.
@@ -842,10 +842,10 @@ fn literal_function<'a>(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{HashMap, HashSet};
+    use crate::{HashMap, HashSet};
 
     fn graph(edges: &[(&str, &str)]) -> HashMap<String, HashSet<String>> {
-        let mut graph = HashMap::<String, HashSet<String>>::new();
+        let mut graph = HashMap::<String, HashSet<String>>::default();
         for (from, to) in edges {
             graph
                 .entry((*from).to_owned())

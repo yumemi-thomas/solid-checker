@@ -1,6 +1,6 @@
 //! Static validation for Solid 2.0 API shapes and explicit refresh writes.
 
-use std::collections::{HashMap, HashSet};
+use crate::{HashMap, HashSet};
 
 use solid_dialect::Primitive;
 use solid_facts::FileFacts;
@@ -15,8 +15,7 @@ use crate::indexes::{EntitySymbols, SemanticLookup};
 use crate::owners::{analysis_context, computation_is_async};
 use crate::pipeline::{AnalysisContext, ProgramDraft, parallel_file_results};
 use crate::{
-    ReactiveSourceKind, ReactiveWrite, StaticDefect, StaticDefectKind, StaticViolation,
-    call_primitive_name, location,
+    ReactiveSourceKind, ReactiveWrite, StaticDefect, StaticDefectKind, StaticViolation, location,
 };
 
 pub(super) struct StaticDirectiveFileResult {
@@ -71,9 +70,14 @@ impl StaticApiContext<'_> {
         let allowed = allowed_callback_spans(file, self.lookup);
         let dialect = self.lookup.dialect;
         for call in &file.ast.calls {
-            let Some(primitive) =
-                call_primitive_name(file, call, self.entities, self.symbol_names, dialect)
-            else {
+            let Some(primitive) = crate::call_primitive_name_cached(
+                self.lookup,
+                file,
+                call,
+                self.entities,
+                self.symbol_names,
+                dialect,
+            ) else {
                 continue;
             };
             // `primitive` stays as the spelling to report; `kind` is what the
@@ -790,12 +794,7 @@ fn action_step_body(
 fn member_chain_root(file: &FileFacts, span: Span) -> Option<Span> {
     let mut current = span;
     for _ in 0..64 {
-        if let Some(member) = file
-            .ast
-            .members
-            .iter()
-            .find(|member| member.span == current)
-        {
+        if let Some(member) = file.ast.member_at(current) {
             current = member.object;
             continue;
         }

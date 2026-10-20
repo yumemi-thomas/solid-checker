@@ -6,8 +6,9 @@
 //! an `InterproceduralContext` parameter object and calls `build` to obtain an
 //! `InterproceduralResult`; every stage function here is module-private.
 
+use crate::{HashMap, HashSet};
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::BTreeMap,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -26,11 +27,11 @@ use super::{
     CallbackSchedule, CallbackSummary, EntitySymbols, ExecutionRole, FunctionBoundary,
     FunctionLookup, ProjectIndexes, ReactiveRead, ReactiveSourceKind, ReturnSummary,
     SemanticLookup, StaticDefect, StaticDefectKind, SymbolId, UnresolvedCallbackObligation,
-    allowed_callback_spans, assigned_member_function_contains, call_primitive_name,
-    callback_execution_word, containing_summary_function_indexed, function_indices_by_path,
-    function_lookup_for_path, functions_for_path, items_by_containing_function, location,
-    location_order, propagate_returned_summary_deltas, propagate_summary_deltas,
-    push_callback_summary, push_unique_summary_read, semantic_execution_role,
+    allowed_callback_spans, assigned_member_function_contains, callback_execution_word,
+    containing_summary_function_indexed, function_indices_by_path, function_lookup_for_path,
+    functions_for_path, items_by_containing_function, location, location_order,
+    propagate_returned_summary_deltas, propagate_summary_deltas, push_callback_summary,
+    push_unique_summary_read, semantic_execution_role,
 };
 use crate::cache::{
     CachedInterproceduralGraph, CachedInterproceduralResultFile, CachedInterproceduralResults,

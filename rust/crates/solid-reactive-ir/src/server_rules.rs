@@ -6,7 +6,7 @@
 //! emitted only where the vocabulary or the dialect's server-function model
 //! resolves — a 1.x project never sees them.
 
-use std::collections::HashSet;
+use crate::HashSet;
 
 use solid_dialect::Primitive;
 use solid_facts::FileFacts;
@@ -18,8 +18,7 @@ use crate::execution_role::semantic_execution_role;
 use crate::owners::{containing_ast_function, jsx_element_is_loading};
 use crate::pipeline::{AnalysisContext, ProgramDraft};
 use crate::{
-    ExecutionRole, RichArgumentTransport, StaticDefect, StaticDefectKind, StaticViolation,
-    call_primitive_name, location,
+    ExecutionRole, RichArgumentTransport, StaticDefect, StaticDefectKind, StaticViolation, location,
 };
 
 /// The directive whose presence turns a function or module into server-build
@@ -50,9 +49,16 @@ fn http_response_after_flush(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
         let mut allowed = None;
         for call in &file.ast.calls {
             let Some(kind @ (Primitive::HttpStatus | Primitive::HttpHeader)) =
-                call_primitive_name(file, call, ctx.entities, ctx.symbol_names, ctx.dialect)
-                    .as_ref()
-                    .and_then(crate::PrimitiveName::primitive)
+                crate::call_primitive_name_cached(
+                    ctx.semantic_lookup,
+                    file,
+                    call,
+                    ctx.entities,
+                    ctx.symbol_names,
+                    ctx.dialect,
+                )
+                .as_ref()
+                .and_then(crate::PrimitiveName::primitive)
             else {
                 continue;
             };
@@ -157,7 +163,7 @@ fn call_under_loading_children(ctx: &AnalysisContext<'_>, file: &FileFacts, span
 /// one component-boundary level deep, matching the dominance the async rules
 /// use. Fallback-position renders are excluded (shell content).
 fn loading_wrapped_components<'a>(ctx: &AnalysisContext<'a>) -> HashSet<(&'a str, Span)> {
-    let mut hosts = HashSet::new();
+    let mut hosts = HashSet::default();
     for caller in &ctx.facts.files {
         for element in &caller.ast.jsx_elements {
             let Some((target_file, target)) = ctx

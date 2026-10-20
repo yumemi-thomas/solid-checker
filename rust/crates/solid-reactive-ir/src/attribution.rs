@@ -14,8 +14,8 @@
 //! enumeration read as a complete one silently certifies a caller that can
 //! still reach the obligation.
 
+use crate::{HashMap, HashSet};
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
 
 use solid_facts::{FileFacts, ProjectFacts, core::Span};
 use typefacts::Location;
@@ -77,7 +77,7 @@ pub(crate) fn discharge_closed_program_export_dispatch(
         entities,
         aliases,
         symbols_by_root,
-        namespace_escapes: RefCell::new(HashMap::new()),
+        namespace_escapes: RefCell::new(HashMap::default()),
         attested_project_texts: RefCell::new(None),
     };
     defects.retain(|defect| {
@@ -149,11 +149,7 @@ impl<'a> CallGraph<'a, '_> {
     /// - a function with no binding name, or a name with no symbol.
     fn function_symbols(&self, path: &str, function: Span) -> Option<Vec<SymbolId>> {
         let file = self.file(path)?;
-        let fact = file
-            .ast
-            .functions
-            .iter()
-            .find(|candidate| candidate.span == function)?;
+        let fact = file.ast.function_at(function)?;
         if fact.name.is_none()
             && fact.method_name.is_some()
             && file
@@ -447,7 +443,7 @@ impl<'a> CallGraph<'a, '_> {
     fn attested_project_targets(&self, specifier: &str) -> Vec<String> {
         let mut cache = self.attested_project_texts.borrow_mut();
         let targets = cache.get_or_insert_with(|| {
-            let mut targets: HashMap<String, Vec<String>> = HashMap::new();
+            let mut targets: HashMap<String, Vec<String>> = HashMap::default();
             for (_, row) in self
                 .lookup
                 .resolved_imports()
@@ -546,8 +542,8 @@ impl<'a> CallGraph<'a, '_> {
         path: &str,
         function: Span,
     ) -> (HashSet<CallSiteKey>, HashSet<ReferenceKey>) {
-        let mut known = HashSet::new();
-        let mut properties = HashSet::new();
+        let mut known = HashSet::default();
+        let mut properties = HashSet::default();
         for (caller, callee) in self.lookup.function_call_sites(path, function) {
             if self.lookup.call_by_callee(caller, callee).is_none() {
                 continue;
@@ -557,12 +553,7 @@ impl<'a> CallGraph<'a, '_> {
             if caller.ast.computed_members.binary_search(&peeled).is_ok() {
                 continue;
             }
-            let Some(member) = caller
-                .ast
-                .members
-                .iter()
-                .find(|member| member.span == peeled)
-            else {
+            let Some(member) = caller.ast.member_at(peeled) else {
                 continue;
             };
             let same_target = self
@@ -650,21 +641,11 @@ impl<'a> CallGraph<'a, '_> {
         if self.lookup.proven_primitive(file, value, 6) {
             return true;
         }
-        if let Some(conditional) = file
-            .ast
-            .conditional_expressions
-            .iter()
-            .find(|conditional| conditional.span == value)
-        {
+        if let Some(conditional) = file.ast.conditional_at(value) {
             return self.value_is_primitive(file, conditional.consequent, depth - 1, assumed)
                 && self.value_is_primitive(file, conditional.alternate, depth - 1, assumed);
         }
-        if let Some(logical) = file
-            .ast
-            .logical_expressions
-            .iter()
-            .find(|logical| logical.span == value)
-        {
+        if let Some(logical) = file.ast.logical_at(value) {
             return self.value_is_primitive(file, logical.left, depth - 1, assumed)
                 && self.value_is_primitive(file, logical.right, depth - 1, assumed);
         }
@@ -881,12 +862,7 @@ impl<'a> CallGraph<'a, '_> {
         let Some(expression) = SemanticLookup::peel_parentheses(file, expression) else {
             return false;
         };
-        let Some(member) = file
-            .ast
-            .members
-            .iter()
-            .find(|member| member.span == expression)
-        else {
+        let Some(member) = file.ast.member_at(expression) else {
             return false;
         };
         if file
@@ -1063,12 +1039,7 @@ impl<'a> CallGraph<'a, '_> {
         if file.ast.computed_members.binary_search(&argument).is_ok() {
             return false;
         }
-        let Some(access) = file
-            .ast
-            .members
-            .iter()
-            .find(|access| access.span == argument)
-        else {
+        let Some(access) = file.ast.member_at(argument) else {
             return false;
         };
         let Some(name) = file.source_text(access.property) else {
@@ -1448,12 +1419,7 @@ impl<'a> CallGraph<'a, '_> {
         if file.ast.computed_members.binary_search(&argument).is_ok() {
             return false;
         }
-        let Some(access) = file
-            .ast
-            .members
-            .iter()
-            .find(|access| access.span == argument)
-        else {
+        let Some(access) = file.ast.member_at(argument) else {
             return false;
         };
         let Some(name) = file.source_text(access.property) else {

@@ -25,7 +25,7 @@ pub(crate) fn read_loading_cover(
     span: Span,
     symbol_names: &HashMap<SymbolId, SymbolId>,
 ) -> LoadingCover {
-    loading_cover_at(lookup, file, span, symbol_names, &mut HashSet::new())
+    loading_cover_at(lookup, file, span, symbol_names, &mut HashSet::default())
 }
 
 pub(super) fn loading_cover_at(
@@ -198,7 +198,7 @@ pub(crate) fn async_read_role(
             solid_facts::ast::ArgumentValueKind::Identifier
                 | solid_facts::ast::ArgumentValueKind::Function
                 | solid_facts::ast::ArgumentValueKind::AsyncFunction
-        ) && call_primitive_name(file, call, entities, symbol_names, dialect)
+        ) && crate::call_primitive_name_cached(lookup, file, call, entities, symbol_names, dialect)
             .as_ref()
             .and_then(PrimitiveName::primitive)
             .is_some_and(|primitive| {
@@ -268,9 +268,7 @@ pub(crate) fn computation_is_async(
         return true;
     }
     file.ast
-        .functions
-        .iter()
-        .find(|function| function.span == argument)
+        .function_at(argument)
         .is_some_and(|function| function.r#async)
 }
 

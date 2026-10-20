@@ -195,7 +195,7 @@ pub(super) fn stored_literal_invocation_unproven(
             literal,
             ExecutionRole::UntrackedRendering,
             lookup,
-            &mut HashSet::new(),
+            &mut HashSet::default(),
         )
 }
 
@@ -394,7 +394,7 @@ pub(super) fn member_runs_declared_method(
     {
         return true;
     }
-    let Some(member) = file.ast.members.iter().find(|member| member.span == callee) else {
+    let Some(member) = file.ast.member_at(callee) else {
         return false;
     };
     let Some(name) = file.source_text(member.property) else {

@@ -451,19 +451,14 @@ fn record_parameter_member_invocation(
     // would select another argument.
     if let Some((receiver, path)) = lookup.member_callee_receiver(file, call.callee)
         && nodes[owner].parameters.contains(&receiver)
-        && let Some(parameter) = file
-            .ast
-            .functions
-            .iter()
-            .find(|function| function.span == owner_span)
-            .and_then(|function| {
-                function.parameters.iter().position(|parameter| {
-                    parameter.shape == solid_facts::ast::BindingShape::Identifier
-                        && parameter.names.first().is_some_and(|name| {
-                            symbols.entities.at(file.path.as_str(), name.span) == Some(&receiver)
-                        })
-                })
+        && let Some(parameter) = file.ast.function_at(owner_span).and_then(|function| {
+            function.parameters.iter().position(|parameter| {
+                parameter.shape == solid_facts::ast::BindingShape::Identifier
+                    && parameter.names.first().is_some_and(|name| {
+                        symbols.entities.at(file.path.as_str(), name.span) == Some(&receiver)
+                    })
             })
+        })
     {
         let primitive_builtin = primitive_builtin_member_call(file, call.callee, lookup);
         let entry = (
@@ -534,9 +529,7 @@ fn record_forwarded_parameter_invocations(
             // the completion table's do not. Admit only where they agree.
             let aligned = file
                 .ast
-                .functions
-                .iter()
-                .find(|function| function.span == nodes[owner].span)
+                .function_at(nodes[owner].span)
                 .is_some_and(|function| {
                     function
                         .parameters

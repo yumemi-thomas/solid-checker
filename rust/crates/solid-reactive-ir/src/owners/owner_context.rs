@@ -150,7 +150,7 @@ pub(crate) struct AwaitContinuations<'a> {
 
 impl<'a> AwaitContinuations<'a> {
     pub(crate) fn new(facts: &'a ProjectFacts, lookup: &SemanticLookup<'_>) -> Self {
-        let mut starts = HashMap::<&'a str, HashSet<u64>>::new();
+        let mut starts = HashMap::<&'a str, HashSet<u64>>::default();
         if lookup.dialect.fresh_stack_callback_owner() == Some(solid_dialect::CallbackOwner::None) {
             for file in facts.typescript.files() {
                 for function in file.async_functions.iter() {
@@ -512,7 +512,14 @@ pub(crate) fn containing_leaf_owner(
     file.ast
         .arguments_containing(span)
         .find_map(|(call, index)| {
-            let owner = call_primitive_name(file, call, entities, symbol_names, lookup.dialect)?;
+            let owner = crate::call_primitive_name_cached(
+                lookup,
+                file,
+                call,
+                entities,
+                symbol_names,
+                lookup.dialect,
+            )?;
             owner
                 .primitive()
                 .is_some_and(|primitive| {

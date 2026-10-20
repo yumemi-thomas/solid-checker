@@ -1,14 +1,12 @@
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-};
+use crate::{HashMap, HashSet};
+use std::sync::Arc;
 
 use solid_facts::ProjectFacts;
 use solid_facts::core::Span;
 use typefacts::Location;
 
 use super::{
-    EntitySymbols, FunctionNode, ProjectIndexes, SemanticLookup, SymbolId, call_primitive_name,
+    EntitySymbols, FunctionNode, ProjectIndexes, SemanticLookup, SymbolId,
     containing_function_indexed, function_indices_by_path, location,
 };
 use crate::cache::{
@@ -46,7 +44,8 @@ fn reachability_topology(
     // resolves an owner and a target span, so scanning made building a file's
     // topology quadratic in its function count. `or_insert` keeps the first
     // index for a repeated span, exactly as the scan did.
-    let mut indices_by_span = HashMap::with_capacity(functions.len());
+    let mut indices_by_span =
+        HashMap::with_capacity_and_hasher(functions.len(), Default::default());
     for (index, function) in functions.iter().enumerate() {
         indices_by_span.entry(function.span).or_insert(index);
     }
@@ -171,9 +170,7 @@ fn discover_reachability_file(
         .iter()
         .filter(|function| {
             file.ast
-                .functions
-                .iter()
-                .find(|candidate| candidate.span == function.span)
+                .function_at(function.span)
                 .is_some_and(|candidate| {
                     lookup.function_is_component(file, candidate)
                         || function_is_solid_callback(
@@ -225,9 +222,16 @@ fn discover_reachability_file(
                 target: ReachabilityTarget::Symbol(symbol.clone()),
             });
         }
-        let primitive = call_primitive_name(file, call, entities, symbol_names, lookup.dialect)
-            .as_ref()
-            .and_then(super::PrimitiveName::primitive);
+        let primitive = crate::call_primitive_name_cached(
+            lookup,
+            file,
+            call,
+            entities,
+            symbol_names,
+            lookup.dialect,
+        )
+        .as_ref()
+        .and_then(super::PrimitiveName::primitive);
         if primitive.is_some()
             || (0..call.arguments.len()).any(|index| {
                 returned_callback_execution_at_call(file, call, index, lookup).is_some()
@@ -330,7 +334,8 @@ fn discover_reachability_file(
         callback_edges.push((owner, targets));
     }
     // As in `reachability_topology`: one map rather than a scan per call.
-    let mut function_indices_by_span = HashMap::with_capacity(functions.len());
+    let mut function_indices_by_span =
+        HashMap::with_capacity_and_hasher(functions.len(), Default::default());
     for (index, function) in functions.iter().enumerate() {
         function_indices_by_span
             .entry(function.span)
@@ -425,11 +430,11 @@ pub(super) fn reachability_stage(
     } else {
         let substage_started = std::time::Instant::now();
         let cached = cache.get_or_insert_with(|| crate::cache::CachedReachability {
-            inputs: HashMap::new(),
-            files: HashMap::new(),
-            calls: HashMap::new(),
-            multiplicity_by_path: HashMap::new(),
-            function_symbols: HashSet::new(),
+            inputs: HashMap::default(),
+            files: HashMap::default(),
+            calls: HashMap::default(),
+            multiplicity_by_path: HashMap::default(),
+            function_symbols: HashSet::default(),
         });
         let (reused_files, recomputed_files) = reachable_call_multiplicity_incremental(
             inputs,
@@ -490,7 +495,7 @@ pub(super) fn reachable_call_multiplicity_incremental(
     multiplicity_by_path.retain(|path, _| current_paths.contains(path.as_str()));
     let mut reused_files = 0;
     let mut recomputed_files = 0;
-    let mut recomputed_paths = HashSet::<String>::new();
+    let mut recomputed_paths = HashSet::<String>::default();
     let mut topology_unchanged = !multiplicity_by_path.is_empty() && removed_paths.is_empty();
     let mut recomputed = Vec::new();
     for file in &facts.files {
@@ -647,7 +652,7 @@ pub(super) fn reachable_call_multiplicity_incremental(
     roots.dedup();
     let mut multiplicity = vec![0_usize; functions.len()];
     for root in roots {
-        accumulate_function(root, &edges, &mut HashSet::new(), &mut multiplicity);
+        accumulate_function(root, &edges, &mut HashSet::default(), &mut multiplicity);
     }
     multiplicity_by_path.clear();
     let mut offset = 0;
@@ -701,10 +706,10 @@ pub(super) fn reachable_call_multiplicity<'a>(
     symbol_names: &'a HashMap<SymbolId, SymbolId>,
     lookup: &'a SemanticLookup<'a>,
 ) -> HashMap<Location, usize> {
-    let mut files = HashMap::new();
-    let mut multiplicity_by_path = HashMap::new();
-    let mut calls = HashMap::new();
-    let mut function_symbols = HashSet::new();
+    let mut files = HashMap::default();
+    let mut multiplicity_by_path = HashMap::default();
+    let mut calls = HashMap::default();
+    let mut function_symbols = HashSet::default();
     reachable_call_multiplicity_incremental(
         ReachabilityInputs {
             facts,
@@ -777,7 +782,7 @@ mod tests {
         };
 
         assert_eq!(
-            effective_reachability_topology(&topology, &HashSet::from(["known".into()])),
+            effective_reachability_topology(&topology, &HashSet::from_iter(["known".into()])),
             ReachabilityTopology {
                 function_symbols: vec![Some("owner".into())],
                 roots: vec![

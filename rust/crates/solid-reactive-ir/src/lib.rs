@@ -56,6 +56,14 @@ mod interproc;
 mod literal_member_slots;
 mod local_access;
 mod owners;
+/// The crate's maps and sets hash spans, symbol ids and paths on every
+/// lookup; Fx hashing is several times cheaper than SipHash for such keys.
+/// No answer depends on iteration order: the default hasher already
+/// randomized it on every run.
+pub type HashMap<K, V> = std::collections::HashMap<K, V, rustc_hash::FxBuildHasher>;
+/// See [`HashMap`].
+pub type HashSet<T> = std::collections::HashSet<T, rustc_hash::FxBuildHasher>;
+
 pub mod package_boundary;
 mod pipeline;
 mod projection;
@@ -114,7 +122,7 @@ use cache::{BuildIdentity, IncrementalCacheState, RetainedBuild};
 use pipeline::build_with_analysis_inputs_measured_incremental;
 
 use std::{
-    collections::{BTreeSet, HashMap, VecDeque},
+    collections::{BTreeSet, VecDeque},
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -1148,7 +1156,7 @@ pub struct Program {
     /// Message-only observations, recomputed from the current merged reads.
     /// These apply sites also read the exact source in their paired compute.
     #[serde(skip)]
-    pub apply_compute_reads: std::collections::HashSet<Location>,
+    pub apply_compute_reads: HashSet<Location>,
     #[serde(
         default,
         skip_serializing_if = "RuntimeConfigurationPremise::permits_proof"
@@ -1295,6 +1303,9 @@ pub struct IncrementalBuilder {
         (solid_dialect::Version, String, u64),
         RuntimeConfigurationPremise,
     )>,
+    /// Each file's part of that scan, reused across generations where the
+    /// Type Facts delta proves it unchanged.
+    runtime_configuration_scan: runtime_configuration::ScanCache,
 }
 
 /// How much derived cross-generation state an idle retained session keeps.
@@ -1359,7 +1370,11 @@ impl IncrementalBuilder {
         let premise = match &self.runtime_configuration {
             Some((key, premise)) if *key == premise_key => premise.clone(),
             _ => {
-                let premise = runtime_configuration::scan(facts, dialect);
+                let premise = runtime_configuration::scan_retained(
+                    facts,
+                    dialect,
+                    &mut self.runtime_configuration_scan,
+                );
                 self.runtime_configuration = Some((premise_key, premise.clone()));
                 premise
             }
@@ -1501,8 +1516,8 @@ fn propagate_summary_deltas(
     summaries: &mut [SummaryReads],
     reverse_edges: &[Vec<usize>],
     propagated_lengths: &mut [usize],
-    transported_edges: &std::collections::HashSet<(usize, usize)>,
-    guaranteed_edges: &std::collections::HashSet<(usize, usize)>,
+    transported_edges: &HashSet<(usize, usize)>,
+    guaranteed_edges: &HashSet<(usize, usize)>,
 ) {
     let mut queued = summaries
         .iter()
@@ -1570,7 +1585,7 @@ fn function_indices_by_path<T>(functions: &[T]) -> HashMap<String, Vec<usize>>
 where
     T: FunctionBoundary,
 {
-    let mut by_path = HashMap::<String, Vec<usize>>::new();
+    let mut by_path = HashMap::<String, Vec<usize>>::default();
     for (index, function) in functions.iter().enumerate() {
         by_path
             .entry(function.path().to_owned())
@@ -1604,9 +1619,9 @@ fn function_lookup_for_path(
     by_path: &HashMap<String, Vec<usize>>,
     path: &str,
 ) -> FunctionLookup {
-    let mut by_symbol = HashMap::new();
-    let mut by_span = HashMap::new();
-    let mut parameter_owner = HashMap::new();
+    let mut by_symbol = HashMap::default();
+    let mut by_span = HashMap::default();
+    let mut parameter_owner = HashMap::default();
     for (index, function) in functions_for_path(functions, by_path, path) {
         by_span.entry(function.span).or_insert(index);
         if let Some(symbol) = &function.symbol {
@@ -1705,19 +1720,25 @@ enum PrimitiveName {
     Known(Primitive, &'static str),
     /// A name this dialect does not export, carrying the spelling it was
     /// written with.
-    Other(String),
+    Other(Arc<str>),
 }
 
 impl PrimitiveName {
     /// Resolves a source-level name against the dialect's vocabulary.
     fn new(name: &str, dialect: &dyn Dialect) -> Self {
-        match dialect
+        Self::known(name, dialect).unwrap_or_else(|| Self::Other(name.into()))
+    }
+
+    /// [`Self::new`] for a symbol's name, sharing its text rather than
+    /// copying it: most names a call resolves to are not primitives.
+    fn from_symbol(name: &SymbolId, dialect: &dyn Dialect) -> Self {
+        Self::known(name, dialect).unwrap_or_else(|| Self::Other(name.shared()))
+    }
+
+    fn known(name: &str, dialect: &dyn Dialect) -> Option<Self> {
+        dialect
             .primitive(name)
-            .and_then(|primitive| Some((primitive, dialect.name_of(primitive)?)))
-        {
-            Some((primitive, spelling)) => Self::Known(primitive, spelling),
-            None => Self::Other(name.to_owned()),
-        }
+            .and_then(|primitive| Some(Self::Known(primitive, dialect.name_of(primitive)?)))
     }
 
     /// The dialect primitive this name denotes, or `None` when the dialect
@@ -1775,16 +1796,15 @@ fn primitive_name(
     symbol_names: &HashMap<SymbolId, SymbolId>,
     dialect: &dyn Dialect,
 ) -> Option<PrimitiveName> {
-    let location = location(path, span);
-    if let Some(symbol) = entities.get(&location) {
+    if let Some(symbol) = entities.at(path, span) {
         symbol_names
             .get(symbol)
-            .map(|name| PrimitiveName::new(name, dialect))
+            .map(|name| PrimitiveName::from_symbol(name, dialect))
             .or_else(|| {
                 let property = static_callee?.rsplit('.').next()?;
                 symbol_names
                     .get(format!("{symbol}::{property}").as_str())
-                    .map(|name| PrimitiveName::new(name, dialect))
+                    .map(|name| PrimitiveName::from_symbol(name, dialect))
             })
     } else {
         None
@@ -1843,7 +1863,7 @@ fn referenced_primitive(
     known(
         symbol_names
             .get(format!("{namespace}::{property}").as_str())
-            .map(|name| PrimitiveName::new(name, dialect)),
+            .map(|name| PrimitiveName::from_symbol(name, dialect)),
     )
 }
 
@@ -1855,6 +1875,72 @@ fn referenced_primitive(
 /// `dynamic(source, { static: true })`) is the same form in every pass. The
 /// spelling stays the callee's: a form is a call of the export, not another
 /// name.
+/// [`jsx_primitive_name`], answered from `lookup`'s per-file memo under the
+/// same exact-identity conditions as [`call_primitive_name_cached`]: the
+/// element is the file's own fact, found by its place in that slice.
+fn jsx_primitive_name_cached(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    element: &solid_facts::ast::JsxElementFact,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    dialect: &dyn Dialect,
+) -> Option<PrimitiveName> {
+    let own_inputs = std::ptr::eq(entities, lookup.entities())
+        && std::ptr::eq(symbol_names, lookup.symbol_names())
+        && std::ptr::addr_eq(
+            std::ptr::from_ref::<dyn Dialect>(dialect),
+            std::ptr::from_ref::<dyn Dialect>(lookup.dialect),
+        )
+        && lookup
+            .file_by_path(file.path.as_str())
+            .is_some_and(|own| std::ptr::eq(own, file));
+    let index = file
+        .ast
+        .jsx_elements
+        .iter()
+        .position(|own| std::ptr::eq(own, element));
+    if own_inputs && let Some(index) = index {
+        return lookup.primitives(file).jsx[index].clone();
+    }
+    jsx_primitive_name(file, element, entities, symbol_names, dialect)
+}
+
+/// [`call_primitive_name`], answered from `lookup`'s per-file memo (which
+/// computes exactly it, once per call) when every input is the very one the
+/// lookup was built from, compared by pointer, and computed directly
+/// otherwise: a host analysis with its own entities, a file copy, a call
+/// that is not the file's own fact. The answer is the same either way.
+fn call_primitive_name_cached(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    dialect: &dyn Dialect,
+) -> Option<PrimitiveName> {
+    let own_inputs = std::ptr::eq(entities, lookup.entities())
+        && std::ptr::eq(symbol_names, lookup.symbol_names())
+        && std::ptr::addr_eq(
+            std::ptr::from_ref::<dyn Dialect>(dialect),
+            std::ptr::from_ref::<dyn Dialect>(lookup.dialect),
+        )
+        && lookup
+            .file_by_path(file.path.as_str())
+            .is_some_and(|own| std::ptr::eq(own, file));
+    if own_inputs
+        && let Some(index) = lookup.call_index(file, call.span)
+        && file
+            .ast
+            .calls
+            .get(index)
+            .is_some_and(|own| std::ptr::eq(own, call))
+    {
+        return lookup.primitives(file).calls[index].clone();
+    }
+    call_primitive_name(file, call, entities, symbol_names, dialect)
+}
+
 fn call_primitive_name(
     file: &solid_facts::FileFacts,
     call: &solid_facts::ast::CallFact,
@@ -1889,7 +1975,7 @@ fn call_primitive_name(
     // that method's, not the primitive's. A namespace member
     // (`Solid.createEffect`), whose object is the namespace, keeps its answer.
     let callee = file.ast.peel_ts_sugar_span(call.callee);
-    if let Some(member) = file.ast.members.iter().find(|member| member.span == callee)
+    if let Some(member) = file.ast.member_at(callee)
         && referenced_primitive(
             file,
             file.ast.peel_ts_sugar_span(member.object),
@@ -2035,7 +2121,7 @@ fn exact_jsx_primitive_name(
         namespace_import.then(|| {
             symbol_names
                 .get(format!("{object_symbol}::{property_name}").as_str())
-                .map(|name| PrimitiveName::new(name, dialect))
+                .map(|name| PrimitiveName::from_symbol(name, dialect))
         })?
     })
 }

@@ -93,8 +93,8 @@ impl<'a> SemanticLookup<'a> {
 
     fn component_statuses(&self) -> &ComponentSets<'a> {
         self.component_functions.get_or_init(|| {
-            let mut proven = HashSet::new();
-            let mut escaped = HashSet::new();
+            let mut proven = HashSet::default();
+            let mut escaped = HashSet::default();
             for file in &self.facts.files {
                 for function in &file.ast.functions {
                     match self.compute_function_component_status(file, function) {
@@ -440,11 +440,7 @@ impl<'a> SemanticLookup<'a> {
             .iter()
             .filter_map(|(path, span)| {
                 let file = self.file_by_path(path)?;
-                let function = file
-                    .ast
-                    .functions
-                    .iter()
-                    .find(|function| function.span == *span)?;
+                let function = file.ast.function_at(*span)?;
                 Some(crate::UndecidedRegion {
                     body: crate::location(*path, function.body),
                     placed_callbacks: file
@@ -612,7 +608,7 @@ impl<'a> SemanticLookup<'a> {
 
     fn prop_render_sites(&self) -> &PropRenderSites<'a> {
         self.prop_render_sites.get_or_init(|| {
-            let mut map = PropRenderSites::new();
+            let mut map = PropRenderSites::default();
             let renderers = self.dialect.component_prop_renderers();
             if renderers.is_empty() {
                 return map;
@@ -752,7 +748,7 @@ impl<'a> SemanticLookup<'a> {
 
     fn contained_entities_by_path(&self) -> &HashMap<&'a str, Vec<&'a EntityFact>> {
         self.contained_entities_by_path.get_or_init(|| {
-            let mut by_path = HashMap::<&str, Vec<&EntityFact>>::new();
+            let mut by_path = HashMap::<&str, Vec<&EntityFact>>::default();
             for entity in self.facts.typescript.entities() {
                 by_path
                     .entry(entity.location.path.as_ref())
@@ -768,7 +764,7 @@ impl<'a> SemanticLookup<'a> {
 
     pub(super) fn functions_by_symbol(&self) -> &HashMap<&'a str, SymbolFunction> {
         self.functions_by_symbol.get_or_init(|| {
-            let mut map = HashMap::new();
+            let mut map = HashMap::default();
             for (file_index, file) in self.facts.files.iter().enumerate() {
                 for (function_index, function) in file.ast.functions.iter().enumerate() {
                     let own_method = crate::owners::own_method_name(file, function);
@@ -879,7 +875,7 @@ impl<'a> SemanticLookup<'a> {
 
     fn jsx_call_sites(&self) -> &HashMap<(&'a str, Span), CallSiteLoading> {
         self.jsx_call_sites.get_or_init(|| {
-            let mut map = HashMap::<(&'a str, Span), CallSiteLoading>::new();
+            let mut map = HashMap::<(&'a str, Span), CallSiteLoading>::default();
             for (_, _, _, target_file, target) in self.jsx_rendered_functions() {
                 let entry = map
                     .entry((target_file.path.as_str(), target.span))
@@ -925,7 +921,7 @@ impl<'a> SemanticLookup<'a> {
         &self,
     ) -> &HashMap<(&'a str, Span), Vec<FunctionCallSite>> {
         self.function_call_sites.get_or_init(|| {
-            let mut map = HashMap::<(&str, Span), Vec<FunctionCallSite>>::new();
+            let mut map = HashMap::<(&str, Span), Vec<FunctionCallSite>>::default();
             for (file_index, caller_file) in self.facts.files.iter().enumerate() {
                 for call in &caller_file.ast.calls {
                     let Some(symbol) = self.callee_symbol(caller_file, call.callee) else {
@@ -967,7 +963,7 @@ impl<'a> SemanticLookup<'a> {
 
     pub(super) fn entities_by_location(&self) -> &HashMap<(&'a str, u64, u64), &'a EntityFact> {
         self.entities_by_location.get_or_init(|| {
-            let mut map = HashMap::new();
+            let mut map = HashMap::default();
             for entity in self.facts.typescript.entities() {
                 map.entry((
                     entity.location.path.as_ref(),

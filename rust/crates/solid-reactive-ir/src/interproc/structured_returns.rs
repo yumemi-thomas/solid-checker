@@ -164,11 +164,7 @@ impl StructuredReturnDiscovery<'_, '_> {
                     let initializer = self
                         .binding_initializer(file, argument.span)
                         .unwrap_or(argument.span);
-                    let function = file
-                        .ast
-                        .functions
-                        .iter()
-                        .find(|function| function.span == initializer)?;
+                    let function = file.ast.function_at(initializer)?;
                     let index = self.indexes.get(&(file.path.to_string(), function.span))?;
                     let resolved = self.structured_returns[*index].as_ref()?;
                     (!matches!(
@@ -247,11 +243,7 @@ impl StructuredReturnDiscovery<'_, '_> {
                     let provider_context = if let Some(provider_member) =
                         self.lookup.dialect.context_provider_member()
                     {
-                        let member = provider_file
-                            .ast
-                            .members
-                            .iter()
-                            .find(|member| member.span == component)?;
+                        let member = provider_file.ast.member_at(component)?;
                         (provider_file.source_text(member.property) == Some(provider_member))
                             .then_some(member.object)?
                     } else {
@@ -295,7 +287,8 @@ impl StructuredReturnDiscovery<'_, '_> {
         let handler = call.arguments.get(1)?.span;
         let reactive = file.ast.calls.iter().any(|nested| {
             handler.contains(nested.span)
-                && crate::known_primitive(&call_primitive_name(
+                && crate::known_primitive(&crate::call_primitive_name_cached(
+                    self.lookup,
                     file,
                     nested,
                     self.entities,
@@ -322,12 +315,7 @@ impl StructuredReturnDiscovery<'_, '_> {
         if depth == 0 {
             return None;
         }
-        if let Some(conditional) = file
-            .ast
-            .conditional_expressions
-            .iter()
-            .find(|conditional| conditional.span == span)
-        {
+        if let Some(conditional) = file.ast.conditional_at(span) {
             let consequent = self.callable_value_return(
                 file,
                 call,
@@ -352,11 +340,7 @@ impl StructuredReturnDiscovery<'_, '_> {
                 _ => None,
             };
         }
-        let function = file
-            .ast
-            .functions
-            .iter()
-            .find(|function| function.span == span)?;
+        let function = file.ast.function_at(span)?;
         let index = self.indexes.get(&(file.path.to_string(), function.span))?;
         self.structured_returns[*index]
             .as_ref()
@@ -376,7 +360,8 @@ impl StructuredReturnDiscovery<'_, '_> {
             return None;
         }
         let symbol = self.entities.at(file.path.as_str(), call.callee);
-        let primitive = call_primitive_name(
+        let primitive = crate::call_primitive_name_cached(
+            self.lookup,
             file,
             call,
             self.entities,
@@ -537,7 +522,7 @@ impl StructuredReturnDiscovery<'_, '_> {
         if depth == 0 {
             return None;
         }
-        let member = file.ast.members.iter().find(|member| member.span == span)?;
+        let member = file.ast.member_at(span)?;
         let base = if let Some(call) = file
             .ast
             .calls
@@ -672,7 +657,7 @@ impl StructuredReturnDiscovery<'_, '_> {
             })
         })?;
         let sibling = self.relative_module_file(file, module)?;
-        let mut visiting = HashSet::new();
+        let mut visiting = HashSet::default();
         let (target_path, target) =
             self.resolve_export_binding(sibling.path.as_str(), imported, &mut visiting)?;
         self.accessors.iter().find_map(|(symbol, (_, location))| {
@@ -715,7 +700,7 @@ impl StructuredReturnDiscovery<'_, '_> {
             return false;
         }
         let mut symbol_id = entity.symbol.as_ref();
-        let mut seen = HashSet::new();
+        let mut seen = HashSet::default();
         while seen.insert(symbol_id) {
             let Some(symbol) = self.facts.typescript.symbol(symbol_id) else {
                 return false;
@@ -920,12 +905,7 @@ impl StructuredReturnDiscovery<'_, '_> {
         if depth == 0 {
             return None;
         }
-        if let Some(conditional) = file
-            .ast
-            .conditional_expressions
-            .iter()
-            .find(|conditional| conditional.span == span)
-        {
+        if let Some(conditional) = file.ast.conditional_at(span) {
             let consequent =
                 self.leaf_with_depth(file, conditional.consequent, fallback_label, depth - 1);
             let alternate =
@@ -940,12 +920,7 @@ impl StructuredReturnDiscovery<'_, '_> {
                 _ => None,
             };
         }
-        if let Some(logical) = file
-            .ast
-            .logical_expressions
-            .iter()
-            .find(|logical| logical.span == span)
-        {
+        if let Some(logical) = file.ast.logical_at(span) {
             let left = self.leaf_with_depth(file, logical.left, fallback_label, depth - 1);
             let right = self.leaf_with_depth(file, logical.right, fallback_label, depth - 1);
             return match (left, right) {
@@ -1118,7 +1093,7 @@ impl StructuredReturnDiscovery<'_, '_> {
                 return Some(returned);
             }
         }
-        if let Some(member) = file.ast.members.iter().find(|member| member.span == span)
+        if let Some(member) = file.ast.member_at(span)
             && let Some(symbol) = self.entities.at(file.path.as_str(), member.object)
             && self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store)
         {
@@ -1149,11 +1124,7 @@ pub(super) fn discover_structured_returns(
 ) -> Vec<Option<ReturnSummary>> {
     parallel_slice_results(discovery.nodes, |node| {
         let file = discovery.lookup.file_by_path(node.path.as_str())?;
-        let function = file
-            .ast
-            .functions
-            .iter()
-            .find(|function| function.span == node.span)?;
+        let function = file.ast.function_at(node.span)?;
         let returned = function
             .expression_return
             .iter()

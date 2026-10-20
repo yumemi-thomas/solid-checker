@@ -109,9 +109,9 @@ impl<'a> NamedCallbackIndex<'a> {
                 Some((function.span, function_symbol(file, function, entities)?))
             })
             .collect::<Vec<_>>();
-        let mut by_symbol = HashMap::<&str, Vec<usize>>::new();
-        let mut by_reference = HashMap::<Span, Vec<usize>>::new();
-        let mut by_canonical_name = HashMap::<&str, Vec<usize>>::new();
+        let mut by_symbol = HashMap::<&str, Vec<usize>>::default();
+        let mut by_reference = HashMap::<Span, Vec<usize>>::default();
+        let mut by_canonical_name = HashMap::<&str, Vec<usize>>::default();
         for (index, (_, symbol)) in candidates.iter().enumerate() {
             by_symbol.entry(symbol.as_str()).or_default().push(index);
             if let Some(name) = symbol_names.get(*symbol) {

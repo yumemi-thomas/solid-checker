@@ -263,12 +263,7 @@ pub(super) fn typed_candidate_contributions(
         // The candidate is keyed by the entity root its reads carry; the
         // callee's resolved declaration symbol may be another identity.
         let callee = file.ast.peel_ts_sugar_span(call.callee);
-        let property = file
-            .ast
-            .members
-            .iter()
-            .find(|member| member.span == callee)
-            .map(|member| member.property);
+        let property = file.ast.member_at(callee).map(|member| member.property);
         let Some((symbol, typed)) = [
             lookup.callee_symbol(file, call.callee),
             entities
@@ -431,7 +426,7 @@ pub(super) fn interprocedural_reads(
         vec![Vec::<UnresolvedCallbackObligation>::new(); nodes.len()];
     let mut dispatch_obligations = Vec::new();
     let mut edges = vec![Vec::<usize>::new(); nodes.len()];
-    let mut guaranteed_edges = HashSet::<(usize, usize)>::new();
+    let mut guaranteed_edges = HashSet::<(usize, usize)>::default();
     let mut invoked_parameters = vec![Vec::<usize>::new(); nodes.len()];
     let mut direct_callback_parameters = vec![Vec::<usize>::new(); nodes.len()];
     let mut guaranteed_callback_parameters = vec![Vec::<usize>::new(); nodes.len()];
@@ -680,8 +675,8 @@ type SummaryNodeIndexes = (HashMap<(String, Span), usize>, HashMap<SymbolId, usi
 fn transported_body_sets(
     transported_calls: &HashMap<Location, accessor_provenance::Callable>,
 ) -> (TransportedBodies<'_>, HashSet<(String, Span)>) {
-    let mut transported_bodies = HashSet::new();
-    let mut array_member_bodies = HashSet::new();
+    let mut transported_bodies = HashSet::default();
+    let mut array_member_bodies = HashSet::default();
     for target in transported_calls.values() {
         match target {
             accessor_provenance::Callable::Function { path, span } => {
@@ -752,7 +747,7 @@ fn discover_summary_graph_nodes<'a>(
         ..
     } = context;
     let mut nodes = Vec::new();
-    let mut graph_node_reused_paths = HashSet::new();
+    let mut graph_node_reused_paths = HashSet::default();
     if let Some(cache) = interprocedural_graph_cache {
         let current_paths = facts
             .files
@@ -846,7 +841,7 @@ fn transported_call_targets(
     {
         provenance.proven_source_origins().cloned().collect()
     } else {
-        HashSet::new()
+        HashSet::default()
     };
     (transported_calls, unavailable_calls, array_source_origins)
 }
@@ -1061,7 +1056,7 @@ fn add_transported_call_summaries(
         lookup,
         ..
     } = context;
-    let mut transported_edges = HashSet::new();
+    let mut transported_edges = HashSet::default();
     for file in &facts.files {
         for call in &file.ast.calls {
             let Some(owner) = containing_summary_function_indexed(
@@ -1380,7 +1375,7 @@ fn collect_returned_summaries<'a>(
         }),
         |returned| returned.span,
     );
-    let mut returns_by_ast_owner = HashMap::new();
+    let mut returns_by_ast_owner = HashMap::default();
     for file in &facts.files {
         for returned in &file.ast.returns {
             if let Some(function) = containing_ast_function(&file.ast, returned.span) {
@@ -1654,7 +1649,7 @@ fn propagate_factory_reads(
     let accessors = context.accessors;
     let returned_binding_candidates = candidates.returned_bindings;
     let factory_call_candidates = candidates.factory_calls;
-    let mut returned_bindings = HashMap::<SymbolId, Vec<SummaryRead>>::new();
+    let mut returned_bindings = HashMap::<SymbolId, Vec<SummaryRead>>::default();
     if returned.iter().any(|summary| !summary.is_empty()) {
         for (binding_symbol, target_symbol) in returned_binding_candidates {
             let Some(target) = by_symbol.get(target_symbol).copied() else {
@@ -1908,7 +1903,7 @@ fn export_parameter_member_dispatch_obligations(
     // the pipeline discharges it there for a helper
     // entered only through call expressions
     // (`attribution::discharge_closed_program_export_dispatch`, ADR 0203).
-    let mut allowed_by_path: HashMap<&str, Vec<Span>> = HashMap::new();
+    let mut allowed_by_path: HashMap<&str, Vec<Span>> = HashMap::default();
     for node in nodes.iter().filter(|node| node.exported) {
         let Some(&file) = project_indexes.files_by_path.get(node.path.as_str()) else {
             continue;
@@ -2067,12 +2062,7 @@ fn export_structured_return_obligations(
         let Some(file) = lookup.file_by_path(node.path.as_str()) else {
             continue;
         };
-        let Some(function) = file
-            .ast
-            .functions
-            .iter()
-            .find(|function| function.span == node.span)
-        else {
+        let Some(function) = file.ast.function_at(node.span) else {
             continue;
         };
         for property in function

@@ -5,13 +5,13 @@
 //! the compiler-fact classifier plus the semantic (AST-driven) classifier and
 //! the two role-keyed read helpers that consume its result.
 
-use std::collections::{HashMap, HashSet};
+use crate::{HashMap, HashSet};
 
 use solid_dialect::{Dialect, Execution, Primitive};
 use solid_facts::core::Span;
 
 use super::{
-    EntitySymbols, ExecutionRole, PrimitiveName, SemanticLookup, SymbolId, call_primitive_name,
+    EntitySymbols, ExecutionRole, PrimitiveName, SemanticLookup, SymbolId,
     exact_jsx_primitive_name, jsx_primitive_name, known_primitive, location,
 };
 #[path = "project_consumer.rs"]
@@ -262,7 +262,7 @@ pub(super) fn semantic_execution_role(
         entities,
         symbol_names,
         lookup,
-        &mut HashSet::new(),
+        &mut HashSet::default(),
     )
 }
 

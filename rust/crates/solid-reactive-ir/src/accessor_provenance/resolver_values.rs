@@ -38,7 +38,7 @@ impl Resolver<'_, '_> {
             *transported = true;
             return Some(value);
         }
-        if let Some(function) = file.ast.functions.iter().find(|f| f.span == span) {
+        if let Some(function) = file.ast.function_at(span) {
             if function.generator || function.r#async {
                 return None;
             }
@@ -68,7 +68,7 @@ impl Resolver<'_, '_> {
                 span: function.span,
             }));
         }
-        if let Some(member) = file.ast.members.iter().find(|m| m.span == span) {
+        if let Some(member) = file.ast.member_at(span) {
             if file.ast.computed_members.contains(&span) {
                 return None;
             }
@@ -108,7 +108,7 @@ impl Resolver<'_, '_> {
                 return None;
             };
             let target_file = self.lookup.file_by_path(&path)?;
-            let function = target_file.ast.functions.iter().find(|f| f.span == span)?;
+            let function = target_file.ast.function_at(span)?;
             if function.r#async
                 || function.generator
                 || !self.lookup.function_value_is_current(target_file, function)
@@ -171,12 +171,7 @@ impl Resolver<'_, '_> {
                             return true;
                         }
                         let value = file.ast.peel_ts_sugar_span(property.value);
-                        if let Some(function) = file
-                            .ast
-                            .functions
-                            .iter()
-                            .find(|function| function.span == value)
-                        {
+                        if let Some(function) = file.ast.function_at(value) {
                             // Receiver closure is independent of when an async
                             // body runs. Its invocation remains outside ordinary
                             // callable transport; an unused sibling need not veto
@@ -196,9 +191,7 @@ impl Resolver<'_, '_> {
                                 .and_then(|owner| {
                                     owner
                                         .ast
-                                        .functions
-                                        .iter()
-                                        .find(|function| function.span == span)
+                                        .function_at(span)
                                         .map(|function| (owner, function))
                                 })
                                 .is_some_and(|(owner, function)| {
@@ -375,13 +368,7 @@ impl Resolver<'_, '_> {
             transported,
         )?;
         if let Value::Callable(Callable::Function { path, span }) = &value {
-            let selected = self
-                .lookup
-                .file_by_path(path)?
-                .ast
-                .functions
-                .iter()
-                .find(|f| f.span == *span)?;
+            let selected = self.lookup.file_by_path(path)?.ast.function_at(*span)?;
             if selected.kind != ast::FunctionKind::Arrow
                 && (!module_scoped_source(self.lookup.file_by_path(path)?)
                     || self.receiver_channels_opaque

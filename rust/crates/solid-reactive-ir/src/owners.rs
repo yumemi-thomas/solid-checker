@@ -5,13 +5,13 @@ use crate::cache::{CachedLateStages, same_compiler_semantics};
 use crate::pipeline::{AnalysisContext, ProgramDraft, parallel_slice_results};
 use crate::{
     BuildTimings, ExecutionRole, Fix, FunctionBoundary, OwnerRequirement,
-    OwnerRequirementOperation, PrimitiveName, TextEdit, call_primitive_name,
-    containing_function_indexed, function_indices_by_path, jsx_primitive_name, known_primitive,
-    location,
+    OwnerRequirementOperation, PrimitiveName, TextEdit, containing_function_indexed,
+    function_indices_by_path, jsx_primitive_name, known_primitive, location,
 };
 
+use crate::{HashMap, HashSet};
 use std::{
-    collections::{HashMap, HashSet, VecDeque},
+    collections::VecDeque,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -370,7 +370,16 @@ impl OwnerFileIndex {
             .ast
             .calls
             .iter()
-            .map(|call| call_primitive_name(file, call, entities, symbol_names, lookup.dialect))
+            .map(|call| {
+                crate::call_primitive_name_cached(
+                    lookup,
+                    file,
+                    call,
+                    entities,
+                    symbol_names,
+                    lookup.dialect,
+                )
+            })
             .collect::<Vec<_>>();
         let providing_regions = file
             .ast

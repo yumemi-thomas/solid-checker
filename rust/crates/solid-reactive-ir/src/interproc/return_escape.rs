@@ -39,12 +39,7 @@ pub(super) fn function_value_escapes_through_return(
     entities: &EntitySymbols,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
-    let Some(owner_function) = file
-        .ast
-        .functions
-        .iter()
-        .find(|function| function.span == owner.span)
-    else {
+    let Some(owner_function) = file.ast.function_at(owner.span) else {
         return false;
     };
     owner_function
@@ -234,11 +229,11 @@ pub(super) fn returned_function_targets(
     functions: &FunctionLookup,
     entities: &EntitySymbols,
 ) -> HashMap<SymbolId, usize> {
-    let mut ast_functions = HashMap::new();
+    let mut ast_functions = HashMap::default();
     for function in &file.ast.functions {
         ast_functions.entry(function.span).or_insert(function);
     }
-    let mut returns_by_owner = HashMap::<Span, Vec<&solid_facts::ast::ReturnFact>>::new();
+    let mut returns_by_owner = HashMap::<Span, Vec<&solid_facts::ast::ReturnFact>>::default();
     for returned in &file.ast.returns {
         if let Some(owner) = containing_ast_function(&file.ast, returned.span) {
             returns_by_owner
@@ -247,8 +242,8 @@ pub(super) fn returned_function_targets(
                 .push(returned);
         }
     }
-    let mut seen = HashSet::new();
-    let mut targets = HashMap::new();
+    let mut seen = HashSet::default();
+    let mut targets = HashMap::default();
     for binding in &file.ast.bindings {
         let Some(initializer) = binding.call_initializer else {
             continue;
@@ -322,12 +317,7 @@ pub(super) fn returned_function_spans(
             result.push(value);
             return;
         }
-        if let Some(conditional) = file
-            .ast
-            .conditional_expressions
-            .iter()
-            .find(|conditional| conditional.span == value)
-        {
+        if let Some(conditional) = file.ast.conditional_at(value) {
             collect(file, conditional.consequent, entities, visited, result);
             collect(file, conditional.alternate, entities, visited, result);
             return;
@@ -422,7 +412,7 @@ pub(super) fn returned_function_spans(
         }
     }
 
-    let mut visited = HashSet::new();
+    let mut visited = HashSet::default();
     let mut result = Vec::new();
     collect(file, value, entities, &mut visited, &mut result);
     result.sort_unstable();
@@ -435,11 +425,7 @@ pub(super) fn proven_array_method<'a>(
     call: &solid_facts::ast::CallFact,
     entities: &EntitySymbols,
 ) -> Option<&'a str> {
-    let member = file
-        .ast
-        .members
-        .iter()
-        .find(|member| member.span == call.callee)?;
+    let member = file.ast.member_at(call.callee)?;
     let method = file.source_text(member.property)?;
     if !matches!(method, "push" | "unshift") {
         return None;

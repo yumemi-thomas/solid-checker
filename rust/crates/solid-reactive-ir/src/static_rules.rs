@@ -2,6 +2,7 @@
 //! checks that need discovered sources and TypeScript facts, but none of the
 //! reactive stages behind them.
 
+use crate::HashSet;
 use crate::cleanup::callback_argument_literal;
 use crate::execution_role::{allowed_callback_spans, semantic_execution_role};
 use crate::identity::SymbolId;
@@ -13,11 +14,9 @@ use crate::pipeline::{AnalysisContext, ProgramDraft};
 use crate::runtime_semantics::is_proven_array_filter;
 use crate::symbols::AsyncSymbolRoots;
 use crate::{
-    ReactiveRead, ReactiveSourceKind, StaticDefect, StaticDefectKind, call_primitive_name,
-    known_primitive, location,
+    ReactiveRead, ReactiveSourceKind, StaticDefect, StaticDefectKind, known_primitive, location,
 };
 use solid_facts::core::Span;
-use std::collections::HashSet;
 use typefacts::Location;
 
 /// The static-prepass stage: every prepass rule, in their pipeline order.
@@ -47,13 +46,21 @@ fn primitive_value_references(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraf
         // read these. Anything else is a value the call reaches: a method of
         // the primitive (`createEffect.call(…)`, `.bind(…)`) or a choice
         // (`(flag ? a : b)(…)`).
-        let mut callees = HashSet::new();
+        let mut callees = HashSet::default();
         for call in ast.calls.iter().filter(|call| {
-            call_primitive_name(file, call, ctx.entities, ctx.symbol_names, ctx.dialect).is_some()
+            crate::call_primitive_name_cached(
+                ctx.semantic_lookup,
+                file,
+                call,
+                ctx.entities,
+                ctx.symbol_names,
+                ctx.dialect,
+            )
+            .is_some()
         }) {
             let mut span = ast.peel_ts_sugar_span(call.callee);
             callees.insert(span);
-            while let Some(member) = ast.members.iter().find(|member| member.span == span) {
+            while let Some(member) = ast.member_at(span) {
                 callees.insert(member.property);
                 span = ast.peel_ts_sugar_span(member.object);
                 callees.insert(span);
@@ -70,7 +77,7 @@ fn primitive_value_references(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraf
                     .filter(|member| !ast.computed_members.contains(&member.span))
                     .map(|member| member.property),
             );
-        let mut seen = HashSet::new();
+        let mut seen = HashSet::default();
         for span in candidates {
             if callees.contains(&span)
                 || ast.jsx_elements.iter().any(|element| {
@@ -339,7 +346,8 @@ fn binding_initializes_reactive_store(
     else {
         return false;
     };
-    known_primitive(&call_primitive_name(
+    known_primitive(&crate::call_primitive_name_cached(
+        ctx.semantic_lookup,
         file,
         call,
         ctx.entities,
@@ -388,7 +396,7 @@ fn reactive_read_after_await(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
             else {
                 continue;
             };
-            let mut reported_calls = HashSet::new();
+            let mut reported_calls = HashSet::default();
             for call in &function.calls_after_await {
                 let ast_call = ctx
                     .facts
@@ -622,7 +630,7 @@ pub(crate) fn reactive_read_after_await_through_calls(
                 }) {
                     continue;
                 }
-                let mut reported = HashSet::new();
+                let mut reported = HashSet::default();
                 for read in reads {
                     // ADR 0195: a source already read before the first
                     // suspension is a dependency, and stays one.
@@ -763,7 +771,7 @@ fn call_accessor_symbol<'s>(
     call: &solid_facts::ast::CallFact,
 ) -> Option<&'s SymbolId> {
     let callee = file.ast.peel_ts_sugar_span(call.callee);
-    if let Some(member) = file.ast.members.iter().find(|member| member.span == callee) {
+    if let Some(member) = file.ast.member_at(callee) {
         return (!file.ast.computed_members.contains(&member.span))
             .then(|| ctx.entities.at(file.path.as_str(), member.property))
             .flatten();
@@ -794,12 +802,7 @@ fn tracked_before_first_suspension(
         return false;
     };
     let expression = file.ast.peel_ts_sugar_span(Span::new(start, end));
-    let Some(ast_function) = file
-        .ast
-        .functions
-        .iter()
-        .find(|candidate| candidate.span == expression)
-    else {
+    let Some(ast_function) = file.ast.function_at(expression) else {
         return false;
     };
     let own = |span: Span| {
@@ -841,11 +844,7 @@ fn member_read_site<'f>(
     let start = u32::try_from(function.expression.start_byte).ok()?;
     let end = u32::try_from(function.expression.end_byte).ok()?;
     let expression = file.ast.peel_ts_sugar_span(Span::new(start, end));
-    let ast_function = file
-        .ast
-        .functions
-        .iter()
-        .find(|candidate| candidate.span == expression)?;
+    let ast_function = file.ast.function_at(expression)?;
     let boundary = file
         .ast
         .unconditional_awaits
@@ -916,8 +915,14 @@ fn tracked_async_computation_context(
     candidates.into_iter().find_map(|(file_index, call_index)| {
         let file = &ctx.facts.files[file_index];
         let candidate = &file.ast.calls[call_index];
-        let primitive =
-            call_primitive_name(file, candidate, ctx.entities, ctx.symbol_names, ctx.dialect)?;
+        let primitive = crate::call_primitive_name_cached(
+            ctx.semantic_lookup,
+            file,
+            candidate,
+            ctx.entities,
+            ctx.symbol_names,
+            ctx.dialect,
+        )?;
         // A tracked callback is what makes this a computation
         // whose reads matter after an await. The list this
         // replaced was 2.0's eight; under 1.x three of them
@@ -1146,21 +1151,11 @@ pub(crate) fn component_returns_conditionally(ctx: &AnalysisContext<'_>, draft: 
 /// tracks and is not a structural branch.
 fn return_spine_tests(file: &solid_facts::FileFacts, expression: Span, tests: &mut Vec<Span>) {
     let expression = file.ast.peel_ts_sugar_span(expression);
-    if let Some(conditional) = file
-        .ast
-        .conditional_expressions
-        .iter()
-        .find(|conditional| conditional.span == expression)
-    {
+    if let Some(conditional) = file.ast.conditional_at(expression) {
         tests.push(conditional.test);
         return_spine_tests(file, conditional.consequent, tests);
         return_spine_tests(file, conditional.alternate, tests);
-    } else if let Some(logical) = file
-        .ast
-        .logical_expressions
-        .iter()
-        .find(|logical| logical.span == expression)
-    {
+    } else if let Some(logical) = file.ast.logical_at(expression) {
         if jsx_structure_within(file, logical.right) {
             tests.push(logical.left);
         }

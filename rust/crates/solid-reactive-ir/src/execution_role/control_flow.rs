@@ -14,12 +14,7 @@ pub(crate) fn assigned_member_function_contains(
             {
                 return false;
             }
-            let Some(member) = file
-                .ast
-                .members
-                .iter()
-                .find(|member| member.span == assignment.target)
-            else {
+            let Some(member) = file.ast.member_at(assignment.target) else {
                 return false;
             };
             let Some(object_symbol) = entities.at(file.path.as_str(), member.object) else {
@@ -206,7 +201,8 @@ pub(crate) fn function_placed_by_dialect(
             .children
             .iter()
             .any(|child| jsx_child_expression(file, *child) == Some(function))
-            && jsx_primitive_name(
+            && crate::jsx_primitive_name_cached(
+                lookup,
                 file,
                 element,
                 lookup.entities(),

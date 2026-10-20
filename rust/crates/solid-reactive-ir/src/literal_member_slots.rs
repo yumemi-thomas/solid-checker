@@ -39,7 +39,7 @@
 //! root, a function literal stored there is decided by its own body, and any
 //! other root (an Unknown receiver among them) is only a typed candidate.
 
-use std::collections::HashMap;
+use crate::HashMap;
 
 use solid_facts::{
     FileFacts, ProjectFacts,
@@ -84,9 +84,9 @@ impl<'l, 'a> LiteralMemberSlots<'l, 'a> {
         Self {
             facts,
             lookup,
-            verdicts: HashMap::new(),
+            verdicts: HashMap::default(),
             sites: None,
-            members: HashMap::new(),
+            members: HashMap::default(),
         }
     }
 
@@ -114,7 +114,7 @@ impl<'l, 'a> LiteralMemberSlots<'l, 'a> {
         let lookup = self.lookup;
         let facts = self.facts;
         let sites = self.sites.get_or_insert_with(|| {
-            let mut sites = HashMap::<&SymbolId, Vec<&Location>>::new();
+            let mut sites = HashMap::<&SymbolId, Vec<&Location>>::default();
             for entity in facts.typescript.entities() {
                 if let Some(root) = lookup.entities().get(&entity.location) {
                     sites.entry(root).or_default().push(&entity.location);
@@ -238,7 +238,7 @@ impl<'l, 'a> LiteralMemberSlots<'l, 'a> {
         let lookup = self.lookup;
         let facts = self.facts;
         let sites = self.sites.get_or_insert_with(|| {
-            let mut sites = HashMap::<&SymbolId, Vec<&Location>>::new();
+            let mut sites = HashMap::<&SymbolId, Vec<&Location>>::default();
             for entity in facts.typescript.entities() {
                 if let Some(root) = lookup.entities().get(&entity.location) {
                     sites.entry(root).or_default().push(&entity.location);
@@ -269,7 +269,7 @@ impl<'l, 'a> LiteralMemberSlots<'l, 'a> {
             // computed access or any other shape is not judged here and
             // withholds the root.
             let members = self.members.entry(file.path.as_str()).or_insert_with(|| {
-                let mut index = HashMap::new();
+                let mut index = HashMap::default();
                 for (position, member) in file.ast.members.iter().enumerate() {
                     if file
                         .ast

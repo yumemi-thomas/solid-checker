@@ -298,9 +298,7 @@ fn expected_function_got_expression(
             // installing it once is exactly right and stays silent.
             let member_symbol = file
                 .ast
-                .members
-                .iter()
-                .find(|member| member.span == expression)
+                .member_at(expression)
                 .and_then(|_| member_root(file, expression))
                 .and_then(|root| Some((root, context.entities.at(file.path.as_str(), root)?)));
             if let Some((root, symbol)) = member_symbol {
@@ -656,9 +654,7 @@ fn no_direct_mutation(
                 .any(|identifier| identifier.span == file.ast.peel_ts_sugar_span(root))
                 || !file
                     .ast
-                    .members
-                    .iter()
-                    .find(|member| member.span == file.ast.peel_ts_sugar_span(assignment.target))
+                    .member_at(file.ast.peel_ts_sugar_span(assignment.target))
                     .is_some_and(|member| {
                         file.ast.peel_ts_sugar_span(member.object)
                             == file.ast.peel_ts_sugar_span(root)
@@ -692,9 +688,7 @@ fn no_direct_mutation(
             && context.dialect.store_root_properties_are_readonly()
             && file
                 .ast
-                .members
-                .iter()
-                .find(|member| member.span == assignment.target)
+                .member_at(assignment.target)
                 .is_some_and(|member| member.object == root)
             && file
                 .ast

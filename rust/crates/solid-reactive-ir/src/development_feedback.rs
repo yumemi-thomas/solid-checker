@@ -1,6 +1,7 @@
 //! Optional, non-authoritative models for executed development feedback.
 //! Exact primitive identity comes from the normal semantic lookup. The host
 //! may instrument these spans, but cannot manufacture models from API names.
+use crate::HashMap;
 use serde::{Deserialize, Serialize};
 use solid_dialect::{Dialect, Execution};
 use solid_facts::{
@@ -8,7 +9,6 @@ use solid_facts::{
     ast::{FunctionFact, ReturnFact},
     core::Span,
 };
-use std::collections::HashMap;
 
 use crate::indexes::SemanticLookup;
 
@@ -142,7 +142,7 @@ pub(crate) fn models(
                     .then_some((file.ast.peel_ts_sugar_span(argument.span), call.span))
                 })
                 .collect::<HashMap<_, _>>();
-            let mut returns = HashMap::<Span, Vec<&ReturnFact>>::new();
+            let mut returns = HashMap::<Span, Vec<&ReturnFact>>::default();
             for function in &file.ast.functions {
                 returns
                     .entry(function.span)

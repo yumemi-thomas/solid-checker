@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use crate::{HashMap, HashSet};
 use std::sync::Arc;
 
 use solid_dialect::{Primitive, TrackedCallbackTiming};
@@ -695,7 +695,7 @@ fn a_tracked_chain_takes_its_schedule_from_the_dialect_not_the_word() {
 
 #[test]
 fn reactive_sources_order_by_phase_before_location() {
-    let phases = HashMap::from([(SymbolId::from("late"), 2_u8)]);
+    let phases = HashMap::from_iter([(SymbolId::from("late"), 2_u8)]);
     let early = cached_reactive_source("early", "early", &location(90), &phases);
     let late = cached_reactive_source("late", "late", &location(10), &phases);
     // `late` sits at an earlier byte but a later phase.
@@ -712,14 +712,14 @@ fn reactive_sources_order_by_phase_before_location() {
 
 #[test]
 fn retained_reactive_sources_build_sorted_and_reuse_the_cache() {
-    let accessors = HashMap::from([
+    let accessors = HashMap::from_iter([
         (SymbolId::from("a"), (SymbolId::from("count"), location(50))),
         (SymbolId::from("b"), (SymbolId::from("name"), location(10))),
         (SymbolId::from("c"), (SymbolId::from("gone"), location(5))),
     ]);
     // `c` never appears in the summaries, so it is ineligible.
-    let summary_sources = HashSet::from([SymbolId::from("a"), SymbolId::from("b")]);
-    let phases = HashMap::from([(SymbolId::from("a"), 2_u8)]);
+    let summary_sources = HashSet::from_iter([SymbolId::from("a"), SymbolId::from("b")]);
+    let phases = HashMap::from_iter([(SymbolId::from("a"), 2_u8)]);
 
     let mut cache = None;
     let first = retained_reactive_sources(&mut cache, &accessors, &summary_sources, &phases);
@@ -737,12 +737,12 @@ fn retained_reactive_sources_build_sorted_and_reuse_the_cache() {
 
 #[test]
 fn retained_reactive_sources_drop_stale_entries_and_insert_new_ones_in_order() {
-    let mut accessors = HashMap::from([
+    let mut accessors = HashMap::from_iter([
         (SymbolId::from("a"), (SymbolId::from("count"), location(50))),
         (SymbolId::from("b"), (SymbolId::from("name"), location(10))),
     ]);
-    let mut summary_sources = HashSet::from([SymbolId::from("a"), SymbolId::from("b")]);
-    let phases = HashMap::new();
+    let mut summary_sources = HashSet::from_iter([SymbolId::from("a"), SymbolId::from("b")]);
+    let phases = HashMap::default();
 
     let mut cache = None;
     retained_reactive_sources(&mut cache, &accessors, &summary_sources, &phases);
@@ -764,8 +764,8 @@ fn retained_reactive_sources_drop_stale_entries_and_insert_new_ones_in_order() {
 #[test]
 fn dependency_users_are_reference_counted() {
     let dependency = InterproceduralResultDependency::Symbol(SymbolId::from("f"));
-    let mut users = HashMap::new();
-    let mut states = HashMap::new();
+    let mut users = HashMap::default();
+    let mut states = HashMap::default();
     states.insert(
         dependency.clone(),
         crate::cache::InterproceduralResultDependencyState::Missing,

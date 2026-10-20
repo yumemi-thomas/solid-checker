@@ -1,6 +1,6 @@
 //! A split effect's apply phase needs an invocation premise (ADR 0302).
 
-use std::collections::{HashMap, HashSet};
+use crate::{HashMap, HashSet};
 
 use solid_dialect::{OptionLiteral, Primitive, ReactiveRole, ResultSlot};
 use solid_facts::FileFacts;
@@ -49,7 +49,7 @@ pub(crate) fn at_call(
 pub(crate) type ApplyCalls<'a> = HashMap<(&'a str, Span, usize), ApplyExecution>;
 
 pub(crate) fn calls<'a>(lookup: &SemanticLookup<'a>) -> ApplyCalls<'a> {
-    let mut result = ApplyCalls::new();
+    let mut result = ApplyCalls::default();
     for file in lookup.files() {
         for call in &file.ast.calls {
             let Some(primitive) = lookup.primitive_at_call(file, call.span) else {
@@ -98,7 +98,7 @@ fn prove_at_call(
             })
             .map(|(_, argument)| argument)
             .map_or(ApplyExecution::Unknown, |compute| {
-                compute_dependency(file, compute.span, lookup, &mut HashSet::new())
+                compute_dependency(file, compute.span, lookup, &mut HashSet::default())
             })
     } else {
         ApplyExecution::Unknown
@@ -113,9 +113,7 @@ fn callback<'a, 'facts: 'a>(
 ) -> Option<(&'a FileFacts, &'a FunctionFact)> {
     let value = file.ast.peel_ts_sugar_span(value);
     file.ast
-        .functions
-        .iter()
-        .find(|function| function.span == value)
+        .function_at(value)
         .map(|function| (file, function))
         .or_else(|| {
             let identifier = file
@@ -212,7 +210,7 @@ fn compute_dependency(
 fn mutable_accessor(file: &FileFacts, callee: Span, lookup: &SemanticLookup<'_>) -> bool {
     let mut path = file.path.as_str();
     let mut span = callee;
-    let mut seen = HashSet::new();
+    let mut seen = HashSet::default();
     while let Some((definition, binding, symbol)) = lookup.binding_at_reference(path, span) {
         if !binding.immutable || !seen.insert(symbol.clone()) {
             return false;
@@ -294,8 +292,8 @@ pub(crate) fn at_span(file: &FileFacts, span: Span, lookup: &SemanticLookup<'_>)
 pub(crate) type ApplyRegions = HashMap<String, Vec<(Span, ApplyExecution)>>;
 
 pub(crate) fn regions(lookup: &SemanticLookup<'_>) -> ApplyRegions {
-    let mut targets: HashMap<(String, Span), Vec<ApplyExecution>> = HashMap::new();
-    let mut uses = HashSet::new();
+    let mut targets: HashMap<(String, Span), Vec<ApplyExecution>> = HashMap::default();
+    let mut uses = HashSet::default();
     for file in lookup.files() {
         for call in &file.ast.calls {
             if let Some((definition, function)) = callback(file, call.callee, lookup) {
@@ -380,7 +378,7 @@ pub(crate) fn regions(lookup: &SemanticLookup<'_>) -> ApplyRegions {
             }
         }
     }
-    let mut result = ApplyRegions::new();
+    let mut result = ApplyRegions::default();
     for ((path, span), sites) in targets {
         let execution = if sites.contains(&ApplyExecution::Proven) {
             ApplyExecution::Proven

@@ -75,10 +75,10 @@ impl<'a> SemanticLookup<'a> {
         self.parameter_testing_functions
             .get_or_init(|| {
                 let facts: &'a ProjectFacts = self.facts;
-                let mut testing = HashSet::new();
+                let mut testing = HashSet::default();
                 for file in &facts.files {
                     let ast = &file.ast;
-                    let mut owners = HashMap::<Span, Span>::new();
+                    let mut owners = HashMap::<Span, Span>::default();
                     for function in &ast.functions {
                         for parameter in &function.parameters {
                             for name in &parameter.names {
@@ -112,7 +112,7 @@ impl<'a> SemanticLookup<'a> {
     pub(super) fn never_returning_calls(&self) -> &HashMap<&'a str, Vec<Span>> {
         self.never_returning_calls.get_or_init(|| {
             let facts: &'a ProjectFacts = self.facts;
-            let mut calls = HashMap::<&'a str, Vec<Span>>::new();
+            let mut calls = HashMap::<&'a str, Vec<Span>>::default();
             for file in &facts.files {
                 for call in &file.ast.calls {
                     if self
@@ -137,7 +137,7 @@ impl<'a> SemanticLookup<'a> {
     pub(super) fn parameter_completion_calls(&self) -> &HashSet<(&'a str, Span, usize)> {
         self.parameter_completion_calls.get_or_init(|| {
             let facts: &'a ProjectFacts = self.facts;
-            let mut calls = HashSet::new();
+            let mut calls = HashSet::default();
             // ADR 0285: calls passing a parameter on to another function.
             let mut forwards = Vec::new();
             for file in &facts.files {
@@ -154,7 +154,7 @@ impl<'a> SemanticLookup<'a> {
                 {
                     continue;
                 }
-                let mut parameters = HashMap::<&str, (Span, usize)>::new();
+                let mut parameters = HashMap::<&str, (Span, usize)>::default();
                 for function in &file.ast.functions {
                     if function.r#async || function.generator {
                         continue;
@@ -280,7 +280,7 @@ impl<'a> SemanticLookup<'a> {
         &self,
     ) -> &HashMap<&'a str, Vec<ResultAccessForwarded>> {
         self.result_access_forwarded.get_or_init(|| {
-            let mut forwarded = HashMap::<&'a str, Vec<ResultAccessForwarded>>::new();
+            let mut forwarded = HashMap::<&'a str, Vec<ResultAccessForwarded>>::default();
             // Most dialect variants answer no slot at all; skip the walk.
             let answered = self.project_primitives().iter().any(|primitive| {
                 (0..PROBED_ARGUMENTS).any(|count| {

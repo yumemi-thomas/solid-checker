@@ -47,12 +47,19 @@ pub(super) fn semantic_role_before_awaits(
             .arguments_containing(function.span)
             .any(|(call, index)| {
                 file.ast.peel_ts_sugar_span(call.arguments[index].span) == function.span
-                    && call_primitive_name(file, call, entities, symbol_names, lookup.dialect)
-                        .as_ref()
-                        .and_then(PrimitiveName::primitive)
-                        .is_some_and(|primitive| {
-                            lookup.dialect.wraps_function_arguments_in_memo(primitive)
-                        })
+                    && crate::call_primitive_name_cached(
+                        lookup,
+                        file,
+                        call,
+                        entities,
+                        symbol_names,
+                        lookup.dialect,
+                    )
+                    .as_ref()
+                    .and_then(PrimitiveName::primitive)
+                    .is_some_and(|primitive| {
+                        lookup.dialect.wraps_function_arguments_in_memo(primitive)
+                    })
             })
     }) {
         return ExecutionRole::Unknown;
@@ -77,7 +84,7 @@ pub(super) fn semantic_role_before_awaits(
     }
     let dialect = lookup.dialect;
     if file.ast.arguments_containing(span).any(|(call, index)| {
-        call_primitive_name(file, call, entities, symbol_names, dialect)
+        crate::call_primitive_name_cached(lookup, file, call, entities, symbol_names, dialect)
             .as_ref()
             .and_then(PrimitiveName::primitive)
             .and_then(|primitive| effect_apply_argument(dialect, primitive, call.arguments.len()))
@@ -96,16 +103,23 @@ pub(super) fn semantic_role_before_awaits(
             .ast
             .arguments_containing(span)
             .find_map(|(call, index)| {
-                call_primitive_name(file, call, entities, symbol_names, dialect)
-                    .as_ref()
-                    .and_then(PrimitiveName::primitive)
-                    .filter(|primitive| {
-                        dialect.callback_inherits_calling_window(*primitive, index)
-                            && callback_execution_at_call(file, call, *primitive, index, lookup)
-                                .is_some()
-                            && direct_callback_contains(file, call.arguments[index].span, span)
-                    })
-                    .map(|_| call)
+                crate::call_primitive_name_cached(
+                    lookup,
+                    file,
+                    call,
+                    entities,
+                    symbol_names,
+                    dialect,
+                )
+                .as_ref()
+                .and_then(PrimitiveName::primitive)
+                .filter(|primitive| {
+                    dialect.callback_inherits_calling_window(*primitive, index)
+                        && callback_execution_at_call(file, call, *primitive, index, lookup)
+                            .is_some()
+                        && direct_callback_contains(file, call.arguments[index].span, span)
+                })
+                .map(|_| call)
             })
     {
         let at_call = semantic_execution_role_within(
@@ -128,7 +142,7 @@ pub(super) fn semantic_role_before_awaits(
         };
     }
     if file.ast.arguments_containing(span).any(|(call, index)| {
-        call_primitive_name(file, call, entities, symbol_names, dialect)
+        crate::call_primitive_name_cached(lookup, file, call, entities, symbol_names, dialect)
             .as_ref()
             .and_then(PrimitiveName::primitive)
             .is_some_and(|primitive| {
@@ -184,7 +198,7 @@ pub(super) fn semantic_role_before_awaits(
             solid_facts::ast::ArgumentValueKind::Identifier
                 | solid_facts::ast::ArgumentValueKind::Function
                 | solid_facts::ast::ArgumentValueKind::AsyncFunction
-        ) && call_primitive_name(file, call, entities, symbol_names, dialect)
+        ) && crate::call_primitive_name_cached(lookup, file, call, entities, symbol_names, dialect)
             .as_ref()
             .and_then(PrimitiveName::primitive)
             .is_some_and(|primitive| {
@@ -481,12 +495,7 @@ pub(super) fn sibling_ignores_receiver(
             }
         }
         Siblings::Element(element) => {
-            let Some(element) = file
-                .ast
-                .jsx_elements
-                .iter()
-                .find(|candidate| candidate.span == element)
-            else {
+            let Some(element) = file.ast.jsx_element_at(element) else {
                 return false;
             };
             match element
@@ -1058,7 +1067,7 @@ pub(crate) fn callee_callback_timing(
     execution: ExecutionRole,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
-    callee_callback_timing_within(file, span, execution, lookup, &mut HashSet::new())
+    callee_callback_timing_within(file, span, execution, lookup, &mut HashSet::default())
 }
 
 /// [`callee_callback_timing`], carrying the invocation sites ADR 0152's arm

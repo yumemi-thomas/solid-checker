@@ -125,7 +125,7 @@ impl<'a> SemanticLookup<'a> {
                 continue;
             };
             let mut site_symbols = Vec::new();
-            let mut visited = HashSet::new();
+            let mut visited = HashSet::default();
             self.member_value_symbols(
                 caller_file,
                 argument.span,
@@ -180,7 +180,7 @@ impl<'a> SemanticLookup<'a> {
         if self.own_member_may_be_replaced(property_name) {
             return;
         }
-        let mut visited = HashSet::new();
+        let mut visited = HashSet::default();
         let mut consulted = Vec::new();
         if let Some(found) = self.member_value_candidates(
             file,
@@ -240,24 +240,19 @@ impl<'a> SemanticLookup<'a> {
                             .literal_computed_members
                             .iter()
                             .all(|literal| literal.span != target)
-                        && file
-                            .ast
-                            .members
-                            .iter()
-                            .find(|member| member.span == target)
-                            .is_some_and(|member| {
-                                constant_string_key(file, member.property).is_none()
-                                    && !matches!(
-                                        self.value_origin_assuming(
-                                            file,
-                                            member.object,
-                                            solid_facts::ast::RuntimeValueKind::Unknown,
-                                            6,
-                                            None,
-                                        ),
-                                        Some(ValueOrigin::Builtin)
-                                    )
-                            })
+                        && file.ast.member_at(target).is_some_and(|member| {
+                            constant_string_key(file, member.property).is_none()
+                                && !matches!(
+                                    self.value_origin_assuming(
+                                        file,
+                                        member.object,
+                                        solid_facts::ast::RuntimeValueKind::Unknown,
+                                        6,
+                                        None,
+                                    ),
+                                    Some(ValueOrigin::Builtin)
+                                )
+                        })
                 })
             });
             unknown_key_write
@@ -327,12 +322,7 @@ impl<'a> SemanticLookup<'a> {
         if !visited.insert((file.path.to_string(), object)) {
             return None;
         }
-        if let Some(conditional) = file
-            .ast
-            .conditional_expressions
-            .iter()
-            .find(|conditional| conditional.span == object)
-        {
+        if let Some(conditional) = file.ast.conditional_at(object) {
             let mut both = self.member_value_candidates(
                 file,
                 conditional.consequent,
@@ -811,7 +801,7 @@ impl<'a> SemanticLookup<'a> {
     /// conditional initializers need the recursive value proof.
     pub(super) fn direct_value_aliases(&self) -> &HashSet<SymbolId> {
         self.direct_value_aliases.get_or_init(|| {
-            let mut aliases = HashSet::new();
+            let mut aliases = HashSet::default();
             for file in &self.facts.files {
                 for binding in &file.ast.bindings {
                     let conditional_initializer = binding.initializer.is_some_and(|initializer| {
@@ -840,7 +830,7 @@ impl<'a> SemanticLookup<'a> {
 
     fn bindings_by_symbol(&self) -> &HashMap<SymbolId, BindingResolution> {
         self.bindings_by_symbol.get_or_init(|| {
-            let mut bindings = HashMap::new();
+            let mut bindings = HashMap::default();
             for (file_index, file) in self.facts.files.iter().enumerate() {
                 for (binding_index, binding) in file.ast.bindings.iter().enumerate() {
                     for name in &binding.names {
@@ -869,12 +859,7 @@ impl<'a> SemanticLookup<'a> {
         if !visited.insert(value) {
             return Vec::new();
         }
-        if let Some(conditional) = file
-            .ast
-            .conditional_expressions
-            .iter()
-            .find(|conditional| conditional.span == value)
-        {
+        if let Some(conditional) = file.ast.conditional_at(value) {
             let mut symbols = self.direct_value_symbols(file, conditional.consequent, visited);
             symbols.extend(self.direct_value_symbols(file, conditional.alternate, visited));
             symbols.sort_unstable();
@@ -938,7 +923,7 @@ impl<'a> SemanticLookup<'a> {
             })
         {
             let mut aliases = Vec::new();
-            let mut visited_objects = HashSet::new();
+            let mut visited_objects = HashSet::default();
             self.member_value_symbols(
                 binding_file,
                 initializer,

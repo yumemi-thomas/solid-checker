@@ -3,10 +3,8 @@
 //! This module hides AST and TypeScript table layout from rule discovery. The
 //! builder asks semantic questions here instead of repeatedly scanning facts.
 
-use std::{
-    collections::{HashMap, HashSet},
-    sync::{Arc, OnceLock},
-};
+use crate::{HashMap, HashSet};
+use std::sync::{Arc, OnceLock};
 
 use sha2::{Digest, Sha256};
 use solid_facts::core::Span;
@@ -413,7 +411,7 @@ type DeclarationSymbols<'a> = HashMap<(&'a str, u64, u64), &'a str>;
 /// preserving the direct-then-declaration order of the per-method lookup this
 /// replaces -- which rescanned every project entity twice per call.
 fn declaration_symbols(typescript: &TypeScriptTable) -> DeclarationSymbols<'_> {
-    let mut by_location = DeclarationSymbols::new();
+    let mut by_location = DeclarationSymbols::default();
     for entity in typescript
         .entities()
         .filter(|entity| !entity.symbol.is_empty())
@@ -519,9 +517,9 @@ pub(super) struct CachedAstFileIndex {
 
 impl CachedAstFileIndex {
     pub(super) fn new(file: &FileFacts) -> Self {
-        let mut calls_by_span = HashMap::new();
-        let mut calls_by_callee = HashMap::<Span, Vec<_>>::new();
-        let mut direct_calls_by_callee = HashMap::new();
+        let mut calls_by_span = HashMap::default();
+        let mut calls_by_callee = HashMap::<Span, Vec<_>>::default();
+        let mut direct_calls_by_callee = HashMap::default();
         for (index, call) in file.ast.calls.iter().enumerate() {
             calls_by_span.entry(call.span).or_insert(index);
             calls_by_callee.entry(call.callee).or_default().push(index);
@@ -529,7 +527,7 @@ impl CachedAstFileIndex {
                 direct_calls_by_callee.entry(call.callee).or_insert(index);
             }
         }
-        let mut functions_by_span = HashMap::new();
+        let mut functions_by_span = HashMap::default();
         for (index, function) in file.ast.functions.iter().enumerate() {
             functions_by_span.entry(function.span).or_insert(index);
         }
@@ -1085,22 +1083,12 @@ impl<'a> SemanticLookup<'a> {
 
     pub(super) fn cross_file_proof_digest(&self) -> Option<CrossFileProofDigest> {
         *self.cross_file_proof_digest.get_or_init(|| {
-            let components = self.component_functions();
-            let mut component_keys = components.iter().copied().collect::<Vec<_>>();
-            component_keys.sort_unstable();
-            let mut escaped_keys = self
-                .escaped_component_functions()
-                .iter()
-                .copied()
-                .collect::<Vec<_>>();
-            escaped_keys.sort_unstable();
-            let mut hasher = Sha256::new();
-            hasher.update(b"components\0");
-            // ADR 0282: a mutation in another file can withdraw the tuple
-            // callable edge without changing the consuming file's facts.
-            // Projects with no supported tuple result cannot consume this
-            // premise. Do not invalidate their unrelated object/source caches.
-            if self.files().iter().any(|file| {
+            // The project-wide proofs below are independent and each a whole
+            // pass over the program; on every incremental build they are
+            // recomputed. Warm them concurrently so the digest costs the
+            // longest of them, not their sum. Each fills its own `OnceLock`,
+            // so the answers are the ones a sequential run computes.
+            let tuple_results = self.files().iter().any(|file| {
                 file.ast.returns.iter().any(|returned| {
                     returned.argument.is_some_and(|argument| {
                         file.ast
@@ -1119,7 +1107,52 @@ impl<'a> SemanticLookup<'a> {
                             .and_then(|span| self.primitive_at_call(file, span))
                             .is_some_and(|primitive| self.dialect.returns_reactive_tuple(primitive))
                 })
-            }) {
+            });
+            if crate::pipeline::available_analysis_workers() > 1 {
+                let limit = crate::pipeline::analysis_worker_limit_for_lanes(4);
+                std::thread::scope(|scope| {
+                    let warm = |work: &(dyn Fn() + Sync)| {
+                        let _limit = crate::pipeline::AnalysisWorkerLimit::enter(limit);
+                        work();
+                    };
+                    if tuple_results {
+                        scope.spawn(move || {
+                            warm(&|| {
+                                let _ = self.tuple_iteration_may_be_mutated();
+                            })
+                        });
+                    }
+                    scope.spawn(move || {
+                        warm(&|| {
+                            let _ = self.effect_apply_calls();
+                        })
+                    });
+                    scope.spawn(move || {
+                        warm(&|| {
+                            let _ = self.object_member_targets();
+                        })
+                    });
+                    warm(&|| {
+                        let _ = self.component_functions();
+                    });
+                });
+            }
+            let components = self.component_functions();
+            let mut component_keys = components.iter().copied().collect::<Vec<_>>();
+            component_keys.sort_unstable();
+            let mut escaped_keys = self
+                .escaped_component_functions()
+                .iter()
+                .copied()
+                .collect::<Vec<_>>();
+            escaped_keys.sort_unstable();
+            let mut hasher = Sha256::new();
+            hasher.update(b"components\0");
+            // ADR 0282: a mutation in another file can withdraw the tuple
+            // callable edge without changing the consuming file's facts.
+            // Projects with no supported tuple result cannot consume this
+            // premise. Do not invalidate their unrelated object/source caches.
+            if tuple_results {
                 hasher.update(b"tuple-iteration-veto\0");
                 hasher.update([u8::from(self.tuple_iteration_may_be_mutated())]);
             }
@@ -1456,13 +1489,7 @@ impl<'a> SemanticLookup<'a> {
             .object_member_targets()
             .get(&crate::location(file.path.shared(), callee))?;
         let file = self.file_by_path(path)?;
-        Some((
-            file,
-            file.ast
-                .functions
-                .iter()
-                .find(|function| function.span == *span)?,
-        ))
+        Some((file, file.ast.function_at(*span)?))
     }
 
     pub(super) fn symbol_names(&self) -> &'a HashMap<SymbolId, SymbolName> {

@@ -2,7 +2,7 @@
 //! Never install a synthetic ExecutionRole: mixed safe roles prove only the
 //! absence of a strict-read invocation, not write legality or ownership.
 
-use std::collections::{HashMap, HashSet};
+use crate::{HashMap, HashSet};
 
 use super::{
     attribute_function_within, callback_runs_outside_tracking, component_prop_literal,
@@ -93,7 +93,7 @@ impl<'a, 'facts> ReadConsumerSummaries<'a, 'facts> {
         Self {
             lookup,
             nodes: Vec::new(),
-            literal_modes: HashMap::new(),
+            literal_modes: HashMap::default(),
         }
     }
 
@@ -371,11 +371,7 @@ impl<'a, 'facts> ReadConsumerSummaries<'a, 'facts> {
             read_siblings: Vec::new(),
         });
         let file = self.lookup.file_by_path(&slot.path)?;
-        let function = file
-            .ast
-            .functions
-            .iter()
-            .find(|f| f.span == slot.function)?;
+        let function = file.ast.function_at(slot.function)?;
         let mut siblings = Siblings::default();
         let uses = self.census(file, function, &slot, &mut siblings);
         self.nodes[index].uses = uses;

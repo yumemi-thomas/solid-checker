@@ -57,7 +57,7 @@ pub(super) fn separate_iteration_target(file: &FileFacts, span: Span, depth: usi
     {
         return true;
     }
-    if let Some(member) = file.ast.members.iter().find(|member| member.span == span)
+    if let Some(member) = file.ast.member_at(span)
         && member_key(file, member) == Some("prototype")
         && let Some(declaration) = file
             .ast
@@ -240,9 +240,7 @@ pub(crate) fn tuple_iteration_write(lookup: &SemanticLookup<'_>) -> bool {
                         .map(|argument| argument.span)
                 } else {
                     file.ast
-                        .members
-                        .iter()
-                        .find(|member| member.span == file.ast.peel_ts_sugar_span(call.callee))
+                        .member_at(file.ast.peel_ts_sugar_span(call.callee))
                         .map(|member| member.object)
                 };
                 return !invocation_operator_is_exact(file, call, method, lookup)
@@ -320,25 +318,15 @@ pub(super) fn string_code_reference(
         return true;
     }
     let span = file.ast.peel_ts_sugar_span(span);
-    if let Some(branch) = file
-        .ast
-        .conditional_expressions
-        .iter()
-        .find(|branch| branch.span == span)
-    {
+    if let Some(branch) = file.ast.conditional_at(span) {
         return string_code_reference(file, branch.consequent, lookup, depth - 1, returned_value)
             || string_code_reference(file, branch.alternate, lookup, depth - 1, returned_value);
     }
-    if let Some(branch) = file
-        .ast
-        .logical_expressions
-        .iter()
-        .find(|branch| branch.span == span)
-    {
+    if let Some(branch) = file.ast.logical_at(span) {
         return string_code_reference(file, branch.left, lookup, depth - 1, returned_value)
             || string_code_reference(file, branch.right, lookup, depth - 1, returned_value);
     }
-    if let Some(member) = file.ast.members.iter().find(|member| member.span == span) {
+    if let Some(member) = file.ast.member_at(span) {
         return string_code_slot(
             file,
             member.object,
@@ -569,12 +557,7 @@ pub(super) fn string_code_slot(
         return true;
     }
     let object = file.ast.peel_ts_sugar_span(object);
-    if let Some(branch) = file
-        .ast
-        .conditional_expressions
-        .iter()
-        .find(|branch| branch.span == object)
-    {
+    if let Some(branch) = file.ast.conditional_at(object) {
         return string_code_slot(
             file,
             branch.consequent,
@@ -591,12 +574,7 @@ pub(super) fn string_code_slot(
             returned_receiver,
         );
     }
-    if let Some(branch) = file
-        .ast
-        .logical_expressions
-        .iter()
-        .find(|branch| branch.span == object)
-    {
+    if let Some(branch) = file.ast.logical_at(object) {
         return string_code_slot(file, branch.left, key, lookup, depth - 1, returned_receiver)
             || string_code_slot(
                 file,
@@ -731,9 +709,7 @@ pub(super) fn string_code_slot(
         }) { return true; }
         let Some(function) = file
             .ast
-            .functions
-            .iter()
-            .find(|function| function.span == file.ast.peel_ts_sugar_span(property.value))
+            .function_at(file.ast.peel_ts_sugar_span(property.value))
         else {
             if matches!(
                 property.value_kind,
@@ -808,12 +784,7 @@ pub(super) fn invocation_operator_is_exact(
     method: &str,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
-    let Some(member) = file
-        .ast
-        .members
-        .iter()
-        .find(|member| member.span == file.ast.peel_ts_sugar_span(call.callee))
-    else {
+    let Some(member) = file.ast.member_at(file.ast.peel_ts_sugar_span(call.callee)) else {
         return false;
     };
     if method == "invoke" {
@@ -997,9 +968,7 @@ pub(super) fn source_bound_invocation(
         && tuple_mutation_method(file, bound, lookup) == Some("invoke")
         && file
             .ast
-            .members
-            .iter()
-            .find(|member| member.span == file.ast.peel_ts_sugar_span(bound.callee))
+            .member_at(file.ast.peel_ts_sugar_span(bound.callee))
             .is_some_and(|member| {
                 member_key(file, member) == Some("bind")
                     && iteration_source_function(file, member.object, lookup)

@@ -148,7 +148,7 @@ fn lookup_project(source: &str, declaration_path: &str, start: u64, end: u64) ->
         typescript_changes: None,
         resolved_imports: None,
         runtime_resolutions: None,
-        runtime_symbol_redirects: HashMap::new(),
+        runtime_symbol_redirects: std::collections::HashMap::new(),
         dependency_source_roots: Vec::new(),
     }
 }
@@ -272,11 +272,67 @@ fn a_process_free_project_without_resolution_evidence_keeps_the_premise() {
         typescript_changes: None,
         resolved_imports: None,
         runtime_resolutions: None,
-        runtime_symbol_redirects: HashMap::new(),
+        runtime_symbol_redirects: std::collections::HashMap::new(),
         dependency_source_roots: Vec::new(),
     };
     assert_eq!(
         scan(&facts, &solid_dialect::Solid2),
         RuntimeConfigurationPremise::Assumed
     );
+}
+
+fn at_generation(mut facts: ProjectFacts, generation: u64) -> ProjectFacts {
+    let generation = solid_facts::core::Generation::new(generation).unwrap();
+    facts.generation = generation;
+    for file in &mut facts.files {
+        file.generation = generation;
+    }
+    facts
+}
+
+/// A retained per-file answer is the full scan's whenever it is reused, and
+/// is withdrawn by anything that could move it: the file's source, its
+/// entities, or the configuration identity of a symbol it asked about. No
+/// change set is trusted: each input is checked against the current facts.
+#[test]
+fn a_retained_scan_answers_as_a_full_scan_and_withdraws_on_any_input_change() {
+    let dialect = &solid_dialect::Solid2;
+    let veto = "import { sharedConfig as host } from 'solid-js/internal'; host.load = () => 1;";
+    let keep =
+        "import { sharedConfig as host } from 'solid-js/internal'; const value = host.hydrating;";
+    // Reuse agrees with a full scan, case by case, when nothing moved.
+    for source in [veto, keep] {
+        let mut cache = ScanCache::default();
+        let facts = hydration_project(source);
+        let first = scan_retained(&at_generation(facts.clone(), 1), dialect, &mut cache);
+        let reused = scan_retained(&at_generation(facts, 2), dialect, &mut cache);
+        assert_eq!(first, scan(&hydration_project(source), dialect), "{source}");
+        assert_eq!(reused, first, "{source}");
+    }
+    // A changed source is rescanned.
+    let mut cache = ScanCache::default();
+    assert!(
+        !scan_retained(
+            &at_generation(hydration_project(veto), 1),
+            dialect,
+            &mut cache
+        )
+        .permits_proof()
+    );
+    assert!(
+        scan_retained(
+            &at_generation(hydration_project(keep), 2),
+            dialect,
+            &mut cache
+        )
+        .permits_proof()
+    );
+    // The same source whose symbol no longer resolves to the hydration host
+    // (a different table) is rescanned, whatever any change set says.
+    let mut cache = ScanCache::default();
+    let facts = hydration_project(veto);
+    assert!(!scan_retained(&at_generation(facts.clone(), 1), dialect, &mut cache).permits_proof());
+    let mut moved = facts;
+    moved.typescript = table("/p/src/local.d.ts", 7472, 7484);
+    assert!(scan_retained(&at_generation(moved, 2), dialect, &mut cache).permits_proof());
 }

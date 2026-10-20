@@ -2,7 +2,7 @@
 //!
 //! Exact browser registrations have feasible host triggers (ADR 0270).
 
-use std::collections::HashMap;
+use crate::HashMap;
 
 use serde::{Deserialize, Serialize};
 use solid_dialect::{BrowserCallbackTrigger, Dialect};
@@ -221,25 +221,21 @@ pub(crate) fn inert_callback(file: &FileFacts, value: Span, lookup: &SemanticLoo
     let Some(target) = target(file, value, lookup) else {
         return false;
     };
-    file.ast
-        .functions
-        .iter()
-        .find(|function| function.span == target.span)
-        .is_some_and(|function| {
-            !function.r#async
-                && (function
-                    .expression_return
-                    .as_ref()
-                    .and_then(|value| value.argument)
-                    .is_some_and(|span| {
-                        file.ast.host_zero_values.contains(&span)
-                            || file.ast.host_undefined_arguments.contains(&span)
-                    })
-                    || (!function.expression_body
-                        && file
-                            .source_text(function.body)
-                            .is_some_and(|text| text.trim() == "{}")))
-        })
+    file.ast.function_at(target.span).is_some_and(|function| {
+        !function.r#async
+            && (function
+                .expression_return
+                .as_ref()
+                .and_then(|value| value.argument)
+                .is_some_and(|span| {
+                    file.ast.host_zero_values.contains(&span)
+                        || file.ast.host_undefined_arguments.contains(&span)
+                })
+                || (!function.expression_body
+                    && file
+                        .source_text(function.body)
+                        .is_some_and(|text| text.trim() == "{}")))
+    })
 }
 
 fn dialect_trigger_dead(
@@ -496,9 +492,7 @@ fn same_receiver(
 ) -> bool {
     let receiver = |call: &CallFact| {
         file.ast
-            .members
-            .iter()
-            .find(|member| member.span == file.ast.peel_ts_sugar_span(call.callee))
+            .member_at(file.ast.peel_ts_sugar_span(call.callee))
             .map(|member| member.object)
     };
     match (receiver(first), receiver(second)) {
@@ -1010,7 +1004,7 @@ mod tests {
                 .map(|(reference, _)| *reference),
         );
         let entities = crate::indexes::EntitySymbols {
-            by_path: HashMap::from([(
+            by_path: HashMap::from_iter([(
                 "case.tsx".into(),
                 locations
                     .map(|span| {
@@ -1038,11 +1032,11 @@ mod tests {
             typescript_changes: None,
             resolved_imports: None,
             runtime_resolutions: None,
-            runtime_symbol_redirects: HashMap::new(),
+            runtime_symbol_redirects: std::collections::HashMap::default(),
             dependency_source_roots: Vec::new(),
         };
-        let ast = HashMap::new();
-        let names = HashMap::new();
+        let ast = HashMap::default();
+        let names = HashMap::default();
         let lookup = SemanticLookup::new(
             &facts,
             &ast,

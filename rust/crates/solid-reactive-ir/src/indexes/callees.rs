@@ -215,8 +215,8 @@ impl<'a> SemanticLookup<'a> {
                     .map(|candidate| (candidate.id(), candidate))
                     .collect()
             });
-            let mut by_path = HashMap::<String, HashMap<(u64, u64), BindingResolution>>::new();
-            let mut by_symbol = HashMap::<SymbolId, BindingResolution>::new();
+            let mut by_path = HashMap::<String, HashMap<(u64, u64), BindingResolution>>::default();
+            let mut by_symbol = HashMap::<SymbolId, BindingResolution>::default();
             for (file_index, file) in self.facts.files.iter().enumerate() {
                 for (binding_index, binding) in file.ast.bindings.iter().enumerate() {
                     for name in &binding.names {
@@ -420,11 +420,7 @@ impl<'a> SemanticLookup<'a> {
         if file.ast.computed_members.binary_search(&callee).is_ok() {
             return None;
         }
-        let member = file
-            .ast
-            .members
-            .iter()
-            .find(|member| member.span == callee)?;
+        let member = file.ast.member_at(callee)?;
         let receiver = file.ast.peel_ts_sugar_span(member.object);
         let declaration = file.ast.reference_declaration(receiver)?;
         let namespace = file.ast.imports.iter().any(|import| {
@@ -545,7 +541,7 @@ impl<'a> SemanticLookup<'a> {
             if !self.direct_value_aliases().contains(symbol) {
                 return vec![symbol.clone()];
             }
-            let mut visited = HashSet::new();
+            let mut visited = HashSet::default();
             let aliases = self.direct_value_symbols(file, callee, &mut visited);
             if !aliases.is_empty() {
                 return aliases;
@@ -580,12 +576,12 @@ impl<'a> SemanticLookup<'a> {
         let Some(property_name) = file.source_text(member_property) else {
             return Vec::new();
         };
-        let member = file.ast.members.iter().find(|member| member.span == callee);
+        let member = file.ast.member_at(callee);
         let Some(member) = member else {
             return Vec::new();
         };
         let mut symbols = Vec::new();
-        let mut visited_spans = HashSet::new();
+        let mut visited_spans = HashSet::default();
         self.member_value_symbols(
             file,
             member.object,
@@ -739,7 +735,7 @@ impl<'a> SemanticLookup<'a> {
         if !fresh_argument && self.own_member_may_be_replaced(property_name) {
             return Vec::new();
         }
-        let mut visited = HashSet::new();
+        let mut visited = HashSet::default();
         let mut symbols = self
             .member_value_candidates(file, value, property_name, &mut visited, true, consulted)
             .unwrap_or_default();
@@ -826,11 +822,7 @@ impl<'a> SemanticLookup<'a> {
             // fresh object (possibly through closed aliases), never undefined.
             // An identifier parameter's default therefore cannot replace it.
             let (owner, value) = self.nested_member_value(file, argument.span, path, 16)?;
-            let function = owner
-                .ast
-                .functions
-                .iter()
-                .find(|function| function.span == value);
+            let function = owner.ast.function_at(value);
             let symbol = if let Some(function) = function {
                 let name = function_binding_name(owner, function)?;
                 self.entities.at(owner.path.as_str(), name.span)?

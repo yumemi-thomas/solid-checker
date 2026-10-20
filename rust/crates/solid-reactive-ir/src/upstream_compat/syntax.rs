@@ -7,7 +7,7 @@
 //! upstream corpus case exercises a behaviour difference for it, and an option
 //! nothing proves is a knob that can silently rot.
 
-use std::collections::{HashMap, HashSet};
+use crate::{HashMap, HashSet};
 
 use solid_facts::FileFacts;
 use solid_facts::ast::{JsxAttributeValueKind, JsxElementFact};
@@ -101,8 +101,8 @@ fn jsx_no_duplicate_props(
     }
     candidates.sort_by_key(|(span, ..)| (span.start, span.end));
 
-    let mut names: HashMap<String, &str> = HashMap::new();
-    let mut seen_slots = HashSet::new();
+    let mut names: HashMap<String, &str> = HashMap::default();
+    let mut seen_slots = HashSet::default();
     for (name_span, slot, written) in candidates {
         let Some(normalized) = slot else {
             continue;

@@ -131,14 +131,14 @@ thread_local! {
 pub(crate) fn invocation_flow_answers(
     lookup: &SemanticLookup<'_>,
 ) -> HashMap<(String, Span), ExecutionRole> {
-    let mut answers = HashMap::new();
+    let mut answers = HashMap::default();
     if !lookup.program_closed {
         return answers;
     }
     let outer = COMPUTING_FLOW_ANSWERS.with(|computing| computing.replace(true));
     for file in lookup.files() {
         for literal in &file.ast.functions {
-            let mut classifying = HashSet::new();
+            let mut classifying = HashSet::default();
             if let Some(role) = literal_flow_role(file, literal, lookup, &mut classifying) {
                 answers.insert((file.path.to_string(), literal.span), role);
             }
@@ -156,11 +156,7 @@ pub(super) fn literal_flow_role(
     classifying: &mut HashSet<(String, Span)>,
 ) -> Option<ExecutionRole> {
     let file = lookup.file_by_path(file.path.as_str())?;
-    let literal = file
-        .ast
-        .functions
-        .iter()
-        .find(|function| function.span == literal.span)?;
+    let literal = file.ast.function_at(literal.span)?;
     if literal.generator || lookup.function_component_status(file, literal) != ComponentStatus::No {
         return None;
     }
@@ -180,7 +176,7 @@ pub(super) fn literal_flow_role(
         lookup,
         classifying,
         budget: FLOW_BUDGET,
-        seen: HashSet::new(),
+        seen: HashSet::default(),
         frames: Vec::new(),
         props_stack: Vec::new(),
         owner_mode: false,

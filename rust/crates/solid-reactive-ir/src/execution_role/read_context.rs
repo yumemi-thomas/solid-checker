@@ -42,9 +42,7 @@ pub(crate) fn apply_compute_reads(
     let callback = |file: &solid_facts::FileFacts, argument: Span| {
         let argument = file.ast.peel_ts_sugar_span(argument);
         file.ast
-            .functions
-            .iter()
-            .find(|function| function.span == argument)
+            .function_at(argument)
             .map(|function| (file.path.to_string(), function.span))
             .or_else(|| {
                 if !file.ast.identifiers.iter().any(|identifier| {
@@ -60,7 +58,7 @@ pub(crate) fn apply_compute_reads(
                     .map(|(file, function)| (file.path.to_string(), function.span))
             })
     };
-    let mut pairs = HashMap::<(String, Span), Vec<Option<(String, Span)>>>::new();
+    let mut pairs = HashMap::<(String, Span), Vec<Option<(String, Span)>>>::default();
     for file in &facts.files {
         for call in &file.ast.calls {
             let Some(primitive) = lookup.primitive_at_call(file, call.span) else {
@@ -98,7 +96,7 @@ pub(crate) fn apply_compute_reads(
     };
     // A declaration site can allocate several sources (two calls of a
     // factory). Correlate immutable getter values, not allocation templates.
-    let mut values = HashMap::<SymbolId, Option<(Option<SymbolId>, bool)>>::new();
+    let mut values = HashMap::<SymbolId, Option<(Option<SymbolId>, bool)>>::default();
     for file in &facts.files {
         for binding in file.ast.bindings.iter().filter(|binding| binding.immutable) {
             for name in &binding.names {
@@ -137,7 +135,7 @@ pub(crate) fn apply_compute_reads(
                 return None;
             }
             let mut symbol = lookup.entities().at(file.path.as_str(), callee)?.clone();
-            let mut visiting = HashSet::new();
+            let mut visiting = HashSet::default();
             loop {
                 if !visiting.insert(symbol.clone()) {
                     return None;
@@ -200,7 +198,7 @@ pub(crate) fn apply_compute_reads(
         .flatten()
         .filter_map(Clone::clone)
         .collect::<HashSet<_>>();
-    let mut guaranteed = HashMap::<(String, Span), HashSet<Span>>::new();
+    let mut guaranteed = HashMap::<(String, Span), HashSet<Span>>::default();
     for file in &facts.files {
         for call in file
             .ast

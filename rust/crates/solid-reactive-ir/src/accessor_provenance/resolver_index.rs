@@ -18,14 +18,14 @@ impl Resolver<'_, '_> {
             source_kinds,
             names,
             functions,
-            binding_locations: HashMap::new(),
-            parameter_inputs: HashMap::new(),
-            declarations: HashMap::new(),
-            uses: HashMap::new(),
-            providers: HashMap::new(),
-            source_origins: HashSet::new(),
-            runtime_source_origins: HashSet::new(),
-            blocked_contexts: HashSet::new(),
+            binding_locations: HashMap::default(),
+            parameter_inputs: HashMap::default(),
+            declarations: HashMap::default(),
+            uses: HashMap::default(),
+            providers: HashMap::default(),
+            source_origins: HashSet::default(),
+            runtime_source_origins: HashSet::default(),
+            blocked_contexts: HashSet::default(),
             unkeyed_provider: false,
             member_stability: MemberStability::index(facts, lookup),
             receiver_channels_opaque: facts.files.iter().any(|file| {
@@ -144,8 +144,8 @@ impl Resolver<'_, '_> {
                 }))
                 .map(|span| file.ast.peel_ts_sugar_span(span))
                 .collect::<HashSet<_>>();
-            let mut provider_values = HashSet::new();
-            let mut context_tags = HashSet::new();
+            let mut provider_values = HashSet::default();
+            let mut context_tags = HashSet::default();
             for element in &file.ast.jsx_elements {
                 let target = if let Some(member) = lookup.dialect.context_provider_member() {
                     (element.member_property.and_then(|p| file.source_text(p)) == Some(member))
@@ -187,7 +187,7 @@ impl Resolver<'_, '_> {
                     context_tags.extend(element.closing_name);
                 }
             }
-            let mut context_reads = HashSet::new();
+            let mut context_reads = HashSet::default();
             for call in &file.ast.calls {
                 if resolver.role(file, call) == Some(ContextRole::Read)
                     && call.arguments.len() == 1
@@ -387,7 +387,7 @@ impl Resolver<'_, '_> {
         // Join every exact context-derived receiver, including wrapper-return
         // bindings and aliases, before resolving any transported call. One
         // escaped/mutated receiver can replace the shared provider's members.
-        let mut blocked_contexts = HashSet::new();
+        let mut blocked_contexts = HashSet::default();
         let object_contexts = resolver
             .providers
             .iter()
@@ -524,7 +524,7 @@ impl Resolver<'_, '_> {
     /// unaccounted reference. Do not use call-site count alone: a stored or
     /// aliased value can have an invocation missing from that count.
     fn index_parameter_inputs(&mut self) {
-        let mut local_functions = HashMap::new();
+        let mut local_functions = HashMap::default();
         for file in &self.facts.files {
             for function in &file.ast.functions {
                 if !function.parameters.is_empty()
@@ -540,8 +540,8 @@ impl Resolver<'_, '_> {
         if local_functions.is_empty() {
             return;
         }
-        let mut references = HashMap::<(String, Span), HashSet<Location>>::new();
-        let mut argument_observers = HashSet::new();
+        let mut references = HashMap::<(String, Span), HashSet<Location>>::default();
+        let mut argument_observers = HashSet::default();
         for file in &self.facts.files {
             for id in file
                 .ast

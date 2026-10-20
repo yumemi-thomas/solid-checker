@@ -331,14 +331,14 @@ fn wildcard_target_requires_every_local_identity_input_to_be_distinct() {
             typescript_changes: None,
             resolved_imports: None,
             runtime_resolutions: None,
-            runtime_symbol_redirects: HashMap::new(),
+            runtime_symbol_redirects: std::collections::HashMap::default(),
             dependency_source_roots: Vec::new(),
         };
         let entities = crate::EntitySymbols {
-            by_path: HashMap::new(),
+            by_path: HashMap::default(),
         };
-        let ast_indexes = HashMap::new();
-        let names = HashMap::new();
+        let ast_indexes = HashMap::default();
+        let names = HashMap::default();
         let dialect = solid_dialect::Solid2;
         let lookup = SemanticLookup::new(&facts, &ast_indexes, &entities, &names, &dialect, true);
         // A declaration at the same byte offsets in a different file is

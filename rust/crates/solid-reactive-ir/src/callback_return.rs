@@ -52,7 +52,7 @@ fn callback_result_binding_chain(
         // unresolved result keeps the evidence it had before.
         return resolve(lookup, file, call).is_some();
     }
-    if let Some(member) = file.ast.members.iter().find(|member| member.span == span) {
+    if let Some(member) = file.ast.member_at(span) {
         return callback_result_binding_chain(lookup, file, member.object, depth - 1);
     }
     let declaration = file.ast.reference_declaration(span).unwrap_or(span);

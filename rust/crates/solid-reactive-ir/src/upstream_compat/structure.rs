@@ -56,12 +56,7 @@ fn prefer_for(
         if direct_container_position(file, call.span) != Some(JsxExpressionPosition::Child) {
             continue;
         }
-        let Some(member) = file
-            .ast
-            .members
-            .iter()
-            .find(|member| member.span == call.callee)
-        else {
+        let Some(member) = file.ast.member_at(call.callee) else {
             continue;
         };
         if text(file, member.property) != "map" || call.arguments.len() != 1 {
@@ -118,9 +113,7 @@ fn prefer_for(
         let one_parameter_arrow = argument.value == ArgumentValueKind::Function
             && file
                 .ast
-                .functions
-                .iter()
-                .find(|function| function.span == file.ast.peel_ts_sugar_span(argument.span))
+                .function_at(file.ast.peel_ts_sugar_span(argument.span))
                 .is_some_and(|function| {
                     function.kind == solid_facts::ast::FunctionKind::Arrow
                         && function.parameters.len() == 1

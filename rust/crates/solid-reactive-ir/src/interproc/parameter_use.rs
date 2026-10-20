@@ -27,12 +27,7 @@ pub(super) fn unmodeled_parameter_uses(
             .flatten()
             .copied()
         {
-            let Some(function) = file
-                .ast
-                .functions
-                .iter()
-                .find(|function| function.span == nodes[owner].span)
-            else {
+            let Some(function) = file.ast.function_at(nodes[owner].span) else {
                 continue;
             };
             if crate::owners::enclosing_render_function(file, function.body, lookup)
@@ -544,12 +539,7 @@ pub(super) fn forward_parameter_member_invocations(
                 if crate::owners::enclosing_render_function(file, call.span, lookup) {
                     continue;
                 }
-                let Some(owner_function) = file
-                    .ast
-                    .functions
-                    .iter()
-                    .find(|function| function.span == nodes[owner].span)
-                else {
+                let Some(owner_function) = file.ast.function_at(nodes[owner].span) else {
                     continue;
                 };
                 for (index, argument) in call.arguments.iter().enumerate() {
@@ -674,12 +664,7 @@ pub(super) fn parameter_has_default(
     let Some(file) = lookup.file_by_path(node.path.as_str()) else {
         return true;
     };
-    let Some(function) = file
-        .ast
-        .functions
-        .iter()
-        .find(|function| function.span == node.span)
-    else {
+    let Some(function) = file.ast.function_at(node.span) else {
         return true;
     };
     function

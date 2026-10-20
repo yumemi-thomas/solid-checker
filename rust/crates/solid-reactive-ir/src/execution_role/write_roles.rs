@@ -29,7 +29,7 @@ pub(crate) fn semantic_write_execution_role(
         symbol_names,
         lookup,
         root_body,
-        &mut HashSet::new(),
+        &mut HashSet::default(),
     )
 }
 
@@ -260,7 +260,7 @@ pub(super) fn semantic_write_execution_role_within(
         entities,
         symbol_names,
         lookup,
-        &mut HashSet::from([write_classification_marker()]),
+        &mut HashSet::from_iter([write_classification_marker()]),
     );
     // A proven non-reporting mix walks on exactly as an unknown role does;
     // only where the walk ends without a role does it answer `Unreported`

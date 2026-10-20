@@ -108,9 +108,9 @@ impl<'a> SemanticLookup<'a> {
     pub(super) fn assigned_members(&self) -> &AssignedMembers {
         self.assigned_member_names.get_or_init(|| {
             let facts: &'a ProjectFacts = self.facts;
-            let mut names = HashSet::new();
+            let mut names = HashSet::default();
             let mut prototype = false;
-            let mut constructors = HashSet::new();
+            let mut constructors = HashSet::default();
             let mut pending_hosts = Vec::new();
             let mut record =
                 |file: &'a FileFacts, owner: Option<PrototypeOwner>, prototype: &mut bool| {

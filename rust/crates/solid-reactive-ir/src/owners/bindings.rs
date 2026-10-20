@@ -42,7 +42,7 @@ use super::*;
 pub(crate) fn lazy_default_render_witnesses<'a>(
     lookup: &SemanticLookup<'a>,
 ) -> HashSet<(&'a str, Span, Span)> {
-    let mut witnesses = HashSet::new();
+    let mut witnesses = HashSet::default();
     for file in lookup.files() {
         for call in &file.ast.calls {
             if let Some((function, property)) = lazy_default_render_witness(file, call, lookup) {
@@ -86,11 +86,7 @@ pub(crate) fn lazy_default_render_candidate<'f>(
         return None;
     }
     let loader_span = file.ast.peel_ts_sugar_span(call.arguments.get(slot)?.span);
-    let loader = file
-        .ast
-        .functions
-        .iter()
-        .find(|function| function.span == loader_span)?;
+    let loader = file.ast.function_at(loader_span)?;
     if !loader.r#async || loader.generator || !lazy_wrapper_only_rendered(file, call) {
         return None;
     }
@@ -378,7 +374,7 @@ pub(crate) fn read_escapes_synchronous_extent(
         {
             return false;
         }
-        call_primitive_name(file, call, entities, symbol_names, dialect)
+        crate::call_primitive_name(file, call, entities, symbol_names, dialect)
             .as_ref()
             .and_then(PrimitiveName::primitive)
             .is_some_and(|primitive| {
@@ -499,12 +495,17 @@ pub(crate) fn function_is_solid_callback(
             .ast
             .functions_within(element.span)
             .any(|outer| outer.span != function.span && outer.span.contains(function.span))
-            && jsx_primitive_name(file, element, entities, symbol_names, lookup.dialect)
-                .as_ref()
-                .and_then(PrimitiveName::primitive)
-                .is_some_and(|primitive| {
-                    lookup.dialect.renders_children_through_callback(primitive)
-                })
+            && crate::jsx_primitive_name_cached(
+                lookup,
+                file,
+                element,
+                entities,
+                symbol_names,
+                lookup.dialect,
+            )
+            .as_ref()
+            .and_then(PrimitiveName::primitive)
+            .is_some_and(|primitive| lookup.dialect.renders_children_through_callback(primitive))
     }) {
         return true;
     }
@@ -600,7 +601,8 @@ pub(crate) fn analysis_context(
         .map(|(call, index)| (call, index, call.arguments[index].span))
         .min_by_key(|(_, _, argument)| argument.end - argument.start);
     if let Some((call, argument, _)) = callback
-        && let Some(primitive) = call_primitive_name(file, call, entities, symbol_names, dialect)
+        && let Some(primitive) =
+            crate::call_primitive_name_cached(lookup, file, call, entities, symbol_names, dialect)
     {
         // An owner-transparent inline callback (`untrack`, `flush(fn)`) runs
         // under its call site's owner, so it is described as that call site.

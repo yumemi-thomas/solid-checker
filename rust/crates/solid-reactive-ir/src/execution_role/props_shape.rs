@@ -140,17 +140,13 @@ pub(super) fn attribute_value_is_string(
         JsxAttributeValueKind::String => true,
         JsxAttributeValueKind::Expression => attribute.expression.is_some_and(|expression| {
             let expression = file.ast.peel_ts_sugar_span(expression);
-            file.ast
-                .members
-                .iter()
-                .find(|member| member.span == expression)
-                .is_some_and(|member| {
-                    file.source_text(member.property).is_some_and(|key| {
-                        view_shape_at(file, views, member.object)
-                            .and_then(Option::as_ref)
-                            .is_some_and(|shape| shape.get(key) == Some(&true))
-                    })
+            file.ast.member_at(expression).is_some_and(|member| {
+                file.source_text(member.property).is_some_and(|key| {
+                    view_shape_at(file, views, member.object)
+                        .and_then(Option::as_ref)
+                        .is_some_and(|shape| shape.get(key) == Some(&true))
                 })
+            })
         }),
         _ => false,
     }

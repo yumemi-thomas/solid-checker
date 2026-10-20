@@ -5,10 +5,8 @@
 //! its cache slots, timing split, and the merge into `ProgramDraft`; the
 //! top-level pipeline only sequences the resulting stage.
 
-use std::{
-    collections::HashMap,
-    time::{Duration, Instant},
-};
+use crate::HashMap;
+use std::time::{Duration, Instant};
 
 use solid_facts::core::SourcePath;
 use typefacts::Declaration;
@@ -97,7 +95,7 @@ pub(crate) fn collect_project<'facts>(
         })
         .flatten();
     let references_by_source = if cached_interprocedural.is_some() {
-        HashMap::new()
+        HashMap::default()
     } else {
         references_for_sources(
             &ctx.facts.typescript,

@@ -1,12 +1,8 @@
 //! Build entry points and the staged incremental pipeline that
 //! assembles a `Program`, plus the bounded-parallelism helpers.
 
-use std::{
-    cell::Cell,
-    collections::{HashMap, HashSet},
-    sync::Arc,
-    time::Instant,
-};
+use crate::{HashMap, HashSet};
+use std::{cell::Cell, sync::Arc, time::Instant};
 
 use crate::boundary_defects::discover_boundary_defects;
 use crate::cache::{BuildCaches, ReusePlan, build_typescript_indexes};

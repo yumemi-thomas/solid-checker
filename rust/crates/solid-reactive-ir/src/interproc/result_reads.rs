@@ -320,7 +320,7 @@ fn call_result_reads(
                 call.callee,
                 allowed,
                 lookup,
-                &mut HashSet::new(),
+                &mut HashSet::default(),
                 excluded_dispatch_helpers,
             )
             .is_some())
@@ -378,7 +378,7 @@ fn call_result_reads(
         .then(|| match transported {
             Some(accessor_provenance::Callable::Function { path, span }) => {
                 let file = lookup.file_by_path(path)?;
-                Some((file, file.ast.functions.iter().find(|f| f.span == *span)?))
+                Some((file, file.ast.function_at(*span)?))
             }
             _ => lookup.function_for_symbol(symbol),
         })
@@ -1503,8 +1503,7 @@ impl<'s, 'a, 'b, 'c> DirectReadProof<'s, 'a, 'b, 'c> {
                     let Some(target_file) = lookup.file_by_path(path) else {
                         return false;
                     };
-                    let Some(function) = target_file.ast.functions.iter().find(|f| f.span == *span)
-                    else {
+                    let Some(function) = target_file.ast.function_at(*span) else {
                         return false;
                     };
                     captured_body_read_runs_during_call(target_file, function, read)
@@ -1546,12 +1545,7 @@ impl<'s, 'a, 'b, 'c> DirectReadProof<'s, 'a, 'b, 'c> {
                 let all_sync = entered.iter().all(|(path, span)| {
                     lookup
                         .file_by_path(path)
-                        .and_then(|file| {
-                            file.ast
-                                .functions
-                                .iter()
-                                .find(|function| function.span == *span)
-                        })
+                        .and_then(|file| file.ast.function_at(*span))
                         .is_some_and(|function| !function.r#async)
                 });
                 if all_sync
@@ -1563,13 +1557,9 @@ impl<'s, 'a, 'b, 'c> DirectReadProof<'s, 'a, 'b, 'c> {
                                 target_path == path && target_span == span
                             })
                             && lookup.file_by_path(path).is_some_and(|file| {
-                                file.ast
-                                    .functions
-                                    .iter()
-                                    .find(|function| function.span == *span)
-                                    .is_some_and(|function| {
-                                        captured_body_read_runs_during_call(file, function, read)
-                                    })
+                                file.ast.function_at(*span).is_some_and(|function| {
+                                    captured_body_read_runs_during_call(file, function, read)
+                                })
                             })
                     })
                 {
@@ -1707,7 +1697,7 @@ fn decide_reads_by_arguments(
                 callee_file.path.to_string(),
                 callee.span,
             ));
-            let mut unreachable = HashSet::new();
+            let mut unreachable = HashSet::default();
             for ((index, _), standing) in candidates.iter().zip(standings) {
                 match standing {
                     solid_facts::ast::SiteStanding::Unreachable => {
@@ -1785,10 +1775,17 @@ pub(super) fn source_has_runtime_witness(
             .any(|name| location(file.path.shared(), name.span) == *declaration)
             && binding.call_initializer.is_some_and(|initializer| {
                 file.ast.call_at(initializer).is_some_and(|call| {
-                    call_primitive_name(file, call, entities, symbol_names, lookup.dialect)
-                        .as_ref()
-                        .and_then(crate::PrimitiveName::primitive)
-                        .is_some_and(|primitive| lookup.dialect.creates_reactive_source(primitive))
+                    crate::call_primitive_name_cached(
+                        lookup,
+                        file,
+                        call,
+                        entities,
+                        symbol_names,
+                        lookup.dialect,
+                    )
+                    .as_ref()
+                    .and_then(crate::PrimitiveName::primitive)
+                    .is_some_and(|primitive| lookup.dialect.creates_reactive_source(primitive))
                 })
             })
     })
@@ -1803,15 +1800,10 @@ pub(super) fn store_get_has_strict_witness(
     entities: &EntitySymbols,
     dialect: &dyn Dialect,
 ) -> bool {
-    let Some(mut head) = file.ast.members.iter().find(|member| member.span == span) else {
+    let Some(mut head) = file.ast.member_at(span) else {
         return false;
     };
-    while let Some(inner) = file
-        .ast
-        .members
-        .iter()
-        .find(|member| member.span == file.ast.peel_ts_sugar_span(head.object))
-    {
+    while let Some(inner) = file.ast.member_at(file.ast.peel_ts_sugar_span(head.object)) {
         head = inner;
     }
     let root = file.ast.peel_ts_sugar_span(head.object);
@@ -2229,12 +2221,7 @@ pub(super) fn enter_directly_called(
                 let Some(callee_file) = lookup.file_by_path(target_path) else {
                     continue;
                 };
-                let Some(callee) = callee_file
-                    .ast
-                    .functions
-                    .iter()
-                    .find(|f| f.span == *target_span)
-                else {
+                let Some(callee) = callee_file.ast.function_at(*target_span) else {
                     continue;
                 };
                 let key = (target_path.clone(), *target_span);
@@ -2274,15 +2261,9 @@ pub(super) fn enter_directly_called(
             continue;
         };
         let resolved = match transported {
-            Some(accessor_provenance::Callable::Function { path, span }) => {
-                lookup.file_by_path(path).and_then(|f| {
-                    f.ast
-                        .functions
-                        .iter()
-                        .find(|fun| fun.span == *span)
-                        .map(|fun| (f, fun))
-                })
-            }
+            Some(accessor_provenance::Callable::Function { path, span }) => lookup
+                .file_by_path(path)
+                .and_then(|f| f.ast.function_at(*span).map(|fun| (f, fun))),
             _ => lookup.function_for_symbol(symbol),
         };
         let Some((callee_file, callee)) = resolved else {

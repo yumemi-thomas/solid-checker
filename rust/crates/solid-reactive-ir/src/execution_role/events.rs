@@ -70,7 +70,7 @@ pub(super) fn forwarded_event_prop_role(
                     prop,
                     &[],
                     lookup,
-                    &mut HashSet::new(),
+                    &mut HashSet::default(),
                 )
             })
         })

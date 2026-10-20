@@ -18,10 +18,8 @@ use crate::{
     location,
 };
 
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-};
+use crate::{HashMap, HashSet};
+use std::sync::Arc;
 
 use crate::execution_role::{
     RootBodyGuard, allowed_callback_spans, async_execution_role, callee_callback_timing,
@@ -951,7 +949,7 @@ impl LocalAccessContext<'_, '_> {
 
     pub(crate) fn discover(&self, file: &solid_facts::FileFacts) -> LocalAccessResult {
         let mut result = LocalAccessResult::default();
-        let mut seen = HashSet::new();
+        let mut seen = HashSet::default();
         let allowed = allowed_callback_spans(file, self.lookup);
         for call in &file.ast.calls {
             self.discover_call(file, call, &allowed, &mut result, &mut seen);
@@ -1926,15 +1924,10 @@ pub(crate) fn store_head_get(
     span: solid_facts::core::Span,
     dialect: &dyn solid_dialect::Dialect,
 ) -> StoreHeadGet {
-    let Some(mut head) = file.ast.members.iter().find(|member| member.span == span) else {
+    let Some(mut head) = file.ast.member_at(span) else {
         return StoreHeadGet::Undecided("the store Get's key is not a known string");
     };
-    while let Some(inner) = file
-        .ast
-        .members
-        .iter()
-        .find(|member| member.span == file.ast.peel_ts_sugar_span(head.object))
-    {
+    while let Some(inner) = file.ast.member_at(file.ast.peel_ts_sugar_span(head.object)) {
         head = inner;
     }
     let chained = file
@@ -2012,7 +2005,7 @@ fn exempt_store_get_runs_nothing(
     lookup: &SemanticLookup<'_>,
 ) -> bool {
     use solid_facts::ast::RuntimeValueKind;
-    let Some(member) = file.ast.members.iter().find(|member| member.span == span) else {
+    let Some(member) = file.ast.member_at(span) else {
         return false;
     };
     let key = if file
@@ -2140,12 +2133,7 @@ pub(crate) fn function_literal_runs_nothing(
     file: &solid_facts::FileFacts,
     span: solid_facts::core::Span,
 ) -> bool {
-    let Some(function) = file
-        .ast
-        .functions
-        .iter()
-        .find(|function| function.span == span)
-    else {
+    let Some(function) = file.ast.function_at(span) else {
         return false;
     };
     let within = |inner: solid_facts::core::Span| function.span.contains(inner);

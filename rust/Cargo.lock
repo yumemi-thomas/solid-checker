@@ -1452,6 +1452,7 @@ dependencies = [
 name = "solid-reactive-ir"
 version = "0.1.0"
 dependencies = [
+ "rustc-hash",
  "serde",
  "serde_json",
  "sha2",

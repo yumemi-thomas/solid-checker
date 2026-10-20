@@ -267,7 +267,8 @@ pub(super) fn returned_source_through<'a>(
     {
         return None;
     }
-    let primitive = known_primitive(&call_primitive_name(
+    let primitive = known_primitive(&crate::call_primitive_name_cached(
+        lookup,
         file,
         created,
         entities,
@@ -456,7 +457,7 @@ pub(super) fn effective_inner_call_return(
     inner: &solid_facts::ast::CallFact,
     context: &EffectiveReturnContext<'_>,
 ) -> Option<ReturnSummary> {
-    let primitive = call_primitive_name(
+    let primitive = crate::call_primitive_name(
         context.file,
         inner,
         context.entities,

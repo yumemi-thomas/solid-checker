@@ -10,7 +10,7 @@ use super::*;
 /// invocation through a primitive's callback slot refuses: who owns that run
 /// is the owner graph's question, not this walk's.
 pub(crate) fn unowned_event_literals(lookup: &SemanticLookup<'_>) -> HashSet<(String, Span)> {
-    let mut literals = HashSet::new();
+    let mut literals = HashSet::default();
     if !lookup.program_closed
         || lookup.files().iter().any(|file| {
             file.ast
@@ -28,12 +28,12 @@ pub(crate) fn unowned_event_literals(lookup: &SemanticLookup<'_>) -> HashSet<(St
             {
                 continue;
             }
-            let mut classifying = HashSet::new();
+            let mut classifying = HashSet::default();
             let mut flow = InvocationFlow {
                 lookup,
                 classifying: &mut classifying,
                 budget: FLOW_BUDGET,
-                seen: HashSet::new(),
+                seen: HashSet::default(),
                 frames: Vec::new(),
                 props_stack: Vec::new(),
                 owner_mode: true,
@@ -808,12 +808,7 @@ impl<'a> InvocationFlow<'a, '_, '_> {
     /// a value that ignores `this`, or undefined.
     fn cycle_element_forwards(&self, frame: &PropsFrame<'a>) -> bool {
         let file = frame.element_file;
-        let Some(element) = file
-            .ast
-            .jsx_elements
-            .iter()
-            .find(|candidate| candidate.span == frame.element)
-        else {
+        let Some(element) = file.ast.jsx_element_at(frame.element) else {
             return false;
         };
         let children = jsx_children(file, element);
@@ -826,12 +821,7 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         }) else {
             return false;
         };
-        let Some(writer) = file
-            .ast
-            .functions
-            .iter()
-            .find(|function| function.span == writer.component)
-        else {
+        let Some(writer) = file.ast.function_at(writer.component) else {
             return false;
         };
         let Some(writer_props) = props_parameter(file, writer) else {

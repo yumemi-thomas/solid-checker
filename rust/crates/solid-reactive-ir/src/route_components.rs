@@ -16,7 +16,7 @@
 //! `['component']` element, a destructured `component`): read back, the value
 //! can be called by the project, which the census does not see.
 
-use std::collections::HashSet;
+use crate::HashSet;
 
 use solid_dialect::Dialect;
 use solid_facts::ast::{FunctionKind, ImportKind};
@@ -114,7 +114,7 @@ fn tanstack_values(
     dialect: &dyn Dialect,
     install: &RouterInstallEvidence,
 ) -> HashSet<(String, Span)> {
-    let mut values = HashSet::new();
+    let mut values = HashSet::default();
     let Some(audited) = audited_directories(facts, dialect, install) else {
         return values;
     };
@@ -341,14 +341,14 @@ fn router_config_values(
     references: &BindingReferences<'_>,
     namespace_exposed: Option<&HashSet<String>>,
 ) -> HashSet<(String, Span)> {
-    let mut values = HashSet::new();
+    let mut values = HashSet::default();
     let Some(audited) = router_directories(facts, dialect, install, references, namespace_exposed)
     else {
         return values;
     };
     // `routes` values that name a binding, by `(path, span)`: a constant
     // array counts only when every reference to it is one of these.
-    let mut named_routes = HashSet::new();
+    let mut named_routes = HashSet::default();
     for file in unaudited_files(facts, &audited) {
         let locals = RouterLocals::of(file);
         if locals.create.is_empty() {
@@ -556,11 +556,7 @@ fn definitions(
     values: &mut HashSet<(String, Span)>,
 ) {
     let ast = &*file.ast;
-    let Some(literal) = ast
-        .array_literal_elements
-        .iter()
-        .find(|literal| literal.span == array)
-    else {
+    let Some(literal) = ast.array_literal_at(array) else {
         return;
     };
     if depth > 32 {

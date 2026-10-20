@@ -168,7 +168,10 @@ impl TypeScriptTable {
     }
 
     #[must_use]
-    pub fn with_files(mut self, files: Vec<FileFact>) -> Self {
+    pub fn with_files(mut self, mut files: Vec<FileFact>) -> Self {
+        // Sorted by path, as the retained table already yields them, so a
+        // lookup is a binary search rather than a scan of every file.
+        files.sort_by(|left, right| left.path.cmp(&right.path));
         self.file_overrides = Some(files.into());
         self
     }
@@ -224,7 +227,8 @@ impl TypeScriptTable {
     #[must_use]
     pub fn file(&self, path: &str) -> Option<&FileFact> {
         if let Some(files) = &self.file_overrides {
-            return files.iter().find(|file| file.path.as_ref() == path);
+            let index = files.partition_point(|file| file.path.as_ref() < path);
+            return files.get(index).filter(|file| file.path.as_ref() == path);
         }
         self.retained.as_ref().map_or_else(
             || {

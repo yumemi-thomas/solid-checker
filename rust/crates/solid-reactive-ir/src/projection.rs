@@ -687,7 +687,7 @@ pub fn suppress_findings_owned_by_enabled_rules(
             })
             .collect::<std::collections::HashSet<_>>()
     } else {
-        std::collections::HashSet::new()
+        std::collections::HashSet::default()
     };
     findings.retain(|finding| {
         if finding.id != "SC1001" {
@@ -749,7 +749,7 @@ fn collapse_unanalyzed_package_defects(
     // analysis reached and the output order does not depend on a hash.
     let mut order: Vec<&str> = Vec::new();
     let mut grouped: std::collections::HashMap<&str, Vec<&StaticDefect>> =
-        std::collections::HashMap::new();
+        std::collections::HashMap::default();
     let mut findings = Vec::new();
     for defect in defects {
         match package_of(defect) {

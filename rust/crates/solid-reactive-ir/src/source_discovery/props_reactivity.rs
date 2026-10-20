@@ -196,7 +196,7 @@ pub(super) fn classify_component_props(
         return PropsReactivityIndex::default();
     }
     // Every JSX element resolved to the project function it renders.
-    let mut uses = HashMap::<(&str, solid_facts::core::Span), Vec<(usize, usize)>>::new();
+    let mut uses = HashMap::<(&str, solid_facts::core::Span), Vec<(usize, usize)>>::default();
     for (file_index, file) in facts.files.iter().enumerate() {
         for (element_index, element) in file.ast.jsx_elements.iter().enumerate() {
             if let Some((target_file, target)) =
@@ -208,7 +208,7 @@ pub(super) fn classify_component_props(
             }
         }
     }
-    let mut by_declaration = HashMap::new();
+    let mut by_declaration = HashMap::default();
     let mut pending = Vec::new();
     for file in &facts.files {
         for function in &file.ast.functions {
@@ -722,12 +722,7 @@ pub(super) fn classify_passed_expression(
         }
         let mut root = member.object;
         let mut head = member;
-        while let Some(inner) = file
-            .ast
-            .members
-            .iter()
-            .find(|candidate| candidate.span == file.ast.peel_ts_sugar_span(root))
-        {
+        while let Some(inner) = file.ast.member_at(file.ast.peel_ts_sugar_span(root)) {
             head = inner;
             root = inner.object;
         }
