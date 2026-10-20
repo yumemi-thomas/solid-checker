@@ -125,21 +125,38 @@ effect.
   (calling one runs none of its body), methods, parameter initializers, a
   `let` helper, a callback handed to a timer, listener or promise, and an async
   function's code after its first `await` are not claimed.
-- **Unreachable code.** A call after an unconditional `return` or `throw` in
-  its own function, a callback of an array literal written empty
-  (`([] as T[]).forEach(...)`), and an effect whose compute function written
-  inline contains a `throw` statement (it may always throw, which skips the
-  apply) are not claimed.
-- **Server builds.** With a Node-family target (`node`, `deno`, `worker`) or
+- **Unreachable code.** Each layer's call must have a normal path from its
+  function's entry, by the abrupt-completion rules: after an unconditional
+  `return`, `throw`, `try { return } finally {}`, an infinite loop with no
+  `break` (`for (;;) {}`), a `switch` whose every arm returns, a call that never
+  returns (a `never` signature, an exactly resolved project function that only
+  throws), and an inline `forEach`/`map`/... callback that only throws over a
+  literal array with a first element, the call is not claimed. A callback of an
+  array literal written empty is never invoked either. A function the analysis
+  cannot parse or find is not claimed.
+- **A compute that never returns.** When the effect's compute is a function
+  written inline, or an exactly resolved project function, it must be able to
+  return a value; one that only throws (directly, through `never`, or through a
+  helper that only throws) leaves the apply unrun. Any other compute (a signal
+  accessor, a member, a package function) is assumed able to return, like every
+  unknown callee.
+- **Server builds.** With no runtime selection the client build is the
+  default (a documented premise, as the audited release is everywhere else).
+  With a Node-family target (`node`, `deno`, `worker`) or
   `string-ssr`/`streaming-ssr` selected, `solid-js`'s server entry never runs an
   apply (`createEffect` is `serverEffect(compute, undefined, options)`) and its
   `flush` is empty, so nothing is claimed. With no selection the client build is
   the default.
-- **Two copies of `@solidjs/signals`.** The `flush` call and the `createEffect`
-  call must resolve to declarations of the same installed package directory; a
-  `flush` of another copy has a queue that is not the one running. A `flush`
-  imported from `@solidjs/signals` itself, which Type Facts do not resolve to a
-  declaration, is not claimed.
+- **Two installed copies.** Package identity is decided by runtime module
+  resolution, not declarations (TypeScript merges a second copy at the same
+  version into the first copy's declarations, while the runtime loads both, each
+  with its own scheduler queue). The backend resolves `solid-js` from each
+  analyzed file's directory (nearest `node_modules`, symlinks resolved); the file
+  holding the `flush` call and the file holding the `createEffect` call must load
+  the same copy, and both calls' declarations must be in one package directory.
+  A file whose `solid-js` is not resolved on disk (a caller with no disk, such as
+  the WASM adapter) is not claimed. A `flush` imported from `@solidjs/signals`
+  itself, which Type Facts do not resolve to a declaration, is not claimed.
 - **Positions it does not place.** An apply passed by name
   (`createEffect(v, applyFn)`), the `{ effect, error }` bundle form, and an
   apply of a `defer: true` effect whose compute never changes. `createRenderEffect`

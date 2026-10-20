@@ -206,6 +206,16 @@
       "code": "SC2008",
       "kind": "violation",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
+      "start": 9988,
+      "end": 9993,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "violation",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/commit.ts",
       "start": 210,
       "end": 215,

@@ -1038,7 +1038,6 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_throw_statement(&mut self, statement: &oxc_ast::ast::ThrowStatement<'a>) {
-        self.throw_statements.push(span(statement.span));
         walk::walk_throw_statement(self, statement);
         self.mark_function_exit();
     }

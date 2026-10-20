@@ -220,3 +220,31 @@ export function NeverApplied() {
   );
   return <span>never-applied</span>;
 }
+
+export function TryReturn() {
+  const [value] = createSignal(1);
+  createEffect(value, () => {
+    try {
+      return;
+    } finally {
+      void 0;
+    }
+    flush();
+  });
+  return <span>try-return</span>;
+}
+
+function fail(): never {
+  throw new Error("always");
+}
+export function NeverBeforeFlush() {
+  const [value] = createSignal(1);
+  createEffect(value, () => {
+    try {
+      fail();
+    } catch {}
+    return;
+    flush();
+  });
+  return <span>never-before-flush</span>;
+}

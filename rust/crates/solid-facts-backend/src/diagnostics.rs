@@ -342,6 +342,8 @@ impl DiagnosticSession {
         }
         rule_options.runtime.router_install =
             crate::installed_bytes::router_install_evidence(project, facts);
+        rule_options.runtime.package_instances =
+            crate::installed_bytes::package_instance_evidence(facts);
         rule_options.development_feedback = enablement.feedback_facts;
         // Scoped to this generation's facts: a gap about named exports is due
         // only where the project reaches one (`release_scope`), so the answer

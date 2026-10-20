@@ -21,13 +21,25 @@
 //!   the effect is proven by that call alone (the other calls of the helper
 //!   are no evidence either way).
 //!
-//! Each layer's site must also be reachable in the layer's own function: not
-//! after an unconditional `return` or `throw`
-//! ([`solid_facts::ast::argument_site_standings`]; a merely `Possible` site
-//! stays, the engine's feasible-path premise). An effect whose compute
-//! function contains a `throw` statement is not claimed (the compute may
-//! always throw, and the apply never runs then), nor is a callback of an
-//! array literal written empty.
+//! Each layer's site must also have a normal path from its function's entry
+//! ([`solid_facts::ast::site_reachable`]: abrupt completion by `return`,
+//! `throw`, `break`, an infinite loop, a `try` that only leaves abruptly, a
+//! `switch` whose arms all return, and calls that never return: a `never`
+//! signature, an exactly resolved project function that only throws, an inline
+//! callback over a literal non-empty array that only throws). A condition the
+//! analysis cannot decide is taken either way (the engine's feasible-path
+//! premise); a function it cannot analyze is not claimed. An effect whose
+//! compute is a function written inline, or an exactly resolved project
+//! function, must be able to return a value ([`solid_facts::ast::function_may_return`]),
+//! or the apply never runs; any other compute (a signal accessor, a member, a
+//! package function) is assumed able to, like every unknown callee. A callback
+//! of an array literal written empty is never invoked.
+//!
+//! The queue the nested `flush` finds running must be the apply's: the file
+//! holding the `flush` call and the file holding the `createEffect` call must
+//! load the same installed `solid-js` at runtime
+//! ([`crate::PackageInstanceEvidence`], module resolution with symlinks
+//! resolved), and both calls' declarations must be in one package directory.
 //!
 //! Anything else answers `None`: an unresolved callee, a callback handed to a
 //! timer, listener or promise, a generator (calling one runs none of its body),
@@ -35,7 +47,7 @@
 //! through a binding that may have been replaced. An async layer is on the
 //! stack only up to its first suspension.
 
-use crate::HashSet;
+use crate::{HashMap, HashSet};
 
 use solid_facts::FileFacts;
 use solid_facts::ast::{ArgumentValueKind, FunctionFact};
@@ -70,11 +82,17 @@ pub(crate) fn effect_phase_origin(
     file: &FileFacts,
     span: Span,
     package_root: &str,
+    instances: &crate::PackageInstanceEvidence,
     lookup: &SemanticLookup<'_>,
 ) -> Option<EffectPhaseOrigin> {
+    // The instance the flush call's file loads; unresolved is no proof.
+    let flush_instance = instances.solid_js_by_file.get(file.path.as_str())?;
     let mut walk = Walk {
         lookup,
         package_root,
+        flush_instance,
+        instances,
+        returns: HashMap::default(),
         visiting: HashSet::default(),
         budget: BUDGET,
     };
@@ -86,6 +104,12 @@ struct Walk<'l, 'a> {
     /// The package instance the starting call's declaration is in: the effect
     /// call must resolve to the same one, or its queue is not the one running.
     package_root: &'l str,
+    /// The `solid-js` directory the flush call's file loads at runtime, and
+    /// what every analyzed file loads.
+    flush_instance: &'l str,
+    instances: &'l crate::PackageInstanceEvidence,
+    /// Whether a call of a project function can return, by function.
+    returns: HashMap<(String, Span), Option<bool>>,
     /// Functions the walk is inside through a call, so a call cycle ends.
     visiting: HashSet<(String, Span)>,
     budget: usize,
@@ -117,18 +141,16 @@ impl Walk<'_, '_> {
         if literal.r#async && !runs_before_first_suspension(file, literal, span) {
             return None;
         }
-        // Dead code after an unconditional exit never runs. `None` is a
-        // function the walk refuses (`arguments`, `eval`): no proof either way.
-        let standing = solid_facts::ast::argument_site_standings(
+        // A site no normal path reaches never runs. A function the analysis
+        // cannot parse or find is no proof either way.
+        let diverging = self.diverging_calls(file, literal, 0);
+        if solid_facts::ast::site_reachable(
             std::path::Path::new(file.path.as_str()),
             &file.source,
             literal.span,
-            &[],
-            &self.lookup.never_returning_calls_within(file, literal),
-            &[span],
-        )?;
-        if standing.first() != Some(&solid_facts::ast::SiteStanding::Guaranteed)
-            && standing.first() != Some(&solid_facts::ast::SiteStanding::Possible)
+            span,
+            &diverging,
+        ) != Some(true)
         {
             return None;
         }
@@ -166,7 +188,7 @@ impl Walk<'_, '_> {
                 // package instance's queue.
                 return (effect_execution::at_call(file, call, primitive, index, self.lookup)
                     == ApplyExecution::Proven
-                    && !compute_may_throw(file, call)
+                    && self.compute_may_return(file, call)
                     && self.same_package_instance(file, call))
                 .then(|| EffectPhaseOrigin {
                     path: file.path.to_string(),
@@ -214,11 +236,185 @@ impl Walk<'_, '_> {
     /// Whether the call's resolved declaration is in the package instance the
     /// walk started from (the nearest `node_modules` package directory).
     fn same_package_instance(&self, file: &FileFacts, call: &solid_facts::ast::CallFact) -> bool {
-        self.lookup
+        self.instances
+            .solid_js_by_file
+            .get(file.path.as_str())
+            .map(String::as_str)
+            == Some(self.flush_instance)
+            && self
+                .lookup
+                .resolved_callee_call(file, call.callee)
+                .and_then(|resolved| resolved.declaration.as_ref())
+                .and_then(|declaration| package_root(declaration.location.path.as_ref()))
+                .is_some_and(|root| root == self.package_root)
+    }
+
+    /// Whether the effect's compute can return a value, so that its apply
+    /// runs: a function written inline, or an exactly resolved project
+    /// function, must show a normal return; anything else is assumed to.
+    fn compute_may_return(&mut self, file: &FileFacts, call: &solid_facts::ast::CallFact) -> bool {
+        let Some(compute) = call.arguments.first() else {
+            return false;
+        };
+        let span = file.ast.peel_ts_sugar_span(compute.span);
+        let function = if let Some(function) = file.ast.function_at(span) {
+            Some((file, function))
+        } else if compute.value == ArgumentValueKind::Identifier {
+            self.lookup
+                .function_called_at(file.path.as_str(), span)
+                .filter(|(function_file, function)| {
+                    self.lookup
+                        .function_value_is_current(function_file, function)
+                })
+        } else {
+            None
+        };
+        match function {
+            Some((function_file, function)) => {
+                self.may_return(function_file, function, 0) == Some(true)
+            }
+            None => true,
+        }
+    }
+
+    /// Whether a call of `function` can return, by the completion analysis;
+    /// `None` when it cannot be analyzed or the budget is spent.
+    fn may_return(
+        &mut self,
+        file: &FileFacts,
+        function: &FunctionFact,
+        depth: usize,
+    ) -> Option<bool> {
+        let key = (file.path.to_string(), function.span);
+        if let Some(known) = self.returns.get(&key) {
+            return *known;
+        }
+        if depth > 3 || self.budget == 0 {
+            return None;
+        }
+        self.budget -= 1;
+        // A call cycle answers "unknown" to its own inner calls.
+        self.returns.insert(key.clone(), None);
+        let diverging = self.diverging_calls(file, function, depth + 1);
+        let answer = solid_facts::ast::function_may_return(
+            std::path::Path::new(file.path.as_str()),
+            &file.source,
+            function.span,
+            &diverging,
+        );
+        self.returns.insert(key, answer);
+        answer
+    }
+
+    /// The calls written directly in `function` that provably never return
+    /// normally.
+    fn diverging_calls(
+        &mut self,
+        file: &FileFacts,
+        function: &FunctionFact,
+        depth: usize,
+    ) -> Vec<Span> {
+        let mut found = Vec::new();
+        for call in &file.ast.calls {
+            if call.construct
+                || !function.body.contains(call.span)
+                || !written_directly_in(&file.ast, function, call.span)
+            {
+                continue;
+            }
+            if self.call_diverges(file, call, depth) {
+                found.push(call.span);
+            }
+        }
+        found
+    }
+
+    fn call_diverges(
+        &mut self,
+        file: &FileFacts,
+        call: &solid_facts::ast::CallFact,
+        depth: usize,
+    ) -> bool {
+        // A `never` signature (not `asserts`, which may return).
+        if self
+            .lookup
             .resolved_callee_call(file, call.callee)
-            .and_then(|resolved| resolved.declaration.as_ref())
-            .and_then(|declaration| package_root(declaration.location.path.as_ref()))
-            .is_some_and(|root| root == self.package_root)
+            .is_some_and(|resolved| {
+                resolved.never_returns
+                    && resolved.validity == typefacts::ResolvedCallValidity::Valid
+            })
+        {
+            return true;
+        }
+        // A project function that only throws, reached by an exact call.
+        if let Some((callee_file, callee, true)) =
+            project_callee_at_parameter(file, call, 0, self.lookup)
+            && !callee.generator
+            && !callee.r#async
+            && self.may_return(callee_file, callee, depth) == Some(false)
+        {
+            return true;
+        }
+        // An inline array method over a literal with a first element, whose
+        // callback only throws: the first element reaches it.
+        const PER_ELEMENT: [&str; 10] = [
+            "forEach",
+            "map",
+            "filter",
+            "find",
+            "findIndex",
+            "findLast",
+            "findLastIndex",
+            "some",
+            "every",
+            "flatMap",
+        ];
+        let Some(member) = file.ast.member_at(file.ast.peel_ts_sugar_span(call.callee)) else {
+            return false;
+        };
+        if !file
+            .source_text(member.property)
+            .is_some_and(|name| PER_ELEMENT.contains(&name))
+            || solid_facts::ast::literal_array_element(
+                std::path::Path::new(file.path.as_str()),
+                &file.source,
+                file.ast.peel_ts_sugar_span(member.object),
+                0,
+            )
+            .is_none()
+        {
+            return false;
+        }
+        let Some(resolved) =
+            self.lookup
+                .resolved_callee_call(file, call.callee)
+                .filter(|resolved| {
+                    resolved
+                        .declaration
+                        .as_ref()
+                        .is_some_and(|declaration| declaration.standard_library)
+                })
+        else {
+            return false;
+        };
+        let Some(argument) = call.arguments.first() else {
+            return false;
+        };
+        let callability = self
+            .lookup
+            .entity_at(file.path.as_str(), argument.span)
+            .and_then(|entity| entity.callability);
+        if !matches!(
+            crate::runtime_semantics::argument_behavior(resolved, callability, 0),
+            Some(crate::runtime_semantics::RuntimeArgumentBehavior::InlineCallback)
+        ) || argument.spread
+        {
+            return false;
+        }
+        file.ast
+            .function_at(file.ast.peel_ts_sugar_span(argument.span))
+            .filter(|callback| !callback.r#async && !callback.generator)
+            .is_some_and(|callback| self.may_return(file, callback, depth) == Some(false))
     }
 
     /// `literal` is a function bound to a name: it runs during the effect
@@ -373,25 +569,6 @@ pub(crate) fn package_root(path: &str) -> Option<String> {
         first.len()
     };
     Some(path[..at + name_len].to_owned())
-}
-
-/// Whether the effect's compute function, written as a function literal,
-/// contains a `throw` statement of its own: it may always throw, which skips
-/// the apply. A compute that is not a literal is assumed not to.
-fn compute_may_throw(file: &FileFacts, call: &solid_facts::ast::CallFact) -> bool {
-    let Some(compute) = call.arguments.first() else {
-        return false;
-    };
-    let Some(function) = file
-        .ast
-        .function_at(file.ast.peel_ts_sugar_span(compute.span))
-    else {
-        return false;
-    };
-    file.ast
-        .throw_statements
-        .iter()
-        .any(|statement| written_directly_in(&file.ast, function, *statement))
 }
 
 #[cfg(test)]

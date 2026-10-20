@@ -105,6 +105,42 @@ fn package_install_roots(facts: &ProjectFacts, package: &str) -> Vec<PathBuf> {
     roots
 }
 
+/// Which installed `solid-js` each analyzed file loads at runtime: the
+/// nearest `node_modules/solid-js` (with a `package.json`) in the file's
+/// directory or above, symlinks resolved. Two copies of one version are two
+/// instances however TypeScript merged their declarations.
+#[must_use]
+pub fn package_instance_evidence(
+    facts: &ProjectFacts,
+) -> solid_reactive_ir::PackageInstanceEvidence {
+    let mut by_directory: std::collections::HashMap<PathBuf, Option<String>> =
+        std::collections::HashMap::new();
+    let mut solid_js_by_file = BTreeMap::new();
+    for file in &facts.files {
+        let Some(directory) = Path::new(file.path.as_str()).parent() else {
+            continue;
+        };
+        let resolved = by_directory
+            .entry(directory.to_path_buf())
+            .or_insert_with(|| {
+                directory.ancestors().find_map(|ancestor| {
+                    let package = ancestor.join("node_modules").join("solid-js");
+                    package.join("package.json").is_file().then(|| {
+                        fs::canonicalize(&package)
+                            .unwrap_or(package)
+                            .to_string_lossy()
+                            .into_owned()
+                    })
+                })
+            })
+            .clone();
+        if let Some(resolved) = resolved {
+            solid_js_by_file.insert(file.path.to_string(), resolved);
+        }
+    }
+    solid_reactive_ir::PackageInstanceEvidence { solid_js_by_file }
+}
+
 /// The router evidence for `project`'s analysis of `facts`.
 #[must_use]
 pub fn router_install_evidence(project: &Path, facts: &ProjectFacts) -> RouterInstallEvidence {

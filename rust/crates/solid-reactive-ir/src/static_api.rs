@@ -38,6 +38,7 @@ pub(crate) fn check_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft)
         accessors: ctx.accessors,
         reachable_calls: ctx.reachable_calls,
         client_build: !ctx.rule_options.runtime.selects_server_build(),
+        package_instances: &ctx.rule_options.runtime.package_instances,
     };
     for result in parallel_file_results(&ctx.facts.files, |file| checker.check_file(file)) {
         draft.static_defects.extend(result.defects);
@@ -60,6 +61,8 @@ pub(super) struct StaticApiContext<'a> {
     pub(super) reachable_calls: &'a HashMap<Location, usize>,
     /// No server build of the Solid packages is selected.
     pub(super) client_build: bool,
+    /// Which installed `solid-js` each file loads at runtime.
+    pub(super) package_instances: &'a crate::PackageInstanceEvidence,
 }
 
 impl StaticApiContext<'_> {
@@ -326,8 +329,13 @@ impl StaticApiContext<'_> {
                     .and_then(|declaration| {
                         crate::effect_phase::package_root(declaration.location.path.as_ref())
                     })
-                && let Some(origin) =
-                    crate::effect_phase::effect_phase_origin(file, call.span, &root, self.lookup)
+                && let Some(origin) = crate::effect_phase::effect_phase_origin(
+                    file,
+                    call.span,
+                    &root,
+                    self.package_instances,
+                    self.lookup,
+                )
             {
                 let reached = match origin.helper_calls {
                     0 => "directly in the apply callback of a createEffect".to_owned(),

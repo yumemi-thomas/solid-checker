@@ -304,6 +304,92 @@ createRoot(() => {
     },
   );
 
+  // Negative: abrupt completion before the call. Each leaves no normal path to
+  // the `flush()`: a `try` whose blocks only return, an infinite loop, a
+  // `switch` whose every arm returns, a call that never returns (a `never`
+  // signature, a local `never` arrow), and an inline callback that only throws
+  // over a literal array with a first element.
+  function fail(): never {
+    throw new Error("always");
+  }
+  createEffect(value, () => {
+    try {
+      return;
+    } finally {
+      void 0;
+    }
+    flush();
+  });
+  createEffect(value, () => {
+    for (;;) {}
+    flush();
+  });
+  createEffect(value, () => {
+    switch (1) {
+      default:
+        return;
+    }
+    flush();
+  });
+  createEffect(value, () => {
+    const never = (): never => {
+      throw new Error();
+    };
+    never();
+    flush();
+  });
+  createEffect(value, () => {
+    fail();
+    flush();
+  });
+  createEffect(value, () => {
+    [1].forEach(() => {
+      throw new Error();
+    });
+    flush();
+  });
+
+  // Negative: a compute that never returns leaves the apply unrun: a call of a
+  // `never` function, a const arrow, a declaration, and a helper it returns.
+  const throwingCompute = (): number => {
+    throw new Error("always");
+  };
+  function throwingDeclaration(): number {
+    throw new Error("always");
+  }
+  createEffect(
+    () => fail(),
+    () => {
+      flush();
+    },
+  );
+  createEffect(throwingCompute, () => {
+    flush();
+  });
+  createEffect(throwingDeclaration, () => {
+    flush();
+  });
+  createEffect(
+    () => {
+      value();
+      return throwingDeclaration();
+    },
+    () => {
+      flush();
+    },
+  );
+
+  // Positive: a compute that can return, written as a named function or a
+  // member, is analyzed or assumed to; a throw guarded by a condition still
+  // returns on the other path.
+  function guardedCompute(): number {
+    if (value() < 0) throw new Error("negative");
+    return value();
+  }
+  createEffect(guardedCompute, () => {
+    flush();
+  });
+
   // Negative: a cleanup the apply returns runs at the next run (inside the
   // marker) and at disposal (outside it): no single answer, so none is claimed.
   createEffect(value, () => () => {
