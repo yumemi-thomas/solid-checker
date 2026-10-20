@@ -10,3 +10,4 @@ Each file removes one condition of ADR 0342's census, so a member stored in the 
 - `Shadowed.tsx`: the module's holder is rendered nowhere (the tag names a parameter that shadows it), and a local `Object` is not the standard library's `Object.assign`.
 - `Target.tsx`: `Object.assign` mutates its target function, so `TabsRoot.List` reaches every member without naming the holder.
 - `HelperCalled.tsx`: the helper-read twin of `compound-components/Helper.tsx` with one member also called plainly (`Split.Panel()`); the holder fails the census, so the read in `Handle` is uncertifiable as well.
+- `Targets.tsx`, `Imported.tsx`, `Base.ts`: the `Object.assign` target is a class with a static accessor, an object with accessors, a Proxy, or an imported class; `Object.assign` writes with [[Set]], so the target can receive a member and call it plainly or answer another value.

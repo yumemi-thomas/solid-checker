@@ -6,6 +6,26 @@
       "code": "SC1001",
       "kind": "violation",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/compound-components/ArrowTarget.tsx",
+      "start": 146,
+      "end": 153,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/compound-components/ArrowTarget.tsx",
+      "start": 242,
+      "end": 249,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/compound-components/Assign.tsx",
       "start": 143,
       "end": 150,

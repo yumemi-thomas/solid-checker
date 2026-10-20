@@ -216,12 +216,29 @@ impl<'a> SemanticLookup<'a> {
                     FunctionKind::Arrow | FunctionKind::Expression
                 )
         };
-        if ast
-            .identifiers
-            .binary_search_by_key(&first, |id| id.span)
-            .is_err()
-            && !ast.functions.iter().any(is_function)
-        {
+        // `Object.assign` writes with [[Set]]: a class's static accessor, an
+        // object's setter or a Proxy trap would receive each member and may
+        // call it, and a getter may answer another value. Only a function
+        // that exactly resolves, in this file, to a function declaration or
+        // a `const` bound to an arrow or function expression takes the
+        // members as plain data properties.
+        let function_target = ast.functions.iter().any(is_function)
+            || ast.reference_declaration(first).is_some_and(|declaration| {
+                ast.functions.iter().any(|function| {
+                    function.kind == FunctionKind::Declaration
+                        && function
+                            .name
+                            .as_ref()
+                            .is_some_and(|name| name.span == declaration)
+                }) || ast.bindings.iter().any(|candidate| {
+                    candidate.immutable
+                        && candidate.shape == solid_facts::ast::BindingShape::Identifier
+                        && candidate.initializer_function
+                        && candidate.names.len() == 1
+                        && candidate.names[0].span == declaration
+                })
+            });
+        if !function_target {
             return None;
         }
         let mut members: Vec<(String, Member)> = Vec::new();

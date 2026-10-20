@@ -106,6 +106,16 @@
       "code": "SC1001",
       "kind": "uncertifiable",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Imported.tsx",
+      "start": 141,
+      "end": 148,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/compound-components-escapes/Passed.tsx",
       "start": 111,
       "end": 118,
@@ -189,6 +199,36 @@
       "path": "fixtures/reactive-ir/compound-components-escapes/Target.tsx",
       "start": 193,
       "end": 200,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Targets.tsx",
+      "start": 153,
+      "end": 160,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Targets.tsx",
+      "start": 230,
+      "end": 237,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Targets.tsx",
+      "start": 306,
+      "end": 313,
       "fixes": 0
     }
   ]

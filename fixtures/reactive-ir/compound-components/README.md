@@ -6,6 +6,7 @@ The census: the holder is a `const` bound to a closed object literal (no spread,
 
 - `Literal.tsx` (positive): `{ Root, Panel, Handle }` rendered as `<Split.Panel/>`, `<Split.Handle></Split.Handle>` (a closing tag is the same use).
 - `Assign.tsx` (positive): `Object.assign(TabsRoot, { List, Item })`; `<Tabs>` renders the target and `<Tabs.List>` a member.
+- `ArrowTarget.tsx` (positive): the `Object.assign` target is a `const` bound to an arrow. A target must be a function declaration or such a `const` in the same file (a class, an object, a Proxy or an import may receive the members through a setter).
 - `Nested.tsx` (positive): a nested namespace (`<Card.Header.Title/>`), an anonymous arrow member (`<Card.Footer/>`) and a data member never tagged.
 - `Dialog.tsx`, `index.ts`, `Screen.tsx` (positive): the holder is exported through a barrel and tagged in another module; an export is module surface, as for a plain component.
 - `Helper.tsx` (positive): both members call a helper whose strict read is reported at each call written directly in a member body; a member held in an object is a render there, not a retained callable (ADR 0292's `lazy` default is the same disposition).
