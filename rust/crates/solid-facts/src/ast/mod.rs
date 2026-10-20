@@ -93,7 +93,7 @@ pub use literal_array::{literal_array_element, this_expression_spans};
 pub use module_requests::static_module_requests;
 pub use primitive_completion::primitive_completion_by_syntax;
 pub use proxy_get_forward::proxy_get_forward_target;
-pub use site_reachability::{function_may_return, site_reachable};
+pub use site_reachability::{function_may_return, module_site_reachable, site_reachable};
 pub use unconditional_calls::{synchronously_unconditional_calls, unconditional_calls};
 
 pub use emission::{

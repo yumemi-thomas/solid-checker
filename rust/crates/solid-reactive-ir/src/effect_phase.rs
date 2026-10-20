@@ -21,19 +21,21 @@
 //!   the effect is proven by that call alone (the other calls of the helper
 //!   are no evidence either way).
 //!
-//! Each layer's site must also have a normal path from its function's entry
-//! ([`solid_facts::ast::site_reachable`]: abrupt completion by `return`,
-//! `throw`, `break`, an infinite loop, a `try` that only leaves abruptly, a
-//! `switch` whose arms all return, and calls that never return: a `never`
-//! signature, an exactly resolved project function that only throws, an inline
-//! callback over a literal non-empty array that only throws). A condition the
-//! analysis cannot decide is taken either way (the engine's feasible-path
-//! premise); a function it cannot analyze is not claimed. An effect whose
-//! compute is a function written inline, or an exactly resolved project
-//! function, must be able to return a value ([`solid_facts::ast::function_may_return`]),
-//! or the apply never runs; any other compute (a signal accessor, a member, a
-//! package function) is assumed able to, like every unknown callee. A callback
-//! of an array literal written empty is never invoked.
+//! Each layer's site, and the `createEffect` registration site, must also be on
+//! a proven normal path ([`solid_facts::ast::site_reachable`]): a positive
+//! allowlist of constructs from the function entry (blocks, non-constant
+//! `if`/loops, non-literal `for`-`of`, `try` blocks but never `catch`, operands
+//! of calls and short circuits whose left side is not constant), with no
+//! proven abrupt completion before the site (`return`, `throw`, a call that
+//! never returns, a throwing same-file getter). The feasible-path premise is
+//! what remains: a non-constant condition may take either branch, and a call
+//! not proven never to return returns. Array callbacks count only on a receiver
+//! that is not an array literal, never for `sort`, and for `reduce` only with an
+//! initial value. An effect whose compute is a function written inline, or an
+//! exactly resolved project function, must be able to return a value
+//! ([`solid_facts::ast::function_may_return`]) and not be `async` or a
+//! generator, or the apply is not claimed; any other compute (a signal
+//! accessor, a member, a package function) is assumed able to.
 //!
 //! The queue the nested `flush` finds running must be the apply's: the file
 //! holding the `flush` call and the file holding the `createEffect` call must
@@ -188,6 +190,7 @@ impl Walk<'_, '_> {
                 // package instance's queue.
                 return (effect_execution::at_call(file, call, primitive, index, self.lookup)
                     == ApplyExecution::Proven
+                    && self.registration_reachable(file, call)
                     && self.compute_may_return(file, call)
                     && self.same_package_instance(file, call))
                 .then(|| EffectPhaseOrigin {
@@ -212,14 +215,23 @@ impl Walk<'_, '_> {
                     .as_ref()
                     .is_some_and(|declaration| declaration.standard_library)
             })?;
-        // A callback of an array literal written empty is never invoked.
-        if file
+        // Only a receiver that is not an array literal (it may be empty,
+        // sparse or a single element), and a method that always invokes its
+        // callback on an element: `reduce` without an initial value skips the
+        // first element, and `sort` may not compare at all.
+        let member = file
             .ast
-            .member_at(file.ast.peel_ts_sugar_span(call.callee))
-            .and_then(|member| file.source_text(file.ast.peel_ts_sugar_span(member.object)))
-            .is_some_and(|object| object.trim() == "[]")
+            .member_at(file.ast.peel_ts_sugar_span(call.callee))?;
+        if file
+            .source_text(file.ast.peel_ts_sugar_span(member.object))
+            .is_none_or(|object| object.trim_start().starts_with('['))
         {
             return None;
+        }
+        match file.source_text(member.property)? {
+            "sort" | "toSorted" => return None,
+            "reduce" | "reduceRight" if call.arguments.len() < 2 => return None,
+            _ => {}
         }
         let callability = self
             .lookup
@@ -249,6 +261,52 @@ impl Walk<'_, '_> {
                 .is_some_and(|root| root == self.package_root)
     }
 
+    /// Whether the `createEffect` call is itself on a proven normal path from
+    /// the entry of its enclosing function (or the module body): a registration
+    /// that never runs applies nothing.
+    fn registration_reachable(
+        &mut self,
+        file: &FileFacts,
+        call: &solid_facts::ast::CallFact,
+    ) -> bool {
+        let path = std::path::Path::new(file.path.as_str());
+        match containing_ast_function(&file.ast, call.span) {
+            Some(function) => {
+                if !written_directly_in(&file.ast, function, call.span) {
+                    return false;
+                }
+                let diverging = self.diverging_calls(file, function, 0);
+                solid_facts::ast::site_reachable(
+                    path,
+                    &file.source,
+                    function.span,
+                    call.span,
+                    &diverging,
+                ) == Some(true)
+            }
+            None => {
+                let diverging = self.module_diverging_calls(file);
+                solid_facts::ast::module_site_reachable(path, &file.source, call.span, &diverging)
+                    == Some(true)
+            }
+        }
+    }
+
+    /// The calls written in the module body (outside every function) that
+    /// provably never return normally.
+    fn module_diverging_calls(&mut self, file: &FileFacts) -> Vec<Span> {
+        let mut found = Vec::new();
+        for call in &file.ast.calls {
+            if call.construct || containing_ast_function(&file.ast, call.span).is_some() {
+                continue;
+            }
+            if self.call_diverges(file, call, 0) {
+                found.push(call.span);
+            }
+        }
+        found
+    }
+
     /// Whether the effect's compute can return a value, so that its apply
     /// runs: a function written inline, or an exactly resolved project
     /// function, must show a normal return; anything else is assumed to.
@@ -270,6 +328,9 @@ impl Walk<'_, '_> {
             None
         };
         match function {
+            // Calling an async function or a generator never throws, but the
+            // value is a promise or an iterator: the apply is not claimed.
+            Some((_, function)) if function.r#async || function.generator => false,
             Some((function_file, function)) => {
                 self.may_return(function_file, function, 0) == Some(true)
             }

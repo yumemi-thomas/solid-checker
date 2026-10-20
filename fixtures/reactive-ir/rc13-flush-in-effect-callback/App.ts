@@ -139,10 +139,17 @@ createRoot(() => {
 
   // Positive: an array method the audited rows model as invoking its callback
   // before it returns.
+  const items: number[] = [1, 2];
   createEffect(value, () => {
-    [1, 2].forEach(() => {
+    items.forEach(() => {
       flush();
     });
+  });
+  createEffect(value, () => {
+    items.reduce((accumulator) => {
+      flush();
+      return accumulator;
+    }, 0);
   });
 
   // Positive: an async helper runs on the caller's stack up to its first await.
@@ -424,6 +431,225 @@ createRoot(() => {
       flush();
     },
     { defer: true },
+  );
+
+  // The remaining cases pin the allowlist: a site is claimed only when every
+  // construct on its path is an allowlisted shape. Non-constant conditions and
+  // calls not proven never to return are the feasible-path premise (ADR 0341).
+
+  // Positive: a non-constant short circuit, a conditional arm, a sequence, a
+  // loop over a non-literal iterable, a switch on a non-constant value, a
+  // `try` block and a `finally` block.
+  createEffect(value, (next) => {
+    next > 1 && flush();
+  });
+  createEffect(value, (next) => {
+    next > 1 ? flush() : 0;
+  });
+  createEffect(value, () => {
+    (setValue(3), flush());
+  });
+  createEffect(value, () => {
+    for (const item of items) {
+      flush();
+      void item;
+    }
+  });
+  createEffect(value, (next) => {
+    switch (next) {
+      case 1:
+        flush();
+        break;
+      default:
+        break;
+    }
+  });
+  createEffect(value, () => {
+    try {
+      flush();
+    } catch {}
+  });
+  createEffect(value, () => {
+    try {
+      setValue(4);
+    } finally {
+      flush();
+    }
+  });
+  // A constant that lets the site run is honored, not just refused.
+  createEffect(value, () => {
+    true && flush();
+  });
+
+  // Negative: the registration itself is dead code.
+  if (false) {
+    createEffect(
+      () => 1,
+      () => {
+        flush();
+      },
+    );
+  }
+  createEffect(value, () => {
+    flush();
+  });
+
+  // Negative: an async or generator compute is not claimed.
+  createEffect(
+    async () => {
+      throw new Error("rejected");
+    },
+    () => {
+      flush();
+    },
+  );
+  createEffect(
+    async function* (): AsyncGenerator<number> {
+      throw new Error("no yield");
+    },
+    () => {
+      flush();
+    },
+  );
+
+  // Negative: array methods that never call the callback here.
+  createEffect(
+    () => 1,
+    () => {
+      [, ,].forEach(() => {
+        flush();
+      });
+      [1].reduce((accumulator) => {
+        flush();
+        return accumulator;
+      });
+      [1].reduceRight((accumulator) => {
+        flush();
+        return accumulator;
+      });
+      [1].sort((a, b) => {
+        flush();
+        return a - b;
+      });
+      items.sort((a, b) => {
+        flush();
+        return a - b;
+      });
+      items.reduce((accumulator) => {
+        flush();
+        return accumulator;
+      });
+    },
+  );
+
+  // Negative: a constant short circuit or conditional skips the call.
+  createEffect(
+    () => 1,
+    () => {
+      false && flush();
+      true || flush();
+      true ? 1 : flush();
+    },
+  );
+
+  // Negative: a `catch` is not claimed (no throw is proven to reach it), and a
+  // `try` whose block returns leaves nothing after it.
+  createEffect(
+    () => 1,
+    () => {
+      try {
+        return;
+      } catch {}
+      flush();
+    },
+  );
+  createEffect(
+    () => 1,
+    () => {
+      try {
+        return;
+      } catch {
+        flush();
+      }
+    },
+  );
+
+  // Negative: a call that never returns earlier in the same expression or
+  // loop header.
+  createEffect(
+    () => 1,
+    () => {
+      (fail(), flush());
+    },
+  );
+  createEffect(
+    () => 1,
+    () => {
+      for (let i = fail(); ; ) {
+        flush();
+      }
+    },
+  );
+  createEffect(
+    () => 1,
+    () => {
+      while (fail()) {
+        flush();
+      }
+    },
+  );
+
+  // Negative: a getter that throws, read before the call or by the compute.
+  createEffect(
+    () => 1,
+    () => {
+      const thrower = {
+        get value(): number {
+          throw new Error("getter");
+        },
+      };
+      thrower.value;
+      flush();
+    },
+  );
+  const throwingGetter = {
+    get value(): number {
+      throw new Error("compute getter");
+    },
+  };
+  createEffect(
+    () => throwingGetter.value,
+    () => {
+      flush();
+    },
+  );
+
+  // Negative: a switch over a literal decides its arm.
+  createEffect(
+    () => 1,
+    () => {
+      switch (1) {
+        case 1:
+          break;
+        default:
+          flush();
+      }
+    },
+  );
+
+  // Negative: a loop over a literal iterable or one with a constant-false test
+  // may never run its body.
+  createEffect(
+    () => 1,
+    () => {
+      for (const unused of [] as number[]) {
+        void unused;
+        flush();
+      }
+      for (let i = 0; false; i++) {
+        flush();
+      }
+    },
   );
 
 });

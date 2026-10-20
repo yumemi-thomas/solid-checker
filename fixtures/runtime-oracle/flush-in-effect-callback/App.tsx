@@ -44,12 +44,13 @@ export function OtherFile() {
 
 export function Inline() {
   const [value] = createSignal(1);
+  const items = [1];
   createEffect(value, () => {
     (() => {
       flush();
     })();
     untrack(() => flush());
-    [1].forEach(() => {
+    items.forEach(() => {
       flush();
     });
   });

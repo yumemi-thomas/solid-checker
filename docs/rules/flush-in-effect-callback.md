@@ -125,21 +125,37 @@ effect.
   (calling one runs none of its body), methods, parameter initializers, a
   `let` helper, a callback handed to a timer, listener or promise, and an async
   function's code after its first `await` are not claimed.
-- **Unreachable code.** Each layer's call must have a normal path from its
-  function's entry, by the abrupt-completion rules: after an unconditional
-  `return`, `throw`, `try { return } finally {}`, an infinite loop with no
-  `break` (`for (;;) {}`), a `switch` whose every arm returns, a call that never
-  returns (a `never` signature, an exactly resolved project function that only
-  throws), and an inline `forEach`/`map`/... callback that only throws over a
-  literal array with a first element, the call is not claimed. A callback of an
-  array literal written empty is never invoked either. A function the analysis
-  cannot parse or find is not claimed.
+- **Unreachable code.** A positive allowlist: the call, and the
+  `createEffect` registration itself, are claimed only when every construct on
+  the path from the enclosing function's entry (or the module body) is an
+  allowlisted shape: blocks; `if`/`else`, `while` and `for` whose test does not
+  fold to the constant that skips the branch; `for`-`of`/`in` over a non-literal
+  iterable; `switch` over a non-constant discriminant; `try` and `finally`
+  blocks (never a `catch`, since no throw is proven to reach it); and, inside an
+  expression, call/`new`/`await`/unary/binary/sequence operands, simple
+  assignments, and the right of `&&`/`||`/`??` or an arm of `?:` unless the left
+  side or test folds to the constant that skips it. Anything else on the path
+  is not claimed. Every statement and expression evaluated earlier on the path
+  must show no proven abrupt completion: `return`, `throw`, `break`,
+  `continue`, a call that never returns (a `never` signature, an exactly
+  resolved project function that only throws, an inline callback that only
+  throws over a literal array with a first element), an infinite loop without
+  `break`, a `switch` whose arms all leave, or a read of a name a same-file
+  getter that cannot return is declared under (any computed read, spread or
+  destructuring while one exists). Constant folding is exact (literals, `!`,
+  `typeof`, `void`, unary minus, `&&`/`||`/`??`, `?:`, comparisons of folded
+  primitives); anything it cannot fold is non-constant. Array methods are
+  claimed only on a receiver that is not an array literal (it may be empty,
+  sparse or one element), and never `sort`, `toSorted`, or `reduce` and
+  `reduceRight` without an initial value. A function the analysis cannot parse
+  or find is not claimed.
 - **A compute that never returns.** When the effect's compute is a function
   written inline, or an exactly resolved project function, it must be able to
   return a value; one that only throws (directly, through `never`, or through a
   helper that only throws) leaves the apply unrun. Any other compute (a signal
   accessor, a member, a package function) is assumed able to return, like every
-  unknown callee.
+  unknown callee. An `async` or generator compute is refused: the apply is not
+  claimed. So is one whose body reads a throwing same-file getter first.
 - **Server builds.** With no runtime selection the client build is the
   default (a documented premise, as the audited release is everywhere else).
   With a Node-family target (`node`, `deno`, `worker`) or
@@ -166,10 +182,12 @@ effect.
 
 ## Premises
 
-- **Conditional calls.** `if (next > 100) flush()` is reported: like every rule
-  here, the engine assumes a branch it cannot decide may be taken (the
-  feasible-path premise). Only code that provably cannot run (the unreachable
-  cases above) is withheld.
+- **Feasible paths.** Non-constant conditions may take either branch, and calls
+  not proven never to return return normally. `if (next > 100) flush()` is
+  reported on that premise; it is the only assumption left under the allowlist
+  above. Constants are folded exactly and honored: a test that folds to the
+  constant that skips a branch withholds the branch, one that folds to the
+  constant that runs it keeps it.
 - **The apply runs.** `defer: true` effects whose compute never changes, or
   whose options the syntax cannot read, are not claimed.
 
