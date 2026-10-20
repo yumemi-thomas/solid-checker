@@ -52,7 +52,7 @@
 use crate::{HashMap, HashSet};
 
 use solid_facts::FileFacts;
-use solid_facts::ast::{ArgumentValueKind, FunctionFact};
+use solid_facts::ast::{ArgumentValueKind, FunctionCompletion, FunctionFact, PathEvidence};
 use solid_facts::core::Span;
 
 use crate::effect_execution::{self, ApplyExecution};
@@ -67,6 +67,16 @@ const MAX_LAYERS: usize = 12;
 /// How many function declarations one question may expand before it gives up:
 /// a project with thousands of call sites of one helper stays bounded.
 const BUDGET: usize = 400;
+
+/// How far an export chain gets.
+enum Chain {
+    /// The file that imports the package.
+    Found(String),
+    /// The module does not export the name.
+    Missing,
+    /// A hop could not be resolved, or the name is declared in the project.
+    Unknown,
+}
 
 /// The `createEffect` call whose apply callback a span provably runs inside,
 /// and what stood between them.
@@ -85,19 +95,28 @@ pub(crate) fn effect_phase_origin(
     span: Span,
     package_root: &str,
     instances: &crate::PackageInstanceEvidence,
+    reachable_calls: &HashMap<typefacts::Location, usize>,
     lookup: &SemanticLookup<'_>,
 ) -> Option<EffectPhaseOrigin> {
-    // The instance the flush call's file loads; unresolved is no proof.
-    let flush_instance = instances.solid_js_by_file.get(file.path.as_str())?;
     let mut walk = Walk {
         lookup,
         package_root,
-        flush_instance,
+        flush_instance: "",
         instances,
+        reachable_calls,
+        files: std::cell::OnceCell::new(),
+        imported_accessors: HashMap::default(),
         returns: HashMap::default(),
         visiting: HashSet::default(),
+        entering: HashSet::default(),
         budget: BUDGET,
     };
+    // The instance the flush call's own import loads, followed through
+    // re-exports to the file that imports the package; unresolved is no proof.
+    let flush_call = file.ast.calls.iter().find(|call| call.span == span)?;
+    let flush_file = walk.declaring_file(file, flush_call.callee)?;
+    let flush_instance = instances.solid_js_by_file.get(flush_file.as_str())?;
+    walk.flush_instance = flush_instance;
     walk.layer(file, span, 0)
 }
 
@@ -110,14 +129,22 @@ struct Walk<'l, 'a> {
     /// what every analyzed file loads.
     flush_instance: &'l str,
     instances: &'l crate::PackageInstanceEvidence,
-    /// Whether a call of a project function can return, by function.
-    returns: HashMap<(String, Span), Option<bool>>,
+    /// Calls the reachability stage found on a path from a root, by callee.
+    reachable_calls: &'l HashMap<typefacts::Location, usize>,
+    /// The analyzed files by path, built when a question first needs them.
+    files: std::cell::OnceCell<HashMap<&'a str, &'a FileFacts>>,
+    /// The throwing accessor names of the files a file imports, by file.
+    imported_accessors: HashMap<String, Vec<Option<String>>>,
+    /// How a call of a project function ends, by function.
+    returns: HashMap<(String, Span), Option<FunctionCompletion>>,
     /// Functions the walk is inside through a call, so a call cycle ends.
     visiting: HashSet<(String, Span)>,
+    /// Functions whose entry is being proven, so a call cycle ends.
+    entering: HashSet<(String, Span)>,
     budget: usize,
 }
 
-impl Walk<'_, '_> {
+impl<'a> Walk<'_, 'a> {
     fn layer(
         &mut self,
         file: &FileFacts,
@@ -145,13 +172,13 @@ impl Walk<'_, '_> {
         }
         // A site no normal path reaches never runs. A function the analysis
         // cannot parse or find is no proof either way.
-        let diverging = self.diverging_calls(file, literal, 0);
+        let evidence = self.evidence(file, Some(literal), 0);
         if solid_facts::ast::site_reachable(
             std::path::Path::new(file.path.as_str()),
             &file.source,
             literal.span,
             span,
-            &diverging,
+            &evidence,
         ) != Some(true)
         {
             return None;
@@ -190,7 +217,7 @@ impl Walk<'_, '_> {
                 // package instance's queue.
                 return (effect_execution::at_call(file, call, primitive, index, self.lookup)
                     == ApplyExecution::Proven
-                    && self.registration_reachable(file, call)
+                    && self.registration_reachable(file, call, 0)
                     && self.compute_may_return(file, call)
                     && self.same_package_instance(file, call))
                 .then(|| EffectPhaseOrigin {
@@ -245,12 +272,22 @@ impl Walk<'_, '_> {
         .flatten()
     }
 
-    /// Whether the call's resolved declaration is in the package instance the
-    /// walk started from (the nearest `node_modules` package directory).
-    fn same_package_instance(&self, file: &FileFacts, call: &solid_facts::ast::CallFact) -> bool {
+    /// Whether the effect call's `createEffect` is the one the flush call's
+    /// queue runs: its declaration is in the package the walk started from, and
+    /// the import it is called through, followed through re-exports to the file
+    /// that imports the package, loads the same installed `solid-js` copy at
+    /// runtime as the flush call's import does.
+    fn same_package_instance(
+        &mut self,
+        file: &FileFacts,
+        call: &solid_facts::ast::CallFact,
+    ) -> bool {
+        let Some(declaring) = self.declaring_file(file, call.callee) else {
+            return false;
+        };
         self.instances
             .solid_js_by_file
-            .get(file.path.as_str())
+            .get(declaring.as_str())
             .map(String::as_str)
             == Some(self.flush_instance)
             && self
@@ -261,50 +298,330 @@ impl Walk<'_, '_> {
                 .is_some_and(|root| root == self.package_root)
     }
 
-    /// Whether the `createEffect` call is itself on a proven normal path from
-    /// the entry of its enclosing function (or the module body): a registration
-    /// that never runs applies nothing.
+    fn files(&self) -> &HashMap<&'a str, &'a FileFacts> {
+        self.files.get_or_init(|| {
+            self.lookup
+                .files()
+                .iter()
+                .map(|file| (file.path.as_str(), file))
+                .collect()
+        })
+    }
+
+    /// The analyzed file a module specifier written at `span` in `file` lands
+    /// on (the resolver's file, or the one the compiler included in its place);
+    /// `None` when the resolution is not attested.
+    fn landing(&self, file: &FileFacts, span: Span, module: &str) -> Option<String> {
+        if let Some(imports) = self.lookup.resolved_imports() {
+            let solid_facts::SpecifierAttestation::Attested(row) =
+                imports.specifier(file.path.as_str(), span, module)
+            else {
+                return None;
+            };
+            if row.resolved_path.is_empty() {
+                return None;
+            }
+            return Some(if row.included_path.is_empty() {
+                row.resolved_path.to_string()
+            } else {
+                row.included_path.to_string()
+            });
+        }
+        solid_facts::resolve_relative_module_path(
+            file.path.as_str(),
+            module,
+            self.lookup.files().iter().map(|file| file.path.as_str()),
+        )
+        .map(|path| path.to_string())
+    }
+
+    /// The analyzed file whose import or re-export of the package declares the
+    /// function `callee` calls: the callee's import binding, followed through
+    /// every barrel and `export *` to the file that imports from outside the
+    /// project. `None` when any hop cannot be resolved exactly.
+    fn declaring_file(&self, file: &FileFacts, callee: Span) -> Option<String> {
+        let callee = file.ast.peel_ts_sugar_span(callee);
+        let (object, name) = match file.ast.member_at(callee) {
+            Some(member) => (
+                file.ast.peel_ts_sugar_span(member.object),
+                Some(file.source_text(member.property)?.to_owned()),
+            ),
+            None => (callee, None),
+        };
+        let declaration = file.ast.reference_declaration(object)?;
+        let (import, binding) = file.ast.imports.iter().find_map(|import| {
+            import
+                .bindings
+                .iter()
+                .find(|binding| binding.local.span == declaration)
+                .map(|binding| (import, binding))
+        })?;
+        if import.type_only || binding.type_only {
+            return None;
+        }
+        let name = match (binding.kind, name) {
+            (solid_facts::ast::ImportKind::Namespace, Some(name)) => name,
+            (solid_facts::ast::ImportKind::Namespace, None) | (_, Some(_)) => return None,
+            (solid_facts::ast::ImportKind::Default, None) => "default".to_owned(),
+            (_, None) => binding.imported.as_deref()?.to_owned(),
+        };
+        match self.follow_export(file, import.span, &import.module, &name, 0) {
+            Chain::Found(path) => Some(path),
+            Chain::Missing | Chain::Unknown => None,
+        }
+    }
+
+    /// Follows the export `name` of the module a declaration at `span` in
+    /// `file` names, to the file that imports it from outside the project.
+    fn follow_export(
+        &self,
+        file: &FileFacts,
+        span: Span,
+        module: &str,
+        name: &str,
+        depth: usize,
+    ) -> Chain {
+        if depth > 8 {
+            return Chain::Unknown;
+        }
+        let Some(landing) = self.landing(file, span, module) else {
+            return Chain::Unknown;
+        };
+        let Some(target) = self.files().get(landing.as_str()).copied() else {
+            // Outside the project: this file's import is the package's.
+            return Chain::Found(file.path.to_string());
+        };
+        let mut stars = Vec::new();
+        for export in target
+            .ast
+            .module_level_exports()
+            .filter(|export| !export.type_only)
+        {
+            if export
+                .declarations
+                .iter()
+                .any(|declaration| declaration.exported == name)
+            {
+                // Declared here, not re-exported.
+                return Chain::Unknown;
+            }
+            if let Some(specifier) = export
+                .specifiers
+                .iter()
+                .find(|specifier| specifier.exported == name && !specifier.type_only)
+            {
+                let Some(local) = target.source_text(specifier.local.span) else {
+                    return Chain::Unknown;
+                };
+                if let Some(module) = export.module.as_deref() {
+                    return self.follow_export(target, export.span, module, local, depth + 1);
+                }
+                // `import { a } from "m"; export { a as name }`.
+                let Some((import, binding)) = target.ast.imports.iter().find_map(|import| {
+                    import
+                        .bindings
+                        .iter()
+                        .find(|binding| {
+                            !binding.type_only
+                                && target.source_text(binding.local.span) == Some(local)
+                        })
+                        .map(|binding| (import, binding))
+                }) else {
+                    return Chain::Unknown;
+                };
+                if import.type_only {
+                    return Chain::Unknown;
+                }
+                let imported = match binding.kind {
+                    solid_facts::ast::ImportKind::Namespace => return Chain::Unknown,
+                    solid_facts::ast::ImportKind::Default => "default",
+                    _ => match binding.imported.as_deref() {
+                        Some(imported) => imported,
+                        None => return Chain::Unknown,
+                    },
+                };
+                return self.follow_export(
+                    target,
+                    import.span,
+                    &import.module,
+                    imported,
+                    depth + 1,
+                );
+            }
+            if export.kind == solid_facts::ast::ExportKind::All
+                && export.namespace.is_none()
+                && export.module.is_some()
+            {
+                stars.push(export);
+            }
+        }
+        let mut found: Option<String> = None;
+        for export in stars {
+            let module = export.module.as_deref().unwrap_or_default();
+            match self.follow_export(target, export.span, module, name, depth + 1) {
+                Chain::Found(path) => {
+                    if found.as_ref().is_some_and(|known| known != &path) {
+                        return Chain::Unknown;
+                    }
+                    found = Some(path);
+                }
+                Chain::Missing => {}
+                Chain::Unknown => return Chain::Unknown,
+            }
+        }
+        found.map_or(Chain::Missing, Chain::Found)
+    }
+
+    /// Whether the `createEffect` call is itself on a proven path: reachable
+    /// from a reachability root (every enclosing function of it was entered),
+    /// and on a normal path from the entry of its enclosing function (or the
+    /// module body). A registration that never runs applies nothing; one in
+    /// another effect's apply runs only when that effect's compute returns.
     fn registration_reachable(
         &mut self,
         file: &FileFacts,
         call: &solid_facts::ast::CallFact,
+        depth: usize,
     ) -> bool {
+        if depth > MAX_LAYERS {
+            return false;
+        }
         let path = std::path::Path::new(file.path.as_str());
         match containing_ast_function(&file.ast, call.span) {
             Some(function) => {
-                if !written_directly_in(&file.ast, function, call.span) {
+                if !written_directly_in(&file.ast, function, call.span)
+                    || !self
+                        .reachable_calls
+                        .contains_key(&crate::location(file.path.shared(), call.callee))
+                {
                     return false;
                 }
-                let diverging = self.diverging_calls(file, function, 0);
-                solid_facts::ast::site_reachable(
+                let evidence = self.evidence(file, Some(function), 0);
+                if solid_facts::ast::site_reachable(
                     path,
                     &file.source,
                     function.span,
                     call.span,
-                    &diverging,
-                ) == Some(true)
+                    &evidence,
+                ) != Some(true)
+                {
+                    return false;
+                }
+                // The function exists only once the call that receives it is
+                // evaluated, and an effect's apply runs only after a compute
+                // that returns.
+                if let Some((outer, index)) = argument_position(file, function) {
+                    if let Some(primitive) = self.lookup.primitive_at_call(file, outer.span)
+                        && self
+                            .lookup
+                            .dialect
+                            .callback_runs_in_effect_phase(primitive, index)
+                        && !(effect_execution::at_call(file, outer, primitive, index, self.lookup)
+                            == ApplyExecution::Proven
+                            && self.compute_may_return(file, outer))
+                    {
+                        return false;
+                    }
+                    return self.registration_reachable(file, outer, depth + 1);
+                }
+                if let Some(invoking) = iife_call(file, function) {
+                    return self.registration_reachable(file, invoking, depth + 1);
+                }
+                self.function_entered(file, function, depth)
             }
             None => {
-                let diverging = self.module_diverging_calls(file);
-                solid_facts::ast::module_site_reachable(path, &file.source, call.span, &diverging)
+                let evidence = self.module_evidence(file);
+                solid_facts::ast::module_site_reachable(path, &file.source, call.span, &evidence)
                     == Some(true)
             }
         }
     }
 
-    /// The calls written in the module body (outside every function) that
-    /// provably never return normally.
-    fn module_diverging_calls(&mut self, file: &FileFacts) -> Vec<Span> {
-        let mut found = Vec::new();
+    /// Whether `function` (written neither as an argument nor invoked where it
+    /// is written) provably runs: it is a root (an exported or rendered
+    /// component, an exported function), or one exact call of it is itself on
+    /// a reachable path. A function nothing calls never runs.
+    fn function_entered(
+        &mut self,
+        file: &FileFacts,
+        function: &FunctionFact,
+        depth: usize,
+    ) -> bool {
+        let exported = file
+            .ast
+            .exports
+            .iter()
+            .any(|export| export.span.contains(function.span))
+            || self
+                .lookup
+                .typescript_file(file.path.as_str())
+                .is_some_and(|facts| {
+                    facts.functions.iter().any(|candidate| {
+                        candidate.exported
+                            && candidate.body.start_byte == u64::from(function.body.start)
+                            && candidate.body.end_byte == u64::from(function.body.end)
+                    })
+                });
+        if exported || self.lookup.function_is_component(file, function) {
+            return true;
+        }
+        if function.generator
+            || function.method_name.is_some()
+            || function_binding_name(file, function).is_none()
+            || !self.lookup.function_value_is_current(file, function)
+        {
+            return false;
+        }
+        let key = (file.path.to_string(), function.span);
+        if !self.entering.insert(key.clone()) {
+            return false;
+        }
+        let mut entered = false;
+        for (caller, callee) in self
+            .lookup
+            .function_call_sites(file.path.as_str(), function.span)
+        {
+            if self.budget == 0 {
+                break;
+            }
+            self.budget -= 1;
+            let Some(call) = caller.ast.calls.iter().find(|call| {
+                !call.construct && caller.ast.peel_ts_sugar_span(call.callee) == callee
+            }) else {
+                continue;
+            };
+            let exact = project_callee_at_parameter(caller, call, 0, self.lookup).is_some_and(
+                |(callee_file, candidate, exact)| {
+                    exact
+                        && callee_file.path.as_str() == file.path.as_str()
+                        && candidate.span == function.span
+                },
+            );
+            if exact && self.registration_reachable(caller, call, depth + 1) {
+                entered = true;
+                break;
+            }
+        }
+        self.entering.remove(&key);
+        entered
+    }
+
+    /// The path evidence of the module body: its calls that never return.
+    fn module_evidence(&mut self, file: &FileFacts) -> PathEvidence {
+        let mut evidence = PathEvidence::default();
         for call in &file.ast.calls {
             if call.construct || containing_ast_function(&file.ast, call.span).is_some() {
                 continue;
             }
-            if self.call_diverges(file, call, 0) {
-                found.push(call.span);
+            if let Some(throws) = self.call_divergence(file, call, 0) {
+                evidence.diverging.push(call.span);
+                if throws {
+                    evidence.throwing.push(call.span);
+                }
             }
         }
-        found
+        evidence.accessors = self.imported_accessors(file);
+        evidence
     }
 
     /// Whether the effect's compute can return a value, so that its apply
@@ -331,21 +648,21 @@ impl Walk<'_, '_> {
             // Calling an async function or a generator never throws, but the
             // value is a promise or an iterator: the apply is not claimed.
             Some((_, function)) if function.r#async || function.generator => false,
-            Some((function_file, function)) => {
-                self.may_return(function_file, function, 0) == Some(true)
-            }
+            Some((function_file, function)) => self
+                .completion(function_file, function, 0)
+                .is_some_and(|completion| completion.returns),
             None => true,
         }
     }
 
-    /// Whether a call of `function` can return, by the completion analysis;
-    /// `None` when it cannot be analyzed or the budget is spent.
-    fn may_return(
+    /// How a call of `function` ends, by the completion analysis; `None` when
+    /// it cannot be analyzed or the budget is spent.
+    fn completion(
         &mut self,
         file: &FileFacts,
         function: &FunctionFact,
         depth: usize,
-    ) -> Option<bool> {
+    ) -> Option<FunctionCompletion> {
         let key = (file.path.to_string(), function.span);
         if let Some(known) = self.returns.get(&key) {
             return *known;
@@ -356,26 +673,30 @@ impl Walk<'_, '_> {
         self.budget -= 1;
         // A call cycle answers "unknown" to its own inner calls.
         self.returns.insert(key.clone(), None);
-        let diverging = self.diverging_calls(file, function, depth + 1);
-        let answer = solid_facts::ast::function_may_return(
+        let evidence = self.evidence(file, Some(function), depth + 1);
+        let answer = solid_facts::ast::function_completion(
             std::path::Path::new(file.path.as_str()),
             &file.source,
             function.span,
-            &diverging,
+            &evidence,
         );
         self.returns.insert(key, answer);
         answer
     }
 
-    /// The calls written directly in `function` that provably never return
-    /// normally.
-    fn diverging_calls(
+    /// What is known about the code `function` runs: the calls written
+    /// directly in it that provably never return normally (and which of them
+    /// end by throwing), and the accessors of the files it imports.
+    fn evidence(
         &mut self,
         file: &FileFacts,
-        function: &FunctionFact,
+        function: Option<&FunctionFact>,
         depth: usize,
-    ) -> Vec<Span> {
-        let mut found = Vec::new();
+    ) -> PathEvidence {
+        let Some(function) = function else {
+            return self.module_evidence(file);
+        };
+        let mut evidence = PathEvidence::default();
         for call in &file.ast.calls {
             if call.construct
                 || !function.body.contains(call.span)
@@ -383,19 +704,99 @@ impl Walk<'_, '_> {
             {
                 continue;
             }
-            if self.call_diverges(file, call, depth) {
-                found.push(call.span);
+            if let Some(throws) = self.call_divergence(file, call, depth) {
+                evidence.diverging.push(call.span);
+                if throws {
+                    evidence.throwing.push(call.span);
+                }
             }
         }
-        found
+        evidence.accessors = self.imported_accessors(file);
+        evidence
     }
 
-    fn call_diverges(
+    /// The names of the getters, setters and Proxy traps that cannot return,
+    /// written in the project files `file` imports or re-exports from
+    /// (transitively, bounded): a property read or write with such a name may
+    /// reach one.
+    fn imported_accessors(&mut self, file: &FileFacts) -> Vec<Option<String>> {
+        if let Some(known) = self.imported_accessors.get(file.path.as_str()) {
+            return known.clone();
+        }
+        const MAX_FILES: usize = 48;
+        let mut seen = HashSet::<String>::default();
+        seen.insert(file.path.to_string());
+        let mut queue = vec![file.path.to_string()];
+        let mut names = Vec::<Option<String>>::new();
+        let mut cursor = 0;
+        while cursor < queue.len() && seen.len() <= MAX_FILES {
+            let current = queue[cursor].clone();
+            cursor += 1;
+            let Some(current_file) = self.files().get(current.as_str()).copied() else {
+                continue;
+            };
+            let modules = current_file
+                .ast
+                .imports
+                .iter()
+                .filter(|import| !import.type_only)
+                .map(|import| (import.span, import.module.as_str()))
+                .chain(
+                    current_file
+                        .ast
+                        .module_level_exports()
+                        .filter(|export| !export.type_only)
+                        .filter_map(|export| Some((export.span, export.module.as_deref()?))),
+                )
+                .collect::<Vec<_>>();
+            for (span, module) in modules {
+                let Some(path) = self.landing(current_file, span, module) else {
+                    continue;
+                };
+                if !seen.insert(path.clone()) {
+                    continue;
+                }
+                let Some(imported) = self.files().get(path.as_str()).copied() else {
+                    continue;
+                };
+                if let Some(found) = solid_facts::ast::throwing_accessors(
+                    std::path::Path::new(imported.path.as_str()),
+                    &imported.source,
+                ) {
+                    for name in found {
+                        if !names.contains(&name) {
+                            names.push(name);
+                        }
+                    }
+                }
+                queue.push(path);
+            }
+        }
+        self.imported_accessors
+            .insert(file.path.to_string(), names.clone());
+        names
+    }
+
+    /// Whether the call provably never returns normally: `Some(true)` when it
+    /// ends by throwing, `Some(false)` when it may run forever instead (or the
+    /// rules cannot tell which), `None` when it is not proven to diverge.
+    fn call_divergence(
         &mut self,
         file: &FileFacts,
         call: &solid_facts::ast::CallFact,
         depth: usize,
-    ) -> bool {
+    ) -> Option<bool> {
+        // A project function reached by an exact call.
+        let project = project_callee_at_parameter(file, call, 0, self.lookup)
+            .filter(|(_, callee, exact)| *exact && !callee.generator && !callee.r#async);
+        let completion = project
+            .and_then(|(callee_file, callee, _)| self.completion(callee_file, callee, depth));
+        // A project function that only throws or only loops.
+        if let Some(completion) = completion
+            && !completion.returns
+        {
+            return Some(completion.throws);
+        }
         // A `never` signature (not `asserts`, which may return).
         if self
             .lookup
@@ -405,16 +806,7 @@ impl Walk<'_, '_> {
                     && resolved.validity == typefacts::ResolvedCallValidity::Valid
             })
         {
-            return true;
-        }
-        // A project function that only throws, reached by an exact call.
-        if let Some((callee_file, callee, true)) =
-            project_callee_at_parameter(file, call, 0, self.lookup)
-            && !callee.generator
-            && !callee.r#async
-            && self.may_return(callee_file, callee, depth) == Some(false)
-        {
-            return true;
+            return Some(false);
         }
         // An inline array method over a literal with a first element, whose
         // callback only throws: the first element reaches it.
@@ -430,9 +822,9 @@ impl Walk<'_, '_> {
             "every",
             "flatMap",
         ];
-        let Some(member) = file.ast.member_at(file.ast.peel_ts_sugar_span(call.callee)) else {
-            return false;
-        };
+        let member = file
+            .ast
+            .member_at(file.ast.peel_ts_sugar_span(call.callee))?;
         if !file
             .source_text(member.property)
             .is_some_and(|name| PER_ELEMENT.contains(&name))
@@ -444,23 +836,18 @@ impl Walk<'_, '_> {
             )
             .is_none()
         {
-            return false;
+            return None;
         }
-        let Some(resolved) =
-            self.lookup
-                .resolved_callee_call(file, call.callee)
-                .filter(|resolved| {
-                    resolved
-                        .declaration
-                        .as_ref()
-                        .is_some_and(|declaration| declaration.standard_library)
-                })
-        else {
-            return false;
-        };
-        let Some(argument) = call.arguments.first() else {
-            return false;
-        };
+        let resolved = self
+            .lookup
+            .resolved_callee_call(file, call.callee)
+            .filter(|resolved| {
+                resolved
+                    .declaration
+                    .as_ref()
+                    .is_some_and(|declaration| declaration.standard_library)
+            })?;
+        let argument = call.arguments.first()?;
         let callability = self
             .lookup
             .entity_at(file.path.as_str(), argument.span)
@@ -470,12 +857,15 @@ impl Walk<'_, '_> {
             Some(crate::runtime_semantics::RuntimeArgumentBehavior::InlineCallback)
         ) || argument.spread
         {
-            return false;
+            return None;
         }
-        file.ast
+        let callback = file
+            .ast
             .function_at(file.ast.peel_ts_sugar_span(argument.span))
-            .filter(|callback| !callback.r#async && !callback.generator)
-            .is_some_and(|callback| self.may_return(file, callback, depth) == Some(false))
+            .filter(|callback| !callback.r#async && !callback.generator)?;
+        self.completion(file, callback, depth)
+            .filter(|completion| !completion.returns)
+            .map(|completion| completion.throws)
     }
 
     /// `literal` is a function bound to a name: it runs during the effect

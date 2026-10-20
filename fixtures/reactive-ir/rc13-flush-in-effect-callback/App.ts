@@ -19,6 +19,7 @@ import {
 import * as Solid from "solid-js";
 import { flush as signalsFlush } from "@solidjs/signals";
 import { commitFromOtherFile } from "./commit";
+import { ImportedClass, importedBox, importedReturning } from "./accessors";
 
 // The cases sit in a root so each effect has an owner.
 createRoot(() => {
@@ -652,6 +653,242 @@ createRoot(() => {
     },
   );
 
+
+  // Negative: a `finally` is entered only when its try block can leave. An
+  // unconditional infinite loop, inline or in a helper that cannot return,
+  // never does.
+  function spin(): never {
+    for (;;) {}
+  }
+  createEffect(
+    () => 1,
+    () => {
+      try {
+        for (;;) {}
+      } finally {
+        flush();
+      }
+    },
+  );
+  createEffect(
+    () => 1,
+    () => {
+      try {
+        spin();
+      } finally {
+        flush();
+      }
+    },
+  );
+  createEffect(
+    () => 1,
+    () => {
+      try {
+        throw new Error("block");
+      } catch {
+        for (;;) {}
+      } finally {
+        flush();
+      }
+    },
+  );
+
+  // Positive: a block that can throw or leave enters its `finally`.
+  createEffect(
+    () => 1,
+    () => {
+      try {
+        fail();
+      } finally {
+        flush();
+      }
+    },
+  );
+  createEffect(
+    () => 1,
+    () => {
+      try {
+        for (;;) {
+          if (Math.random() > 0.5) break;
+        }
+      } finally {
+        flush();
+      }
+    },
+  );
+
+  // Negative: a registration that no root reaches never runs.
+  function neverCalled() {
+    createEffect(
+      () => 1,
+      () => {
+        flush();
+      },
+    );
+  }
+  createEffect(
+    () => 1,
+    () => {
+      function neverCalledInner() {
+        createEffect(
+          () => 1,
+          () => {
+            flush();
+          },
+        );
+      }
+    },
+  );
+  // Negative: the outer compute always throws, so its apply never runs.
+  createEffect(
+    () => {
+      throw new Error("compute");
+    },
+    () => {
+      createEffect(
+        () => 1,
+        () => {
+          flush();
+        },
+      );
+    },
+  );
+
+  // Positive: a hook the root calls registers its effect.
+  function useCommit() {
+    createEffect(value, () => {
+      flush();
+    });
+  }
+  useCommit();
+
+  // Negative: evaluating a class runs its static blocks and initializers.
+  createEffect(
+    () => 1,
+    () => {
+      class WithBlock {
+        static {
+          throw new Error("static block");
+        }
+      }
+      flush();
+    },
+  );
+  createEffect(
+    () => 1,
+    () => {
+      const Expression = class {
+        static {
+          throw new Error("static block");
+        }
+      };
+      flush();
+    },
+  );
+  createEffect(
+    () => 1,
+    () => {
+      class WithInitializer {
+        static boom = fail();
+      }
+      flush();
+    },
+  );
+  createEffect(
+    () => 1,
+    () => {
+      if (
+        typeof class {
+          static {
+            throw new Error("typeof static");
+          }
+        } === "function"
+      ) {
+        flush();
+      }
+    },
+  );
+
+  // Positive: a class with only methods and constant statics evaluates.
+  createEffect(
+    () => 1,
+    () => {
+      class Plain {
+        static count = 1;
+        static helper(): number {
+          return 2;
+        }
+      }
+      void Plain;
+      flush();
+    },
+  );
+
+  // Negative: an accessor that cannot return, imported or written here, a
+  // setter, or a Proxy trap, on the path before the call.
+  createEffect(
+    () => 1,
+    () => {
+      importedBox.value;
+      flush();
+    },
+  );
+  createEffect(
+    () => 1,
+    () => {
+      const box = new ImportedClass();
+      box.value;
+      flush();
+    },
+  );
+  createEffect(
+    () => importedBox.value,
+    () => {
+      flush();
+    },
+  );
+  createEffect(
+    () => 1,
+    () => {
+      const box = new Proxy(
+        { value: 1 },
+        {
+          get(): never {
+            throw new Error("proxy get");
+          },
+        },
+      );
+      box.value;
+      flush();
+    },
+  );
+  createEffect(
+    () => 1,
+    () => {
+      const box = {
+        set value(next: number) {
+          throw new Error(`setter ${next}`);
+        },
+      };
+      box.value = 1;
+      flush();
+    },
+  );
+
+  // Positive: an accessor that returns, and a property of an object whose
+  // accessors are not visible, complete normally.
+  createEffect(
+    () => 1,
+    () => {
+      importedReturning.steady;
+      flush();
+    },
+  );
+  createEffect(value, (current) => {
+    const unknown: { [key: string]: number } = { current };
+    unknown.current;
+    flush();
+  });
 });
 
 // Negative: module scope runs outside every effect.

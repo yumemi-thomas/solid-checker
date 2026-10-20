@@ -131,7 +131,9 @@ effect.
   allowlisted shape: blocks; `if`/`else`, `while` and `for` whose test does not
   fold to the constant that skips the branch; `for`-`of`/`in` over a non-literal
   iterable; `switch` over a non-constant discriminant; `try` and `finally`
-  blocks (never a `catch`, since no throw is proven to reach it); and, inside an
+  blocks (never a `catch`, since no throw is proven to reach it; a `finally` is
+  entered only when its try block can leave: an unconditional infinite loop,
+  inline or in a resolved helper that cannot return, never enters it); and, inside an
   expression, call/`new`/`await`/unary/binary/sequence operands, simple
   assignments, and the right of `&&`/`||`/`??` or an arm of `?:` unless the left
   side or test folds to the constant that skips it. Anything else on the path
@@ -140,9 +142,10 @@ effect.
   `continue`, a call that never returns (a `never` signature, an exactly
   resolved project function that only throws, an inline callback that only
   throws over a literal array with a first element), an infinite loop without
-  `break`, a `switch` whose arms all leave, or a read of a name a same-file
-  getter that cannot return is declared under (any computed read, spread or
-  destructuring while one exists). Constant folding is exact (literals, `!`,
+  `break`, a `switch` whose arms all leave, evaluating a class with a static
+  block, a non-constant static initializer or computed key, a decorator or an
+  abruptly completing `extends`, or a property read or write that reaches an
+  accessor (below). Constant folding is exact (literals, `!`,
   `typeof`, `void`, unary minus, `&&`/`||`/`??`, `?:`, comparisons of folded
   primitives); anything it cannot fold is non-constant. Array methods are
   claimed only on a receiver that is not an array literal (it may be empty,
@@ -156,6 +159,19 @@ effect.
   accessor, a member, a package function) is assumed able to return, like every
   unknown callee. An `async` or generator compute is refused: the apply is not
   claimed. So is one whose body reads a throwing same-file getter first.
+- **Unreachable registrations.** The `createEffect` call must be reachable
+  from a root: every enclosing function was entered (the reachability stage
+  reached it), the call that receives it is on a normal path, and it is an
+  exported or rendered component or one exact call of it is reachable. A
+  registration inside another effect's apply needs that effect's compute to be
+  able to return, applied recursively. A function nothing calls never runs.
+- **Accessors.** A property read or write whose name matches a getter or
+  setter that cannot return (written in the same file or in a project file it
+  imports or re-exports from, matched by name, so it only withholds), or whose
+  receiver is a variable bound to `new Proxy(target, { get… | set… })` with a
+  trap that cannot return, does not complete normally: the call after it is not
+  claimed. A property operation on an object whose accessors cannot be
+  resolved is assumed to complete normally (the feasible-path premise below).
 - **Server builds.** With no runtime selection the client build is the
   default (a documented premise, as the audited release is everywhere else).
   With a Node-family target (`node`, `deno`, `worker`) or
@@ -170,6 +186,10 @@ effect.
   analyzed file's directory (nearest `node_modules`, symlinks resolved); the file
   holding the `flush` call and the file holding the `createEffect` call must load
   the same copy, and both calls' declarations must be in one package directory.
+  Each import is followed through re-exports (barrels, `export { a as b } from`,
+  `export *`, a namespace member) to the file that imports the package, and that
+  file's copy is the one compared; a hop that does not resolve exactly is not
+  claimed.
   A file whose `solid-js` is not resolved on disk (a caller with no disk, such as
   the WASM adapter) is not claimed. A `flush` imported from `@solidjs/signals`
   itself, which Type Facts do not resolve to a declaration, is not claimed.
@@ -182,8 +202,11 @@ effect.
 
 ## Premises
 
-- **Feasible paths.** Non-constant conditions may take either branch, and calls
-  not proven never to return return normally. `if (next > 100) flush()` is
+- **Feasible paths.** Non-constant conditions may take either branch, calls
+  not proven never to return return normally, and property operations on
+  objects whose accessors cannot be resolved complete normally. Constant
+  expressions the folder does not model (`NaN`, BigInt, template literals,
+  object comparisons) are treated as non-constant. `if (next > 100) flush()` is
   reported on that premise; it is the only assumption left under the allowlist
   above. Constants are folded exactly and honored: a test that folds to the
   constant that skips a branch withholds the branch, one that folds to the

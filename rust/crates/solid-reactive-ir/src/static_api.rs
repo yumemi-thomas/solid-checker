@@ -334,6 +334,7 @@ impl StaticApiContext<'_> {
                     call.span,
                     &root,
                     self.package_instances,
+                    self.reachable_calls,
                     self.lookup,
                 )
             {

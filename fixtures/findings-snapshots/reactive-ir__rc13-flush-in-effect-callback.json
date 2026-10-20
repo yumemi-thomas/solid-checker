@@ -7,8 +7,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 1157,
-      "end": 1162,
+      "start": 1234,
+      "end": 1239,
       "fixes": 0
     },
     {
@@ -17,8 +17,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 1353,
-      "end": 1358,
+      "start": 1430,
+      "end": 1435,
       "fixes": 0
     },
     {
@@ -27,8 +27,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 1555,
-      "end": 1560,
+      "start": 1632,
+      "end": 1637,
       "fixes": 0
     },
     {
@@ -37,8 +37,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 1713,
-      "end": 1718,
+      "start": 1790,
+      "end": 1795,
       "fixes": 0
     },
     {
@@ -47,8 +47,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 1762,
-      "end": 1773,
+      "start": 1839,
+      "end": 1850,
       "fixes": 0
     },
     {
@@ -57,8 +57,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 2352,
-      "end": 2370,
+      "start": 2429,
+      "end": 2447,
       "fixes": 0
     },
     {
@@ -67,8 +67,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 2414,
-      "end": 2419,
+      "start": 2491,
+      "end": 2496,
       "fixes": 0
     },
     {
@@ -77,8 +77,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 2472,
-      "end": 2490,
+      "start": 2549,
+      "end": 2567,
       "fixes": 0
     },
     {
@@ -87,8 +87,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 2593,
-      "end": 2598,
+      "start": 2670,
+      "end": 2675,
       "fixes": 0
     },
     {
@@ -97,8 +97,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 2642,
-      "end": 2647,
+      "start": 2719,
+      "end": 2724,
       "fixes": 0
     },
     {
@@ -107,8 +107,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 2662,
-      "end": 2680,
+      "start": 2739,
+      "end": 2757,
       "fixes": 0
     },
     {
@@ -117,8 +117,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 2920,
-      "end": 2925,
+      "start": 2997,
+      "end": 3002,
       "fixes": 0
     },
     {
@@ -127,8 +127,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 3031,
-      "end": 3036,
+      "start": 3108,
+      "end": 3113,
       "fixes": 0
     },
     {
@@ -137,8 +137,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 3219,
-      "end": 3224,
+      "start": 3296,
+      "end": 3301,
       "fixes": 0
     },
     {
@@ -147,8 +147,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 3562,
-      "end": 3567,
+      "start": 3639,
+      "end": 3644,
       "fixes": 0
     },
     {
@@ -157,8 +157,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 3696,
-      "end": 3701,
+      "start": 3773,
+      "end": 3778,
       "fixes": 0
     },
     {
@@ -167,8 +167,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 3831,
-      "end": 3836,
+      "start": 3908,
+      "end": 3913,
       "fixes": 0
     },
     {
@@ -177,8 +177,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 4054,
-      "end": 4059,
+      "start": 4131,
+      "end": 4136,
       "fixes": 0
     },
     {
@@ -187,8 +187,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 4149,
-      "end": 4154,
+      "start": 4226,
+      "end": 4231,
       "fixes": 0
     },
     {
@@ -197,8 +197,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 4338,
-      "end": 4343,
+      "start": 4415,
+      "end": 4420,
       "fixes": 0
     },
     {
@@ -207,8 +207,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 4585,
-      "end": 4590,
+      "start": 4662,
+      "end": 4667,
       "fixes": 0
     },
     {
@@ -217,8 +217,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 10145,
-      "end": 10150,
+      "start": 10222,
+      "end": 10227,
       "fixes": 0
     },
     {
@@ -227,8 +227,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 11557,
-      "end": 11562,
+      "start": 11634,
+      "end": 11639,
       "fixes": 0
     },
     {
@@ -237,8 +237,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 11621,
-      "end": 11626,
+      "start": 11698,
+      "end": 11703,
       "fixes": 0
     },
     {
@@ -247,8 +247,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 11688,
-      "end": 11693,
+      "start": 11765,
+      "end": 11770,
       "fixes": 0
     },
     {
@@ -257,8 +257,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 11772,
-      "end": 11777,
+      "start": 11849,
+      "end": 11854,
       "fixes": 0
     },
     {
@@ -267,8 +267,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 11886,
-      "end": 11891,
+      "start": 11963,
+      "end": 11968,
       "fixes": 0
     },
     {
@@ -277,8 +277,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 11998,
-      "end": 12003,
+      "start": 12075,
+      "end": 12080,
       "fixes": 0
     },
     {
@@ -287,8 +287,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 12109,
-      "end": 12114,
+      "start": 12186,
+      "end": 12191,
       "fixes": 0
     },
     {
@@ -297,8 +297,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 12241,
-      "end": 12246,
+      "start": 12318,
+      "end": 12323,
       "fixes": 0
     },
     {
@@ -307,8 +307,78 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 12443,
-      "end": 12448,
+      "start": 12520,
+      "end": 12525,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
+      "start": 16224,
+      "end": 16229,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
+      "start": 16403,
+      "end": 16408,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
+      "start": 16968,
+      "end": 16980,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
+      "start": 17189,
+      "end": 17194,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
+      "start": 18268,
+      "end": 18273,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
+      "start": 19385,
+      "end": 19390,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
+      "start": 19528,
+      "end": 19533,
       "fixes": 0
     },
     {

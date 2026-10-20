@@ -69,13 +69,13 @@ pub fn site_reachable(
     source: &str,
     function: Span,
     site: Span,
-    diverging: &[Span],
+    evidence: &PathEvidence,
 ) -> Option<bool> {
     with_scope(
         path,
         source,
         Some(function),
-        diverging,
+        evidence,
         |walk, statements, _| walk.reach_seq(statements, site),
     )
 }
@@ -87,9 +87,9 @@ pub fn module_site_reachable(
     path: &Path,
     source: &str,
     site: Span,
-    diverging: &[Span],
+    evidence: &PathEvidence,
 ) -> Option<bool> {
-    with_scope(path, source, None, diverging, |walk, statements, _| {
+    with_scope(path, source, None, evidence, |walk, statements, _| {
         walk.reach_seq(statements, site)
     })
 }
@@ -105,29 +105,116 @@ pub fn function_may_return(
     path: &Path,
     source: &str,
     function: Span,
-    diverging: &[Span],
+    evidence: &PathEvidence,
 ) -> Option<bool> {
+    function_completion(path, source, function, evidence).map(|completion| completion.returns)
+}
+
+/// How a call of a function can end, as far as the rules prove it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct FunctionCompletion {
+    /// A call can return (the same answer as [`function_may_return`]).
+    pub returns: bool,
+    /// A call has a reachable `throw`, or a call listed in
+    /// [`PathEvidence::throwing`] that ends it by throwing. A function that
+    /// neither returns nor throws, as far as proven, runs forever.
+    pub throws: bool,
+}
+
+/// [`function_may_return`] with the way a function that cannot return ends.
+#[must_use]
+pub fn function_completion(
+    path: &Path,
+    source: &str,
+    function: Span,
+    evidence: &PathEvidence,
+) -> Option<FunctionCompletion> {
     with_scope(
         path,
         source,
         Some(function),
-        diverging,
+        evidence,
         |walk, statements, kind| {
             if kind.lenient {
-                return true;
+                return FunctionCompletion {
+                    returns: true,
+                    throws: false,
+                };
             }
             if kind.expression {
                 return match statements.first() {
                     Some(Statement::ExpressionStatement(statement)) => {
-                        !walk.abrupt(&statement.expression)
+                        let abrupt = walk.abrupt(&statement.expression);
+                        FunctionCompletion {
+                            returns: !abrupt,
+                            throws: abrupt && walk.throws_by_call(&statement.expression),
+                        }
                     }
-                    _ => true,
+                    _ => FunctionCompletion {
+                        returns: true,
+                        throws: false,
+                    },
                 };
             }
             let out = walk.seq(statements);
-            out.normal || out.returns
+            FunctionCompletion {
+                returns: out.normal || out.returns,
+                throws: out.throws,
+            }
         },
     )
+}
+
+/// What the caller knows about the code a function (or module body) runs, so
+/// the walk can cut a path at a point that never completes.
+#[derive(Clone, Debug, Default)]
+pub struct PathEvidence {
+    /// Calls written in the scope that provably never return normally.
+    pub diverging: Vec<Span>,
+    /// The subset of `diverging` that provably ends by throwing (as opposed to
+    /// running forever): a `finally` after one is entered.
+    pub throwing: Vec<Span>,
+    /// Property names of accessors written in other project files (a getter or
+    /// setter that cannot return); `None` is a
+    /// name that is not static, which matches every property. Reads and
+    /// writes of such a name do not complete normally.
+    pub accessors: Vec<Option<String>>,
+}
+
+impl PathEvidence {
+    /// Evidence that only lists never-returning calls.
+    #[must_use]
+    pub fn calls(diverging: &[Span]) -> Self {
+        Self {
+            diverging: diverging.to_vec(),
+            ..Self::default()
+        }
+    }
+}
+
+/// The property names of the accessors written in `source` that cannot return
+/// (getters and setters of object literals and classes): reading or writing such a property does not complete
+/// normally. `None` is a name that is not static. `None` overall when the
+/// source does not parse.
+#[must_use]
+pub fn throwing_accessors(path: &Path, source: &str) -> Option<Vec<Option<String>>> {
+    if source.len() > 4 * 1024 * 1024 {
+        return None;
+    }
+    let source_type = SourceType::from_path(path).ok()?.with_module(true);
+    let allocator = Allocator::default();
+    let parsed = Parser::new(&allocator, source, source_type).parse();
+    if parsed.panicked || !parsed.errors.is_empty() {
+        return None;
+    }
+    let walk = Walk::new(&PathEvidence::default());
+    let mut scan = GetterScan {
+        walk: &walk,
+        throwing: Vec::new(),
+        proxies: Vec::new(),
+    };
+    scan.visit_program(&parsed.program);
+    Some(scan.throwing)
 }
 
 #[derive(Clone, Copy)]
@@ -142,7 +229,7 @@ fn with_scope<T>(
     path: &Path,
     source: &str,
     function: Option<Span>,
-    diverging: &[Span],
+    evidence: &PathEvidence,
     answer: impl FnOnce(&Walk, &[Statement<'_>], ScopeKind) -> T,
 ) -> Option<T> {
     if source.len() > 4 * 1024 * 1024 {
@@ -154,15 +241,19 @@ fn with_scope<T>(
     if parsed.panicked || !parsed.errors.is_empty() {
         return None;
     }
-    let mut walk = Walk::new(diverging);
+    let mut walk = Walk::new(evidence);
     // Getters that cannot return, from a first pass without them (a getter
     // that reads another throwing getter is not chased).
     let mut scan = GetterScan {
         walk: &walk,
         throwing: Vec::new(),
+        proxies: Vec::new(),
     };
     scan.visit_program(&parsed.program);
-    walk.getters = scan.throwing;
+    let (throwing, proxies) = (scan.throwing, scan.proxies);
+    walk.getters = throwing;
+    walk.proxies = proxies;
+    walk.getters.extend(evidence.accessors.iter().cloned());
     let Some(function) = function else {
         return Some(answer(
             &walk,
@@ -220,6 +311,9 @@ struct Out {
     brk: bool,
     /// Reachable `break label` statements.
     labels: Vec<String>,
+    /// A reachable `throw`, or a call proven to end by throwing: control can
+    /// leave the statement by an exception.
+    throws: bool,
 }
 
 impl Out {
@@ -233,6 +327,7 @@ impl Out {
     fn absorb(&mut self, other: &Self) {
         self.returns |= other.returns;
         self.brk |= other.brk;
+        self.throws |= other.throws;
         for label in &other.labels {
             if !self.labels.contains(label) {
                 self.labels.push(label.clone());
@@ -284,9 +379,15 @@ impl Value {
 
 struct Walk {
     diverging: HashSet<Span>,
+    /// The diverging calls that end by throwing.
+    throwing: HashSet<Span>,
     /// Names of same-file getters that cannot return; `None` is a getter whose
     /// name is not static.
     getters: Vec<Option<String>>,
+    /// Names of same-file variables bound to a `new Proxy(target, handler)`
+    /// whose handler literal has a `get` or `set` trap that cannot return: any
+    /// property read or write through such a name does not complete.
+    proxies: Vec<String>,
 }
 
 fn span_of(span: oxc_span::Span) -> Span {
@@ -309,7 +410,12 @@ impl<'a> Visit<'a> for Finder<'_> {
 
     fn visit_arrow_function_expression(&mut self, _: &oxc_ast::ast::ArrowFunctionExpression<'a>) {}
 
-    fn visit_class(&mut self, _: &oxc_ast::ast::Class<'a>) {}
+    fn visit_class(&mut self, class: &oxc_ast::ast::Class<'a>) {
+        // Evaluating a class runs its static blocks and initializers.
+        if self.walk.class_abrupt(class) {
+            self.found = true;
+        }
+    }
 
     fn visit_call_expression(&mut self, call: &oxc_ast::ast::CallExpression<'a>) {
         if self.walk.diverging.contains(&span_of(call.span)) {
@@ -320,7 +426,9 @@ impl<'a> Visit<'a> for Finder<'_> {
     }
 
     fn visit_static_member_expression(&mut self, member: &StaticMemberExpression<'a>) {
-        if self.walk.getter_throws(Some(member.property.name.as_str())) {
+        if self.walk.proxy_receiver(&member.object)
+            || self.walk.getter_throws(Some(member.property.name.as_str()))
+        {
             self.found = true;
             return;
         }
@@ -332,7 +440,7 @@ impl<'a> Visit<'a> for Finder<'_> {
             Some(Expression::StringLiteral(text)) => Some(text.value.as_str()),
             _ => None,
         };
-        if self.walk.getter_throws(name) {
+        if self.walk.proxy_receiver(&member.object) || self.walk.getter_throws(name) {
             self.found = true;
             return;
         }
@@ -361,6 +469,7 @@ impl<'a> Visit<'a> for Finder<'_> {
 struct GetterScan<'w> {
     walk: &'w Walk,
     throwing: Vec<Option<String>>,
+    proxies: Vec<String>,
 }
 
 impl GetterScan<'_> {
@@ -379,8 +488,18 @@ impl GetterScan<'_> {
 }
 
 impl<'a> Visit<'a> for GetterScan<'_> {
+    fn visit_variable_declarator(&mut self, declarator: &oxc_ast::ast::VariableDeclarator<'a>) {
+        if let (Some(init), Some(name)) = (&declarator.init, declarator.id.get_identifier_name())
+            && let Some(Expression::NewExpression(new)) = inner(init)
+            && self.walk.proxy_trap_throws(new)
+        {
+            self.proxies.push(name.as_str().to_owned());
+        }
+        walk::walk_variable_declarator(self, declarator);
+    }
+
     fn visit_object_property(&mut self, property: &ObjectProperty<'a>) {
-        if property.kind == PropertyKind::Get
+        if matches!(property.kind, PropertyKind::Get | PropertyKind::Set)
             && let Expression::FunctionExpression(function) = &property.value
         {
             let key = property.key.static_name().map(|name| name.into_owned());
@@ -390,7 +509,10 @@ impl<'a> Visit<'a> for GetterScan<'_> {
     }
 
     fn visit_method_definition(&mut self, method: &MethodDefinition<'a>) {
-        if method.kind == MethodDefinitionKind::Get {
+        if matches!(
+            method.kind,
+            MethodDefinitionKind::Get | MethodDefinitionKind::Set
+        ) {
             let key = method.key.static_name().map(|name| name.into_owned());
             self.check(key, &method.value);
         }
@@ -419,11 +541,148 @@ fn literal_like(expression: &Expression<'_>) -> bool {
 }
 
 impl Walk {
-    fn new(diverging: &[Span]) -> Self {
+    fn new(evidence: &PathEvidence) -> Self {
         Self {
-            diverging: diverging.iter().copied().collect(),
+            diverging: evidence.diverging.iter().copied().collect(),
+            throwing: evidence.throwing.iter().copied().collect(),
             getters: Vec::new(),
+            proxies: Vec::new(),
         }
+    }
+
+    /// Whether a property read or write on `receiver` goes through a proxy
+    /// whose trap cannot return.
+    fn proxy_receiver(&self, receiver: &Expression<'_>) -> bool {
+        match inner(receiver) {
+            Some(Expression::Identifier(name)) => {
+                self.proxies.iter().any(|proxy| proxy == name.name.as_str())
+            }
+            Some(Expression::NewExpression(new)) => self.proxy_trap_throws(new),
+            _ => false,
+        }
+    }
+
+    /// Whether `new` is `new Proxy(target, { get… | set… })` with a trap that
+    /// cannot return.
+    fn proxy_trap_throws(&self, new: &oxc_ast::ast::NewExpression<'_>) -> bool {
+        if !matches!(&new.callee, Expression::Identifier(callee) if callee.name == "Proxy")
+            || new.arguments.len() < 2
+        {
+            return false;
+        }
+        let Some(Expression::ObjectExpression(handler)) =
+            new.arguments[1].as_expression().and_then(inner)
+        else {
+            return false;
+        };
+        handler.properties.iter().any(|property| {
+            let oxc_ast::ast::ObjectPropertyKind::ObjectProperty(property) = property else {
+                return false;
+            };
+            if !matches!(property.key.static_name().as_deref(), Some("get" | "set")) {
+                return false;
+            }
+            match inner(&property.value) {
+                Some(Expression::FunctionExpression(function)) => {
+                    !function.r#async
+                        && !function.generator
+                        && function.body.as_ref().is_some_and(|body| {
+                            let out = self.seq(&body.statements);
+                            !(out.normal || out.returns)
+                        })
+                }
+                Some(Expression::ArrowFunctionExpression(arrow)) if !arrow.r#async => {
+                    if arrow.expression {
+                        matches!(
+                            arrow.body.statements.first(),
+                            Some(Statement::ExpressionStatement(statement))
+                                if self.abrupt(&statement.expression)
+                        )
+                    } else {
+                        let out = self.seq(&arrow.body.statements);
+                        !(out.normal || out.returns)
+                    }
+                }
+                _ => false,
+            }
+        })
+    }
+
+    /// Whether evaluating the expression ends by a proven-throwing call.
+    fn throws_by_call(&self, expression: &Expression<'_>) -> bool {
+        let thrower = Self {
+            diverging: self.throwing.clone(),
+            throwing: HashSet::new(),
+            getters: Vec::new(),
+            proxies: Vec::new(),
+        };
+        thrower.abrupt(expression)
+    }
+
+    /// The outcome of a statement whose expression `expression` has a proven
+    /// abrupt completion.
+    fn abrupt_out(&self, expression: &Expression<'_>) -> Out {
+        Out {
+            throws: self.throws_by_call(expression),
+            ..Out::default()
+        }
+    }
+
+    /// Whether evaluating a class (its heritage, computed keys, static blocks
+    /// and static field initializers run at that point) may complete
+    /// abruptly: a static block, a static initializer that is not a constant or
+    /// a function, a computed key that does not fold, a decorator, or a
+    /// heritage expression with a proven abrupt completion.
+    fn class_abrupt(&self, class: &oxc_ast::ast::Class<'_>) -> bool {
+        use oxc_ast::ast::ClassElement;
+        if !class.decorators.is_empty()
+            || class
+                .super_class
+                .as_ref()
+                .is_some_and(|super_class| self.abrupt(super_class))
+        {
+            return true;
+        }
+        let safe_value = |value: &Expression<'_>| {
+            matches!(
+                inner(value),
+                Some(Expression::FunctionExpression(_) | Expression::ArrowFunctionExpression(_))
+            ) || Self::fold(value).is_some()
+        };
+        class.body.body.iter().any(|element| match element {
+            ClassElement::StaticBlock(_) => true,
+            ClassElement::PropertyDefinition(property) => {
+                !property.decorators.is_empty()
+                    || (property.computed
+                        && !property
+                            .key
+                            .as_expression()
+                            .is_some_and(|key| Self::fold(key).is_some()))
+                    || (property.r#static
+                        && property
+                            .value
+                            .as_ref()
+                            .is_some_and(|value| !safe_value(value)))
+            }
+            ClassElement::AccessorProperty(property) => {
+                !property.decorators.is_empty()
+                    || property.computed
+                    || (property.r#static
+                        && property
+                            .value
+                            .as_ref()
+                            .is_some_and(|value| !safe_value(value)))
+            }
+            ClassElement::MethodDefinition(method) => {
+                !method.decorators.is_empty()
+                    || (method.computed
+                        && !method
+                            .key
+                            .as_expression()
+                            .is_some_and(|key| Self::fold(key).is_some()))
+            }
+            _ => false,
+        })
     }
 
     fn getter_throws(&self, name: Option<&str>) -> bool {
@@ -619,14 +878,18 @@ impl Walk {
 
     fn stmt(&self, statement: &Statement<'_>) -> Out {
         match statement {
-            Statement::ReturnStatement(statement) => Out {
-                returns: statement
-                    .argument
-                    .as_ref()
-                    .is_none_or(|argument| !self.abrupt(argument)),
+            Statement::ReturnStatement(statement) => match &statement.argument {
+                Some(argument) if self.abrupt(argument) => self.abrupt_out(argument),
+                _ => Out {
+                    returns: true,
+                    ..Out::default()
+                },
+            },
+            Statement::ThrowStatement(_) => Out {
+                throws: true,
                 ..Out::default()
             },
-            Statement::ThrowStatement(_) | Statement::ContinueStatement(_) => Out::default(),
+            Statement::ContinueStatement(_) => Out::default(),
             Statement::BreakStatement(statement) => match &statement.label {
                 None => Out {
                     brk: true,
@@ -639,13 +902,28 @@ impl Walk {
             },
             Statement::ExpressionStatement(statement) => {
                 if self.abrupt(&statement.expression) {
-                    Out::default()
+                    self.abrupt_out(&statement.expression)
                 } else {
                     Out::normal()
                 }
             }
             Statement::VariableDeclaration(declaration) => {
                 if self.declaration_abrupt(declaration) {
+                    Out {
+                        throws: declaration.declarations.iter().any(|declarator| {
+                            declarator
+                                .init
+                                .as_ref()
+                                .is_some_and(|init| self.throws_by_call(init))
+                        }),
+                        ..Out::default()
+                    }
+                } else {
+                    Out::normal()
+                }
+            }
+            Statement::ClassDeclaration(class) => {
+                if self.class_abrupt(class) {
                     Out::default()
                 } else {
                     Out::normal()
@@ -654,7 +932,7 @@ impl Walk {
             Statement::BlockStatement(block) => self.seq(&block.body),
             Statement::IfStatement(statement) => {
                 if self.abrupt(&statement.test) {
-                    return Out::default();
+                    return self.abrupt_out(&statement.test);
                 }
                 let consequent = || self.stmt(&statement.consequent);
                 let alternate = || {
@@ -689,7 +967,7 @@ impl Walk {
             }
             Statement::WhileStatement(statement) => {
                 if self.abrupt(&statement.test) {
-                    return Out::default();
+                    return self.abrupt_out(&statement.test);
                 }
                 self.looping(Self::truth(&statement.test), &statement.body, false)
             }
@@ -703,7 +981,13 @@ impl Walk {
                         .as_ref()
                         .is_some_and(|test| self.abrupt(test))
                 {
-                    return Out::default();
+                    return Out {
+                        throws: statement
+                            .test
+                            .as_ref()
+                            .is_some_and(|test| self.throws_by_call(test)),
+                        ..Out::default()
+                    };
                 }
                 let truth = statement
                     .test
@@ -754,6 +1038,11 @@ impl Walk {
                     ..Out::default()
                 };
                 out.absorb(&block);
+                // A throw in the block lands in the handler, which is not
+                // credited, so the exception is not credited either.
+                if statement.handler.is_some() {
+                    out.throws = false;
+                }
                 if let Some(finalizer) = &statement.finalizer {
                     let finalizer = self.seq(&finalizer.body);
                     if finalizer.normal {
@@ -796,7 +1085,7 @@ impl Walk {
     /// literal (a literal may be empty); evaluating the iterable must not leave.
     fn each(&self, right: &Expression<'_>, body: &Statement<'_>) -> Out {
         if self.abrupt(right) {
-            return Out::default();
+            return self.abrupt_out(right);
         }
         let mut out = Out::normal();
         if !literal_like(right) {
@@ -956,14 +1245,40 @@ impl Walk {
                 }
                 // A catch handler is not claimed: no throw is proven to reach
                 // it.
+                // The `finally` runs only when control leaves the block (or the
+                // handler a throw lands in): a block that loops forever never
+                // enters it.
                 if let Some(finalizer) = &statement.finalizer
                     && contains(finalizer.span, site)
                 {
-                    return self.reach_seq(&finalizer.body, site);
+                    return self.finalizer_entered(statement)
+                        && self.reach_seq(&finalizer.body, site);
                 }
                 false
             }
             _ => false,
+        }
+    }
+
+    /// Whether control can reach the `finally` of `statement`: the block
+    /// completes (normally or by a `return`, `break` or labeled `break`), or
+    /// it throws and no handler intercepts, or the handler it lands in can
+    /// itself complete. Anything the rules cannot show leave is not entered.
+    fn finalizer_entered(&self, statement: &oxc_ast::ast::TryStatement<'_>) -> bool {
+        let leaves = |out: &Out| out.normal || out.returns || out.brk || !out.labels.is_empty();
+        let block = self.seq(&statement.block.body);
+        if leaves(&block) {
+            return true;
+        }
+        if !block.throws {
+            return false;
+        }
+        match &statement.handler {
+            None => true,
+            Some(handler) => {
+                let handled = self.seq(&handler.body.body);
+                leaves(&handled) || handled.throws
+            }
         }
     }
 
@@ -1124,7 +1439,7 @@ mod tests {
             source,
             Span::new(start, end),
             site,
-            &diverging,
+            &PathEvidence::calls(&diverging),
         )
     }
 
@@ -1220,7 +1535,12 @@ mod tests {
     fn module_sites_follow_the_same_rules() {
         let at = |source: &str| {
             let start = source.find("hit()").unwrap() as u32;
-            module_site_reachable(Path::new("a.ts"), source, Span::new(start, start + 5), &[])
+            module_site_reachable(
+                Path::new("a.ts"),
+                source,
+                Span::new(start, start + 5),
+                &PathEvidence::default(),
+            )
         };
         assert_eq!(at("hit();"), Some(true));
         assert_eq!(at("if (false) hit();"), Some(false));
@@ -1259,7 +1579,12 @@ mod tests {
                     Span::new(at, at + text.len() as u32)
                 })
                 .collect::<Vec<_>>();
-            function_may_return(Path::new("a.ts"), source, Span::new(start, end), &diverging)
+            function_may_return(
+                Path::new("a.ts"),
+                source,
+                Span::new(start, end),
+                &PathEvidence::calls(&diverging),
+            )
         };
         assert_eq!(may("(() => { throw new Error(); })", &[]), Some(false));
         assert_eq!(may("(() => { for (;;) {} })", &[]), Some(false));
@@ -1281,6 +1606,135 @@ mod tests {
             may(
                 "(() => { const o = { get v(): number { throw 1; } }; return o.v; })",
                 &[]
+            ),
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn a_finally_is_entered_only_when_the_block_can_leave() {
+        for (body, expected) in [
+            ("try { x(); } finally { hit(); }", true),
+            ("try { for (;;) {} } finally { hit(); }", false),
+            ("try { while (true) { x(); } } finally { hit(); }", false),
+            (
+                "try { for (;;) { if (x()) break; } } finally { hit(); }",
+                true,
+            ),
+            (
+                "try { for (;;) { if (x()) throw 1; } } finally { hit(); }",
+                true,
+            ),
+            ("try { throw 1; } finally { hit(); }", true),
+            ("try { return; } finally { hit(); }", true),
+            (
+                "try { for (;;) {} } catch { x(); } finally { hit(); }",
+                false,
+            ),
+            (
+                "try { throw 1; } catch { for (;;) {} } finally { hit(); }",
+                false,
+            ),
+            ("try { throw 1; } catch { x(); } finally { hit(); }", true),
+            ("try { never(); } finally { hit(); }", false),
+            ("try { fail(); } finally { hit(); }", true),
+        ] {
+            let source = arrow(body);
+            let at = |text: &str| {
+                let at = source.find(text).expect("call") as u32;
+                Span::new(at, at + text.len() as u32)
+            };
+            let evidence = PathEvidence {
+                diverging: [("never()"), ("fail()")]
+                    .iter()
+                    .filter(|text| source.contains(**text))
+                    .map(|text| at(text))
+                    .collect(),
+                throwing: source
+                    .contains("fail()")
+                    .then(|| at("fail()"))
+                    .into_iter()
+                    .collect(),
+                accessors: Vec::new(),
+            };
+            let marker = at("hit()");
+            let start = source.find('(').unwrap() as u32 + 1;
+            assert_eq!(
+                site_reachable(
+                    Path::new("a.ts"),
+                    &source,
+                    Span::new(start, (source.len() - 1) as u32),
+                    marker,
+                    &evidence
+                ),
+                Some(expected),
+                "{body}"
+            );
+        }
+    }
+
+    #[test]
+    fn evaluating_a_class_with_a_static_block_or_initializer_may_throw() {
+        for (body, expected) in [
+            ("class A {} hit();", true),
+            ("class A { static x = 1; static f() {} } hit();", true),
+            ("class A { static {} } hit();", false),
+            ("class A { static x = make(); } hit();", false),
+            ("const A = class { static { throw 1; } }; hit();", false),
+            (
+                "if (typeof class { static x = make() } === 'function') { hit(); }",
+                false,
+            ),
+            ("class A extends make() {} hit();", true),
+        ] {
+            assert_eq!(reach(&arrow(body), "hit()", &[]), Some(expected), "{body}");
+        }
+    }
+
+    #[test]
+    fn a_property_operation_on_a_throwing_accessor_does_not_complete() {
+        for (body, expected) in [
+            (
+                "const o = { get v(): number { throw 1; } }; o.v; hit();",
+                false,
+            ),
+            (
+                "const o = { set v(x: number) { throw 1; } }; o.v = 1; hit();",
+                false,
+            ),
+            (
+                "const o = { set v(x: number) { throw 1; } }; o.w = 1; hit();",
+                true,
+            ),
+            (
+                "const o = { get v(): number { return 1; } }; o.v; hit();",
+                true,
+            ),
+            (
+                "const o = new Proxy({}, { get() { throw 1; } }); o.v; hit();",
+                false,
+            ),
+            (
+                "const o = new Proxy({}, { get() { return 1; } }); o.v; hit();",
+                true,
+            ),
+        ] {
+            assert_eq!(reach(&arrow(body), "hit()", &[]), Some(expected), "{body}");
+        }
+        let source = arrow("o.v; hit();");
+        let start = source.find('(').unwrap() as u32 + 1;
+        let at = source.find("hit()").unwrap() as u32;
+        let evidence = PathEvidence {
+            accessors: vec![Some("v".to_owned())],
+            ..PathEvidence::default()
+        };
+        assert_eq!(
+            site_reachable(
+                Path::new("a.ts"),
+                &source,
+                Span::new(start, (source.len() - 1) as u32),
+                Span::new(at, at + 5),
+                &evidence
             ),
             Some(false)
         );
