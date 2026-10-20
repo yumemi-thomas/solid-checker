@@ -97,8 +97,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/spread-prop-backing/App.tsx",
-      "start": 4104,
-      "end": 4115,
+      "start": 4124,
+      "end": 4135,
       "fixes": 0
     },
     {
@@ -107,8 +107,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/spread-prop-backing/App.tsx",
-      "start": 4208,
-      "end": 4219,
+      "start": 4228,
+      "end": 4239,
       "fixes": 0
     },
     {
@@ -117,8 +117,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/spread-prop-backing/App.tsx",
-      "start": 4923,
-      "end": 4934,
+      "start": 4943,
+      "end": 4954,
       "fixes": 0
     },
     {
@@ -127,8 +127,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/spread-prop-backing/App.tsx",
-      "start": 5273,
-      "end": 5284,
+      "start": 5293,
+      "end": 5304,
       "fixes": 0
     },
     {
@@ -137,8 +137,38 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/spread-prop-backing/App.tsx",
-      "start": 5624,
-      "end": 5635,
+      "start": 5644,
+      "end": 5655,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/spread-prop-backing/App.tsx",
+      "start": 6201,
+      "end": 6212,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/spread-prop-backing/App.tsx",
+      "start": 6610,
+      "end": 6621,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/spread-prop-backing/App.tsx",
+      "start": 7098,
+      "end": 7109,
       "fixes": 0
     }
   ]

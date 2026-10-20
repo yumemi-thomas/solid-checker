@@ -106,7 +106,7 @@ function DeletingOuter(props: { count: number }) {
 // `mergeProps(props, extra)` can hand the callee the parent's props object
 // itself (rc.13 `merge` returns its one non-falsy source), and the callee may
 // delete or redefine the getter before a sibling reads it.
-type Wide = { count?: number; label?: string; extra?: { tag?: string } };
+type Wide = { count?: number; label?: string; children?: unknown; extra?: { tag?: string } };
 const extra: { tag?: string } | undefined = undefined;
 function WipeByDelete(props: Wide) {
   delete props.count;
@@ -188,6 +188,54 @@ function ChildSpreadOuter(props: Wide) {
   );
 }
 
+// Babel drops a `children` attribute when the element has any raw child node
+// (`hasChildren && key === "children"`), even whitespace or `{/* */}`, so the
+// element has no never-falsy source and the callee gets the props object.
+// Uncertifiable.
+function ChildrenAttrReader(props: Wide) {
+  const count = props.count;
+  return <span>{count}</span>;
+}
+function ChildrenAttrOuter(props: Wide) {
+  return (
+    <div>
+      <WipeByDelete {...props} {...extra} children="x">
+        {/* nothing */}
+      </WipeByDelete>
+      <ChildrenAttrReader {...props} />
+    </div>
+  );
+}
+// Violation: without a raw child the `children` attribute is a real source.
+function ChildrenAttrSelfReader(props: Wide) {
+  const count = props.count;
+  return <span>{count}</span>;
+}
+function ChildrenAttrSelfOuter(props: Wide) {
+  return (
+    <div>
+      <WipeByDelete {...props} {...extra} children="x" />
+      <ChildrenAttrSelfReader {...props} />
+    </div>
+  );
+}
+
+// Babel's `isDynamic` reads a leading `/*@static*/` comment and passes the
+// member spread raw (`mergeProps(props, props.extra)`), which is `props` when
+// `extra` is undefined. Uncertifiable.
+function StaticMemberReader(props: Wide) {
+  const count = props.count;
+  return <span>{count}</span>;
+}
+function StaticMemberOuter(props: Wide) {
+  return (
+    <div>
+      <WipeByDelete {...props} {.../*@static*/ props.extra} />
+      <StaticMemberReader {...props} />
+    </div>
+  );
+}
+
 export function App() {
   const [count] = createSignal(1);
   return (
@@ -206,6 +254,9 @@ export function App() {
       <MemberSpreadOuter count={count()} />
       <AttributeSpreadOuter count={count()} />
       <ChildSpreadOuter count={count()} />
+      <ChildrenAttrOuter count={count()} />
+      <ChildrenAttrSelfOuter count={count()} />
+      <StaticMemberOuter count={count()} />
     </div>
   );
 }

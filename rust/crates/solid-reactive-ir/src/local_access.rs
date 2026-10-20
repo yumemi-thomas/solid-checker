@@ -165,19 +165,26 @@ pub(super) fn call_builds_view(
 }
 
 /// Whether a component element hands its callee a `merge` *view* rather than
-/// possibly the object it spreads. The compiler (`shared/component.rs`) builds
-/// one source per run of attributes or children (an object literal) and one per
-/// spread, and wraps several sources in `mergeProps`; a lone source is passed
-/// as is. rc.13 `merge` returns its one non-falsy source itself, so the same
-/// never-falsy test as [`call_builds_view`] applies: the call is a view when
-/// some source is provably never falsy, here
+/// possibly the object it spreads. Both lowerings (the native compiler's
+/// `shared/component.rs` and `@solidjs/babel-plugin`'s `shared/component.ts`)
+/// build one source per run of attributes or children (an object literal) and
+/// one per spread, and wrap several sources in `mergeProps`; a lone source is
+/// passed as is. rc.13 `merge` returns its one non-falsy source itself, so the
+/// same never-falsy test as [`call_builds_view`] applies: the call is a view
+/// when some source is provably never falsy, here
 ///
-/// * a non-`ref` attribute or a child that renders (an object literal source;
-///   `ref` may lower to no property, and whitespace or a `{/* */}` child is
-///   dropped), or
+/// * a non-`ref` attribute (an object literal source; `ref` may lower to no
+///   property). A `children` attribute does not count when the element has
+///   any raw child node, even whitespace: Babel drops it
+///   (`hasChildren && key === "children"`);
+/// * a child that renders: whitespace and `{/* */}` lower to nothing, and a
+///   spread child is not followed; or
 /// * a spread of a member expression (`{...props.extra}`): dynamic, so lowered
 ///   to a function source (`() => props.extra`), unless the object is an import
-///   binding (a namespace member is static and passes through unwrapped).
+///   binding (a namespace member is static and passes through unwrapped) or any
+///   comment sits in the spread (Babel's `isDynamic` reads a leading
+///   `/*@static*/` marker, `staticMarker` is configurable, and it passes the
+///   expression raw).
 ///
 /// A spread of a bare identifier is not: it may be `undefined`, leaving the
 /// spread props object as the receiver's own.
@@ -185,8 +192,14 @@ pub(super) fn component_element_builds_view(
     file: &solid_facts::FileFacts,
     element: &solid_facts::ast::JsxElementFact,
 ) -> bool {
+    let has_raw_children = !element.children.is_empty();
     if element.attributes.iter().any(|attribute| {
-        attribute.namespace.is_some() || file.source_text(attribute.name) != Some("ref")
+        attribute.namespace.is_some()
+            || match file.source_text(attribute.name) {
+                Some("ref") => false,
+                Some("children") => !has_raw_children,
+                _ => true,
+            }
     }) {
         return true;
     }
@@ -196,7 +209,10 @@ pub(super) fn component_element_builds_view(
             match text.strip_prefix('{') {
                 Some(inner) => {
                     let inner = inner.trim_start();
-                    !inner.starts_with('}') && !inner.starts_with("/*") && !inner.starts_with("//")
+                    !inner.starts_with('}')
+                        && !inner.starts_with("...")
+                        && !inner.starts_with("/*")
+                        && !inner.starts_with("//")
                 }
                 None => !text.is_empty(),
             }
@@ -205,6 +221,12 @@ pub(super) fn component_element_builds_view(
         return true;
     }
     element.spreads.iter().any(|spread| {
+        if file
+            .source_text(spread.span)
+            .is_none_or(|text| text.contains("/*") || text.contains("//"))
+        {
+            return false;
+        }
         let argument = file.ast.peel_ts_sugar_span(spread.argument);
         file.ast.member_at(argument).is_some_and(|member| {
             let object = file.ast.peel_ts_sugar_span(member.object);
