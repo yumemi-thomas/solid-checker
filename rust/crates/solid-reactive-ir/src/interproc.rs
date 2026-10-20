@@ -52,7 +52,7 @@ use crate::owners::{
 use crate::pipeline::{parallel_file_results, parallel_slice_results};
 
 #[path = "property_gets.rs"]
-mod property_gets;
+pub(crate) mod property_gets;
 
 #[path = "accessor_provenance.rs"]
 pub(crate) mod accessor_provenance;

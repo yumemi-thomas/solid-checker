@@ -303,3 +303,21 @@ function member(v: any) { return v.length(); }\n";
     assert_eq!(inert("aliases"), 1);
     assert_eq!(inert("member"), 0);
 }
+
+/// A hoisted function declaration runs whenever it is called, so an earlier
+/// `return` does not make a site in it unreachable; a function expression
+/// written after the `return` never exists, and a site in it is.
+#[test]
+fn a_hoisted_declaration_is_not_ordered_by_an_earlier_return() {
+    let source = "declare function readIt(): number;\n\
+function hoisted(v: any) {\n  return 1;\n  function inner() { return readIt(); }\n}\n\
+function expression(v: any) {\n  return 1;\n  const inner = () => readIt();\n}\n";
+    assert_eq!(
+        standings(source, "hoisted", &[function(0)], &["readIt()"]),
+        [SiteStanding::Possible]
+    );
+    assert_eq!(
+        standings(source, "expression", &[function(0)], &["readIt()"]),
+        [SiteStanding::Unreachable]
+    );
+}

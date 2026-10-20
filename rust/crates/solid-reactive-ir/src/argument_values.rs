@@ -372,6 +372,11 @@ fn getter_is_only_called_or_decided(
     lookup: &SemanticLookup<'_>,
     target: (&str, Span),
 ) -> bool {
+    // A direct `eval` in the declaring file reaches the binding with no static
+    // reference (`eval("Object.defineProperty(value, 'length', …)")`).
+    if crate::interproc::property_gets::direct_eval_in(file, Span::new(0, u32::MAX)) {
+        return false;
+    }
     let mut references = file
         .ast
         .reference_declarations

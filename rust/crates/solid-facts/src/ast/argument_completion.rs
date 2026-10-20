@@ -862,6 +862,15 @@ fn before(
     statements: &[Statement<'_>],
     child: oxc_span::Span,
 ) -> SiteStanding {
+    // A function declaration is hoisted: its body runs whenever the function
+    // is called, which can be before any `return` that precedes it in the
+    // list. Statement order says nothing of it, so neither does an earlier
+    // exit.
+    if statements.iter().any(|statement| {
+        statement.span() == child && matches!(statement, Statement::FunctionDeclaration(_))
+    }) {
+        return SiteStanding::Possible;
+    }
     let mut result = SiteStanding::Guaranteed;
     for statement in statements {
         if statement.span() == child {

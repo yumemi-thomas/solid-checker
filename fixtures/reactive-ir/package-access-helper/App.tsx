@@ -2,6 +2,7 @@ import { createMemo, createSignal, createStore } from "solid-js";
 import { access, accessWith } from "@solid-primitives/utils";
 import { access as callsWhenParameterless } from "./local-access";
 import { access as callsEveryFunction } from "./local-calls";
+import { callsLater, redefines } from "./hoisted";
 
 const config = { label: "static" };
 
@@ -135,4 +136,21 @@ export function BadCalledAndRepeated() {
   const first = access(value);
   const second = access(value);
   return <span>{first + second + value()}</span>;
+}
+
+// Uncertifiable: the callee redefines `length` in a hoisted function
+// declaration that runs before its `return`; a later site is not
+// unreachable for being written after that `return`.
+export function UncertifiableHoistedRedefinition() {
+  const [value] = createSignal(1);
+  const result = redefines(value);
+  return <span>{String(result)}</span>;
+}
+
+// Known miss, silent: the callee reads the getter in a hoisted function it
+// calls; nested function declarations are not followed (docs/open-work.md).
+export function MissedHoistedCallee() {
+  const [value] = createSignal(1);
+  const result = callsLater(value);
+  return <span>{String(result)}</span>;
 }
