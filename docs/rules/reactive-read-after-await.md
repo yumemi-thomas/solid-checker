@@ -112,8 +112,9 @@ Each of these keeps it from applying:
   except one of the `async` helpers above;
 - a `.then` whose result is dropped, or a `setTimeout`/`queueMicrotask`
   callback (a deferred callback is not on the continuation's stack).
-- a read after `for await` is not claimed even though the runtime warns (a
-  known miss, `docs/open-work.md`).
+- a read after `for await` or `await using` is an uncertifiable obligation, not
+  a violation: the suspension is real (the loop awaits at least once) but not a
+  dominating `await` expression the facts model.
 
 **The feasible-path premise.** A read is reported where the code is written to
 run it, not where one input makes it dead: a `catch` that only an await
@@ -134,6 +135,48 @@ store-path member reads: a path read in the same straight-line flow before the
 first suspension tracked every key along it, so a later read of that path, or of
 a prefix of it, is silent (`store.a; await pause(); return store.a`), while
 another key or a deeper key is not. Props member reads are not exempt.
+
+**Possibly tracked is uncertifiable, not a violation.** Only a source the
+analysis proves nothing before the first suspension can have read is reported.
+The segment before the first suspension (the first `await`'s operand included)
+may have read the source without a straight-line call of it: through a project
+helper or a getter of that name, through an inline callback
+(`[0].forEach(() => value())`), or through a call whose body is not visible
+(a project function reached through a value, a method of a project object).
+That read made the source a dependency, so the read after the await is an
+uncertifiable obligation. Code outside the project (a global, a package import,
+a function declared without a body) reads nothing of a source it is not handed;
+a function literal inside the call keeps the call opaque. A conditional read in
+the computation's own flow does not hide the finding (the run that skips it
+warns, the feasible-path premise). A callback of `untrack` or `runWithOwner`
+runs with tracking off and is not part of the segment. A store key is a
+dependency by its path only when the same path was read; a key another path
+may share (`{ a: item, b: item }`, `store.a.n` before and `store.b.n` after) is
+uncertifiable when a read before the await used a key of that name or anything
+opaque, and a violation when none did (path text equality is not dependency
+identity).
+
+**The preceding chain decides settlement.** A fulfillment handler (and a
+`.finally` handler) is on the flight only when the receiver is proven to
+fulfill (settle): a handler that returns a rejected, never-settling or
+unproven value, or contains `throw`, leaves everything after it unproven;
+`setTimeout(done, ms, value)` resolves with `value`, so only a plain literal
+fulfills (a promise there is adopted); `Promise.allSettled` fulfills only over
+elements proven to settle. Anything else is uncertifiable.
+
+**A disposed owner is silent.** A computation inside a `createRoot` whose
+`dispose` parameter the code mentions (called, passed to a timer, returned) may
+be disposed before it resumes, and a read in a disposed computation does not
+warn: uncertifiable. A root that never mentions its `dispose` keeps the
+violation.
+
+**Owners.** `untrack(() => load())` with an `async` helper keeps the helper's
+reads before its first await out of the window (tracking is off), so its read
+after the await is a violation. `runWithOwner(null, () => read())` runs with no
+owner (the check returns only for a context that is not `null`): a violation
+with a literal `null`, silent for `undefined`, uncertifiable for any owner the
+analysis cannot see through (a captured `getOwner()` is live and the runtime is
+silent).
 
 **The runtime agrees from rc.13.** `@solidjs/signals@2.0.0-rc.13` warns
 `UNTRACKED_READ_AFTER_AWAIT` in dev for a read after the first `await` of an

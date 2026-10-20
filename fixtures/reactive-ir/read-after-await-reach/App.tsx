@@ -1,4 +1,4 @@
-import { createMemo, createSignal, createStore, untrack } from "solid-js";
+import { createMemo, createRoot, createSignal, createStore, getOwner, runWithOwner, untrack } from "solid-js";
 
 // SC1002 reaches the code an async computation's continuation runs, not only
 // the awaiting function's own body. Every positive below is an
@@ -952,4 +952,460 @@ export function StoreReadBeforeConditionalAwait(props: { flag: boolean }) {
     return store.a;
   });
   return <div>{data()}</div>;
+}
+
+// ---- Round 5: what the pre-await segment and the preceding chain prove.
+// Each group is a runtime-oracle case (`after-await-settlement`,
+// `after-await-tracked`, `after-await-disposed`, `after-await-owner`). The
+// uncertifiable components are shapes where the runtime stays silent (or
+// warns for a reason the analysis cannot prove); the *Control components are
+// the proven violations next to them.
+
+// ---- after-await-settlement
+
+export function ThenRejects() {
+  const [value, setValue] = createSignal(1);
+  setTimeout(() => setValue(2), 160);
+  const [tick, setTick] = createSignal(0);
+  setTimeout(() => setTick(1), 80);
+  const data = createMemo(async () => {
+    tick();
+    return await Promise.resolve(0).then(() => Promise.reject("expected")).then(() => value()).catch(() => 0);
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function FinallyRejects() {
+  const [value, setValue] = createSignal(1);
+  setTimeout(() => setValue(2), 160);
+  const [tick, setTick] = createSignal(0);
+  setTimeout(() => setTick(1), 80);
+  const data = createMemo(async () => {
+    tick();
+    return await Promise.resolve(0).finally(() => Promise.reject("expected")).then(() => value()).catch(() => 0);
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function CatchRejects() {
+  const [value, setValue] = createSignal(1);
+  setTimeout(() => setValue(2), 160);
+  const [tick, setTick] = createSignal(0);
+  setTimeout(() => setTick(1), 80);
+  const data = createMemo(async () => {
+    tick();
+    return await Promise.reject("first").catch(() => Promise.reject("expected")).then(() => value()).catch(() => 0);
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function ThenThrows() {
+  const [value, setValue] = createSignal(1);
+  setTimeout(() => setValue(2), 160);
+  const [tick, setTick] = createSignal(0);
+  setTimeout(() => setTick(1), 80);
+  const data = createMemo(async () => {
+    tick();
+    return await Promise.resolve(0).then(() => { throw new Error("expected"); }).then(() => value()).catch(() => 0);
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function AllSettledNever() {
+  const [value, setValue] = createSignal(1);
+  setTimeout(() => setValue(2), 160);
+  const [tick, setTick] = createSignal(0);
+  setTimeout(() => setTick(1), 80);
+  const data = createMemo(async () => {
+    tick();
+    return await Promise.allSettled([new Promise<void>(() => {})]).then(() => value());
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function TimerResolvesWithRejection() {
+  const [value, setValue] = createSignal(1);
+  setTimeout(() => setValue(2), 160);
+  const [tick, setTick] = createSignal(0);
+  setTimeout(() => setTick(1), 80);
+  const rejected = Promise.reject("expected");
+  void rejected.catch(() => 0);
+  const data = createMemo(async () => {
+    tick();
+    return await new Promise<number>((done) => setTimeout(done, 20, rejected)).then(() => value()).catch(() => 0);
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function TimerResolvesWithNever() {
+  const [value, setValue] = createSignal(1);
+  setTimeout(() => setValue(2), 160);
+  const [tick, setTick] = createSignal(0);
+  setTimeout(() => setTick(1), 80);
+  const never = new Promise<number>(() => {});
+  const data = createMemo(async () => {
+    tick();
+    return await new Promise<number>((done) => setTimeout(done, 20, never)).then(() => value());
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function FinallyOnNever() {
+  const [value, setValue] = createSignal(1);
+  setTimeout(() => setValue(2), 160);
+  const [tick, setTick] = createSignal(0);
+  setTimeout(() => setTick(1), 80);
+  const data = createMemo(async () => {
+    tick();
+    await new Promise<void>(() => {}).finally(() => { value(); });
+    return 0;
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function ThenReturnsNever() {
+  const [value, setValue] = createSignal(1);
+  setTimeout(() => setValue(2), 160);
+  const [tick, setTick] = createSignal(0);
+  setTimeout(() => setTick(1), 80);
+  const data = createMemo(async () => {
+    tick();
+    return await Promise.resolve(0).then(() => new Promise<void>(() => {})).then(() => value());
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function ThenPlainControl() {
+  const [value, setValue] = createSignal(1);
+  setTimeout(() => setValue(2), 160);
+  const [tick, setTick] = createSignal(0);
+  setTimeout(() => setTick(1), 80);
+  const data = createMemo(async () => {
+    tick();
+    return await pause().then(() => 0).then(() => value());
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function TimerPlainValueControl() {
+  const [value, setValue] = createSignal(1);
+  setTimeout(() => setValue(2), 160);
+  const [tick, setTick] = createSignal(0);
+  setTimeout(() => setTick(1), 80);
+  const data = createMemo(async () => {
+    tick();
+    return await new Promise<number>((done) => setTimeout(done, 20, 5)).then(() => value());
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function FinallyControl() {
+  const [value, setValue] = createSignal(1);
+  setTimeout(() => setValue(2), 160);
+  const [tick, setTick] = createSignal(0);
+  setTimeout(() => setTick(1), 80);
+  const data = createMemo(async () => {
+    tick();
+    await pause().finally(() => { value(); });
+    return 0;
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function AllSettledControl() {
+  const [value, setValue] = createSignal(1);
+  setTimeout(() => setValue(2), 160);
+  const [tick, setTick] = createSignal(0);
+  setTimeout(() => setTick(1), 80);
+  const data = createMemo(async () => {
+    tick();
+    return await Promise.allSettled([pause()]).then(() => value());
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function ThenReturnsFulfillingControl() {
+  const [value, setValue] = createSignal(1);
+  setTimeout(() => setValue(2), 160);
+  const [tick, setTick] = createSignal(0);
+  setTimeout(() => setTick(1), 80);
+  const data = createMemo(async () => {
+    tick();
+    return await pause().then(() => Promise.resolve(0)).then(() => value());
+  });
+  return <div>{String(data())}</div>;
+}
+
+// ---- after-await-tracked
+
+export function HelperReadTracked() {
+  const [value, setValue] = createSignal(1);
+  setTimeout(() => setValue(2), 160);
+  const [tick, setTick] = createSignal(0);
+  setTimeout(() => setTick(1), 80);
+  function read() { return value(); }
+  const data = createMemo(async () => {
+    tick();
+    read();
+    await pause();
+    return [0].map(() => value())[0];
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function GetterReadTracked() {
+  const [value, setValue] = createSignal(1);
+  setTimeout(() => setValue(2), 160);
+  const [tick, setTick] = createSignal(0);
+  setTimeout(() => setTick(1), 80);
+  const obj = { get n() { return value(); } };
+  const data = createMemo(async () => {
+    tick();
+    obj.n;
+    await pause();
+    return value();
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function CallbackReadTracked() {
+  const [value, setValue] = createSignal(1);
+  setTimeout(() => setValue(2), 160);
+  const [tick, setTick] = createSignal(0);
+  setTimeout(() => setTick(1), 80);
+  const data = createMemo(async () => {
+    tick();
+    [0].forEach(() => value());
+    await pause();
+    return value();
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function StoreSharedRoots() {
+  const [value, setValue] = createSignal(1);
+  setTimeout(() => setValue(2), 160);
+  const [tick, setTick] = createSignal(0);
+  setTimeout(() => setTick(1), 80);
+  const item = { n: 1 };
+  const [store, setStore] = createStore({ a: item, b: item });
+  setTimeout(() => setStore((draft) => { draft.a.n = 2; }), 160);
+  const data = createMemo(async () => {
+    tick();
+    store.a.n;
+    store.b;
+    await pause();
+    return store.b.n;
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function StoreAliasTracked() {
+  const [value, setValue] = createSignal(1);
+  setTimeout(() => setValue(2), 160);
+  const [tick, setTick] = createSignal(0);
+  setTimeout(() => setTick(1), 80);
+  const [store] = createStore({ a: 1 });
+  const alias = store;
+  const data = createMemo(async () => {
+    tick();
+    store.a;
+    await pause();
+    return alias.a;
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function HelperUntouchedControl() {
+  const [value, setValue] = createSignal(1);
+  setTimeout(() => setValue(2), 160);
+  const [tick, setTick] = createSignal(0);
+  setTimeout(() => setTick(1), 80);
+  function read() { return 0; }
+  const data = createMemo(async () => {
+    tick();
+    await pause();
+    return [0].map(() => value())[0];
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function GetterUntouchedControl() {
+  const [value, setValue] = createSignal(1);
+  setTimeout(() => setValue(2), 160);
+  const [tick, setTick] = createSignal(0);
+  setTimeout(() => setTick(1), 80);
+  const obj = { get n() { return value(); } };
+  const data = createMemo(async () => {
+    tick();
+    await pause();
+    return value();
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function StoreOtherKeyControl() {
+  const [value, setValue] = createSignal(1);
+  setTimeout(() => setValue(2), 160);
+  const [tick, setTick] = createSignal(0);
+  setTimeout(() => setTick(1), 80);
+  const item = { n: 1 };
+  const [store, setStore] = createStore({ a: item, b: item });
+  setTimeout(() => setStore((draft) => { draft.a.n = 2; }), 160);
+  const data = createMemo(async () => {
+    tick();
+    store.b;
+    await pause();
+    return store.b.n;
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function OtherSignalHelperControl() {
+  const [value, setValue] = createSignal(1);
+  setTimeout(() => setValue(2), 160);
+  const [tick, setTick] = createSignal(0);
+  setTimeout(() => setTick(1), 80);
+  const [second] = createSignal(0);
+  function other() { return second(); }
+  const data = createMemo(async () => {
+    tick();
+    other();
+    await pause();
+    return value();
+  });
+  return <div>{String(data())}</div>;
+}
+
+// ---- after-await-disposed
+
+export function DisposedByTimer() {
+  const [value] = createSignal(1);
+  createRoot((dispose) => {
+    const data = createMemo(async () => {
+      await pause();
+      console.log("disposed read", value());
+      return 0;
+    });
+    createMemo(() => data());
+    setTimeout(dispose, 5);
+  });
+  return <span>disposed</span>;
+}
+
+export function DisposedInsideComputation() {
+  const [value] = createSignal(1);
+  createRoot((dispose) => {
+    const data = createMemo(async () => {
+      await pause();
+      dispose();
+      console.log("disposed read", value());
+      return 0;
+    });
+    createMemo(() => data());
+  });
+  return <span>disposed</span>;
+}
+
+export function RootControl() {
+  const [value] = createSignal(1);
+  createRoot(() => {
+    const data = createMemo(async () => {
+      await pause();
+      console.log("live read", value());
+      return 0;
+    });
+    createMemo(() => data());
+  });
+  return <span>live</span>;
+}
+
+// ---- after-await-owner
+
+export function UntrackedAsyncHelper() {
+  const [value, setValue] = createSignal(1);
+  setTimeout(() => setValue(2), 160);
+  const [tick, setTick] = createSignal(0);
+  setTimeout(() => setTick(1), 80);
+  async function load() {
+    value();
+    await pause();
+    return value();
+  }
+  const data = createMemo(async () => {
+    tick();
+    return await untrack(() => load());
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function TrackedHelperControl() {
+  const [value, setValue] = createSignal(1);
+  setTimeout(() => setValue(2), 160);
+  const [tick, setTick] = createSignal(0);
+  setTimeout(() => setTick(1), 80);
+  async function load() {
+    value();
+    await pause();
+    return value();
+  }
+  const data = createMemo(async () => {
+    tick();
+    return await load();
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function NullOwnerCallback() {
+  const [value, setValue] = createSignal(1);
+  setTimeout(() => setValue(2), 160);
+  const [tick, setTick] = createSignal(0);
+  setTimeout(() => setTick(1), 80);
+  const data = createMemo(async () => {
+    tick();
+    await pause();
+    return (() => runWithOwner(null, () => value()))();
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function CapturedOwnerControl() {
+  const [value, setValue] = createSignal(1);
+  setTimeout(() => setValue(2), 160);
+  const [tick, setTick] = createSignal(0);
+  setTimeout(() => setTick(1), 80);
+  const data = createMemo(async () => {
+    tick();
+    const owner = getOwner();
+    await pause();
+    return runWithOwner(owner, () => value());
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function ForAwait() {
+  const [value, setValue] = createSignal(1);
+  setTimeout(() => setValue(2), 160);
+  const [tick, setTick] = createSignal(0);
+  setTimeout(() => setTick(1), 80);
+  const data = createMemo(async () => {
+    tick();
+    for await (const _ of [1]) {}
+    return value();
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function ForAwaitReadBeforeControl() {
+  const [value, setValue] = createSignal(1);
+  setTimeout(() => setValue(2), 160);
+  const [tick, setTick] = createSignal(0);
+  setTimeout(() => setTick(1), 80);
+  const data = createMemo(async () => {
+    tick();
+    value();
+    for await (const _ of [1]) {}
+    return value();
+  });
+  return <div>{String(data())}</div>;
 }

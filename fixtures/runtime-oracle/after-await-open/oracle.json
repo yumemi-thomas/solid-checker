@@ -30,11 +30,6 @@
       "code": "UNTRACKED_READ_AFTER_AWAIT",
       "site": "App.tsx:57",
       "reason": "an async IIFE awaited by the computation is not followed"
-    },
-    {
-      "code": "UNTRACKED_READ_AFTER_AWAIT",
-      "site": "App.tsx:67",
-      "reason": "a read after `for await`: the loop's suspension is not a dominating `await` expression"
     }
   ]
 }

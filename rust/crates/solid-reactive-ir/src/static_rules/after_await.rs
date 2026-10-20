@@ -35,10 +35,10 @@
 //! computation already tracked before its first suspension stay exempt
 //! (ADR 0195).
 
+use super::pre_await::{PreAwait, Tracking};
 use super::{
     AsyncComputations, call_accessor_symbol, member_read_site, member_reads_after_await,
-    tracked_async_computation_context, tracked_before_first_suspension,
-    tracked_store_paths_before_first_suspension, typed_after_await_obligation, typed_unknown,
+    tracked_async_computation_context, typed_after_await_obligation, typed_unknown,
 };
 use crate::HashSet;
 use crate::cleanup::callback_argument_literal;
@@ -47,8 +47,9 @@ use crate::owners::{containing_ast_function, written_directly_in};
 use crate::pipeline::{AnalysisContext, ProgramDraft};
 use crate::runtime_semantics::{is_inline_standard_callback, is_timer_call, standard_call_name};
 use crate::{StaticDefect, StaticDefectKind, location};
+use solid_dialect::Primitive;
 use solid_facts::FileFacts;
-use solid_facts::ast::{CallFact, FunctionFact, FunctionKind};
+use solid_facts::ast::{ArgumentValueKind, CallFact, FunctionFact, FunctionKind};
 use solid_facts::core::Span;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -82,8 +83,9 @@ struct Walk<'m> {
     queued: HashSet<(String, Span)>,
     /// How the promise chain being followed reaches the flight.
     carried: Carried,
-    /// Store paths the windows already read before their first suspension.
-    store_paths: Vec<(SymbolId, String)>,
+    /// The chain being followed runs inside `untrack`: a helper it reaches
+    /// is not inside the computation's tracking window.
+    untracked: bool,
 }
 
 struct Reach<'f, 'a> {
@@ -91,6 +93,7 @@ struct Reach<'f, 'a> {
     files: HashMap<&'f str, &'f FileFacts>,
     facts: HashMap<(&'f str, u64, u64), &'f AsyncFunctionFact>,
     done: HashSet<(String, u64, u64)>,
+    pre: PreAwait<'f, 'a>,
 }
 
 pub(super) fn run(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
@@ -119,6 +122,7 @@ pub(super) fn run(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
             })
             .collect(),
         done: HashSet::default(),
+        pre: PreAwait::new(ctx),
     };
     // Built on first use: only a function with something to report needs it.
     let mut computations: Option<AsyncComputations> = None;
@@ -132,6 +136,7 @@ pub(super) fn run(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
             if function.calls_after_await.is_empty()
                 && member_site.is_none()
                 && !reach.has_promise_seed(function)
+                && !reach.has_implicit_suspension(function)
             {
                 continue;
             }
@@ -141,11 +146,15 @@ pub(super) fn run(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
                 continue;
             };
             let function = Rc::new(function.clone());
+            // An owner a `dispose` function can reach may be gone when the
+            // continuation resumes: the runtime then reads in a disposed
+            // computation and stays silent, so every read is an obligation.
+            let conditional = owner_may_be_disposed(ctx, &reach.files, &function);
             let mut queue = vec![Member {
                 function: Rc::clone(&function),
                 context,
                 windows: vec![function],
-                conditional: false,
+                conditional,
             }];
             while let Some(member) = queue.pop() {
                 reach.report(draft, &member, &mut queue);
@@ -209,6 +218,80 @@ fn plain_value(file: &FileFacts, span: Span) -> bool {
             && matches!(text.as_bytes()[0], b'"' | b'\'')
             && text.as_bytes()[text.len() - 1] == text.as_bytes()[0]
             && !text[1..text.len() - 1].contains(text.as_bytes()[0] as char))
+}
+
+/// Whether `word` occurs in `text` as a whole identifier.
+fn mentions_word(text: &str, word: &str) -> bool {
+    let identifier = |c: char| c.is_alphanumeric() || c == '_' || c == '$';
+    text.match_indices(word).any(|(index, _)| {
+        !text[..index].chars().next_back().is_some_and(identifier)
+            && !text[index + word.len()..]
+                .chars()
+                .next()
+                .is_some_and(identifier)
+    })
+}
+
+/// Whether a `createRoot` whose `dispose` function the code mentions encloses
+/// the computation: the root, and the computation with it, may be disposed
+/// before the continuation resumes (an explicit `dispose` call, one passed to
+/// a timer, returned to a caller). The runtime then reads in a disposed
+/// computation and does not warn, so no read after its await is proven.
+fn owner_may_be_disposed(
+    ctx: &AnalysisContext<'_>,
+    files: &HashMap<&str, &FileFacts>,
+    function: &AsyncFunctionFact,
+) -> bool {
+    let Some((file, ast_function)) = ast_function(files, function) else {
+        return false;
+    };
+    file.ast.calls.iter().any(|call| {
+        if call.construct || !call.span.contains(ast_function.span) {
+            return false;
+        }
+        let Some(root) = call
+            .arguments
+            .first()
+            .and_then(|argument| callback_argument_literal(file, argument.span))
+            .filter(|root| root.span.contains(ast_function.span) && root.span != ast_function.span)
+        else {
+            return false;
+        };
+        if crate::call_primitive_name_cached(
+            ctx.semantic_lookup,
+            file,
+            call,
+            ctx.entities,
+            ctx.symbol_names,
+            ctx.dialect,
+        )
+        .and_then(|name| name.primitive())
+            != Some(Primitive::CreateRoot)
+        {
+            return false;
+        }
+        let Some(dispose) = root
+            .parameters
+            .first()
+            .filter(|binding| binding.shape == solid_facts::ast::BindingShape::Identifier)
+            .and_then(|binding| binding.names.first())
+            .and_then(|name| file.source_text(name.span))
+        else {
+            return false;
+        };
+        file.source_text(root.body)
+            .is_some_and(|body| mentions_word(body, dispose))
+    })
+}
+
+/// A promise handler argument: absent (or `undefined`/`null`, which passes the
+/// outcome through), a function literal proven to complete normally with a
+/// value that is not a thenable, or anything else.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Handler {
+    PassThrough,
+    Fulfilling,
+    Unproven,
 }
 
 /// Turns the reads reported since `mark` into proof obligations.
@@ -364,12 +447,22 @@ impl<'f, 'a> Reach<'f, 'a> {
             })
     }
 
-    /// Whether the window's tracking already made `symbol` a dependency.
-    fn exempt(&self, member: &Member, symbol: &SymbolId) -> bool {
-        member
-            .windows
-            .iter()
-            .any(|window| tracked_before_first_suspension(self.ctx, &self.files, window, symbol))
+    /// Whether the function itself suspends in a way the producer's facts do
+    /// not model (`for await`, `await using`).
+    fn has_implicit_suspension(&self, function: &'f AsyncFunctionFact) -> bool {
+        ast_function(&self.files, function).is_some_and(|(file, ast_function)| {
+            file.ast.implicit_suspensions.iter().any(|suspension| {
+                ast_function.body.contains(*suspension)
+                    && written_directly_in(&file.ast, ast_function, *suspension)
+            })
+        })
+    }
+
+    /// Whether the windows' tracking already made `symbol` a dependency
+    /// (ADR 0195), may have (a read through a helper, a getter, an inline
+    /// callback or a call the analysis cannot see into), or cannot have.
+    fn tracking(&self, member: &Member, symbol: &SymbolId) -> Tracking {
+        self.pre.accessor(&member.windows, symbol)
     }
 
     fn report(&mut self, draft: &mut ProgramDraft, member: &Member, queue: &mut Vec<Member>) {
@@ -389,13 +482,7 @@ impl<'f, 'a> Reach<'f, 'a> {
             visited: HashSet::default(),
             queued: HashSet::default(),
             carried: Carried::Held,
-            store_paths: member
-                .windows
-                .iter()
-                .flat_map(|window| {
-                    tracked_store_paths_before_first_suspension(ctx, &self.files, window)
-                })
-                .collect(),
+            untracked: false,
         };
         let mark = draft.static_defects.len();
         // The producer's dominance facts: accessor calls after the first
@@ -449,7 +536,9 @@ impl<'f, 'a> Reach<'f, 'a> {
             // The same source read on every run before the first suspension
             // is a dependency already (ADR 0195), and rc.13's own
             // `UNTRACKED_READ_AFTER_AWAIT` stays silent for it.
-            if symbol.is_some_and(|symbol| self.exempt(member, symbol)) {
+            let tracking =
+                symbol.map_or(Tracking::Untracked, |symbol| self.tracking(member, symbol));
+            if tracking == Tracking::Tracked {
                 continue;
             }
             let display = ast_call
@@ -468,7 +557,7 @@ impl<'f, 'a> Reach<'f, 'a> {
                 },
                 analysis_context: member.context.clone(),
                 fixes: vec![],
-                uncertain: false,
+                uncertain: tracking == Tracking::Possible,
             });
         }
         // The promise chain first: it records which function literals become
@@ -480,7 +569,9 @@ impl<'f, 'a> Reach<'f, 'a> {
             }
         }
         if let Some(site) = member_site {
-            member_reads_after_await(ctx, draft, site, &member.context, &walk.store_paths);
+            member_reads_after_await(ctx, draft, site, &member.context, &|symbol, text| {
+                self.pre.store_key(&member.windows, symbol, text)
+            });
             let (file, ast_function, boundary) = site;
             for call in file.ast.calls_within(ast_function.body) {
                 if call.span.start >= boundary
@@ -491,12 +582,63 @@ impl<'f, 'a> Reach<'f, 'a> {
                 }
             }
         }
+        if let Some((file, ast_function)) = ast_function(&self.files, function) {
+            self.after_implicit_suspension(draft, &mut walk, file, ast_function);
+        }
         for (file, call) in after_await_calls {
             self.visit_call(draft, &mut walk, file, call, 0);
         }
         if member.conditional {
             mark_uncertain(draft, mark);
         }
+    }
+
+    /// The dialect primitive the call resolves to.
+    fn primitive(&self, file: &FileFacts, call: &CallFact) -> Option<Primitive> {
+        crate::call_primitive_name_cached(
+            self.ctx.semantic_lookup,
+            file,
+            call,
+            self.ctx.entities,
+            self.ctx.symbol_names,
+            self.ctx.dialect,
+        )
+        .and_then(|name| name.primitive())
+    }
+
+    /// A suspension the dominance facts do not model (`for await`, `await
+    /// using`) always suspends the function at least once, but where it sits
+    /// in the flow is not proven the way an `await`'s is: an accessor read
+    /// written after it is a proof obligation, never a silent clean (`for await`
+    /// over an empty iterable still awaits, measured on rc.13,
+    /// `after-await-for-await`).
+    fn after_implicit_suspension(
+        &self,
+        draft: &mut ProgramDraft,
+        walk: &mut Walk<'_>,
+        file: &'f FileFacts,
+        function: &'f FunctionFact,
+    ) {
+        let Some(boundary) = file
+            .ast
+            .implicit_suspensions
+            .iter()
+            .filter(|suspension| {
+                function.body.contains(**suspension)
+                    && written_directly_in(&file.ast, function, **suspension)
+            })
+            .map(|suspension| suspension.end)
+            .min()
+        else {
+            return;
+        };
+        let mark = draft.static_defects.len();
+        for call in file.ast.calls_within(function.body) {
+            if call.span.start >= boundary && written_directly_in(&file.ast, function, call.span) {
+                self.report_call_read(draft, walk, file, call);
+            }
+        }
+        mark_uncertain(draft, mark);
     }
 
     /// The callbacks a call runs inline: an immediately invoked function
@@ -525,6 +667,27 @@ impl<'f, 'a> Reach<'f, 'a> {
             && !function.generator
         {
             self.report_region(draft, walk, file, function, depth);
+            return;
+        }
+        // `runWithOwner(owner, fn)` runs `fn` at once with `owner` as the
+        // context and tracking off (`dev-shared.js` `runWithOwner`), and
+        // `checkPostAwaitRead` returns only for a context that is not `null`:
+        // a literal `null` owner (the detached-root spelling) keeps the read
+        // a warning, `undefined` silences it, and an owner the analysis
+        // cannot see through may be either.
+        if self.primitive(file, call) == Some(Primitive::RunWithOwner)
+            && let [owner, callback] = call.arguments.as_slice()
+            && !owner.spread
+            && !callback.spread
+            && let Some(callback) = callback_argument_literal(file, callback.span)
+            && !callback.r#async
+            && !callback.generator
+        {
+            match owner.value {
+                ArgumentValueKind::Null => self.report_region(draft, walk, file, callback, depth),
+                ArgumentValueKind::Undefined => {}
+                _ => self.report_conditional_region(draft, walk, file, callback, depth),
+            }
             return;
         }
         let Some(resolved) = ctx.semantic_lookup.resolved_callee_call(file, call.callee) else {
@@ -670,7 +833,7 @@ impl<'f, 'a> Reach<'f, 'a> {
                 draft,
                 (file, callback, callback.span.start),
                 &walk.member.context,
-                &walk.store_paths,
+                &|symbol, text| self.pre.store_key(&walk.member.windows, symbol, text),
             );
         }
         for call in file.ast.calls_within(callback.body) {
@@ -723,7 +886,8 @@ impl<'f, 'a> Reach<'f, 'a> {
             }
             return;
         };
-        if self.exempt(walk.member, symbol) || !walk.reported.insert(key) {
+        let tracking = self.tracking(walk.member, symbol);
+        if tracking == Tracking::Tracked || !walk.reported.insert(key) {
             return;
         }
         let display = call.static_callee(&file.source).unwrap_or(name);
@@ -734,7 +898,7 @@ impl<'f, 'a> Reach<'f, 'a> {
             location: location(file.path.shared(), call.callee),
             analysis_context: walk.member.context.clone(),
             fixes: vec![],
-            uncertain: false,
+            uncertain: tracking == Tracking::Possible,
         });
     }
 
@@ -752,6 +916,25 @@ impl<'f, 'a> Reach<'f, 'a> {
             return;
         }
         let ctx = self.ctx;
+        // `untrack(() => load())` returns what its callback returns: the
+        // promise is the same one, but the helper's own reads before its first
+        // await are not dependencies of the computation (tracking is off for
+        // them) and the read after it warns all the same (measured on rc.13,
+        // `after-await-untracked-helper`).
+        if self.primitive(file, call) == Some(Primitive::Untrack)
+            && let [argument] = call.arguments.as_slice()
+            && !argument.spread
+            && let Some(callback) = callback_argument_literal(file, argument.span)
+            && !callback.r#async
+            && !callback.generator
+        {
+            let previous = std::mem::replace(&mut walk.untracked, true);
+            for (inner, _) in chain_calls(file, callback) {
+                self.expand(draft, walk, queue, file, inner, depth + 1);
+            }
+            walk.untracked = previous;
+            return;
+        }
         if let Some((helper_file, helper)) = async_helper(ctx, file, call) {
             self.enqueue(walk, queue, helper_file, helper);
             return;
@@ -785,10 +968,15 @@ impl<'f, 'a> Reach<'f, 'a> {
                 // returns, and no frame of the computation is below it.
                 let on_flight =
                     walk.carried == Carried::Held || self.pending_promise(file, receiver, 0);
-                // A fulfillment handler runs only if the receiver fulfills:
-                // proven for it, or the handler is a proof obligation.
-                let fulfills = name != "Promise.then"
-                    || self.settlement(file, receiver, 0) == Settlement::Fulfills;
+                // A fulfillment handler runs only if the receiver fulfills and
+                // `finally` only if it settles: proven for it, or the handler
+                // is a proof obligation.
+                let outcome = self.settlement(file, receiver, 0);
+                let fulfills = match name {
+                    "Promise.then" => outcome == Settlement::Fulfills,
+                    "Promise.finally" => outcome != Settlement::Unknown,
+                    _ => true,
+                };
                 for (index, argument) in call.arguments.iter().take(handlers).enumerate() {
                     if argument.spread {
                         continue;
@@ -921,7 +1109,9 @@ impl<'f, 'a> Reach<'f, 'a> {
         walk.queued.insert((file.path.to_string(), function.span));
         let fact = Rc::new(fact);
         let mut windows = walk.member.windows.clone();
-        windows.push(Rc::clone(&fact));
+        if !walk.untracked {
+            windows.push(Rc::clone(&fact));
+        }
         // An `async` function returned without `await` is adopted by its
         // caller one job after the call returns. Its own continuation, queued
         // by an await on a settled value, runs before that: only a first
@@ -1008,7 +1198,14 @@ impl<'f, 'a> Reach<'f, 'a> {
             (false, Some("PromiseConstructor.allSettled"))
                 if is_global_promise_static(file, callee) =>
             {
-                elements(call).map_or(Settlement::Unknown, |_| Settlement::Fulfills)
+                // It fulfills once every element settles, either way: an
+                // element that may never settle holds it open.
+                match elements(call) {
+                    Some(all) if all.iter().all(|item| *item != Settlement::Unknown) => {
+                        Settlement::Fulfills
+                    }
+                    _ => Settlement::Unknown,
+                }
             }
             (false, Some("PromiseConstructor.all" | "PromiseConstructor.race"))
                 if is_global_promise_static(file, callee) =>
@@ -1028,7 +1225,10 @@ impl<'f, 'a> Reach<'f, 'a> {
                     _ => Settlement::Unknown,
                 }
             }
-            (false, Some(handler @ ("Promise.then" | "Promise.catch" | "Promise.finally"))) => {
+            (
+                false,
+                Some(handler_name @ ("Promise.then" | "Promise.catch" | "Promise.finally")),
+            ) => {
                 let Some(receiver) = file
                     .ast
                     .member_at(callee)
@@ -1037,25 +1237,72 @@ impl<'f, 'a> Reach<'f, 'a> {
                 else {
                     return Settlement::Unknown;
                 };
-                let handled = |index: usize| {
-                    call.arguments.get(index).is_some_and(|argument| {
-                        !argument.spread && callback_argument_literal(file, argument.span).is_some()
-                    })
+                let handler = |index: usize| match call.arguments.get(index) {
+                    None => Handler::PassThrough,
+                    Some(argument) if argument.spread => Handler::Unproven,
+                    Some(argument)
+                        if matches!(
+                            argument.value,
+                            ArgumentValueKind::Undefined | ArgumentValueKind::Null
+                        ) =>
+                    {
+                        Handler::PassThrough
+                    }
+                    Some(argument) => callback_argument_literal(file, argument.span)
+                        .filter(|callback| self.handler_fulfills(file, callback, depth))
+                        .map_or(Handler::Unproven, |_| Handler::Fulfilling),
                 };
-                match (handler, receiver) {
+                // What a handler turns an outcome into: the result of its
+                // call decides, so a handler that returns a rejected or
+                // never-settling promise, or throws, leaves the downstream
+                // outcome unproven.
+                let recovered = |index: usize, otherwise: Settlement| match handler(index) {
+                    Handler::PassThrough => otherwise,
+                    Handler::Fulfilling => Settlement::Fulfills,
+                    Handler::Unproven => Settlement::Unknown,
+                };
+                match (handler_name, receiver) {
                     (_, Settlement::Unknown) => Settlement::Unknown,
-                    ("Promise.finally", outcome) => outcome,
-                    ("Promise.then", Settlement::Fulfills)
-                    | ("Promise.catch", Settlement::Fulfills) => Settlement::Fulfills,
-                    ("Promise.then", Settlement::Rejects) if handled(1) => Settlement::Fulfills,
-                    ("Promise.catch", Settlement::Rejects) if handled(0) => Settlement::Fulfills,
-                    (_, Settlement::Rejects) => Settlement::Rejects,
+                    ("Promise.finally", outcome) => match handler(0) {
+                        Handler::Unproven => Settlement::Unknown,
+                        _ => outcome,
+                    },
+                    ("Promise.catch", Settlement::Fulfills) => Settlement::Fulfills,
+                    ("Promise.catch", outcome) => recovered(0, outcome),
+                    ("Promise.then", Settlement::Fulfills) => recovered(0, Settlement::Fulfills),
+                    ("Promise.then", outcome) => recovered(1, outcome),
                     _ => Settlement::Unknown,
                 }
             }
             (false, None) => self.returns_settlement(file, call, depth),
             _ => Settlement::Unknown,
         }
+    }
+
+    /// Whether calling the handler is proven to complete with a value that is
+    /// not a thenable: no `throw` in it, no `async` or generator, and every
+    /// returned value a plain literal or a promise proven to fulfill. Calls the
+    /// handler makes are assumed to return (the feasible-path premise); what
+    /// it returns is not.
+    fn handler_fulfills(&self, file: &FileFacts, callback: &FunctionFact, depth: usize) -> bool {
+        if callback.r#async || callback.generator || depth > MAX_DEPTH {
+            return false;
+        }
+        if file
+            .source_text(callback.body)
+            .is_none_or(|body| mentions_word(body, "throw"))
+        {
+            return false;
+        }
+        file.ast
+            .own_returns(callback)
+            .chain(callback.expression_return.iter())
+            .all(|returned| {
+                returned.argument.is_none_or(|argument| {
+                    plain_value(file, argument)
+                        || self.settlement(file, argument, depth + 1) == Settlement::Fulfills
+                })
+            })
     }
 
     /// A call to a synchronous project function whose every return settles
@@ -1138,7 +1385,20 @@ impl<'f, 'a> Reach<'f, 'a> {
                 .and_then(|name| file.source_text(name.span))
         };
         match (parameter(0), parameter(1)) {
-            (Some(resolve), _) if resolve == callback => Settlement::Fulfills,
+            // `setTimeout(done, ms, value)` resolves with `value`: only a
+            // value that is not a thenable fulfills (a promise there is
+            // adopted, with its outcome).
+            (Some(resolve), _) if resolve == callback => {
+                if timer
+                    .arguments
+                    .get(2)
+                    .is_none_or(|value| !value.spread && plain_value(file, value.span))
+                {
+                    Settlement::Fulfills
+                } else {
+                    Settlement::Unknown
+                }
+            }
             (_, Some(reject)) if reject == callback => Settlement::Rejects,
             _ => Settlement::Unknown,
         }

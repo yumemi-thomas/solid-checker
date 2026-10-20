@@ -19,6 +19,7 @@ use solid_facts::core::Span;
 use typefacts::Location;
 
 mod after_await;
+mod pre_await;
 
 /// The static-prepass stage: every prepass rule, in their pipeline order.
 pub(crate) fn static_prepass(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
@@ -834,7 +835,7 @@ fn member_reads_after_await(
         u32,
     ),
     analysis_context: &str,
-    tracked_store_paths: &[(SymbolId, String)],
+    store_tracking: &dyn Fn(&SymbolId, Option<&str>) -> pre_await::Tracking,
 ) {
     let (file, ast_function, boundary) = site;
     for member in &file.ast.members {
@@ -871,13 +872,13 @@ fn member_reads_after_await(
                 continue;
             };
             // A key read on every run before the first suspension is a
-            // dependency already.
-            if store_path_text(file, member.span)
-                .is_some_and(|path| store_path_tracked(tracked_store_paths, symbol, &path))
-            {
-                continue;
+            // dependency already; a key another path may alias is not proven
+            // either way.
+            match store_tracking(symbol, store_path_text(file, member.span).as_deref()) {
+                pre_await::Tracking::Tracked => continue,
+                pre_await::Tracking::Possible => (name, true),
+                pre_await::Tracking::Untracked => (name, false),
             }
-            (name, false)
         } else if let Some((name, declaration)) = ctx.prop_sources.get(symbol) {
             let property = file.source_text(member.property).unwrap_or_default();
             match ctx.props_reactivity.prop_use(declaration, property) {
