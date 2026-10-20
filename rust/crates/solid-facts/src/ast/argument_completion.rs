@@ -40,7 +40,8 @@ pub struct ParameterValue {
     /// The value is `undefined` (as opposed to `null`), when nullish.
     pub undefined: Option<bool>,
     /// The exact `length` of the value, when it is a function whose arity the
-    /// caller proves. Only meaningful with `type_of == Some("function")`.
+    /// caller proves, including that nothing redefines it (`length` is
+    /// configurable). Only meaningful with `type_of == Some("function")`.
     pub length: Option<u32>,
 }
 
@@ -70,8 +71,8 @@ pub enum SiteStanding {
     Unreachable,
 }
 
-/// The standing of each of `sites` (call, `new` or member expressions written
-/// directly in the function at `function`) on a call whose arguments prove
+/// The standing of each of `sites` (call, `new`, member or identifier
+/// reference expressions written directly in the function at `function`) on a call whose arguments prove
 /// `parameters`. `exits` are calls the caller knows may leave by throwing
 /// (`never` or `asserts` signatures); one before a site leaves it possible.
 /// `None` when the source does not parse, the function is not found or is a
@@ -198,6 +199,7 @@ pub fn argument_site_standings(
                                 | AstKind::NewExpression(_)
                                 | AstKind::StaticMemberExpression(_)
                                 | AstKind::ComputedMemberExpression(_)
+                                | AstKind::IdentifierReference(_)
                         )
                 }) else {
                     return SiteStanding::Possible;
@@ -226,19 +228,24 @@ pub fn argument_site_standings(
     )
 }
 
-/// The references to parameter `index` of the function at `function` that
-/// cannot invoke its value: the operand of `typeof`, and a read of its
-/// `length` that only feeds a test or a comparison. Every other use of a
-/// parameter (an alias, an argument, a member call) may run it, which is why
-/// ruling out its direct calls proves nothing about those. The caller
-/// accounts for the rest. `None` when the source does not parse or the function or its parameter is not found.
-#[must_use]
-pub fn inert_parameter_references(
+/// How a reference to a parameter uses its value.
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum ParameterUse {
+    /// `typeof p`, or a `p.length` that only feeds a test: runs and changes
+    /// nothing.
+    Inert,
+    /// `p(…)`: calls it.
+    Callee,
+    /// Anything else: an alias, an argument, a member, a return.
+    Value,
+}
+
+fn parameter_uses(
     path: &Path,
     source: &str,
     function: Span,
     index: usize,
-) -> Option<Vec<Span>> {
+) -> Option<Vec<(Span, ParameterUse)>> {
     if source.len() > 4 * 1024 * 1024 {
         return None;
     }
@@ -270,15 +277,20 @@ pub fn inert_parameter_references(
         return None;
     };
     let symbol = identifier.symbol_id.get()?;
-    let mut inert = Vec::new();
+    let mut uses = Vec::new();
     for reference in scoping.get_resolved_references(symbol) {
         let node = reference.node_id();
         let reference_span = nodes.kind(node).span();
         let parent = nodes.parent_id(node);
-        let is_inert = match nodes.kind(parent) {
-            AstKind::UnaryExpression(unary) => unary.operator == UnaryOperator::Typeof,
-            AstKind::StaticMemberExpression(member) => {
-                !member.optional
+        let kind = match nodes.kind(parent) {
+            AstKind::UnaryExpression(unary) if unary.operator == UnaryOperator::Typeof => {
+                ParameterUse::Inert
+            }
+            AstKind::CallExpression(call) if call.callee.span() == reference_span => {
+                ParameterUse::Callee
+            }
+            AstKind::StaticMemberExpression(member)
+                if !member.optional
                     && member.property.name == "length"
                     && member.object.span() == reference_span
                     && match nodes.kind(nodes.parent_id(parent)) {
@@ -292,15 +304,60 @@ pub fn inert_parameter_references(
                             conditional.test.span() == member.span
                         }
                         _ => false,
-                    }
+                    } =>
+            {
+                ParameterUse::Inert
             }
-            _ => false,
+            _ => ParameterUse::Value,
         };
-        if is_inert {
-            inert.push(Span::new(reference_span.start, reference_span.end));
-        }
+        uses.push((Span::new(reference_span.start, reference_span.end), kind));
     }
-    Some(inert)
+    Some(uses)
+}
+
+/// The references to parameter `index` of the function at `function` that
+/// cannot invoke its value: the operand of `typeof`, and a read of its
+/// `length` that only feeds a test or a comparison. Every other use of a
+/// parameter (an alias, an argument, a member call) may run it, which is why
+/// ruling out its direct calls proves nothing about those. The caller
+/// accounts for the rest. `None` when the source does not parse or the
+/// function or its parameter is not found.
+#[must_use]
+pub fn inert_parameter_references(
+    path: &Path,
+    source: &str,
+    function: Span,
+    index: usize,
+) -> Option<Vec<Span>> {
+    Some(
+        parameter_uses(path, source, function, index)?
+            .into_iter()
+            .filter(|(_, kind)| *kind == ParameterUse::Inert)
+            .map(|(span, _)| span)
+            .collect(),
+    )
+}
+
+/// The references to parameter `index` that use its value as a value: not a
+/// call of it, not a `typeof` or `length` test. A caller that must know the
+/// value is neither handed on nor altered (`Object.defineProperty(p, …)`,
+/// an alias, a return) asks whether each of these can run
+/// ([`argument_site_standings`] decides a reference site too). `None` when
+/// the source does not parse or the function or its parameter is not found.
+#[must_use]
+pub fn parameter_value_uses(
+    path: &Path,
+    source: &str,
+    function: Span,
+    index: usize,
+) -> Option<Vec<Span>> {
+    Some(
+        parameter_uses(path, source, function, index)?
+            .into_iter()
+            .filter(|(_, kind)| *kind == ParameterUse::Value)
+            .map(|(span, _)| span)
+            .collect(),
+    )
 }
 
 #[derive(Default)]
@@ -431,7 +488,10 @@ impl Scope<'_, '_> {
 
     /// The exact `length` of `p.length` where `p` is a parameter this call
     /// proves a function of known arity. A function's `length` is a
-    /// non-writable own data property, so a parameter nothing writes keeps it.
+    /// non-writable but *configurable* own property: `Object.defineProperty`
+    /// can change it. The walk assumes nothing did, so whoever supplies
+    /// [`ParameterValue::length`] must have shown that no reference to the
+    /// value can (the caller's census, ADR 0338).
     fn length(&self, expression: &Expression<'_>) -> Option<u32> {
         let Expression::StaticMemberExpression(member) = peel(expression) else {
             return None;

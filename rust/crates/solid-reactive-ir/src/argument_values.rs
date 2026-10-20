@@ -205,7 +205,13 @@ fn mapped_parameter_values(
             continue;
         }
         let value = match call.arguments.get(index) {
-            Some(argument) => argument_value(file, index, argument, lookup),
+            Some(argument) => argument_value(
+                file,
+                index,
+                argument,
+                lookup,
+                (mapping.target_path, mapping.target_span),
+            ),
             None => Some(ParameterValue::omitted(index)),
         };
         // A default replaces an `undefined` argument, explicit or omitted.
@@ -223,6 +229,7 @@ fn argument_value(
     index: usize,
     argument: &solid_facts::ast::ArgumentFact,
     lookup: &SemanticLookup<'_>,
+    target: (&str, Span),
 ) -> Option<ParameterValue> {
     let span = file.ast.peel_ts_sugar_span(argument.span);
     let text = file.source_text(span)?.trim();
@@ -258,7 +265,7 @@ fn argument_value(
     if let Some(truthy) = string_literal_truthiness(text) {
         return Some(known("string", truthy));
     }
-    if let Some(length) = solid_getter_length(file, span, lookup) {
+    if let Some(length) = solid_getter_length(file, span, lookup, target) {
         return Some(ParameterValue {
             length: Some(length),
             ..known("function", true)
@@ -282,15 +289,24 @@ fn argument_value(
 /// ADR 0338: the exact `length` of the getter `reference` names, when it is
 /// the accessor slot of a Solid primitive's result that the selected dialect
 /// has audited ([`Dialect::accessor_getter_length`]) and nothing in the file
-/// rewrites the binding. The primitive is the exact one the call resolves to
-/// (an import of the dialect's package, never a name), the pattern's slot is
-/// the accessor's (`const [value] = createSignal(0)`, or the whole of a
-/// `createMemo`), and a store, a setter, a tuple left unpacked, a parameter
+/// rewrites the binding. The primitive is the exact one the initializer's own
+/// callee resolves to (a direct or namespace reference to an import of the
+/// dialect's package, never a name and never a member call on a call's
+/// result: `createSignal(1).slice(1)` is the array's method), the pattern's
+/// slot is the accessor's (`const [value] = createSignal(0)`, or the whole of
+/// a `createMemo`), and a store, a setter, a tuple left unpacked, a parameter
 /// or an import prove nothing.
+///
+/// A function's `length` is configurable (`Object.defineProperty(getter,
+/// "length", …)`), so the fact also needs a reference census
+/// ([`getter_is_only_called_or_decided`]): the getter may be called, and
+/// handed to the very function `target` this call decides, whose own uses of
+/// the parameter cannot run for these arguments; any other use refuses.
 fn solid_getter_length(
     file: &FileFacts,
     reference: Span,
     lookup: &SemanticLookup<'_>,
+    target: (&str, Span),
 ) -> Option<u32> {
     use solid_dialect::ResultSlot;
 
@@ -301,6 +317,19 @@ fn solid_getter_length(
     })?;
     let call = file.ast.call_at(binding.call_initializer?)?;
     if call.construct || crate::indexes::binding_written(file, declaration) {
+        return None;
+    }
+    // The callee is the primitive itself: an identifier, or a member of a
+    // namespace import. A member of anything else (a call's result among
+    // them) is some other value's method.
+    let callee = file.ast.peel_ts_sugar_span(call.callee);
+    let direct = file.ast.reference_declaration(callee).is_some()
+        || file.ast.member_at(callee).is_some_and(|member| {
+            file.ast
+                .reference_declaration(file.ast.peel_ts_sugar_span(member.object))
+                .is_some()
+        });
+    if !direct {
         return None;
     }
     let entities = lookup.entities();
@@ -325,7 +354,108 @@ fn solid_getter_length(
         BindingShape::Identifier => ResultSlot::Whole,
         _ => return None,
     };
-    lookup.dialect.accessor_getter_length(primitive, slot)
+    let length = lookup.dialect.accessor_getter_length(primitive, slot)?;
+    getter_is_only_called_or_decided(file, declaration, symbol, length, lookup, target)
+        .then_some(length)
+}
+
+/// Whether every reference to the getter declared at `declaration` is a call
+/// of it, or an argument of a call of `target` (exactly resolved, no spread)
+/// whose parameter's other uses cannot run for a getter of `length`. No
+/// reference may sit in another file, and none may be a type-facts reference
+/// this file's own table lacks.
+fn getter_is_only_called_or_decided(
+    file: &FileFacts,
+    declaration: Span,
+    symbol: &crate::identity::SymbolId,
+    length: u32,
+    lookup: &SemanticLookup<'_>,
+    target: (&str, Span),
+) -> bool {
+    let mut references = file
+        .ast
+        .reference_declarations
+        .iter()
+        .filter(|(reference, owner)| *owner == declaration && *reference != declaration)
+        .map(|(reference, _)| *reference)
+        .collect::<crate::HashSet<_>>();
+    for other in lookup.symbol_references(symbol.as_str()) {
+        if other.path.as_ref() != file.path.as_str() {
+            return false;
+        }
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(other.start_byte),
+            u32::try_from(other.end_byte),
+        ) else {
+            return false;
+        };
+        let other = Span::new(start, end);
+        if other != declaration {
+            if file.ast.reference_declaration(other) != Some(declaration) {
+                return false;
+            }
+            references.insert(other);
+        }
+    }
+    references.into_iter().all(|reference| {
+        if file
+            .ast
+            .calls
+            .iter()
+            .any(|call| file.ast.peel_ts_sugar_span(call.callee) == reference)
+        {
+            return true;
+        }
+        let Some((call, index)) = file.ast.calls.iter().find_map(|call| {
+            call.arguments
+                .iter()
+                .position(|argument| file.ast.peel_ts_sugar_span(argument.span) == reference)
+                .map(|index| (call, index))
+        }) else {
+            return false;
+        };
+        if call.construct || call.arguments.iter().any(|argument| argument.spread) {
+            return false;
+        }
+        let Some((callee_file, callee, true)) =
+            crate::execution_role::project_callee_at_parameter(file, call, index, lookup)
+        else {
+            return false;
+        };
+        if (callee_file.path.as_str(), callee.span) != target {
+            return false;
+        }
+        let path = std::path::Path::new(callee_file.path.as_str());
+        let Some(uses) =
+            solid_facts::ast::parameter_value_uses(path, &callee_file.source, callee.span, index)
+        else {
+            return false;
+        };
+        if uses.is_empty() {
+            return true;
+        }
+        let value = ParameterValue {
+            index,
+            type_of: Some("function"),
+            truthy: Some(true),
+            nullish: Some(false),
+            undefined: Some(false),
+            length: Some(length),
+        };
+        solid_facts::ast::argument_site_standings(
+            path,
+            &callee_file.source,
+            callee.span,
+            &[value],
+            &lookup.never_returning_calls_within(callee_file, callee),
+            &uses,
+        )
+        .is_some_and(|standings| {
+            standings
+                .iter()
+                .all(|standing| *standing == solid_facts::ast::SiteStanding::Unreachable)
+        })
+    })
 }
 
 /// The truthiness of a decimal, hex, octal or binary numeric literal.

@@ -1975,6 +1975,17 @@ fn call_primitive_name(
     // that method's, not the primitive's. A namespace member
     // (`Solid.createEffect`), whose object is the namespace, keeps its answer.
     let callee = file.ast.peel_ts_sugar_span(call.callee);
+    // A member call on the *result* of a call (`createSignal(1).slice(1)`,
+    // `createMemo(fn).toString()`) is that value's method, never the
+    // primitive: the whole member span carries the inner callee's symbol.
+    if let Some(member) = file.ast.member_at(callee)
+        && file
+            .ast
+            .call_at(file.ast.peel_ts_sugar_span(member.object))
+            .is_some()
+    {
+        return None;
+    }
     if let Some(member) = file.ast.member_at(callee)
         && referenced_primitive(
             file,

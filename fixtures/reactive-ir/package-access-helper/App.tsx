@@ -87,3 +87,52 @@ export function UncertifiableAlias() {
   const initial = access(alias);
   return <span>{initial}</span>;
 }
+
+// Negative: a member call on a primitive's result is that value's own method,
+// never the primitive. `createMemo(...).toString()` is a string, and
+// `createSignal(1).slice(1)` and `.reverse()` are arrays whose first item is
+// the setter; none is a getter, so nothing is read and nothing is reported.
+export function UncertifiableMemoToString() {
+  const text = createMemo(() => 2).toString();
+  const initial = access(text);
+  return <span>{String(initial)}</span>;
+}
+
+export function UncertifiableSlice() {
+  const [value] = createSignal(1).slice(1);
+  const initial = access(value);
+  return <span>{String(initial)}</span>;
+}
+
+export function UncertifiableReverse() {
+  const [value] = createSignal(1).reverse();
+  const initial = access(value);
+  return <span>{String(initial)}</span>;
+}
+
+// Uncertifiable: `length` is configurable, so a getter handed to
+// `Object.defineProperty` may no longer have length 0.
+export function UncertifiableRedefinedLength() {
+  const [value] = createSignal(1);
+  Object.defineProperty(value, "length", { value: 1 });
+  const initial = access(value);
+  return <span>{initial}</span>;
+}
+
+// Uncertifiable: the getter is handed to another function before the call.
+export function UncertifiablePassedElsewhere() {
+  const [value] = createSignal(1);
+  const keep: Array<unknown> = [];
+  keep.push(value);
+  const initial = access(value);
+  return <span>{initial}</span>;
+}
+
+// Positive: calling the getter, and handing it to the same helper twice, do
+// not refuse the fact.
+export function BadCalledAndRepeated() {
+  const [value] = createSignal(1);
+  const first = access(value);
+  const second = access(value);
+  return <span>{first + second + value()}</span>;
+}

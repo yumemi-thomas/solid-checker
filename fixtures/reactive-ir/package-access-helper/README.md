@@ -10,9 +10,12 @@ Claim: a helper that branches on its parameter's type or arity is decided for a 
 - `GoodStore` (negative): a store is an object, not a getter.
 - `GoodWithParameters` (negative): a function with a parameter has `length` 1; `access` returns it without calling it.
 - `GoodLocalCallsWithParameters` (negative): a project `access` that calls only a function of positive `length` (`local-access.ts`) never calls a getter, so nothing is read.
+- `UncertifiableMemoToString`, `UncertifiableSlice`, `UncertifiableReverse` (negative): a member call on a primitive's result (`createMemo(...).toString()`, `createSignal(1).slice(1)`, `.reverse()`) is that value's own method: a string, or an array whose first item is the setter. Not a getter, so `access` reads nothing; the primitive is no longer resolved from such a call at all (`call_primitive_name`).
+- `UncertifiableRedefinedLength`, `UncertifiablePassedElsewhere` (uncertifiable): a function's `length` is configurable, so a getter handed to `Object.defineProperty` or to anything but the helper being decided has no proven length; the fact needs every reference to be a call of the getter or an argument of the decided helper whose other uses of that parameter cannot run (the package's `: v` return is unreachable for a getter of length 0).
+- `BadCalledAndRepeated` (positive): calling the getter and handing it to the same helper twice keep the fact.
 - `UncertifiableAlias` (uncertifiable, internal): `const alias = value` is not the binding the primitive created, so the argument proves nothing about its arity and the read stays one the call is not proven to perform.
 
-Only an exact, unwritten binding of the accessor slot of `createSignal`/`createOptimistic` (`const [value] = ...`) or of `createMemo` proves the value; a function literal, an alias, a props value, a store, a setter or an import proves nothing, so the branch stays undecided.
+Only an exact, unwritten binding whose references are all calls or arguments of the decided helper of the accessor slot of `createSignal`/`createOptimistic` (`const [value] = ...`) or of `createMemo` proves the value; a function literal, an alias, a props value, a store, a setter or an import proves nothing, so the branch stays undecided.
 
 ## Package bytes
 

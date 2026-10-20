@@ -74,6 +74,7 @@ mod visitor;
 
 pub use argument_completion::{
     ParameterValue, SiteStanding, argument_site_standings, inert_parameter_references,
+    parameter_value_uses,
 };
 pub use completion_call_cover::{completion_call_cover, completion_return_cover};
 pub use component_value_flow::{ComponentPropSite, ComponentValueFlow, component_value_flows};
