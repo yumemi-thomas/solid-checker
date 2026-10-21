@@ -1,0 +1,3 @@
+{
+  "note": "SC2004 resolve-in-tracked-scope: a memo re-run, triggered by a timer, calls resolve (RESOLVE_IN_REACTIVE_SCOPE, thrown); control: resolve from an event handler, where no observer is active"
+}

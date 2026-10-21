@@ -1,0 +1,3 @@
+{
+  "note": "SC7001 missing-effect-function: createEffect called from a timer with an absent apply function, hidden by a cast so rc.13 tsc accepts it (MISSING_EFFECT_FN, emitted and thrown); control: createEffect with an apply function"
+}
