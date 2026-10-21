@@ -8,4 +8,4 @@
 - a default parameter initializer runs in its function's call: in the apply callback a violation, in a root's callback owned;
 - a callback a call in the expression returns (`ref={(() => (el) => …)()}`), a factory's result anywhere but as the ref value or a ref-array element, a function nested in the applied callback that nothing visibly invokes, and a generator (calling one runs none of its body) are undecided: uncertifiable.
 
-Positives: a memo directly in the apply callback, each callback of a ref array, the timer case. The `createRoot` call itself stays a violation, the rule's stated premise. Owner API signatures copy `@solidjs/signals@2.0.0-rc.13` `dist/types`.
+Positives: a memo directly in apply, each ref-array callback, the timer case. Explicit roots are uncertifiable (ADR 0355): disposal or an empty body may prevent any leak. RootLifetime covers namespace, factory and shadowed variants. Signatures copy signals rc.13 `dist/types`.

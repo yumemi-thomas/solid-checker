@@ -128,10 +128,15 @@ impl CatalogWording for Catalog {
             FindingSeed::StaticViolation(violation) => static_violation_wording(violation),
             FindingSeed::DirectiveCreation(creation) => FindingWording::new(
                 Rule::PrimitiveInDirectiveApplication.metadata(),
-                format!(
+                if creation.uncertain {
+                    format!(
+                        "reactive primitive {} is created in a possible directive application, but its execution owner or disposal lifetime is not proven; no computation leak is certified",
+                        creation.primitive
+                    )
+                } else { format!(
                     "reactive primitive {} registers a computation in a directive application callback; the apply phase runs once per element with no owner, so the computation is never disposed and leaks for every element the directive is applied to (the dev runtime warns NO_OWNER for it)",
                     creation.primitive
-                ),
+                ) },
                 "Use the two-phase directive factory: create computations and subscriptions in the setup phase (the factory body, which runs in an owned scope) and keep the returned ref callback to DOM work only. Value-form state (createSignal(0), createStore({...})) needs no owner and is fine here.",
             )
             .with_evidence(vec![EvidenceStep {
