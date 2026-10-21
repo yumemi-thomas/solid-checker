@@ -204,7 +204,9 @@ enum Settlement {
 }
 
 /// A literal that is not a thenable: a number, a string without
-/// substitutions, `true`, `false`, `null` or `undefined`.
+/// substitutions, `true`, `false`, `null`, or the global `undefined`, `NaN` or
+/// `Infinity`. The three globals are resolved, not read by spelling: a
+/// binding of that name (`const undefined = Promise.reject()`) is a value.
 fn plain_value(file: &FileFacts, span: Span) -> bool {
     let Some(text) = file
         .source_text(file.ast.peel_ts_sugar_span(span))
@@ -212,7 +214,19 @@ fn plain_value(file: &FileFacts, span: Span) -> bool {
     else {
         return false;
     };
-    matches!(text, "true" | "false" | "null" | "undefined")
+    matches!(text, "true" | "false" | "null")
+        || (matches!(text, "undefined" | "NaN" | "Infinity")
+            && file
+                .ast
+                .reference_declaration(file.ast.peel_ts_sugar_span(span))
+                .is_none()
+            && file
+                .ast
+                .identifiers
+                .binary_search_by_key(&file.ast.peel_ts_sugar_span(span), |identifier| {
+                    identifier.span
+                })
+                .is_ok())
         || (!text.is_empty() && text.chars().all(|c| c.is_ascii_digit() || c == '.'))
         || (text.len() >= 2
             && matches!(text.as_bytes()[0], b'"' | b'\'')
@@ -245,28 +259,61 @@ fn owner_may_be_disposed(
     let Some((file, ast_function)) = ast_function(files, function) else {
         return false;
     };
+    // The outermost function around the computation: a root argument that
+    // cannot be resolved might be it, or a function that contains it.
+    let outermost = file
+        .ast
+        .functions
+        .iter()
+        .filter(|candidate| candidate.span.contains(ast_function.span))
+        .max_by_key(|candidate| candidate.span.end - candidate.span.start);
     file.ast.calls.iter().any(|call| {
-        if call.construct || !call.span.contains(ast_function.span) {
+        if call.construct
+            || crate::call_primitive_name_cached(
+                ctx.semantic_lookup,
+                file,
+                call,
+                ctx.entities,
+                ctx.symbol_names,
+                ctx.dialect,
+            )
+            .and_then(|name| name.primitive())
+                != Some(Primitive::CreateRoot)
+        {
             return false;
         }
-        let Some(root) = call
-            .arguments
-            .first()
-            .and_then(|argument| callback_argument_literal(file, argument.span))
-            .filter(|root| root.span.contains(ast_function.span) && root.span != ast_function.span)
-        else {
+        let Some(argument) = call.arguments.first() else {
             return false;
         };
-        if crate::call_primitive_name_cached(
-            ctx.semantic_lookup,
-            file,
-            call,
-            ctx.entities,
-            ctx.symbol_names,
-            ctx.dialect,
-        )
-        .and_then(|name| name.primitive())
-            != Some(Primitive::CreateRoot)
+        // The root's function: a literal written in the argument, or the
+        // project function the argument exactly resolves to.
+        let root = if argument.spread {
+            None
+        } else if let Some(literal) = callback_argument_literal(file, argument.span) {
+            Some((file, literal))
+        } else {
+            ctx.semantic_lookup
+                .function_called_at(
+                    file.path.as_str(),
+                    file.ast.peel_ts_sugar_span(argument.span),
+                )
+                .filter(|(helper_file, helper)| {
+                    helper.method_name.is_none()
+                        && ctx
+                            .semantic_lookup
+                            .function_value_is_current(helper_file, helper)
+                })
+        };
+        let Some((root_file, root)) = root else {
+            // Not resolved: the callback may be a function around the
+            // computation, and then may be disposed. Only a call written in
+            // the computation's own component can be one.
+            return outermost.is_some_and(|outermost| outermost.span.contains(call.span))
+                || call.span.contains(ast_function.span);
+        };
+        if root_file.path != file.path
+            || !root.span.contains(ast_function.span)
+            || root.span == ast_function.span
         {
             return false;
         }
@@ -275,11 +322,12 @@ fn owner_may_be_disposed(
             .first()
             .filter(|binding| binding.shape == solid_facts::ast::BindingShape::Identifier)
             .and_then(|binding| binding.names.first())
-            .and_then(|name| file.source_text(name.span))
+            .and_then(|name| root_file.source_text(name.span))
         else {
             return false;
         };
-        file.source_text(root.body)
+        root_file
+            .source_text(root.body)
             .is_some_and(|body| mentions_word(body, dispose))
     })
 }
@@ -582,11 +630,11 @@ impl<'f, 'a> Reach<'f, 'a> {
                 }
             }
         }
-        if let Some((file, ast_function)) = ast_function(&self.files, function) {
-            self.after_implicit_suspension(draft, &mut walk, file, ast_function);
-        }
         for (file, call) in after_await_calls {
             self.visit_call(draft, &mut walk, file, call, 0);
+        }
+        if let Some((file, ast_function)) = ast_function(&self.files, function) {
+            self.after_implicit_suspension(draft, &mut walk, mark, file, ast_function);
         }
         if member.conditional {
             mark_uncertain(draft, mark);
@@ -616,6 +664,7 @@ impl<'f, 'a> Reach<'f, 'a> {
         &self,
         draft: &mut ProgramDraft,
         walk: &mut Walk<'_>,
+        base: usize,
         file: &'f FileFacts,
         function: &'f FunctionFact,
     ) {
@@ -633,9 +682,38 @@ impl<'f, 'a> Reach<'f, 'a> {
             return;
         };
         let mark = draft.static_defects.len();
+        // The suspension's span ends with the iterable, so the loop's body is
+        // past it as well as what follows the loop. Whether the body runs, and
+        // where an `await` the facts do model sits relative to it, is not
+        // proven: every read reached is an obligation.
+        if self.ctx.dialect.reports_member_reads_after_await() {
+            let before = draft.static_defects.len();
+            member_reads_after_await(
+                self.ctx,
+                draft,
+                (file, function, boundary),
+                &walk.member.context,
+                &|symbol, text| self.pre.store_key(&walk.member.windows, symbol, text),
+            );
+            // A member read the `await` proof already reported stays as it
+            // was reported there (a violation proven by the await wins).
+            let mut index = before;
+            while index < draft.static_defects.len() {
+                let duplicate = draft.static_defects[..before]
+                    .iter()
+                    .skip(base)
+                    .any(|earlier| earlier.location == draft.static_defects[index].location);
+                if duplicate {
+                    draft.static_defects.remove(index);
+                } else {
+                    index += 1;
+                }
+            }
+        }
         for call in file.ast.calls_within(function.body) {
             if call.span.start >= boundary && written_directly_in(&file.ast, function, call.span) {
                 self.report_call_read(draft, walk, file, call);
+                self.visit_call(draft, walk, file, call, 0);
             }
         }
         mark_uncertain(draft, mark);
@@ -921,22 +999,72 @@ impl<'f, 'a> Reach<'f, 'a> {
         // await are not dependencies of the computation (tracking is off for
         // them) and the read after it warns all the same (measured on rc.13,
         // `after-await-untracked-helper`).
-        if self.primitive(file, call) == Some(Primitive::Untrack)
-            && let [argument] = call.arguments.as_slice()
-            && !argument.spread
-            && let Some(callback) = callback_argument_literal(file, argument.span)
-            && !callback.r#async
-            && !callback.generator
-        {
+        // `untrack(fn)` and `runWithOwner(owner, fn)` return what `fn`
+        // returns, and run it with tracking off. The function is a literal or
+        // exactly the project function the argument names; anything else is
+        // an obligation, never a silent clean.
+        let primitive = self.primitive(file, call);
+        let wrapped = match (primitive, call.arguments.as_slice()) {
+            (Some(Primitive::Untrack), [argument]) => Some((argument, None)),
+            (Some(Primitive::RunWithOwner), [owner, argument]) if !owner.spread => {
+                Some((argument, Some(owner.value)))
+            }
+            _ => None,
+        };
+        if let Some((argument, owner)) = wrapped {
+            let function = if argument.spread {
+                None
+            } else if let Some(callback) = callback_argument_literal(file, argument.span) {
+                Some((file, callback))
+            } else {
+                ctx.semantic_lookup
+                    .function_called_at(
+                        file.path.as_str(),
+                        file.ast.peel_ts_sugar_span(argument.span),
+                    )
+                    .filter(|(helper_file, helper)| {
+                        helper.method_name.is_none()
+                            && ctx
+                                .semantic_lookup
+                                .function_value_is_current(helper_file, helper)
+                    })
+            };
+            // A detached owner (`null`) is not the computation's; the read
+            // after the await then warns whatever the owner. Any other owner
+            // may be one the runtime stays silent for.
+            let uncertain = !matches!(owner, None | Some(ArgumentValueKind::Null));
             let previous = std::mem::replace(&mut walk.untracked, true);
-            for (inner, _) in chain_calls(file, callback) {
-                self.expand(draft, walk, queue, file, inner, depth + 1);
+            match function {
+                Some((function_file, function)) if function.r#async && !function.generator => {
+                    self.enqueue(walk, queue, function_file, function, uncertain);
+                }
+                Some((function_file, function)) if !function.generator => {
+                    let mark = draft.static_defects.len();
+                    for (inner, _) in chain_calls(function_file, function) {
+                        self.expand(draft, walk, queue, function_file, inner, depth + 1);
+                    }
+                    if uncertain {
+                        mark_uncertain(draft, mark);
+                    }
+                }
+                _ => draft.push_defect(StaticDefect {
+                    kind: StaticDefectKind::ReactiveCallbackUnresolved {
+                        callee: call
+                            .static_callee(&file.source)
+                            .unwrap_or("this callback")
+                            .to_owned(),
+                    },
+                    location: location(file.path.shared(), argument.span),
+                    analysis_context: walk.member.context.clone(),
+                    fixes: vec![],
+                    uncertain: false,
+                }),
             }
             walk.untracked = previous;
             return;
         }
         if let Some((helper_file, helper)) = async_helper(ctx, file, call) {
-            self.enqueue(walk, queue, helper_file, helper);
+            self.enqueue(walk, queue, helper_file, helper, false);
             return;
         }
         let Some(resolved) = ctx.semantic_lookup.resolved_callee_call(file, call.callee) else {
@@ -1059,7 +1187,7 @@ impl<'f, 'a> Reach<'f, 'a> {
         };
         if let Some(callback) = callback_argument_literal(file, argument.span) {
             if callback.r#async && !callback.generator {
-                self.enqueue(walk, queue, file, callback);
+                self.enqueue(walk, queue, file, callback, false);
             }
         } else if let Some((helper_file, helper)) = ctx.semantic_lookup.function_called_at(
             file.path.as_str(),
@@ -1071,7 +1199,7 @@ impl<'f, 'a> Reach<'f, 'a> {
                 .semantic_lookup
                 .function_value_is_current(helper_file, helper)
         {
-            self.enqueue(walk, queue, helper_file, helper);
+            self.enqueue(walk, queue, helper_file, helper, false);
         }
     }
 
@@ -1082,6 +1210,7 @@ impl<'f, 'a> Reach<'f, 'a> {
         queue: &mut Vec<Member>,
         file: &FileFacts,
         function: &FunctionFact,
+        uncertain: bool,
     ) {
         // A function with no `await` carries no producer fact: nothing is
         // dominated by a suspension in it, but its returned promises still
@@ -1117,6 +1246,7 @@ impl<'f, 'a> Reach<'f, 'a> {
         // by an await on a settled value, runs before that: only a first
         // await on a promise proven still pending leaves a reaction in place.
         let conditional = walk.member.conditional
+            || uncertain
             || (walk.carried == Carried::Adopted && !self.awaits_pending(file, function));
         queue.push(Member {
             function: fact,
@@ -1282,8 +1412,8 @@ impl<'f, 'a> Reach<'f, 'a> {
     /// Whether calling the handler is proven to complete with a value that is
     /// not a thenable: no `throw` in it, no `async` or generator, and every
     /// returned value a plain literal or a promise proven to fulfill. Calls the
-    /// handler makes are assumed to return (the feasible-path premise); what
-    /// it returns is not.
+    /// handler makes are assumed to return (the feasible-path premise) unless
+    /// they are proven never to; what it returns is not.
     fn handler_fulfills(&self, file: &FileFacts, callback: &FunctionFact, depth: usize) -> bool {
         if callback.r#async || callback.generator || depth > MAX_DEPTH {
             return false;
@@ -1291,6 +1421,17 @@ impl<'f, 'a> Reach<'f, 'a> {
         if file
             .source_text(callback.body)
             .is_none_or(|body| mentions_word(body, "throw"))
+        {
+            return false;
+        }
+        // A call that never returns (a `never` signature, an assertion
+        // function) throws as a `throw` does. Any other call is assumed to
+        // return, the feasible-path premise.
+        if !self
+            .ctx
+            .semantic_lookup
+            .never_returning_calls_within(file, callback)
+            .is_empty()
         {
             return false;
         }

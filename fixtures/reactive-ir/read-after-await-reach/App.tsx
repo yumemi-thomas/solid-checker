@@ -1409,3 +1409,360 @@ export function ForAwaitReadBeforeControl() {
   });
   return <div>{String(data())}</div>;
 }
+
+// ---- Round 6: what a call before the first await may have tracked. A callee
+// that is not an exactly resolved project function with a visible body (a
+// package, a global, a standard-library call outside the audited inert rows)
+// may invoke a callback registered earlier or read a source a package store
+// holds: the read after the await is uncertifiable, never a violation. Only
+// the audited inert rows (`Math.*`, timers, `Promise` statics) leave it one.
+
+declare function register(callback: () => unknown): void;
+declare function invoke(): void;
+declare function holdInStore(source: object): void;
+declare function readHeld(): void;
+
+export function PackageRegisteredCallback() {
+  const [value] = createSignal(1);
+  const [tick] = createSignal(0);
+  register(() => value());
+  const data = createMemo(async () => {
+    tick();
+    invoke();
+    await pause();
+    return value();
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function PackageStoreHolds() {
+  const [value] = createSignal(1);
+  const [tick] = createSignal(0);
+  holdInStore({ value });
+  const data = createMemo(async () => {
+    tick();
+    readHeld();
+    await pause();
+    return value();
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function GlobalEventDispatch() {
+  const [value] = createSignal(1);
+  const [tick] = createSignal(0);
+  window.addEventListener("review-track", () => value());
+  const data = createMemo(async () => {
+    tick();
+    window.dispatchEvent(new Event("review-track"));
+    await pause();
+    return value();
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function StandardFunctionCall() {
+  const [value] = createSignal(1);
+  const [tick] = createSignal(0);
+  const captured = () => value();
+  const data = createMemo(async () => {
+    tick();
+    captured.call(undefined);
+    await pause();
+    return value();
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function InertStandardCallsControl() {
+  const [value] = createSignal(1);
+  const [tick] = createSignal(0);
+  const data = createMemo(async () => {
+    Math.max(tick(), 1);
+    setTimeout(() => {}, 0);
+    await pause();
+    return value();
+  });
+  return <div>{String(data())}</div>;
+}
+
+// ---- A disposal the analysis follows through a named root callback.
+
+export function DisposedNamedRoot() {
+  const [value] = createSignal(1);
+  function start(dispose: () => void) {
+    const data = createMemo(async () => {
+      await pause();
+      return value();
+    });
+    createMemo(() => data());
+    setTimeout(dispose, 5);
+  }
+  createRoot(start);
+  return <span>disposed</span>;
+}
+
+export function NamedRootWithoutDisposeControl() {
+  const [value] = createSignal(1);
+  function start(dispose: () => void) {
+    const data = createMemo(async () => {
+      await pause();
+      return value();
+    });
+    createMemo(() => data());
+  }
+  createRoot(start);
+  return <span>kept</span>;
+}
+
+declare const unseenRoot: (dispose: () => void) => void;
+
+export function UnresolvedRootCallback() {
+  const [value] = createSignal(1);
+  createRoot(unseenRoot);
+  const data = createMemo(async () => {
+    await pause();
+    return value();
+  });
+  return <div>{String(data())}</div>;
+}
+
+// ---- `undefined`, `NaN` and `Infinity` are the globals, not a spelling: a
+// binding of that name is a value that may be a rejection.
+
+export function ShadowedUndefinedHandler() {
+  const [value] = createSignal(1);
+  const [tick] = createSignal(0);
+  const data = createMemo(async () => {
+    tick();
+    return await Promise.resolve(0)
+      .then(() => {
+        const undefined = Promise.reject("expected");
+        return undefined;
+      })
+      .then(() => value())
+      .catch(() => 0);
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function ShadowedUndefinedResolve() {
+  const [value] = createSignal(1);
+  const [tick] = createSignal(0);
+  const data = createMemo(async () => {
+    tick();
+    const undefined = Promise.reject("expected");
+    return await Promise.resolve(undefined)
+      .then(() => value())
+      .catch(() => 0);
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function GlobalUndefinedResolveControl() {
+  const [value] = createSignal(1);
+  const [tick] = createSignal(0);
+  const data = createMemo(async () => {
+    tick();
+    return await Promise.resolve(undefined).then(() => value());
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function ShadowedOwnerUndefined() {
+  const [value] = createSignal(1);
+  const [tick] = createSignal(0);
+  const data = createMemo(async () => {
+    tick();
+    const undefined = null;
+    await pause();
+    return runWithOwner(undefined, () => value());
+  });
+  return <div>{String(data())}</div>;
+}
+
+// ---- A handler that calls a function that never returns throws.
+
+export function HandlerCallsNever() {
+  const [value] = createSignal(1);
+  const [tick] = createSignal(0);
+  function fail(): never {
+    throw new Error("expected");
+  }
+  const data = createMemo(async () => {
+    tick();
+    return await Promise.resolve(0)
+      .then(() => {
+        fail();
+        return 0;
+      })
+      .then(() => value())
+      .catch(() => 0);
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function HandlerCallsVoidControl() {
+  const [value] = createSignal(1);
+  const [tick] = createSignal(0);
+  function log() {}
+  const data = createMemo(async () => {
+    tick();
+    return await Promise.resolve(0)
+      .then(() => {
+        log();
+        return 0;
+      })
+      .then(() => value())
+      .catch(() => 0);
+  });
+  return <div>{String(data())}</div>;
+}
+
+// ---- `for await` suspends before its body and after the loop: a source read
+// in either is an obligation, however it is read.
+
+export function ForAwaitStore() {
+  const [tick] = createSignal(0);
+  const [store] = createStore({ n: 1 });
+  const data = createMemo(async () => {
+    tick();
+    for await (const _ of [1]) {
+    }
+    return store.n;
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function ForAwaitCallback() {
+  const [value] = createSignal(1);
+  const [tick] = createSignal(0);
+  const data = createMemo(async () => {
+    tick();
+    for await (const _ of [1]) {
+    }
+    return [1].map(() => value())[0];
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function ForAwaitHelper() {
+  const [value] = createSignal(1);
+  const [tick] = createSignal(0);
+  function read() {
+    return value();
+  }
+  const data = createMemo(async () => {
+    tick();
+    for await (const _ of [1]) {
+    }
+    return read();
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function ForAwaitBody() {
+  const [value] = createSignal(1);
+  const [tick] = createSignal(0);
+  const data = createMemo(async () => {
+    tick();
+    for await (const _ of [1]) {
+      return value();
+    }
+    return 0;
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function ForAwaitBodyStore() {
+  const [tick] = createSignal(0);
+  const data = createMemo(async () => {
+    tick();
+    const [store] = createStore({ n: 1 });
+    for await (const _ of [1]) {
+      return store.n;
+    }
+    return 0;
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function ForAwaitBodyReadBeforeControl() {
+  const [value] = createSignal(1);
+  const [tick] = createSignal(0);
+  const data = createMemo(async () => {
+    tick();
+    value();
+    for await (const _ of [1]) {
+      return value();
+    }
+    return 0;
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function ForAwaitIterableReadControl() {
+  const [value] = createSignal(1);
+  const data = createMemo(async () => {
+    for await (const _ of [value()]) {
+    }
+    return 0;
+  });
+  return <div>{String(data())}</div>;
+}
+
+// ---- `untrack(fn)` and `runWithOwner(owner, fn)` with the function passed by
+// reference or written async.
+
+export function UntrackDirectHelper() {
+  const [value] = createSignal(1);
+  const [tick] = createSignal(0);
+  async function load() {
+    await pause();
+    return value();
+  }
+  const data = createMemo(async () => {
+    tick();
+    return await untrack(load);
+  });
+  return <div>{String(data())}</div>;
+}
+
+declare const unseenLoader: () => Promise<number>;
+
+export function UntrackUnresolvedFunction() {
+  const [tick] = createSignal(0);
+  const data = createMemo(async () => {
+    tick();
+    return await untrack(unseenLoader);
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function NullOwnerAsyncCallback() {
+  const [value] = createSignal(1);
+  const [tick] = createSignal(0);
+  const data = createMemo(async () => {
+    tick();
+    await pause();
+    return await runWithOwner(null, async () => {
+      await pause();
+      return value();
+    });
+  });
+  return <div>{String(data())}</div>;
+}
+
+export function CapturedOwnerAsyncCallback() {
+  const [value] = createSignal(1);
+  const [tick] = createSignal(0);
+  const data = createMemo(async () => {
+    tick();
+    const owner = getOwner();
+    return await runWithOwner(owner, async () => {
+      await pause();
+      return value();
+    });
+  });
+  return <div>{String(data())}</div>;
+}

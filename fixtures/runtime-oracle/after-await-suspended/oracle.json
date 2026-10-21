@@ -1,0 +1,1 @@
+{"note": "SC1002 reach: a read inside or after `for await` is an obligation (the loop suspends before its body); untrack(fn) with fn passed by reference and runWithOwner(null, async fn) hand the computation their promise, so the read after their own await is a violation, with a captured owner an obligation. ForAwaitBodyReadBeforeControl tracks the source before the loop"}

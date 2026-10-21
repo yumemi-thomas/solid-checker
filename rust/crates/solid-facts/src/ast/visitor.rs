@@ -1131,7 +1131,13 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         self.iterated_operands.push(span(statement.right.span()));
         self.loop_statements.push(span(statement.span));
         if statement.r#await {
-            self.implicit_suspensions.push(span(statement.span));
+            // The suspension is the loop's first `next()`: it comes after the
+            // iterable is evaluated and before the body, so the span ends with
+            // the iterable. The body and everything after the loop are past it.
+            self.implicit_suspensions.push(Span::new(
+                span(statement.span).start,
+                span(statement.right.span()).end,
+            ));
         }
         self.conditional_flow_depth += 1;
         walk::walk_for_of_statement(self, statement);

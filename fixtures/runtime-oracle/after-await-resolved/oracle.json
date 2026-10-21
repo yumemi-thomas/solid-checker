@@ -1,0 +1,1 @@
+{"note": "SC1002 reach: a createRoot callback named by reference is followed like an inline one (a mentioned dispose parameter makes the finding uncertifiable); `undefined` is the global only when no binding shadows it; a handler calling a never-returning function throws. The *Control components keep the violation"}

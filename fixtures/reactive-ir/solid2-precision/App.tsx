@@ -7,7 +7,9 @@ import {
   onSettled,
 } from "solid-js";
 
-declare function fetchPosts(): Promise<string[]>;
+async function fetchPosts(): Promise<string[]> {
+  return ["a"];
+}
 declare function invoke<T, U>(value: T, callback: (value: T) => U): U;
 declare function makePredicate(
   callback: (post: string) => boolean,

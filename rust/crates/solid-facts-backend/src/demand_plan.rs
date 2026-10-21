@@ -862,6 +862,24 @@ fn emit_span_demands(
     Ok(())
 }
 
+/// Whether the callee is an identifier, or a plain member chain rooted at one,
+/// that no declaration the parser saw binds: a global such as `Promise` or
+/// `Math`. Its declaration decides what the call may run.
+fn callee_rooted_at_global(file: &FileFacts, callee: Span) -> bool {
+    let mut root = file.ast.peel_ts_sugar_span(callee);
+    while let Some(member) = file.ast.member_at(root) {
+        if file.ast.computed_members.contains(&member.span) {
+            return false;
+        }
+        root = file.ast.peel_ts_sugar_span(member.object);
+    }
+    file.ast
+        .identifiers
+        .binary_search_by_key(&root, |identifier| identifier.span)
+        .is_ok()
+        && file.ast.reference_declaration(root).is_none()
+}
+
 fn plan_call_demands(
     dialect: &'static Dialect,
     file: &FileFacts,
@@ -955,7 +973,31 @@ fn plan_call_demands(
                             && binding.call_initializer.is_some()
                     })
                 });
+        // SC1002 asks whether a call before an async function's first
+        // suspension may have tracked a source: only an exactly resolved
+        // standard-library declaration answers `Promise.resolve()` or
+        // `Math.random()` (ADR 0340), and an argumentless call has none
+        // otherwise.
+        let argumentless_before_suspension = call.arguments.is_empty()
+            && callee_rooted_at_global(file, call.callee)
+            && file
+                .ast
+                .functions_body_containing(call.span)
+                .min_by_key(|function| function.body.end - function.body.start)
+                .is_some_and(|function| {
+                    function.r#async
+                        && file
+                            .ast
+                            .awaits
+                            .iter()
+                            .chain(&file.ast.implicit_suspensions)
+                            .any(|suspension| {
+                                function.body.contains(*suspension)
+                                    && suspension.end >= call.span.end
+                            })
+                });
         planned.resolved_call = !call.arguments.is_empty()
+            || argumentless_before_suspension
             || returned_callees.contains(&call.callee)
             || computed_dispatch
             || argumentless_primitive

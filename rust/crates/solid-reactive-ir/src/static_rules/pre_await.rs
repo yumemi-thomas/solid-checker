@@ -8,7 +8,9 @@
 //! dependency: [`Tracking::Tracked`]), and a source nothing before the first
 //! suspension can have read (a defect: [`Tracking::Untracked`]). Everything
 //! between is [`Tracking::Possible`] and never a violation: a read through a
-//! helper, a getter, an inline callback or a call whose body is not visible,
+//! helper, a getter, an inline callback or a call whose body is not visible
+//! (a package, a global, a standard-library call outside the audited inert
+//! rows: it may run a callback or read a source captured earlier),
 //! a conditional read, and a store key another path may alias (store path
 //! text equality is not dependency identity: `{ a: item, b: item }`).
 //! "Unresolved" is not evidence of anything, so a call the analysis cannot see
@@ -34,6 +36,83 @@ use typefacts::AsyncFunctionFact;
 /// Helper-in-helper nesting the scan follows before it gives up (a possible
 /// read).
 const MAX_DEPTH: usize = 6;
+
+/// The standard-library declarations whose call runs no user code but what its
+/// arguments hand it (a callback literal argument is scanned as part of the
+/// segment, a function reference as a helper): timers and microtasks only
+/// schedule, `Promise` statics only create or chain, `Math`, number and URI
+/// functions and `Date.now` compute, an error, collection or date constructor
+/// builds a value, and `fetch` starts a request. Everything
+/// else is opaque: nothing audited says it cannot run a callback an earlier
+/// call registered (`dispatchEvent`, `Function.call`, `Reflect.apply`, an
+/// iterator, a getter, a `toString`).
+fn inert_standard_call(name: &str) -> bool {
+    name.starts_with("Math.")
+        || name
+            .strip_suffix("Constructor.construct")
+            .is_some_and(|class| {
+                matches!(
+                    class,
+                    "Error"
+                        | "TypeError"
+                        | "RangeError"
+                        | "SyntaxError"
+                        | "ReferenceError"
+                        | "EvalError"
+                        | "URIError"
+                        | "Array"
+                        | "Date"
+                        | "Map"
+                        | "Set"
+                        | "WeakMap"
+                        | "WeakSet"
+                        | "RegExp"
+                )
+            })
+        || matches!(
+            name,
+            "setTimeout"
+                | "setInterval"
+                | "clearTimeout"
+                | "clearInterval"
+                | "queueMicrotask"
+                | "requestAnimationFrame"
+                | "cancelAnimationFrame"
+                | "WindowOrWorkerGlobalScope.setTimeout"
+                | "WindowOrWorkerGlobalScope.setInterval"
+                | "WindowOrWorkerGlobalScope.clearTimeout"
+                | "WindowOrWorkerGlobalScope.clearInterval"
+                | "WindowOrWorkerGlobalScope.queueMicrotask"
+                | "WindowOrWorkerGlobalScope.fetch"
+                | "fetch"
+                | "PromiseConstructor.construct"
+                | "PromiseConstructor.resolve"
+                | "PromiseConstructor.reject"
+                | "PromiseConstructor.all"
+                | "PromiseConstructor.allSettled"
+                | "PromiseConstructor.race"
+                | "PromiseConstructor.any"
+                | "Promise.then"
+                | "Promise.catch"
+                | "Promise.finally"
+                | "DateConstructor.now"
+                | "ArrayConstructor.isArray"
+                | "parseInt"
+                | "parseFloat"
+                | "isNaN"
+                | "isFinite"
+                | "NumberConstructor.parseInt"
+                | "NumberConstructor.parseFloat"
+                | "NumberConstructor.isFinite"
+                | "NumberConstructor.isInteger"
+                | "NumberConstructor.isNaN"
+                | "NumberConstructor.isSafeInteger"
+                | "encodeURIComponent"
+                | "decodeURIComponent"
+                | "encodeURI"
+                | "decodeURI"
+        )
+}
 
 /// What the pre-await segment is known to have done to a source.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -456,25 +535,17 @@ impl<'f, 'a> PreAwait<'f, 'a> {
         {
             return false;
         }
+        // A standard-library call states its own behavior, but only the
+        // audited rows of [`inert_standard_call`] are known to run no code
+        // registered elsewhere. Another one (`dispatchEvent`, `Function.call`,
+        // `Reflect.apply`) may invoke a callback captured earlier, and a
+        // package or global callee may read a source it was handed before
+        // (ADR 0340): a possible read.
         if ctx
             .semantic_lookup
             .resolved_callee_call(file, call.callee)
             .and_then(standard_call_name)
-            .is_some()
-        {
-            return false;
-        }
-        // Code outside the project (a global such as `Promise.resolve()`, a
-        // package import, an ambient `declare function`) cannot reach a
-        // project's source but through what the call hands it: the arguments
-        // were checked above, and a function literal inside the call may be
-        // run by the callee, so it keeps the call opaque.
-        if self.outside_project(file, callee)
-            && !file
-                .ast
-                .functions
-                .iter()
-                .any(|function| call.span.contains(function.span))
+            .is_some_and(inert_standard_call)
         {
             return false;
         }
@@ -501,64 +572,6 @@ impl<'f, 'a> PreAwait<'f, 'a> {
         }
         // Not visible: nothing rules out a read.
         true
-    }
-
-    /// Whether `callee` is an identifier, or a plain member chain rooted at
-    /// one, that names code outside the project: a global no declaration
-    /// binds, an import of a package, a function declared without a body.
-    fn outside_project(&self, file: &FileFacts, callee: Span) -> bool {
-        let mut root = file.ast.peel_ts_sugar_span(callee);
-        while let Some(member) = file.ast.member_at(root) {
-            if file.ast.computed_members.contains(&member.span) {
-                return false;
-            }
-            root = file.ast.peel_ts_sugar_span(member.object);
-        }
-        if file
-            .ast
-            .identifiers
-            .binary_search_by_key(&root, |identifier| identifier.span)
-            .is_err()
-        {
-            return false;
-        }
-        let Some(declaration) = file.ast.reference_declaration(root) else {
-            return self
-                .ctx
-                .entities
-                .at(file.path.as_str(), root)
-                .is_none_or(|symbol| {
-                    self.ctx
-                        .semantic_lookup
-                        .function_for_symbol(symbol)
-                        .is_none()
-                });
-        };
-        file.ast.imports.iter().any(|import| {
-            !import.type_only
-                && !import.module.starts_with('.')
-                && !import.module.starts_with('/')
-                && import
-                    .bindings
-                    .iter()
-                    .any(|binding| !binding.type_only && binding.local.span == declaration)
-        }) || file
-            .ast
-            .function_declarations
-            .iter()
-            .any(|function| !function.has_body && function.name.span == declaration)
-            // `declare const api: Api`: a module-level constant with no
-            // initializer is ambient.
-            || file.ast.bindings.iter().any(|binding| {
-                binding.immutable
-                    && binding.initializer.is_none()
-                    && binding.names.iter().any(|name| name.span == declaration)
-                    && !file
-                        .ast
-                        .functions
-                        .iter()
-                        .any(|function| function.span.contains(binding.declaration))
-            })
     }
 
     /// Whether running a project function may read `symbol`.
