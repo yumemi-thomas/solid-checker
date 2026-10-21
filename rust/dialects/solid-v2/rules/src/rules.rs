@@ -31,6 +31,7 @@ pub enum Rule {
     FlushInEffectCallback,
     LeafOwnerForbiddenCall,
     MissingOwner,
+    MissingContextProvider,
     PendingAsyncUnsuspendableRead,
     AsyncOutsideLoadingBoundary,
     PrimitiveInDirectiveApplication,
@@ -71,7 +72,7 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 32] = [
+    pub const ALL: [Self; 33] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::UncalledAccessor,
@@ -90,6 +91,7 @@ impl Rule {
         Self::FlushInEffectCallback,
         Self::LeafOwnerForbiddenCall,
         Self::MissingOwner,
+        Self::MissingContextProvider,
         Self::PendingAsyncUnsuspendableRead,
         Self::AsyncOutsideLoadingBoundary,
         Self::PrimitiveInDirectiveApplication,
@@ -170,6 +172,10 @@ impl Rule {
             // the rc.0 dev runtime throws SETTLED_CLEANUP_UNOWNED, while the
             // other missing-owner operations leak silently.
             Self::MissingOwner => ("SC4001", "missing-owner", "warning", false),
+            // ADR 0349: a read under an owner of a context no provider supplies
+            // throws `ContextNotFoundError` in the dev and production builds, a
+            // crash at the read, so it is an error like SC2006's dev throw.
+            Self::MissingContextProvider => ("SC4002", "missing-context-provider", "error", false),
             // Leaf-owner reads override this family default to warning so the
             // merged rule preserves the runtime-mirroring severity split.
             Self::PendingAsyncUnsuspendableRead => {

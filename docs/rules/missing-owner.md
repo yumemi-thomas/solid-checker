@@ -15,7 +15,8 @@ module scope, code after an `await`, or a `runWithOwner(null)` callback is
 unowned. A package hook that reads a context is followed through its source, and
 the finding sits at the project call that runs it, as for any package owner
 requirement (ADR 0290). A context with no provider throws `ContextNotFoundError`
-instead; that is a different claim and not this rule's.
+instead, which is [missing-context-provider](missing-context-provider.md)'s claim,
+not this rule's.
 A callback of an `onSettled` called inside another leaf body runs with no owner
 (rc.13 queues it), so an `onCleanup` there is this rule's claim.
 

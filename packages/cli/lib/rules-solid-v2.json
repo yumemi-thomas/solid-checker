@@ -23,6 +23,7 @@
     { "code": "SC2008", "name": "flush-in-effect-callback", "severity": "warning", "uncertifiable": false, "defaultEnabled": true, "presets": [] },
     { "code": "SC3001", "name": "leaf-owner-forbidden-call", "severity": "error", "uncertifiable": false, "defaultEnabled": true, "presets": [] },
     { "code": "SC4001", "name": "missing-owner", "severity": "warning", "uncertifiable": false, "defaultEnabled": true, "presets": [] },
+    { "code": "SC4002", "name": "missing-context-provider", "severity": "error", "uncertifiable": false, "defaultEnabled": true, "presets": [] },
     { "code": "SC5001", "name": "pending-async-unsuspendable-read", "severity": "error", "uncertifiable": false, "defaultEnabled": true, "presets": [] },
     { "code": "SC5003", "name": "async-outside-loading-boundary", "severity": "warning", "uncertifiable": false, "defaultEnabled": true, "presets": [] },
     { "code": "SC6001", "name": "primitive-in-directive-application", "severity": "warning", "uncertifiable": false, "defaultEnabled": true, "presets": [] },

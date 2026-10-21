@@ -29,6 +29,8 @@ mod owner_graph;
 pub(crate) use owner_graph::*;
 mod missing_owners;
 pub(crate) use missing_owners::*;
+mod context_census;
+pub(crate) use context_census::*;
 mod owner_discovery;
 pub(crate) use owner_discovery::*;
 mod owner_context;

@@ -998,6 +998,15 @@
       "checker": "reports",
       "why": "ADR 0349: `useContext<T>(context: Context<T>): T` type-checks in an event handler, and a default-less `createContext<T>()` is typed as `Context<T>`, so TypeScript has no complaint about either. The read throws NoOwnerError, because `getContext` finds no owner, which is an ownership fact tsc cannot see.",
       "code": "import { createContext, useContext } from \"solid-js\";\nconst Ctx = createContext<number>();\nexport function Button() {\n  return <button onClick={() => useContext(Ctx)} />;\n}\n"
+    },
+    {
+      "rule": "missing-context-provider",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "reports",
+      "programBoundary": "closed",
+      "why": "ADR 0349: `useContext<T>(context: Context<T>): T` and a default-less `createContext<T>()` type-check in a component body, so TypeScript has no complaint. The read throws ContextNotFoundError because no provider exists in the closed program, a fact about the whole program that tsc cannot see.",
+      "code": "import { createContext, useContext } from \"solid-js\";\nconst Ctx = createContext<number>();\nexport function Panel() {\n  const value = useContext(Ctx);\n  return <i>{value}</i>;\n}\n"
     }
   ]
 }

@@ -111,6 +111,9 @@ for (const [name, value] of Object.entries(mod as Record<string, unknown>)) {
     render(() => <Component />, host);
   } catch (error) {
     console.error("render failed", name, error);
+    // Rethrown from a timer, so the uncaught error reaches the feedback run's
+    // source mapping as a runtime exception (ADR 0349); the others still render.
+    setTimeout(() => { throw error; });
   }
 }
 
@@ -155,6 +158,8 @@ const codeRules = {
   NO_OWNER_BOUNDARY: ["missing-owner"],
   // Thrown, not reported: `useContext` with no owner (ADR 0349). See `thrownCodes`.
   NO_OWNER_CONTEXT: ["missing-owner"],
+  // ADR 0349: a default-less context with no provider throws when its reader renders.
+  CONTEXT_NOT_FOUND: ["missing-context-provider"],
   SETTLED_CLEANUP_UNOWNED: ["missing-owner"],
   REACTIVE_WRITE_IN_OWNED_SCOPE: ["reactive-write-in-owned-scope"],
   CLEANUP_IN_FORBIDDEN_SCOPE: ["leaf-owner-forbidden-call"],
@@ -187,6 +192,7 @@ const thrownCodes = [
   [/^dynamic\(\): a static source must resolve synchronously/, "DYNAMIC_STATIC_PROMISE"],
   // `getContext` checks the owner first (rc.13 `dev-shared.js`), whatever the default.
   [/^Context can only be accessed under a reactive root/, "NO_OWNER_CONTEXT"],
+  [/^Context must either be created with a default value/, "CONTEXT_NOT_FOUND"],
 ];
 // Withholdings that cover any rule at their site.
 const withholdingRules = ["reactive-dispatch-unresolved"];

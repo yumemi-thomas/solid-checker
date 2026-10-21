@@ -1099,6 +1099,9 @@ pub enum OwnerRequirementOperation {
     SettledCleanup,
     /// `useContext(context)` with no owner: rc.13 throws `NoOwnerError` (ADR 0349).
     ContextRead,
+    /// `useContext` under an owner of a context created with no default that a
+    /// closed program never provides: rc.13 throws `ContextNotFoundError` (ADR 0349).
+    ContextProvider,
 }
 
 impl OwnerRequirementOperation {
@@ -1110,6 +1113,7 @@ impl OwnerRequirementOperation {
             "boundary" => Self::Boundary,
             "settled-cleanup" => Self::SettledCleanup,
             "context-read" => Self::ContextRead,
+            "context-provider" => Self::ContextProvider,
             _ => panic!("owner analysis emitted unknown operation {operation:?}"),
         }
     }

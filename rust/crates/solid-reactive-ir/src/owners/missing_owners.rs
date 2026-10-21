@@ -9,6 +9,7 @@ pub(crate) fn find_missing_owners(
     symbol_names: &HashMap<SymbolId, SymbolId>,
 ) -> (Vec<OwnerRequirement>, SettledGateDecisions) {
     let entities = lookup.entities();
+    let provider_free = provider_free_contexts(facts, lookup, symbol_names);
     let owner_file_indexes = facts
         .files
         .iter()
@@ -366,9 +367,20 @@ pub(crate) fn find_missing_owners(
                 // `useContext` throws `NoOwnerError` when no owner is current
                 // (ADR 0349): the unowned question an effect asks, with nothing
                 // to register. An owned leaf has an owner, so only the unowned
-                // bit reports it.
-                (Some(OwnerRequirementRole::ContextRead), _) if !root_owned => {
-                    Some(("context-read", context & OWNER_CONTEXT_UNOWNED != 0, false))
+                // bit reports it. Under an owner, a read of a context the closed
+                // program never provides throws `ContextNotFoundError` instead.
+                (Some(OwnerRequirementRole::ContextRead), _) => {
+                    let provider_free_read = read_context_key(lookup, file, call)
+                        .is_some_and(|key| provider_free.contains(&key));
+                    // A providing region owns its reads (`root_owned`), so only a
+                    // provider-free read there is a finding, and it is not an owner question.
+                    if provider_free_read && (root_owned || owned_on_every_path(context)) {
+                        Some(("context-provider", true, false))
+                    } else if root_owned {
+                        None
+                    } else {
+                        Some(("context-read", context & OWNER_CONTEXT_UNOWNED != 0, false))
+                    }
                 }
                 _ => None,
             };
@@ -911,5 +923,6 @@ pub(super) const fn operation_name(operation: OwnerRequirementOperation) -> &'st
         OwnerRequirementOperation::Boundary => "boundary",
         OwnerRequirementOperation::SettledCleanup => "settled-cleanup",
         OwnerRequirementOperation::ContextRead => "context-read",
+        OwnerRequirementOperation::ContextProvider => "context-provider",
     }
 }

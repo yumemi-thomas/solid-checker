@@ -179,6 +179,13 @@ pub(crate) fn discover_owner_file(
             let settled_gate = known_primitive(&call_primitives[call_index])
                 .filter(|primitive| dialect.leaf_owner_requires_owned_call_site(*primitive))
                 .map(|_| call.span);
+            // The context argument of a `useContext` read, for the closed
+            // provider census (ADR 0349). Only a read with exactly one argument.
+            let context_argument = (operation == "context-read")
+                .then(|| call.arguments.first())
+                .flatten()
+                .filter(|_| call.arguments.len() == 1 && !call.arguments[0].spread)
+                .map(|argument| argument.span);
             requirements.push(OwnerRequirementCandidate {
                 operation,
                 operation_span,
@@ -189,6 +196,7 @@ pub(crate) fn discover_owner_file(
                 settled_target,
                 settled_gate,
                 providing_region_chain,
+                context_argument,
             });
         }
     }
@@ -273,6 +281,7 @@ pub(crate) fn discover_owner_file(
                 settled_target: None,
                 settled_gate: None,
                 providing_region_chain: region_chain(element.span),
+                context_argument: None,
             });
         }
     }
@@ -416,6 +425,8 @@ pub(crate) fn find_missing_owners_incremental(
     let continuations = AwaitContinuations::new(facts, lookup);
     let mut settled_gates = SettledGateDecisions::default();
     let mut seen = HashSet::default();
+    // Program-wide: a context's provider census spans every file (ADR 0349).
+    let provider_free = provider_free_contexts(facts, lookup, symbol_names);
     for file in &facts.files {
         let Some(fragment) = cache.get(file.path.as_str()) else {
             continue;
@@ -438,17 +449,33 @@ pub(crate) fn find_missing_owners_incremental(
             } else {
                 context
             };
+            // A read of a provider-free context under an owner throws
+            // `ContextNotFoundError` (ADR 0349). The batch pass decides the same.
+            let provider_free_read = candidate.operation == "context-read"
+                && candidate.context_argument.is_some_and(|argument| {
+                    context_key_at(lookup, file, argument)
+                        .is_some_and(|key| provider_free.contains(&key))
+                });
             // The batch pass skips these before recording a settled gate too.
             // Every chain span is one of this fragment's own nodes; one that
             // did not resolve would withhold the lexical answer, not grant it.
-            if root_owned_at(candidate.providing_region_chain.as_deref(), |span| {
+            let root_owned = root_owned_at(candidate.providing_region_chain.as_deref(), |span| {
                 nodes_by_span
                     .get(file.path.as_str())
                     .and_then(|nodes| nodes.get(span))
                     .map_or(OWNER_CONTEXT_LEAVES_REGION, |index| contexts[*index])
-            }) {
+            });
+            // A providing region owns its reads, so a provider-free read there is
+            // a provider finding, not an owner question (ADR 0349).
+            let provider = provider_free_read && (root_owned || owned_on_every_path(context));
+            if root_owned && !provider {
                 continue;
             }
+            let (operation, report_hit) = if provider {
+                ("context-provider", true)
+            } else {
+                (candidate.operation, context & candidate.report_mask != 0)
+            };
             if let Some(gate) = candidate.settled_gate {
                 settled_gates.insert(
                     (
@@ -551,7 +578,7 @@ pub(crate) fn find_missing_owners_incremental(
             push_owner_requirement(
                 &mut requirements,
                 &mut seen,
-                candidate.operation,
+                operation,
                 file,
                 candidate.operation_span,
                 OwnerRequirementStatus {
@@ -565,7 +592,7 @@ pub(crate) fn find_missing_owners_incremental(
                     // The batch pass's cleanup rule (ADR 0347 amendment): a cleanup in a
                     // leaf that is not owned is reported; in an owned leaf it is
                     // SC3001's claim.
-                    report: context & candidate.report_mask != 0
+                    report: report_hit
                         || (candidate.operation == "cleanup"
                             && context & OWNER_CONTEXT_LEAF != 0
                             && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED) == 0),

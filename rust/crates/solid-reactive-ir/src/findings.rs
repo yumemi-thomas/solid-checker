@@ -200,7 +200,9 @@ impl Finding {
             };
         }
         let mut evidence = vec![EvidenceStep {
-            message: if requirement.after_await {
+            message: if requirement.operation == crate::OwnerRequirementOperation::ContextProvider {
+                "the read runs under a reactive owner, and the closed program has no provider for this context, so Solid finds no value".into()
+            } else if requirement.after_await {
                 "this call runs after an `await`, from a promise continuation: the owner current before the `await` is not current after it, and no other owner is"
                     .into()
             } else if component_uncertain {

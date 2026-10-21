@@ -160,6 +160,10 @@ impl CatalogWording for Catalog {
                         "useContext is called without a reactive owner; Solid throws NoOwnerError (\"Context can only be accessed under a reactive root.\") here, so the read never returns a value",
                         "Read the context while a component, or a computation it creates, is being set up, and pass the value to the handler, timer or callback that needs it. A handler, a timer, a module-scope statement and code after an await run with no owner.",
                     ),
+                    OwnerRequirementOperation::ContextProvider => (
+                        "useContext reads a context created with no default, and no provider for it exists in this closed program; Solid throws ContextNotFoundError here, so the read never returns a value",
+                        "Render a provider for this context above the component that reads it (`<Context value={...}>`), or create the context with a default if a fallback value is meant. The provider must enclose the reader in the rendered tree.",
+                    ),
                     OwnerRequirementOperation::Effect => (
                         "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app",
                         "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle.",
@@ -168,6 +172,11 @@ impl CatalogWording for Catalog {
                 let mut metadata = Rule::MissingOwner.metadata();
                 if requirement.operation == OwnerRequirementOperation::SettledCleanup {
                     metadata.severity = "error";
+                }
+                // The provider question is its own rule (ADR 0349): a missing
+                // provider is not a missing owner, and its fix is different.
+                if requirement.operation == OwnerRequirementOperation::ContextProvider {
+                    metadata = Rule::MissingContextProvider.metadata();
                 }
                 FindingWording::new(metadata, message, hint)
             }
@@ -581,6 +590,7 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         | Rule::ActionCalledInOwnedScope
         | Rule::LeafOwnerForbiddenCall
         | Rule::MissingOwner
+        | Rule::MissingContextProvider
         | Rule::PendingAsyncUnsuspendableRead
         | Rule::AsyncOutsideLoadingBoundary
         | Rule::PrimitiveInDirectiveApplication

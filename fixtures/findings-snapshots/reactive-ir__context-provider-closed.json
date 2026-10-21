@@ -1,0 +1,53 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-provider-closed/App.tsx",
+      "start": 789,
+      "end": 799,
+      "fixes": 0,
+      "message": "useContext reads a context created with no default, and no provider for it exists in this closed program; Solid throws ContextNotFoundError here, so the read never returns a value",
+      "hint": "Render a provider for this context above the component that reads it (`<Context value={...}>`), or create the context with a default if a fallback value is meant. The provider must enclose the reader in the rendered tree."
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-provider-closed/App.tsx",
+      "start": 969,
+      "end": 979,
+      "fixes": 0,
+      "message": "useContext reads a context created with no default, and no provider for it exists in this closed program; Solid throws ContextNotFoundError here, so the read never returns a value",
+      "hint": "Render a provider for this context above the component that reads it (`<Context value={...}>`), or create the context with a default if a fallback value is meant. The provider must enclose the reader in the rendered tree."
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-provider-closed/App.tsx",
+      "start": 1329,
+      "end": 1339,
+      "fixes": 0,
+      "message": "useContext is called without a reactive owner; Solid throws NoOwnerError (\"Context can only be accessed under a reactive root.\") here, so the read never returns a value",
+      "hint": "Read the context while a component, or a computation it creates, is being set up, and pass the value to the handler, timer or callback that needs it. A handler, a timer, a module-scope statement and code after an await run with no owner."
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-provider-closed/remote.ts",
+      "start": 229,
+      "end": 239,
+      "fixes": 0,
+      "message": "useContext reads a context created with no default, and no provider for it exists in this closed program; Solid throws ContextNotFoundError here, so the read never returns a value",
+      "hint": "Render a provider for this context above the component that reads it (`<Context value={...}>`), or create the context with a default if a fallback value is meant. The provider must enclose the reader in the rendered tree."
+    }
+  ]
+}

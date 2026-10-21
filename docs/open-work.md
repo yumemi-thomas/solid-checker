@@ -48,13 +48,15 @@ Missing owner (`missing-owner`, SC4001):
 - `missing-owner` (SC4001), recall lost: an unmodelled callback between leaves (`forEach`, `addEventListener`) misses `NO_OWNER_CLEANUP`; at probe k5 the wrongly coded SC3001 is gone.
 - `missing-owner` (SC4001), recall lost: `onSettled(wrap(() => …))` (`solid2-precision`, `WrappedSettledCleanup`): a bodiless `wrap` is no identity wrapper (ADR 0346), so the cleanup in its literal goes unreported.
 
+Missing provider (`missing-context-provider`, SC4002, ADR 0349): a context is claimed only when no provider exists in the program. Not claimed: a reader above no provider when another provider exists (needs the closed component tree), open programs, escaped contexts, package contexts (kobalte, router, query), `createContext` through an alias.
+
 Read after an await (`reactive-read-after-await`, SC1002), `after-await-open`: a handler on a promise held in a variable; a member helper (`api.read()`); `fetch(...).then`; a `.then` on a `Promise<T>` not proven native; `Promise.race` of helpers; an async IIFE the computation awaits. Each fires the runtime warning without a proof (ADR 0340).
 
 Primitive used as a value (`reactive-dispatch-unresolved`, SC9012):
 
 - Found only through a named or namespace import. Not followed: a stored or aliased namespace object (`const NS = Solid; NS.createEffect(…)`), a namespace import of a project barrel, a computed member (`S["createEffect"]`), an `import S = require(…)` member. Fix: a census where every TypeFacts reference of a primitive's symbol that is not a primitive callee is an obligation. No corpus site has these shapes.
 
-`runWithOwner` with a disposed owner (`RUN_WITH_DISPOSED_OWNER`, a dev warning, rc.13 `dist/dev-shared.js:6919-6932`) is claimed by no rule. Proof needs the owner variable written once, from `getOwner()` in a `createRoot` body that calls its `dispose` unconditionally after the capture, and every `runWithOwner` reading it running after that body. A conditional disposal, or an owner held in a store or closure, is only sometimes disposed. Not built: no corpus site has one; reopen with a report or a corpus site.
+`runWithOwner` with a disposed owner (`RUN_WITH_DISPOSED_OWNER`, rc.13 `dist/dev-shared.js:6919-6932`) is claimed by no rule. Proof needs an owner written once from `getOwner()` in a `createRoot` body that disposes it unconditionally, and every `runWithOwner` using it running after that body. Not built: no corpus site has one.
 
 Other:
 
@@ -64,7 +66,6 @@ Other:
 - A context-provided value read through a package hook (kui `TopicsRoute.tsx:425`) stays an uncertifiable SC9012. Only the router's own provider is proven; a project provider or an `Object.defineProperty` replacement of the location getter both type-check (ADR 0289, ADR 0312).
 - `typeof window` in solid-query source blocks the proxy proof unless a Window realm is declared (ADR 0295, 0312).
 
-Not a miss: `r4c-leak` line 43 is listed open only because the oracle has no frame linking its JSX read to the checker's SC5003 two lines above.
 
 Leaf body (`leaf-owner-forbidden-call`, SC3001):
 

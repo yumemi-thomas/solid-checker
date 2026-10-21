@@ -1,0 +1,3 @@
+{
+  "note": "ADR 0349: a default-less context no provider supplies throws ContextNotFoundError when its reader renders (missing-context-provider, SC4002); the defaulted read and the provided reader are controls."
+}

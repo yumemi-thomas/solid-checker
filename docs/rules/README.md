@@ -66,7 +66,7 @@ Renamed and merged configuration keys, retired identities, and the six merges
 whose disables deliberately do not transfer are listed in the
 [catalog migration note](../rule-catalog-migration.md).
 
-## Solid 2.0 catalog — 32 rules
+## Solid 2.0 catalog — 33 rules
 
 | Code | Rule | Severity | Default |
 | --- | --- | --- | --- |
@@ -86,6 +86,7 @@ whose disables deliberately do not transfer are listed in the
 | SC2008 | [flush-in-effect-callback](flush-in-effect-callback.md) | warning | on |
 | SC3001 | [leaf-owner-forbidden-call](leaf-owner-forbidden-call.md) | error | on |
 | SC4001 | [missing-owner](missing-owner.md) | warning | on |
+| SC4002 | [missing-context-provider](missing-context-provider.md) | error | on |
 | SC5001 | [pending-async-unsuspendable-read](pending-async-unsuspendable-read.md) | error | on |
 | SC5003 | [async-outside-loading-boundary](async-outside-loading-boundary.md) | warning | on |
 | SC6001 | [primitive-in-directive-application](primitive-in-directive-application.md) | warning | on |
