@@ -76,8 +76,13 @@ pub(super) fn async_helper<'x>(
         return None;
     }
     let callee = file.ast.peel_ts_sugar_span(call.callee);
-    if file.ast.member_at(callee).is_some() {
-        return None;
+    if let Some(member) = file.ast.member_at(callee) {
+        // ADR 0351: an exact function of a closed object literal (`api.load()`).
+        if file.ast.computed_members.contains(&member.span) {
+            return None;
+        }
+        let (helper_file, helper) = ctx.semantic_lookup.closed_member_function(file, member)?;
+        return (helper.r#async && !helper.generator).then_some((helper_file, helper));
     }
     let (helper_file, helper) = ctx
         .semantic_lookup

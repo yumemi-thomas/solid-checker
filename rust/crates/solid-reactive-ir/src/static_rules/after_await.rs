@@ -99,6 +99,8 @@ struct Reach<'f, 'a> {
     ctx: &'f AnalysisContext<'a>,
     files: HashMap<&'f str, &'f FileFacts>,
     facts: HashMap<(&'f str, u64, u64), &'f AsyncFunctionFact>,
+    /// The producer's facts by end offset: an object method's span ends where its function does (ADR 0351).
+    facts_by_end: HashMap<(&'f str, u64), Vec<&'f AsyncFunctionFact>>,
     done: HashSet<(String, u64, u64)>,
     pre: PreAwait<'f, 'a>,
 }
@@ -128,6 +130,24 @@ pub(super) fn run(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
                 )
             })
             .collect(),
+        facts_by_end: {
+            let mut by_end: HashMap<(&str, u64), Vec<&AsyncFunctionFact>> = HashMap::new();
+            for function in ctx
+                .facts
+                .typescript
+                .files()
+                .flat_map(|file| file.async_functions.iter())
+            {
+                by_end
+                    .entry((
+                        function.expression.path.as_ref(),
+                        function.expression.end_byte,
+                    ))
+                    .or_default()
+                    .push(function);
+            }
+            by_end
+        },
         done: HashSet::default(),
         pre: PreAwait::new(ctx),
     };
@@ -180,7 +200,28 @@ fn ast_function<'f>(
     let start = u32::try_from(function.expression.start_byte).ok()?;
     let end = u32::try_from(function.expression.end_byte).ok()?;
     let expression = file.ast.peel_ts_sugar_span(Span::new(start, end));
-    Some((file, file.ast.function_at(expression)?))
+    if let Some(found) = file.ast.function_at(expression) {
+        return Some((file, found));
+    }
+    // ADR 0351: an object method's producer span starts at its key or `async`,
+    // its function at the parameter list: the same end, with method-header text between.
+    let found = file.ast.functions.iter().find(|candidate| {
+        candidate.span.end == end
+            && candidate.span.start > start
+            && method_header(file.source_text(Span::new(start, candidate.span.start)))
+    })?;
+    Some((file, found))
+}
+
+/// Text a method's producer span may hold before its parameter list and no
+/// other function: `async`, `*`, a key name, whitespace.
+fn method_header(text: Option<&str>) -> bool {
+    text.is_some_and(|text| {
+        !text.is_empty()
+            && text.chars().all(|c| {
+                c.is_alphanumeric() || c == '_' || c == '$' || c == '*' || c.is_whitespace()
+            })
+    })
 }
 
 /// The immediate stack segment stops at the first own suspension, including
@@ -886,9 +927,6 @@ impl<'f, 'a> Reach<'f, 'a> {
             return;
         }
         let callee = file.ast.peel_ts_sugar_span(call.callee);
-        if file.ast.member_at(callee).is_some() {
-            return;
-        }
         // A callee that is itself an accessor, or a typed candidate, is read
         // as the access it is, not as a helper.
         if call_accessor_symbol(ctx, file, call)
@@ -896,17 +934,33 @@ impl<'f, 'a> Reach<'f, 'a> {
         {
             return;
         }
-        let Some((helper_file, helper)) = ctx
-            .semantic_lookup
-            .function_called_at(file.path.as_str(), callee)
-        else {
-            return;
+        // ADR 0351: an exact function of a closed object literal is a helper
+        // (its method name is no dispatch here); any other member is not.
+        let (helper_file, helper, member) = if let Some(member) = file.ast.member_at(callee) {
+            if file.ast.computed_members.contains(&member.span) {
+                return;
+            }
+            let Some((helper_file, helper)) =
+                ctx.semantic_lookup.closed_member_function(file, member)
+            else {
+                return;
+            };
+            (helper_file, helper, true)
+        } else {
+            let Some((helper_file, helper)) = ctx
+                .semantic_lookup
+                .function_called_at(file.path.as_str(), callee)
+            else {
+                return;
+            };
+            (helper_file, helper, false)
         };
         if helper.generator
-            || helper.method_name.is_some()
-            || !ctx
-                .semantic_lookup
-                .function_value_is_current(helper_file, helper)
+            || (!member
+                && (helper.method_name.is_some()
+                    || !ctx
+                        .semantic_lookup
+                        .function_value_is_current(helper_file, helper)))
         {
             return;
         }
@@ -1306,23 +1360,16 @@ impl<'f, 'a> Reach<'f, 'a> {
         // A function with no `await` carries no producer fact: nothing is
         // dominated by a suspension in it, but its returned promises still
         // continue the chain.
-        let fact = self
-            .facts
-            .get(&(
-                file.path.as_str(),
-                u64::from(function.span.start),
-                u64::from(function.span.end),
-            ))
-            .map_or_else(
-                || AsyncFunctionFact {
-                    expression: location(file.path.shared(), function.span),
-                    symbol: "".into(),
-                    target: "".into(),
-                    can_return_async: true,
-                    calls_after_await: Vec::new(),
-                },
-                |fact| (*fact).clone(),
-            );
+        let fact = self.fact_for(file, function).map_or_else(
+            || AsyncFunctionFact {
+                expression: location(file.path.shared(), function.span),
+                symbol: "".into(),
+                target: "".into(),
+                can_return_async: true,
+                calls_after_await: Vec::new(),
+            },
+            |fact| (*fact).clone(),
+        );
         if self.done.contains(&Self::key(&fact)) {
             return;
         }
@@ -1346,6 +1393,30 @@ impl<'f, 'a> Reach<'f, 'a> {
             windows,
             conditional,
         });
+    }
+
+    /// The producer's fact of `function` (ADR 0351): the fact at its span, or an
+    /// object method's, whose producer span starts at its key or `async`.
+    fn fact_for(&self, file: &FileFacts, function: &FunctionFact) -> Option<&'f AsyncFunctionFact> {
+        let file = *self.files.get(file.path.as_str())?;
+        let path = file.path.as_str();
+        if let Some(fact) = self.facts.get(&(
+            path,
+            u64::from(function.span.start),
+            u64::from(function.span.end),
+        )) {
+            return Some(*fact);
+        }
+        self.facts_by_end
+            .get(&(path, u64::from(function.span.end)))?
+            .iter()
+            .copied()
+            .find(|fact| {
+                u32::try_from(fact.expression.start_byte).is_ok_and(|start| {
+                    start < function.span.start
+                        && method_header(file.source_text(Span::new(start, function.span.start)))
+                })
+            })
     }
 
     /// How `span` settles, where the analysis can tell. A handler is assumed

@@ -104,6 +104,11 @@ there, and the reads in it are then reported with the same two proofs:
   completion (ADR 0276's completion fact) is a violation at that read. A read
   on some paths, or one reached through a further helper, stays the
   uncertifiable through-call obligation above.
+- **An exact object-literal member.** `api.load()`, where `api` is a closed
+  `const` object literal (no spread, computed key, accessor, `this`, export or
+  escape, and every reference a plain member read that no one writes), names
+  the literal's function. It is followed as the named helpers above are (ADR
+  0351).
 
 Each of these keeps it from applying:
 
@@ -279,7 +284,7 @@ own synchronous computation and compose the two.
 ## Limits
 
 - **Each shape only adds reports.** A mistake in one shape can only add a false positive, so each has a runtime-oracle case: `after-await-settlement`, `after-await-tracked`, `after-await-disposed` and `after-await-owner` pin the reports. The other `after-await-*` cases (`after-await-quiet`, `after-await-possible`, `after-await-promises`, `after-await-adopted`) pin the silent shapes and the reads the checker leaves uncertifiable.
-- **Not modeled:** `race` and `any` of helpers, a promise held in a variable and handled later, member helpers (`api.read()`), an async IIFE the computation awaits, a `Promise.all` over a `.map` result (not an array literal), an accessor alias, and props already tracked. The open items are in `docs/open-work.md`.
+- **Not modeled:** `race` and `any` of helpers, a promise held in a variable and handled later, member helpers outside a closed literal (a class, a spread or exported object; ADR 0351), an async IIFE the computation awaits, a `Promise.all` over a `.map` result (not an array literal), an accessor alias, and props already tracked. The open items are in `docs/open-work.md`.
 
 ## Related
 

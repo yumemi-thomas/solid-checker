@@ -18,6 +18,7 @@ use crate::owners::function_binding_name;
 
 mod callees;
 mod class_prototype;
+mod closed_members;
 mod completion;
 mod components;
 mod compound;
@@ -770,6 +771,8 @@ pub(super) struct SemanticLookup<'a> {
     reflective_property_definition: OnceLock<bool>,
     /// ADR 0349: the Promise and array-iteration premises, by their tripwires.
     intrinsics: OnceLock<intrinsics::Intrinsics>,
+    /// ADR 0351: each member read that names a closed object literal's function.
+    closed_members: OnceLock<HashMap<(&'a str, Span), Span>>,
     entities_by_location: OnceLock<HashMap<(&'a str, u64, u64), &'a EntityFact>>,
     contained_entities_by_path: OnceLock<HashMap<&'a str, Vec<&'a EntityFact>>>,
     descriptors_by_symbol: OnceLock<HashMap<&'a str, &'a TypeDescriptor>>,
@@ -977,6 +980,7 @@ impl<'a> SemanticLookup<'a> {
             assigned_member_names: OnceLock::new(),
             reflective_property_definition: OnceLock::new(),
             intrinsics: OnceLock::new(),
+            closed_members: OnceLock::new(),
             entities_by_location: OnceLock::new(),
             contained_entities_by_path: OnceLock::new(),
             descriptors_by_symbol: OnceLock::new(),

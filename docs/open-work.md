@@ -48,7 +48,7 @@ Missing owner (`missing-owner`, SC4001):
 - `missing-owner` (SC4001), recall lost: an unmodelled callback between leaves (`forEach`, `addEventListener`) misses `NO_OWNER_CLEANUP`; at probe k5 the wrongly coded SC3001 is gone.
 - `missing-owner` (SC4001), recall lost: `onSettled(wrap(() => …))` (`solid2-precision`, `WrappedSettledCleanup`): a bodiless `wrap` is no identity wrapper (ADR 0346), so the cleanup in its literal goes unreported.
 
-SC1002 (`after-await-open`): a handler on a promise held in a variable; a member helper (`api.read()`); a `.then` on a `Promise<T>` not proven native; `Promise.race` of helpers; an async IIFE the computation awaits; `Promise.all(x.map(async …))`; an accessor alias; a destructured or bound loader; router `query` flights; a catch join after earlier statements; `Math.max(count())` after a functional setter. Each fires the runtime warning unproven (ADR 0340, 0349, 0350).
+SC1002 (`after-await-open`): a handler on a promise held in a variable; a member helper off a closed literal (ADR 0351); a `.then` on a `Promise<T>` not proven native; `Promise.race` of helpers; an async IIFE the computation awaits; `Promise.all(x.map(async …))`; an accessor alias; a destructured or bound loader; router `query` flights; a catch join after statements; `Math.max(count())` after a functional setter. Each fires the runtime warning unproven (ADR 0340, 0349, 0350).
 
 Primitive used as a value (`reactive-dispatch-unresolved`, SC9012):
 
