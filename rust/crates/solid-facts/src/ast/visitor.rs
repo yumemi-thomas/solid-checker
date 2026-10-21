@@ -99,8 +99,11 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             self.straight_line_calls.push(span(call.span));
         }
         self.record_completion_site(call.span);
-        if let Expression::Identifier(callee) = &call.callee {
+        // TypeScript wrappers erase at run time: `(require as any)("./b")`,
+        // `require!("./b")` and `require satisfies X` call `require` directly.
+        if let Expression::Identifier(callee) = peel_ts_sugar(&call.callee) {
             if self.is_unresolved_named(callee, "require") {
+                self.direct_require_callees.push(span(callee.span));
                 let specifier = match call.arguments.as_slice() {
                     [Argument::StringLiteral(source)] => {
                         Some((source.value.as_str().into(), span(source.span)))
@@ -142,6 +145,14 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             && self.is_unresolved_named(object, "Object")
         {
             self.record_accessor_installation(call.span);
+        }
+        if let Expression::StaticMemberExpression(member) = call.callee.get_inner_expression()
+            && !member.optional
+            && member.property.name == "glob"
+            && Self::is_import_meta(&member.object)
+            && Self::import_glob_is_lazy(&call.arguments)
+        {
+            self.lazy_import_glob_callees.push(span(member.span));
         }
         let callee_span = call.callee.span();
         self.calls.push(CallFact {
@@ -273,6 +284,9 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                         .map(|expression| self.runtime_value_kind(expression))
                         .unwrap_or_default(),
                     immutable: declaration.kind == oxc_ast::ast::VariableDeclarationKind::Const,
+                    in_switch_case: self
+                        .switch_case_declarators
+                        .contains(&span(declaration.span)),
                     runtime_let: declaration.kind == oxc_ast::ast::VariableDeclarationKind::Let
                         && !self.ambient_variable
                         && self.ambient_module_depth == 0
@@ -333,6 +347,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                     })
                     .collect(),
                 rest_parameter: function.params.rest.is_some(),
+                parameters_inert: self.parameters_inert(&function.params),
                 rest_parameter_names: self.rest_parameter_names(function.params.rest.as_deref()),
                 r#async: function.r#async,
                 generator: function.generator,
@@ -458,6 +473,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 })
                 .collect(),
             rest_parameter: function.params.rest.is_some(),
+            parameters_inert: self.parameters_inert(&function.params),
             rest_parameter_names: self.rest_parameter_names(function.params.rest.as_deref()),
             r#async: function.r#async,
             generator: false,
@@ -760,6 +776,14 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             span: span(identifier.span),
             role: IdentifierRole::Reference,
         });
+        // Resolved or not: a `declare function require` shadows the host's
+        // `require` in the binder, and the host's is what runs.
+        if identifier.name == "require"
+            && !self.direct_require_callees.contains(&span(identifier.span))
+        {
+            self.unmodeled_require_references
+                .push(span(identifier.span));
+        }
         // The identifier, not `new Proxy(`: `Proxy.revocable` builds the same
         // thing, and `const P = Proxy` defers the construction to a name this
         // pass does not follow. A shadowed `Proxy` is somebody's own class and
@@ -863,6 +887,20 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         walk::walk_switch_statement(self, statement);
         self.conditional_flow_depth -= 1;
         self.conditional_control_stack.pop();
+    }
+
+    fn visit_switch_case(&mut self, case: &oxc_ast::ast::SwitchCase<'a>) {
+        for statement in &case.consequent {
+            if let oxc_ast::ast::Statement::VariableDeclaration(declaration) = statement {
+                self.switch_case_declarators.extend(
+                    declaration
+                        .declarations
+                        .iter()
+                        .map(|declarator| span(declarator.span)),
+                );
+            }
+        }
+        walk::walk_switch_case(self, case);
     }
 
     fn visit_assignment_expression(&mut self, expression: &AssignmentExpression<'a>) {
@@ -1713,6 +1751,12 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 kind: ModuleHazardKind::OpaqueWasm,
             });
         }
+        if Self::is_import_meta(&member.object)
+            && matches!(member.property.name.as_str(), "glob" | "globEager")
+            && !self.lazy_import_glob_callees.contains(&span(member.span))
+        {
+            self.in_place_import_globs.push(span(member.span));
+        }
         self.members.push(MemberFact {
             span: span(member.span),
             object: span(member.object.span()),
@@ -1733,6 +1777,13 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 || self.is_unresolved_named(object, "Reflect"))
         {
             self.record_accessor_installation(member.span);
+        }
+        // `import.meta["glob"]`, or a computed key that may spell it.
+        if Self::is_import_meta(&member.object)
+            && literal_property_key(&member.expression)
+                .is_none_or(|key| matches!(key.as_str(), "glob" | "globEager"))
+        {
+            self.in_place_import_globs.push(span(member.span));
         }
         let property = member.expression.span();
         let member_span = span(member.span);

@@ -20,6 +20,7 @@ mod callees;
 mod class_prototype;
 mod completion;
 mod components;
+mod initialization;
 mod member_values;
 mod primitive_proof;
 
@@ -129,6 +130,11 @@ pub(crate) fn returns_source_root(file: &FileFacts) -> bool {
 }
 
 pub(super) fn binding_written(file: &FileFacts, declaration: Span) -> bool {
+    // A direct `eval` reaches every binding visible where it is written and
+    // can rebind it (`eval("go = () => {}")`) with no static reference.
+    if crate::interproc::property_gets::direct_eval_in(file, Span::new(0, u32::MAX)) {
+        return true;
+    }
     // A redeclaration (`var xs = …` over a parameter, a second `function f`)
     // writes the same binding without any reference. Any other declaration
     // of the same name in the scope counts, a shadowing one included.
@@ -703,6 +709,9 @@ pub(super) struct SemanticLookup<'a> {
     jsx_call_sites: OnceLock<HashMap<(&'a str, Span), CallSiteLoading>>,
     declaration_symbols: OnceLock<DeclarationSymbols<'a>>,
     function_call_sites: OnceLock<HashMap<(&'a str, Span), Vec<FunctionCallSite>>>,
+    /// ADR 0339: references to function-valued bindings not proven to follow
+    /// their declarators.
+    initialization: initialization::State,
     prop_render_sites: OnceLock<PropRenderSites<'a>>,
     direct_value_aliases: OnceLock<HashSet<SymbolId>>,
     bindings_by_symbol: OnceLock<HashMap<SymbolId, BindingResolution>>,
@@ -876,6 +885,7 @@ impl<'a> SemanticLookup<'a> {
             jsx_call_sites: OnceLock::new(),
             declaration_symbols: OnceLock::new(),
             function_call_sites: OnceLock::new(),
+            initialization: initialization::State::default(),
             prop_render_sites: OnceLock::new(),
             direct_value_aliases: OnceLock::new(),
             bindings_by_symbol: OnceLock::new(),
@@ -1209,6 +1219,22 @@ impl<'a> SemanticLookup<'a> {
                     hasher.update(name.as_bytes());
                     hasher.update([u8::from(dom)]);
                 }
+            }
+            // ADR 0339: a mention of a function-valued binding that may run
+            // before its declarator supplies no call site or reachability
+            // edge; another module's imports decide it.
+            hasher.update(b"uninitialized-references\0");
+            let mut withheld = self
+                .uninitialized_references()
+                .iter()
+                .flat_map(|(path, spans)| spans.iter().map(move |span| (path.as_str(), *span)))
+                .collect::<Vec<_>>();
+            withheld.sort_unstable();
+            for (path, span) in withheld {
+                hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
+                hasher.update(path.as_bytes());
+                hasher.update(span.start.to_le_bytes());
+                hasher.update(span.end.to_le_bytes());
             }
             let mut member_targets = self.object_member_targets().iter().collect::<Vec<_>>();
             member_targets.sort_unstable_by(|a, b| {

@@ -721,6 +721,98 @@ fn runtime_let_facts_do_not_turn_ambient_bindings_into_undefined() {
 }
 
 #[test]
+fn switch_case_facts_mark_only_declarators_written_directly_in_a_clause() {
+    let source = "switch (m) { /* } */ case 0: const direct = 1, second = 2; break; case 1: { const blocked = 3; } default: let tail = 4; } const outside = 5; const f = () => { switch (m) { case 0: const nested = 6; } const inner = 7; };";
+    let facts = extract("switch.ts", source).unwrap();
+    let marked = facts
+        .bindings
+        .iter()
+        .filter(|binding| binding.in_switch_case)
+        .map(|binding| {
+            let name = binding.names[0].span;
+            &source[name.start as usize..name.end as usize]
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(marked, ["direct", "second", "tail", "nested"]);
+}
+
+#[test]
+fn parameter_lists_are_inert_only_when_no_default_can_run_user_code() {
+    let source = "const a = (x = 0, y = {}, z = [], w = () => 1, u = undefined, s = `t`) => 1; const b = (x = f()) => 1; const c = ({ k = g() } = {}) => 1; const d = ([k = 1], { m } = {}) => 1; const e = ({ [h()]: v }) => 1; const f2 = (x = [h()]) => 1; const g2 = (x = {p: 1}) => 1; const k = (x = `${h()}`) => 1; const l = (x = new Later()) => 1;";
+    let facts = extract("params.ts", source).unwrap();
+    // Source order: `a` then its nested `w` arrow, then `b` .. `l`.
+    let mut functions = facts.functions.iter().collect::<Vec<_>>();
+    functions.sort_by_key(|function| function.span.start);
+    let by_start = functions
+        .into_iter()
+        .map(|function| function.parameters_inert)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        by_start,
+        [
+            true, true, false, false, true, false, false, false, false, false
+        ]
+    );
+}
+
+#[test]
+fn require_wrappers_are_loads_and_other_mentions_are_unmodeled() {
+    for source in [
+        "require('./a')",
+        "(require as any)('./a')",
+        "require!('./a')",
+        "(require satisfies Function)('./a')",
+        "(<any>require)('./a')",
+    ] {
+        let facts = extract("direct.ts", source).unwrap();
+        assert_eq!(facts.module_loads.len(), 1, "{source}");
+        assert!(facts.unmodeled_require_references.is_empty(), "{source}");
+    }
+    for source in [
+        "(0, require)('./a')",
+        "const r = require; r('./a')",
+        "typeof require",
+        "require.resolve('./a')",
+        "new require('./a')",
+    ] {
+        let facts = extract("other.ts", source).unwrap();
+        assert_eq!(facts.unmodeled_require_references.len(), 1, "{source}");
+    }
+}
+
+#[test]
+fn import_globs_are_in_place_unless_provably_lazy() {
+    let lazy = [
+        "import.meta.glob('./a')",
+        "import.meta.glob('./a', { eager: false })",
+        "import.meta.glob(['./a'], { import: 'x', 'query': '?raw' })",
+        "(import.meta).glob('./a', { eager: false })",
+    ];
+    for source in lazy {
+        let facts = extract("lazy.ts", source).unwrap();
+        assert!(facts.in_place_import_globs.is_empty(), "{source}");
+    }
+    let in_place = [
+        "import.meta.glob('./a', { eager: true })",
+        "import.meta.glob('./a', { eager })",
+        "import.meta.glob('./a', { ...options })",
+        "import.meta.glob('./a', { ['eager']: false })",
+        "import.meta.glob('./a', options)",
+        "import.meta.glob(...args)",
+        "import.meta.globEager('./a')",
+        "const g = import.meta.glob; g('./a')",
+        "import.meta['glob']('./a')",
+        "import.meta?.glob('./a')",
+    ];
+    for source in in_place {
+        let facts = extract("eager.ts", source).unwrap();
+        assert_eq!(facts.in_place_import_globs.len(), 1, "{source}");
+    }
+    let env = extract("env.ts", "import.meta.env.MODE; import.meta['env']").unwrap();
+    assert!(env.in_place_import_globs.is_empty());
+}
+
+#[test]
 fn literal_keys_peel_wrappers_without_closing_computed_object_shapes() {
     for key in [
         "'state' as const",

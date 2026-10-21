@@ -115,6 +115,81 @@ fn effective_reachability_topology(
     }
 }
 
+/// The symbol a call edge resolves to for this function node.
+///
+/// A declaration (and a function expression's own name) answers by its own
+/// name. A function expression or arrow bound to a `const` identifier is
+/// reached by calling that binding -- `const useMenu = () => ...; useMenu()` --
+/// so its node takes the binding's symbol, which the call's callee resolves to
+/// exactly. Only an immutable single-identifier binding qualifies: a `let` or
+/// `var` may be reassigned between the declaration and the call, so a call
+/// through it does not prove this function runs. This only lets call edges
+/// find the node; it grants no owner, role, or root.
+fn reachability_function_symbol(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    entities: &EntitySymbols,
+) -> Option<SymbolId> {
+    if function.kind != solid_facts::ast::FunctionKind::Declaration
+        && let Some(name) = exact_const_binding_name(file, function)
+    {
+        return entities
+            .get(&location(file.path.shared(), name.span))
+            .cloned();
+    }
+    function.name.as_ref().and_then(|name| {
+        // A declaration's name may be rebound (`go = other`, or a direct
+        // `eval("go = …")`): a call through it then proves nothing of this
+        // function.
+        if function.kind == solid_facts::ast::FunctionKind::Declaration
+            && crate::indexes::binding_written(file, name.span)
+        {
+            return None;
+        }
+        entities
+            .get(&location(file.path.shared(), name.span))
+            .cloned()
+    })
+}
+
+fn exact_const_binding_name<'a>(
+    file: &'a solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> Option<&'a solid_facts::ast::NamedSpan> {
+    file.ast
+        .bindings_initializer_containing(function.span)
+        .find(|binding| {
+            binding.initializer_function
+                && binding.initializer.is_some_and(|initializer| {
+                    file.ast
+                        .functions_within(initializer)
+                        .max_by_key(|candidate| candidate.span.end - candidate.span.start)
+                        .is_some_and(|candidate| candidate.span == function.span)
+                })
+        })
+        .filter(|binding| {
+            binding.immutable
+                && binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding.names.len() == 1
+        })
+        .and_then(|binding| binding.names.first())
+}
+
+/// Whether the name a function is reached by (a declaration's own, or the
+/// `const` it is the whole initializer of) may be written, which includes a
+/// direct `eval` in the file.
+fn root_binding_written(file: &solid_facts::FileFacts, span: Span) -> bool {
+    let Some(function) = file.ast.function_at(span) else {
+        return false;
+    };
+    let name = if function.kind == solid_facts::ast::FunctionKind::Declaration {
+        function.name.as_ref()
+    } else {
+        exact_const_binding_name(file, function)
+    };
+    name.is_some_and(|name| crate::indexes::binding_written(file, name.span))
+}
+
 fn discover_reachability_file(
     file: &solid_facts::FileFacts,
     indexes: &ProjectIndexes<'_>,
@@ -127,11 +202,7 @@ fn discover_reachability_file(
         .functions
         .iter()
         .map(|function| {
-            let symbol = function.name.as_ref().and_then(|name| {
-                entities
-                    .get(&location(file.path.shared(), name.span))
-                    .cloned()
-            });
+            let symbol = reachability_function_symbol(file, function, entities);
             FunctionNode {
                 path: file.path.to_string(),
                 span: function.span,
@@ -169,6 +240,11 @@ fn discover_reachability_file(
     let mut roots = functions
         .iter()
         .filter(|function| {
+            // A root whose binding may be written (`App = other`, or a direct
+            // `eval` that can) may no longer be the function that runs.
+            !root_binding_written(file, function.span)
+        })
+        .filter(|function| {
             file.ast
                 .function_at(function.span)
                 .is_some_and(|candidate| {
@@ -205,7 +281,12 @@ fn discover_reachability_file(
             let Ok(end) = u32::try_from(entity.location.end_byte) else {
                 continue;
             };
-            if export.span.contains(Span::new(start, end))
+            let mention = Span::new(start, end);
+            // `export { addSooner }` names the entity by a reference; the
+            // binding is the declaration it resolves to.
+            let declaration = file.ast.reference_declaration(mention).unwrap_or(mention);
+            if export.span.contains(mention)
+                && !crate::indexes::binding_written(file, declaration)
                 && let Some(symbol) = entities.get(&entity.location)
             {
                 roots.push(ReachabilityTarget::Symbol(symbol.clone()));
@@ -216,7 +297,13 @@ fn discover_reachability_file(
     for (call_index, call) in file.ast.calls.iter().enumerate() {
         let owner = call_owners[call_index];
         let callee = location(file.path.shared(), call.callee);
-        if let Some(symbol) = entities.get(&callee) {
+        // ADR 0339: a mention that may run before its function-valued
+        // binding's declarator reaches nothing; the same holds for each edge
+        // below that names a function by a mention.
+        let withheld = |span: Span| lookup.may_precede_initialization(file.path.as_str(), span);
+        if let Some(symbol) = entities.get(&callee)
+            && !withheld(call.callee)
+        {
             edges.push(ReachabilityEdge {
                 owner,
                 target: ReachabilityTarget::Symbol(symbol.clone()),
@@ -282,6 +369,9 @@ fn discover_reachability_file(
                     else {
                         continue;
                     };
+                    if withheld(argument.span) {
+                        continue;
+                    }
                     for function in &file.ast.functions {
                         if function_symbol(file, function, entities) == Some(symbol) {
                             edges.push(ReachabilityEdge {
@@ -297,6 +387,9 @@ fn discover_reachability_file(
                 .iter()
                 .flat_map(|argument| &argument.identifier_properties)
             {
+                if withheld(property.span) {
+                    continue;
+                }
                 if let Some(symbol) = entities.get(&location(file.path.shared(), property.span)) {
                     edges.push(ReachabilityEdge {
                         owner,
@@ -328,7 +421,9 @@ fn discover_reachability_file(
             .filter(|function| callback.span.contains(function.span))
             .map(|function| ReachabilityTarget::LocalSpan(function.span))
             .collect::<Vec<_>>();
-        if let Some(symbol) = entities.get(&location(file.path.shared(), callback.span)) {
+        if let Some(symbol) = entities.get(&location(file.path.shared(), callback.span))
+            && !lookup.may_precede_initialization(file.path.as_str(), callback.span)
+        {
             targets.push(ReachabilityTarget::Symbol(symbol.clone()));
         }
         callback_edges.push((owner, targets));

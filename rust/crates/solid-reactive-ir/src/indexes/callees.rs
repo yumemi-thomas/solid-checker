@@ -206,7 +206,7 @@ impl<'a> SemanticLookup<'a> {
         ))
     }
 
-    fn bindings_by_reference(&self) -> &BindingsByReference {
+    pub(super) fn bindings_by_reference(&self) -> &BindingsByReference {
         self.bindings_by_reference.get_or_init(|| {
             let symbols = self.symbols_by_id.get_or_init(|| {
                 self.facts

@@ -1,0 +1,2 @@
+import "./aliast-provider";
+export {};

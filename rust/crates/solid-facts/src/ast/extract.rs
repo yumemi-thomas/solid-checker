@@ -88,6 +88,9 @@ pub(super) struct Collector<'s, 'semantic> {
     pub(super) exported_import_equals: Vec<Span>,
     pub(super) module_hazards: Vec<ModuleHazardFact>,
     pub(super) module_blocks: Vec<Span>,
+    /// The declarator spans of every variable declaration written directly
+    /// in a `switch` case clause (facts schema 67).
+    pub(super) switch_case_declarators: Vec<Span>,
     pub(super) ambient_module_depth: usize,
     pub(super) ambient_variable: bool,
     pub(super) identifiers: Vec<IdentifierFact>,
@@ -96,6 +99,13 @@ pub(super) struct Collector<'s, 'semantic> {
     pub(super) unconditional_awaits: Vec<Span>,
     pub(super) dominating_awaits: Vec<(Span, Span)>,
     pub(super) try_head_awaits: Vec<TryHeadAwaitFact>,
+    pub(super) in_place_import_globs: Vec<Span>,
+    pub(super) unmodeled_require_references: Vec<Span>,
+    /// The `require` identifiers that are the (peeled) callee of a call.
+    pub(super) direct_require_callees: Vec<Span>,
+    /// `import.meta.glob` member spans that are the callee of a call whose
+    /// options are provably lazy.
+    pub(super) lazy_import_glob_callees: Vec<Span>,
     /// Open blocks: span, conditional depth at entry, function nesting level.
     pub(super) open_blocks: Vec<(Span, usize, usize)>,
     pub(super) straight_line_calls: Vec<Span>,
@@ -251,6 +261,7 @@ pub(super) struct BindingMetadata {
     pub(super) initializer_value_kind: RuntimeValueKind,
     pub(super) immutable: bool,
     pub(super) runtime_let: bool,
+    pub(super) in_switch_case: bool,
 }
 
 impl<'s, 'semantic> Collector<'s, 'semantic> {
@@ -308,6 +319,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             exported_import_equals: Vec::new(),
             module_hazards: Vec::new(),
             module_blocks: Vec::new(),
+            switch_case_declarators: Vec::new(),
             ambient_module_depth: 0,
             ambient_variable: false,
             identifiers: Vec::new(),
@@ -316,6 +328,10 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             unconditional_awaits: Vec::new(),
             dominating_awaits: Vec::new(),
             try_head_awaits: Vec::new(),
+            in_place_import_globs: Vec::new(),
+            unmodeled_require_references: Vec::new(),
+            direct_require_callees: Vec::new(),
+            lazy_import_glob_callees: Vec::new(),
             open_blocks: Vec::new(),
             straight_line_calls: Vec::new(),
             straight_line_constructs: Vec::new(),
@@ -399,6 +415,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.dominating_awaits.sort_unstable();
         self.try_head_awaits
             .sort_unstable_by_key(|fact| fact.awaited);
+        self.in_place_import_globs.sort_unstable();
+        self.unmodeled_require_references.sort_unstable();
         self.straight_line_calls.sort_unstable();
         self.straight_line_constructs.sort_unstable();
         self.completion_sites.sort_unstable();
@@ -475,6 +493,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             unconditional_awaits: self.unconditional_awaits,
             dominating_awaits: self.dominating_awaits,
             try_head_awaits: self.try_head_awaits,
+            in_place_import_globs: self.in_place_import_globs,
+            unmodeled_require_references: self.unmodeled_require_references,
             straight_line_calls: self.straight_line_calls,
             straight_line_constructs: self.straight_line_constructs,
             completion_sites: self.completion_sites,
@@ -606,6 +626,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             },
             immutable: metadata.immutable,
             runtime_let: metadata.runtime_let,
+            in_switch_case: metadata.in_switch_case,
             initializer: metadata.initializer.map(span),
             call_initializer: metadata.call_initializer.map(span),
             initializer_function: metadata.initializer_function,
@@ -1008,6 +1029,53 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         });
     }
 
+    pub(super) fn is_import_meta(expression: &Expression<'_>) -> bool {
+        matches!(
+            expression.get_inner_expression(),
+            Expression::MetaProperty(meta)
+                if meta.meta.name == "import" && meta.property.name == "meta"
+        )
+    }
+
+    /// Whether `import.meta.glob(arguments)` is provably lazy: one or two
+    /// plain arguments, the second absent or an object literal of plain keys
+    /// whose `eager`, if written, is the literal `false`.
+    pub(super) fn import_glob_is_lazy(arguments: &[Argument<'_>]) -> bool {
+        use oxc_ast::ast::ObjectPropertyKind;
+        if arguments.is_empty()
+            || arguments.len() > 2
+            || arguments
+                .iter()
+                .any(|argument| matches!(argument, Argument::SpreadElement(_)))
+        {
+            return false;
+        }
+        let Some(options) = arguments.get(1) else {
+            return true;
+        };
+        let Argument::ObjectExpression(options) = options else {
+            return false;
+        };
+        options.properties.iter().all(|property| {
+            let ObjectPropertyKind::ObjectProperty(property) = property else {
+                return false;
+            };
+            if property.computed {
+                return false;
+            }
+            let eager = match &property.key {
+                PropertyKey::StaticIdentifier(key) => key.name == "eager",
+                PropertyKey::StringLiteral(key) => key.value == "eager",
+                _ => return false,
+            };
+            !eager
+                || matches!(
+                    property.value.get_inner_expression(),
+                    Expression::BooleanLiteral(value) if !value.value
+                )
+        })
+    }
+
     pub(super) fn is_unresolved_named(
         &self,
         identifier: &IdentifierReference<'_>,
@@ -1017,6 +1085,55 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             && identifier.reference_id.get().is_some_and(|reference| {
                 self.scoping.get_reference(reference).symbol_id().is_none()
             })
+    }
+
+    /// Whether evaluating `parameters` can run no user code (see
+    /// `FunctionFact::parameters_inert`).
+    pub(super) fn parameters_inert(&self, parameters: &oxc_ast::ast::FormalParameters<'_>) -> bool {
+        parameters.items.iter().all(|parameter| {
+            parameter.decorators.is_empty()
+                && parameter
+                    .initializer
+                    .as_ref()
+                    .is_none_or(|value| self.inert_default(value))
+                && self.pattern_inert(&parameter.pattern)
+        })
+    }
+
+    fn pattern_inert(&self, pattern: &BindingPattern<'_>) -> bool {
+        match pattern {
+            BindingPattern::BindingIdentifier(_) => true,
+            BindingPattern::ObjectPattern(object) => object
+                .properties
+                .iter()
+                .all(|property| !property.computed && self.pattern_inert(&property.value)),
+            BindingPattern::ArrayPattern(array) => array.elements.iter().all(|element| {
+                element
+                    .as_ref()
+                    .is_none_or(|element| self.pattern_inert(element))
+            }),
+            BindingPattern::AssignmentPattern(assignment) => {
+                self.inert_default(&assignment.right) && self.pattern_inert(&assignment.left)
+            }
+        }
+    }
+
+    fn inert_default(&self, expression: &Expression<'_>) -> bool {
+        match peel_ts_sugar(expression) {
+            Expression::NullLiteral(_)
+            | Expression::StringLiteral(_)
+            | Expression::NumericLiteral(_)
+            | Expression::BooleanLiteral(_)
+            | Expression::BigIntLiteral(_)
+            | Expression::RegExpLiteral(_)
+            | Expression::ArrowFunctionExpression(_)
+            | Expression::FunctionExpression(_) => true,
+            Expression::TemplateLiteral(template) => template.expressions.is_empty(),
+            Expression::ObjectExpression(object) => object.properties.is_empty(),
+            Expression::ArrayExpression(array) => array.elements.is_empty(),
+            Expression::Identifier(identifier) => self.is_global_undefined(identifier),
+            _ => false,
+        }
     }
 
     pub(super) fn runtime_value_kind(&self, expression: &Expression<'_>) -> RuntimeValueKind {

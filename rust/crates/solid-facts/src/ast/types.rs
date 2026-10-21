@@ -146,6 +146,23 @@ pub struct AstFacts {
     /// Whether the operand can throw is the consumer's question.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub try_head_awaits: Vec<TryHeadAwaitFact>,
+    /// The `import.meta.glob(…)` and `import.meta.globEager(…)` calls that the
+    /// bundler may turn into static imports run in place (facts schema 70):
+    /// every call except `glob` with no options, or with an options object
+    /// literal (no spread, no computed key) that has no `eager` key or has
+    /// `eager: false`. The matched modules are unknown, so the module holding
+    /// one may sit on an import cycle. A lazy glob is a dynamic import and
+    /// is not recorded.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub in_place_import_globs: Vec<Span>,
+    /// Every reference to the unresolved global `require` that is not the
+    /// callee of a call, once parentheses and TypeScript wrappers (`as`,
+    /// `satisfies`, `!`, `<T>`) are peeled (facts schema 69): `(0, require)(x)`,
+    /// `const r = require`, `typeof require`, `require.resolve`. Such a
+    /// reference may load a module in place with no recorded load, so the
+    /// module holding one may sit on an import cycle.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unmodeled_require_references: Vec<Span>,
     /// The call expressions written in their innermost enclosing function's
     /// straight-line flow, as [`Self::unconditional_awaits`] are, and outside
     /// any optional chain (`a?.b(c())` evaluates `c()` only when `a` is not
@@ -699,6 +716,13 @@ pub struct BindingFact {
     /// Missing ambient initializers never establish an undefined value.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub runtime_let: bool,
+    /// Whether this declarator is written directly in a `switch` case clause
+    /// (facts schema 67). All clauses share one lexical scope, so a jump to a
+    /// later clause enters it without running the declarator, and a read
+    /// there throws `ReferenceError`. A declaration in a block inside a
+    /// clause (`case 1: { const x }`) is not this.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub in_switch_case: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub initializer: Option<Span>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -813,6 +837,14 @@ pub struct FunctionFact {
     /// must treat that tail as observable rather than as unnamed.
     #[serde(default)]
     pub rest_parameter: bool,
+    /// Whether evaluating the parameter list can run no user code and so
+    /// cannot throw before the body does (facts schema 70): every default
+    /// initializer, at any depth of a destructuring pattern, is a primitive
+    /// literal, a function or arrow, an empty object or array literal or the
+    /// global `undefined`, no computed key is written, and no parameter has a
+    /// decorator. Absent (an older fact) is false: the list may throw.
+    #[serde(default)]
+    pub parameters_inert: bool,
     /// The binding identifiers a rest parameter declares.
     ///
     /// Kept out of `parameters` for the reason above — the tail fills no single
@@ -1719,6 +1751,8 @@ impl AstFacts {
             unconditional_awaits: Vec::new(),
             dominating_awaits: Vec::new(),
             try_head_awaits: Vec::new(),
+            in_place_import_globs: Vec::new(),
+            unmodeled_require_references: Vec::new(),
             straight_line_calls: Vec::new(),
             straight_line_constructs: Vec::new(),
             completion_sites: Vec::new(),
