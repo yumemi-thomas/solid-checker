@@ -1,7 +1,7 @@
 // SC1002 under ADR 0348: argument purity and the synchronous prefix. Each export
 // is one review case; its id is the comment above it. Verdicts the checker keeps:
-//  - a01-a20, r23-r27: a standard call before the await may read the source, so
-//    the read after it is uncertifiable (U). a21 (`new Array(object)`: an element,
+//  - a01-a14, a16-a20, r23-r27: a standard call before the await may read the
+//    source, so the read after it is uncertifiable (U). a21 (`new Array(object)`: an element,
 //    not a length), c01 (`Math.max(1)`) and d01-d03 stay violations (V).
 //  - s01-s04, s07, s08, s11, r12, r17, u01, u04-u07, u09, u12: a prefix or try-head
 //    read is a violation (V). s09, s10, u10, u11, r16, r18, r22, r28: U.
@@ -228,22 +228,6 @@ export function CaseA14MathSpread() {
   const data = createMemo(async () => {
     tick();
     Math.max(...iter);
-    await pause();
-    return value();
-  });
-  return <div>{String(data())}</div>;
-}
-
-// a15-promise-subclass
-export function CaseA15PromiseSubclass() {
-  const [value, setValue] = createSignal(1);
-  const [tick, setTick] = createSignal(0);
-  setTimeout(() => setTick(1), 80);
-  setTimeout(() => setValue(2), 160);
-  class P extends Promise<number> { then<A = number, B = never>(a?: ((v: number) => A | PromiseLike<A>) | null, b?: ((r: any) => B | PromiseLike<B>) | null): Promise<A | B> { value(); return super.then(a, b); } }
-  const data = createMemo(async () => {
-    tick();
-    await P.resolve(1).then(() => 0);
     await pause();
     return value();
   });

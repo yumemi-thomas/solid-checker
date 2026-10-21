@@ -50,11 +50,13 @@ there, and the reads in it are then reported with the same two proofs:
   continuation when the call's result is the promise the computation returns
   or awaits (`createMemo(() => pause().then(() => count()))`, `await
   pause().then(...)`, a handler chain). The receiver is proven native by
-  `new Promise`, `Promise.resolve` and the other statics of the global
-  `Promise`, a call of an `async` project function, a project function that
-  returns one of these, or a handler call on one; a `PromiseLike`, a typed
-  `Promise<T>` parameter or an unknown receiver is not proof, since a thenable
-  may call back inline. Two limits keep a handler uncertifiable:
+  `new Promise`, the statics of the global `Promise`, `fetch`, a call of an
+  `async` project function or an `async` function literal invoked in place, a
+  project function that returns one of these, or a handler call on one; a
+  `PromiseLike`, a typed `Promise<T>` parameter or an unknown receiver is not
+  proof, since a thenable may call back inline. The proof holds while no visible
+  write reaches the Promise intrinsics (ADR 0349). With such a write the handler
+  is a proof obligation, never a violation. Two limits keep a handler uncertifiable:
   - *An `async` function returns the chain without awaiting it* (the
     computation itself, or an `async` helper): the function adopts the promise
     in a later microtask. A receiver that may already be settled
@@ -160,10 +162,19 @@ spread, each slot that coerces or iterates (`Math.max(x)`, `parseInt(x)`,
 source-proven primitive, and each queued callback slot (`setTimeout`,
 `queueMicrotask`, `new Promise(executor)`) holds a proven function. A type
 annotation or assertion is not a value proof, and a primitive-valued operator
-is not inert by its result (`delete proxy.key`). A standard call that is not an
+is not inert by its result (`delete proxy.key`). A call is primitive by its
+result when its standard function returns a primitive (`Math.random()`), or when
+it reads a signal the program only ever writes with numeric literals and the
+compiler types as a number (ADR 0350); the call's own evaluation is judged on
+its own. A standard call that is not an
 inert row is opaque, never a project member of the same property name
-(`stats.max` beside `Math.max`). Promise handlers and
-combinators are opaque in this pass. An object, spread or opaque slot stays
+(`stats.max` beside `Math.max`). A handler on a
+native receiver is inert, and `Promise.all`, `allSettled`, `race` and `any` over an
+array literal of native promises and primitives are inert while the
+array-iteration premise holds (ADR 0349). Other handlers and combinators are
+opaque. A coercion whose operand holds the function's own suspension
+(`(await f()) + 1`) runs after the function resumed, so it is not a pre-await
+read (ADR 0348). An object, spread or opaque slot stays
 possibly tracked. A callee may invoke a callback registered earlier
 (`window.dispatchEvent`, `fn.call()`, a package `invoke()`) or read a source a
 package store holds, and nothing says it does not. A call whose declaration the
@@ -268,7 +279,7 @@ own synchronous computation and compose the two.
 ## Limits
 
 - **Each shape only adds reports.** A mistake in one shape can only add a false positive, so each has a runtime-oracle case: `after-await-settlement`, `after-await-tracked`, `after-await-disposed` and `after-await-owner` pin the reports. The other `after-await-*` cases (`after-await-quiet`, `after-await-possible`, `after-await-promises`, `after-await-adopted`) pin the silent shapes and the reads the checker leaves uncertifiable.
-- **Not modeled:** `race` and `any` of helpers, a promise held in a variable and handled later, member helpers (`api.read()`), an async IIFE the computation awaits, and props already tracked. The open items are in `docs/open-work.md`.
+- **Not modeled:** `race` and `any` of helpers, a promise held in a variable and handled later, member helpers (`api.read()`), an async IIFE the computation awaits, a `Promise.all` over a `.map` result (not an array literal), an accessor alias, and props already tracked. The open items are in `docs/open-work.md`.
 
 ## Related
 

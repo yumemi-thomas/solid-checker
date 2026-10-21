@@ -13,11 +13,6 @@
     },
     {
       "code": "UNTRACKED_READ_AFTER_AWAIT",
-      "site": "App.tsx:31",
-      "reason": "`fetch(...)` is not among the receivers proven a native Promise"
-    },
-    {
-      "code": "UNTRACKED_READ_AFTER_AWAIT",
       "site": "App.tsx:38",
       "reason": "a `Promise<void>` read from a property is typed, not proven native: a thenable or subclass has that type"
     },

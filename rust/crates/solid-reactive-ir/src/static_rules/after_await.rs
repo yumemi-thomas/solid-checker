@@ -35,6 +35,9 @@
 //! computation already tracked before its first suspension stay exempt
 //! (ADR 0195).
 
+use super::native_promise::{
+    async_helper, is_global_promise, is_global_promise_static, native_promise, native_promise_claim,
+};
 use super::pre_await::{PreAwait, Tracking};
 use super::{
     AsyncComputations, call_accessor_symbol, member_read_site, member_reads_after_await,
@@ -43,6 +46,7 @@ use super::{
 use crate::HashSet;
 use crate::cleanup::callback_argument_literal;
 use crate::identity::SymbolId;
+use crate::indexes::mentions_word;
 use crate::owners::{containing_ast_function, written_directly_in};
 use crate::pipeline::{AnalysisContext, ProgramDraft};
 use crate::runtime_semantics::{is_inline_standard_callback, is_timer_call, standard_call_name};
@@ -86,6 +90,9 @@ struct Walk<'m> {
     /// The chain being followed runs inside `untrack`: a helper it reaches
     /// is not inside the computation's tracking window.
     untracked: bool,
+    /// The chain being followed runs on an intrinsic a visible write may have
+    /// changed (ADR 0349): every member it queues is conditional.
+    unproven: bool,
 }
 
 struct Reach<'f, 'a> {
@@ -250,18 +257,6 @@ fn plain_value(file: &FileFacts, span: Span) -> bool {
             && matches!(text.as_bytes()[0], b'"' | b'\'')
             && text.as_bytes()[text.len() - 1] == text.as_bytes()[0]
             && !text[1..text.len() - 1].contains(text.as_bytes()[0] as char))
-}
-
-/// Whether `word` occurs in `text` as a whole identifier.
-fn mentions_word(text: &str, word: &str) -> bool {
-    let identifier = |c: char| c.is_alphanumeric() || c == '_' || c == '$';
-    text.match_indices(word).any(|(index, _)| {
-        !text[..index].chars().next_back().is_some_and(identifier)
-            && !text[index + word.len()..]
-                .chars()
-                .next()
-                .is_some_and(identifier)
-    })
 }
 
 /// Whether a `createRoot` whose `dispose` function the code mentions encloses
@@ -432,49 +427,6 @@ fn chain_calls<'f>(
     awaited.chain(returned).collect()
 }
 
-/// Whether the function the callee names is an `async` project function
-/// whose value is the one the call runs.
-fn async_helper<'x>(
-    ctx: &AnalysisContext<'x>,
-    file: &FileFacts,
-    call: &CallFact,
-) -> Option<(&'x FileFacts, &'x FunctionFact)> {
-    if call.construct {
-        return None;
-    }
-    let callee = file.ast.peel_ts_sugar_span(call.callee);
-    if file.ast.member_at(callee).is_some() {
-        return None;
-    }
-    let (helper_file, helper) = ctx
-        .semantic_lookup
-        .function_called_at(file.path.as_str(), callee)?;
-    (helper.r#async
-        && !helper.generator
-        && helper.method_name.is_none()
-        && ctx
-            .semantic_lookup
-            .function_value_is_current(helper_file, helper))
-    .then_some((helper_file, helper))
-}
-
-/// The global `Promise`: the identifier `Promise`, bound by no declaration the
-/// parser saw.
-fn is_global_promise(file: &FileFacts, span: Span) -> bool {
-    let span = file.ast.peel_ts_sugar_span(span);
-    file.source_text(span) == Some("Promise") && file.ast.reference_declaration(span).is_none()
-}
-
-/// A call to a static member of the global `Promise` (`Promise.all(...)`).
-fn is_global_promise_static(file: &FileFacts, callee: Span) -> bool {
-    let callee = file.ast.peel_ts_sugar_span(callee);
-    !file.ast.computed_members.contains(&callee)
-        && file
-            .ast
-            .member_at(callee)
-            .is_some_and(|member| is_global_promise(file, member.object))
-}
-
 impl<'f, 'a> Reach<'f, 'a> {
     fn key(function: &AsyncFunctionFact) -> (String, u64, u64) {
         (
@@ -558,6 +510,7 @@ impl<'f, 'a> Reach<'f, 'a> {
             queued: HashSet::default(),
             carried: Carried::Held,
             untracked: false,
+            unproven: false,
         };
         let mark = draft.static_defects.len();
         // The producer's dominance facts: accessor calls after the first
@@ -1187,10 +1140,27 @@ impl<'f, 'a> Reach<'f, 'a> {
                 // Only a native promise runs the handler from a microtask on
                 // the stack the flight is attributed to. A thenable, a
                 // subclass or an unknown receiver may call back inline.
-                if !self.native_promise(file, receiver, 0) {
+                let handlers = if name == "Promise.then" { 2 } else { 1 };
+                if !native_promise(self.ctx, file, receiver, 0) {
+                    // ADR 0349: a receiver the premise would prove native, which
+                    // a visible write withdraws, is unproven, not clean: its
+                    // handlers are proof obligations.
+                    if native_promise_claim(self.ctx, file, receiver, 0) {
+                        for argument in call
+                            .arguments
+                            .iter()
+                            .take(handlers)
+                            .filter(|argument| !argument.spread)
+                        {
+                            if let Some(callback) = callback_argument_literal(file, argument.span)
+                                && !callback.generator
+                            {
+                                self.report_conditional_region(draft, walk, file, callback, depth);
+                            }
+                        }
+                    }
                     return;
                 }
-                let handlers = if name == "Promise.then" { 2 } else { 1 };
                 // A handler on a receiver that may already be settled is
                 // queued before an `async` function adopts the promise it
                 // returns, and no frame of the computation is below it.
@@ -1220,7 +1190,9 @@ impl<'f, 'a> Reach<'f, 'a> {
                     // runs either way.
                     let rejection_only =
                         name == "Promise.catch" || (name == "Promise.then" && index == 1);
-                    if rejection_only || !fulfills || !on_flight {
+                    // Inside an aggregate whose premise is withdrawn (ADR 0349),
+                    // the element's flight is unproven as well.
+                    if rejection_only || !fulfills || !on_flight || walk.unproven {
                         self.report_conditional_region(draft, walk, file, callback, depth);
                     } else {
                         self.report_region(draft, walk, file, callback, depth);
@@ -1234,27 +1206,46 @@ impl<'f, 'a> Reach<'f, 'a> {
             "PromiseConstructor.all" | "PromiseConstructor.allSettled"
                 if is_global_promise_static(file, callee) =>
             {
-                let Some(argument) = call.arguments.first().filter(|argument| !argument.spread)
-                else {
-                    return;
-                };
-                let span = file.ast.peel_ts_sugar_span(argument.span);
-                if let Some(array) = file.ast.array_literal_at(span) {
-                    for element in &array.elements {
-                        if element.kind != solid_facts::ast::ArrayElementKind::Value {
-                            continue;
-                        }
-                        let element = file.ast.peel_ts_sugar_span(element.span);
-                        if let Some(inner) = file.ast.call_at(element) {
-                            self.expand(draft, walk, queue, file, inner, depth + 1);
-                        }
-                    }
-                } else if let Some(mapped) = file.ast.call_at(span) {
-                    self.expand_mapped(walk, queue, file, mapped);
-                }
+                self.expand_aggregate(draft, walk, queue, file, call, depth);
             }
             _ => {}
         }
+    }
+
+    /// `Promise.all([...])` and `allSettled`: each element's promise continues
+    /// the flight. Driving the iterator and each element's `then` is intrinsic
+    /// only under the Promise and array-iteration premises (ADR 0349); without
+    /// them the elements' reads are proof obligations.
+    fn expand_aggregate(
+        &self,
+        draft: &mut ProgramDraft,
+        walk: &mut Walk<'_>,
+        queue: &mut Vec<Member>,
+        file: &'f FileFacts,
+        call: &'f CallFact,
+        depth: usize,
+    ) {
+        let semantic = self.ctx.semantic_lookup;
+        let premise = semantic.promise_intrinsics_intact() && semantic.array_iteration_intact();
+        let next = walk.unproven || !premise;
+        let previous = std::mem::replace(&mut walk.unproven, next);
+        if let Some(argument) = call.arguments.first().filter(|argument| !argument.spread) {
+            let span = file.ast.peel_ts_sugar_span(argument.span);
+            if let Some(array) = file.ast.array_literal_at(span) {
+                for element in &array.elements {
+                    if element.kind != solid_facts::ast::ArrayElementKind::Value {
+                        continue;
+                    }
+                    let element = file.ast.peel_ts_sugar_span(element.span);
+                    if let Some(inner) = file.ast.call_at(element) {
+                        self.expand(draft, walk, queue, file, inner, depth + 1);
+                    }
+                }
+            } else if let Some(mapped) = file.ast.call_at(span) {
+                self.expand_mapped(walk, queue, file, mapped);
+            }
+        }
+        walk.unproven = previous;
     }
 
     /// `Promise.all(items.map(async (item) => ...))`: each element is the
@@ -1347,6 +1338,7 @@ impl<'f, 'a> Reach<'f, 'a> {
         // await on a promise proven still pending leaves a reaction in place.
         let conditional = walk.member.conditional
             || uncertain
+            || walk.unproven
             || (walk.carried == Carried::Adopted && !self.awaits_pending(file, function));
         queue.push(Member {
             function: fact,
@@ -1361,7 +1353,9 @@ impl<'f, 'a> Reach<'f, 'a> {
     /// fulfilling receiver fulfills, a rejection handler on a rejecting one
     /// recovers it, and `finally` passes the receiver's outcome on.
     fn settlement(&self, file: &FileFacts, span: Span, depth: usize) -> Settlement {
-        if depth > MAX_DEPTH {
+        // ADR 0349: outcomes of the global Promise are unproven once a visible
+        // write may have changed them.
+        if depth > MAX_DEPTH || !self.ctx.semantic_lookup.promise_intrinsics_intact() {
             return Settlement::Unknown;
         }
         let ctx = self.ctx;
@@ -1402,6 +1396,20 @@ impl<'f, 'a> Reach<'f, 'a> {
                     .collect(),
             )
         };
+        // ADR 0349: an aggregate's outcome is driven by the array iterator, which
+        // a visible write may have replaced.
+        if matches!(
+            standard,
+            Some(
+                "PromiseConstructor.all"
+                    | "PromiseConstructor.allSettled"
+                    | "PromiseConstructor.race"
+                    | "PromiseConstructor.any"
+            )
+        ) && !ctx.semantic_lookup.array_iteration_intact()
+        {
+            return Settlement::Unknown;
+        }
         match (call.construct, standard) {
             (true, Some("PromiseConstructor.construct")) => {
                 if !is_global_promise(file, call.callee) {
@@ -1681,7 +1689,7 @@ impl<'f, 'a> Reach<'f, 'a> {
     /// promise, a `Promise.resolve`, a `Promise.reject` and a typed value are
     /// not proof: each may be settled already.
     fn pending_promise(&self, file: &FileFacts, span: Span, depth: usize) -> bool {
-        if depth > MAX_DEPTH {
+        if depth > MAX_DEPTH || !self.ctx.semantic_lookup.promise_intrinsics_intact() {
             return false;
         }
         let ctx = self.ctx;
@@ -1708,6 +1716,7 @@ impl<'f, 'a> Reach<'f, 'a> {
                 ),
             ) => {
                 is_global_promise_static(file, callee)
+                    && self.ctx.semantic_lookup.array_iteration_intact()
                     && call
                         .arguments
                         .first()
@@ -1833,93 +1842,6 @@ impl<'f, 'a> Reach<'f, 'a> {
             returned
                 .argument
                 .is_some_and(|argument| self.pending_promise(helper_file, argument, depth + 1))
-        })
-    }
-
-    /// Whether `span` is provably a native `Promise` (constructor `Promise`):
-    /// `new Promise(...)` and `Promise.resolve`/`reject`/combinators of the
-    /// global `Promise`, a call to an `async` project function (never a
-    /// subclass), a project function whose every return is one of these, and
-    /// `.then`/`.catch`/`.finally` of one. A typed `Promise<T>` or
-    /// `PromiseLike<T>` proves nothing: a subclass or a thenable has that
-    /// type too.
-    fn native_promise(&self, file: &FileFacts, span: Span, depth: usize) -> bool {
-        if depth > MAX_DEPTH {
-            return false;
-        }
-        let ctx = self.ctx;
-        let span = file.ast.peel_ts_sugar_span(span);
-        let Some(call) = file.ast.call_at(span) else {
-            return false;
-        };
-        if async_helper(ctx, file, call).is_some() {
-            return true;
-        }
-        let standard = ctx
-            .semantic_lookup
-            .resolved_callee_call(file, call.callee)
-            .and_then(standard_call_name);
-        let callee = file.ast.peel_ts_sugar_span(call.callee);
-        match (call.construct, standard) {
-            (true, Some("PromiseConstructor.construct")) => is_global_promise(file, call.callee),
-            (
-                false,
-                Some(
-                    "PromiseConstructor.resolve"
-                    | "PromiseConstructor.reject"
-                    | "PromiseConstructor.all"
-                    | "PromiseConstructor.allSettled"
-                    | "PromiseConstructor.race"
-                    | "PromiseConstructor.any",
-                ),
-            ) => is_global_promise_static(file, callee),
-            (false, Some("Promise.then" | "Promise.catch" | "Promise.finally")) => file
-                .ast
-                .member_at(callee)
-                .filter(|_| !file.ast.computed_members.contains(&callee))
-                .is_some_and(|member| self.native_promise(file, member.object, depth + 1)),
-            (false, None) => self.returns_native_promise(file, call, depth),
-            _ => false,
-        }
-    }
-
-    /// A call to a project function that, on every path, returns a native
-    /// promise (`const pause = () => new Promise(...)`).
-    fn returns_native_promise(&self, file: &FileFacts, call: &CallFact, depth: usize) -> bool {
-        let ctx = self.ctx;
-        if call.construct {
-            return false;
-        }
-        let callee = file.ast.peel_ts_sugar_span(call.callee);
-        if file.ast.member_at(callee).is_some() {
-            return false;
-        }
-        let Some((helper_file, helper)) = ctx
-            .semantic_lookup
-            .function_called_at(file.path.as_str(), callee)
-        else {
-            return false;
-        };
-        if helper.generator
-            || helper.method_name.is_some()
-            || !ctx
-                .semantic_lookup
-                .function_value_is_current(helper_file, helper)
-        {
-            return false;
-        }
-        let mut returned = helper_file
-            .ast
-            .own_returns(helper)
-            .chain(helper.expression_return.iter())
-            .peekable();
-        if returned.peek().is_none() {
-            return false;
-        }
-        returned.all(|returned| {
-            returned
-                .argument
-                .is_some_and(|argument| self.native_promise(helper_file, argument, depth + 1))
         })
     }
 }
