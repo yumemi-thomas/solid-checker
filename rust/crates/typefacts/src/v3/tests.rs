@@ -10,10 +10,10 @@ use crate::{
 use super::{
     SlotOp, TYPE_FACTS_SCHEMA_SHA256, TYPE_FACTS_TABLE_SCHEMA_V3, TYPE_FACTS_TABLE_SCHEMA_V14,
     TYPE_FACTS_TABLE_SCHEMA_V15, TYPE_FACTS_TABLE_SCHEMA_V16, TYPE_FACTS_TABLE_SCHEMA_V17,
-    TYPE_FACTS_TABLE_SCHEMA_V18, TYPE_FACTS_TABLE_SCHEMA_V19, TransitionMode,
-    decode_table_transition, parse_argument_mapping_reason, parse_argument_mapping_status,
-    parse_call_kind, parse_callability, parse_constructability, parse_reference_space,
-    parse_resolved_call_validity, push_uvarint,
+    TYPE_FACTS_TABLE_SCHEMA_V18, TYPE_FACTS_TABLE_SCHEMA_V19, TYPE_FACTS_TABLE_SCHEMA_V21,
+    TransitionMode, decode_table_transition, parse_argument_mapping_reason,
+    parse_argument_mapping_status, parse_call_kind, parse_callability, parse_constructability,
+    parse_reference_space, parse_resolved_call_validity, push_uvarint,
 };
 
 fn push_test_string(frame: &mut Vec<u8>, value: &str) {
@@ -316,8 +316,61 @@ fn wire_table_v5_decodes_explicit_unresolved_symbols_and_v4_stays_frozen() {
         panic!("entity row was not replaced");
     };
     assert!(entities[0].symbol.is_empty());
-    assert!(entities[0].symbol_unresolved);
+    assert!(entities[0].symbol_unresolved());
     assert!(decode_table_transition(&unresolved_symbol_transition(4)).is_err());
+}
+
+/// One path with one entity whose symbol is the string-table entry at
+/// `symbol_index` (0 is the empty string, which means no symbol), carrying
+/// the flag word `flags`.
+fn symbol_flag_transition(table_schema: u64, symbol_index: u64, flags: u64) -> Vec<u8> {
+    let mut frame = Vec::new();
+    for value in [1, 0, table_schema, 0, 1, 3] {
+        push_uvarint(&mut frame, value);
+    }
+    push_test_string(&mut frame, "");
+    push_test_string(&mut frame, "/p/tsconfig.json");
+    push_test_string(&mut frame, "/p/a.ts");
+    for value in [1, 0, 1, 2, 4] {
+        push_uvarint(&mut frame, value);
+    }
+    // One entity: start 0, length 1, the symbol, the flag word. Bit 6 has no
+    // payload, so the row ends after it.
+    for value in [1, 0, 1, symbol_index, flags, 0] {
+        push_uvarint(&mut frame, value);
+    }
+    frame
+}
+
+#[test]
+fn wire_table_v21_reads_bit_six_as_span_coverage_on_a_symbol() {
+    // Bit 6 on a symbol-bearing row: the symbol covers the whole span.
+    let covering = decode_table_transition(&symbol_flag_transition(21, 2, 64)).unwrap();
+    let SlotOp::Replace(entities) = &covering.paths[0].entities else {
+        panic!("entity row was not replaced");
+    };
+    assert_eq!(entities[0].symbol.as_ref(), "/p/a.ts");
+    assert!(entities[0].symbol_covers_span());
+    assert_eq!(entities[0].symbol_claim, crate::SymbolClaim::Covering);
+
+    // No bit 6 on a symbol-bearing row: a token inside the span, not the value.
+    let plain = decode_table_transition(&symbol_flag_transition(21, 2, 0)).unwrap();
+    let SlotOp::Replace(entities) = &plain.paths[0].entities else {
+        panic!("entity row was not replaced");
+    };
+    assert!(!entities[0].symbol_covers_span());
+    assert_eq!(entities[0].symbol_claim, crate::SymbolClaim::Partial);
+
+    // Bit 6 on a symbol-less row is still the unresolved claim at every schema.
+    let unresolved = decode_table_transition(&symbol_flag_transition(21, 0, 64)).unwrap();
+    let SlotOp::Replace(entities) = &unresolved.paths[0].entities else {
+        panic!("entity row was not replaced");
+    };
+    assert_eq!(entities[0].symbol_claim, crate::SymbolClaim::Unresolved);
+
+    // Before v21, bit 6 on a symbol-bearing row is the contradiction it always
+    // was.
+    assert!(decode_table_transition(&symbol_flag_transition(20, 2, 64)).is_err());
 }
 
 #[test]
@@ -609,6 +662,7 @@ fn wire_table_v16_decodes_primitive_literal_candidates_and_v15_stays_frozen() {
     assert_eq!(TYPE_FACTS_TABLE_SCHEMA_V17, 17);
     assert_eq!(TYPE_FACTS_TABLE_SCHEMA_V18, 18);
     assert_eq!(TYPE_FACTS_TABLE_SCHEMA_V19, 19);
+    assert_eq!(TYPE_FACTS_TABLE_SCHEMA_V21, 21);
 }
 
 #[test]

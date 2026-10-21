@@ -288,6 +288,23 @@ func TestWireTransitionRejectsContradictorySymbolResolution(t *testing.T) {
 	}
 }
 
+// A span-covering claim without a symbol has no value to cover, so the writer
+// refuses it rather than encoding a flag the reader would reject.
+func TestWireTransitionRejectsSpanCoverageWithoutSymbol(t *testing.T) {
+	table := goldenWireTable()
+	table.Entities = append([]EntityFact(nil), table.Entities...)
+	table.Entities[0].Symbol = ""
+	table.Entities[0].SymbolCoversSpan = true
+
+	_, err := (&wireTransitionEncoder{}).Encode(wireTransitionInput{
+		ProjectID: table.ProjectID,
+		Target:    &table,
+	})
+	if err == nil || !bytes.Contains([]byte(err.Error()), []byte("covers its span without a symbol")) {
+		t.Fatalf("span coverage without a symbol was not refused by its own check: %v", err)
+	}
+}
+
 // untypedCallable is tag 4, and tag 4 exists only from Wire table schema v15.
 // Every frozen schema before it must keep emitting a tag its own decoder
 // accepts, and the substitute must be unknown — an absent answer — because

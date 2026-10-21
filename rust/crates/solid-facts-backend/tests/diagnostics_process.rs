@@ -1561,8 +1561,10 @@ fn solid2_precision_corrections_are_end_to_end() {
     // while the compound and update forms also read their target and a
     // computed key stays a read. SC3001/SC4001/SC4001: the one owner-backed
     // settled cleanup written as a literal callback reports SC3001 without a
-    // duplicate SC4001; the wrapper-built, identifier-referenced, and
-    // out-of-band cleanups are SC4001 only. The returned-call block adds three
+    // duplicate SC4001; the identifier-referenced and out-of-band cleanups are
+    // SC4001 only. A cleanup inside `wrap(...)`'s literal is not named as the
+    // callback, since a call's value is not its literal (ADR 0345 review D), so
+    // it is not reported. The returned-call block adds three
     // SC3004 (a produced `number` in both return spellings, plus the unowned
     // one), one SC9002 (`any`), and one SC4001 (a produced function is a real
     // cleanup); a produced function, `(() => void) | undefined`, and `void`
@@ -1580,9 +1582,10 @@ fn solid2_precision_corrections_are_end_to_end() {
         // asserted by span below. A count alone cannot tell those apart.
         ("no-direct-mutation", 4),
         ("leaf-owner-forbidden-call", 1),
-        // One proven returned cleanup plus four callbacks whose runtime
-        // return may be a cleanup and therefore cannot be certified safe.
-        ("missing-owner", 8),
+        // One fewer than before ADR 0345 review D: the wrapper-built callback is
+        // no longer named, so its cleanup is not reported; the rest of the
+        // breakdown is unchanged.
+        ("missing-owner", 7),
     ] {
         assert_rule_findings(&findings, rule, expected);
     }
@@ -1605,8 +1608,8 @@ fn solid2_precision_corrections_are_end_to_end() {
             .iter()
             .filter(|start| **start > non_literal_leaf)
             .count(),
-        3,
-        "the wrapped, referenced, and out-of-band cleanups stay unowned"
+        2,
+        "the referenced and out-of-band cleanups stay unowned; the wrapped one is not named (ADR 0345 review D)"
     );
 
     assert!(

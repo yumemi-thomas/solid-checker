@@ -53,14 +53,16 @@ A static violation no dev diagnostic covers is classified by the observations of
 | --- | --- | --- | --- |
 | `oracle-behaviour-uncalled-accessor` | SC1005 | text: the violation keeps the accessor's source; reflected: its write is `lost`, the called control's is `reflected` | `behaviour-confirmed` |
 | `oracle-behaviour-no-direct-mutation` | SC2003 | text and reflected: the direct write is refused (`Ada`), the setter write shows (`Grace`) | `behaviour-confirmed` |
-| `oracle-behaviour-primitive-in-directive` | SC6001 | window: the apply-phase effect runs again after its element is hidden (2, not 1); the control's does not | `behaviour-refuted` (below) |
+| `oracle-behaviour-primitive-in-directive` | SC6001 | window: the apply-phase effect runs again after its element is hidden (2, not 1); the control's setup-phase effect does not | `covered-violation`; behaviour rows confirmed and clean (below) |
 | `oracle-behaviour-jsx-no-duplicate-props` | SC8003 | reflected: five two-source elements each show one `lost` and one `reflected` write; two one-source controls reflect | `static-only` overall: five sites `behaviour-confirmed`; the static site is unobserved (below) |
-| `oracle-behaviour-components-return-once` | SC1004 | text: the early return stays on screen after the write (`logged out`) | `covered-violation`; behaviour rows confirmed and clean |
+| `oracle-behaviour-components-return-once` | SC1004 | text: the early return stays on screen after the write (`logged out`) | `covered-violation` (dev `STRICT_READ_UNTRACKED` covers the finding); behaviour rows confirmed and clean |
 | `oracle-frame-covered-sc1004` | SC1004 | none: the frame pin (below) | `covered-violation`, empty `staticOnly` |
 
 The `StaticText` site (static `textContent` beside children) has no write to show its loss: its children win (checked in Chrome on rc.13), and a reflected observation there would read as a false candidate, so it stays static-only.
 
-The `oracle-behaviour-primitive-in-directive` control's `missing-owner` finding (`App.tsx:18`) is refuted: the runtime disposes the effect when its `Show` branch hides, as the rule page's correct example does. It is a false-positive candidate, recorded in `docs/open-work.md`, not fixed here. `NO_OWNER_EFFECT` is also claimed by `primitive-in-directive-application`, whose page names that warning.
+The `oracle-behaviour-primitive-in-directive` control's `missing-owner` finding (`App.tsx:18`) was refuted by its observation: the runtime disposes the effect when its `Show` branch hides. ADR 0345 removed it, so the control is `behaviour-clean` and no row is refuted.
+
+`NO_OWNER_EFFECT` is also claimed by `primitive-in-directive-application`, whose page names that warning.
 
 ## Frame attribution
 

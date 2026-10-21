@@ -46,4 +46,9 @@ const TypeFactsTableSchemaVersionV19 uint64 = 19
 // v20 appends an optional direct-global default-library binding declaration
 // to each resolved call. Selected declarations and parameter mappings stay intact.
 const TypeFactsTableSchemaVersionV20 uint64 = 20
-const TypeFactsTableSchemaVersion uint64 = TypeFactsTableSchemaVersionV20
+
+// v21 reads the unresolved bit (6) of a symbol-bearing entity as "the symbol
+// covers the whole demanded span" (EntityFact.SymbolCoversSpan). A symbol-less
+// entity keeps reading it as unresolved. No other row changes.
+const TypeFactsTableSchemaVersionV21 uint64 = 21
+const TypeFactsTableSchemaVersion uint64 = TypeFactsTableSchemaVersionV21

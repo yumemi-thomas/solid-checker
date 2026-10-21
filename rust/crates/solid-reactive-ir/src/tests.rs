@@ -486,7 +486,8 @@ fn exact_index_patch_replaces_local_alias_ids_without_retargeting_the_graph() {
             end_byte: start + 1,
         },
         symbol: symbol.into(),
-        symbol_unresolved: false,
+        // Each fixture entity is a one-byte identifier span: the symbol covers it.
+        symbol_claim: typefacts::SymbolClaim::Covering,
         type_descriptor: None,
         resolved_call: None,
         callability: None,

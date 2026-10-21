@@ -1003,18 +1003,18 @@ mod tests {
                 .filter(|(_, declaration)| *declaration == name)
                 .map(|(reference, _)| *reference),
         );
+        // Each listed span is the parameter's own name, so its entity covers it.
+        let entries: HashMap<(u64, u64), crate::SymbolId> = locations
+            .map(|span| {
+                (
+                    (u64::from(span.start), u64::from(span.end)),
+                    crate::SymbolId::from("parameter"),
+                )
+            })
+            .collect();
         let entities = crate::indexes::EntitySymbols {
-            by_path: HashMap::from_iter([(
-                "case.tsx".into(),
-                locations
-                    .map(|span| {
-                        (
-                            (u64::from(span.start), u64::from(span.end)),
-                            crate::SymbolId::from("parameter"),
-                        )
-                    })
-                    .collect(),
-            )]),
+            by_path: HashMap::from_iter([("case.tsx".into(), entries.clone())]),
+            exact_by_path: HashMap::from_iter([("case.tsx".into(), entries)]),
         };
         let facts = ProjectFacts {
             generation,

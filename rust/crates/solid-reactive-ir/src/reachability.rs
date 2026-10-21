@@ -365,8 +365,7 @@ fn discover_reachability_file(
                     {
                         continue;
                     }
-                    let Some(symbol) = entities.get(&location(file.path.shared(), argument.span))
-                    else {
+                    let Some(symbol) = entities.value_symbol(file, argument.span) else {
                         continue;
                     };
                     if withheld(argument.span) {
@@ -390,7 +389,7 @@ fn discover_reachability_file(
                 if withheld(property.span) {
                     continue;
                 }
-                if let Some(symbol) = entities.get(&location(file.path.shared(), property.span)) {
+                if let Some(symbol) = entities.exact(&location(file.path.shared(), property.span)) {
                     edges.push(ReachabilityEdge {
                         owner,
                         target: ReachabilityTarget::Symbol(symbol.clone()),
@@ -421,7 +420,7 @@ fn discover_reachability_file(
             .filter(|function| callback.span.contains(function.span))
             .map(|function| ReachabilityTarget::LocalSpan(function.span))
             .collect::<Vec<_>>();
-        if let Some(symbol) = entities.get(&location(file.path.shared(), callback.span))
+        if let Some(symbol) = entities.value_symbol(file, callback.span)
             && !lookup.may_precede_initialization(file.path.as_str(), callback.span)
         {
             targets.push(ReachabilityTarget::Symbol(symbol.clone()));

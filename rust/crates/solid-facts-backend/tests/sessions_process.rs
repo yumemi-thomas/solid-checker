@@ -1860,7 +1860,7 @@ fn incremental_owner_fragments_match_fresh_owner_fixtures() {
         Err(_) => return,
     };
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    for fixture_name in ["owner-presence", "leaf-owner"] {
+    for fixture_name in ["owner-presence", "leaf-owner", "directive-owned-effects"] {
         let fixture = root.join(format!("fixtures/reactive-ir/{fixture_name}"));
         let project = fixture.join("tsconfig.json").canonicalize().unwrap();
         let project_id = project.to_string_lossy().into_owned();

@@ -1409,7 +1409,7 @@ fn collect_returned_summaries<'a>(
             match returned_value.value {
                 solid_facts::ast::ReturnValueKind::Identifier => {
                     let returned_location = location(file.path.shared(), returned_value.span);
-                    if let Some(symbol) = entities.get(&returned_location) {
+                    if let Some(symbol) = entities.exact(&returned_location) {
                         if returned_source_symbols.contains(symbol)
                             && let Some((display, declaration)) = accessors.get(symbol)
                         {

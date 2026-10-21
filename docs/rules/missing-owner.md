@@ -54,12 +54,35 @@ runtime premises. A call proved to allocate without an owner is a violation;
 unresolved execution or ownership remains uncertifiable. No contract or receipt
 can supply the missing behavior.
 
-One approximation remains: a nested callback the owner graph gives no owner
+A ref expression on an intrinsic element runs in two places. The value a ref
+application receives (the expression itself, or an element, a conditional branch,
+an operand of `||` or `??`, or the right operand of `&&`) runs with no owner: a
+violation. The left operand of `&&` is only tested, since a function is always
+truthy, so it is not applied. Code a call in the expression evaluates runs while
+the component renders, under the owner of the code around the expression: an IIFE,
+the body of a factory the expression calls, a default parameter initializer, and
+a callback a dialect slot runs during its call (`untrack`) are owned, so an
+effect there is not reported. Two placements change that. A call inside a
+component's children runs inside the component's own memo, so it is
+uncertifiable. A call made at module initialization, where no owner is current,
+runs with none, so it is a violation. A call whose enclosing function no owner
+edge reaches (a method or constructor no resolved call names, a getter, an
+exported function that a closed program never calls) is uncertifiable. A
+generator never runs when called, and a callback no dialect slot describes may
+run with or without an owner. A function the expression evaluates without
+yielding it (a getter's body, a tagged template's substitution, an operand of
+`void`) is not placed. Each of these uncertain cases is uncertifiable, never a
+violation (ADR 0345).
+
+Two approximations remain. A nested callback the owner graph gives no owner
 edge at all, such as a callback handed to a function the analysis does not
 model, or handed to a scheduler through a wrapper call
 (`setTimeout(wrap(() => ...))`), is still treated as owned by the
 owner-creating callback it is written in, and is not reported inside a
-component. Where it runs with no owner, that is a false negative.
+component. Where it runs with no owner, that is a false negative. An IIFE is not
+an owner edge either: a plain IIFE at module scope that creates an effect is not
+reported, and neither is one inside a function no edge reaches
+(`docs/open-work.md`).
 
 The proven `onSettled` cleanup variant has **error** severity because Solid 2.0
 throws `SETTLED_CLEANUP_UNOWNED` in development and silently drops the cleanup
@@ -114,3 +137,7 @@ analysis; unresolved callers and ownership remain uncertifiable.
 - [leaf-owner rules](leaf-owner-forbidden-call.md) — calls made under an owner whose lifetime is nevertheless unsuitable
 - [async-outside-loading-boundary](async-outside-loading-boundary.md) — async work that needs an owned loading boundary
 - [package-behavior-unavailable](package-behavior-unavailable.md) — missing external ownership facts
+
+## Which callback an argument names
+
+A callback passed to a primitive, a handler or a ref is the function the argument is: a function literal, a bare identifier, element 0 of an event handler's tuple, or the literal an identity wrapper hands back (`wrap(() => …)`, where `wrap` returns its parameter unchanged on every completion and reads it no other way; ADR 0346). A TypeScript wrapper keeps the identifier's identity (`h as X`, `h!`, `h satisfies X`), and a wrapper around the identity wrapper's call is that call. A declaration written later in its module (`wrap = function …`) is no wrapper. A call, an IIFE or `untrack(…)` names no callback: its value is not the literal it contains.

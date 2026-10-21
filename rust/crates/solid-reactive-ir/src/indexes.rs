@@ -21,6 +21,8 @@ mod class_prototype;
 mod completion;
 mod components;
 mod compound;
+mod identity_wrappers;
+pub(crate) use identity_wrappers::identity_wrapped_literal_span;
 mod initialization;
 mod member_values;
 mod primitive_proof;
@@ -131,6 +133,18 @@ pub(crate) fn returns_source_root(file: &FileFacts) -> bool {
 }
 
 pub(super) fn binding_written(file: &FileFacts, declaration: Span) -> bool {
+    binding_written_by(file, declaration, false)
+}
+
+/// [`binding_written`], except that a member write whose object is wrapped in
+/// TypeScript (`(c as X).p = v`, `c!.p = v`) writes a member of the value, not
+/// the binding, as the plain `c.p = v` does. Identity wrappers use this reading;
+/// the other binding analyses keep the conservative one above.
+pub(super) fn binding_written_through_wrappers(file: &FileFacts, declaration: Span) -> bool {
+    binding_written_by(file, declaration, true)
+}
+
+fn binding_written_by(file: &FileFacts, declaration: Span, through_wrappers: bool) -> bool {
     // A direct `eval` reaches every binding visible where it is written and
     // can rebind it (`eval("go = () => {}")`) with no static reference.
     if crate::interproc::property_gets::direct_eval_in(file, Span::new(0, u32::MAX)) {
@@ -176,11 +190,14 @@ pub(super) fn binding_written(file: &FileFacts, declaration: Span) -> bool {
         .filter(|(_, declared)| *declared == declaration)
         .any(|(reference, _)| {
             targets.iter().any(|target| target.contains(*reference))
-                && !file
-                    .ast
-                    .members
-                    .iter()
-                    .any(|member| member.object == *reference)
+                && !file.ast.members.iter().any(|member| {
+                    let object = if through_wrappers {
+                        file.ast.peel_ts_sugar_span(member.object)
+                    } else {
+                        member.object
+                    };
+                    object == *reference
+                })
         })
 }
 
@@ -392,11 +409,26 @@ pub(super) enum ComponentStatus {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct EntitySymbols {
     pub(super) by_path: HashMap<String, HashMap<(u64, u64), SymbolId>>,
+    /// The entries of `by_path` whose symbol names the whole span
+    /// (`EntityFact::symbol_covers_span`).
+    pub(super) exact_by_path: HashMap<String, HashMap<(u64, u64), SymbolId>>,
 }
 
 impl EntitySymbols {
+    /// The symbol of the entity at `location`, whatever its span. At a call
+    /// span this is the callee's; at a member span, the object's. Use it for a
+    /// callee or a declaration position only.
     pub(super) fn get(&self, location: &Location) -> Option<&SymbolId> {
         self.by_path
+            .get(location.path.as_ref())
+            .and_then(|entities| entities.get(&(location.start_byte, location.end_byte)))
+    }
+
+    /// The symbol that is the value at exactly `location`: an entity whose
+    /// symbol names the whole span. A callback's or a value's identity is read
+    /// here, so a call or member span never answers with a token inside it.
+    pub(super) fn exact(&self, location: &Location) -> Option<&SymbolId> {
+        self.exact_by_path
             .get(location.path.as_ref())
             .and_then(|entities| entities.get(&(location.start_byte, location.end_byte)))
     }
@@ -405,6 +437,37 @@ impl EntitySymbols {
         self.by_path
             .get(path)
             .and_then(|entities| entities.get(&(u64::from(span.start), u64::from(span.end))))
+    }
+
+    /// The symbol of the value `span` denotes, when that value is one identifier
+    /// (ADR 0346). TypeScript wrappers keep the value (`h as X`, `h!`,
+    /// `h satisfies X`), so the identity is the identifier's symbol:
+    ///
+    /// - the covering symbol at the peeled span, when the entity exists there;
+    /// - else, when the peeled span is a single identifier that starts at the
+    ///   span's first byte, the symbol at the span itself. An entity names the
+    ///   symbol at its first byte, and that token is the identifier.
+    ///
+    /// A call, a member or any other expression answers with nothing: the
+    /// token at its first byte is a callee or an object, not the value.
+    pub(crate) fn value_symbol(
+        &self,
+        file: &solid_facts::FileFacts,
+        span: Span,
+    ) -> Option<&SymbolId> {
+        let path = file.path.as_str();
+        let peeled = file.ast.peel_ts_sugar_span(span);
+        if let Some(symbol) = self
+            .exact_by_path
+            .get(path)
+            .and_then(|entities| entities.get(&(u64::from(peeled.start), u64::from(peeled.end))))
+        {
+            return Some(symbol);
+        }
+        if peeled.start != span.start || !crate::owners::is_identifier_span(file, peeled) {
+            return None;
+        }
+        self.at(path, span)
     }
 }
 
@@ -686,6 +749,8 @@ pub(super) struct SemanticLookup<'a> {
     entities: &'a EntitySymbols,
     symbol_names: &'a HashMap<SymbolId, SymbolName>,
     functions_by_symbol: OnceLock<HashMap<&'a str, SymbolFunction>>,
+    /// ADR 0346: the project's identity wrappers, by declaration symbol.
+    identity_wrappers: OnceLock<HashMap<&'a str, usize>>,
     /// ADR 0319: every literal's invocation-flow answer.
     invocation_flow_answers: OnceLock<HashMap<(String, Span), crate::ExecutionRole>>,
     /// The literals whose every invocation is a host event dispatch.
@@ -874,6 +939,7 @@ impl<'a> SemanticLookup<'a> {
             entities,
             symbol_names,
             functions_by_symbol: OnceLock::new(),
+            identity_wrappers: OnceLock::new(),
             invocation_flow_answers: OnceLock::new(),
             unowned_event_literals: OnceLock::new(),
             objects_assigned_into: OnceLock::new(),
@@ -1177,6 +1243,20 @@ impl<'a> SemanticLookup<'a> {
             // every file (a history in one decides what another reads).
             hasher.update(b"router-params\0");
             hasher.update([u8::from(self.router_params().applies())]);
+            // ADR 0346: a wrapper in another file decides whether a call hands
+            // back a callback literal, so every wrapper's identity is digested.
+            hasher.update(b"identity-wrappers\0");
+            let mut wrappers = self.identity_wrappers().iter().collect::<Vec<_>>();
+            wrappers.sort_unstable();
+            for (symbol, index) in wrappers {
+                hasher.update(
+                    u64::try_from(symbol.len())
+                        .unwrap_or(u64::MAX)
+                        .to_le_bytes(),
+                );
+                hasher.update(symbol.as_bytes());
+                hasher.update(u64::try_from(*index).unwrap_or(u64::MAX).to_le_bytes());
+            }
             // ADR 0325: an imported constant's primitive-ness is another
             // file's fact.
             hasher.update(b"imported-primitive-consts\0");
@@ -1535,7 +1615,7 @@ impl<'a> SemanticLookup<'a> {
         span: Span,
     ) -> Option<solid_facts::TypeScriptSymbol<'a>> {
         let entity = self.entity_at(path, span)?;
-        if entity.symbol_unresolved || entity.symbol.is_empty() {
+        if entity.symbol_unresolved() || entity.symbol.is_empty() {
             return None;
         }
         self.symbols_by_id().get(entity.symbol.as_ref()).copied()

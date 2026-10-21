@@ -69,6 +69,8 @@ pub(crate) fn find_missing_owners(
                     file,
                     argument.span,
                     entities,
+                    false,
+                    lookup,
                 ) else {
                     continue;
                 };
@@ -94,7 +96,8 @@ pub(crate) fn find_missing_owners(
                 solid_facts::compiler::CallbackRoleKind::EventHandler
                     | solid_facts::compiler::CallbackRoleKind::DirectiveApply
             ) || (callback.role == solid_facts::compiler::CallbackRoleKind::DirectiveApply
-                && !ref_application_on_intrinsic(file, callback.span))
+                && (!ref_application_on_intrinsic(file, callback.span)
+                    || !is_identifier_span(file, callback.span)))
             {
                 continue;
             }
@@ -105,8 +108,66 @@ pub(crate) fn find_missing_owners(
                 file,
                 callback.span,
                 entities,
+                callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler,
+                lookup,
             ) {
-                contexts[index] |= OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED;
+                let kind = match callback.role {
+                    solid_facts::compiler::CallbackRoleKind::DirectiveApply
+                        if nodes[index].generator =>
+                    {
+                        OwnerEdgeKind::MayBeUnowned
+                    }
+                    solid_facts::compiler::CallbackRoleKind::DirectiveApply => {
+                        OwnerEdgeKind::RefApplied
+                    }
+                    _ => OwnerEdgeKind::Unowned,
+                };
+                contexts[index] |=
+                    owner_edge_context(kind, OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED);
+            }
+        }
+        // The function literals a ref value writes at its top level (ADR 0345),
+        // placed by position: a value-position function runs with no owner at
+        // the application, a call made at module initialization runs with none,
+        // an eagerly called one runs under the owner of the code around the
+        // expression (settled once propagation has run), and any other one is
+        // unproven.
+        for mark in ref_value_marks(
+            file,
+            &owner_file_indexes[file_index].call_primitives,
+            lookup,
+        ) {
+            let function = match mark {
+                RefValueMark::Applied { function }
+                | RefValueMark::Unowned { function }
+                | RefValueMark::Eager { function, .. }
+                | RefValueMark::Unproven { function } => function,
+            };
+            let Some(target) = nodes_by_path
+                .get(file.path.as_str())
+                .into_iter()
+                .flatten()
+                .copied()
+                .find(|index| nodes[*index].span == function)
+            else {
+                continue;
+            };
+            match mark {
+                RefValueMark::Applied { .. } | RefValueMark::Unowned { .. } => {
+                    contexts[target] |= OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED;
+                }
+                RefValueMark::Eager { call, .. } => {
+                    if let Some(owner) =
+                        enclosing_function_span(&nodes, &nodes_by_path, file.path.as_str(), call)
+                    {
+                        edges.push((owner, target, OwnerEdgeKind::EagerCall));
+                    } else {
+                        contexts[target] |= OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED;
+                    }
+                }
+                RefValueMark::Unproven { .. } => {
+                    contexts[target] |= owner_edge_context(OwnerEdgeKind::MayBeUnowned, 0);
+                }
             }
         }
     }
@@ -115,6 +176,7 @@ pub(crate) fn find_missing_owners(
         outgoing[source].push((target, kind));
     }
     propagate_owner_contexts(&mut contexts, &outgoing);
+    settle_eager_owners(&mut contexts, &outgoing);
 
     let continuations = AwaitContinuations::new(facts, lookup);
     let mut settled_gates = SettledGateDecisions::default();
@@ -220,6 +282,8 @@ pub(crate) fn find_missing_owners(
                                 file,
                                 argument.span,
                                 entities,
+                                false,
+                                lookup,
                             )
                         })
                         .and_then(|index| {

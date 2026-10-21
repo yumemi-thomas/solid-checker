@@ -30,6 +30,12 @@ const (
 	wireTransitionEntityHasRuntimeBindingKind
 )
 
+// Wire table schema v21 reads bit 6 by the entity's symbol: with no symbol it
+// is "unresolved"; with a symbol it says the symbol covers the whole span.
+// The two never meet in one row, and a row without the bit names a partial
+// symbol, so a covering claim costs no varint byte (the flags stay under 2^14).
+const wireTransitionEntitySymbolCoversSpan = wireTransitionEntitySymbolUnresolved
+
 const (
 	wireTransitionParameterHasDeclaration = 1 << iota
 	wireTransitionParameterIsRest
@@ -124,6 +130,9 @@ func writeWireTransitionEntityRun(
 		}
 		if entity.Symbol != "" && entity.SymbolUnresolved {
 			return fmt.Errorf("entity %d cannot be both resolved and unresolved", index)
+		}
+		if entity.SymbolCoversSpan && entity.Symbol == "" {
+			return fmt.Errorf("entity %d covers its span without a symbol", index)
 		}
 
 		var callability uint64
@@ -222,6 +231,11 @@ func writeWireTransitionEntityRun(
 		}
 		if tableSchema >= TypeFactsTableSchemaVersionV5 && entity.SymbolUnresolved {
 			flags |= wireTransitionEntitySymbolUnresolved
+		}
+		// A producer at an older table schema drops the claim: the reader then
+		// sees a symbol that does not cover its span, which withholds it.
+		if tableSchema >= TypeFactsTableSchemaVersionV21 && entity.SymbolCoversSpan {
+			flags |= wireTransitionEntitySymbolCoversSpan
 		}
 		w.u64(flags)
 		if entity.TypeDescriptor != nil {

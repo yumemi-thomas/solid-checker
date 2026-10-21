@@ -4,8 +4,12 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 79: Wire table schema v20 separates a direct
-// global's default-library binding from its selected ambient overload.
+// TypeFactsHandshakeProtocol is 80: Wire table schema v21 flags an entity's
+// symbol as covering its whole demanded span (EntityFact.SymbolCoversSpan).
+// A symbol without the flag names a token inside the span, such as the callee
+// of a call, and is not the value at the span.
+// Protocol 79: Wire table schema v20 separates a direct global's
+// default-library binding from its selected ambient overload.
 // Protocol 78: the certification reads `invocations` and
 // `export-values` are removed with package contracts, together with their
 // request and response fields. A protocol-77 consumer could still send them.
@@ -535,8 +539,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 79
-	TypeFactsSchemaSHA256             = "sha256:2533cc3d559a1318cd62a6adc256bd96aa610a7a9e4b1d6fea985e0996e6d527"
+	TypeFactsHandshakeProtocol uint64 = 80
+	TypeFactsSchemaSHA256             = "sha256:d335380a5433ee6aed1f4a23984aea97401b9b115bd9a480ebf6fb36e7b4a963"
 )
 
 type ServiceHandshake struct {

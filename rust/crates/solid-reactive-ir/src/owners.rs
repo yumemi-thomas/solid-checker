@@ -292,6 +292,19 @@ pub(crate) enum OwnerEdgeKind {
     /// owner on a later one.
     InheritsFirstRun,
     Leaf,
+    /// A ref application runs the callback with no owner, which is proven
+    /// unowned -- unless the callback is a generator. Calling a generator
+    /// returns an iterator and runs none of its body, so the target resolves
+    /// to [`OwnerEdgeKind::MayBeUnowned`] there.
+    RefApplied,
+    /// The callback may run with no owner, and nothing proves it: the bare
+    /// open-world unowned bit, a caller obligation that stays uncertifiable.
+    MayBeUnowned,
+    /// A function a ref expression calls while the expression evaluates
+    /// (ADR 0345). It runs under its enclosing function's owner, as
+    /// [`OwnerEdgeKind::Preserve`] does, and a source with no owner context
+    /// settles to the uncertain unowned bit ([`settle_eager_owners`]).
+    EagerCall,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -336,6 +349,9 @@ pub(crate) struct OwnerNode {
     pub(crate) body: Span,
     pub(crate) symbol: Option<SymbolId>,
     pub(crate) exported: bool,
+    /// A generator's body runs only when its iterator is iterated, never on
+    /// a call, so a ref application proves nothing about its owner.
+    pub(crate) generator: bool,
     pub(crate) component: bool,
     pub(crate) component_uncertain: bool,
     pub(crate) seed_context: u8,

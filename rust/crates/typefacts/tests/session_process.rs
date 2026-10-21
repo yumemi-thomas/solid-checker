@@ -267,9 +267,9 @@ fn explicit_unresolved_symbols_survive_the_process_seam() {
         .unwrap();
     let entities = facts.entities().collect::<Vec<_>>();
     assert!(!entities[0].symbol.is_empty());
-    assert!(!entities[0].symbol_unresolved);
+    assert!(!entities[0].symbol_unresolved());
     assert!(entities[1].symbol.is_empty());
-    assert!(entities[1].symbol_unresolved);
+    assert!(entities[1].symbol_unresolved());
     session.close().unwrap();
     fs::remove_dir_all(root).unwrap();
 }

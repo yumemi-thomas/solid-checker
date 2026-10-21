@@ -1,5 +1,5 @@
 {
-  "note": "SC6001 behaviour: the violation's apply-phase effect outlives its hidden element and runs again on the write. The control's setup-phase effect is disposed with its element, so its missing-owner finding (App.tsx:18) is refuted: a false-positive candidate, reported as such",
+  "note": "SC6001 behaviour: the violation's apply-phase effect outlives its hidden element and runs again on the write. The control's effect is created by a factory the ref expression calls, so it is disposed with its element. Its missing-owner finding (App.tsx:18) was refuted by this observation; ADR 0345 removed it, so the row is behaviour-clean",
   "behaviour": [
     {
       "rule": "primitive-in-directive-application",

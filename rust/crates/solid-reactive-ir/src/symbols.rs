@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 
 use solid_dialect::Dialect;
 use solid_facts::{ProjectFacts, TypeScriptSymbol, TypeScriptTable};
-use typefacts::{Declaration, Location};
+use typefacts::{Declaration, EntityFact, Location};
 
 use super::{
     EntitySymbols, SymbolId, SymbolInterner, SymbolName, location, location_order, symbol_id,
@@ -443,23 +443,17 @@ pub(super) fn patch_typescript_indexes(
     let entities_started = Instant::now();
     for path in &changes.entity_paths {
         cache.entities.by_path.remove(path);
+        cache.entities.exact_by_path.remove(path);
         for entity in table.entities_for_path(path) {
             if entity.symbol.is_empty() {
                 continue;
             }
-            cache
-                .entities
-                .by_path
-                .entry(entity.location.path.to_string())
-                .or_default()
-                .insert(
-                    (entity.location.start_byte, entity.location.end_byte),
-                    cache
-                        .aliases
-                        .get(entity.symbol.as_ref())
-                        .cloned()
-                        .unwrap_or_else(|| cache.interner.intern(entity.symbol.as_ref())),
-                );
+            let symbol = cache
+                .aliases
+                .get(entity.symbol.as_ref())
+                .cloned()
+                .unwrap_or_else(|| cache.interner.intern(entity.symbol.as_ref()));
+            record_entity_symbol(&mut cache.entities, entity, symbol);
         }
     }
     let entities_elapsed = entities_started.elapsed();
@@ -512,20 +506,37 @@ pub(super) fn entity_symbols(
     roots: &HashMap<SymbolId, SymbolId>,
     interner: &SymbolInterner,
 ) -> EntitySymbols {
-    let mut by_path = HashMap::<String, HashMap<(u64, u64), SymbolId>>::default();
+    let mut entities = EntitySymbols {
+        by_path: HashMap::default(),
+        exact_by_path: HashMap::default(),
+    };
     for entity in table.entities().filter(|entity| !entity.symbol.is_empty()) {
-        by_path
-            .entry(entity.location.path.to_string())
-            .or_default()
-            .insert(
-                (entity.location.start_byte, entity.location.end_byte),
-                roots
-                    .get(entity.symbol.as_ref())
-                    .cloned()
-                    .unwrap_or_else(|| interner.intern(entity.symbol.as_ref())),
-            );
+        let symbol = roots
+            .get(entity.symbol.as_ref())
+            .cloned()
+            .unwrap_or_else(|| interner.intern(entity.symbol.as_ref()));
+        record_entity_symbol(&mut entities, entity, symbol);
     }
-    EntitySymbols { by_path }
+    entities
+}
+
+/// Records one entity's symbol in both maps: `by_path` answers at any span,
+/// `exact_by_path` only at a span the symbol covers. A later row for the same
+/// span replaces both, so the two maps always agree.
+fn record_entity_symbol(entities: &mut EntitySymbols, entity: &EntityFact, symbol: SymbolId) {
+    let path = entity.location.path.to_string();
+    let key = (entity.location.start_byte, entity.location.end_byte);
+    let exact = entities.exact_by_path.entry(path.clone()).or_default();
+    if entity.symbol_covers_span() {
+        exact.insert(key, symbol.clone());
+    } else {
+        exact.remove(&key);
+    }
+    entities
+        .by_path
+        .entry(path)
+        .or_default()
+        .insert(key, symbol);
 }
 
 pub(super) fn symbol_names(
