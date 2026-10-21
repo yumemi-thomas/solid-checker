@@ -169,6 +169,33 @@ fn lowercase_innerhtml_is_not_a_content_source() {
     assert_eq!(camel[0].rule, "jsx-no-duplicate-props");
 }
 
+/// `innerText` is a content source on rc.13: `ChildProperties` lists it, so a
+/// write replaces the element's child nodes. Upstream has no innerText arm, so
+/// this is a kept divergence. A lone `innerText` and a component's `innerText`
+/// beside children stay silent.
+#[test]
+fn inner_text_is_a_content_source() {
+    let beside_children =
+        violations_for(r#"export const Case = () => <div innerText="x">child</div>;"#);
+    assert_eq!(beside_children.len(), 1, "innerText competes with children");
+    assert_eq!(beside_children[0].rule, "jsx-no-duplicate-props");
+
+    let alone = violations_for(r#"export const Case = () => <div innerText="x" />;"#);
+    assert_eq!(
+        alone.len(),
+        0,
+        "a lone innerText is the only content source"
+    );
+
+    let component =
+        violations_for(r#"export const Case = () => <Widget innerText="x">child</Widget>;"#);
+    assert_eq!(
+        component.len(),
+        0,
+        "a component's innerText is an ordinary prop"
+    );
+}
+
 fn violations_for(source: &str) -> Vec<crate::StaticViolation> {
     use solid_facts::{
         FileFacts, ast,

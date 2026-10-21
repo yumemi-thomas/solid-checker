@@ -47,7 +47,43 @@
       "end": 905,
       "fixes": 0,
       "message": "Using JSX children, `props.innerHTML` at the same time is not allowed.",
-      "hint": "Pick exactly one source of content for this element. When more than one of children, innerHTML, and textContent is set, they overwrite each other and the result depends on write order."
+      "hint": "Pick exactly one source of content for this element. When more than one of children, innerHTML, innerText, and textContent is set, they overwrite each other and the result depends on write order."
+    },
+    {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/ported-structure-v2/App.tsx",
+      "start": 1116,
+      "end": 1144,
+      "fixes": 0,
+      "message": "Using JSX children, `props.innerText` at the same time is not allowed.",
+      "hint": "Pick exactly one source of content for this element. When more than one of children, innerHTML, innerText, and textContent is set, they overwrite each other and the result depends on write order."
+    },
+    {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/ported-structure-v2/App.tsx",
+      "start": 1165,
+      "end": 1202,
+      "fixes": 0,
+      "message": "Using `props.innerText`, `props.textContent` at the same time is not allowed.",
+      "hint": "Pick exactly one source of content for this element. When more than one of children, innerHTML, innerText, and textContent is set, they overwrite each other and the result depends on write order."
+    },
+    {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/ported-structure-v2/App.tsx",
+      "start": 1209,
+      "end": 1244,
+      "fixes": 0,
+      "message": "Using `props.innerHTML`, `props.innerText` at the same time is not allowed.",
+      "hint": "Pick exactly one source of content for this element. When more than one of children, innerHTML, innerText, and textContent is set, they overwrite each other and the result depends on write order."
     },
     {
       "rule": "unaudited-solid-release",

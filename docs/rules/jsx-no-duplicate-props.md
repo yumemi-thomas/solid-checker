@@ -6,7 +6,7 @@ An intrinsic element uses multiple competing sources of DOM child content.
 
 ## What it does
 
-Reports combinations of JSX children, `children`, `innerHTML`, and
+Reports combinations of JSX children, `children`, `innerHTML`, `innerText`, and
 `textContent` when more than one mechanism writes the same intrinsic element's
 content. The `children`-prop plus JSX-children pair alone is left to TS2710.
 
@@ -15,6 +15,13 @@ content source in Solid 2.0: TypeScript rejects it (TS2322), and the runtime
 writes it as a plain attribute, so the rule stays silent on it. Upstream's
 lowercase alias is deliberately not carried; the divergence is pinned in
 `fixtures/ownership-cases/cases.json`.
+
+`innerText` is a content source too. The rc.13 runtime lists it in its property
+set (`ChildProperties`), so a write replaces the element's child nodes, the same
+clash `textContent` has. Upstream's rule does not read `innerText`; this kept
+divergence is pinned as `innertext/solid-v2/content-positive/001` in
+`fixtures/ownership-cases/cases.json`. TypeScript accepts the prop, so the
+finding is the checker's own claim.
 
 Solid 2.0 has no Solid 1.x lowercase `on*` or `attr:` alias domain, so this
 rule deliberately does not port the 1.x compiler-slot folding arm. Component
@@ -30,9 +37,11 @@ and the visible result depends on write order.
 ```tsx
 // reported
 <div innerHTML={markup}>{fallback}</div>
+<div innerText={label}>{fallback}</div>
 
 // clean
 <div>{fallback}</div>
+<div innerText={label} />
 <Widget innerHTML={markup}>{fallback}</Widget>
 ```
 

@@ -856,6 +856,40 @@
    }
   },
   {
+   "id": "innertext/solid-v2/content-positive/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "export const App = (props: { text: string }) => <div innerText={props.text}>fallback</div>;\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "<div innerText={props.text}>"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Kept divergence: 2.0 rc.13 ChildProperties includes innerText (@solidjs/web dist/web.js line 33), so a write to it replaces the element's children, the same clash textContent has. eslint-plugin-solid 0.14.5 has no innerText arm (src/rules/jsx-no-duplicate-props.ts lines 77-83 at 6d3bc311 read innerHTML, innerhtml and textContent only). The published typings accept innerText as an ordinary prop (@solidjs/web types/jsx.d.ts line 953), so TypeScript reports nothing and the finding is checker-only. The camel-case spelling is jsx-no-duplicate-props/solid-v2/content-positive/001."
+  },
+  {
    "id": "resolve-in-tracked-scope/positive/001",
    "dialect": "solid-v2",
    "source": {

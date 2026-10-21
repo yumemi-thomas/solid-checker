@@ -11,7 +11,7 @@
       "end": 657,
       "fixes": 0,
       "message": "Using JSX children, `props.textContent` at the same time is not allowed.",
-      "hint": "Pick exactly one source of content for this element. When more than one of children, innerHTML, and textContent is set, they overwrite each other and the result depends on write order."
+      "hint": "Pick exactly one source of content for this element. When more than one of children, innerHTML, innerText, and textContent is set, they overwrite each other and the result depends on write order."
     },
     {
       "rule": "strict-read-untracked",
