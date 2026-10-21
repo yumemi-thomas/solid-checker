@@ -131,6 +131,18 @@ pub(crate) fn returns_source_root(file: &FileFacts) -> bool {
 }
 
 pub(super) fn binding_written(file: &FileFacts, declaration: Span) -> bool {
+    binding_written_by(file, declaration, false)
+}
+
+/// [`binding_written`], except that a member write whose object is wrapped in
+/// TypeScript (`(c as X).p = v`, `c!.p = v`) writes a member of the value, not
+/// the binding, as the plain `c.p = v` does. Identity wrappers use this reading;
+/// the other binding analyses keep the conservative one above.
+pub(super) fn binding_written_through_wrappers(file: &FileFacts, declaration: Span) -> bool {
+    binding_written_by(file, declaration, true)
+}
+
+fn binding_written_by(file: &FileFacts, declaration: Span, through_wrappers: bool) -> bool {
     // A redeclaration (`var xs = …` over a parameter, a second `function f`)
     // writes the same binding without any reference. Any other declaration
     // of the same name in the scope counts, a shadowing one included.
@@ -171,11 +183,14 @@ pub(super) fn binding_written(file: &FileFacts, declaration: Span) -> bool {
         .filter(|(_, declared)| *declared == declaration)
         .any(|(reference, _)| {
             targets.iter().any(|target| target.contains(*reference))
-                && !file
-                    .ast
-                    .members
-                    .iter()
-                    .any(|member| member.object == *reference)
+                && !file.ast.members.iter().any(|member| {
+                    let object = if through_wrappers {
+                        file.ast.peel_ts_sugar_span(member.object)
+                    } else {
+                        member.object
+                    };
+                    object == *reference
+                })
         })
 }
 
@@ -415,6 +430,37 @@ impl EntitySymbols {
         self.by_path
             .get(path)
             .and_then(|entities| entities.get(&(u64::from(span.start), u64::from(span.end))))
+    }
+
+    /// The symbol of the value `span` denotes, when that value is one identifier
+    /// (ADR 0346). TypeScript wrappers keep the value (`h as X`, `h!`,
+    /// `h satisfies X`), so the identity is the identifier's symbol:
+    ///
+    /// - the covering symbol at the peeled span, when the entity exists there;
+    /// - else, when the peeled span is a single identifier that starts at the
+    ///   span's first byte, the symbol at the span itself. An entity names the
+    ///   symbol at its first byte, and that token is the identifier.
+    ///
+    /// A call, a member or any other expression answers with nothing: the
+    /// token at its first byte is a callee or an object, not the value.
+    pub(crate) fn value_symbol(
+        &self,
+        file: &solid_facts::FileFacts,
+        span: Span,
+    ) -> Option<&SymbolId> {
+        let path = file.path.as_str();
+        let peeled = file.ast.peel_ts_sugar_span(span);
+        if let Some(symbol) = self
+            .exact_by_path
+            .get(path)
+            .and_then(|entities| entities.get(&(u64::from(peeled.start), u64::from(peeled.end))))
+        {
+            return Some(symbol);
+        }
+        if peeled.start != span.start || !crate::owners::is_identifier_span(file, peeled) {
+            return None;
+        }
+        self.at(path, span)
     }
 }
 

@@ -1,0 +1,15 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "server-function-rich-argument",
+      "code": "SC7007",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/server-member-transport/App.tsx",
+      "start": 268,
+      "end": 278,
+      "fixes": 0
+    }
+  ]
+}

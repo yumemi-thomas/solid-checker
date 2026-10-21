@@ -42,7 +42,9 @@ impl<'a> SemanticLookup<'a> {
 
 /// The exact symbol a function is bound to: a declaration's name, or the
 /// single `const` a function literal initializes. A function reached through
-/// any other binding has no symbol here, so no call names it.
+/// any other binding has no symbol here, so no call names it. A declaration
+/// that is written somewhere (`wrap = function …`, a redeclaration) no longer
+/// holds the function it declares, so it has no symbol either.
 fn function_symbol<'e>(
     file: &solid_facts::FileFacts,
     entities: &'e EntitySymbols,
@@ -50,6 +52,9 @@ fn function_symbol<'e>(
 ) -> Option<&'e str> {
     if function.kind == solid_facts::ast::FunctionKind::Declaration {
         let name = function.name.as_ref()?;
+        if crate::indexes::binding_written_through_wrappers(file, name.span) {
+            return None;
+        }
         return entities
             .exact(&location(file.path.shared(), name.span))
             .map(SymbolId::as_str);
@@ -94,15 +99,20 @@ fn returned_parameter(
     if returns.is_empty() {
         return None;
     }
-    // Every return names the same parameter, by exact symbol.
+    // Every return names the same parameter, by exact symbol. A returned
+    // identifier may sit inside TypeScript wrappers (`cb as X`, `cb!`) that
+    // keep its value; `value_symbol` reads through them, and the identifier's
+    // own span is the use that the returned set excludes below.
     let mut index = None;
     let mut completes_on_identity = false;
+    let mut returned_arguments = Vec::with_capacity(returns.len());
     for returned in &returns {
         if returned.value != solid_facts::ast::ReturnValueKind::Identifier {
             return None;
         }
         let argument = returned.argument?;
-        let symbol = entities.exact(&location(file.path.shared(), argument))?;
+        returned_arguments.push(file.ast.peel_ts_sugar_span(argument));
+        let symbol = entities.value_symbol(file, argument)?;
         let position = function.parameters.iter().position(|parameter| {
             parameter.shape == solid_facts::ast::BindingShape::Identifier
                 && parameter.names.len() == 1
@@ -126,10 +136,6 @@ fn returned_parameter(
     }
     let parameter = &function.parameters[index].names[0];
     let parameter_text = file.source_text(parameter.span)?;
-    let returned_arguments: Vec<Span> = returns
-        .iter()
-        .filter_map(|returned| returned.argument)
-        .collect();
     // Any other occurrence of the name in the function, its parameter list
     // included, is a use the function does not return: a store, a call, a
     // default that captures it. `arguments` and `eval` reach it without a name.
@@ -160,13 +166,12 @@ pub(crate) fn identity_wrapped_literal_span(
     file: &solid_facts::FileFacts,
     argument: Span,
 ) -> Option<Span> {
-    let call = file.ast.call_at(argument)?;
+    // `wrap(…) as X` is the same call: its wrappers keep the value.
+    let call = file.ast.call_at(file.ast.peel_ts_sugar_span(argument))?;
     if call.construct || !is_identifier_span(file, call.callee) {
         return None;
     }
-    let symbol = lookup
-        .entities()
-        .get(&location(file.path.shared(), call.callee))?;
+    let symbol = lookup.entities().value_symbol(file, call.callee)?;
     let index = lookup.identity_wrapper_parameter(symbol.as_str())?;
     if call.arguments.len() <= index
         || call

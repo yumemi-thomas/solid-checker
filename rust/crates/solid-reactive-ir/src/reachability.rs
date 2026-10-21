@@ -278,8 +278,7 @@ fn discover_reachability_file(
                     {
                         continue;
                     }
-                    let Some(symbol) = entities.exact(&location(file.path.shared(), argument.span))
-                    else {
+                    let Some(symbol) = entities.value_symbol(file, argument.span) else {
                         continue;
                     };
                     for function in &file.ast.functions {
@@ -328,7 +327,7 @@ fn discover_reachability_file(
             .filter(|function| callback.span.contains(function.span))
             .map(|function| ReachabilityTarget::LocalSpan(function.span))
             .collect::<Vec<_>>();
-        if let Some(symbol) = entities.exact(&location(file.path.shared(), callback.span)) {
+        if let Some(symbol) = entities.value_symbol(file, callback.span) {
             targets.push(ReachabilityTarget::Symbol(symbol.clone()));
         }
         callback_edges.push((owner, targets));

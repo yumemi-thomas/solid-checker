@@ -419,7 +419,7 @@ pub(crate) fn argument_references_callback_symbol(
     symbol_names: &HashMap<SymbolId, SymbolId>,
 ) -> bool {
     entities
-        .exact(&location(file.path.shared(), argument.span))
+        .value_symbol(file, argument.span)
         .map(SymbolId::as_str)
         == Some(symbol)
         || argument.identifier_properties.iter().any(|property| {

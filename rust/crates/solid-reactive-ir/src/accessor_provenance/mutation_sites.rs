@@ -157,6 +157,33 @@ pub(super) fn tuple_mutation_method<'a>(
         .then_some(method)
 }
 
+/// Whether a call's TypeScript-resolved declaration is a function this checker
+/// analyzes: a project member, such as `Object.defineProperty` of a namespace
+/// that shadows the global `Object`. A library declaration is not one. Read from
+/// the resolved call alone: reading the object-member index from inside this
+/// veto hung the checker on the `t9` shape.
+fn resolves_to_project_function(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    call: &ast::CallFact,
+) -> bool {
+    let Some(resolved) = lookup.resolved_callee_call(file, call.callee) else {
+        return false;
+    };
+    if resolved.validity != typefacts::ResolvedCallValidity::Valid {
+        return false;
+    }
+    resolved
+        .declaration
+        .as_ref()
+        .filter(|declaration| !declaration.symbol.is_empty())
+        .is_some_and(|declaration| {
+            lookup
+                .function_for_symbol(declaration.symbol.as_ref())
+                .is_some()
+        })
+}
+
 pub(crate) fn tuple_iteration_write(lookup: &SemanticLookup<'_>) -> bool {
     if lookup.visible_string_code() {
         return true;
@@ -207,12 +234,18 @@ pub(crate) fn tuple_iteration_write(lookup: &SemanticLookup<'_>) -> bool {
                     // A factory's declaration does not describe the callable
                     // it returns. Its object handoff needs its own census.
                     && (file.ast.call_at(file.ast.peel_ts_sugar_span(call.callee)).is_some()
-                        || lookup
+                        || (lookup
                             .function_called_at(
                                 file.path.as_str(),
                                 file.ast.peel_ts_sugar_span(call.callee),
                             )
-                            .is_none())
+                            .is_none()
+                            // A project member (`Object.defineProperty` of a
+                            // shadowing namespace) is a known function by its own
+                            // resolution, not by its object's leading token. The
+                            // resolved declaration is read here, not the member
+                            // index, which hung when read from inside this veto.
+                            && !resolves_to_project_function(lookup, file, call)))
                     && call.arguments.first().is_some_and(|target| {
                         target.spread
                             || (!matches!(

@@ -397,7 +397,12 @@ impl<'a> SemanticLookup<'a> {
         path: &str,
         callee: Span,
     ) -> Option<(&'a FileFacts, &'a solid_facts::ast::FunctionFact)> {
-        let symbol = self.entities.at(path, callee)?;
+        // The called value is the identifier the callee names, read through its
+        // TypeScript wrappers. A callee that is a call or a member names its own
+        // value through other facts, so the leading token's function is not this
+        // callee's (ADR 0346).
+        let file = self.file_by_path(path)?;
+        let symbol = self.entities.value_symbol(file, callee)?;
         self.function_for_symbol(symbol)
     }
 
@@ -508,8 +513,11 @@ impl<'a> SemanticLookup<'a> {
             })
             .or_else(|| {
                 if member_property.is_none() {
+                    // The identifier's own symbol. A call or another expression
+                    // names no value through its leading token (ADR 0346): the
+                    // token at `make(…)(…)`'s callee is `make`, not what it returns.
                     self.entities
-                        .at(file.path.as_str(), callee)
+                        .value_symbol(file, callee)
                         .map(SymbolId::as_str)
                 } else {
                     None
@@ -536,7 +544,7 @@ impl<'a> SemanticLookup<'a> {
         // FunctionType declaration is not the runtime function identity and
         // must not replace it.
         if member_property.is_none()
-            && let Some(symbol) = self.entities.at(file.path.as_str(), callee)
+            && let Some(symbol) = self.entities.value_symbol(file, callee)
         {
             if !self.direct_value_aliases().contains(symbol) {
                 return vec![symbol.clone()];
