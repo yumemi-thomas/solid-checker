@@ -36,7 +36,10 @@ there, and the reads in it are then reported with the same two proofs:
   `forEach`, `Array.from`'s mapper, the `Promise` executor), and an
   immediately invoked function expression, runs inside the region it is
   called from, nested ones too. It needs a call after a dominating await (a
-  `try` around the await is enough). An empty receiver never invokes its
+  `try` around the await is enough). An `async` callback or IIFE runs its
+  prefix the same way: the code up to its first own suspension (its operand
+  included) is on the caller's stack, and its tail belongs to the
+  promise-flight walk. An empty receiver never invokes its
   callback: the read is reported as where the callback would run. A `sort`
   comparator, a `reduce`/`reduceRight` reducer with no initial value (not
   called under two elements) and a `replace`/`replaceAll` replacer are the
@@ -108,8 +111,7 @@ Each of these keeps it from applying:
 - an argument that is not the literal function: `rows.map(makeRow(fn))` hands
   the callback to a wrapper; an opaque slot of an exact standard callback is
   an uncertifiable obligation;
-- an `async` or generator callback, which suspends at its own first await,
-  except one of the `async` helpers above;
+- a generator callback, which runs nothing when it is called;
 - a `.then` whose result is dropped, or a `setTimeout`/`queueMicrotask`
   callback (a deferred callback is not on the continuation's stack).
 - a read inside or after `for await` (or after `await using`) is an
@@ -149,13 +151,23 @@ That read made the source a dependency, so the read after the await is an
 uncertifiable obligation. Code outside the project is opaque too: a package
 import, a global, a function declared without a body, and any standard-library
 call outside the audited inert rows (`inert_standard_call` in `pre_await.rs`:
-`Math.*`, timers, `Promise` statics and handlers, number and URI functions,
-`Date.now`, `fetch`, error and collection constructors). It may invoke a
-callback registered earlier (`window.dispatchEvent`, `fn.call()`, a package
-`invoke()`) or read a source a package store holds, and nothing says it does
-not. A call whose declaration the type facts did not resolve is judged the same
-way (an argumentless call before an async function's first suspension is
-demanded its resolved call only when its callee is a global). A conditional read in
+`Math.*`, timers, number and URI functions, `Date.now`, `fetch`, error,
+collection and `RegExp` constructors, `Array.isArray`). A row is inert only for
+the values it receives: its receiver is the built-in itself (a shadowed `Math`,
+or a subclass or Proxy inheriting the signature, is not), no argument is a
+spread, each slot that coerces or iterates (`Math.max(x)`, `parseInt(x)`,
+`new Map(x)`, `fetch(url, init)`, `new Error(message, options)`) holds a
+source-proven primitive, and each queued callback slot (`setTimeout`,
+`queueMicrotask`, `new Promise(executor)`) holds a proven function. A type
+annotation or assertion is not a value proof, and a primitive-valued operator
+is not inert by its result (`delete proxy.key`). A standard call that is not an
+inert row is opaque, never a project member of the same property name
+(`stats.max` beside `Math.max`). Promise handlers and
+combinators are opaque in this pass. An object, spread or opaque slot stays
+possibly tracked. A callee may invoke a callback registered earlier
+(`window.dispatchEvent`, `fn.call()`, a package `invoke()`) or read a source a
+package store holds, and nothing says it does not. A call whose declaration the
+type facts did not resolve is judged the same way. A conditional read in
 the computation's own flow does not hide the finding (the run that skips it
 warns, the feasible-path premise). A callback of `untrack` or `runWithOwner`
 runs with tracking off and is not part of the segment. A store key is a
@@ -197,6 +209,12 @@ uncertifiable for any owner the analysis cannot see through (a captured
 promise: an `async` one is a member whose read after its own await is a
 violation (a non-null owner: uncertifiable); a function the analysis cannot
 resolve is an uncertifiable obligation.
+
+**Exceptional continuations.** A catch/finally following a try-head await
+is visited even without normal-flow dominance. It is a violation only when
+the existing operand proof excludes synchronous throws; otherwise it is an
+obligation. Code following the handler's join is an obligation too. A try
+with statements before its first await still needs handler-region facts.
 
 **The runtime agrees from rc.13.** `@solidjs/signals@2.0.0-rc.13` warns
 `UNTRACKED_READ_AFTER_AWAIT` in dev for a read after the first `await` of an
@@ -250,7 +268,7 @@ own synchronous computation and compose the two.
 ## Limits
 
 - **Each shape only adds reports.** A mistake in one shape can only add a false positive, so each has a runtime-oracle case: `after-await-settlement`, `after-await-tracked`, `after-await-disposed` and `after-await-owner` pin the reports. The other `after-await-*` cases (`after-await-quiet`, `after-await-possible`, `after-await-promises`, `after-await-adopted`) pin the silent shapes and the reads the checker leaves uncertifiable.
-- **Not modeled:** `race` and `any` of helpers, a promise held in a variable and handled later, member helpers (`api.read()`), async IIFEs, and props already tracked. The open items are in `docs/open-work.md`.
+- **Not modeled:** `race` and `any` of helpers, a promise held in a variable and handled later, member helpers (`api.read()`), an async IIFE the computation awaits, and props already tracked. The open items are in `docs/open-work.md`.
 
 ## Related
 

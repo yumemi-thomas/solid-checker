@@ -413,6 +413,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/await-continuation-reads/node_modules/**
 !fixtures/reactive-ir/read-after-await-reach/node_modules/
 !fixtures/reactive-ir/read-after-await-reach/node_modules/**
+!fixtures/reactive-ir/read-after-await-purity/node_modules/
+!fixtures/reactive-ir/read-after-await-purity/node_modules/**
 !fixtures/reactive-ir/mixed-role-flow/node_modules/
 !fixtures/reactive-ir/mixed-role-flow/node_modules/**
 !fixtures/reactive-ir/root-window-reads/node_modules/

@@ -137,6 +137,7 @@ pub(super) fn run(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
                 && member_site.is_none()
                 && !reach.has_promise_seed(function)
                 && !reach.has_implicit_suspension(function)
+                && !reach.has_try_handler(function)
             {
                 continue;
             }
@@ -173,6 +174,23 @@ fn ast_function<'f>(
     let end = u32::try_from(function.expression.end_byte).ok()?;
     let expression = file.ast.peel_ts_sugar_span(Span::new(start, end));
     Some((file, file.ast.function_at(expression)?))
+}
+
+/// The immediate stack segment stops at the first own suspension, including
+/// its operand. Nothing in the async tail executes on this caller's stack.
+fn synchronous_prefix(file: &FileFacts, function: &FunctionFact) -> Span {
+    let end = file
+        .ast
+        .awaits
+        .iter()
+        .chain(&file.ast.implicit_suspensions)
+        .filter(|awaited| {
+            function.body.contains(**awaited) && written_directly_in(&file.ast, function, **awaited)
+        })
+        .map(|awaited| awaited.end)
+        .min()
+        .unwrap_or(function.body.end);
+    Span::new(function.body.start, end)
 }
 
 /// The operand span of an `await`. Of nested awaits that share an end
@@ -495,6 +513,15 @@ impl<'f, 'a> Reach<'f, 'a> {
             })
     }
 
+    fn has_try_handler(&self, function: &AsyncFunctionFact) -> bool {
+        ast_function(&self.files, function).is_some_and(|(file, function)| {
+            file.ast
+                .try_head_awaits
+                .iter()
+                .any(|head| written_directly_in(&file.ast, function, head.awaited))
+        })
+    }
+
     /// Whether the function itself suspends in a way the producer's facts do
     /// not model (`for await`, `await using`).
     fn has_implicit_suspension(&self, function: &'f AsyncFunctionFact) -> bool {
@@ -634,6 +661,51 @@ impl<'f, 'a> Reach<'f, 'a> {
             self.visit_call(draft, &mut walk, file, call, 0);
         }
         if let Some((file, ast_function)) = ast_function(&self.files, function) {
+            // A catch/finally may follow a rejected await even though the
+            // producer has no normal-flow dominance fact for its reads.
+            for head in &file.ast.try_head_awaits {
+                if !written_directly_in(&file.ast, ast_function, head.awaited) {
+                    continue;
+                }
+                // The catch can complete and continue after the try too.
+                // This suffix remains an obligation: a synchronous operand
+                // failure may have reached the same join without suspension.
+                let suffix = head
+                    .regions
+                    .iter()
+                    .map(|region| region.end)
+                    .max()
+                    .map(|end| Span::new(end, ast_function.body.end));
+                for region in head.regions.iter().copied().chain(suffix) {
+                    let before = draft.static_defects.len();
+                    let mut handler = ast_function.clone();
+                    handler.body = region;
+                    self.report_region(draft, &mut walk, file, &handler, 0);
+                    // Reuse the operand proof only while the resolved
+                    // declaration is still the current function value.
+                    let current = file
+                        .ast
+                        .call_at(file.ast.peel_ts_sugar_span(head.operand))
+                        .and_then(|call| {
+                            ctx.semantic_lookup.function_called_at(
+                                file.path.as_str(),
+                                file.ast.peel_ts_sugar_span(call.callee),
+                            )
+                        })
+                        .is_some_and(|(f, fun)| {
+                            ctx.semantic_lookup.function_value_is_current(f, fun)
+                        });
+                    if !current
+                        || !crate::execution_role::follows_try_head_await(
+                            file,
+                            Span::new(region.start + 1, region.start + 1),
+                            ctx.semantic_lookup,
+                        )
+                    {
+                        mark_uncertain(draft, before);
+                    }
+                }
+            }
             self.after_implicit_suspension(draft, &mut walk, mark, file, ast_function);
         }
         if member.conditional {
@@ -741,10 +813,9 @@ impl<'f, 'a> Reach<'f, 'a> {
                 .function_at(file.ast.peel_ts_sugar_span(call.callee))
             && function.kind != FunctionKind::Declaration
             && function.method_name.is_none()
-            && !function.r#async
             && !function.generator
         {
-            self.report_region(draft, walk, file, function, depth);
+            self.report_prefix(draft, walk, file, function, depth);
             return;
         }
         // `runWithOwner(owner, fn)` runs `fn` at once with `owner` as the
@@ -757,14 +828,27 @@ impl<'f, 'a> Reach<'f, 'a> {
             && let [owner, callback] = call.arguments.as_slice()
             && !owner.spread
             && !callback.spread
-            && let Some(callback) = callback_argument_literal(file, callback.span)
-            && !callback.r#async
+            && let Some((callback_file, callback)) = callback_argument_literal(file, callback.span)
+                .map(|callback| (file, callback))
+                .or_else(|| {
+                    ctx.semantic_lookup
+                        .function_called_at(
+                            file.path.as_str(),
+                            file.ast.peel_ts_sugar_span(callback.span),
+                        )
+                        .filter(|(f, fun)| ctx.semantic_lookup.function_value_is_current(f, fun))
+                })
             && !callback.generator
         {
-            match owner.value {
-                ArgumentValueKind::Null => self.report_region(draft, walk, file, callback, depth),
-                ArgumentValueKind::Undefined => {}
-                _ => self.report_conditional_region(draft, walk, file, callback, depth),
+            let mark = draft.static_defects.len();
+            if owner.value != ArgumentValueKind::Undefined {
+                self.report_prefix(draft, walk, callback_file, callback, depth);
+            }
+            if !matches!(
+                owner.value,
+                ArgumentValueKind::Null | ArgumentValueKind::Undefined
+            ) {
+                mark_uncertain(draft, mark);
             }
             return;
         }
@@ -787,8 +871,7 @@ impl<'f, 'a> Reach<'f, 'a> {
                 // fewer than two elements, a replacer when nothing matches. A
                 // read in one is a proof obligation.
                 Some(callback)
-                    if !callback.r#async
-                        && !callback.generator
+                    if !callback.generator
                         && (matches!(
                             standard_call_name(resolved),
                             Some("Array.sort" | "String.replace" | "String.replaceAll")
@@ -805,8 +888,8 @@ impl<'f, 'a> Reach<'f, 'a> {
                 {
                     self.report_conditional_region(draft, walk, file, callback, depth);
                 }
-                Some(callback) if !callback.r#async && !callback.generator => {
-                    self.report_region(draft, walk, file, callback, depth);
+                Some(callback) if !callback.generator => {
+                    self.report_prefix(draft, walk, file, callback, depth);
                 }
                 // A literal queued as a member of the promise chain reports
                 // for itself; anything else the body of which cannot be
@@ -866,8 +949,7 @@ impl<'f, 'a> Reach<'f, 'a> {
         else {
             return;
         };
-        if helper.r#async
-            || helper.generator
+        if helper.generator
             || helper.method_name.is_some()
             || !ctx
                 .semantic_lookup
@@ -875,7 +957,10 @@ impl<'f, 'a> Reach<'f, 'a> {
         {
             return;
         }
-        for read in helper_file.ast.calls_within(helper.body) {
+        for read in helper_file
+            .ast
+            .calls_within(synchronous_prefix(helper_file, helper))
+        {
             if !written_directly_in(&helper_file.ast, helper, read.span)
                 || !crate::interproc::site_on_every_completion(
                     ctx.semantic_lookup,
@@ -893,6 +978,21 @@ impl<'f, 'a> Reach<'f, 'a> {
         }
     }
 
+    /// Async functions execute their prefix immediately too. Their tail is
+    /// handled by the promise-flight walk, never by this stack walk.
+    fn report_prefix(
+        &self,
+        draft: &mut ProgramDraft,
+        walk: &mut Walk<'_>,
+        file: &'f FileFacts,
+        function: &'f FunctionFact,
+        depth: usize,
+    ) {
+        let mut prefix = function.clone();
+        prefix.body = synchronous_prefix(file, function);
+        self.report_region(draft, walk, file, &prefix, depth);
+    }
+
     /// A function literal's body as part of the continuation: its member
     /// reads and accessor calls, and the callbacks its own calls run.
     fn report_region(
@@ -900,7 +1000,7 @@ impl<'f, 'a> Reach<'f, 'a> {
         draft: &mut ProgramDraft,
         walk: &mut Walk<'_>,
         file: &'f FileFacts,
-        callback: &'f FunctionFact,
+        callback: &FunctionFact,
         depth: usize,
     ) {
         let ctx = self.ctx;
@@ -909,7 +1009,7 @@ impl<'f, 'a> Reach<'f, 'a> {
             member_reads_after_await(
                 ctx,
                 draft,
-                (file, callback, callback.span.start),
+                (file, callback, callback.body.start),
                 &walk.member.context,
                 &|symbol, text| self.pre.store_key(&walk.member.windows, symbol, text),
             );
@@ -937,7 +1037,7 @@ impl<'f, 'a> Reach<'f, 'a> {
         depth: usize,
     ) {
         let mark = draft.static_defects.len();
-        self.report_region(draft, walk, file, callback, depth);
+        self.report_prefix(draft, walk, file, callback, depth);
         mark_uncertain(draft, mark);
     }
 

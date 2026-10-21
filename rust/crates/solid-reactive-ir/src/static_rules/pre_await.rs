@@ -37,81 +37,122 @@ use typefacts::AsyncFunctionFact;
 /// read).
 const MAX_DEPTH: usize = 6;
 
-/// The standard-library declarations whose call runs no user code but what its
-/// arguments hand it (a callback literal argument is scanned as part of the
-/// segment, a function reference as a helper): timers and microtasks only
-/// schedule, `Promise` statics only create or chain, `Math`, number and URI
-/// functions and `Date.now` compute, an error, collection or date constructor
-/// builds a value, and `fetch` starts a request. Everything
-/// else is opaque: nothing audited says it cannot run a callback an earlier
-/// call registered (`dispatchEvent`, `Function.call`, `Reflect.apply`, an
-/// iterator, a getter, a `toString`).
-fn inert_standard_call(name: &str) -> bool {
-    name.starts_with("Math.")
-        || name
-            .strip_suffix("Constructor.construct")
-            .is_some_and(|class| {
-                matches!(
-                    class,
-                    "Error"
-                        | "TypeError"
-                        | "RangeError"
-                        | "SyntaxError"
-                        | "ReferenceError"
-                        | "EvalError"
-                        | "URIError"
-                        | "Array"
-                        | "Date"
-                        | "Map"
-                        | "Set"
-                        | "WeakMap"
-                        | "WeakSet"
-                        | "RegExp"
-                )
-            })
-        || matches!(
-            name,
-            "setTimeout"
-                | "setInterval"
-                | "clearTimeout"
-                | "clearInterval"
-                | "queueMicrotask"
-                | "requestAnimationFrame"
-                | "cancelAnimationFrame"
-                | "WindowOrWorkerGlobalScope.setTimeout"
-                | "WindowOrWorkerGlobalScope.setInterval"
-                | "WindowOrWorkerGlobalScope.clearTimeout"
-                | "WindowOrWorkerGlobalScope.clearInterval"
-                | "WindowOrWorkerGlobalScope.queueMicrotask"
-                | "WindowOrWorkerGlobalScope.fetch"
-                | "fetch"
-                | "PromiseConstructor.construct"
-                | "PromiseConstructor.resolve"
-                | "PromiseConstructor.reject"
-                | "PromiseConstructor.all"
-                | "PromiseConstructor.allSettled"
-                | "PromiseConstructor.race"
-                | "PromiseConstructor.any"
-                | "Promise.then"
-                | "Promise.catch"
-                | "Promise.finally"
-                | "DateConstructor.now"
-                | "ArrayConstructor.isArray"
-                | "parseInt"
-                | "parseFloat"
-                | "isNaN"
-                | "isFinite"
-                | "NumberConstructor.parseInt"
-                | "NumberConstructor.parseFloat"
-                | "NumberConstructor.isFinite"
-                | "NumberConstructor.isInteger"
-                | "NumberConstructor.isNaN"
-                | "NumberConstructor.isSafeInteger"
-                | "encodeURIComponent"
-                | "decodeURIComponent"
-                | "encodeURI"
-                | "decodeURI"
-        )
+/// An inert declaration is only inert for the supplied runtime values. In
+/// particular, a primitive *type* is insufficient: assertions do not change
+/// objects and coercion/iteration/thenable assimilation can call project code.
+fn inert_standard_call(
+    name: &str,
+    call: &CallFact,
+    primitive: impl Fn(&solid_facts::ast::ArgumentFact) -> bool,
+    function: impl Fn(&solid_facts::ast::ArgumentFact) -> bool,
+) -> bool {
+    if call.arguments.iter().any(|argument| argument.spread) {
+        return false; // ArgumentListEvaluation itself drives an iterator.
+    }
+    let all_primitive = || call.arguments.iter().all(&primitive);
+    match name {
+        // These operations do not coerce or inspect argument properties.
+        "ArrayConstructor.construct"
+        | "ArrayConstructor.isArray"
+        | "NumberConstructor.isFinite"
+        | "NumberConstructor.isInteger"
+        | "NumberConstructor.isNaN"
+        | "NumberConstructor.isSafeInteger"
+        | "PromiseConstructor.reject"
+        | "DateConstructor.now" => true,
+        "setTimeout"
+        | "setInterval"
+        | "WindowOrWorkerGlobalScope.setTimeout"
+        | "WindowOrWorkerGlobalScope.setInterval" => {
+            call.arguments
+                .first()
+                .is_none_or(|arg| function(arg) || primitive(arg))
+                && call.arguments.get(1).is_none_or(&primitive)
+            // Remaining arguments are retained without coercion.
+        }
+        "queueMicrotask" | "requestAnimationFrame" | "WindowOrWorkerGlobalScope.queueMicrotask" => {
+            call.arguments.first().is_none_or(&function)
+        }
+        "PromiseConstructor.construct" => {
+            // Its executor is scanned as an inline callback, including calls
+            // of resolve/reject. An uninspectable executor is opaque.
+            call.arguments.first().is_some_and(&function)
+        }
+        // A handler receiver may run a constructor/species getter or have an
+        // overridden then. Its declaration alone does not prove inertness.
+        "Promise.then" | "Promise.catch" | "Promise.finally" => false,
+        "clearTimeout"
+        | "clearInterval"
+        | "cancelAnimationFrame"
+        | "WindowOrWorkerGlobalScope.clearTimeout"
+        | "WindowOrWorkerGlobalScope.clearInterval"
+        | "fetch"
+        | "WindowOrWorkerGlobalScope.fetch"
+        | "PromiseConstructor.resolve"
+        | "PromiseConstructor.all"
+        | "PromiseConstructor.allSettled"
+        | "PromiseConstructor.race"
+        | "PromiseConstructor.any"
+        | "parseInt"
+        | "parseFloat"
+        | "isNaN"
+        | "isFinite"
+        | "NumberConstructor.parseInt"
+        | "NumberConstructor.parseFloat"
+        | "encodeURIComponent"
+        | "decodeURIComponent"
+        | "encodeURI"
+        | "decodeURI"
+        | "ErrorConstructor.construct"
+        | "TypeErrorConstructor.construct"
+        | "RangeErrorConstructor.construct"
+        | "SyntaxErrorConstructor.construct"
+        | "ReferenceErrorConstructor.construct"
+        | "EvalErrorConstructor.construct"
+        | "URIErrorConstructor.construct"
+        | "DateConstructor.construct"
+        | "MapConstructor.construct"
+        | "SetConstructor.construct"
+        | "WeakMapConstructor.construct"
+        | "WeakSetConstructor.construct"
+        | "RegExpConstructor.construct"
+        | "Math.abs"
+        | "Math.acos"
+        | "Math.acosh"
+        | "Math.asin"
+        | "Math.asinh"
+        | "Math.atan"
+        | "Math.atanh"
+        | "Math.atan2"
+        | "Math.cbrt"
+        | "Math.ceil"
+        | "Math.clz32"
+        | "Math.cos"
+        | "Math.cosh"
+        | "Math.exp"
+        | "Math.expm1"
+        | "Math.floor"
+        | "Math.fround"
+        | "Math.hypot"
+        | "Math.imul"
+        | "Math.log"
+        | "Math.log1p"
+        | "Math.log2"
+        | "Math.log10"
+        | "Math.max"
+        | "Math.min"
+        | "Math.pow"
+        | "Math.random"
+        | "Math.round"
+        | "Math.sign"
+        | "Math.sin"
+        | "Math.sinh"
+        | "Math.sqrt"
+        | "Math.tan"
+        | "Math.tanh"
+        | "Math.trunc" => all_primitive(),
+        _ => false,
+    }
 }
 
 /// What the pre-await segment is known to have done to a source.
@@ -423,6 +464,11 @@ impl<'f, 'a> PreAwait<'f, 'a> {
                 reads.opaque = true;
             }
         }
+        if file.ast.coercing_operands.iter().any(|operand| {
+            region.contains(*operand) && !skipped(*operand) && !self.primitive_value(file, *operand)
+        }) {
+            reads.opaque = true;
+        }
         // A plain member read may run a getter of that name.
         for member in &file.ast.members {
             if !region.contains(member.span)
@@ -541,13 +587,50 @@ impl<'f, 'a> PreAwait<'f, 'a> {
         // `Reflect.apply`) may invoke a callback captured earlier, and a
         // package or global callee may read a source it was handed before
         // (ADR 0340): a possible read.
-        if ctx
+        if let Some(name) = ctx
             .semantic_lookup
             .resolved_callee_call(file, call.callee)
             .and_then(standard_call_name)
-            .is_some_and(inert_standard_call)
         {
-            return false;
+            // A lib declaration describes a signature, not the runtime
+            // receiver: a Proxy or subclass may inherit that signature. Keep
+            // only a direct global built-in after resolving its declaration.
+            let global = |span: Span, expected: &str| {
+                file.source_text(span) == Some(expected)
+                    && file.ast.reference_declaration(span).is_none()
+            };
+            let direct_builtin = if let Some(class) = name.strip_suffix("Constructor.construct") {
+                call.construct && global(callee, class)
+            } else if let Some((receiver, _)) = name.split_once('.') {
+                file.ast.member_at(callee).is_some_and(|member| {
+                    if receiver == "WindowOrWorkerGlobalScope" {
+                        ["window", "globalThis", "self"]
+                            .iter()
+                            .any(|name| global(member.object, name))
+                    } else {
+                        global(
+                            member.object,
+                            receiver.strip_suffix("Constructor").unwrap_or(receiver),
+                        )
+                    }
+                })
+            } else {
+                global(callee, name)
+            };
+            if direct_builtin
+                && inert_standard_call(
+                    name,
+                    call,
+                    |argument| self.primitive_value(file, argument.span),
+                    |argument| self.function_value(file, argument.span),
+                )
+            {
+                return false;
+            }
+            // The declaration names the built-in, so a project member that
+            // shares its property name (`stats.max` beside `Math.max`) is never
+            // the callee. A call that is not inert may run what it holds.
+            return true;
         }
         // A project function whose body is visible.
         let member = file
@@ -572,6 +655,80 @@ impl<'f, 'a> PreAwait<'f, 'a> {
         }
         // Not visible: nothing rules out a read.
         true
+    }
+
+    /// Runtime function provenance, not a callable assertion. In addition to
+    /// project functions, Promise supplies its executor's resolve/reject as
+    /// native functions. This keeps `new Promise(done => setTimeout(done, 20))`
+    /// inspectable without trusting an arbitrary callable-typed parameter.
+    fn function_value(&self, file: &FileFacts, value: Span) -> bool {
+        let value = file.ast.peel_ts_sugar_span(value);
+        if callback_argument_literal(file, value).is_some()
+            || self
+                .ctx
+                .semantic_lookup
+                .function_called_at(file.path.as_str(), value)
+                .is_some_and(|(f, fun)| self.ctx.semantic_lookup.function_value_is_current(f, fun))
+        {
+            return true;
+        }
+        let Some(declaration) = file.ast.reference_declaration(value) else {
+            return false;
+        };
+        if file
+            .ast
+            .write_targets
+            .iter()
+            .any(|written| file.ast.reference_declaration(*written) == Some(declaration))
+        {
+            return false;
+        }
+        file.ast.calls.iter().any(|call| {
+            call.construct
+                && file.source_text(call.callee) == Some("Promise")
+                && file.ast.reference_declaration(call.callee).is_none()
+                && self
+                    .ctx
+                    .semantic_lookup
+                    .resolved_callee_call(file, call.callee)
+                    .and_then(standard_call_name)
+                    == Some("PromiseConstructor.construct")
+                && call
+                    .arguments
+                    .first()
+                    .filter(|argument| !argument.spread)
+                    .and_then(|argument| callback_argument_literal(file, argument.span))
+                    .is_some_and(|executor| {
+                        executor.parameters.iter().take(2).any(|parameter| {
+                            parameter.shape == solid_facts::ast::BindingShape::Identifier
+                                && parameter.names.len() == 1
+                                && parameter.names[0].span == declaration
+                        })
+                    })
+        })
+    }
+
+    fn primitive_value(&self, file: &FileFacts, value: Span) -> bool {
+        let value = file.ast.peel_ts_sugar_span(value);
+        // The result domain of an arbitrary expression does not prove that
+        // evaluating it is inert (`delete proxy.key` returns a boolean).
+        // Keep literals/templates and sourced primitive bindings; calls,
+        // member Gets and operators need their own execution proof.
+        if file.ast.primitive_results.binary_search(&value).is_ok()
+            || file.ast.call_at(value).is_some()
+            || file.ast.member_at(value).is_some()
+            || file.ast.conditional_at(value).is_some()
+            || file.ast.logical_at(value).is_some()
+        {
+            return false;
+        }
+        file.source_text(value) == Some("null")
+            || (file.source_text(value) == Some("undefined")
+                && file.ast.reference_declaration(value).is_none())
+            || self
+                .ctx
+                .semantic_lookup
+                .proven_primitive(file, value, MAX_DEPTH)
     }
 
     /// Whether running a project function may read `symbol`.
