@@ -304,21 +304,21 @@ impl StaticApiContext<'_> {
                     uncertain: false,
                 });
             }
-            // SC2008: flush() run synchronously by a user effect's apply
-            // callback. The claim is the no-op: the flush that runs effects is
-            // already in progress (`globalQueue._running`), so the nested call
-            // returns without draining in every client build. The dev build
-            // of `@solidjs/signals` (from rc.1) usually also warns
+            // SC2008: a flush() that only ever runs on a user effect's apply
+            // callback. The claim is universal: whenever the call runs, the
+            // flush that runs effects is already in progress
+            // (`globalQueue._running`), so the nested call returns without
+            // draining in every client build, and a call that never runs is
+            // as pointless, so reachability is no part of the proof. The dev
+            // build of `@solidjs/signals` (from rc.1) usually also warns
             // `FLUSH_IN_EFFECT_CALLBACK`, but only while its global
             // `inEffectCallback` marker is still up: a nested synchronous
-            // `runEffect` (a `createRenderEffect` run at creation, JSX) lowers
-            // it in its `finally` (rc.13 `dist/dev.js:1906`), so the warning
-            // is not part of the claim (`dist/dev-shared.js:2680-2698`).
-            // Which primitive, on which release, and which callback is the
-            // effect phase are the dialect's; the proof that the call runs on
-            // that callback's own stack, on the same package instance's queue,
-            // is `effect_phase`'s. A server build selects neither (the apply
-            // never runs there and `flush` is empty).
+            // `runEffect` lowers it in its `finally` (rc.13 `dist/dev.js:1906`),
+            // so the warning is not part of the claim. Which primitive, on
+            // which release, and which callback is the effect phase are the
+            // dialect's; the proof that no execution of the call is outside
+            // that callback's stack, on the same package instance's queue, is
+            // `effect_phase`'s. A server build selects neither.
             if let Some(kind) = kind
                 && self.client_build
                 && dialect.warns_inside_effect_phase(kind)
@@ -334,7 +334,6 @@ impl StaticApiContext<'_> {
                     call.span,
                     &root,
                     self.package_instances,
-                    self.reachable_calls,
                     self.lookup,
                 )
             {
@@ -353,7 +352,7 @@ impl StaticApiContext<'_> {
                     id: "SC2008".into(),
                     rule: "flush-in-effect-callback".into(),
                     message: format!(
-                        "{primitive}() is called {reached}, which runs inside the flush that drains effects; the queue is already running, so this flush drains nothing (the dev build usually also warns FLUSH_IN_EFFECT_CALLBACK), and the writes it was meant to reveal are processed in that flush's continuation, not at this call"
+                        "{primitive}() is called {reached}; whenever it runs, it runs inside the flush that drains effects, so the queue is already running and this flush drains nothing (the dev build usually also warns FLUSH_IN_EFFECT_CALLBACK), and the writes it was meant to reveal are processed in that flush's continuation, not at this call"
                     ),
                     hint: "Remove the flush(): writes made in an effect are processed by the flush that is already running. To force a drain afterwards, defer it (`queueMicrotask(() => flush())`) or call it from an event handler or other code that runs outside the effect.".into(),
                     location: location(file.path.shared(), call.callee),

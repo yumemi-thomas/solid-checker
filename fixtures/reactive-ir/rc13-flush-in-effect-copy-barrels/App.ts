@@ -3,6 +3,7 @@ import { effectOfThisCopy } from "./barrel";
 import * as Bridge from "./lib/bridge";
 import { createEffect as effectOfOtherCopy } from "./lib/bridge";
 import { createEffect as effectThroughStar } from "./lib/star";
+import { createEffect as effectThroughPackage } from "foreign-effects";
 
 createRoot(() => {
   const [value] = createSignal(1);
@@ -28,6 +29,13 @@ createRoot(() => {
     flush();
   });
   Bridge.createEffect(value, () => {
+    flush();
+  });
+
+  // Negative: a package's `exports` conditions pick the file it loads, and with
+  // it which installed `solid-js` that file imports (here the same copy, but
+  // the conditions are not the ones this proof selects): not claimed.
+  effectThroughPackage(value, () => {
     flush();
   });
 });

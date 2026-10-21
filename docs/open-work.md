@@ -28,9 +28,10 @@ Write in an owned scope (`reactive-write-in-owned-scope`, SC2001):
 
 - `createRenderEffect`'s re-runs report `FLUSH_IN_EFFECT_CALLBACK`, but its first run is synchronous at creation, outside any flush, where `flush()` drains. The rule cannot say which run a call is in.
 - A cleanup returned from a `createEffect` apply reports when the next run replaces it (it runs inside the marker) and not at disposal.
-- Accessors are matched by property name, not by receiver: a getter, setter or Proxy-bound variable that cannot return, anywhere in the file or its imports, withholds every same-named property operation on the path (a miss accepted to keep zero false positives). A registration inside a method, a generator or a function passed by name to a primitive is not claimed; neither is one in a function only reached through an unmodelled consumer.
-- Constant expressions the folder does not model (`NaN`, BigInt, template literals, object comparisons) are not folded: `if (NaN) flush()` and similar are reported under the feasible-path premise.
+- A helper is claimed only when every reference to it is an exact call from a proven effect layer. A helper that also has a handler, timer, module-level or exported caller, an alias, or is passed as an argument is not claimed, though the call from the effect is still a no-op (accepted: the claim is universal, and `endProviderCodeLogin` in openbot is now silent). `runtime-oracle/flush-in-effect-callback` lists the exported-helper case as `open`.
+- A `flush` imported through another package's `exports` conditions is not claimed (selected conditions are not known).
 - An apply passed by name (`createEffect(v, applyFn)`) or written as the `{ effect }` bundle: the position is not placed. A helper in a callback handed to an unmodelled consumer (a project function taking the callback, a package call) is not followed.
+- Dead code is reported: the call is pointless wherever it runs.
 
 Async read outside a loading boundary (`async-outside-loading-boundary`, SC5003):
 

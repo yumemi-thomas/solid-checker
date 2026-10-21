@@ -5,8 +5,10 @@
 // marker, reports `FLUSH_IN_EFFECT_CALLBACK` (a warning) and returns without
 // draining (`dist/dev-shared.js:2680-2698`); the production build returns at
 // the same branch silently. Positive: the call runs on the apply's own stack.
-// Negative: anything else, including the compute function (no marker), calls
-// deferred to a timer or microtask, and code no layer proves runs there.
+// The claim is universal: whenever the call runs it runs on an apply's stack,
+// so a call in dead code is reported too. Negative: any call that may run
+// elsewhere, including the compute function (no marker), calls deferred to a
+// timer or microtask, and helpers with a caller no layer proves.
 import {
   createEffect,
   createRenderEffect,
@@ -19,7 +21,6 @@ import {
 import * as Solid from "solid-js";
 import { flush as signalsFlush } from "@solidjs/signals";
 import { commitFromOtherFile } from "./commit";
-import { ImportedClass, importedBox, importedReturning } from "./accessors";
 
 // The cases sit in a root so each effect has an owner.
 createRoot(() => {
@@ -91,8 +92,7 @@ createRoot(() => {
     });
   });
 
-  // Positive: a conditional call is claimed on the engine's feasible-path
-  // premise: nothing here decides the condition.
+  // Positive: a conditional call, whatever the condition.
   createEffect(value, (next) => {
     if (next > 100) flush();
   });
@@ -114,7 +114,8 @@ createRoot(() => {
     outerArrow();
   });
 
-  // Positive: a helper in another file.
+  // Negative: a helper in another file is exported, so code this build cannot
+  // see may call it from outside any effect.
   createEffect(value, () => {
     commitFromOtherFile();
   });
@@ -162,8 +163,8 @@ createRoot(() => {
     void loadThenSettle();
   });
 
-  // Positive: a helper also called from a handler is still reached from the
-  // effect by this call.
+  // Negative: a helper also called from a handler may flush outside the
+  // effect, so one call from an effect proves nothing.
   function sharedHelper(): void {
     flush();
   }
@@ -224,7 +225,8 @@ createRoot(() => {
     flush();
   });
 
-  // Negative: a helper no call from an effect reaches.
+  // Negative: a helper no call from an effect reaches (its only caller is a
+  // handler).
   function onlyFromHandler(): void {
     flush();
   }
@@ -283,120 +285,24 @@ createRoot(() => {
     api.commitMember();
   });
 
-  // Negative: code after an unconditional return or throw never runs.
-  createEffect(value, () => {
-    return;
+  // Negative: a helper an effect calls and an alias also reaches.
+  function aliasedHelper(): void {
     flush();
-  });
+  }
+  const alias = aliasedHelper;
+  void alias;
   createEffect(value, () => {
-    throw new Error("boom");
+    aliasedHelper();
+  });
+
+  // Negative: a helper called from the apply and from the module body.
+  function moduleAndEffect(): void {
     flush();
-  });
-
-  // Negative: a callback of an array literal written empty is never invoked.
-  createEffect(value, () => {
-    ([] as number[]).forEach(() => flush());
-    [].filter(() => {
-      flush();
-      return true;
-    });
-  });
-
-  // Negative: a compute that always throws leaves the apply unrun.
-  createEffect(
-    (): number => {
-      throw new Error("x");
-    },
-    () => {
-      flush();
-    },
-  );
-
-  // Negative: abrupt completion before the call. Each leaves no normal path to
-  // the `flush()`: a `try` whose blocks only return, an infinite loop, a
-  // `switch` whose every arm returns, a call that never returns (a `never`
-  // signature, a local `never` arrow), and an inline callback that only throws
-  // over a literal array with a first element.
-  function fail(): never {
-    throw new Error("always");
   }
   createEffect(value, () => {
-    try {
-      return;
-    } finally {
-      void 0;
-    }
-    flush();
+    moduleAndEffect();
   });
-  createEffect(value, () => {
-    for (;;) {}
-    flush();
-  });
-  createEffect(value, () => {
-    switch (1) {
-      default:
-        return;
-    }
-    flush();
-  });
-  createEffect(value, () => {
-    const never = (): never => {
-      throw new Error();
-    };
-    never();
-    flush();
-  });
-  createEffect(value, () => {
-    fail();
-    flush();
-  });
-  createEffect(value, () => {
-    [1].forEach(() => {
-      throw new Error();
-    });
-    flush();
-  });
-
-  // Negative: a compute that never returns leaves the apply unrun: a call of a
-  // `never` function, a const arrow, a declaration, and a helper it returns.
-  const throwingCompute = (): number => {
-    throw new Error("always");
-  };
-  function throwingDeclaration(): number {
-    throw new Error("always");
-  }
-  createEffect(
-    () => fail(),
-    () => {
-      flush();
-    },
-  );
-  createEffect(throwingCompute, () => {
-    flush();
-  });
-  createEffect(throwingDeclaration, () => {
-    flush();
-  });
-  createEffect(
-    () => {
-      value();
-      return throwingDeclaration();
-    },
-    () => {
-      flush();
-    },
-  );
-
-  // Positive: a compute that can return, written as a named function or a
-  // member, is analyzed or assumed to; a throw guarded by a condition still
-  // returns on the other path.
-  function guardedCompute(): number {
-    if (value() < 0) throw new Error("negative");
-    return value();
-  }
-  createEffect(guardedCompute, () => {
-    flush();
-  });
+  moduleAndEffect();
 
   // Negative: a cleanup the apply returns runs at the next run (inside the
   // marker) and at disposal (outside it): no single answer, so none is claimed.
@@ -425,7 +331,33 @@ createRoot(() => {
     error: () => {},
   });
 
-  // Negative: a deferred first run of a constant compute never applies.
+  // Positive: dead code is reported, because the call is pointless wherever it
+  // runs: after a return, under a constant condition, in an apply whose compute
+  // never returns, and in an effect that is never registered.
+  createEffect(value, () => {
+    return;
+    flush();
+  });
+  createEffect(value, () => {
+    if (false) flush();
+  });
+  createEffect(
+    (): number => {
+      throw new Error("x");
+    },
+    () => {
+      flush();
+    },
+  );
+  function neverCalled() {
+    createEffect(value, () => {
+      flush();
+    });
+  }
+  void neverCalled;
+
+  // Negative: a deferred first run of a constant compute never applies, and the
+  // engine reports nothing inside an apply it proves absent (ADR 0302).
   createEffect(
     () => 1,
     () => {
@@ -434,459 +366,9 @@ createRoot(() => {
     { defer: true },
   );
 
-  // The remaining cases pin the allowlist: a site is claimed only when every
-  // construct on its path is an allowlisted shape. Non-constant conditions and
-  // calls not proven never to return are the feasible-path premise (ADR 0341).
-
-  // Positive: a non-constant short circuit, a conditional arm, a sequence, a
-  // loop over a non-literal iterable, a switch on a non-constant value, a
-  // `try` block and a `finally` block.
-  createEffect(value, (next) => {
-    next > 1 && flush();
-  });
-  createEffect(value, (next) => {
-    next > 1 ? flush() : 0;
-  });
-  createEffect(value, () => {
-    (setValue(3), flush());
-  });
-  createEffect(value, () => {
-    for (const item of items) {
-      flush();
-      void item;
-    }
-  });
-  createEffect(value, (next) => {
-    switch (next) {
-      case 1:
-        flush();
-        break;
-      default:
-        break;
-    }
-  });
-  createEffect(value, () => {
-    try {
-      flush();
-    } catch {}
-  });
-  createEffect(value, () => {
-    try {
-      setValue(4);
-    } finally {
-      flush();
-    }
-  });
-  // A constant that lets the site run is honored, not just refused.
-  createEffect(value, () => {
-    true && flush();
-  });
-
-  // Negative: the registration itself is dead code.
-  if (false) {
-    createEffect(
-      () => 1,
-      () => {
-        flush();
-      },
-    );
-  }
-  createEffect(value, () => {
-    flush();
-  });
-
-  // Negative: an async or generator compute is not claimed.
-  createEffect(
-    async () => {
-      throw new Error("rejected");
-    },
-    () => {
-      flush();
-    },
-  );
-  createEffect(
-    async function* (): AsyncGenerator<number> {
-      throw new Error("no yield");
-    },
-    () => {
-      flush();
-    },
-  );
-
-  // Negative: array methods that never call the callback here.
-  createEffect(
-    () => 1,
-    () => {
-      [, ,].forEach(() => {
-        flush();
-      });
-      [1].reduce((accumulator) => {
-        flush();
-        return accumulator;
-      });
-      [1].reduceRight((accumulator) => {
-        flush();
-        return accumulator;
-      });
-      [1].sort((a, b) => {
-        flush();
-        return a - b;
-      });
-      items.sort((a, b) => {
-        flush();
-        return a - b;
-      });
-      items.reduce((accumulator) => {
-        flush();
-        return accumulator;
-      });
-    },
-  );
-
-  // Negative: a constant short circuit or conditional skips the call.
-  createEffect(
-    () => 1,
-    () => {
-      false && flush();
-      true || flush();
-      true ? 1 : flush();
-    },
-  );
-
-  // Negative: a `catch` is not claimed (no throw is proven to reach it), and a
-  // `try` whose block returns leaves nothing after it.
-  createEffect(
-    () => 1,
-    () => {
-      try {
-        return;
-      } catch {}
-      flush();
-    },
-  );
-  createEffect(
-    () => 1,
-    () => {
-      try {
-        return;
-      } catch {
-        flush();
-      }
-    },
-  );
-
-  // Negative: a call that never returns earlier in the same expression or
-  // loop header.
-  createEffect(
-    () => 1,
-    () => {
-      (fail(), flush());
-    },
-  );
-  createEffect(
-    () => 1,
-    () => {
-      for (let i = fail(); ; ) {
-        flush();
-      }
-    },
-  );
-  createEffect(
-    () => 1,
-    () => {
-      while (fail()) {
-        flush();
-      }
-    },
-  );
-
-  // Negative: a getter that throws, read before the call or by the compute.
-  createEffect(
-    () => 1,
-    () => {
-      const thrower = {
-        get value(): number {
-          throw new Error("getter");
-        },
-      };
-      thrower.value;
-      flush();
-    },
-  );
-  const throwingGetter = {
-    get value(): number {
-      throw new Error("compute getter");
-    },
-  };
-  createEffect(
-    () => throwingGetter.value,
-    () => {
-      flush();
-    },
-  );
-
-  // Negative: a switch over a literal decides its arm.
-  createEffect(
-    () => 1,
-    () => {
-      switch (1) {
-        case 1:
-          break;
-        default:
-          flush();
-      }
-    },
-  );
-
-  // Negative: a loop over a literal iterable or one with a constant-false test
-  // may never run its body.
-  createEffect(
-    () => 1,
-    () => {
-      for (const unused of [] as number[]) {
-        void unused;
-        flush();
-      }
-      for (let i = 0; false; i++) {
-        flush();
-      }
-    },
-  );
-
-
-  // Negative: a `finally` is entered only when its try block can leave. An
-  // unconditional infinite loop, inline or in a helper that cannot return,
-  // never does.
-  function spin(): never {
-    for (;;) {}
-  }
-  createEffect(
-    () => 1,
-    () => {
-      try {
-        for (;;) {}
-      } finally {
-        flush();
-      }
-    },
-  );
-  createEffect(
-    () => 1,
-    () => {
-      try {
-        spin();
-      } finally {
-        flush();
-      }
-    },
-  );
-  createEffect(
-    () => 1,
-    () => {
-      try {
-        throw new Error("block");
-      } catch {
-        for (;;) {}
-      } finally {
-        flush();
-      }
-    },
-  );
-
-  // Positive: a block that can throw or leave enters its `finally`.
-  createEffect(
-    () => 1,
-    () => {
-      try {
-        fail();
-      } finally {
-        flush();
-      }
-    },
-  );
-  createEffect(
-    () => 1,
-    () => {
-      try {
-        for (;;) {
-          if (Math.random() > 0.5) break;
-        }
-      } finally {
-        flush();
-      }
-    },
-  );
-
-  // Negative: a registration that no root reaches never runs.
-  function neverCalled() {
-    createEffect(
-      () => 1,
-      () => {
-        flush();
-      },
-    );
-  }
-  createEffect(
-    () => 1,
-    () => {
-      function neverCalledInner() {
-        createEffect(
-          () => 1,
-          () => {
-            flush();
-          },
-        );
-      }
-    },
-  );
-  // Negative: the outer compute always throws, so its apply never runs.
-  createEffect(
-    () => {
-      throw new Error("compute");
-    },
-    () => {
-      createEffect(
-        () => 1,
-        () => {
-          flush();
-        },
-      );
-    },
-  );
-
-  // Positive: a hook the root calls registers its effect.
-  function useCommit() {
-    createEffect(value, () => {
-      flush();
-    });
-  }
-  useCommit();
-
-  // Negative: evaluating a class runs its static blocks and initializers.
-  createEffect(
-    () => 1,
-    () => {
-      class WithBlock {
-        static {
-          throw new Error("static block");
-        }
-      }
-      flush();
-    },
-  );
-  createEffect(
-    () => 1,
-    () => {
-      const Expression = class {
-        static {
-          throw new Error("static block");
-        }
-      };
-      flush();
-    },
-  );
-  createEffect(
-    () => 1,
-    () => {
-      class WithInitializer {
-        static boom = fail();
-      }
-      flush();
-    },
-  );
-  createEffect(
-    () => 1,
-    () => {
-      if (
-        typeof class {
-          static {
-            throw new Error("typeof static");
-          }
-        } === "function"
-      ) {
-        flush();
-      }
-    },
-  );
-
-  // Positive: a class with only methods and constant statics evaluates.
-  createEffect(
-    () => 1,
-    () => {
-      class Plain {
-        static count = 1;
-        static helper(): number {
-          return 2;
-        }
-      }
-      void Plain;
-      flush();
-    },
-  );
-
-  // Negative: an accessor that cannot return, imported or written here, a
-  // setter, or a Proxy trap, on the path before the call.
-  createEffect(
-    () => 1,
-    () => {
-      importedBox.value;
-      flush();
-    },
-  );
-  createEffect(
-    () => 1,
-    () => {
-      const box = new ImportedClass();
-      box.value;
-      flush();
-    },
-  );
-  createEffect(
-    () => importedBox.value,
-    () => {
-      flush();
-    },
-  );
-  createEffect(
-    () => 1,
-    () => {
-      const box = new Proxy(
-        { value: 1 },
-        {
-          get(): never {
-            throw new Error("proxy get");
-          },
-        },
-      );
-      box.value;
-      flush();
-    },
-  );
-  createEffect(
-    () => 1,
-    () => {
-      const box = {
-        set value(next: number) {
-          throw new Error(`setter ${next}`);
-        },
-      };
-      box.value = 1;
-      flush();
-    },
-  );
-
-  // Positive: an accessor that returns, and a property of an object whose
-  // accessors are not visible, complete normally.
-  createEffect(
-    () => 1,
-    () => {
-      importedReturning.steady;
-      flush();
-    },
-  );
-  createEffect(value, (current) => {
-    const unknown: { [key: string]: number } = { current };
-    unknown.current;
+  // Negative: past its first await the apply itself runs from a microtask.
+  createEffect(value, async () => {
+    await Promise.resolve();
     flush();
   });
 });

@@ -120,8 +120,12 @@ pub fn package_instance_evidence(
         let Some(directory) = Path::new(file.path.as_str()).parent() else {
             continue;
         };
+        // Node resolves from the file's real directory: a file reached
+        // through a symlinked workspace package sees the workspace's own
+        // `node_modules`, not the linking project's.
+        let directory = fs::canonicalize(directory).unwrap_or_else(|_| directory.to_path_buf());
         let resolved = by_directory
-            .entry(directory.to_path_buf())
+            .entry(directory.clone())
             .or_insert_with(|| {
                 directory.ancestors().find_map(|ancestor| {
                     let package = ancestor.join("node_modules").join("solid-js");

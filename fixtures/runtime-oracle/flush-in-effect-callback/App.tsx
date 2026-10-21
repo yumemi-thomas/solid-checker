@@ -4,7 +4,9 @@ import { commitFromOtherFile } from "./helper";
 // rc.13 dev raises FLUSH_IN_EFFECT_CALLBACK (a warning) when `flush` runs on
 // the stack of a createEffect apply: the flush that runs effects is already in
 // progress. Positives are the calls SC2008 claims; every other export is a
-// control that must stay quiet at runtime and in the checker.
+// control that must stay quiet at runtime and in the checker, except the
+// documented static-only ones: the claim is that the call only ever runs on an
+// apply's stack, so dead code is reported though the runtime never reaches it.
 
 export function Direct() {
   const [value] = createSignal(1);
@@ -34,6 +36,8 @@ export function Helpers() {
   return <span>helpers</span>;
 }
 
+// An exported helper may be called from anywhere, so the checker is silent
+// though this call warns: a known open site (oracle.json).
 export function OtherFile() {
   const [value] = createSignal(1);
   createEffect(value, () => {
@@ -134,7 +138,9 @@ export function Conditional() {
   return <span>conditional</span>;
 }
 
-// Controls: no FLUSH_IN_EFFECT_CALLBACK.
+// Controls: no FLUSH_IN_EFFECT_CALLBACK at runtime. AfterReturn, EmptyLiteral,
+// ThrowingCompute, TryReturn and NeverBeforeFlush are dead code the checker
+// reports anyway (static-only).
 
 export function AfterReturn() {
   const [value] = createSignal(1);

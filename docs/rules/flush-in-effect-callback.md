@@ -2,19 +2,24 @@
 
 `SC2008` · **warning** · violation
 
-`flush()` (or `flush(fn)`) runs on the stack of a `createEffect` apply callback,
-inside the flush that is draining effects, where it cannot drain anything. The
-dev build usually also warns.
+`flush()` (or `flush(fn)`) that, whenever it runs, runs on the stack of a
+`createEffect` apply callback, inside the flush that is draining effects, where
+it cannot drain anything. The dev build usually also warns.
 
 ## What it does
 
-Flags calls to `flush` (imported from `solid-js` or `@solidjs/signals`) that
-provably run synchronously inside the apply (second) argument of a
+Flags calls to `flush` (imported from `solid-js`) that can only run
+synchronously inside the apply (second) argument of a
 `createEffect(compute, apply)` call, in a client build, on an installation
 whose `@solidjs/signals` has the marker below: `2.0.0-rc.1` and later reviewed
-releases. The claim is the **no-op**: the queue is already running, so the call
-drains nothing and the writes are processed in that flush's continuation. The
-dev warning is the usual symptom, not the claim.
+releases. The claim is the **no-op**, and it is **universal**: whenever the call
+runs it runs inside the flush that drains effects, so the queue is already
+running and the call drains nothing; the writes are processed in that flush's
+continuation. It holds for every execution, including none, so reachability is
+not part of the proof: a `flush()` in dead code (after a `return`, under
+`if (false)`, in an effect that is never registered) is reported, because the
+call is pointless wherever it runs. The dev warning is the usual symptom, not
+the claim.
 
 **Premise: read from the published bytes and probed.** An effect's apply is
 queued, and `runEffect` runs it between two marker writes (rc.13
@@ -56,9 +61,9 @@ report.
 | position of the call | reports |
 | --- | --- |
 | directly in `createEffect`'s apply | **yes** |
-| in a function the apply calls (same file or another), an immediately invoked function, an `untrack`/`createRoot`/`runWithOwner` callback, or an inline array-method callback written there | **yes** |
+| in a function only effects call (not exported, every reference a call from a proven layer), an immediately invoked function, an `untrack`/`createRoot`/`runWithOwner` callback, or an inline array-method callback written there | **yes** |
 | `createEffect`'s compute function | no (marker not raised) |
-| a `setTimeout`/microtask/`.then` callback created in the apply, an event handler | no (the effect phase is over; `flush()` drains) |
+| a `setTimeout`/microtask/`.then` callback created in the apply, an event handler, a helper that also has such a caller | no (the effect phase is over; `flush()` drains) |
 | `createRenderEffect`'s apply | first run: no, it is synchronous at creation with no flush running (`flush()` drains); later runs: yes |
 | a cleanup the apply returns | next run's cleanup: yes (it runs inside the marker); disposal: no |
 | `createTrackedEffect` and an owned `onSettled` | not this code: `flush` **throws** there in dev (`Cannot call flush() from inside onSettled or createTrackedEffect`); see [leaf-owner-forbidden-call](leaf-owner-forbidden-call.md) |
@@ -117,61 +122,18 @@ effect.
   `@solidjs/signals` (the one the installed `solid-js` resolves). rc.0 has no
   marker, so it is silent there; a signals release no review read, or one that
   does not resolve, is not claimed (its `SC9014` notice says so).
-- **Anything not proven on the apply's stack.** Each layer between the call and
-  the apply must be proven to run during it: a call the dialect or the audited
+- **Anything that may run elsewhere.** Each layer between the call and the
+  apply must be proven to run only during it: a call the dialect or the audited
   standard-library rows state runs its callback before returning, an immediately
-  invoked function, or a project function bound to a name nothing reassigns that
-  one resolved call from the apply reaches. Unresolved callees, generators
-  (calling one runs none of its body), methods, parameter initializers, a
-  `let` helper, a callback handed to a timer, listener or promise, and an async
-  function's code after its first `await` are not claimed.
-- **Unreachable code.** A positive allowlist: the call, and the
-  `createEffect` registration itself, are claimed only when every construct on
-  the path from the enclosing function's entry (or the module body) is an
-  allowlisted shape: blocks; `if`/`else`, `while` and `for` whose test does not
-  fold to the constant that skips the branch; `for`-`of`/`in` over a non-literal
-  iterable; `switch` over a non-constant discriminant; `try` and `finally`
-  blocks (never a `catch`, since no throw is proven to reach it; a `finally` is
-  entered only when its try block can leave: an unconditional infinite loop,
-  inline or in a resolved helper that cannot return, never enters it); and, inside an
-  expression, call/`new`/`await`/unary/binary/sequence operands, simple
-  assignments, and the right of `&&`/`||`/`??` or an arm of `?:` unless the left
-  side or test folds to the constant that skips it. Anything else on the path
-  is not claimed. Every statement and expression evaluated earlier on the path
-  must show no proven abrupt completion: `return`, `throw`, `break`,
-  `continue`, a call that never returns (a `never` signature, an exactly
-  resolved project function that only throws, an inline callback that only
-  throws over a literal array with a first element), an infinite loop without
-  `break`, a `switch` whose arms all leave, evaluating a class with a static
-  block, a non-constant static initializer or computed key, a decorator or an
-  abruptly completing `extends`, or a property read or write that reaches an
-  accessor (below). Constant folding is exact (literals, `!`,
-  `typeof`, `void`, unary minus, `&&`/`||`/`??`, `?:`, comparisons of folded
-  primitives); anything it cannot fold is non-constant. Array methods are
-  claimed only on a receiver that is not an array literal (it may be empty,
-  sparse or one element), and never `sort`, `toSorted`, or `reduce` and
-  `reduceRight` without an initial value. A function the analysis cannot parse
-  or find is not claimed.
-- **A compute that never returns.** When the effect's compute is a function
-  written inline, or an exactly resolved project function, it must be able to
-  return a value; one that only throws (directly, through `never`, or through a
-  helper that only throws) leaves the apply unrun. Any other compute (a signal
-  accessor, a member, a package function) is assumed able to return, like every
-  unknown callee. An `async` or generator compute is refused: the apply is not
-  claimed. So is one whose body reads a throwing same-file getter first.
-- **Unreachable registrations.** The `createEffect` call must be reachable
-  from a root: every enclosing function was entered (the reachability stage
-  reached it), the call that receives it is on a normal path, and it is an
-  exported or rendered component or one exact call of it is reachable. A
-  registration inside another effect's apply needs that effect's compute to be
-  able to return, applied recursively. A function nothing calls never runs.
-- **Accessors.** A property read or write whose name matches a getter or
-  setter that cannot return (written in the same file or in a project file it
-  imports or re-exports from, matched by name, so it only withholds), or whose
-  receiver is a variable bound to `new Proxy(target, { get… | set… })` with a
-  trap that cannot return, does not complete normally: the call after it is not
-  claimed. A property operation on an object whose accessors cannot be
-  resolved is assumed to complete normally (the feasible-path premise below).
+  invoked function, or a project function bound to a name nothing reassigns,
+  not exported, with at least one call, whose every reference is an exact call
+  that is itself such a layer. A helper that is also called from an event
+  handler, a timer, the module body or another non-effect function, aliased,
+  passed as an argument or exported is not claimed: the flush may run outside
+  the effect. Unresolved callees, generators (calling one runs none of its
+  body), methods, parameter initializers, a `let` helper, a callback handed to
+  a timer, listener or promise, and an async function's code after its first
+  `await` are not claimed.
 - **Server builds.** With no runtime selection the client build is the
   default (a documented premise, as the audited release is everywhere else).
   With a Node-family target (`node`, `deno`, `worker`) or
@@ -183,36 +145,32 @@ effect.
   resolution, not declarations (TypeScript merges a second copy at the same
   version into the first copy's declarations, while the runtime loads both, each
   with its own scheduler queue). The backend resolves `solid-js` from each
-  analyzed file's directory (nearest `node_modules`, symlinks resolved); the file
-  holding the `flush` call and the file holding the `createEffect` call must load
-  the same copy, and both calls' declarations must be in one package directory.
-  Each import is followed through re-exports (barrels, `export { a as b } from`,
-  `export *`, a namespace member) to the file that imports the package, and that
-  file's copy is the one compared; a hop that does not resolve exactly is not
-  claimed.
-  A file whose `solid-js` is not resolved on disk (a caller with no disk, such as
-  the WASM adapter) is not claimed. A `flush` imported from `@solidjs/signals`
-  itself, which Type Facts do not resolve to a declaration, is not claimed.
+  analyzed file's real directory (nearest `node_modules`, symlinks resolved);
+  the file holding the `flush` call and the file holding the `createEffect` call
+  must load the same copy, and both calls' declarations must be in one package
+  directory. Each import is followed through project re-exports (barrels,
+  `export { a as b } from`, `export *`, a namespace member) to the file that
+  imports `solid-js` itself; a hop that does not resolve exactly, or a call
+  imported through another package (whose `exports` conditions pick the file
+  and so the copy), is not claimed. A file whose `solid-js` is not resolved on
+  disk (a caller with no disk, such as the WASM adapter) is not claimed. A
+  `flush` imported from `@solidjs/signals` itself, which Type Facts do not
+  resolve to a declaration, is not claimed.
 - **Positions it does not place.** An apply passed by name
   (`createEffect(v, applyFn)`), the `{ effect, error }` bundle form, and an
-  apply of a `defer: true` effect whose compute never changes. `createRenderEffect`
+  apply the engine proves absent (`defer: true` on a constant compute: it
+  reports nothing there, ADR 0302). `createRenderEffect`
   is never claimed (see the table).
 - **Returned cleanups.** A cleanup function the apply returns reports only on
   the run that replaces it, so no single answer holds.
 
 ## Premises
 
-- **Feasible paths.** Non-constant conditions may take either branch, calls
-  not proven never to return return normally, and property operations on
-  objects whose accessors cannot be resolved complete normally. Constant
-  expressions the folder does not model (`NaN`, BigInt, template literals,
-  object comparisons) are treated as non-constant. `if (next > 100) flush()` is
-  reported on that premise; it is the only assumption left under the allowlist
-  above. Constants are folded exactly and honored: a test that folds to the
-  constant that skips a branch withholds the branch, one that folds to the
-  constant that runs it keeps it.
-- **The apply runs.** `defer: true` effects whose compute never changes, or
-  whose options the syntax cannot read, are not claimed.
+- **Universal claim.** Dead code is reported on purpose; there is no
+  reachability, completion or constant-folding analysis. What the rule needs is
+  that no execution of the call is outside the effect phase.
+- **Same queue.** The apply's queue is the one the flush finds running when the
+  two calls load one installed `solid-js` (above).
 
 ## Related
 

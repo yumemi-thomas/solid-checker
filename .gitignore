@@ -97,8 +97,6 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/rc13-flush-in-effect-copy-barrels/node_modules/**
 !fixtures/reactive-ir/rc13-flush-in-effect-copy-barrels/lib/node_modules/
 !fixtures/reactive-ir/rc13-flush-in-effect-copy-barrels/lib/node_modules/**
-!fixtures/reactive-ir/rc13-flush-in-effect-proxy-traps/node_modules/
-!fixtures/reactive-ir/rc13-flush-in-effect-proxy-traps/node_modules/**
 !fixtures/reactive-ir/rc13-flush-in-effect-same-version-copies/node_modules/
 !fixtures/reactive-ir/rc13-flush-in-effect-same-version-copies/node_modules/**
 !fixtures/reactive-ir/rc13-flush-in-effect-same-version-copies/lib/node_modules/
