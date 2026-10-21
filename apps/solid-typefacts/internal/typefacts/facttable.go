@@ -51,4 +51,8 @@ const TypeFactsTableSchemaVersionV20 uint64 = 20
 // covers the whole demanded span" (EntityFact.SymbolCoversSpan). A symbol-less
 // entity keeps reading it as unresolved. No other row changes.
 const TypeFactsTableSchemaVersionV21 uint64 = 21
-const TypeFactsTableSchemaVersion uint64 = TypeFactsTableSchemaVersionV21
+
+// v22 keeps the rows of v21 under a new number: a v21 table from another build
+// is refused, so the merged line's transitions carry 22.
+const TypeFactsTableSchemaVersionV22 uint64 = 22
+const TypeFactsTableSchemaVersion uint64 = TypeFactsTableSchemaVersionV22

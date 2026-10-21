@@ -43,8 +43,11 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V20: u64 = 20;
 /// (`EntityFact::symbol_covers_span`). A symbol-less entity keeps reading it as
 /// unresolved. No other row changes, so covering rows keep their flag varint.
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V21: u64 = 21;
+/// v22 keeps the rows of v21 under a new number: a v21 table from another build
+/// is refused, so the merged line's transitions carry 22.
+pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V22: u64 = 22;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:d335380a5433ee6aed1f4a23984aea97401b9b115bd9a480ebf6fb36e7b4a963";
+    "sha256:6d2154ba04be45cdd241d78d3b94a32d0ec5c57ce264fe97e1b3ed979e3d0bfd";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -451,7 +454,8 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // `export-values` with their request and response fields.
 // Protocol 79 carries the independent default-library binding in Wire v20.
 // Protocol 80 carries the span-covering symbol flag in Wire v21.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 80;
+// Protocol 81 carries Wire v22, which keeps v21's rows under a new number.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 81;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",
@@ -1244,7 +1248,8 @@ fn decode_entity_run(
             TYPE_FACTS_TABLE_SCHEMA_V18
             | TYPE_FACTS_TABLE_SCHEMA_V19
             | TYPE_FACTS_TABLE_SCHEMA_V20
-            | TYPE_FACTS_TABLE_SCHEMA_V21 => 65535,
+            | TYPE_FACTS_TABLE_SCHEMA_V21
+            | TYPE_FACTS_TABLE_SCHEMA_V22 => 65535,
             TYPE_FACTS_TABLE_SCHEMA_V15 | TYPE_FACTS_TABLE_SCHEMA_V14 => 16383,
             TYPE_FACTS_TABLE_SCHEMA_V13 => 8191,
             TYPE_FACTS_TABLE_SCHEMA_V12 => 4095,
@@ -1738,6 +1743,7 @@ pub(crate) fn decode_table_transition(input: &[u8]) -> Result<WireTableTransitio
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V19
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V20
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V21
+        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V22
     {
         return Err(format!("unsupported Wire table schema {table_schema}"));
     }

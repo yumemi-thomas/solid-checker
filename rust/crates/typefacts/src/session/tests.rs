@@ -56,7 +56,7 @@ fn fact_table(
     files: Vec<crate::FileFact>,
 ) -> FactTable {
     FactTable::from_parts(
-        v3::TYPE_FACTS_TABLE_SCHEMA_V21,
+        v3::TYPE_FACTS_TABLE_SCHEMA_V22,
         1,
         "/p/tsconfig.json",
         sources,
@@ -74,7 +74,7 @@ fn delta_transition(
 ) -> WireTableTransition {
     WireTableTransition {
         mode: TransitionMode::Delta,
-        table_schema: v3::TYPE_FACTS_TABLE_SCHEMA_V21,
+        table_schema: v3::TYPE_FACTS_TABLE_SCHEMA_V22,
         base_generation,
         target_generation,
         project_id: "/p/tsconfig.json".into(),
