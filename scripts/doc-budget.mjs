@@ -30,7 +30,9 @@ export const GROUP_BUDGETS = [
   {
     name: "fixture READMEs",
     test: (path) => path.startsWith("fixtures/") && path.endsWith("/README.md"),
-    bytes: 250_000,
+    // Raised from 250 KB for the context-read fixtures (ADR 0349): the group was
+    // 249.8 KB before they landed, and each case README is a claim the reader needs.
+    bytes: 254_000,
   },
   { name: "skills", test: (path) => path.startsWith(".claude/skills/"), bytes: 25_000 },
 ];

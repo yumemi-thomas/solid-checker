@@ -2,6 +2,22 @@
 
 use super::*;
 
+/// The owner-requirement partition every dialect so far agrees on: the three
+/// effect constructors register a computation on the owner, and the two
+/// cleanup registrars are each their own role. A dialect that adds a role
+/// (Solid 2's `useContext`, ADR 0349) matches its own and delegates the rest
+/// here, so the shared list is written once.
+pub(crate) fn shared_owner_requirement_role(primitive: Primitive) -> Option<OwnerRequirementRole> {
+    match primitive {
+        Primitive::CreateEffect
+        | Primitive::CreateRenderEffect
+        | Primitive::CreateTrackedEffect => Some(OwnerRequirementRole::Effect),
+        Primitive::OnCleanup => Some(OwnerRequirementRole::Cleanup),
+        Primitive::OnSettled => Some(OwnerRequirementRole::SettledCleanup),
+        _ => None,
+    }
+}
+
 /// One Solid language version's vocabulary.
 ///
 /// Implementors are stateless; a dialect is a set of tables, and every method
@@ -1369,14 +1385,7 @@ pub trait Dialect: Sync {
     /// effect outside any owner leaked with nothing reported. One named answer
     /// is what stops that recurring quietly.
     fn owner_requirement_role(&self, primitive: Primitive) -> Option<OwnerRequirementRole> {
-        match primitive {
-            Primitive::CreateEffect
-            | Primitive::CreateRenderEffect
-            | Primitive::CreateTrackedEffect => Some(OwnerRequirementRole::Effect),
-            Primitive::OnCleanup => Some(OwnerRequirementRole::Cleanup),
-            Primitive::OnSettled => Some(OwnerRequirementRole::SettledCleanup),
-            _ => None,
-        }
+        shared_owner_requirement_role(primitive)
     }
 
     /// Whether an untracked read in this callback is a likely dependency bug.

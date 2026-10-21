@@ -1,4 +1,15 @@
 {
-  "status": "certified",
-  "findings": []
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-member-identity-open/account.ts",
+      "start": 182,
+      "end": 192,
+      "fixes": 0
+    }
+  ]
 }

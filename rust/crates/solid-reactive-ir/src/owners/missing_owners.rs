@@ -363,6 +363,13 @@ pub(crate) fn find_missing_owners(
                         CleanupReturnProof::NoFunction => None,
                     }
                 }
+                // `useContext` throws `NoOwnerError` when no owner is current
+                // (ADR 0349): the unowned question an effect asks, with nothing
+                // to register. An owned leaf has an owner, so only the unowned
+                // bit reports it.
+                (Some(OwnerRequirementRole::ContextRead), _) if !root_owned => {
+                    Some(("context-read", context & OWNER_CONTEXT_UNOWNED != 0, false))
+                }
                 _ => None,
             };
             if let Some((operation, report, runtime_uncertain)) = operation {
@@ -903,5 +910,6 @@ pub(super) const fn operation_name(operation: OwnerRequirementOperation) -> &'st
         OwnerRequirementOperation::Cleanup => "cleanup",
         OwnerRequirementOperation::Boundary => "boundary",
         OwnerRequirementOperation::SettledCleanup => "settled-cleanup",
+        OwnerRequirementOperation::ContextRead => "context-read",
     }
 }

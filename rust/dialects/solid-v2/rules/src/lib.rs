@@ -156,6 +156,10 @@ impl CatalogWording for Catalog {
                         "onSettled returns a cleanup function in a scope with no owner to register it on; Solid throws SETTLED_CLEANUP_UNOWNED here in dev, and in production the cleanup is silently dropped and will never run",
                         "Call onSettled where an owner is active (a component body or computation), or wrap the scope in createRoot. Inside event handlers a returned cleanup is not supported; do the teardown explicitly instead.",
                     ),
+                    OwnerRequirementOperation::ContextRead => (
+                        "useContext is called without a reactive owner; Solid throws NoOwnerError (\"Context can only be accessed under a reactive root.\") here, so the read never returns a value",
+                        "Read the context while a component, or a computation it creates, is being set up, and pass the value to the handler, timer or callback that needs it. A handler, a timer, a module-scope statement and code after an await run with no owner.",
+                    ),
                     OwnerRequirementOperation::Effect => (
                         "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app",
                         "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle.",

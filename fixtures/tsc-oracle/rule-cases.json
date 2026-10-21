@@ -990,6 +990,14 @@
       "sourceExtension": "ts",
       "why": "The negative beside the keystone: a microtask created in the apply runs after the effect phase, where `flush()` drains normally, so the rule must stay quiet.",
       "code": "import { createEffect, createRoot, createSignal, flush } from \"solid-js\";\nexport const dispose = createRoot((dispose) => {\n  const [value] = createSignal(1);\n  createEffect(value, () => {\n    queueMicrotask(() => flush());\n  });\n  return dispose;\n});\n"
+    },
+    {
+      "rule": "missing-owner",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "reports",
+      "why": "ADR 0349: `useContext<T>(context: Context<T>): T` type-checks in an event handler, and a default-less `createContext<T>()` is typed as `Context<T>`, so TypeScript has no complaint about either. The read throws NoOwnerError, because `getContext` finds no owner, which is an ownership fact tsc cannot see.",
+      "code": "import { createContext, useContext } from \"solid-js\";\nconst Ctx = createContext<number>();\nexport function Button() {\n  return <button onClick={() => useContext(Ctx)} />;\n}\n"
     }
   ]
 }

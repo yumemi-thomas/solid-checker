@@ -3,8 +3,19 @@
 `SC4001` · **warning** by default · violation (uncertifiable, reported as an error, when required ownership facts are unresolved)
 
 An owner-requiring operation executes without a reactive owner. The rule covers
-effects, cleanup registration, `Loading`/`Errored` boundaries, and an `onSettled`
-callback that returns cleanup. Its message identifies the specific operation.
+effects, cleanup registration, `Loading`/`Errored` boundaries, an `onSettled`
+callback that returns cleanup, and a `useContext` read. Its message identifies
+the specific operation.
+
+A `useContext(context)` read with no owner is the `context-read` operation (ADR
+0349). rc.13's `getContext` checks the owner before it reads, so the read throws
+`NoOwnerError` whatever default the context has, and the message says so. The
+owner walk places it as it places an effect: an event handler, a timer callback,
+module scope, code after an `await`, or a `runWithOwner(null)` callback is
+unowned. A package hook that reads a context is followed through its source, and
+the finding sits at the project call that runs it, as for any package owner
+requirement (ADR 0290). A context with no provider throws `ContextNotFoundError`
+instead; that is a different claim and not this rule's.
 A callback of an `onSettled` called inside another leaf body runs with no owner
 (rc.13 queues it), so an `onCleanup` there is this rule's claim.
 

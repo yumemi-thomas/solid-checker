@@ -481,3 +481,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/arrow-bound-helper-module-loads/node_modules/**
 !fixtures/reactive-ir/arrow-bound-helper-workspace-link/node_modules/
 !fixtures/reactive-ir/arrow-bound-helper-workspace-link/node_modules/**
+!fixtures/reactive-ir/context-read-package/node_modules/
+!fixtures/reactive-ir/context-read-package/node_modules/**

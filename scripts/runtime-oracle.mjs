@@ -153,6 +153,8 @@ const codeRules = {
   // An apply-phase createEffect warns this code, as the primitive-in-directive-application page states.
   NO_OWNER_EFFECT: ["missing-owner", "primitive-in-directive-application"],
   NO_OWNER_BOUNDARY: ["missing-owner"],
+  // Thrown, not reported: `useContext` with no owner (ADR 0349). See `thrownCodes`.
+  NO_OWNER_CONTEXT: ["missing-owner"],
   SETTLED_CLEANUP_UNOWNED: ["missing-owner"],
   REACTIVE_WRITE_IN_OWNED_SCOPE: ["reactive-write-in-owned-scope"],
   CLEANUP_IN_FORBIDDEN_SCOPE: ["leaf-owner-forbidden-call"],
@@ -183,6 +185,8 @@ const thrownCodes = [
   [/^\[FLUSH_IN_ACTION\]/, "FLUSH_IN_ACTION"],
   [/^Cannot call flush\(\) from inside onSettled or createTrackedEffect/, "FLUSH_IN_TRACKED_QUEUE_CALLBACK"],
   [/^dynamic\(\): a static source must resolve synchronously/, "DYNAMIC_STATIC_PROMISE"],
+  // `getContext` checks the owner first (rc.13 `dev-shared.js`), whatever the default.
+  [/^Context can only be accessed under a reactive root/, "NO_OWNER_CONTEXT"],
 ];
 // Withholdings that cover any rule at their site.
 const withholdingRules = ["reactive-dispatch-unresolved"];

@@ -1,0 +1,41 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "package-behavior-unavailable",
+      "code": "SC9005",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-read-package/App.tsx",
+      "start": 55,
+      "end": 97,
+      "fixes": 0,
+      "message": "dep-unselected is not analyzed from source here, so the behaviour of imported export useThing is unknown; solid-checker cannot tell whether it reads reactive values, takes tracked callbacks, or returns accessors, so code flowing through it cannot be certified",
+      "hint": "Installed Solid packages are analyzed from their runtime source when the run declares a runtime target and build (--runtime-target, --runtime-build) and a Solid Vite plugin resolves from the project, or when --dependency-source names them. A package source analysis cannot read stays uncertifiable."
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-read-package/App.tsx",
+      "start": 386,
+      "end": 404,
+      "fixes": 0,
+      "message": "useContext is called without a reactive owner; Solid throws NoOwnerError (\"Context can only be accessed under a reactive root.\") here, so the read never returns a value; this call runs it inside a package analyzed as source, under this call's owner context",
+      "hint": "Read the context while a component, or a computation it creates, is being set up, and pass the value to the handler, timer or callback that needs it. A handler, a timer, a module-scope statement and code after an await run with no owner. The operation is in the package; give this call an owner (call it in a component or computation, or under createRoot)."
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-read-package/App.tsx",
+      "start": 808,
+      "end": 826,
+      "fixes": 0,
+      "message": "useContext is called without a reactive owner; Solid throws NoOwnerError (\"Context can only be accessed under a reactive root.\") here, so the read never returns a value; this call runs it inside a package analyzed as source, under this call's owner context, which solid-checker cannot prove provides an owner on every path to it",
+      "hint": "Read the context while a component, or a computation it creates, is being set up, and pass the value to the handler, timer or callback that needs it. A handler, a timer, a module-scope statement and code after an await run with no owner. The operation is in the package; give this call an owner (call it in a component or computation, or under createRoot)."
+    }
+  ]
+}

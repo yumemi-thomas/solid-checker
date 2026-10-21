@@ -1,0 +1,65 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-read-owner/App.tsx",
+      "start": 566,
+      "end": 576,
+      "fixes": 0,
+      "message": "useContext is called without a reactive owner; Solid throws NoOwnerError (\"Context can only be accessed under a reactive root.\") here, so the read never returns a value",
+      "hint": "Read the context while a component, or a computation it creates, is being set up, and pass the value to the handler, timer or callback that needs it. A handler, a timer, a module-scope statement and code after an await run with no owner."
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-read-owner/App.tsx",
+      "start": 968,
+      "end": 978,
+      "fixes": 0,
+      "message": "useContext is called without a reactive owner; Solid throws NoOwnerError (\"Context can only be accessed under a reactive root.\") here, so the read never returns a value",
+      "hint": "Read the context while a component, or a computation it creates, is being set up, and pass the value to the handler, timer or callback that needs it. A handler, a timer, a module-scope statement and code after an await run with no owner."
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-read-owner/App.tsx",
+      "start": 1097,
+      "end": 1107,
+      "fixes": 0,
+      "message": "useContext is called without a reactive owner; Solid throws NoOwnerError (\"Context can only be accessed under a reactive root.\") here, so the read never returns a value",
+      "hint": "Read the context while a component, or a computation it creates, is being set up, and pass the value to the handler, timer or callback that needs it. A handler, a timer, a module-scope statement and code after an await run with no owner."
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-read-owner/App.tsx",
+      "start": 1328,
+      "end": 1338,
+      "fixes": 0,
+      "message": "useContext is called without a reactive owner; Solid throws NoOwnerError (\"Context can only be accessed under a reactive root.\") here, so the read never returns a value",
+      "hint": "Read the context while a component, or a computation it creates, is being set up, and pass the value to the handler, timer or callback that needs it. A handler, a timer, a module-scope statement and code after an await run with no owner."
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-read-owner/App.tsx",
+      "start": 1505,
+      "end": 1515,
+      "fixes": 0,
+      "message": "useContext is called without a reactive owner; Solid throws NoOwnerError (\"Context can only be accessed under a reactive root.\") here, so the read never returns a value",
+      "hint": "Read the context while a component, or a computation it creates, is being set up, and pass the value to the handler, timer or callback that needs it. A handler, a timer, a module-scope statement and code after an await run with no owner."
+    }
+  ]
+}

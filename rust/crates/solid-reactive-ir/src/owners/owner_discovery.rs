@@ -162,6 +162,15 @@ pub(crate) fn discover_owner_file(
                     .map_or(call.callee, |argument| argument.span),
                 false,
             )),
+            // ADR 0349: `useContext` with no owner throws `NoOwnerError`; the
+            // batch pass asks the same unowned question.
+            (Some(OwnerRequirementRole::ContextRead), _) => Some((
+                "context-read",
+                OWNER_CONTEXT_UNOWNED,
+                None,
+                call.callee,
+                false,
+            )),
             _ => None,
         };
         if let Some((operation, report_mask, settled_target, operation_span, runtime_uncertain)) =
@@ -419,10 +428,10 @@ pub(crate) fn find_missing_owners_incremental(
                     .copied()
             });
             let context = owner_index.map_or(OWNER_CONTEXT_UNOWNED, |index| contexts[index]);
-            // As in the batch pass: effects and cleanups, never a JSX boundary
-            // or `onSettled`'s returned cleanup.
-            let after_await = matches!(candidate.operation, "effect" | "cleanup")
-                && candidate.operation != "settled-cleanup"
+            // As in the batch pass: effects, cleanups and context reads, never a
+            // JSX boundary or `onSettled`'s returned cleanup. The two passes must
+            // agree here: a context read after an `await` is unowned (ADR 0349).
+            let after_await = matches!(candidate.operation, "effect" | "cleanup" | "context-read")
                 && continuations.contains(file.path.as_str(), candidate.operation_span.start);
             let context = if after_await {
                 await_continuation_context(context)

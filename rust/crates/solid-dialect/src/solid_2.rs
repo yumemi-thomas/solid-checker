@@ -11,8 +11,8 @@
 //! and a fixture or focused regression test.
 
 use crate::{
-    Boundary, CallbackOwner, CleanupRule, ContextRole, Dialect, Execution, Primitive, ReactiveRole,
-    ResultSlot, TrackedCallbackTiming, Version, lookup, reverse,
+    Boundary, CallbackOwner, CleanupRule, ContextRole, Dialect, Execution, OwnerRequirementRole,
+    Primitive, ReactiveRole, ResultSlot, TrackedCallbackTiming, Version, lookup, reverse,
 };
 
 mod releases;
@@ -1893,6 +1893,18 @@ impl Dialect for Solid2 {
             "useContext" => Some(ContextRole::Read),
             "createComponent" => Some(ContextRole::Render),
             _ => None,
+        }
+    }
+
+    /// rc.13's `getContext` (the read `useContext` wraps, `solid-js`
+    /// `dist/solid.dev.js`) checks the owner before anything else and throws
+    /// `NoOwnerError`, whatever default the context has (ADR 0349). The
+    /// `ContextNotFoundError` half is a different claim (a missing provider),
+    /// so it is not a role here.
+    fn owner_requirement_role(&self, primitive: Primitive) -> Option<OwnerRequirementRole> {
+        match primitive {
+            Primitive::UseContext => Some(OwnerRequirementRole::ContextRead),
+            _ => crate::dialect::shared_owner_requirement_role(primitive),
         }
     }
 
