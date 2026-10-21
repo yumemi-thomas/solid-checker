@@ -189,6 +189,14 @@ impl<'a> SemanticLookup<'a> {
                 if !candidate(file, binding) {
                     continue;
                 }
+                // Another module can render the holder's tags while this
+                // module is still initializing, through an import cycle: the
+                // holder is then uninitialized and the tag throws before any
+                // member runs. An unresolved load counts as a cycle.
+                let census = self.module_census();
+                if census.is_cyclic(file.path.as_str()) || census.has_unknown_load() {
+                    continue;
+                }
                 let literals = literals.get_or_insert_with(|| FileLiterals::of(file));
                 let Some(holder) = self.holder(file, literals, binding) else {
                     continue;
@@ -222,6 +230,11 @@ impl<'a> SemanticLookup<'a> {
         // values uninitialized (`const Sub` below it) and throws, and a
         // function-local holder is built by such a call.
         if !module_top_level(file, binding.declaration) {
+            return None;
+        }
+        // Module code that runs before the holder's statement may render a
+        // tag that names it, which throws before the member runs.
+        if self.runs_code_before(file, binding.declaration.start) {
             return None;
         }
         if binding.initializer_value_kind == RuntimeValueKind::Object {
@@ -558,20 +571,238 @@ impl SemanticLookup<'_> {
             return true;
         }
         self.facts.files.iter().any(|file| {
-            file.ast.calls.iter().any(|call| {
-                let Some(target) = call.arguments.first() else {
-                    return false;
-                };
-                let text = file
-                    .source_text(file.ast.peel_ts_sugar_span(target.span))
-                    .unwrap_or_default();
-                crate::interproc::accessor_provenance::mutation_builtin(file, call, self).is_some()
-                    && (target.spread
-                        || matches!(text, "Object" | "globalThis" | "window" | "self" | "global")
-                        || text.ends_with(".Object"))
-            })
+            self.computed_write_may_reach_object(file)
+                || file.ast.calls.iter().any(|call| {
+                    let Some(target) = call.arguments.first() else {
+                        return false;
+                    };
+                    let reflective = self.reflective_write_name(file, call);
+                    if call.construct || reflective.is_none() {
+                        return false;
+                    }
+                    // `Object.assign(target, …)` is everywhere; only a target
+                    // that is `Object` itself (or its alias) patches it. The
+                    // reflective writes that take a descriptor or a key
+                    // refuse any target that may be `Object`, unresolved ones
+                    // included.
+                    let strict = reflective == Some(ReflectiveWrite::Assign);
+                    target.spread || self.may_be_object(file, target.span, !strict, 8)
+                })
         })
     }
+
+    /// Whether a computed member write whose key is not a literal (or a
+    /// `const` string) can write the global `Object` function: its object may
+    /// be `Object`, an alias of it, the global object or an unresolved value.
+    /// A write with a known key is a named write ([`Self::assigned_members`]).
+    fn computed_write_may_reach_object(&self, file: &FileFacts) -> bool {
+        let ast = &file.ast;
+        let targets = ast
+            .assignments
+            .iter()
+            .map(|assignment| assignment.target)
+            .chain(ast.iteration_targets.iter().copied());
+        for target in targets {
+            let target = ast.peel_ts_sugar_span(target);
+            let inside = ast
+                .members
+                .iter()
+                .filter(|member| target.contains(member.span))
+                .collect::<Vec<_>>();
+            for member in inside.iter().copied().filter(|member| {
+                // A member that is another written member's object is read.
+                !inside
+                    .iter()
+                    .any(|outer| ast.peel_ts_sugar_span(outer.object) == member.span)
+                    && ast.computed_members.binary_search(&member.span).is_ok()
+            }) {
+                let literal = ast
+                    .literal_computed_members
+                    .iter()
+                    .any(|literal| literal.span == member.span)
+                    || super::constant_string_key(file, member.property).is_some();
+                if !literal && self.may_be_object(file, member.object, true, 8) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// Which builtin a call is, when it writes properties of its first
+    /// argument reflectively: by the exact standard-library declaration, or by
+    /// its spelling when the compiler resolved none.
+    fn reflective_write_name(
+        &self,
+        file: &FileFacts,
+        call: &solid_facts::ast::CallFact,
+    ) -> Option<ReflectiveWrite> {
+        let by_name = |name: &str| match name {
+            "ObjectConstructor.assign" | "Object.assign" => Some(ReflectiveWrite::Assign),
+            "ObjectConstructor.defineProperty"
+            | "ObjectConstructor.defineProperties"
+            | "Object.defineProperty"
+            | "Object.defineProperties"
+            | "Reflect.set"
+            | "Reflect.defineProperty"
+            | "Reflect.deleteProperty" => Some(ReflectiveWrite::Descriptor),
+            _ => None,
+        };
+        if let Some(declaration) =
+            self.standard_library_declaration(file, call, typefacts::CallKind::Call)
+            && let Some(found) = by_name(declaration.qualified_name.as_ref())
+        {
+            return Some(found);
+        }
+        by_name(file.source_text(file.ast.peel_ts_sugar_span(call.callee))?)
+    }
+
+    /// Whether the value at `span` may be the global `Object` function: the
+    /// identifier `Object`, a binding initialized by such a value, or a
+    /// member of the global object. With `unresolved`, any value the file
+    /// does not prove to be something else counts too (a parameter, an
+    /// import, a call's result, a member of an unknown object).
+    fn may_be_object(&self, file: &FileFacts, span: Span, unresolved: bool, depth: u32) -> bool {
+        let ast = &file.ast;
+        let span = ast.peel_ts_sugar_span(span);
+        if depth == 0 {
+            return true;
+        }
+        let text = file.source_text(span).unwrap_or_default();
+        if matches!(text, "globalThis" | "window" | "self" | "global")
+            && ast.reference_declaration(span).is_none()
+            || text.ends_with(".Object")
+            || text.ends_with("[\"Object\"]")
+        {
+            return true;
+        }
+        let is_identifier = ast
+            .identifiers
+            .binary_search_by_key(&span, |identifier| identifier.span)
+            .is_ok();
+        if !is_identifier {
+            // A literal, a function or a class expression is not Object.
+            let fresh = ast.function_at(span).is_some()
+                || ast.array_literals.binary_search(&span).is_ok()
+                || ast.classes.iter().any(|class| class.span == span)
+                || ast.object_get_shapes.iter().any(|shape| shape.span == span);
+            return !fresh && unresolved;
+        }
+        let Some(declaration) = ast.reference_declaration(span) else {
+            // A global: `Object` itself, or some other global.
+            return text == "Object" || unresolved;
+        };
+        if ast.functions.iter().any(|function| {
+            function.kind == FunctionKind::Declaration
+                && function
+                    .name
+                    .as_ref()
+                    .is_some_and(|name| name.span == declaration)
+        }) || ast.classes.iter().any(|class| {
+            class
+                .name
+                .as_ref()
+                .is_some_and(|name| name.span == declaration)
+        }) {
+            return false;
+        }
+        let Some(binding) = ast
+            .bindings
+            .iter()
+            .find(|binding| binding.names.iter().any(|name| name.span == declaration))
+        else {
+            return unresolved;
+        };
+        let Some(initializer) = binding.initializer else {
+            return unresolved;
+        };
+        if binding.shape != solid_facts::ast::BindingShape::Identifier
+            || !binding.immutable
+            || crate::indexes::binding_written(file, declaration)
+        {
+            return unresolved;
+        }
+        if binding.initializer_function
+            || matches!(
+                binding.initializer_value_kind,
+                RuntimeValueKind::Object | RuntimeValueKind::Array | RuntimeValueKind::Primitive
+            )
+        {
+            return false;
+        }
+        let initializer = ast.peel_ts_sugar_span(initializer);
+        // `const Tabs = Object.assign(Root, {...})` is its first argument;
+        // that call is judged on its own.
+        if let Some(call) = ast.call_at(initializer)
+            && self.reflective_write_name(file, call) == Some(ReflectiveWrite::Assign)
+            && let Some(first) = call.arguments.first()
+        {
+            return self.may_be_object(file, first.span, unresolved, depth - 1);
+        }
+        self.may_be_object(file, initializer, unresolved, depth - 1)
+    }
+
+    /// Whether module top-level code written before `before` can run user
+    /// code or render: a call, `new`, a JSX element or a tagged template
+    /// outside every function (a function body runs only when it is called).
+    /// A call to a primitive of the dialect that is given nothing but data
+    /// literals (`createSignal(0)`) runs no user code and does not count.
+    fn runs_code_before(&self, file: &FileFacts, before: u32) -> bool {
+        let ast = &file.ast;
+        let top_level = |span: Span| {
+            span.start < before
+                && !ast
+                    .functions
+                    .iter()
+                    .any(|function| function.span.contains(span) && function.span != span)
+        };
+        ast.calls
+            .iter()
+            .any(|call| top_level(call.span) && !self.call_runs_no_user_code(file, call))
+            || ast
+                .jsx_elements
+                .iter()
+                .any(|element| top_level(element.span))
+            || ast
+                .tagged_templates
+                .iter()
+                .any(|template| top_level(template.span))
+    }
+
+    fn call_runs_no_user_code(&self, file: &FileFacts, call: &solid_facts::ast::CallFact) -> bool {
+        if call.construct
+            || call.arguments.iter().any(|argument| {
+                argument.spread
+                    || !matches!(
+                        argument.runtime_value_kind,
+                        RuntimeValueKind::Primitive
+                            | RuntimeValueKind::Nullish
+                            | RuntimeValueKind::Object
+                            | RuntimeValueKind::Array
+                    )
+            })
+        {
+            return false;
+        }
+        crate::call_primitive_name_cached(
+            self,
+            file,
+            call,
+            self.entities(),
+            self.symbol_names(),
+            self.dialect,
+        )
+        .and_then(|name| name.primitive())
+        .is_some_and(|primitive| !self.dialect.mounts_component_tree(primitive))
+    }
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum ReflectiveWrite {
+    /// `Object.assign(target, …)`.
+    Assign,
+    /// `Object.defineProperty`, `defineProperties`, `Reflect.set`, …
+    Descriptor,
 }
 
 /// Whether `binding` can declare a holder: a `const` identifier initialized

@@ -224,7 +224,7 @@ impl<'a> SemanticLookup<'a> {
         })
     }
 
-    fn module_census(&self) -> &ModuleCensus {
+    pub(super) fn module_census(&self) -> &ModuleCensus {
         self.initialization
             .census
             .get_or_init(|| ModuleCensus::new(self.facts, self))

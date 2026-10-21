@@ -36,6 +36,56 @@
       "code": "SC1001",
       "kind": "uncertifiable",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Before.tsx",
+      "start": 146,
+      "end": 153,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/compound-components-escapes/BeforeInitializer.tsx",
+      "start": 146,
+      "end": 153,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/compound-components-escapes/BeforeJsx.tsx",
+      "start": 146,
+      "end": 153,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/compound-components-escapes/BeforeObject.tsx",
+      "start": 146,
+      "end": 153,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/compound-components-escapes/BeforeTemplate.tsx",
+      "start": 146,
+      "end": 153,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/compound-components-escapes/Called.tsx",
       "start": 111,
       "end": 118,
@@ -49,6 +99,16 @@
       "path": "fixtures/reactive-ir/compound-components-escapes/Called.tsx",
       "start": 184,
       "end": 191,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/compound-components-escapes/Cycle.tsx",
+      "start": 170,
+      "end": 177,
       "fixes": 0
     },
     {
