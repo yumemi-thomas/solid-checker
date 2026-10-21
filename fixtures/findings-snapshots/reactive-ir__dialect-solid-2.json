@@ -136,6 +136,18 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 4419,
+      "end": 4428,
+      "fixes": 0,
+      "message": "onCleanup is called without a reactive owner; no scope's disposal can trigger it, so this cleanup function will never run",
+      "hint": "Call onCleanup inside a component or computation, or create the surrounding scope with createRoot so disposal exists. For one-time setup with teardown, use onSettled with a returned cleanup in a component."
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",

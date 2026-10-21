@@ -135,6 +135,7 @@ pub(crate) fn callback_literal_span(
 /// Any other expression names no callback: an entity at a call's span carries
 /// the callee's symbol, so resolving it would mark the callee's body unowned
 /// for a call that returns a different function (SC4001 review D).
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn owner_callback_index(
     nodes: &[OwnerNode],
     nodes_by_path: &HashMap<String, Vec<usize>>,
@@ -143,8 +144,12 @@ pub(crate) fn owner_callback_index(
     argument: Span,
     entities: &EntitySymbols,
     handler_tuple: bool,
+    lookup: &SemanticLookup<'_>,
 ) -> Option<usize> {
-    if let Some(span) = callback_literal_span(file, argument, handler_tuple) {
+    // A wrapper call is never an array, so the tuple slot cannot reach it.
+    let literal = callback_literal_span(file, argument, handler_tuple)
+        .or_else(|| crate::indexes::identity_wrapped_literal_span(lookup, file, argument));
+    if let Some(span) = literal {
         return nodes_by_path
             .get(file.path.as_str())
             .into_iter()

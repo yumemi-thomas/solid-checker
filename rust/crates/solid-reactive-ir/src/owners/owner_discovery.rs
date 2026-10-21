@@ -40,6 +40,7 @@ pub(crate) fn discover_owner_file(
     // expression is not the callback (SC4001 review D).
     let callback_target = |argument: Span, handler_tuple: bool| {
         callback_literal_span(file, argument, handler_tuple)
+            .or_else(|| crate::indexes::identity_wrapped_literal_span(lookup, file, argument))
             .and_then(|span| {
                 nodes_by_path
                     .get(file.path.as_str())

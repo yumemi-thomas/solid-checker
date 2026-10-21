@@ -70,6 +70,7 @@ pub(crate) fn find_missing_owners(
                     argument.span,
                     entities,
                     false,
+                    lookup,
                 ) else {
                     continue;
                 };
@@ -108,6 +109,7 @@ pub(crate) fn find_missing_owners(
                 callback.span,
                 entities,
                 callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler,
+                lookup,
             ) {
                 let kind = match callback.role {
                     solid_facts::compiler::CallbackRoleKind::DirectiveApply
@@ -281,6 +283,7 @@ pub(crate) fn find_missing_owners(
                                 argument.span,
                                 entities,
                                 false,
+                                lookup,
                             )
                         })
                         .and_then(|index| {

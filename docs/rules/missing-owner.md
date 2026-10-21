@@ -137,3 +137,7 @@ analysis; unresolved callers and ownership remain uncertifiable.
 - [leaf-owner rules](leaf-owner-forbidden-call.md) — calls made under an owner whose lifetime is nevertheless unsuitable
 - [async-outside-loading-boundary](async-outside-loading-boundary.md) — async work that needs an owned loading boundary
 - [package-behavior-unavailable](package-behavior-unavailable.md) — missing external ownership facts
+
+## Which callback an argument names
+
+A callback passed to a primitive, a handler or a ref is the function the argument is: a function literal, a bare identifier, element 0 of an event handler's tuple, or the literal an identity wrapper hands back (`wrap(() => …)`, where `wrap` returns its parameter unchanged on every completion and reads it no other way; ADR 0346). A call, an IIFE or `untrack(…)` names no callback: its value is not the literal it contains.

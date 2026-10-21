@@ -20,6 +20,8 @@ mod callees;
 mod class_prototype;
 mod completion;
 mod components;
+mod identity_wrappers;
+pub(crate) use identity_wrappers::identity_wrapped_literal_span;
 mod member_values;
 mod primitive_proof;
 
@@ -694,6 +696,8 @@ pub(super) struct SemanticLookup<'a> {
     entities: &'a EntitySymbols,
     symbol_names: &'a HashMap<SymbolId, SymbolName>,
     functions_by_symbol: OnceLock<HashMap<&'a str, SymbolFunction>>,
+    /// ADR 0346: the project's identity wrappers, by declaration symbol.
+    identity_wrappers: OnceLock<HashMap<&'a str, usize>>,
     /// ADR 0319: every literal's invocation-flow answer.
     invocation_flow_answers: OnceLock<HashMap<(String, Span), crate::ExecutionRole>>,
     /// The literals whose every invocation is a host event dispatch.
@@ -875,6 +879,7 @@ impl<'a> SemanticLookup<'a> {
             entities,
             symbol_names,
             functions_by_symbol: OnceLock::new(),
+            identity_wrappers: OnceLock::new(),
             invocation_flow_answers: OnceLock::new(),
             unowned_event_literals: OnceLock::new(),
             objects_assigned_into: OnceLock::new(),
@@ -1175,6 +1180,20 @@ impl<'a> SemanticLookup<'a> {
             // every file (a history in one decides what another reads).
             hasher.update(b"router-params\0");
             hasher.update([u8::from(self.router_params().applies())]);
+            // ADR 0346: a wrapper in another file decides whether a call hands
+            // back a callback literal, so every wrapper's identity is digested.
+            hasher.update(b"identity-wrappers\0");
+            let mut wrappers = self.identity_wrappers().iter().collect::<Vec<_>>();
+            wrappers.sort_unstable();
+            for (symbol, index) in wrappers {
+                hasher.update(
+                    u64::try_from(symbol.len())
+                        .unwrap_or(u64::MAX)
+                        .to_le_bytes(),
+                );
+                hasher.update(symbol.as_bytes());
+                hasher.update(u64::try_from(*index).unwrap_or(u64::MAX).to_le_bytes());
+            }
             // ADR 0325: an imported constant's primitive-ness is another
             // file's fact.
             hasher.update(b"imported-primitive-consts\0");
