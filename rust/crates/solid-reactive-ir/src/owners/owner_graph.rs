@@ -143,6 +143,33 @@ pub(super) fn propagate_owner_contexts(
     }
 }
 
+/// Settles the eager ref calls ([`OwnerEdgeKind::EagerCall`]) once propagation
+/// has run. A call whose enclosing function holds no owner context at all is
+/// one no owner edge reaches: a function literal that no owner edge names as a
+/// callee (an IIFE the graph does not model), a constructor or getter no
+/// resolved call names, or an exported function a closed program treats as
+/// uncalled. The owner of the code the ref runs is then unknown, not proven, so
+/// the call takes the uncertain unowned bit ([`OwnerEdgeKind::MayBeUnowned`])
+/// and never the proven one. Propagation then carries that bit on. Both owner
+/// passes settle their own graph here, so they cannot disagree.
+pub(super) fn settle_eager_owners(contexts: &mut [u8], outgoing: &[Vec<(usize, OwnerEdgeKind)>]) {
+    let context_free: Vec<usize> = (0..contexts.len())
+        .filter(|source| contexts[*source] == 0)
+        .collect();
+    let mut changed = false;
+    for source in context_free {
+        for (target, kind) in outgoing[source].iter().copied() {
+            if kind == OwnerEdgeKind::EagerCall {
+                contexts[target] |= owner_edge_context(OwnerEdgeKind::MayBeUnowned, 0);
+                changed = true;
+            }
+        }
+    }
+    if changed {
+        propagate_owner_contexts(contexts, outgoing);
+    }
+}
+
 #[derive(Clone)]
 pub(crate) enum OwnerTarget {
     Symbol(SymbolId),

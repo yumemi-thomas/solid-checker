@@ -69,6 +69,7 @@ pub(crate) fn find_missing_owners(
                     file,
                     argument.span,
                     entities,
+                    false,
                 ) else {
                     continue;
                 };
@@ -106,6 +107,7 @@ pub(crate) fn find_missing_owners(
                 file,
                 callback.span,
                 entities,
+                callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler,
             ) {
                 let kind = match callback.role {
                     solid_facts::compiler::CallbackRoleKind::DirectiveApply
@@ -124,8 +126,10 @@ pub(crate) fn find_missing_owners(
         }
         // The function literals a ref value writes at its top level (ADR 0345),
         // placed by position: a value-position function runs with no owner at
-        // the application, an eagerly called one runs under the owner of the
-        // code around the expression, and any other one is unproven.
+        // the application, a call made at module initialization runs with none,
+        // an eagerly called one runs under the owner of the code around the
+        // expression (settled once propagation has run), and any other one is
+        // unproven.
         for mark in ref_value_marks(
             file,
             &owner_file_indexes[file_index].call_primitives,
@@ -133,6 +137,7 @@ pub(crate) fn find_missing_owners(
         ) {
             let function = match mark {
                 RefValueMark::Applied { function }
+                | RefValueMark::Unowned { function }
                 | RefValueMark::Eager { function, .. }
                 | RefValueMark::Unproven { function } => function,
             };
@@ -146,14 +151,14 @@ pub(crate) fn find_missing_owners(
                 continue;
             };
             match mark {
-                RefValueMark::Applied { .. } => {
+                RefValueMark::Applied { .. } | RefValueMark::Unowned { .. } => {
                     contexts[target] |= OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED;
                 }
                 RefValueMark::Eager { call, .. } => {
                     if let Some(owner) =
                         enclosing_function_span(&nodes, &nodes_by_path, file.path.as_str(), call)
                     {
-                        edges.push((owner, target, OwnerEdgeKind::Preserve));
+                        edges.push((owner, target, OwnerEdgeKind::EagerCall));
                     } else {
                         contexts[target] |= OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED;
                     }
@@ -169,6 +174,7 @@ pub(crate) fn find_missing_owners(
         outgoing[source].push((target, kind));
     }
     propagate_owner_contexts(&mut contexts, &outgoing);
+    settle_eager_owners(&mut contexts, &outgoing);
 
     let continuations = AwaitContinuations::new(facts, lookup);
     let mut settled_gates = SettledGateDecisions::default();
@@ -274,6 +280,7 @@ pub(crate) fn find_missing_owners(
                                 file,
                                 argument.span,
                                 entities,
+                                false,
                             )
                         })
                         .and_then(|index| {

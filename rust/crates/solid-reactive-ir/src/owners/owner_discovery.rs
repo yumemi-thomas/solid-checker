@@ -34,16 +34,25 @@ pub(crate) fn discover_owner_file(
             span,
         )
     };
-    let callback_target = |argument: Span| {
-        nodes_by_path
-            .get(file.path.as_str())
-            .into_iter()
-            .flatten()
-            .copied()
-            .filter(|index| argument.contains(nodes[*index].span))
-            .max_by_key(|index| nodes[*index].span.end - nodes[*index].span.start)
+    // The callback an argument names, exactly as `owner_callback_index` reads
+    // it: the function literal itself (or an event tuple's handler slot), or
+    // the function a bare identifier names. A function literal inside any other
+    // expression is not the callback (SC4001 review D).
+    let callback_target = |argument: Span, handler_tuple: bool| {
+        callback_literal_span(file, argument, handler_tuple)
+            .and_then(|span| {
+                nodes_by_path
+                    .get(file.path.as_str())
+                    .into_iter()
+                    .flatten()
+                    .copied()
+                    .find(|index| nodes[*index].span == span)
+            })
             .map(|index| OwnerTarget::LocalSpan(nodes[index].span))
             .or_else(|| {
+                if !is_identifier_span(file, argument) {
+                    return None;
+                }
                 entities
                     .get(&location(file.path.shared(), argument))
                     .cloned()
@@ -76,7 +85,7 @@ pub(crate) fn discover_owner_file(
             if let Some(target) = call
                 .arguments
                 .get(edge.argument)
-                .and_then(|argument| callback_target(argument.span))
+                .and_then(|argument| callback_target(argument.span, false))
             {
                 let source = lookup
                     .files()
@@ -130,7 +139,7 @@ pub(crate) fn discover_owner_file(
                 OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LEAF,
                 call.arguments
                     .first()
-                    .and_then(|argument| callback_target(argument.span)),
+                    .and_then(|argument| callback_target(argument.span, false)),
                 call.arguments
                     .first()
                     .map_or(call.callee, |argument| argument.span),
@@ -165,7 +174,10 @@ pub(crate) fn discover_owner_file(
         ) && (callback.role != solid_facts::compiler::CallbackRoleKind::DirectiveApply
             || (ref_application_on_intrinsic(file, callback.span)
                 && is_identifier_span(file, callback.span)))
-            && let Some(target) = callback_target(callback.span)
+            && let Some(target) = callback_target(
+                callback.span,
+                callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler,
+            )
         {
             // A ref application's callback is resolved against its node: a
             // generator there never runs its body (`RefApplied`).
@@ -186,11 +198,13 @@ pub(crate) fn discover_owner_file(
     // placed by position as the batch pass places them.
     for mark in ref_value_marks(file, &call_primitives, lookup) {
         match mark {
-            RefValueMark::Applied { function } => edges.push(SymbolicOwnerEdge {
-                source: None,
-                target: OwnerTarget::LocalSpan(function),
-                kind: OwnerEdgeKind::Unowned,
-            }),
+            RefValueMark::Applied { function } | RefValueMark::Unowned { function } => {
+                edges.push(SymbolicOwnerEdge {
+                    source: None,
+                    target: OwnerTarget::LocalSpan(function),
+                    kind: OwnerEdgeKind::Unowned,
+                })
+            }
             RefValueMark::Eager { function, call } => edges.push(SymbolicOwnerEdge {
                 source: nodes
                     .iter()
@@ -201,7 +215,7 @@ pub(crate) fn discover_owner_file(
                         span: node.span,
                     }),
                 target: OwnerTarget::LocalSpan(function),
-                kind: OwnerEdgeKind::Preserve,
+                kind: OwnerEdgeKind::EagerCall,
             }),
             RefValueMark::Unproven { function } => edges.push(SymbolicOwnerEdge {
                 source: None,
@@ -365,6 +379,7 @@ pub(crate) fn find_missing_owners_incremental(
 
     let propagation_started = Instant::now();
     propagate_owner_contexts(&mut contexts, &outgoing);
+    settle_eager_owners(&mut contexts, &outgoing);
     let propagation = propagation_started.elapsed();
 
     let requirements_started = Instant::now();

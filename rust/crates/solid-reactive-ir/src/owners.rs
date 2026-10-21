@@ -300,6 +300,11 @@ pub(crate) enum OwnerEdgeKind {
     /// The callback may run with no owner, and nothing proves it: the bare
     /// open-world unowned bit, a caller obligation that stays uncertifiable.
     MayBeUnowned,
+    /// A function a ref expression calls while the expression evaluates
+    /// (ADR 0345). It runs under its enclosing function's owner, as
+    /// [`OwnerEdgeKind::Preserve`] does, and a source with no owner context
+    /// settles to the uncertain unowned bit ([`settle_eager_owners`]).
+    EagerCall,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

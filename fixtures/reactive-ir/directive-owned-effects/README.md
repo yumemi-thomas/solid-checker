@@ -2,7 +2,7 @@
 
 `missing-owner` (SC4001) for an effect created inside an intrinsic `ref` expression. The owner walk places each function literal the expression writes at its top level by where it runs (ADR 0345):
 
-- a value the ref application receives (the expression itself, an array element, a conditional branch or a logical operand) runs in the application with no owner: a violation (line 23, the arrow element of the array on line 34, and the logical operand on line 68; SC6001 reports the same creations);
+- a value the ref application receives (the expression itself, an array element, a conditional branch, or the right operand of `&&`) runs in the application with no owner: a violation (line 23, the arrow element of the array on line 34, and the right operand of `&&` on line 68; SC6001 reports the same creations);
 - a function a call in the expression calls runs while the component renders, under the owner of the code around the expression. An IIFE, the body of a factory the expression calls (`tracked(count)`), a callback a dialect slot runs during its call (`untrack`, line 29), an IIFE element of a ref array (line 33), and a default parameter initializer, which runs in its function's call (line 60, rendered by `Host`), are silent. The runtime agrees: `oracle-behaviour-primitive-in-directive`'s control is a factory call, and its effect is disposed with its element;
 - at module scope the same IIFE has no owner, since nothing renders it: a violation (line 46).
 

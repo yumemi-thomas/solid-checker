@@ -3,7 +3,7 @@ use super::{
     OWNER_CONTEXT_OWNED, OWNER_CONTEXT_PROVEN_UNOWNED, OWNER_CONTEXT_UNOWNED, OwnerEdgeKind,
     OwnerNode, binding_returns_reactive_source, callback_owner_edge_kind, compiler_owner_context,
     compose_owner_edge, owner_edge_context, propagate_owner_contexts, providing_region_chain,
-    returned_arrow_function, root_owned_at, seed_contexts,
+    returned_arrow_function, root_owned_at, seed_contexts, settle_eager_owners,
 };
 use solid_facts::ast;
 use solid_facts::compiler::{
@@ -230,6 +230,33 @@ fn propagation_does_not_walk_edges_out_of_context_free_nodes() {
     let outgoing = vec![vec![(1, OwnerEdgeKind::Owned)], vec![]];
     propagate_owner_contexts(&mut contexts, &outgoing);
     assert_eq!(contexts, vec![0, 0]);
+}
+
+/// An eager ref call from a function with no owner context settles to the
+/// uncertain unowned bit, and what that call leads to inherits it. From a
+/// proven source the call inherits the proof, as `Preserve` does.
+#[test]
+fn an_eager_call_settles_uncertain_from_a_context_free_source() {
+    // 0 (context-free) --eager--> 1 --preserve--> 2; 3 (proven) --eager--> 4.
+    let mut contexts = vec![
+        0,
+        0,
+        0,
+        OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED,
+        0,
+    ];
+    let outgoing = vec![
+        vec![(1, OwnerEdgeKind::EagerCall)],
+        vec![(2, OwnerEdgeKind::Preserve)],
+        vec![],
+        vec![(4, OwnerEdgeKind::EagerCall)],
+        vec![],
+    ];
+    propagate_owner_contexts(&mut contexts, &outgoing);
+    settle_eager_owners(&mut contexts, &outgoing);
+    let uncertain = OWNER_CONTEXT_UNOWNED;
+    let proven = OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED;
+    assert_eq!(contexts, vec![0, uncertain, uncertain, proven, proven]);
 }
 
 #[test]

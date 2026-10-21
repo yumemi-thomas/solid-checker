@@ -87,6 +87,54 @@ pub(crate) fn root_owned_at<K>(chain: Option<&[K]>, context_of: impl Fn(&K) -> u
     })
 }
 
+/// The function literal a callback argument is, when the argument *is* that
+/// literal: the argument with parentheses and TypeScript wrappers removed.
+/// Any other expression hands the callback over as a value. A call whose
+/// result may be a function, an IIFE, or `untrack(() => …)` runs its inner
+/// literals where the surrounding expression runs, not as the callback, so a
+/// literal inside one of them is not named (SC4001 review D).
+///
+/// The one exception is an event handler's tuple: an event attribute may take
+/// `[handler, data]`, whose first slot the DOM calls as the handler (the
+/// two-slot bound-handler tuple `projection` names, `review-r7-event-array`).
+/// `handler_tuple` says the argument sits in an event handler position; no
+/// other position reads an array as its callback.
+pub(crate) fn callback_literal_span(
+    file: &solid_facts::FileFacts,
+    argument: Span,
+    handler_tuple: bool,
+) -> Option<Span> {
+    let is_function = |span: Span| {
+        file.ast
+            .functions
+            .iter()
+            .any(|function| function.span == span)
+    };
+    let peeled = file.ast.peel_ts_sugar_span(argument);
+    if is_function(peeled) {
+        return Some(peeled);
+    }
+    if !handler_tuple {
+        return None;
+    }
+    let array = file
+        .ast
+        .array_literal_elements
+        .iter()
+        .find(|fact| file.ast.peel_ts_sugar_span(fact.span) == peeled)?;
+    let first = array
+        .elements
+        .first()
+        .filter(|element| element.kind == solid_facts::ast::ArrayElementKind::Value)?;
+    let first = file.ast.peel_ts_sugar_span(first.span);
+    is_function(first).then_some(first)
+}
+
+/// The owner-graph node of the callback `argument` names, if it names one
+/// exactly ([`callback_literal_span`]), or the function its identifier names.
+/// Any other expression names no callback: an entity at a call's span carries
+/// the callee's symbol, so resolving it would mark the callee's body unowned
+/// for a call that returns a different function (SC4001 review D).
 pub(crate) fn owner_callback_index(
     nodes: &[OwnerNode],
     nodes_by_path: &HashMap<String, Vec<usize>>,
@@ -94,29 +142,28 @@ pub(crate) fn owner_callback_index(
     file: &solid_facts::FileFacts,
     argument: Span,
     entities: &EntitySymbols,
+    handler_tuple: bool,
 ) -> Option<usize> {
-    nodes_by_path
-        .get(file.path.as_str())
-        .into_iter()
-        .flatten()
+    if let Some(span) = callback_literal_span(file, argument, handler_tuple) {
+        return nodes_by_path
+            .get(file.path.as_str())
+            .into_iter()
+            .flatten()
+            .copied()
+            .find(|index| nodes[*index].span == span);
+    }
+    if !is_identifier_span(file, argument) {
+        return None;
+    }
+    entities
+        .get(&location(file.path.shared(), argument))
+        .and_then(|symbol| by_symbol.get(symbol))
         .copied()
-        .filter(|index| argument.contains(nodes[*index].span))
-        // The argument's function can itself contain nested callbacks or a
-        // returned closure. Select the outermost contained function: choosing
-        // the smallest one assigns the caller's owner semantics to a nested
-        // callback and leaves the actual argument unclassified.
-        .max_by_key(|index| nodes[*index].span.end - nodes[*index].span.start)
-        .or_else(|| {
-            entities
-                .get(&location(file.path.shared(), argument))
-                .and_then(|symbol| by_symbol.get(symbol))
-                .copied()
-        })
 }
 
 pub(crate) const fn owner_edge_context(kind: OwnerEdgeKind, source: u8) -> u8 {
     match kind {
-        OwnerEdgeKind::Preserve => source,
+        OwnerEdgeKind::Preserve | OwnerEdgeKind::EagerCall => source,
         OwnerEdgeKind::Owned => OWNER_CONTEXT_OWNED,
         OwnerEdgeKind::Unowned => OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED,
         OwnerEdgeKind::Conditional => OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED,
@@ -420,6 +467,10 @@ pub(crate) enum RefValueMark {
     /// The function is a value the ref application receives
     /// ([`yielded_value_contains`]).
     Applied { function: Span },
+    /// The function is a call the expression makes while the code around it
+    /// runs at module initialization ([`runs_at_module_init`]): no owner is
+    /// current there, so the call runs with none.
+    Unowned { function: Span },
     /// The function is the callee of `call`, which the expression makes.
     Eager { function: Span, call: Span },
     /// The function's owner is unproven: a generator (a call runs none of its
@@ -472,9 +523,27 @@ pub(crate) fn ref_value_marks(
                 .iter()
                 .find(|(_, call)| file.ast.peel_ts_sugar_span(call.callee) == function.span)
             {
-                marks.push(RefValueMark::Eager {
-                    function: function.span,
-                    call: call.span,
+                // The call runs while the expression evaluates, under the owner
+                // of the code around it (ADR 0345). A component's children do
+                // not run there: they run inside the component's own memo, so
+                // the call is unproven. Code that runs at module initialization
+                // has no owner, so the call is unowned. Elsewhere the owner walk
+                // places it by its enclosing function, and settles a call whose
+                // enclosing function has no owner context
+                // ([`OwnerEdgeKind::EagerCall`]).
+                marks.push(if inside_component_element(file, callback.span) {
+                    RefValueMark::Unproven {
+                        function: function.span,
+                    }
+                } else if runs_at_module_init(file, call.span) {
+                    RefValueMark::Unowned {
+                        function: function.span,
+                    }
+                } else {
+                    RefValueMark::Eager {
+                        function: function.span,
+                        call: call.span,
+                    }
                 });
                 continue;
             }
@@ -540,9 +609,17 @@ pub(crate) fn yielded_value_contains(
         .iter()
         .find(|fact| file.ast.peel_ts_sugar_span(fact.span) == value)
     {
-        return [logical.left, logical.right]
-            .into_iter()
-            .any(|operand| yielded_value_contains(file, operand, function));
+        // `a && b` yields `a` only when `a` is falsy, and a function value is
+        // always truthy: a function written as the left operand is tested and
+        // never applied. `a || b` and `a ?? b` can yield either operand.
+        let operands: &[Span] = if logical.operator == solid_facts::ast::LogicalOperatorKind::And {
+            &[logical.right]
+        } else {
+            &[logical.left, logical.right]
+        };
+        return operands
+            .iter()
+            .any(|operand| yielded_value_contains(file, *operand, function));
     }
     if let Some(array) = file
         .ast
@@ -577,6 +654,31 @@ pub(crate) fn enclosing_function_span(
             let function = nodes[*index].span;
             function.end - function.start
         })
+}
+
+/// Whether the code around `span` runs at module initialization, where no owner
+/// is current. The innermost function containing `span` must be a function
+/// literal the file calls directly, and that call must be one module
+/// initialization makes: in no function body, outside an instance field (which
+/// runs at construction, under the constructor's owner), and outside JSX (a
+/// component's children and a compiled child expression run in an owner of
+/// their own).
+fn runs_at_module_init(file: &solid_facts::FileFacts, span: Span) -> bool {
+    let Some(enclosing) = file
+        .ast
+        .functions
+        .iter()
+        .filter(|function| function.span.contains(span))
+        .min_by_key(|function| function.span.end - function.span.start)
+    else {
+        return false;
+    };
+    file.ast.calls.iter().any(|call| {
+        file.ast.peel_ts_sugar_span(call.callee) == enclosing.span
+            && !file.ast.any_function_body_containing(call.span)
+            && !crate::execution_role::inside_instance_field(file, call.span)
+            && file.ast.jsx_containing(call.span).next().is_none()
+    })
 }
 
 /// Whether `span` is one identifier. A ref application that invokes a named
