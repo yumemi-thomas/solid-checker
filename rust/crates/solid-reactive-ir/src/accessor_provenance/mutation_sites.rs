@@ -1039,7 +1039,7 @@ pub(crate) fn reflective_prototype_write(lookup: &SemanticLookup<'_>) -> bool {
 
 /// Signature and runtime receiver identities are independent, as in ADR 0272.
 /// A local ObjectConstructor-typed value or a homonymous helper is not Object.
-pub(super) fn mutation_builtin<'a>(
+pub(crate) fn mutation_builtin<'a>(
     file: &FileFacts,
     call: &ast::CallFact,
     lookup: &'a SemanticLookup<'_>,

@@ -234,6 +234,13 @@ impl ModuleCensus {
         self.cyclic.contains(path)
     }
 
+    /// Whether some load the census could not resolve (a computed dynamic
+    /// `import()`, an unresolved namespace import or re-export) may run any
+    /// module's code, so no module's initialization order is certain.
+    pub(crate) fn has_unknown_load(&self) -> bool {
+        self.unknown_load
+    }
+
     /// Whether `from` statically imports `to`, directly or through re-exports.
     pub(crate) fn statically_imports(&self, from: &str, to: &str) -> bool {
         let mut seen = HashSet::<&str>::default();
