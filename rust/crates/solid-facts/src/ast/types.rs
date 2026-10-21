@@ -147,7 +147,7 @@ pub struct AstFacts {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub try_head_awaits: Vec<TryHeadAwaitFact>,
     /// The `import.meta.glob(…)` and `import.meta.globEager(…)` calls that the
-    /// bundler may turn into static imports run in place (facts schema 68):
+    /// bundler may turn into static imports run in place (facts schema 70):
     /// every call except `glob` with no options, or with an options object
     /// literal (no spread, no computed key) that has no `eager` key or has
     /// `eager: false`. The matched modules are unknown, so the module holding
@@ -837,6 +837,14 @@ pub struct FunctionFact {
     /// must treat that tail as observable rather than as unnamed.
     #[serde(default)]
     pub rest_parameter: bool,
+    /// Whether evaluating the parameter list can run no user code and so
+    /// cannot throw before the body does (facts schema 70): every default
+    /// initializer, at any depth of a destructuring pattern, is a primitive
+    /// literal, a function or arrow, an empty object or array literal or the
+    /// global `undefined`, no computed key is written, and no parameter has a
+    /// decorator. Absent (an older fact) is false: the list may throw.
+    #[serde(default)]
+    pub parameters_inert: bool,
     /// The binding identifiers a rest parameter declares.
     ///
     /// Kept out of `parameters` for the reason above — the tail fills no single

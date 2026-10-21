@@ -347,6 +347,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                     })
                     .collect(),
                 rest_parameter: function.params.rest.is_some(),
+                parameters_inert: self.parameters_inert(&function.params),
                 rest_parameter_names: self.rest_parameter_names(function.params.rest.as_deref()),
                 r#async: function.r#async,
                 generator: function.generator,
@@ -472,6 +473,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 })
                 .collect(),
             rest_parameter: function.params.rest.is_some(),
+            parameters_inert: self.parameters_inert(&function.params),
             rest_parameter_names: self.rest_parameter_names(function.params.rest.as_deref()),
             r#async: function.r#async,
             generator: false,

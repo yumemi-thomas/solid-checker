@@ -175,6 +175,21 @@ fn exact_const_binding_name<'a>(
         .and_then(|binding| binding.names.first())
 }
 
+/// Whether the name a function is reached by (a declaration's own, or the
+/// `const` it is the whole initializer of) may be written, which includes a
+/// direct `eval` in the file.
+fn root_binding_written(file: &solid_facts::FileFacts, span: Span) -> bool {
+    let Some(function) = file.ast.function_at(span) else {
+        return false;
+    };
+    let name = if function.kind == solid_facts::ast::FunctionKind::Declaration {
+        function.name.as_ref()
+    } else {
+        exact_const_binding_name(file, function)
+    };
+    name.is_some_and(|name| crate::indexes::binding_written(file, name.span))
+}
+
 fn discover_reachability_file(
     file: &solid_facts::FileFacts,
     indexes: &ProjectIndexes<'_>,
@@ -225,6 +240,11 @@ fn discover_reachability_file(
     let mut roots = functions
         .iter()
         .filter(|function| {
+            // A root whose binding may be written (`App = other`, or a direct
+            // `eval` that can) may no longer be the function that runs.
+            !root_binding_written(file, function.span)
+        })
+        .filter(|function| {
             file.ast
                 .function_at(function.span)
                 .is_some_and(|candidate| {
@@ -261,7 +281,12 @@ fn discover_reachability_file(
             let Ok(end) = u32::try_from(entity.location.end_byte) else {
                 continue;
             };
-            if export.span.contains(Span::new(start, end))
+            let mention = Span::new(start, end);
+            // `export { addSooner }` names the entity by a reference; the
+            // binding is the declaration it resolves to.
+            let declaration = file.ast.reference_declaration(mention).unwrap_or(mention);
+            if export.span.contains(mention)
+                && !crate::indexes::binding_written(file, declaration)
                 && let Some(symbol) = entities.get(&entity.location)
             {
                 roots.push(ReachabilityTarget::Symbol(symbol.clone()));

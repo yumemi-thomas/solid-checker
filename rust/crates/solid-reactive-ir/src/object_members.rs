@@ -209,10 +209,23 @@ pub(crate) struct ModuleCensus {
     /// The edges ES evaluation runs before the importer's own body: static
     /// imports and `export … from`.
     hoisted: HashMap<String, HashSet<String>>,
-    /// Loads that run where they are written (`require(…)`, `import x =
-    /// require(…)`) at module level: the targets and where the load ends.
-    in_place: HashMap<String, Vec<(HashSet<String>, u32)>>,
+    /// `import x = require(…)` statements, which sit at module level (never
+    /// inside a block, loop, branch or `try`) and run where they are written:
+    /// the targets and where the statement ends. A `require()` call is not
+    /// here: it may be skipped by the code around it (ADR 0339).
+    equals_loads: HashMap<String, Vec<(HashSet<String>, u32)>>,
+    /// Loads that bind a name to a module at the point they run, by module:
+    /// the targets, where an `import x = require(…)` statement ends (`None`
+    /// for a `require()` call or a dynamic `import()` at module level, which
+    /// are never credited).
+    alias_loads: HashMap<String, Vec<AliasLoad>>,
+    /// Modules with a load whose targets the census cannot see.
+    opaque_loads: HashSet<String>,
+    /// Modules with a top-level `await` or `for await`.
+    async_modules: HashSet<String>,
 }
+
+type AliasLoad = (HashSet<String>, Option<u32>);
 
 impl ModuleCensus {
     /// Whether the module is on an import cycle, or imports (transitively) a
@@ -238,14 +251,68 @@ impl ModuleCensus {
         false
     }
 
+    /// Whether a module, or one it loads, has a top-level `await`:
+    /// `require` of it throws `ERR_REQUIRE_ASYNC_MODULE`.
+    fn loads_async_module(&self, module: &str) -> bool {
+        self.async_modules.contains(module)
+            || self
+                .async_modules
+                .iter()
+                .any(|asynchronous| self.statically_imports(module, asynchronous))
+    }
+
+    /// Whether `to` is reached from `from` by `import` and `export … from`
+    /// alone, the edges ES evaluation runs ahead of the importer's body.
+    fn hoisted_reaches(&self, from: &str, to: &str) -> bool {
+        let mut seen = HashSet::<&str>::default();
+        let mut stack = vec![from];
+        while let Some(module) = stack.pop() {
+            for target in self.hoisted.get(module).into_iter().flatten() {
+                if target == to {
+                    return true;
+                }
+                if seen.insert(target.as_str()) {
+                    stack.push(target.as_str());
+                }
+            }
+        }
+        false
+    }
+
     /// Whether `from` has loaded `to` by the time code at module-level
     /// position `position` runs (`None`: the position is not known): through
-    /// a hoisted edge, or an in-place load that ends at or before it. What the
-    /// first module loads is finished by then (the importer is on no cycle).
+    /// static imports and re-exports, or an `import x = require(…)` statement
+    /// that ends at or before it. Nothing else is credited. What the first
+    /// module loads is finished by then (the importer is on no cycle).
+    ///
+    /// A name bound to a module by a load that reaches `to` is itself in its
+    /// temporal dead zone until the load runs, whatever the module's own
+    /// initialization: a mention in the file reaching `to` is proved only
+    /// after every such `import x = require(…)`, and is withheld where a
+    /// `require()` call or a module-level `import()` may bind it, the
+    /// module has a top-level `await` (`require` throws), or a load of
+    /// unseen targets exists.
     pub(crate) fn imports_before(&self, from: &str, to: &str, position: Option<u32>) -> bool {
+        if self.opaque_loads.contains(from) {
+            return false;
+        }
+        for (targets, end) in self.alias_loads.get(from).into_iter().flatten() {
+            if !targets
+                .iter()
+                .any(|target| target == to || self.statically_imports(target, to))
+            {
+                continue;
+            }
+            let (Some(position), Some(end)) = (position, end) else {
+                return false;
+            };
+            if position < *end || targets.iter().any(|target| self.loads_async_module(target)) {
+                return false;
+            }
+        }
         let mut firsts = self.hoisted.get(from).cloned().unwrap_or_default();
         if let Some(position) = position {
-            for (targets, end) in self.in_place.get(from).into_iter().flatten() {
+            for (targets, end) in self.equals_loads.get(from).into_iter().flatten() {
                 if *end <= position {
                     firsts.extend(targets.iter().cloned());
                 }
@@ -253,7 +320,7 @@ impl ModuleCensus {
         }
         firsts
             .iter()
-            .any(|first| first == to || self.statically_imports(first, to))
+            .any(|first| first == to || self.hoisted_reaches(first, to))
     }
 
     pub(crate) fn new(facts: &ProjectFacts, lookup: &SemanticLookup<'_>) -> Self {
@@ -363,6 +430,7 @@ impl ModuleCensus {
         let mut graph = HashMap::<String, HashSet<String>>::default();
         let mut hoisted = HashMap::<String, HashSet<String>>::default();
         let mut in_place_loads = HashMap::<String, Vec<(HashSet<String>, u32)>>::default();
+        let mut alias_loads = HashMap::<String, Vec<AliasLoad>>::default();
         let mut barrels = HashMap::<String, HashSet<String>>::default();
         for file in lookup.files() {
             let path = file.path.to_string();
@@ -450,19 +518,22 @@ impl ModuleCensus {
                                 .entry(path.clone())
                                 .or_default()
                                 .extend(targets.iter().cloned());
-                            // Evaluated where it is written; a load inside a
-                            // function runs whenever that function does.
-                            if !file
-                                .ast
-                                .functions
-                                .iter()
-                                .any(|function| function.span.contains(load.span))
-                            {
-                                in_place_loads
-                                    .entry(path.clone())
-                                    .or_default()
-                                    .push((targets.clone(), load.span.end));
-                            }
+                        }
+                        // A `require()` call may be skipped by the code around
+                        // it, and what it binds is in its dead zone until it
+                        // runs: it orders nothing and withholds mentions of
+                        // its targets. A dynamic `import()` written at module
+                        // level binds a name the same way.
+                        let in_function = file
+                            .ast
+                            .functions
+                            .iter()
+                            .any(|function| function.span.contains(load.span));
+                        if in_place || !in_function {
+                            alias_loads
+                                .entry(path.clone())
+                                .or_default()
+                                .push((targets.clone(), None));
                         }
                         result.exposed.extend(targets);
                     }
@@ -471,6 +542,7 @@ impl ModuleCensus {
                         if in_place {
                             result.cyclic.insert(path.clone());
                         }
+                        result.opaque_loads.insert(path.clone());
                         result.unknown_load = true;
                     }
                 }
@@ -488,10 +560,21 @@ impl ModuleCensus {
                             .or_default()
                             .extend(targets.iter().cloned());
                         // `import x = require(…)` runs where it is written.
-                        in_place_loads
+                        let module_level = !file
+                            .ast
+                            .module_blocks
+                            .iter()
+                            .any(|block| block.contains(import.span));
+                        if module_level {
+                            in_place_loads
+                                .entry(path.clone())
+                                .or_default()
+                                .push((targets.clone(), import.span.end));
+                        }
+                        alias_loads
                             .entry(path.clone())
                             .or_default()
-                            .push((targets.clone(), import.span.end));
+                            .push((targets.clone(), module_level.then_some(import.span.end)));
                         result.exposed.extend(targets);
                     }
                     Landing::Installed => {}
@@ -505,6 +588,7 @@ impl ModuleCensus {
             // static imports of modules no specifier names: unknown loads in
             // place. A lazy glob is a dynamic import and orders nothing.
             if !file.ast.in_place_import_globs.is_empty() {
+                result.opaque_loads.insert(path.clone());
                 result.unknown_load = true;
                 result.cyclic.insert(path.clone());
             }
@@ -536,7 +620,24 @@ impl ModuleCensus {
                 .iter()
                 .any(|hazard| hazard.kind == ast::ModuleHazardKind::NonliteralDynamicLoading)
             {
+                result.opaque_loads.insert(path.clone());
                 result.unknown_load = true;
+            }
+            let top_level = |span: Span| {
+                !file
+                    .ast
+                    .functions
+                    .iter()
+                    .any(|function| function.span.contains(span))
+            };
+            if file
+                .ast
+                .awaits
+                .iter()
+                .chain(&file.ast.implicit_suspensions)
+                .any(|span| top_level(*span))
+            {
+                result.async_modules.insert(path.clone());
             }
         }
         loop {
@@ -566,7 +667,8 @@ impl ModuleCensus {
         }
         result.graph = graph;
         result.hoisted = hoisted;
-        result.in_place = in_place_loads;
+        result.equals_loads = in_place_loads;
+        result.alias_loads = alias_loads;
         result
     }
 }

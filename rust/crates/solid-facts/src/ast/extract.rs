@@ -1087,6 +1087,55 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             })
     }
 
+    /// Whether evaluating `parameters` can run no user code (see
+    /// `FunctionFact::parameters_inert`).
+    pub(super) fn parameters_inert(&self, parameters: &oxc_ast::ast::FormalParameters<'_>) -> bool {
+        parameters.items.iter().all(|parameter| {
+            parameter.decorators.is_empty()
+                && parameter
+                    .initializer
+                    .as_ref()
+                    .is_none_or(|value| self.inert_default(value))
+                && self.pattern_inert(&parameter.pattern)
+        })
+    }
+
+    fn pattern_inert(&self, pattern: &BindingPattern<'_>) -> bool {
+        match pattern {
+            BindingPattern::BindingIdentifier(_) => true,
+            BindingPattern::ObjectPattern(object) => object
+                .properties
+                .iter()
+                .all(|property| !property.computed && self.pattern_inert(&property.value)),
+            BindingPattern::ArrayPattern(array) => array.elements.iter().all(|element| {
+                element
+                    .as_ref()
+                    .is_none_or(|element| self.pattern_inert(element))
+            }),
+            BindingPattern::AssignmentPattern(assignment) => {
+                self.inert_default(&assignment.right) && self.pattern_inert(&assignment.left)
+            }
+        }
+    }
+
+    fn inert_default(&self, expression: &Expression<'_>) -> bool {
+        match peel_ts_sugar(expression) {
+            Expression::NullLiteral(_)
+            | Expression::StringLiteral(_)
+            | Expression::NumericLiteral(_)
+            | Expression::BooleanLiteral(_)
+            | Expression::BigIntLiteral(_)
+            | Expression::RegExpLiteral(_)
+            | Expression::ArrowFunctionExpression(_)
+            | Expression::FunctionExpression(_) => true,
+            Expression::TemplateLiteral(template) => template.expressions.is_empty(),
+            Expression::ObjectExpression(object) => object.properties.is_empty(),
+            Expression::ArrayExpression(array) => array.elements.is_empty(),
+            Expression::Identifier(identifier) => self.is_global_undefined(identifier),
+            _ => false,
+        }
+    }
+
     pub(super) fn runtime_value_kind(&self, expression: &Expression<'_>) -> RuntimeValueKind {
         match peel_ts_sugar(expression) {
             Expression::NullLiteral(_) => RuntimeValueKind::Nullish,

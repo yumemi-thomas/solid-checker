@@ -236,6 +236,13 @@ impl<'a> SemanticLookup<'a> {
         let Some(initializer) = binding_fact.initializer else {
             return false;
         };
+        // An allowlist (ADR 0339): only a `const` or `let` is initialized by
+        // its declarator running, and so by source position alone. A `var` is
+        // initialized only if its initializer executed (a loop, branch or
+        // caught throw may skip it) and reads `undefined` until then.
+        if !(binding_fact.immutable || binding_fact.runtime_let) {
+            return false;
+        }
         // A direct `eval` calls any function, or rebinds any binding, visible
         // where it is written, at any point: nothing is proved of this file.
         if crate::interproc::property_gets::direct_eval_in(declaring_file, Span::new(0, u32::MAX))
@@ -249,6 +256,22 @@ impl<'a> SemanticLookup<'a> {
             return caller == declaring
                 && initializer.contains(span)
                 && binding_fact.initializer_function;
+        }
+        // Default parameter initializers run before the body and may throw
+        // (a call of a function or a class not yet initialized): a mention
+        // that reaches the body is proved only if they cannot. A default that
+        // is no more than a literal cannot; any other is an early mention of
+        // everything it references, which is not proved, so it is withheld.
+        let own_mention = caller == declaring && initializer.contains(span);
+        if !own_mention
+            && binding_fact.initializer_function
+            && declaring_file
+                .ast
+                .functions_within(initializer)
+                .max_by_key(|function| function.span.end - function.span.start)
+                .is_none_or(|function| !function.parameters_inert)
+        {
+            return false;
         }
         if caller != declaring {
             // ES modules evaluate a module's static imports before its body
