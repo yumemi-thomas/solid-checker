@@ -1,0 +1,1 @@
+{"note": "SC1002 reach: a computation whose root may be disposed before it resumes reads in a disposed owner and the runtime stays silent; the finding is uncertifiable. A root whose dispose function nothing mentions keeps the violation (RootControl)"}

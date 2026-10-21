@@ -1,8 +1,10 @@
 import { createMemo, createSignal } from "solid-js";
 
-declare function load(): Promise<number>;
-declare const maybe: { use(value: number): void } | undefined;
+async function load(): Promise<number> {
+  return 1;
+}
 declare const flag: boolean;
+const maybe: { use(value: number): void } | undefined = flag ? { use(_value: number) {} } : undefined;
 
 export function Reads() {
   const [count] = createSignal(1);

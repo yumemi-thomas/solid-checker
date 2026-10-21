@@ -1,0 +1,1 @@
+{"note": "SC1002 reach (after-await-reach): promises; the same shapes are in fixtures/reactive-ir/read-after-await-reach. CatchCallback (a rejection handler) is covered by an uncertifiable finding by design"}

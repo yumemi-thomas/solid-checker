@@ -1,7 +1,9 @@
 import { createMemo, createSignal } from "solid-js";
 
 const [userId] = createSignal(0);
-declare function fetchPosts(): Promise<number[]>;
+async function fetchPosts(): Promise<number[]> {
+  return [1];
+}
 function byUser(posts: number[]) {
   return posts.filter((post) => post === userId());
 }

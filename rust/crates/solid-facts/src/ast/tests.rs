@@ -2854,7 +2854,7 @@ async function* body(items: AsyncIterable<number>, inner: () => AsyncGenerator<n
             .map(text)
             .collect::<Vec<_>>(),
         [
-            "for await (const item of items) {}",
+            "for await (const item of items",
             "yield* inner()",
             "resource = { async [Symbol.asyncDispose]() {} }"
         ]

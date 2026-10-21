@@ -151,7 +151,7 @@ export function Derived() {
 }
 
 // --- reads after await (SC1002) -----------------------------------------
-declare function step(): Promise<void>;
+async function step(): Promise<void> {}
 
 // A store path read after the dominating await registers no dependency: the
 // computation never re-runs when the store changes.
