@@ -220,7 +220,8 @@ mod tests {
             }
             let root = symbols[&(6, 12)].clone();
             let entities = EntitySymbols {
-                by_path: HashMap::from_iter([("test.ts".into(), symbols)]),
+                by_path: HashMap::from_iter([("test.ts".into(), symbols.clone())]),
+                exact_by_path: HashMap::from_iter([("test.ts".into(), symbols)]),
             };
             let file = FileFacts {
                 generation: Generation::new(1).unwrap(),

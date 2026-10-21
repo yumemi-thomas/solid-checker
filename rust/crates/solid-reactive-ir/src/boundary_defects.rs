@@ -65,7 +65,7 @@ fn push_unavailable_import(
                     .computed_members
                     .binary_search(&member.span)
                     .is_err()
-                    && entities.get(&location(file.path.shared(), member.object))
+                    && entities.exact(&location(file.path.shared(), member.object))
                         == Some(namespace_symbol)
             }) {
                 let export = file.source_text(member.property).unwrap_or_default();

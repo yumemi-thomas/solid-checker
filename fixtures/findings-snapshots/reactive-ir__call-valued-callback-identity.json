@@ -1,0 +1,15 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/call-valued-callback-identity/App.tsx",
+      "start": 781,
+      "end": 793,
+      "fixes": 0
+    }
+  ]
+}

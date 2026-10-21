@@ -156,7 +156,7 @@ pub(crate) fn owner_callback_index(
         return None;
     }
     entities
-        .get(&location(file.path.shared(), argument))
+        .exact(&location(file.path.shared(), argument))
         .and_then(|symbol| by_symbol.get(symbol))
         .copied()
 }

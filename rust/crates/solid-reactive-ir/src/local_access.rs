@@ -1365,14 +1365,12 @@ impl LocalAccessContext<'_, '_> {
         {
             return;
         }
-        let object = location(
-            file.path.shared(),
-            if receiver_is_identifier {
-                receiver
-            } else {
-                member.object
-            },
-        );
+        let object_span = if receiver_is_identifier {
+            receiver
+        } else {
+            member.object
+        };
+        let object = location(file.path.shared(), object_span);
         // ADR 0323: an inline view (`omit(props, "y").x`) is the same
         // expression as a bound one; its root is the source, and a read
         // through a view is never an exact root read.

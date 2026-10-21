@@ -1651,7 +1651,7 @@ fn cleanup_return_status(
             domain_cleanup_return_status(returned_call_domain(lookup, file, callee))
         }
         solid_facts::ast::ReturnValueKind::Identifier => {
-            let Some(symbol) = entities.get(&location(file.path.shared(), returned.span)) else {
+            let Some(symbol) = entities.exact(&location(file.path.shared(), returned.span)) else {
                 return CleanupReturnStatus::Unresolved;
             };
             if identifier_return_is_exact_function(lookup, file, symbol) {
@@ -1731,7 +1731,7 @@ pub(super) fn function_cleanup_return_proof(
                 solid_facts::ast::ReturnValueKind::Function => CleanupReturnProof::Function,
                 solid_facts::ast::ReturnValueKind::Identifier => lookup
                     .entities()
-                    .get(&location(file.path.shared(), returned.span))
+                    .exact(&location(file.path.shared(), returned.span))
                     .filter(|symbol| identifier_return_is_exact_function(lookup, file, symbol))
                     .map_or(CleanupReturnProof::OptionalFunction, |_| {
                         CleanupReturnProof::Function

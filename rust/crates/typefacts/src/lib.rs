@@ -893,14 +893,54 @@ pub struct TypeDescriptor {
     pub alias_declarations: Arc<[Declaration]>,
 }
 
+/// What the producer says about an entity's symbol. The four states are
+/// exclusive, so one byte carries them: an unresolved claim has no symbol, and
+/// a span-covering claim needs one. Two bools would cost a row budget byte
+/// (`retained_entity_rows_keep_optional_evidence_bounded`).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SymbolClaim {
+    /// No symbol, and nothing said about one.
+    #[default]
+    Absent,
+    /// A demanded value the checker could not resolve to a symbol.
+    Unresolved,
+    /// A symbol naming a token inside the demanded span, such as the callee of
+    /// `f(x)` or the object of `o.p`. It does not describe the value.
+    Partial,
+    /// A symbol naming the whole demanded span.
+    Covering,
+}
+
+impl SymbolClaim {
+    #[must_use]
+    pub const fn is_absent(&self) -> bool {
+        matches!(self, Self::Absent)
+    }
+}
+
+impl EntityFact {
+    /// The producer could not resolve the value at this span to a symbol.
+    #[must_use]
+    pub fn symbol_unresolved(&self) -> bool {
+        self.symbol_claim == SymbolClaim::Unresolved
+    }
+
+    /// The symbol names the whole demanded span, not a token inside it.
+    #[must_use]
+    pub fn symbol_covers_span(&self) -> bool {
+        self.symbol_claim == SymbolClaim::Covering
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EntityFact {
     pub location: Location,
     #[serde(default, skip_serializing_if = "str::is_empty")]
     pub symbol: Arc<str>,
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub symbol_unresolved: bool,
+    #[serde(default, skip_serializing_if = "SymbolClaim::is_absent")]
+    pub symbol_claim: SymbolClaim,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub type_descriptor: Option<Arc<TypeDescriptor>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

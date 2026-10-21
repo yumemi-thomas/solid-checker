@@ -58,9 +58,14 @@ type SemanticDemandRunResult struct {
 // EntityFact is one legal location-keyed entity in the finite fact universe.
 // Location ranges are ordered from outermost to innermost during encoding.
 type EntityFact struct {
-	Location                   Location                    `cbor:"location" json:"location"`
-	Symbol                     SymbolID                    `cbor:"symbol,omitempty" json:"symbol,omitempty"`
-	SymbolUnresolved           bool                        `cbor:"symbolUnresolved,omitempty" json:"symbolUnresolved,omitempty"`
+	Location         Location `cbor:"location" json:"location"`
+	Symbol           SymbolID `cbor:"symbol,omitempty" json:"symbol,omitempty"`
+	SymbolUnresolved bool     `cbor:"symbolUnresolved,omitempty" json:"symbolUnresolved,omitempty"`
+	// SymbolCoversSpan says the symbol belongs to the whole demanded span: the
+	// located node is that expression, not a token within it. Without it the
+	// symbol is the leading token's (the callee of `f(x)`, the object of
+	// `o.p`) and does not describe the value at the span.
+	SymbolCoversSpan           bool                        `cbor:"symbolCoversSpan,omitempty" json:"symbolCoversSpan,omitempty"`
 	TypeDescriptor             *TypeDescriptor             `cbor:"typeDescriptor,omitempty" json:"typeDescriptor,omitempty"`
 	ResolvedCall               *Call                       `cbor:"resolvedCall,omitempty" json:"resolvedCall,omitempty"`
 	Callability                Callability                 `cbor:"callability,omitempty" json:"callability,omitempty"`

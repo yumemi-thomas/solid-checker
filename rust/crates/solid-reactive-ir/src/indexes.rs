@@ -385,11 +385,26 @@ pub(super) enum ComponentStatus {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct EntitySymbols {
     pub(super) by_path: HashMap<String, HashMap<(u64, u64), SymbolId>>,
+    /// The entries of `by_path` whose symbol names the whole span
+    /// (`EntityFact::symbol_covers_span`).
+    pub(super) exact_by_path: HashMap<String, HashMap<(u64, u64), SymbolId>>,
 }
 
 impl EntitySymbols {
+    /// The symbol of the entity at `location`, whatever its span. At a call
+    /// span this is the callee's; at a member span, the object's. Use it for a
+    /// callee or a declaration position only.
     pub(super) fn get(&self, location: &Location) -> Option<&SymbolId> {
         self.by_path
+            .get(location.path.as_ref())
+            .and_then(|entities| entities.get(&(location.start_byte, location.end_byte)))
+    }
+
+    /// The symbol that is the value at exactly `location`: an entity whose
+    /// symbol names the whole span. A callback's or a value's identity is read
+    /// here, so a call or member span never answers with a token inside it.
+    pub(super) fn exact(&self, location: &Location) -> Option<&SymbolId> {
+        self.exact_by_path
             .get(location.path.as_ref())
             .and_then(|entities| entities.get(&(location.start_byte, location.end_byte)))
     }
@@ -1502,7 +1517,7 @@ impl<'a> SemanticLookup<'a> {
         span: Span,
     ) -> Option<solid_facts::TypeScriptSymbol<'a>> {
         let entity = self.entity_at(path, span)?;
-        if entity.symbol_unresolved || entity.symbol.is_empty() {
+        if entity.symbol_unresolved() || entity.symbol.is_empty() {
             return None;
         }
         self.symbols_by_id().get(entity.symbol.as_ref()).copied()

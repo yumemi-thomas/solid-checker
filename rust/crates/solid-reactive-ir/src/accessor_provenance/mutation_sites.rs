@@ -1064,7 +1064,7 @@ pub(super) fn mutation_builtin<'a>(
         return None;
     }
     let entity = lookup.entity_at(file.path.as_str(), receiver)?;
-    if entity.symbol_unresolved || entity.symbol.is_empty() {
+    if entity.symbol_unresolved() || entity.symbol.is_empty() {
         return None;
     }
     let symbol = lookup.symbol_at(file.path.as_str(), receiver)?;

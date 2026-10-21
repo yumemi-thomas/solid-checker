@@ -121,6 +121,7 @@ func entityFactEqual(left, right EntityFact) bool {
 	return left.Location == right.Location &&
 		left.Symbol == right.Symbol &&
 		left.SymbolUnresolved == right.SymbolUnresolved &&
+		left.SymbolCoversSpan == right.SymbolCoversSpan &&
 		left.Callability == right.Callability &&
 		left.Constructability == right.Constructability &&
 		left.ReferenceSpace == right.ReferenceSpace &&

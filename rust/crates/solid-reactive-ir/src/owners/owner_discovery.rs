@@ -54,7 +54,7 @@ pub(crate) fn discover_owner_file(
                     return None;
                 }
                 entities
-                    .get(&location(file.path.shared(), argument))
+                    .exact(&location(file.path.shared(), argument))
                     .cloned()
                     .map(OwnerTarget::Symbol)
             })

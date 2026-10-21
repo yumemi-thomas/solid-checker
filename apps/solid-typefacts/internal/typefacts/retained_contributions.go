@@ -144,6 +144,7 @@ func prepareRetainedContribution(
 		if entity.Symbol != "" {
 			target.Symbol = entity.Symbol
 			target.SymbolUnresolved = false
+			target.SymbolCoversSpan = entity.SymbolCoversSpan
 			if demand.References {
 				contribution.fullTier = append(contribution.fullTier, uint32(len(contribution.entities)-1))
 			}

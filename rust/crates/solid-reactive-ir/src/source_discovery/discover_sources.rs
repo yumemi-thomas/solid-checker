@@ -412,7 +412,7 @@ fn discover_typed_sources(
         {
             continue;
         }
-        let Some(symbol) = entities.get(&entity.location) else {
+        let Some(symbol) = entities.exact(&entity.location) else {
             continue;
         };
         let Some((role, type_declaration)) =
