@@ -1,0 +1,3 @@
+{
+  "note": "SC2002 action-called-in-owned-scope: a memo re-run, triggered by a timer, calls an action (ACTION_CALLED_IN_OWNED_SCOPE, emitted and thrown); control: the same action from an event handler, which has no owner"
+}

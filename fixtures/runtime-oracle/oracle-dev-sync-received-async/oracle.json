@@ -1,0 +1,3 @@
+{
+  "note": "SC7002 sync-computation-received-async: a sync: true memo whose compute is async, created from a timer (SYNC_NODE_RECEIVED_ASYNC, emitted and thrown); control: a synchronous sync: true memo"
+}

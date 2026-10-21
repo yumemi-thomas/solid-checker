@@ -1,0 +1,3 @@
+{
+  "note": "SC2006 flush-in-action: an action started from a timer calls flush() at the head of its step (FLUSH_IN_ACTION, thrown into the action's promise, which the page reports as unhandled); control: flush() from an event handler, outside any action"
+}

@@ -1,0 +1,62 @@
+{
+  "note": "SC8003 behaviour, per two-source element: the loser's write is lost and the winner's reflected. textContent beside children loses the textContent (children win); innerHTML beside children loses the children (innerHTML wins); innerHTML beside textContent loses the textContent; a children prop beside textContent loses the prop (textContent wins); a children prop beside innerHTML loses the prop (innerHTML wins). StaticText is not observed: no write reaches its static textContent, so it stays static-only. The one-source controls reflect every write",
+  "behaviour": [
+    {
+      "rule": "jsx-no-duplicate-props",
+      "site": "App.tsx:16",
+      "observe": { "reflected": "[data-probe=violation-content]" },
+      "writes": [
+        { "click": "[data-probe=violation-write]", "expect": "lost", "value": "l-1", "probe": "[data-probe=violation-label-probe]" },
+        { "click": "[data-probe=violation-body]", "expect": "reflected", "value": "b-1", "probe": "[data-probe=violation-body-probe]" }
+      ]
+    },
+    {
+      "rule": "jsx-no-duplicate-props",
+      "site": "App.tsx:31",
+      "observe": { "reflected": "[data-probe=html-content]" },
+      "writes": [
+        { "click": "[data-probe=html-write-markup]", "expect": "reflected", "value": "h-1", "probe": "[data-probe=html-markup-probe]" },
+        { "click": "[data-probe=html-write-body]", "expect": "lost", "value": "b-1", "probe": "[data-probe=html-body-probe]" }
+      ]
+    },
+    {
+      "rule": "jsx-no-duplicate-props",
+      "site": "App.tsx:45",
+      "observe": { "reflected": "[data-probe=children-text-content]" },
+      "writes": [
+        { "click": "[data-probe=children-text-write]", "expect": "reflected", "value": "t-1", "probe": "[data-probe=children-text-probe]" },
+        { "click": "[data-probe=children-prop-write]", "expect": "lost", "value": "c-1", "probe": "[data-probe=children-prop-probe]" }
+      ]
+    },
+    {
+      "rule": "jsx-no-duplicate-props",
+      "site": "App.tsx:59",
+      "observe": { "reflected": "[data-probe=html-text-content]" },
+      "writes": [
+        { "click": "[data-probe=html-text-write]", "expect": "lost", "value": "t-1", "probe": "[data-probe=html-text-text-probe]" },
+        { "click": "[data-probe=html-text-markup-write]", "expect": "reflected", "value": "m-1", "probe": "[data-probe=html-text-markup-probe]" }
+      ]
+    },
+    {
+      "rule": "jsx-no-duplicate-props",
+      "site": "App.tsx:73",
+      "observe": { "reflected": "[data-probe=children-html-content]" },
+      "writes": [
+        { "click": "[data-probe=children-html-markup-write]", "expect": "reflected", "value": "m-1", "probe": "[data-probe=children-html-markup-probe]" },
+        { "click": "[data-probe=children-html-children-write]", "expect": "lost", "value": "c-1", "probe": "[data-probe=children-html-children-probe]" }
+      ]
+    },
+    {
+      "rule": "jsx-no-duplicate-props",
+      "site": "App.tsx:95",
+      "observe": { "reflected": "[data-probe=text-control-content]" },
+      "writes": [{ "click": "[data-probe=text-control-write]", "expect": "reflected", "value": "l-1", "probe": "[data-probe=text-control-probe]" }]
+    },
+    {
+      "rule": "jsx-no-duplicate-props",
+      "site": "App.tsx:106",
+      "observe": { "reflected": "[data-probe=control-content]" },
+      "writes": [{ "click": "[data-probe=control-write]", "expect": "reflected", "value": "b-1", "probe": "[data-probe=control-probe]" }]
+    }
+  ]
+}

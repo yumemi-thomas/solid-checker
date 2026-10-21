@@ -1,0 +1,3 @@
+{
+  "note": "SC2007 static-dynamic-async-source: dynamic() with an async source and static: true, called from a timer (DYNAMIC_STATIC_PROMISE, thrown); control: a synchronous source with the same option"
+}

@@ -1,0 +1,3 @@
+{
+  "note": "SC2005 until-in-tracked-scope: a memo re-run, triggered by a timer, calls until (UNTIL_IN_REACTIVE_SCOPE, thrown); control: until awaited from an event handler, where no observer is active"
+}
