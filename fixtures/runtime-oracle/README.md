@@ -4,9 +4,9 @@ Cases for `scripts/runtime-oracle.mjs`: each runs in Chrome on the Solid 2 dev b
 
 A case is a directory with an `App.tsx` and no `tsconfig.json`; every exported component is rendered and events are dispatched on every element. Optional `oracle.json`: `note`, `steps`, `install` (corpus app with the same Solid version), `open` (known unproven clean sites `{ code, site, reason }`, or `{ rule, site, reason }` for an observation; a site that stops firing is `stale-open`), and `behaviour` (below).
 
-Verdicts: `covered-violation` and `covered-uncertifiable` (a finding on the diagnostic's line or an application frame), `unproven-clean` (exit 1), `known-open`, `no-rule`; `static-only` (a checker violation with no dev diagnostic and no observation: inspect it before calling it a false positive); `behaviour-confirmed`, `behaviour-refuted`, `behaviour-clean`; collector failures are `harness-error`.
+Verdicts: `covered-violation` and `covered-uncertifiable` (a finding on the diagnostic's line or an application frame), `unproven-clean` (exit 1), `known-open`, `no-rule`; `static-only` (a checker violation with no dev diagnostic and no observation: inspect it before calling it a false positive); `behaviour-confirmed`, `behaviour-refuted`, `behaviour-clean`, `behaviour-unexpected`; collector failures are `harness-error`.
 
-The `c*`, `r*` and `oracle-*` cases are reviewer counterexamples and probes (adaptations in each `note`); archive cases needing package metadata, CommonJS or declaration-only values are not represented.
+The `c*`, `r*` and `oracle-*` cases are reviewer counterexamples and probes (adaptations in each `note`).
 
 ## Behavioural observations (`behaviour`)
 
@@ -21,19 +21,21 @@ A static violation with no dev code may be real or false, so a case can observe 
 ```
 
 - `rule` and `site` (`App.tsx:<line>`) name the checker rule and the line it covers; a finding of that rule whose lines include `site` is the claim under test.
-- `act` is optional: scripted clicks, each followed by a flush. The probe runs before the event exercise, so acts start from the initial render. Observations share one page and run in list order, each from the state the earlier ones left.
-- `observe` names exactly one kind: `{ "text": selector }` (`textContent` after the acts, `null` when nothing matches); `{ "window": "a.b" }` (the value at that path of `window`); `{ "identity": selector }` (`same`, `replaced` or `missing`); `{ "thrown": true }` (`threw` or `none`, the message kept as `detail`); `{ "reflected": selector }` (below).
+- `act` is optional: scripted clicks, each followed by a flush, before the event exercise. Observations share one page and run in list order.
+- `observe` names exactly one kind: `{ "text": selector }`, `{ "window": "a.b" }`, `{ "identity": selector }` (`same`, `replaced` or `missing`), `{ "thrown": true }` (`threw` or `none`), or `{ "reflected": selector }` (below).
 - `defect` and `correct` are the value that shows the defect and the value that shows correct behaviour: a JSON literal, or `{ "pattern": regex }` for `text` or `window`.
-- Refused at load, as a `harness-error` with the reason (other cases still run): `behaviour` not a non-empty list; a `rule` that is neither a `codeRules` value nor a file in `docs/rules/`; an empty or uncompilable pattern; `defect` equal to `correct`; a literal side the other side's pattern accepts. Two patterns need `defectExample` and `correctExample`: page texts matching their own side and not the other. Examples are checked, not proved.
+- Refused at load, as a `harness-error` with the reason (other cases still run): `behaviour` not a non-empty list; a `rule` that is neither a `codeRules` value nor a file in `docs/rules/`; an empty or uncompilable pattern; `defect` equal to `correct`; a literal side the other side's pattern accepts. Two patterns need `defectExample` and `correctExample`: page texts matching their own side and not the other.
 
 ### Write-reflected observations
 
-`{ "reflected": selector }` reads one element's `textContent` before and after each write. Its `writes` replace `act`: `{ "click": selector, "expect": "lost" | "reflected" }`, each click followed by a flush. Changed text is `reflected`, unchanged text `lost`. The defect is `lost` and the correct behaviour is `reflected`, so the spec names neither.
+`{ "reflected": selector }` reads one element's settled `textContent` around each write. Its `writes` replace `act`: `{ "click", "expect": "lost" | "reflected", "value", "probe" }`, each click followed by a flush.
 
-- The page shows the defect when any write is `lost`, the correct behaviour when every write is `reflected`; the table below applies. `expect` is the case's prediction: it is reported per write as `match`, and the verdict follows the page, as a text observation's does.
-- A write must change its source, or `lost` may be a repeated value. Buttons a reflected observation uses set a fresh value on each click (a counter), and no other observation uses them. An update that lands after the flush reads as `lost`, so the kind is for synchronous writes.
-- A click that throws, a missing element, or a step still running after 2 s is `harness-error`. `flush()` is synchronous in rc.13, so the 2 s bound binds only an asynchronous flush; a page that never returns from a step ends the feedback run, also `harness-error`.
-- Refused at load: no `writes` or an empty list; a write not exactly `{ click, expect }`, or whose `expect` is not `lost` or `reflected`; a click listed twice; `act`, `defect` or `correct` beside it; `writes` on another kind.
+- `value` is the text the write sets. `reflected`: the text changed, now contains `value`, and did not before. `lost`: the text is unchanged. Anything else is `behaviour-unexpected`. Text is whitespace-normalised before each comparison.
+- `probe` is a separate node bound to the write's source; if it does not change, the write was a no-op (`behaviour-unexpected`). A refused direct store write shows in no binding, so there the handler fills the probe with the value it assigned.
+- Each side of a write settles first: text and probe must hold across two `setTimeout(0)` ticks (500 ms at most), else `behaviour-unexpected`. Writes must be synchronous: a later effect reads as `lost`.
+- `expect` gates the verdict: a write whose outcome differs is `behaviour-unexpected` (`harness-error`), printed with the mismatch. The page shows the defect when any write is `lost`, the correct behaviour when every write is `reflected`.
+- A click that throws, a missing element, or a step still running after 2 s is `harness-error`; a page that never returns from a step ends the feedback run, also `harness-error`.
+- Refused at load: no `writes` or an empty list; a write not exactly `{ click, expect, value, probe }`, a blank `value`, or a `probe` equal to the observed selector; a click listed twice; `act`, `defect` or `correct` beside it; `writes` on another kind.
 
 Each observation gets a row by what the page shows and whether a finding of its rule covers its site:
 
@@ -50,13 +52,15 @@ A static violation no dev diagnostic covers is classified by the observations of
 | case | rule | observation | verdict |
 | --- | --- | --- | --- |
 | `oracle-behaviour-uncalled-accessor` | SC1005 | text: the violation keeps the accessor's source; reflected: its write is `lost`, the called control's is `reflected` | `behaviour-confirmed` |
-| `oracle-behaviour-no-direct-mutation` | SC2003 | text and reflected: the direct write is dropped (`Ada`), the setter write shows (`Grace`) | `behaviour-confirmed` |
+| `oracle-behaviour-no-direct-mutation` | SC2003 | text and reflected: the direct write is refused (`Ada`), the setter write shows (`Grace`) | `behaviour-confirmed` |
 | `oracle-behaviour-primitive-in-directive` | SC6001 | window: the apply-phase effect runs again after its element is hidden (2, not 1); the control's does not | `behaviour-refuted` (below) |
-| `oracle-behaviour-jsx-no-duplicate-props` | SC8003 | reflected: a `textContent` write beside children is `lost`; the innerHTML markup write is `reflected`, its children write `lost`; the one-source controls `reflect` | `behaviour-confirmed`; both controls `behaviour-clean` |
+| `oracle-behaviour-jsx-no-duplicate-props` | SC8003 | reflected: five two-source elements each show one `lost` and one `reflected` write; two one-source controls reflect | `static-only` overall: five sites `behaviour-confirmed`; the static site is unobserved (below) |
 | `oracle-behaviour-components-return-once` | SC1004 | text: the early return stays on screen after the write (`logged out`) | `covered-violation`; behaviour rows confirmed and clean |
 | `oracle-frame-covered-sc1004` | SC1004 | none: the frame pin (below) | `covered-violation`, empty `staticOnly` |
 
-The `oracle-behaviour-primitive-in-directive` control's `missing-owner` finding (`App.tsx:18`) is refuted: the runtime disposes the effect when its `Show` branch hides, as the rule page's correct example does. It is a false-positive candidate, recorded in `docs/open-work.md`, not fixed here. `NO_OWNER_EFFECT` is claimed by `primitive-in-directive-application` as well as `missing-owner`, since that rule's page names the warning for an apply-phase `createEffect`.
+The `StaticText` site (static `textContent` beside children) has no write to show its loss: its children win (checked in Chrome on rc.13), and a reflected observation there would read as a false candidate, so it stays static-only.
+
+The `oracle-behaviour-primitive-in-directive` control's `missing-owner` finding (`App.tsx:18`) is refuted: the runtime disposes the effect when its `Show` branch hides, as the rule page's correct example does. It is a false-positive candidate, recorded in `docs/open-work.md`, not fixed here. `NO_OWNER_EFFECT` is also claimed by `primitive-in-directive-application`, whose page names that warning.
 
 ## Frame attribution
 

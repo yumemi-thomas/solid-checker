@@ -1,9 +1,9 @@
 {
-  "note": "SC2003 behaviour: the violation's direct store write is dropped and the DOM keeps the old name; the control's setter write shows. The reflect rows write fresh values, so a lost write is the dropped write, not a repeated value",
+  "note": "SC2003 behaviour: the violation's direct store write is refused and the DOM keeps the old name; the control's setter write shows. The reflect rows write declared values; the violation's probe is the value its handler assigned, since the store cannot show a refused write",
   "behaviour": [
     {
       "rule": "no-direct-mutation",
-      "site": "App.tsx:13",
+      "site": "App.tsx:14",
       "act": [{ "click": "[data-probe=violation-write]" }],
       "observe": { "text": "[data-probe=violation-name]" },
       "defect": "Ada",
@@ -11,7 +11,7 @@
     },
     {
       "rule": "no-direct-mutation",
-      "site": "App.tsx:24",
+      "site": "App.tsx:25",
       "act": [{ "click": "[data-probe=control-write]" }],
       "observe": { "text": "[data-probe=control-name]" },
       "defect": "Ada",
@@ -19,15 +19,15 @@
     },
     {
       "rule": "no-direct-mutation",
-      "site": "App.tsx:14",
+      "site": "App.tsx:15",
       "observe": { "reflected": "[data-probe=violation-name]" },
-      "writes": [{ "click": "[data-probe=violation-reflect]", "expect": "lost" }]
+      "writes": [{ "click": "[data-probe=violation-reflect]", "expect": "lost", "value": "Grace1", "probe": "[data-probe=violation-probe]" }]
     },
     {
       "rule": "no-direct-mutation",
-      "site": "App.tsx:25",
+      "site": "App.tsx:26",
       "observe": { "reflected": "[data-probe=control-name]" },
-      "writes": [{ "click": "[data-probe=control-reflect]", "expect": "reflected" }]
+      "writes": [{ "click": "[data-probe=control-reflect]", "expect": "reflected", "value": "Grace2", "probe": "[data-probe=control-probe]" }]
     }
   ]
 }

@@ -28,10 +28,11 @@
 // shows the defect and the value that shows correct behaviour. Its verdict:
 // behaviour-confirmed, behaviour-refuted (a false-positive candidate), or
 // unproven-clean when the page shows the defect and no finding covers the site.
-// A `reflected` observation instead scripts writes and reads the element's text
-// before and after each one: lost (unchanged) or reflected (changed). A malformed
-// `behaviour` spec refuses its case: that case is a harness-error with the reason,
-// and the other cases still run.
+// A `reflected` observation instead scripts writes to one element. Each write names
+// the text it sets (`value`) and a `probe` node bound to the same source; the page
+// settles before and after it, and classifies it lost, reflected or unexpected. A
+// malformed `behaviour` spec refuses its case: that case is a harness-error with the
+// reason, and the other cases still run.
 // Files named *.d.ts and node_modules directories are not copied: the case
 // runs against the real packages of `--install`, never against a stub.
 //
@@ -220,11 +221,16 @@ const isPattern = (expected) => typeof expected === "object" && expected !== nul
   && typeof expected.pattern === "string";
 const matches = (value, expected) => isPattern(expected) ? typeof value === "string" && new RegExp(expected.pattern).test(value)
   : JSON.stringify(value) === JSON.stringify(expected);
+// Why a reflected observation's writes are unexpected: a no-op write, text that changed without the write's value
+// (or already held it), or an outcome other than the write's expect. Empty when every write is as predicted.
+const writeReasons = (writes) => (Array.isArray(writes) ? writes : []).flatMap((write) => write.noop
+  ? [`no-op write ${write.click}: probe ${write.probe} did not change`]
+  : write.observed === "unexpected" ? [`write ${write.click}: ${write.reason}`]
+  : write.match ? [] : [`write ${write.click}: expected ${write.expect}, observed ${write.observed}`]);
 // A reflected observation's page: the defect when any write leaves its text unchanged (lost), the correct
-// behaviour when every write changes it (reflected). No writes, or any other result, is unexpected.
-const reflectedOutcome = (writes) => !Array.isArray(writes) || writes.length === 0 ? "unexpected"
-  : writes.some((write) => write.observed === "lost") ? "defect"
-  : writes.every((write) => write.observed === "reflected") ? "correct" : "unexpected";
+// behaviour when every write changes it (reflected). No writes, a reason, or any other result is unexpected.
+const reflectedOutcome = (writes) => !Array.isArray(writes) || writes.length === 0 || writeReasons(writes).length
+  ? "unexpected" : writes.some((write) => write.observed === "lost") ? "defect" : "correct";
 
 // The rule ids a behaviour may name: each code's rules, and each rule page (a rule with neither is not one the checker reports).
 const knownRules = new Set([
@@ -262,10 +268,14 @@ function behaviourSpec(id, spec, source, files) {
       const writes = entry.writes.map((write, position) => {
         const at = `${where} writes[${position}]`;
         assert(write !== null && typeof write === "object" && !Array.isArray(write), `${at} is an object`);
-        assert(Object.keys(write).sort().join() === "click,expect", `${at} is { "click": selector, "expect": "lost" or "reflected" }`);
+        assert(Object.keys(write).sort().join() === "click,expect,probe,value",
+          `${at} is { "click": selector, "expect": "lost" or "reflected", "value": text, "probe": selector }`);
         assert(typeof write.click === "string" && write.click.trim(), `${at} click is a selector`);
         assert(writeExpectations.includes(write.expect), `${at} expect is ${writeExpectations.join(" or ")}`);
-        return { click: write.click, expect: write.expect };
+        assert(typeof write.value === "string" && write.value.trim(), `${at} value is the non-empty text the write sets`);
+        assert(typeof write.probe === "string" && write.probe.trim(), `${at} probe is a selector`);
+        assert(write.probe.trim() !== entry.observe.reflected.trim(), `${at} probe is the observed selector; a probe is a separate node`);
+        return { click: write.click, expect: write.expect, value: write.value, probe: write.probe };
       });
       // A click listed twice is one write with two expectations, or one claim twice.
       const clicks = writes.map((write) => write.click);
@@ -314,12 +324,18 @@ function behaviourProbe(observations) {
   return `// Behavioural observations: each runs its scripted clicks (a flush after each), then
 // reads the page. The results go to a <pre> that the feedback run reads back.
 const observations: any[] = ${payload};
-// A write-reflected observation: the observed element's text is read before and after each write
-// (the write's click, then a flush). A write that changes the text reports reflected; one that
-// leaves it unchanged reports lost. A missing element, a step that throws, or a step still running
-// after writeLimitMs fails the observation. flush() is synchronous in rc.13, so the limit binds only
-// an asynchronous flush; a page that never returns from a step ends the feedback run (harness-error).
+// A write-reflected observation. Each write is bracketed by settle(): the observed text and the write's
+// probe are read once the page has drained its microtasks and timers, and must hold across two timer ticks
+// (settleLimitMs at most), so a deferred update is part of the write it follows. The click then runs
+// (click, then a flush) under writeLimitMs. A missing element, a step that throws, or a step still running
+// after the limit fails the observation. flush() is synchronous in rc.13, so the limit binds only an
+// asynchronous flush; a page that never returns from a step ends the feedback run (harness-error).
+// The probe is bound to the write's source: when it does not change, the write was a no-op. The write is
+// lost when the observed text is unchanged, reflected when the text changed to contain the write's value
+// (and did not contain it before), and unexpected otherwise.
 const writeLimitMs = 2000;
+const settleLimitMs = 500;
+const normal = (text: string): string => text.trim().replace(/\\s+/g, " ");
 function bounded<T>(step: () => T): Promise<T> {
   return new Promise<T>((done, fail) => {
     const timer = setTimeout(() => fail(new Error("timeout after " + writeLimitMs + " ms")), writeLimitMs);
@@ -331,12 +347,30 @@ function bounded<T>(step: () => T): Promise<T> {
 function textAt(selector: string): string {
   const element = document.querySelector(selector);
   if (element === null) throw new Error("no element matches " + selector);
-  return element.textContent ?? "";
+  return normal(element.textContent ?? "");
+}
+const timerTick = () => new Promise<void>((done) => setTimeout(done, 0));
+// The selectors' texts, read once they hold across two consecutive timer ticks. Microtasks queued before a
+// tick run before it, so an update that lands in that window is part of the text this returns.
+async function settle(selectors: string[]): Promise<string[]> {
+  const deadline = Date.now() + settleLimitMs;
+  let previous = selectors.map((selector) => textAt(selector));
+  for (;;) {
+    await timerTick();
+    const middle = selectors.map((selector) => textAt(selector));
+    await timerTick();
+    const current = selectors.map((selector) => textAt(selector));
+    if (JSON.stringify(previous) === JSON.stringify(middle) && JSON.stringify(middle) === JSON.stringify(current)) return current;
+    if (Date.now() >= deadline) throw new Error("text still changing after " + settleLimitMs + " ms: " + selectors.join(", "));
+    previous = current;
+  }
 }
 async function reflectWrites(selector: string, writes: any[]): Promise<unknown[]> {
   const rows: unknown[] = [];
   for (const write of writes) {
-    const before = textAt(selector);
+    const probeNode = document.querySelector(write.probe);
+    if (probeNode !== null && probeNode === document.querySelector(selector)) throw new Error("probe " + write.probe + " is the observed node");
+    const [before, probeBefore] = await settle([selector, write.probe]);
     const errors: string[] = [];
     const onError = (event: ErrorEvent) => { errors.push(String(event.message)); };
     addEventListener("error", onError);
@@ -348,9 +382,17 @@ async function reflectWrites(selector: string, writes: any[]): Promise<unknown[]
       removeEventListener("error", onError);
     }
     if (errors.length) throw new Error("write " + write.click + " threw: " + errors[0]);
-    const after = textAt(selector);
-    const observed = after === before ? "lost" : "reflected";
-    rows.push({ click: write.click, expect: write.expect, before, after, observed, match: observed === write.expect });
+    const [after, probeAfter] = await settle([selector, write.probe]);
+    const value = normal(write.value);
+    const reason = after === before ? null
+      : !after.includes(value) ? "text became " + JSON.stringify(after) + " without the value " + JSON.stringify(value)
+      : before.includes(value) ? "the value " + JSON.stringify(value) + " was already in the text before the write"
+      : null;
+    const observed = after === before ? "lost" : reason === null ? "reflected" : "unexpected";
+    rows.push({
+      click: write.click, expect: write.expect, value, probe: write.probe, before, after, probeBefore, probeAfter,
+      noop: probeAfter === probeBefore, observed, reason, match: observed === write.expect,
+    });
   }
   return rows;
 }
@@ -532,13 +574,15 @@ async function runCase(id) {
     const verdict = outcome === "unexpected" ? "behaviour-unexpected"
       : outcome === "defect" ? (violated ? "behaviour-confirmed" : covering.length ? "covered-uncertifiable" : openBehaviour.has(key) ? "known-open" : "unproven-clean")
       : violated ? "behaviour-refuted" : "behaviour-clean";
+    // A reflected observation's reasons (a no-op write, an unexplained change, an outcome other than expect) are its error.
+    const reasons = reflected && probe ? (Array.isArray(probe.writes) ? writeReasons(probe.writes) : ["no write results"]) : [];
     return {
       source: "behaviour", rule: observation.rule, site: observation.site, file: observation.file, line: observation.line,
       observation: observation.kind, outcome, verdict,
       observed: reflected ? probe?.writes?.map((write) => write.observed) ?? null : probe?.observed ?? null,
       ...(reflected ? { writes: probe?.writes ?? null } : {}),
       expected: { defect: observation.defect, correct: observation.correct },
-      detail: probe?.detail ?? null, error: probe ? (probe.error ?? null) : "no probe result",
+      detail: probe?.detail ?? null, error: probe ? (probe.error ?? (reasons.join("; ") || null)) : "no probe result",
       covering: covering.map((finding) => `${finding.file}:${finding.line} ${finding.id} ${finding.kind} ${finding.rule}`),
       ...(verdict === "known-open" ? { reason: openBehaviour.get(key) } : {}),
     };
