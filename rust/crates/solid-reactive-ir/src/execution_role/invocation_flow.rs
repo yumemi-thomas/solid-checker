@@ -102,9 +102,7 @@ pub(super) fn invocation_flow_role(
     let literal = containing_ast_function(&file.ast, span)?;
     // An async function runs in its invocation's role only up to its first
     // await; what may follow one is a continuation no invocation places.
-    if !literal.body.contains(span)
-        || (literal.r#async && follows_await_in_async_function(file, span))
-    {
+    if !literal.body.contains(span) || (literal.r#async && may_follow_suspension(file, span)) {
         return None;
     }
     // Every answer is computed once per build, context-free, and the set of

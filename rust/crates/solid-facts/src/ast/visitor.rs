@@ -93,6 +93,18 @@ fn lazy_export(call: &CallExpression<'_>) -> Option<CompactString> {
     Some(export.unwrap_or_else(|| CompactString::from("default")))
 }
 
+impl Collector<'_, '_> {
+    /// The parts of a `for…in` or `for…of` loop that repeat: its left-hand
+    /// target and its body. The iterable is evaluated once, before the first
+    /// iteration, so it is not among them (`loop_repeats`).
+    fn push_iterated_loop_repeats(&mut self, looped: Span, left: Span, right: Span) {
+        self.loop_repeats
+            .push((looped, Span::new(left.start, right.start)));
+        self.loop_repeats
+            .push((looped, Span::new(right.end, looped.end)));
+    }
+}
+
 impl<'a> Visit<'a> for Collector<'_, '_> {
     fn enter_scope(&mut self, _flags: ScopeFlags, scope_id: &std::cell::Cell<Option<ScopeId>>) {
         // SemanticBuilder populated every scope cell in this same AST before
@@ -344,6 +356,12 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_variable_declarator(&mut self, declaration: &VariableDeclarator<'a>) {
+        if let Some(init) = &declaration.init
+            && !matches!(declaration.id, BindingPattern::BindingIdentifier(_))
+        {
+            self.pattern_values
+                .push((span(declaration.id.span()), span(init.span())));
+        }
         // `const { a, b } = await import(x)`: the export names the pattern reads.
         if let BindingPattern::ObjectPattern(pattern) = &declaration.id
             && let Some(init) = &declaration.init
@@ -988,6 +1006,10 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         self.if_regions.push(IfRegionFact {
             test,
             consequent: span(statement.consequent.span()),
+            alternate: statement
+                .alternate
+                .as_ref()
+                .map(|alternate| span(alternate.span())),
         });
         self.visit_expression(&statement.test);
         self.conditional_control_stack.push(test);
@@ -1035,6 +1057,14 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             });
         }
         let plain = expression.operator == AssignmentOperator::Assign;
+        if matches!(
+            expression.left,
+            AssignmentTarget::ObjectAssignmentTarget(_)
+                | AssignmentTarget::ArrayAssignmentTarget(_)
+        ) {
+            self.pattern_values
+                .push((span(expression.left.span()), span(expression.right.span())));
+        }
         if plain && matches!(expression.left, AssignmentTarget::ArrayAssignmentTarget(_)) {
             self.iterated_operands.push(span(expression.right.span()));
         }
@@ -1276,14 +1306,28 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_for_statement(&mut self, statement: &oxc_ast::ast::ForStatement<'a>) {
-        self.loop_statements.push(span(statement.span));
+        let whole = span(statement.span);
+        self.loop_statements.push(whole);
+        // The initializer runs once; the test, the update and the body repeat.
+        let repeated_from = statement
+            .init
+            .as_ref()
+            .map_or(whole.start, |init| span(init.span()).end);
+        self.loop_repeats
+            .push((whole, Span::new(repeated_from, whole.end)));
         self.conditional_flow_depth += 1;
         walk::walk_for_statement(self, statement);
         self.conditional_flow_depth -= 1;
     }
 
     fn visit_for_in_statement(&mut self, statement: &oxc_ast::ast::ForInStatement<'a>) {
-        self.loop_statements.push(span(statement.span));
+        let whole = span(statement.span);
+        self.loop_statements.push(whole);
+        self.push_iterated_loop_repeats(
+            whole,
+            span(statement.left.span()),
+            span(statement.right.span()),
+        );
         self.conditional_flow_depth += 1;
         walk::walk_for_in_statement(self, statement);
         self.conditional_flow_depth -= 1;
@@ -1292,6 +1336,11 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     fn visit_for_of_statement(&mut self, statement: &oxc_ast::ast::ForOfStatement<'a>) {
         self.iterated_operands.push(span(statement.right.span()));
         self.loop_statements.push(span(statement.span));
+        self.push_iterated_loop_repeats(
+            span(statement.span),
+            span(statement.left.span()),
+            span(statement.right.span()),
+        );
         if statement.r#await {
             // The suspension is the loop's first `next()`: it comes after the
             // iterable is evaluated and before the body, so the span ends with
@@ -1308,6 +1357,8 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
 
     fn visit_while_statement(&mut self, statement: &oxc_ast::ast::WhileStatement<'a>) {
         self.loop_statements.push(span(statement.span));
+        self.loop_repeats
+            .push((span(statement.span), span(statement.span)));
         self.conditional_flow_depth += 1;
         walk::walk_while_statement(self, statement);
         self.conditional_flow_depth -= 1;
@@ -1315,6 +1366,8 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
 
     fn visit_do_while_statement(&mut self, statement: &oxc_ast::ast::DoWhileStatement<'a>) {
         self.loop_statements.push(span(statement.span));
+        self.loop_repeats
+            .push((span(statement.span), span(statement.span)));
         self.conditional_flow_depth += 1;
         walk::walk_do_while_statement(self, statement);
         self.conditional_flow_depth -= 1;

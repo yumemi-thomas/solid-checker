@@ -126,6 +126,64 @@ fn try_head_awaits_record_their_handlers() {
     assert_eq!(literals, ["1", "'a'", "null", "true", "2n"], "{literals:?}");
 }
 
+/// ADR 0354 (facts schema 73): an `if` records its `else` arm, a loop its
+/// repeated part and a destructuring pattern the value it is evaluated after.
+/// A `for` initializer and a `for…of` iterable run once, before the first
+/// iteration, so neither is repeated; the target of a `for…of` is.
+#[test]
+fn else_arms_loop_repeats_and_pattern_values_are_recorded() {
+    let source = concat!(
+        "declare const c: boolean; declare const xs: number[];\n",
+        "declare const q: Promise<{ a?: number }>;\n",
+        "declare function s(): number;\n",
+        "async function f() {\n",
+        "  if (c) { await s(); } else { s(); }\n",
+        "  for (let i = s(); i < s(); i += s()) { s(); }\n",
+        "  for (const x of xs) { s(); }\n",
+        "  while (c) { s(); }\n",
+        "  const { a = s() } = await q;\n",
+        "  ({ a = s() } = await q);\n",
+        "}\n",
+    );
+    let facts = super::extract("regions.ts", source).unwrap();
+    let text = |span: crate::core::Span| &source[span.start as usize..span.end as usize];
+    let else_arms = facts
+        .if_regions
+        .iter()
+        .filter_map(|region| region.alternate)
+        .map(text)
+        .collect::<Vec<_>>();
+    assert_eq!(else_arms, ["{ s(); }"], "{else_arms:?}");
+    let repeats = facts
+        .loop_repeats
+        .iter()
+        .map(|(looped, repeated)| (text(*looped), text(*repeated)))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        repeats,
+        [
+            (
+                "for (let i = s(); i < s(); i += s()) { s(); }",
+                "; i < s(); i += s()) { s(); }"
+            ),
+            ("for (const x of xs) { s(); }", "const x of "),
+            ("for (const x of xs) { s(); }", ") { s(); }"),
+            ("while (c) { s(); }", "while (c) { s(); }"),
+        ],
+        "{repeats:?}"
+    );
+    let patterns = facts
+        .pattern_values
+        .iter()
+        .map(|(pattern, value)| (text(*pattern), text(*value)))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        patterns,
+        [("{ a = s() }", "await q"), ("{ a = s() }", "await q"),],
+        "{patterns:?}"
+    );
+}
+
 /// ADR 0320 (facts schema 64): an await is unconditional only when no
 /// construct that can skip it lies between the function entry and it:
 /// logical assignments, optional chains, destructuring defaults and

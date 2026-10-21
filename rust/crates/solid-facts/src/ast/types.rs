@@ -342,6 +342,20 @@ pub struct AstFacts {
     /// again after a suspension.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub loop_statements: Vec<Span>,
+    /// `(loop, repeated)`: the part of a loop statement that runs again after
+    /// its body finished (facts schema 73). A `for` loop's initializer runs
+    /// once, and a `for…of` or `for…in` iterable is evaluated once before the
+    /// first iteration, so both are left out; the left-hand target of those
+    /// loops is re-evaluated each iteration and is kept. An await anywhere in
+    /// the loop may run before code in the repeated part on a later iteration.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub loop_repeats: Vec<(Span, Span)>,
+    /// `(pattern, value)`: a destructuring declarator's or assignment's
+    /// pattern and the value it destructures (facts schema 73). The pattern's
+    /// defaults run after the value is evaluated, so a read there follows an
+    /// await in the value even when it is written first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pattern_values: Vec<(Span, Span)>,
     /// The points where an `async` function or generator suspends without an
     /// [`AstFacts::awaits`] expression, by span, sorted (facts schema 45):
     ///
@@ -1519,6 +1533,10 @@ pub enum AssignmentValueKind {
 pub struct IfRegionFact {
     pub test: Span,
     pub consequent: Span,
+    /// The `else` arm, when one is written (facts schema 73). Only one of the
+    /// two arms runs, so an await in one cannot precede code in the other.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alternate: Option<Span>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -1819,6 +1837,8 @@ impl AstFacts {
             jump_statements: Vec::new(),
             iteration_targets: Vec::new(),
             loop_statements: Vec::new(),
+            loop_repeats: Vec::new(),
+            pattern_values: Vec::new(),
             implicit_suspensions: Vec::new(),
             module_directives: Vec::new(),
             tagged_templates: Vec::new(),

@@ -144,6 +144,8 @@ pub(super) struct Collector<'s, 'semantic> {
     pub(super) jump_statements: Vec<Span>,
     pub(super) iteration_targets: Vec<Span>,
     pub(super) loop_statements: Vec<Span>,
+    pub(super) loop_repeats: Vec<(Span, Span)>,
+    pub(super) pattern_values: Vec<(Span, Span)>,
     pub(super) implicit_suspensions: Vec<Span>,
     pub(super) module_directives: Vec<DirectiveFact>,
     pub(super) tagged_templates: Vec<TaggedTemplateFact>,
@@ -371,6 +373,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             jump_statements: Vec::new(),
             iteration_targets: Vec::new(),
             loop_statements: Vec::new(),
+            loop_repeats: Vec::new(),
+            pattern_values: Vec::new(),
             implicit_suspensions: Vec::new(),
             module_directives: Vec::new(),
             tagged_templates: Vec::new(),
@@ -458,6 +462,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.jump_statements.sort_unstable();
         self.iteration_targets.sort_unstable();
         self.loop_statements.sort_unstable();
+        self.loop_repeats.sort_unstable();
+        self.pattern_values.sort_unstable();
         self.implicit_suspensions.sort_unstable();
         self.module_directives.sort_by_key(|fact| fact.span);
         self.tagged_templates.sort_by_key(|fact| fact.span);
@@ -534,6 +540,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             jump_statements: self.jump_statements,
             iteration_targets: self.iteration_targets,
             loop_statements: self.loop_statements,
+            loop_repeats: self.loop_repeats,
+            pattern_values: self.pattern_values,
             implicit_suspensions: self.implicit_suspensions,
             module_directives: self.module_directives,
             tagged_templates: self.tagged_templates,

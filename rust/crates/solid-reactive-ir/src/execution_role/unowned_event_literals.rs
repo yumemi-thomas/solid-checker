@@ -128,7 +128,7 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         }
         let owner = containing_ast_function(&file.ast, call)?;
         if !owner.body.contains(call)
-            || (owner.r#async && follows_await_in_async_function(file, call))
+            || (owner.r#async && may_follow_suspension(file, call))
             || owner.generator
             || self.lookup.function_component_status(file, owner) != ComponentStatus::No
         {
@@ -159,7 +159,7 @@ impl<'a> InvocationFlow<'a, '_, '_> {
     ) -> Option<Option<ExecutionRole>> {
         let owner = containing_ast_function(&file.ast, call)?;
         if !owner.body.contains(call)
-            || (owner.r#async && follows_await_in_async_function(file, call))
+            || (owner.r#async && may_follow_suspension(file, call))
             || owner.generator
             || self.lookup.function_component_status(file, owner) != ComponentStatus::No
         {

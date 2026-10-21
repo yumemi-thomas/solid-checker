@@ -415,6 +415,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/omit-view-reads/node_modules/**
 !fixtures/reactive-ir/await-continuation-reads/node_modules/
 !fixtures/reactive-ir/await-continuation-reads/node_modules/**
+!fixtures/reactive-ir/strict-read-maybe-suspended/node_modules/
+!fixtures/reactive-ir/strict-read-maybe-suspended/node_modules/**
 !fixtures/reactive-ir/read-after-await-reach/node_modules/
 !fixtures/reactive-ir/read-after-await-reach/node_modules/**
 !fixtures/reactive-ir/read-after-await-purity/node_modules/

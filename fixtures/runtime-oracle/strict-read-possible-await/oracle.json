@@ -1,0 +1,3 @@
+{
+  "note": "ADR 0354: conditional, loop and try/finally continuations run after rc.13 restores strictRead. Their output reaches 1, 2 and 3; neither is an SC1001 violation. The synchronous and exclusive-arm controls still warn."
+}

@@ -342,8 +342,7 @@ pub(super) fn semantic_write_execution_role_within(
     // An implicit suspension (`for await`) is the same, and is not proven to
     // run at all; its callers' roles do not describe the code after it.
     if (direct == ExecutionRole::Unknown || direct.reports_disallowed_write())
-        && (follows_await_in_async_function(file, span)
-            || super::body_roles::follows_any_suspension(file, span))
+        && may_follow_suspension(file, span)
     {
         return unknown;
     }

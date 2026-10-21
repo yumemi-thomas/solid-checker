@@ -63,6 +63,17 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   synchronous dispatch in the body reaches the listener, so even that case stays
   uncertifiable. A JSX event handler (`onClick={...}`) is the compiler's event
   callback and is not reported.
+- **A read an await may precede is uncertifiable.** Past an unconditional
+  `await` the window is closed and the read is silent. Past a conditional
+  (`if (c) await p`, `x ??= await p`, `f?.(await p)`, a labelled `break`), a
+  loop that awaits, or a `try` whose block awaits (its `catch` and `finally`),
+  the path that takes the await runs the read after the suspension, so the
+  role is unknown: uncertifiable, never reported (ADR 0354). A loop body that
+  reads before its await is in that set too, since a later iteration follows
+  the await. The other arm of the same `if` or `?:` does not follow it, and an
+  await in a nested closure belongs to that closure. A destructuring default
+  runs after the value it destructures, so it follows that value's await. A
+  helper called at such a site is uncertifiable at the call.
 - **A read no fact places is uncertifiable.** Code in a component's element
   children, in a helper with no resolved caller, or in a closure a tracked
   scope only stores has no execution role; a read there is reported as
