@@ -28,6 +28,8 @@
 // shows the defect and the value that shows correct behaviour. Its verdict:
 // behaviour-confirmed, behaviour-refuted (a false-positive candidate), or
 // unproven-clean when the page shows the defect and no finding covers the site.
+// A malformed `behaviour` spec refuses its case: that case is a harness-error
+// with the reason, and the other cases still run.
 // Files named *.d.ts and node_modules directories are not copied: the case
 // runs against the real packages of `--install`, never against a stub.
 //
@@ -215,12 +217,24 @@ const isPattern = (expected) => typeof expected === "object" && expected !== nul
 const matches = (value, expected) => isPattern(expected) ? typeof value === "string" && new RegExp(expected.pattern).test(value)
   : JSON.stringify(value) === JSON.stringify(expected);
 
+// The rule ids a behaviour may name: each code's rules, and each rule page (a rule with neither is not one the checker reports).
+const knownRules = new Set([
+  ...Object.values(codeRules).flat(),
+  ...readdirSync(join(repo, "docs/rules")).filter((name) => name.endsWith(".md") && name !== "README.md").map((name) => name.slice(0, -".md".length)),
+]);
+const compiles = (pattern) => {
+  try { new RegExp(pattern); return true; } catch { return false; }
+};
+
 // A case's `behaviour` list, validated: a malformed observation is a case error, never a silent skip.
+// Every refusal throws, and the worker records it as that case's harness-error.
 function behaviourSpec(id, spec, source, files) {
   assert(spec.behaviour === undefined || Array.isArray(spec.behaviour), `${id}: behaviour must be a list`);
+  assert(spec.behaviour === undefined || spec.behaviour.length > 0, `${id}: behaviour is empty; omit the key`);
   return (spec.behaviour ?? []).map((entry, index) => {
     const where = `${id}: behaviour[${index}]`;
-    assert(typeof entry.rule === "string" && entry.rule, `${where} needs a checker rule`);
+    assert(entry !== null && typeof entry === "object" && !Array.isArray(entry), `${where} is an object`);
+    assert(typeof entry.rule === "string" && knownRules.has(entry.rule), `${where}: rule ${JSON.stringify(entry.rule)} is not a checker rule (a codeRules value or docs/rules/<rule>.md)`);
     const site = /^(.+):([1-9]\d*)$/.exec(entry.site ?? "");
     assert(site && files.includes(site[1]), `${where} needs a site App.tsx:<line> inside the case`);
     const line = Number(site[2]);
@@ -235,13 +249,31 @@ function behaviourSpec(id, spec, source, files) {
       assert(expected in entry, `${where} needs ${expected}`);
       if (isPattern(entry[expected])) {
         assert(kind === "text" || kind === "window", `${where} ${expected}: a pattern matches text or a window value`);
-        new RegExp(entry[expected].pattern);
+        assert(entry[expected].pattern !== "", `${where} ${expected}: an empty pattern matches every page`);
+        assert(compiles(entry[expected].pattern), `${where} ${expected}: ${JSON.stringify(entry[expected].pattern)} is not a regular expression`);
       } else if (behaviourValues[kind]) {
         assert(behaviourValues[kind].includes(entry[expected]), `${where} ${expected} is one of ${behaviourValues[kind].join(", ")}`);
       }
     }
-    assert(JSON.stringify(entry.defect) !== JSON.stringify(entry.correct), `${where}: defect and correct must differ`);
-    return { rule: entry.rule, site: entry.site, file: site[1], line, kind, act, observe: entry.observe, defect: entry.defect, correct: entry.correct };
+    const { defect, correct } = entry;
+    // The two sides must differ as text: identical literals, or identical patterns, would be one claim twice.
+    assert(JSON.stringify(defect) !== JSON.stringify(correct), `${where}: defect and correct must differ`);
+    // Two patterns are told apart by examples (below); a literal side must not be a page the other pattern accepts.
+    if (isPattern(defect) && isPattern(correct)) {
+      assert("defectExample" in entry && "correctExample" in entry, `${where}: two patterns need defectExample and correctExample`);
+    } else if (isPattern(defect)) {
+      assert(!matches(correct, defect), `${where}: correct ${JSON.stringify(correct)} matches the defect pattern`);
+    } else if (isPattern(correct)) {
+      assert(!matches(defect, correct), `${where}: defect ${JSON.stringify(defect)} matches the correct pattern`);
+    }
+    // An example is a page text: it must match its own side, and not the other side.
+    for (const [name, side, other] of [["defectExample", defect, correct], ["correctExample", correct, defect]]) {
+      if (!(name in entry)) continue;
+      assert(typeof entry[name] === "string", `${where} ${name} is a string`);
+      assert(matches(entry[name], side), `${where} ${name} ${JSON.stringify(entry[name])} does not match its own side`);
+      assert(!matches(entry[name], other), `${where} ${name} ${JSON.stringify(entry[name])} matches the other side too`);
+    }
+    return { rule: entry.rule, site: entry.site, file: site[1], line, kind, act, observe: entry.observe, defect, correct };
   });
 }
 
@@ -472,7 +504,11 @@ const results = [];
 let next = 0;
 async function worker() {
   while (next < ids.length) {
-    const result = await runCase(ids[next++]);
+    const id = ids[next++];
+    // A case that cannot run (a refused spec, an unreadable case) fails that case alone, with its reason.
+    const result = await runCase(id).catch((error) => ({
+      id, verdict: "harness-error", error: error instanceof Error ? error.message : String(error), wallMs: 0,
+    }));
     results.push(result);
     process.stderr.write(`${results.length}/${ids.length} ${result.id}: ${result.verdict}\n`);
   }

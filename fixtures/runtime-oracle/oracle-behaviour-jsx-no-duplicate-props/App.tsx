@@ -21,3 +21,16 @@ export function Control() {
     </section>
   );
 }
+
+// innerHTML beside children: innerHTML shows on first render and still after the
+// children update, so the children never show (checked in Chrome on rc.13).
+export function HtmlViolation() {
+  const [markup] = createSignal("<i>h</i>");
+  const [body, setBody] = createSignal("b");
+  return (
+    <section>
+      <button data-probe="html-write" onClick={() => setBody("c")}>write</button>
+      <div data-probe="html-content" innerHTML={markup()}>{body()}</div>
+    </section>
+  );
+}

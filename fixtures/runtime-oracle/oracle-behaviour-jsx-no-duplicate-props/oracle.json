@@ -1,12 +1,29 @@
 {
-  "note": "SC8003 behaviour: the textContent attribute and the children share one content slot, so the DOM shows only one of them; the control's children alone show",
+  "note": "SC8003 behaviour: a textContent beside children is dropped by the compiler, so the page shows the children alone ('b', the control's output, so no text can refute the finding); an innerHTML beside children shows on first render and still after the children update (rc.13), so the children never show. Each correct pattern is the no-loss page, which no content slot shows: these observations confirm, and cannot refute",
   "behaviour": [
     {
       "rule": "jsx-no-duplicate-props",
       "site": "App.tsx:11",
       "observe": { "text": "[data-probe=violation-content]" },
       "defect": { "pattern": "^[lb]$" },
-      "correct": { "pattern": "^(lb|bl)$" }
+      "correct": { "pattern": "^(lb|bl)$" },
+      "defectExample": "b",
+      "correctExample": "lb"
+    },
+    {
+      "rule": "jsx-no-duplicate-props",
+      "site": "App.tsx:33",
+      "observe": { "text": "[data-probe=html-content]" },
+      "defect": "h",
+      "correct": { "pattern": "^(hb|bh)$" }
+    },
+    {
+      "rule": "jsx-no-duplicate-props",
+      "site": "App.tsx:33",
+      "act": [{ "click": "[data-probe=html-write]" }],
+      "observe": { "text": "[data-probe=html-content]" },
+      "defect": "h",
+      "correct": { "pattern": "^(hc|ch)$" }
     },
     {
       "rule": "jsx-no-duplicate-props",

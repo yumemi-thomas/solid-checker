@@ -16,14 +16,18 @@ props are ordinary object keys and remain outside the rule.
 
 ## Why is this bad?
 
-The writes compete for one DOM content slot, so one source overwrites another
-and the visible result depends on write order.
+The writes compete for one DOM content slot, so one source is silently lost. A
+`textContent` beside JSX children is dropped by the compiler: the children always
+win, and the `textContent` value never reaches the DOM. An `innerHTML` beside JSX
+children wins: the element shows the `innerHTML` on first render and still after
+the children update, so the children never show (observed on Solid 2.0.0-rc.13).
 
 ## Examples
 
 ```tsx
 // reported
 <div innerHTML={markup}>{fallback}</div>
+<div textContent={label}>{fallback}</div>
 
 // clean
 <div>{fallback}</div>

@@ -27,7 +27,8 @@ A static violation with no dev code is not a false positive by default: the page
   - `{ "window": "a.b" }`: the value at that path of `window`, a counter the case exposes there;
   - `{ "identity": selector }`: `same`, `replaced` or `missing`, against the element found before the acts;
   - `{ "thrown": true }`: `threw` when an uncaught error occurred during the acts, otherwise `none` (the message is kept as `detail`).
-- `defect` and `correct` are the value that shows the defect and the value that shows correct behaviour. Each is a JSON literal, or `{ "pattern": regex }` for `text`. They must differ, and `identity` and `thrown` take only the names above.
+- `defect` and `correct` are the value that shows the defect and the value that shows correct behaviour. Each is a JSON literal, or `{ "pattern": regex }` for `text` or `window`. `identity` and `thrown` take only the names above.
+- A spec is refused at load, and its case is a `harness-error` with the reason (the other cases still run), when: `behaviour` is not a non-empty list; a `rule` is neither a `codeRules` value nor a file in `docs/rules/`; a pattern is empty or does not compile; `defect` and `correct` are equal; or a literal side is a page the other side's pattern accepts. Two patterns also need `defectExample` and `correctExample`: page texts that their own pattern matches and the other does not. An example may also accompany a literal side, where it must equal that literal and not match the other side. The examples are checked, not proved: two patterns are never shown disjoint.
 
 The probe is generated only for a case with a `behaviour` list; other cases' pages are unchanged. Its results return through the feedback run: a `wait-for-selector` step on `#oracle-behaviour` records the JSON report as a checkpoint.
 
@@ -50,7 +51,7 @@ A known miss is listed as `{ "rule": ..., "site": ..., "reason": ... }` in `open
 | `oracle-behaviour-uncalled-accessor` | SC1005 | text: the violation keeps the accessor's source after the write; the control shows `Count: 7` | `behaviour-confirmed` |
 | `oracle-behaviour-no-direct-mutation` | SC2003 | text: the direct store write is dropped (`Ada`); the setter write shows `Grace` | `behaviour-confirmed` |
 | `oracle-behaviour-primitive-in-directive` | SC6001 | window: the apply-phase effect runs again after its element is hidden (2, not 1); the control's setup-phase effect does not | `behaviour-refuted` (below) |
-| `oracle-behaviour-jsx-no-duplicate-props` | SC8003 | text: one content slot shows `b`; the children win and the `textContent` value is lost | `behaviour-confirmed` |
+| `oracle-behaviour-jsx-no-duplicate-props` | SC8003 | text: a `textContent` beside children is dropped (the page shows `b`, the control's output); an `innerHTML` beside children shows `h` on first render and still `h` after the children update (`c` never shows) | `behaviour-confirmed`; confirm-only, since no content slot shows both sources, so the correct patterns are the no-loss page and unreachable |
 | `oracle-behaviour-components-return-once` | SC1004 | text: the early return stays on screen after the write (`logged out`) | `covered-violation` (dev `STRICT_READ_UNTRACKED` covers the finding); behaviour rows confirmed and clean |
 | `oracle-frame-covered-sc1004` | SC1004 | none: the frame pin (below) | `covered-violation`, empty `staticOnly` |
 
