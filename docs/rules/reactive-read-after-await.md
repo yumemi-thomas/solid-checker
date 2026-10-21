@@ -247,6 +247,11 @@ Read reactive values before the first `await` and carry the results through the
 async work. If a value must stay live after the `await`, split the read into its
 own synchronous computation and compose the two.
 
+## Limits
+
+- **Each shape only adds reports.** A mistake in one shape can only add a false positive, so each has a runtime-oracle case: `after-await-settlement`, `after-await-tracked`, `after-await-disposed` and `after-await-owner` pin the reports. The other `after-await-*` cases (`after-await-quiet`, `after-await-possible`, `after-await-promises`, `after-await-adopted`) pin the silent shapes and the reads the checker leaves uncertifiable.
+- **Not modeled:** `race` and `any` of helpers, a promise held in a variable and handled later, member helpers (`api.read()`), async IIFEs, and props already tracked. The open items are in `docs/open-work.md`.
+
 ## Related
 
 - [strict-read-untracked](strict-read-untracked.md) — the synchronous variant

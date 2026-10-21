@@ -148,6 +148,11 @@ SC9012 is shared with Solid 1.x as
 warning severity means that no runtime defect has been proven; its
 `uncertifiable` kind still fails `--certify`.
 
+## How it is proven
+
+- **Primitive results.** A member call on the result of a primitive whose result holds a getter (`createSignal(1).slice(0)`, `createMemo(fn).bind(null)`, a chain, or a call on a `const pair = createSignal(1)` binding) is that value's method, not the primitive's, and its provenance is unstated. It raises `primitive-result-method`, an obligation, never silence. A primitive wrapper's method result is exempt only when its receiver is proven primitive at run time (a literal, a template, or an audited `String` or `Number` call), and a TypeScript assertion on the way voids the exemption, because the resolved declaration is a type fact.
+- **Callee arguments.** A callee that calls the parameter an argument lands in reads through that argument unless the argument is proven not to be a getter. An exact accessor is the proven read. Proven not a getter: a literal; an unwritten project function, named by a bare identifier and never by what it returns; a store used as the proxy itself, not a member read or a binding initialized by one; a value Type Facts proves primitive; a data literal; a primitive wrapper's own method result. Expression arguments (`[get][0]`, a conditional, a spread slot, an IIFE, an object member) take the same proof. Any other argument (a spread or rest destructure, a held alias, `Array.from`, `slice`, `bind` or `Reflect.apply` of a getter, a helper's return, a member of a mutable object) keeps an obligation with analysis context `parameter-call-argument-unproven`. A local bound to a standard-library call's result is not a proof, since those calls hand a getter back.
+
 ## TypeScript boundary
 
 The rule requires a call that TypeScript facts mark valid. An invalid call is
