@@ -265,6 +265,8 @@ pub(crate) const OWNER_CONTEXT_LATER_RUN_UNOWNED: u8 = 32;
 /// and carries no leaf shape, so the owner gate can tell a conditional leaf
 /// body from a plain one. A leaf body created unowned never carries this bit.
 pub(crate) const OWNER_CONTEXT_LEAF_OWNED: u8 = 64;
+/// A synchronous owner may have been left by an await on the call path.
+pub(crate) const OWNER_CONTEXT_MAY_RESUME_UNOWNED: u8 = 128;
 
 /// Whether a node's unowned context is *only* the open-world assumption an
 /// exported non-component entry seeds ([`owner_node`]), carried to this node
@@ -296,6 +298,8 @@ const fn open_world_unowned_only(context: u8, node: &OwnerNode) -> bool {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum OwnerEdgeKind {
     Preserve,
+    /// The source owner on an unsuspended path, or no owner after suspension.
+    MayResumeUnowned,
     Owned,
     Unowned,
     Conditional,

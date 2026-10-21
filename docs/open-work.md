@@ -49,6 +49,8 @@ Missing owner (`missing-owner`, SC4001):
 - `missing-owner` (SC4001), recall lost: an unmodelled callback between leaves (`forEach`, `addEventListener`) misses `NO_OWNER_CLEANUP`; at probe k5 the wrongly coded SC3001 is gone.
 - `missing-owner` (SC4001), recall lost: `onSettled(wrap(() => …))` (`solid2-precision`, `WrappedSettledCleanup`): a bodiless `wrap` is no identity wrapper (ADR 0346), so the cleanup in its literal goes unreported.
 
+Possible owner suspension (ADR 0357): skippable-await cleanups retain SC4001 obligations. Call-argument-specific take/skip proofs are unimplemented; callback delivery outside the model remains open.
+
 Missing provider (`missing-context-provider`, SC4002, ADR 0352): a context is claimed only when no provider exists in the program. Not claimed: a reader above no provider when another provider exists (needs the closed component tree), open programs, escaped contexts, package contexts (kobalte, router, query), `createContext` through an alias.
 
 SC1002 (`after-await-open`): a handler on a promise held in a variable; a `.then` on a `Promise<T>` not proven native; `Promise.race` of helpers; an async IIFE the computation awaits; `Promise.all(x.map(async …))`; an accessor alias; a destructured or bound loader; router `query` flights; a catch join after statements; `Math.max(count())` after a functional setter. Each fires the runtime warning unproven (ADR 0340, 0349, 0350).

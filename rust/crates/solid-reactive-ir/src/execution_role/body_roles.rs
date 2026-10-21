@@ -474,7 +474,7 @@ pub(super) fn follows_await_in_async_function(file: &solid_facts::FileFacts, spa
 /// repeated part holds `span`, which runs again after it on a later iteration;
 /// or one in the value a destructuring pattern holds `span` in, since the
 /// pattern's defaults run after that value.
-pub(super) fn may_follow_own_await(file: &solid_facts::FileFacts, span: Span) -> bool {
+pub(crate) fn may_follow_own_await(file: &solid_facts::FileFacts, span: Span) -> bool {
     let Some(function) = containing_ast_function(&file.ast, span) else {
         return false;
     };

@@ -122,3 +122,76 @@ fn helper_event_edits_match_cold() {
     drop(session);
     fs::remove_dir_all(directory).unwrap();
 }
+
+/// A remote helper switches between synchronous, possible and definite
+/// suspension. Its cleanup must gain an obligation, never a silent clean,
+/// while the retained and fresh owner passes agree in both directions.
+#[test]
+fn possible_cleanup_suspension_edits_match_cold() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    const APP: &str = "import { onSettled } from 'solid-js'; import { cleanup } from './lib'; export function App() { onSettled(() => { void cleanup(); }); return <button />; }";
+    const SYNC: &str = "import { onCleanup } from 'solid-js'; export async function cleanup() { onCleanup(() => {}); }";
+    const POSSIBLE: &str = "import { onCleanup } from 'solid-js'; declare const flag: boolean; export async function cleanup() { if (flag) await 0; onCleanup(() => {}); }";
+    const DEFINITE: &str = "import { onCleanup } from 'solid-js'; export async function cleanup() { await 0; onCleanup(() => {}); }";
+    const WRAPPED: &str = "import { onCleanup } from 'solid-js'; declare const flag: boolean; function register() { onCleanup(() => {}); } export async function cleanup() { if (flag) await 0; register(); }";
+    const CALLBACK: &str = "import { onCleanup, untrack } from 'solid-js'; declare const flag: boolean; export async function cleanup() { if (flag) await 0; untrack(() => onCleanup(() => {})); }";
+    let (directory, paths) = project(
+        "possible-cleanup-owner",
+        &[("App.tsx", APP), ("lib.ts", SYNC)],
+    );
+    let tsconfig = directory
+        .join("tsconfig.json")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let selected = dialect::default_dialect();
+    let typescript = TypeFactsSession::open(&typefacts, &tsconfig, &[]).unwrap();
+    let (mut session, _) =
+        NativeIncrementalSession::open_pipelined(selected, tsconfig, typescript).unwrap();
+    let mut builder = solid_reactive_ir::IncrementalBuilder::default();
+    let mut check = |facts: &solid_facts::ProjectFacts, expected: Option<&str>| {
+        let retained = warm(&mut builder, facts, selected.vocabulary, true);
+        let fresh = cold(facts, selected.vocabulary, true);
+        assert_eq!(retained, fresh);
+        let findings = selected.solve(&retained);
+        assert_eq!(findings, selected.solve(&fresh));
+        let kinds = findings
+            .iter()
+            .filter(|finding| {
+                finding.id == "SC4001" && finding.primary_location.path.as_ref() == paths["lib.ts"]
+            })
+            .map(|finding| finding.kind.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(kinds, expected.into_iter().collect::<Vec<_>>());
+    };
+    check(&session.analyze().unwrap(), None);
+    for (version, (text, expected)) in [
+        (POSSIBLE, Some("uncertifiable")),
+        (SYNC, None),
+        (DEFINITE, Some("violation")),
+        (WRAPPED, Some("uncertifiable")),
+        (CALLBACK, Some("uncertifiable")),
+        (POSSIBLE, Some("uncertifiable")),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let facts = session
+            .edit(
+                vec![SourceChange {
+                    path: paths["lib.ts"].clone(),
+                    version: version as u64 + 1,
+                    source: Some(text.into()),
+                    compiler_options: CompilerOptions::default(),
+                }],
+                None,
+            )
+            .unwrap();
+        check(&facts, expected);
+    }
+    drop(session);
+    fs::remove_dir_all(directory).unwrap();
+}

@@ -2,6 +2,16 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-skippable-await/App.tsx",
+      "start": 495,
+      "end": 504,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -9,6 +19,16 @@
       "path": "fixtures/reactive-ir/leaf-scope-skippable-await/App.tsx",
       "start": 601,
       "end": 616,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-skippable-await/App.tsx",
+      "start": 711,
+      "end": 720,
       "fixes": 0
     },
     {
@@ -32,6 +52,16 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-skippable-await/App.tsx",
+      "start": 911,
+      "end": 920,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -42,6 +72,16 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-skippable-await/App.tsx",
+      "start": 1126,
+      "end": 1135,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -49,6 +89,16 @@
       "path": "fixtures/reactive-ir/leaf-scope-skippable-await/App.tsx",
       "start": 1212,
       "end": 1220,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-skippable-await/App.tsx",
+      "start": 1361,
+      "end": 1370,
       "fixes": 0
     },
     {
@@ -69,6 +119,86 @@
       "path": "fixtures/reactive-ir/leaf-scope-skippable-await/App.tsx",
       "start": 1724,
       "end": 1733,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-skippable-await/MaybeOwner.tsx",
+      "start": 170,
+      "end": 185,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-skippable-await/MaybeOwner.tsx",
+      "start": 267,
+      "end": 283,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-skippable-await/MaybeOwner.tsx",
+      "start": 733,
+      "end": 748,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-skippable-await/MaybeOwner.tsx",
+      "start": 905,
+      "end": 912,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-skippable-await/MaybeOwner.tsx",
+      "start": 1017,
+      "end": 1032,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-skippable-await/MaybeOwner.tsx",
+      "start": 1330,
+      "end": 1339,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-skippable-await/Owner.tsx",
+      "start": 370,
+      "end": 379,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-scope-skippable-await/Owner.tsx",
+      "start": 607,
+      "end": 616,
       "fixes": 0
     },
     {

@@ -63,6 +63,15 @@ thenable, which may call back synchronously), an `addEventListener` listener
 (a synchronous `dispatchEvent` runs it on the dispatcher's stack) and a
 Geolocation callback are not in that list.
 
+After a possibly skipped suspension, an effect, cleanup or context read may
+retain its owner or resume without one (ADR 0357). The result is uncertifiable,
+including from an owned leaf: the skip path may instead throw a leaf-scope
+error, while the taken path warns or throws with no owner. This context follows
+ordinary calls and owner-preserving callbacks. It cannot be answered by a
+lexically enclosing root, but a newly created root still owns its callback.
+Definite continuations keep their existing proof. Argument-specific take/skip
+proofs are not implemented.
+
 JSX event placement alone does not prove an ownerless invocation. With a
 visible call selecting the standard-library `EventTarget.dispatchEvent` or
 `HTMLElement.click` declaration, handlers may run on their caller's owned stack

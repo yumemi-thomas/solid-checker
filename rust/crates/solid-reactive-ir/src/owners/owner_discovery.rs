@@ -79,7 +79,7 @@ pub(crate) fn discover_owner_file(
                     span,
                 }),
                 target,
-                kind: OwnerEdgeKind::Preserve,
+                kind: call_owner_edge(file, call.callee),
             });
         }
         // ADR 0347: an invoked function literal runs in the call, under the
@@ -95,11 +95,12 @@ pub(crate) fn discover_owner_file(
                         span: nodes[index].span,
                     }),
                     target: OwnerTarget::LocalSpan(function.span),
-                    kind: OwnerEdgeKind::Preserve,
+                    kind: call_owner_edge(file, call.callee),
                 });
             }
         }
         for edge in owner_callback_edges(file, call, &call_primitives[call_index], lookup) {
+            let kind = callback_call_owner_edge(lookup, &edge.source_path, edge.source, edge.kind);
             if let Some(target) = call
                 .arguments
                 .get(edge.argument)
@@ -120,7 +121,7 @@ pub(crate) fn discover_owner_file(
                 edges.push(SymbolicOwnerEdge {
                     source,
                     target,
-                    kind: edge.kind,
+                    kind,
                 });
             }
         }
@@ -445,10 +446,14 @@ pub(crate) fn find_missing_owners_incremental(
             // agree here: a context read after an `await` is unowned (ADR 0352).
             let after_await = matches!(candidate.operation, "effect" | "cleanup" | "context-read")
                 && continuations.contains(file.path.as_str(), candidate.operation_span.start);
+            let possible_continuation = (!after_await
+                && matches!(candidate.operation, "effect" | "cleanup" | "context-read"))
+            .then(|| possible_await_continuation_context(file, candidate.operation_span, context))
+            .flatten();
             let context = if after_await {
                 await_continuation_context(context)
             } else {
-                context
+                possible_continuation.unwrap_or(context)
             };
             // A read of a provider-free context under an owner throws
             // `ContextNotFoundError` (ADR 0352). The batch pass decides the same.
@@ -460,12 +465,13 @@ pub(crate) fn find_missing_owners_incremental(
             // The batch pass skips these before recording a settled gate too.
             // Every chain span is one of this fragment's own nodes; one that
             // did not resolve would withhold the lexical answer, not grant it.
-            let root_owned = root_owned_at(candidate.providing_region_chain.as_deref(), |span| {
-                nodes_by_span
-                    .get(file.path.as_str())
-                    .and_then(|nodes| nodes.get(span))
-                    .map_or(OWNER_CONTEXT_LEAVES_REGION, |index| contexts[*index])
-            });
+            let root_owned = possible_continuation.is_none()
+                && root_owned_at(candidate.providing_region_chain.as_deref(), |span| {
+                    nodes_by_span
+                        .get(file.path.as_str())
+                        .and_then(|nodes| nodes.get(span))
+                        .map_or(OWNER_CONTEXT_LEAVES_REGION, |index| contexts[*index])
+                });
             // A providing region owns its reads, so a provider-free read there is
             // a provider finding, not an owner question (ADR 0352).
             let provider = provider_free_read && (root_owned || owned_on_every_path(context));

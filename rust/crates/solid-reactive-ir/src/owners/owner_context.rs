@@ -4,8 +4,10 @@ use super::*;
 
 /// The owner context bits that take a function out of the synchronous extent
 /// of an owner-providing region written around it. See [`root_owned_at`].
-pub(super) const OWNER_CONTEXT_LEAVES_REGION: u8 =
-    OWNER_CONTEXT_PROVEN_UNOWNED | OWNER_CONTEXT_LATER_RUN_UNOWNED | OWNER_CONTEXT_LEAF;
+pub(super) const OWNER_CONTEXT_LEAVES_REGION: u8 = OWNER_CONTEXT_PROVEN_UNOWNED
+    | OWNER_CONTEXT_LATER_RUN_UNOWNED
+    | OWNER_CONTEXT_LEAF
+    | OWNER_CONTEXT_MAY_RESUME_UNOWNED;
 
 /// The functions standing between `span` and the innermost owner-providing
 /// region around it: every function whose body contains `span` and which is
@@ -207,6 +209,13 @@ const fn tracked_leaf_body_context(source: u8) -> u8 {
 pub(crate) const fn owner_edge_context(kind: OwnerEdgeKind, source: u8) -> u8 {
     match kind {
         OwnerEdgeKind::Preserve | OwnerEdgeKind::EagerCall => source,
+        OwnerEdgeKind::MayResumeUnowned => {
+            if source == 0 || source & OWNER_CONTEXT_PROVEN_UNOWNED != 0 {
+                source
+            } else {
+                source | OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_MAY_RESUME_UNOWNED
+            }
+        }
         OwnerEdgeKind::Owned => OWNER_CONTEXT_OWNED,
         OwnerEdgeKind::Unowned => OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED,
         OwnerEdgeKind::Conditional => OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED,
@@ -297,7 +306,44 @@ pub(super) const fn await_continuation_context(context: u8) -> u8 {
             | OWNER_CONTEXT_LEAF
             | OWNER_CONTEXT_LEAF_OWNED
             | OWNER_CONTEXT_COMPONENT_UNCERTAIN
-            | OWNER_CONTEXT_LATER_RUN_UNOWNED)
+            | OWNER_CONTEXT_LATER_RUN_UNOWNED
+            | OWNER_CONTEXT_MAY_RESUME_UNOWNED)
+}
+
+/// ADR 0357: a skippable suspension adds an unowned possibility; it does not
+/// erase the synchronous owner or prove an unowned execution. In particular,
+/// a cleanup in an owned leaf may instead resume after the leaf has exited.
+/// An unreachable function (context zero) gains no invocation from syntax.
+pub(super) fn possible_await_continuation_context(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    context: u8,
+) -> Option<u8> {
+    (context != 0 && crate::execution_role::may_follow_own_await(file, span))
+        .then_some(owner_edge_context(OwnerEdgeKind::MayResumeUnowned, context))
+}
+
+pub(super) fn call_owner_edge(file: &solid_facts::FileFacts, site: Span) -> OwnerEdgeKind {
+    if crate::execution_role::may_follow_own_await(file, site) {
+        OwnerEdgeKind::MayResumeUnowned
+    } else {
+        OwnerEdgeKind::Preserve
+    }
+}
+
+pub(super) fn callback_call_owner_edge(
+    lookup: &SemanticLookup<'_>,
+    source_path: &str,
+    site: Span,
+    kind: OwnerEdgeKind,
+) -> OwnerEdgeKind {
+    if kind == OwnerEdgeKind::Preserve {
+        lookup
+            .file_by_path(source_path)
+            .map_or(kind, |file| call_owner_edge(file, site))
+    } else {
+        kind
+    }
 }
 
 pub(crate) fn owner_context_at(

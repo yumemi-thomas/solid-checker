@@ -1,8 +1,9 @@
 use super::{
     OWNER_CONTEXT_COMPONENT_UNCERTAIN, OWNER_CONTEXT_LATER_RUN_UNOWNED, OWNER_CONTEXT_LEAF,
-    OWNER_CONTEXT_LEAF_OWNED, OWNER_CONTEXT_OWNED, OWNER_CONTEXT_PROVEN_UNOWNED,
-    OWNER_CONTEXT_UNOWNED, OwnerEdgeKind, OwnerNode, binding_returns_reactive_source,
-    callback_owner_edge_kind, compiler_owner_context, compose_owner_edge, owner_edge_context,
+    OWNER_CONTEXT_LEAF_OWNED, OWNER_CONTEXT_MAY_RESUME_UNOWNED, OWNER_CONTEXT_OWNED,
+    OWNER_CONTEXT_PROVEN_UNOWNED, OWNER_CONTEXT_UNOWNED, OwnerEdgeKind, OwnerNode,
+    binding_returns_reactive_source, callback_owner_edge_kind, compiler_owner_context,
+    compose_owner_edge, owner_edge_context, possible_await_continuation_context,
     propagate_owner_contexts, providing_region_chain, returned_arrow_function, root_owned_at,
     seed_contexts, seed_unnamed_hand_outs, settle_eager_owners,
 };
@@ -80,6 +81,49 @@ fn compiler_ownership_regions_seed_owner_analysis() {
     assert_eq!(
         compiler_owner_context(&owner_context_file(source, facts), Span::new(15, 17)),
         OWNER_CONTEXT_LEAF
+    );
+}
+
+#[test]
+fn possible_suspension_preserves_the_owner_without_inventing_an_invocation() {
+    let source = "async function run() { before(); if (flag) await pending; after(); }";
+    let compiler = ExecutionMap {
+        compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
+        source_hash: SourceHash::of(source),
+        semantic_model: Default::default(),
+        tracked_regions: vec![],
+        untracked_regions: vec![],
+        discarded_regions: vec![],
+        ownership_regions: vec![],
+        callback_roles: vec![],
+        jsx_operations: vec![],
+    };
+    let file = owner_context_file(source, compiler);
+    let site = |name| {
+        file.ast
+            .calls
+            .iter()
+            .find(|call| file.source_text(call.callee) == Some(name))
+            .unwrap()
+            .callee
+    };
+    let leaf = OWNER_CONTEXT_LEAF | OWNER_CONTEXT_LEAF_OWNED;
+    assert_eq!(
+        possible_await_continuation_context(&file, site("before"), leaf),
+        None
+    );
+    assert_eq!(
+        possible_await_continuation_context(&file, site("after"), leaf),
+        Some(leaf | OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_MAY_RESUME_UNOWNED)
+    );
+    assert_eq!(
+        possible_await_continuation_context(&file, site("after"), 0),
+        None
+    );
+    let unowned = OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED;
+    assert_eq!(
+        possible_await_continuation_context(&file, site("after"), unowned),
+        Some(unowned)
     );
 }
 

@@ -50,7 +50,7 @@ pub(crate) fn find_missing_owners(
                 })
             {
                 if let Some(owner) = owner {
-                    edges.push((owner, target_index, OwnerEdgeKind::Preserve));
+                    edges.push((owner, target_index, call_owner_edge(file, call.callee)));
                 } else {
                     contexts[target_index] |= OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED;
                 }
@@ -73,7 +73,9 @@ pub(crate) fn find_missing_owners(
                     owner.map(|index| nodes[index].span),
                 ) {
                     match owner {
-                        Some(owner) => edges.push((owner, target_index, OwnerEdgeKind::Preserve)),
+                        Some(owner) => {
+                            edges.push((owner, target_index, call_owner_edge(file, call.callee)))
+                        }
                         None => {
                             contexts[target_index] |=
                                 OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED;
@@ -87,6 +89,8 @@ pub(crate) fn find_missing_owners(
                 &owner_file_indexes[file_index].call_primitives[call_index],
                 lookup,
             ) {
+                let kind =
+                    callback_call_owner_edge(lookup, &edge.source_path, edge.source, edge.kind);
                 let Some(argument) = call.arguments.get(edge.argument) else {
                     continue;
                 };
@@ -109,10 +113,10 @@ pub(crate) fn find_missing_owners(
                     edge.source,
                 );
                 if let Some(owner) = invocation_owner {
-                    edges.push((owner, target_index, edge.kind));
+                    edges.push((owner, target_index, kind));
                 } else {
                     contexts[target_index] |= owner_edge_context(
-                        edge.kind,
+                        kind,
                         OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED,
                     );
                 }
@@ -247,12 +251,24 @@ pub(crate) fn find_missing_owners(
                         .and_then(|primitive| lookup.dialect.owner_requirement_role(primitive)),
                     Some(OwnerRequirementRole::SettledCleanup)
                 );
+            let possible_continuation = (!after_await
+                && matches!(
+                    primitive
+                        .and_then(|primitive| lookup.dialect.owner_requirement_role(primitive)),
+                    Some(
+                        OwnerRequirementRole::Effect
+                            | OwnerRequirementRole::Cleanup
+                            | OwnerRequirementRole::ContextRead
+                    )
+                ))
+            .then(|| possible_await_continuation_context(file, call.callee, context))
+            .flatten();
             let context = if after_await {
                 await_continuation_context(context)
             } else {
-                context
+                possible_continuation.unwrap_or(context)
             };
-            let root_owned = root_owned_span(call.span);
+            let root_owned = possible_continuation.is_none() && root_owned_span(call.span);
             if !root_owned
                 && primitive.is_some_and(|primitive| {
                     lookup
