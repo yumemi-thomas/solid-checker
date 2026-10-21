@@ -286,16 +286,6 @@
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
-      "path": "fixtures/engine/eslint-reactivity-v2/leaf-reexport-cleanup.tsx",
-      "start": 86,
-      "end": 95,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
       "path": "fixtures/engine/eslint-reactivity-v2/leaf-reexport-flush.tsx",
       "start": 62,
       "end": 77,

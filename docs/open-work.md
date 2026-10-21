@@ -54,6 +54,9 @@ Other:
 
 Not a miss: `r4c-leak` line 43 is listed open only because the runtime names the JSX read of the memo while the checker's uncertifiable SC5003 sits at the async read two lines above. The oracle has no frame linking them.
 
+- `leaf-owner-forbidden-call` (SC3001), recall lost: a primitive created under `untrack(() => …)` inside a leaf body is not reported, though the runtime gives `PRIMITIVE_IN_FORBIDDEN_SCOPE` (review probes u2, u3, d7).
+- `missing-owner` (SC4001), recall lost: an unmodelled callback between leaves (`forEach`, `addEventListener`) misses `NO_OWNER_CLEANUP` (review probes g4, k1, k3, k5). At k5 the SC3001 the checker reported there, with the wrong code, is gone, so that site is silent.
+
 ## 2. Decisions not to build
 
 - A write is not proven legal because every invocation of its function is an event dispatch (built in step 4, dropped): a synchronous `click()`/`dispatchEvent` from an owned scope runs the handler under that owner (review round 4, probe `r4-sync-event`). About 110 corpus SC2001 obligations stay open. Reopen with an owner-at-dispatch fact.
@@ -94,6 +97,7 @@ Known false-positive shapes left open (fire today, wanted gone):
 - `strict-read-untracked` (SC1001): a function rendered by a tag the program never reaches (`<Show when={false}><Row/></Show>`) and also called plainly (`items().map(Row)`) keeps its component proof; every visible tag is taken as rendered, the same feasible-path premise as a direct read.
 - `primitive-in-directive-application` (SC6001): `createRoot` in an apply callback is reported even when its `dispose` is called; the rule's premise is that a per-element root is never disposed.
 - A read after `if (c) await` or a loop that may skip the await is reported: the feasible-path premise every direct read rests on. Oracle: `r9-d3-ifawait`, `r9-d3-loopawait`.
+- `leaf-owner-forbidden-call` (SC3001), precision (minor): a site inside a dead tracked-effect body is claimed although the body never runs, when every path to its creation is an owned leaf body (review probe m4, line 8).
 
 ## 4. Open questions and live approximations
 

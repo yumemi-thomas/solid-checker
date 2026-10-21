@@ -5,7 +5,7 @@ use super::*;
 /// The owner context bits that take a function out of the synchronous extent
 /// of an owner-providing region written around it. See [`root_owned_at`].
 pub(super) const OWNER_CONTEXT_LEAVES_REGION: u8 =
-    OWNER_CONTEXT_PROVEN_UNOWNED | OWNER_CONTEXT_LATER_RUN_UNOWNED;
+    OWNER_CONTEXT_PROVEN_UNOWNED | OWNER_CONTEXT_LATER_RUN_UNOWNED | OWNER_CONTEXT_LEAF;
 
 /// The functions standing between `span` and the innermost owner-providing
 /// region around it: every function whose body contains `span` and which is
@@ -42,7 +42,7 @@ pub(crate) fn providing_region_chain<K>(
 ///
 /// The region's owner is current only for code that runs in the region's
 /// synchronous extent, and a function nested in the region leaves that extent
-/// when its context carries either bit of [`OWNER_CONTEXT_LEAVES_REGION`]:
+/// when its context carries one of the bits of [`OWNER_CONTEXT_LEAVES_REGION`]:
 ///
 /// - [`OWNER_CONTEXT_LATER_RUN_UNOWNED`], from a `createRenderEffect` apply
 ///   ([`solid_dialect::CallbackOwner::InheritsFirstRun`]). `@solidjs/signals`
@@ -61,10 +61,17 @@ pub(crate) fn providing_region_chain<K>(
 ///   of them, the `onCleanup` raises `NO_OWNER_CLEANUP` (dev) and never runs
 ///   on dispose, and an `onSettled` in the `createEffect` apply runs
 ///   out-of-band, its returned cleanup raising `SETTLED_CLEANUP_UNOWNED`.
+/// - [`OWNER_CONTEXT_LEAF`], from a leaf body. An owned leaf runs its body
+///   under the leaf's own owner, which forbids children, so the region's owner
+///   is not current there: an `onCleanup` or a primitive in the body throws
+///   `CLEANUP_IN_FORBIDDEN_SCOPE` or `PRIMITIVE_IN_FORBIDDEN_SCOPE`, which SC3001
+///   claims, and a `createRoot` around the leaf does not answer for it. A
+///   queued `onSettled` body has no owner and is withheld by the bit above.
 ///
 /// Such an operation is judged on the owner graph instead, which makes it a
 /// violation where the propagated context is proven unowned and uncertifiable
-/// where it carries only the later-run bit.
+/// where it carries only the later-run bit. A leaf body is judged by the leaf
+/// rules instead.
 ///
 /// Only functions *inside* the region are asked. A region written inside the
 /// detached function -- a `createRoot` created in a `createEffect` apply, or a
@@ -161,21 +168,34 @@ pub(crate) fn owner_callback_index(
         .copied()
 }
 
-/// The context a leaf callback takes from the context of the function that
-/// creates it ([`OwnerEdgeKind::Leaf`]). A leaf created under a children-capable
-/// owner carries [`OWNER_CONTEXT_LEAF_OWNED`]. A leaf created inside a
-/// creation-owned leaf body is dead: a `createTrackedEffect` under a
-/// children-forbidden owner throws before its callback runs, so it carries no
-/// context at all, and nothing it contains is claimed (ADR 0347). Its live
-/// unowned path, if any, is kept.
+/// The context an `onSettled` callback takes when its call sits outside every
+/// leaf body ([`OwnerEdgeKind::QueuedLeaf`]). Under a children-capable owner the
+/// callback runs under its leaf owner, [`OWNER_CONTEXT_LEAF_OWNED`]; with no
+/// owner it keeps the unowned bits, which make its cleanup SC4001's claim.
+/// Inside a leaf body the queue applies instead.
 const fn leaf_body_context(source: u8) -> u8 {
     let unowned = source & (OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED);
     if source & OWNER_CONTEXT_OWNED != 0 {
         OWNER_CONTEXT_LEAF | OWNER_CONTEXT_LEAF_OWNED | unowned
-    } else if source & OWNER_CONTEXT_LEAF_OWNED != 0 && source & OWNER_CONTEXT_UNOWNED == 0 {
-        0
     } else {
         OWNER_CONTEXT_LEAF | unowned
+    }
+}
+
+/// A `createTrackedEffect` body always runs under the tracked node, which
+/// forbids children, whether or not the effect itself was created under an
+/// owner, so it carries [`OWNER_CONTEXT_LEAF_OWNED`] and never the unowned bits:
+/// an `onCleanup` there throws `CLEANUP_IN_FORBIDDEN_SCOPE` (SC3001's claim),
+/// not `NO_OWNER_CLEANUP`. It is dead only when every path to its creation is
+/// inside an owned leaf body: the effect throws before its callback runs, so it
+/// carries no context and nothing it contains is claimed (ADR 0347).
+const fn tracked_leaf_body_context(source: u8) -> u8 {
+    let live = source & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED) != 0
+        || source & OWNER_CONTEXT_LEAF_OWNED == 0;
+    if live {
+        OWNER_CONTEXT_LEAF | OWNER_CONTEXT_LEAF_OWNED
+    } else {
+        0
     }
 }
 
@@ -192,14 +212,14 @@ pub(crate) const fn owner_edge_context(kind: OwnerEdgeKind, source: u8) -> u8 {
         OwnerEdgeKind::InheritsFirstRun => {
             source | OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LATER_RUN_UNOWNED
         }
-        // A leaf callback's body runs under the leaf owner when its leaf is
-        // created under a children-capable owner (an `onCleanup` there throws:
-        // SC3001's claim), and with no owner when its leaf is created unowned
-        // (SC4001's claim). See [`leaf_body_context`].
-        OwnerEdgeKind::Leaf => leaf_body_context(source),
+        // A createTrackedEffect callback runs under the tracked node whatever
+        // its creation owner, so its onCleanup is SC3001's claim. See
+        // [`tracked_leaf_body_context`].
+        OwnerEdgeKind::Leaf => tracked_leaf_body_context(source),
         // Inside a leaf body `onSettled` takes the out-of-band queue whatever
         // the body's owner (rc.13), so its callback runs with no owner: proven
-        // unowned. A run-owned part of the source still creates a leaf.
+        // unowned. A run-owned part of the source still creates a leaf. Outside
+        // one it is an ordinary leaf ([`leaf_body_context`]).
         OwnerEdgeKind::QueuedLeaf => {
             if source & OWNER_CONTEXT_LEAF != 0 {
                 let run_owned = if source & OWNER_CONTEXT_OWNED != 0 {

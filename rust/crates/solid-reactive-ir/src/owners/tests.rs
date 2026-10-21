@@ -108,9 +108,10 @@ fn owner_edge_context_transforms_the_source_bits_per_edge_kind() {
         owner_edge_context(OwnerEdgeKind::Conditional, 0),
         OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED
     );
-    // A leaf keeps whether its creation site is owned (ADR 0347 amendment): an
-    // owned leaf's cleanup is SC3001's (`LEAF_OWNED`), an unowned one's is
-    // SC4001's and keeps the proof of its unowned creation.
+    // A createTrackedEffect body runs under the tracked node whatever its
+    // creation owner: its cleanup is SC3001's (`LEAF_OWNED`), and no unowned
+    // bit survives, so it is never SC4001's `NO_OWNER_CLEANUP`. A conditional
+    // creation is live on its owned path too.
     assert_eq!(
         owner_edge_context(OwnerEdgeKind::Leaf, OWNER_CONTEXT_OWNED),
         OWNER_CONTEXT_LEAF | OWNER_CONTEXT_LEAF_OWNED
@@ -120,10 +121,17 @@ fn owner_edge_context_transforms_the_source_bits_per_edge_kind() {
             OwnerEdgeKind::Leaf,
             OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED
         ),
-        OWNER_CONTEXT_LEAF | OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED
+        OWNER_CONTEXT_LEAF | OWNER_CONTEXT_LEAF_OWNED
     );
-    // A leaf inside a creation-owned leaf body is dead: a tracked effect there
-    // throws before its callback runs.
+    assert_eq!(
+        owner_edge_context(
+            OwnerEdgeKind::Leaf,
+            OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED
+        ),
+        OWNER_CONTEXT_LEAF | OWNER_CONTEXT_LEAF_OWNED
+    );
+    // A tracked effect inside a creation-owned leaf body is dead: it throws
+    // before its callback runs.
     assert_eq!(
         owner_edge_context(
             OwnerEdgeKind::Leaf,
@@ -403,7 +411,8 @@ fn root_owned_at_withholds_for_either_detaching_bit() {
     for (context, answered) in [
         (OWNER_CONTEXT_OWNED, true),
         (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED, true),
-        (OWNER_CONTEXT_LEAF, true),
+        (OWNER_CONTEXT_LEAF, false),
+        (OWNER_CONTEXT_LEAF | OWNER_CONTEXT_LEAF_OWNED, false),
         (0, true),
         (OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED, false),
         (

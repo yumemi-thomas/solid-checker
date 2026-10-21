@@ -1,0 +1,85 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-tracked-body-forbidden/App.tsx",
+      "start": 397,
+      "end": 416,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-tracked-body-forbidden/App.tsx",
+      "start": 423,
+      "end": 432,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-tracked-body-forbidden/App.tsx",
+      "start": 579,
+      "end": 588,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-tracked-body-forbidden/App.tsx",
+      "start": 750,
+      "end": 769,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-tracked-body-forbidden/App.tsx",
+      "start": 784,
+      "end": 793,
+      "fixes": 1
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-tracked-body-forbidden/App.tsx",
+      "start": 1112,
+      "end": 1131,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-tracked-body-forbidden/App.tsx",
+      "start": 1146,
+      "end": 1158,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-tracked-body-forbidden/App.tsx",
+      "start": 1391,
+      "end": 1400,
+      "fixes": 1
+    }
+  ]
+}

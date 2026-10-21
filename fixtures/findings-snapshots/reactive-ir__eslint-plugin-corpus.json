@@ -557,16 +557,6 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/leaf-invalid.tsx",
-      "start": 166,
-      "end": 175,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/eslint-plugin-corpus/leaf-invalid.tsx",
       "start": 188,
       "end": 213,
       "fixes": 0
@@ -706,16 +696,6 @@
       "code": "SC3001",
       "kind": "violation",
       "severity": "error",
-      "path": "fixtures/reactive-ir/eslint-plugin-corpus/owned-leaf-extended-invalid.tsx",
-      "start": 405,
-      "end": 414,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/owned-leaf-extended-invalid.tsx",
       "start": 405,
       "end": 414,
