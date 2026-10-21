@@ -107,13 +107,14 @@ A violation withheld, or turned uncertifiable, to keep zero false positives. Eac
 - `missing-owner` (SC4001), recall lost: an IIFE inside a function no owner edge reaches (a method or constructor no resolved call names, an unexported function nothing calls) is silent, since that function's context is zero. Module-scope and `runWithOwner(null)` IIFEs are reported (ADR 0347; oracle probes p3 N1, p4 V5).
 - `missing-owner` (SC4001), uncertain reach (ADR 0347): a detached callback in an export that only an unnamed namespace escape reaches (`Object.keys(ns)`, passed along, spread, an alias, `export * as`, `require`, an unrecognized dynamic-import shape) is uncertifiable: whether the export runs is unproven. Recall is lost where the runtime warns and the program calls such an export (the `Object.entries` case in section 1).
 
+Event delivery (ADR 0356): native `dispatchEvent`/`click` withholds event owner/execution proofs program-wide, including unrelated handlers. Target-specific delivery and other DOM emitters remain unmodelled.
+
 SC6001 root lifetime (ADR 0355): explicit roots in ref apply remain uncertifiable, including disposed and empty roots. Proving live work and non-disposal is not implemented.
 
 Recall trade (ADR 0354): first-iteration reads before a loop await and reads after an awaiting switch case remain uncertifiable.
 
 Known false-positive shapes left open (fire today, wanted gone):
 
-- `missing-owner` (SC4001): a synchronous `dispatchEvent` or `click()` from an owned scope runs the handler under that owner; every event handler is taken to run with no owner. Oracle: `review-r7-sync-scroll`, `review-r7-sync-child-scroll`. Fixing it needs an owner-at-dispatch fact.
 - `strict-read-untracked` (SC1001): a function rendered by a tag the program never reaches (`<Show when={false}><Row/></Show>`) and also called plainly (`items().map(Row)`) keeps its component proof.
 - `leaf-owner-forbidden-call` (SC3001), precision (minor): a site in a dead tracked-effect body is claimed although the body never runs, when every path to its creation is an owned leaf body (probe m4, line 8).
 

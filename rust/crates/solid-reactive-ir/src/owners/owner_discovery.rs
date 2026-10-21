@@ -219,6 +219,7 @@ pub(crate) fn discover_owner_file(
                 solid_facts::compiler::CallbackRoleKind::DirectiveApply => {
                     OwnerEdgeKind::RefApplied
                 }
+                _ if lookup.synchronous_event_dispatch_present() => OwnerEdgeKind::Conditional,
                 _ => OwnerEdgeKind::Unowned,
             };
             edges.push(SymbolicOwnerEdge {

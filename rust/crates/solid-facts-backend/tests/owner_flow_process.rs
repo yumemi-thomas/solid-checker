@@ -30,6 +30,18 @@ const LIB_BODY: &str = r#"export function handlers(cb: () => void) {
   return { onClick: () => cb() };
 }
 "#;
+const LIB_DISPATCH: &str = r#"export function handlers(cb: () => void) {
+  new EventTarget().dispatchEvent(new Event("ping"));
+  return { onClick: () => cb() };
+}
+"#;
+const LIB_HOMONYM: &str = r#"export function handlers(cb: () => void) {
+  const bus = { dispatchEvent() { return true; }, click() {} };
+  bus.dispatchEvent();
+  bus.click();
+  return { onClick: () => cb() };
+}
+"#;
 
 /// Whether `findings` holds a proven `SC4001` at the `onCleanup` call.
 fn owner_violation(findings: &[solid_reactive_ir::Finding], path: &str) -> bool {
@@ -85,6 +97,9 @@ fn helper_event_edits_match_cold() {
     for (version, (text, expected)) in [
         (LIB_NOT_EVENT, false),
         (LIB_EVENT, true),
+        (LIB_DISPATCH, false),
+        (LIB_EVENT, true),
+        (LIB_HOMONYM, true),
         (LIB_BODY, false),
         (LIB_EVENT, true),
     ]

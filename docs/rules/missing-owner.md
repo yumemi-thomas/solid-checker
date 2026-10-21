@@ -10,7 +10,7 @@ the specific operation.
 A `useContext(context)` read with no owner is the `context-read` operation (ADR
 0352). rc.13's `getContext` checks the owner before it reads, so the read throws
 `NoOwnerError` whatever default the context has, and the message says so. The
-owner walk places it as it places an effect: an event handler, a timer callback,
+owner walk places it as it places an effect: an ownerless event handler, a timer callback,
 module scope, code after an `await`, or a `runWithOwner(null)` callback is
 unowned. A package hook that reads a context is followed through its source, and
 the finding sits at the project call that runs it, as for any package owner
@@ -42,7 +42,7 @@ operation stays a proven violation.
 
 An owner-creating callback owns only what runs in its synchronous extent. A
 callback written inside it that runs with no owner on every run -- a
-`createEffect` apply, an event handler, a `createReaction` invalidation, a
+`createEffect` apply, an ownerless event handler, a `createReaction` invalidation, a
 `runWithOwner(null, fn)` callback -- is not owned by it, so an operation there
 inside a `createRoot` callback is the same proven violation it is inside a
 component, and an `onSettled` there is out-of-band. A root created inside such
@@ -62,6 +62,12 @@ standard-library declaration, never from its name. A `PromiseLike.then` (any
 thenable, which may call back synchronously), an `addEventListener` listener
 (a synchronous `dispatchEvent` runs it on the dispatcher's stack) and a
 Geolocation callback are not in that list.
+
+JSX event placement alone does not prove an ownerless invocation. With a
+visible call selecting the standard-library `EventTarget.dispatchEvent` or
+`HTMLElement.click` declaration, handlers may run on their caller's owned stack
+(ADR 0356). Event-owner proofs then remain uncertifiable across the program,
+including forwarded callbacks. No target-specific dispatch edge is guessed.
 
 Package owner requirements must come from exact analyzed source or dialect
 runtime premises. A call proved to allocate without an owner is a violation;

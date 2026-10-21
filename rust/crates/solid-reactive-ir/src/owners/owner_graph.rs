@@ -49,15 +49,30 @@ pub(super) fn owner_node(
         && name.is_some()
         && lookup.program_closed;
     let mut seed_context = compiler_owner_context(file, function.body);
+    let dispatch_uncertain = lookup.synchronous_event_dispatch_present();
+    if dispatch_uncertain
+        && file.compiler.callback_roles.iter().any(|callback| {
+            callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
+                && callback.span.contains(function.body)
+        })
+    {
+        seed_context = (seed_context & !OWNER_CONTEXT_PROVEN_UNOWNED)
+            | OWNER_CONTEXT_OWNED
+            | OWNER_CONTEXT_UNOWNED;
+    }
     // ADR 0319's walk, in its owner mode, proved that every invocation of
-    // this literal is a host event dispatch (a callback a helper calls from
+    // this literal comes through event delivery (a callback a helper calls from
     // the handler it returns, which the caller spreads onto an element): it
-    // runs with no owner, as the same literal written on the element does.
+    // carries the same delivery uncertainty as a literal written on the element.
     if lookup
-        .unowned_event_literals()
+        .event_invoked_literals()
         .contains(&(file.path.to_string(), function.span))
     {
-        seed_context |= OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED;
+        seed_context |= if dispatch_uncertain {
+            OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED
+        } else {
+            OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED
+        };
     }
     match component_status {
         crate::indexes::ComponentStatus::Proven => seed_context |= OWNER_CONTEXT_OWNED,

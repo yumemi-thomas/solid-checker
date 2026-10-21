@@ -1,0 +1,15 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/host-callback-read-timing/variants/dispatch-homonym/App.tsx",
+      "start": 222,
+      "end": 237,
+      "fixes": 0
+    }
+  ]
+}

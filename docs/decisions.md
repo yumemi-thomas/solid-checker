@@ -499,7 +499,7 @@ A member call on an unexported `const` object literal names its function when th
 
 <a id="adr-0352"></a>
 ## ADR 0352 — Context reads require an owner and a provided value
-`useContext` throws `NoOwnerError` before reading a default (rc.13 `getContext`). SC4001 follows exact imports and package source through the owner walk, including await continuations. Under a proven owner, SC4002 reports a project `const Ctx = createContext()` only when a closed-program census finds no provider or escape. Namespace imports and module loads withhold the census for exported contexts. Open programs, package contexts, aliases of `createContext`, and contexts with any provider remain unproven. Owners: `owners/{context_census,missing_owners,owner_discovery}.rs`; mechanics and fixtures: `docs/rules/{missing-owner,missing-context-provider}.md`.
+Without an owner, rc.13 `useContext` throws `NoOwnerError` even with a default (SC4001). Under a proven owner, SC4002 requires a default-less project const and a closed census with no provider or escape. Namespace/module publication withholds that census; package and open contexts stay unproven. Owners: `owners/{context_census,missing_owners,owner_discovery}.rs`; mechanics: `docs/rules/{missing-owner,missing-context-provider}.md`.
 
 <a id="adr-0353"></a>
 ## ADR 0353 — Audited rc.13 render callbacks run under a root
@@ -512,3 +512,7 @@ A read possibly after its own async function's await is uncertifiable; the skipp
 <a id="adr-0355"></a>
 ## ADR 0355 — Root allocation does not prove a directive leak
 A `createRoot` in ref apply owns its work, may be empty, and may be disposed. SC6001 withholds its leak claim as an uncertifiable lifetime obligation in direct and returned callbacks; direct unowned computations retain their proof. No root is certified safe by this change. The dialect identifies root-creating calls. Owners: `directives.rs`; mechanics: `docs/rules/primitive-in-directive-application.md`; fixtures `directive-owned-subscopes/RootLifetime.tsx`, oracle `root-directive-disposal`.
+
+<a id="adr-0356"></a>
+## ADR 0356 — Synchronous dispatch withholds event-owner proofs
+Standard-library `EventTarget.dispatchEvent`/`HTMLElement.click` calls withhold event owner/execution proofs: delivery may inherit an owned caller stack. Until targets are joined, the veto covers all event callbacks, including forwarded literals, and enters the cross-file digest. Project homonyms do not select it. Owners: `indexes/event_delivery.rs`, `owners/`, `execution_role/`; mechanics: `docs/rules/missing-owner.md`.

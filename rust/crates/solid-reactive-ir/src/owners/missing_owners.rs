@@ -148,6 +148,7 @@ pub(crate) fn find_missing_owners(
                     solid_facts::compiler::CallbackRoleKind::DirectiveApply => {
                         OwnerEdgeKind::RefApplied
                     }
+                    _ if lookup.synchronous_event_dispatch_present() => OwnerEdgeKind::Conditional,
                     _ => OwnerEdgeKind::Unowned,
                 };
                 contexts[index] |=

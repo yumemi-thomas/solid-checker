@@ -62,7 +62,8 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   way under `pending-async-unsuspendable-read`. The checker does not prove a
   synchronous dispatch in the body reaches the listener, so even that case stays
   uncertifiable. A JSX event handler (`onClick={...}`) is the compiler's event
-  callback and is not reported.
+  callback. Visible native synchronous dispatch withholds its execution proof
+  (ADR 0356), so its reads are then uncertifiable; otherwise it is not reported.
 - **A read an await may precede is uncertifiable.** Past an unconditional
   `await` the window is closed and the read is silent. Past a conditional
   (`if (c) await p`, `x ??= await p`, `f?.(await p)`, a labelled `break`), a

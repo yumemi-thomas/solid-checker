@@ -22,6 +22,7 @@ mod closed_members;
 mod completion;
 mod components;
 mod compound;
+mod event_delivery;
 mod identity_wrappers;
 pub(crate) use identity_wrappers::identity_wrapped_literal_span;
 mod initialization;
@@ -757,7 +758,8 @@ pub(super) struct SemanticLookup<'a> {
     /// ADR 0319: every literal's invocation-flow answer.
     invocation_flow_answers: OnceLock<HashMap<(String, Span), crate::ExecutionRole>>,
     /// The literals whose every invocation is a host event dispatch.
-    unowned_event_literals: OnceLock<HashSet<(String, Span)>>,
+    event_invoked_literals: OnceLock<HashSet<(String, Span)>>,
+    synchronous_event_dispatch: OnceLock<bool>,
     /// ADR 0320: whether some call may copy keys into an existing object.
     objects_assigned_into: OnceLock<bool>,
     router_params: OnceLock<crate::router_params::RouterParamsStatus>,
@@ -973,7 +975,8 @@ impl<'a> SemanticLookup<'a> {
             functions_by_symbol: OnceLock::new(),
             identity_wrappers: OnceLock::new(),
             invocation_flow_answers: OnceLock::new(),
-            unowned_event_literals: OnceLock::new(),
+            event_invoked_literals: OnceLock::new(),
+            synchronous_event_dispatch: OnceLock::new(),
             objects_assigned_into: OnceLock::new(),
             router_params: OnceLock::new(),
             route_component_values: OnceLock::new(),
@@ -1395,6 +1398,8 @@ impl<'a> SemanticLookup<'a> {
                 hasher.update(path.as_bytes());
                 hasher.update(file.source_hash.as_str().as_bytes());
             }
+            hasher.update(b"synchronous-event-dispatch\0");
+            hasher.update([u8::from(self.synchronous_event_dispatch_present())]);
             // ADR 0319: an invocation-flow proof follows a function value
             // through any file of a closed program -- bindings, returns,
             // object members, callee parameters, component props -- so a
@@ -1417,9 +1422,9 @@ impl<'a> SemanticLookup<'a> {
                     hasher.update([0]);
                 }
                 // The owner seeds read the same walk's owner answers.
-                let mut literals = self.unowned_event_literals().iter().collect::<Vec<_>>();
+                let mut literals = self.event_invoked_literals().iter().collect::<Vec<_>>();
                 literals.sort_unstable();
-                hasher.update(b"unowned-event-literals\0");
+                hasher.update(b"event-invoked-literals\0");
                 for (path, span) in literals {
                     hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
                     hasher.update(path.as_bytes());
@@ -1666,11 +1671,11 @@ impl<'a> SemanticLookup<'a> {
             .get_or_init(|| crate::execution_role::invocation_flow_answers(self))
     }
 
-    /// The literals whose every invocation is a host event dispatch, for the
-    /// owner seeds; see [`crate::execution_role::unowned_event_literals`].
-    pub(crate) fn unowned_event_literals(&self) -> &HashSet<(String, Span)> {
-        self.unowned_event_literals
-            .get_or_init(|| crate::execution_role::unowned_event_literals(self))
+    /// The literals whose every invocation comes through event delivery, for the
+    /// owner seeds; see [`crate::execution_role::event_invoked_literals`].
+    pub(crate) fn event_invoked_literals(&self) -> &HashSet<(String, Span)> {
+        self.event_invoked_literals
+            .get_or_init(|| crate::execution_role::event_invoked_literals(self))
     }
 
     pub(super) fn tuple_iteration_may_be_mutated(&self) -> bool {

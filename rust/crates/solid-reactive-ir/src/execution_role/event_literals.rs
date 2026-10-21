@@ -1,15 +1,15 @@
-//! Unowned event literals: function literals the host's event dispatch invokes outside any owner.
+//! Event-only invocation census; delivery ownership is a separate proof.
 
 use super::*;
 
 /// Every function literal of a closed program whose invocations, followed
-/// forward as ADR 0319 follows them, all run as a host event dispatch: an
+/// forward as ADR 0319 follows them, all run through event delivery: an
 /// intrinsic element's `on…` attribute or spread key, or a function the
-/// compiler classifies as an event handler. Such a literal runs with no
-/// owner, exactly as the same literal written on the element does. Any
+/// compiler classifies as an event handler. A synchronous dispatch can inherit
+/// its caller's owner; the owner graph applies that delivery veto. Any
 /// invocation through a primitive's callback slot refuses: who owns that run
 /// is the owner graph's question, not this walk's.
-pub(crate) fn unowned_event_literals(lookup: &SemanticLookup<'_>) -> HashSet<(String, Span)> {
+pub(crate) fn event_invoked_literals(lookup: &SemanticLookup<'_>) -> HashSet<(String, Span)> {
     let mut literals = HashSet::default();
     if !lookup.program_closed
         || lookup.files().iter().any(|file| {

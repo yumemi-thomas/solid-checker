@@ -1,0 +1,15 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/host-callback-read-timing/variants/bound-dispatch/App.tsx",
+      "start": 140,
+      "end": 149,
+      "fixes": 0
+    }
+  ]
+}
