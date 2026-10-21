@@ -404,6 +404,12 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         rule_options.runtime.program_is_closed(),
     )
     .with_router_install(rule_options.runtime.router_install.clone());
+    // ADR 0347: which exports a namespace import hands out, read once per build.
+    semantic_lookup.set_namespace_hand_outs(crate::attribution::namespace_hand_outs(
+        &semantic_lookup,
+        aliases,
+        &typescript_indexes.symbols_by_root,
+    ));
     let semantic_lookup = &semantic_lookup;
     let reuse = ReusePlan::prepare(
         facts,

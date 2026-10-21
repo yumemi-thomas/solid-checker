@@ -2,16 +2,6 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/App.tsx",
-      "start": 88,
-      "end": 97,
-      "fixes": 0
-    },
-    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "violation",
@@ -102,16 +92,6 @@
       "fixes": 0
     },
     {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/AugmentedTimers.tsx",
-      "start": 717,
-      "end": 726,
-      "fixes": 0
-    },
-    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "violation",
@@ -129,16 +109,6 @@
       "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/Fetch.tsx",
       "start": 574,
       "end": 586,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/leaf-scope-host-callbacks/Fetch.tsx",
-      "start": 712,
-      "end": 721,
       "fixes": 0
     },
     {

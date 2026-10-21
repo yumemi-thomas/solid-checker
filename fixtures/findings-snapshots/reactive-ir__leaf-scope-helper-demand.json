@@ -2,16 +2,6 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/leaf-scope-helper-demand/App.tsx",
-      "start": 288,
-      "end": 297,
-      "fixes": 0
-    },
-    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "violation",

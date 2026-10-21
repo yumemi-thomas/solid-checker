@@ -2,46 +2,6 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/leaf-scope-helper-completion/App.tsx",
-      "start": 303,
-      "end": 312,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/leaf-scope-helper-completion/App.tsx",
-      "start": 529,
-      "end": 538,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/leaf-scope-helper-completion/App.tsx",
-      "start": 660,
-      "end": 669,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/leaf-scope-helper-completion/App.tsx",
-      "start": 773,
-      "end": 782,
-      "fixes": 0
-    },
-    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "violation",
@@ -132,16 +92,6 @@
       "fixes": 0
     },
     {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/leaf-scope-helper-completion/App.tsx",
-      "start": 2813,
-      "end": 2822,
-      "fixes": 0
-    },
-    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -162,16 +112,6 @@
       "fixes": 0
     },
     {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/leaf-scope-helper-completion/App.tsx",
-      "start": 3565,
-      "end": 3574,
-      "fixes": 0
-    },
-    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -179,16 +119,6 @@
       "path": "fixtures/reactive-ir/leaf-scope-helper-completion/App.tsx",
       "start": 3758,
       "end": 3775,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/leaf-scope-helper-completion/App.tsx",
-      "start": 4020,
-      "end": 4029,
       "fixes": 0
     },
     {

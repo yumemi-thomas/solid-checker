@@ -520,29 +520,11 @@
        "ownership": "checker-only",
        "diagnostics": []
       }
-     },
-     {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
-      "span": {
-       "textRange": [
-        85,
-        94
-       ]
-      },
-      "fix": {
-       "behavior": "none"
-      },
-      "typescript": {
-       "ownership": "checker-only",
-       "diagnostics": []
-      }
      }
     ],
     "absent": []
-   }
+   },
+   "note": "The onCleanup in a createTrackedEffect body is SC3001's claim alone. A tracked body always runs under the tracked node, which forbids children, whether or not the effect was created under an owner (ADR 0347, amendment of 2026-10-21), so the runtime throws CLEANUP_IN_FORBIDDEN_SCOPE there and never NO_OWNER_CLEANUP. The SC4001 that was reported on this span claimed a cleanup that cannot run unowned. The unowned effect at the callee keeps its SC4001 (NO_OWNER_EFFECT)."
   },
   {
    "id": "react-prop/typescript-owned/002",

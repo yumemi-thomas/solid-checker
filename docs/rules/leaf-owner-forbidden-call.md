@@ -27,7 +27,19 @@ merely created by the callback executes outside the leaf extent.
 
 `onSettled` becomes a leaf owner only when its call is proven owner-backed.
 Out-of-band calls enqueue a plain callback and remain outside this rule; an
-unprovable caller or nullable owner is uncertifiable.
+unprovable caller or nullable owner is uncertifiable. An `onSettled` called inside
+another leaf body is always queued out of band, because that body's owner is
+children-forbidden: it is never claimed here, and its callback is judged as
+out-of-band (`missing-owner`).
+
+An `onCleanup` in an owned leaf is this rule's claim: the runtime throws
+`CLEANUP_IN_FORBIDDEN_SCOPE` there, and it does so wherever the cleanup sits in
+the leaf's extent, a helper the leaf calls included. A `createTrackedEffect`
+body runs under the tracked node whatever the effect's owner, so its cleanup is
+this rule's claim even when the effect itself has no owner. The same site is not
+also reported as `missing-owner` (SC4001), which claims only a cleanup that never
+runs: one in an `onSettled` callback queued with no owner, or with an owner that
+may be absent (ADR 0347).
 
 ## Examples
 

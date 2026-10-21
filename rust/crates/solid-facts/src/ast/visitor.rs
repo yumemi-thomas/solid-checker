@@ -2,6 +2,97 @@
 
 use super::*;
 
+/// The expression under any parentheses and TypeScript wrappers.
+fn unwrapped<'e, 'a>(mut expression: &'e Expression<'a>) -> &'e Expression<'a> {
+    loop {
+        expression = match expression {
+            Expression::ParenthesizedExpression(inner) => &inner.expression,
+            Expression::TSAsExpression(inner) => &inner.expression,
+            Expression::TSSatisfiesExpression(inner) => &inner.expression,
+            Expression::TSNonNullExpression(inner) => &inner.expression,
+            Expression::TSTypeAssertion(inner) => &inner.expression,
+            _ => return expression,
+        };
+    }
+}
+
+/// The dynamic import an expression awaits: `await import(x)`, through any
+/// parentheses.
+fn awaited_import<'e, 'a>(expression: &'e Expression<'a>) -> Option<&'e ImportExpression<'a>> {
+    let Expression::AwaitExpression(awaited) = unwrapped(expression) else {
+        return None;
+    };
+    match unwrapped(&awaited.argument) {
+        Expression::ImportExpression(import) => Some(import),
+        _ => None,
+    }
+}
+
+/// The dynamic import a concise arrow returns: `() => import(x)`.
+fn concise_import<'e, 'a>(
+    arrow: &'e ArrowFunctionExpression<'a>,
+) -> Option<&'e ImportExpression<'a>> {
+    if !arrow.expression {
+        return None;
+    }
+    let [oxc_ast::ast::Statement::ExpressionStatement(statement)] =
+        arrow.body.statements.as_slice()
+    else {
+        return None;
+    };
+    match unwrapped(&statement.expression) {
+        Expression::ImportExpression(import) => Some(import),
+        _ => None,
+    }
+}
+
+/// The export names an object pattern reads, when every key is stated and
+/// no rest element takes the rest of the namespace.
+fn pattern_names(pattern: &oxc_ast::ast::ObjectPattern<'_>) -> Option<Vec<CompactString>> {
+    if pattern.rest.is_some() {
+        return None;
+    }
+    pattern
+        .properties
+        .iter()
+        .map(
+            |property| match pattern_key_slot(&property.key, property.computed) {
+                PatternSlot::Key(name) => Some(name),
+                _ => None,
+            },
+        )
+        .collect()
+}
+
+/// The export `lazy(() => import(x), options)` reads (facts schema 72):
+/// `default` when the options name none, the one a literal `export` option
+/// names, and `None` for any options whose `export` is not a literal.
+fn lazy_export(call: &CallExpression<'_>) -> Option<CompactString> {
+    let Some(options) = call.arguments.get(1) else {
+        return Some(CompactString::from("default"));
+    };
+    let Argument::ObjectExpression(object) = options else {
+        return None;
+    };
+    let mut export = None;
+    for property in &object.properties {
+        let ObjectPropertyKind::ObjectProperty(property) = property else {
+            return None;
+        };
+        match pattern_key_slot(&property.key, property.computed) {
+            PatternSlot::Key(key) if key.as_str() == "export" => {
+                let Expression::StringLiteral(name) = &property.value else {
+                    return None;
+                };
+                export = Some(CompactString::from(name.value.as_str()));
+            }
+            PatternSlot::Key(_) => {}
+            _ => return None,
+        }
+    }
+    Some(export.unwrap_or_else(|| CompactString::from("default")))
+}
+
 impl<'a> Visit<'a> for Collector<'_, '_> {
     fn enter_scope(&mut self, _flags: ScopeFlags, scope_id: &std::cell::Cell<Option<ScopeId>>) {
         // SemanticBuilder populated every scope cell in this same AST before
@@ -57,11 +148,18 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             None
         };
         let (specifier, specifier_span) = specifier.unzip();
+        let at = span(expression.span);
+        let consumer = self
+            .module_consumers
+            .iter()
+            .position(|(load, _)| *load == at)
+            .map(|index| self.module_consumers.swap_remove(index).1);
         self.module_loads.push(ModuleLoadFact {
-            span: span(expression.span),
+            span: at,
             kind: ModuleLoadKind::DynamicImport,
             specifier: specifier.clone(),
             specifier_span,
+            consumer,
         });
         if specifier.is_none() {
             self.module_hazards.push(ModuleHazardFact {
@@ -88,6 +186,22 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_call_expression(&mut self, call: &CallExpression<'a>) {
+        // `lazy(() => import(x), options)`: whether this `lazy` is Solid's is
+        // the reactive IR's answer, from the call's primitive.
+        if let Expression::Identifier(callee) = &call.callee
+            && callee.name.as_str() == "lazy"
+            && let Some(Argument::ArrowFunctionExpression(arrow)) = call.arguments.first()
+            && let Some(import) = concise_import(arrow)
+            && let Some(export) = lazy_export(call)
+        {
+            self.module_consumers.push((
+                span(import.span),
+                ModuleLoadConsumer::Lazy {
+                    call: span(call.span),
+                    export,
+                },
+            ));
+        }
         if self.optional_chain_depth == 0
             && self.conditional_flow_depth
                 == self
@@ -121,6 +235,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                     kind: ModuleLoadKind::Require,
                     specifier: specifier.clone(),
                     specifier_span,
+                    consumer: None,
                 });
                 if specifier.is_none() {
                     self.module_hazards.push(ModuleHazardFact {
@@ -229,6 +344,15 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_variable_declarator(&mut self, declaration: &VariableDeclarator<'a>) {
+        // `const { a, b } = await import(x)`: the export names the pattern reads.
+        if let BindingPattern::ObjectPattern(pattern) = &declaration.id
+            && let Some(init) = &declaration.init
+            && let Some(import) = awaited_import(init)
+            && let Some(names) = pattern_names(pattern)
+        {
+            self.module_consumers
+                .push((span(import.span), ModuleLoadConsumer::Members { names }));
+        }
         // The disposal is awaited where the block exits, which is after this
         // declarator; recording the declarator itself is the earlier, and so
         // the conservative, position.
@@ -1745,7 +1869,26 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         walk::walk_jsx_element(self, element);
     }
 
+    fn visit_sequence_expression(&mut self, sequence: &oxc_ast::ast::SequenceExpression<'a>) {
+        if let Some(tail) = sequence.expressions.last() {
+            self.sequences.push(SequenceFact {
+                span: span(sequence.span),
+                tail: span(tail.span()),
+            });
+        }
+        walk::walk_sequence_expression(self, sequence);
+    }
+
     fn visit_static_member_expression(&mut self, member: &StaticMemberExpression<'a>) {
+        // `(await import(x)).a`: the one export the member reads.
+        if let Some(import) = awaited_import(&member.object) {
+            self.module_consumers.push((
+                span(import.span),
+                ModuleLoadConsumer::Members {
+                    names: vec![CompactString::from(member.property.name.as_str())],
+                },
+            ));
+        }
         if Self::ACCESSOR_INSTALLING_MEMBERS.contains(&member.property.name.as_str()) {
             self.record_accessor_installation(member.span);
         }

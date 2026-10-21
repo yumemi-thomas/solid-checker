@@ -782,6 +782,8 @@ pub(super) struct SemanticLookup<'a> {
     compound: compound::State<'a>,
     prop_render_sites: OnceLock<PropRenderSites<'a>>,
     direct_value_aliases: OnceLock<HashSet<SymbolId>>,
+    /// The closed program's namespace census (ADR 0347), set once per build.
+    namespace_hand_outs: OnceLock<crate::attribution::NamespaceHandOuts>,
     bindings_by_symbol: OnceLock<HashMap<SymbolId, BindingResolution>>,
     bindings_by_reference: OnceLock<BindingsByReference>,
     files_by_path: OnceLock<HashMap<&'a str, usize>>,
@@ -912,6 +914,29 @@ impl<'a> SemanticLookup<'a> {
         self
     }
 
+    /// Records the closed program's namespace census (ADR 0347). The pipeline
+    /// sets it once per build, before any owner pass reads it.
+    pub(crate) fn set_namespace_hand_outs(&self, hand_outs: crate::attribution::NamespaceHandOuts) {
+        let _ = self.namespace_hand_outs.set(hand_outs);
+    }
+
+    /// Whether the program names the function at `function` in the module at
+    /// `path` as a value it hands out (ADR 0347, amendment): a static member read or
+    /// a named dynamic-import read. Until the census is set, nothing is.
+    pub(crate) fn hands_out_by_name(&self, path: &str, function: Span) -> bool {
+        self.namespace_hand_outs
+            .get()
+            .is_some_and(|hand_outs| hand_outs.named(path, function))
+    }
+
+    /// Whether the module at `path`'s namespace escapes with no name the
+    /// analysis can read (ADR 0347, amendment). Until the census is set, nothing does.
+    pub(crate) fn escapes_unnamed(&self, path: &str) -> bool {
+        self.namespace_hand_outs
+            .get()
+            .is_some_and(|hand_outs| hand_outs.escapes_unnamed(path))
+    }
+
     pub(super) fn new(
         facts: &'a ProjectFacts,
         ast_indexes: &'a HashMap<solid_facts::core::SourcePath, CachedAstFileIndex>,
@@ -960,6 +985,7 @@ impl<'a> SemanticLookup<'a> {
             compound: compound::State::default(),
             prop_render_sites: OnceLock::new(),
             direct_value_aliases: OnceLock::new(),
+            namespace_hand_outs: OnceLock::new(),
             bindings_by_symbol: OnceLock::new(),
             bindings_by_reference: OnceLock::new(),
             files_by_path: OnceLock::new(),

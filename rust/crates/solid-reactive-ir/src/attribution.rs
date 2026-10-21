@@ -79,6 +79,7 @@ pub(crate) fn discharge_closed_program_export_dispatch(
         symbols_by_root,
         namespace_escapes: RefCell::new(HashMap::default()),
         attested_project_texts: RefCell::new(None),
+        may_name_unresolved: true,
     };
     defects.retain(|defect| {
         let Some(file) = graph.file(defect.location.path.as_ref()) else {
@@ -121,6 +122,110 @@ pub(crate) fn discharge_closed_program_export_dispatch(
 /// How many functions a parameter's value is followed back through (ADR 0213).
 const PASS_THROUGH_DEPTH: usize = 4;
 
+/// The exported functions of a closed program that a namespace import or a
+/// dynamic import hands out (ADR 0347, amendment).
+///
+/// Two kinds of hand-out. A function the program names as a value is handed out
+/// by name: a static member read `ns.fn` used as a value, or a dynamic import's
+/// named read (`lazy(() => import(x))` reads `default`, `const { fn } = await
+/// import(x)` reads `fn`). A caller the analysis cannot enumerate may run it, as
+/// it may run an exported function. A module whose namespace escapes with no
+/// name the analysis can read (passed along, spread, `Object.keys`, an alias, an
+/// element access, `export * as`, a `require`, a dynamic import whose read is not
+/// named) hands out every export it has, with nothing to tell which one. A
+/// function no read names is reachable only through that escape, so its reach
+/// is uncertain, and [`CallGraph::module_namespace_escapes`] decides it.
+#[derive(Default)]
+pub(crate) struct NamespaceHandOuts {
+    /// Modules whose namespace escapes with no readable name (ADR 0347, amendment).
+    unnamed: HashSet<String>,
+    /// Functions handed out by name, as `(module path, function span)`.
+    members: HashSet<(String, Span)>,
+}
+
+impl NamespaceHandOuts {
+    /// Whether the function at `function` in the module at `path` is handed out
+    /// by name.
+    pub(crate) fn named(&self, path: &str, function: Span) -> bool {
+        self.members.contains(&(path.to_string(), function))
+    }
+
+    /// Whether the module at `path`'s namespace escapes with no readable name.
+    pub(crate) fn escapes_unnamed(&self, path: &str) -> bool {
+        self.unnamed.contains(path)
+    }
+}
+
+/// The namespace census of a closed program (ADR 0347). An open program's
+/// exports already have an unknown caller, so it has nothing to add.
+pub(crate) fn namespace_hand_outs(
+    lookup: &SemanticLookup<'_>,
+    aliases: &HashMap<SymbolId, SymbolId>,
+    symbols_by_root: &HashMap<SymbolId, Vec<SymbolId>>,
+) -> NamespaceHandOuts {
+    let mut hand_outs = NamespaceHandOuts::default();
+    if !lookup.program_closed {
+        return hand_outs;
+    }
+    let files = lookup.files();
+    let graph = CallGraph {
+        files_by_path: files
+            .iter()
+            .map(|file| (file.path.as_str(), file))
+            .collect(),
+        lookup,
+        entities: lookup.entities(),
+        aliases,
+        symbols_by_root,
+        namespace_escapes: RefCell::new(HashMap::default()),
+        attested_project_texts: RefCell::new(None),
+        may_name_unresolved: false,
+    };
+    for file in files {
+        if !file.ast.exports.is_empty() && graph.module_namespace_escapes(file.path.as_str()) {
+            hand_outs.unnamed.insert(file.path.to_string());
+        }
+        for load in &file.ast.module_loads {
+            if let Some(named) = graph.named_load_members(file, load) {
+                hand_outs.members.extend(named);
+            }
+        }
+        // The member a call invokes is a call, not a hand-out; every other read
+        // of a static member in a runtime position hands its value out.
+        let callees = file
+            .ast
+            .calls
+            .iter()
+            .map(|call| file.ast.peel_ts_sugar_span(call.callee))
+            .collect::<HashSet<_>>();
+        for member in &file.ast.members {
+            if file
+                .ast
+                .computed_members
+                .binary_search(&member.span)
+                .is_ok()
+                || callees.contains(&member.span)
+                || file
+                    .ast
+                    .type_queries
+                    .iter()
+                    .any(|query| query.contains(member.span))
+            {
+                continue;
+            }
+            let Some(symbol) = lookup.entity_symbol(file, member.property) else {
+                continue;
+            };
+            if let Some((target_file, target)) = lookup.function_for_symbol(symbol) {
+                hand_outs
+                    .members
+                    .insert((target_file.path.to_string(), target.span));
+            }
+        }
+    }
+    hand_outs
+}
+
 struct CallGraph<'a, 'b> {
     files_by_path: HashMap<&'a str, &'a FileFacts>,
     lookup: &'a SemanticLookup<'b>,
@@ -132,6 +237,12 @@ struct CallGraph<'a, 'b> {
     /// Specifier texts the compiler resolves to a project file somewhere,
     /// built on first use.
     attested_project_texts: RefCell<Option<HashMap<String, Vec<String>>>>,
+    /// Whether a specifier this analysis cannot resolve may name any module. The
+    /// closed-program discharge takes that premise (ADR 0203), so an unknown
+    /// namespace escapes every module. The namespace census (ADR 0347) does not:
+    /// a hand-out it cannot prove is not one, and a reachable export there would
+    /// make an unproven owner question a violation.
+    may_name_unresolved: bool,
 }
 
 impl<'a> CallGraph<'a, '_> {
@@ -262,7 +373,7 @@ impl<'a> CallGraph<'a, '_> {
             None => self
                 .lookup
                 .namespace_module_paths(file.path.as_str(), span)
-                .is_none_or(|paths| {
+                .map_or(self.may_name_unresolved, |paths| {
                     paths
                         .iter()
                         .any(|target| self.module_exposes(target, path, &mut Vec::new()))
@@ -305,16 +416,22 @@ impl<'a> CallGraph<'a, '_> {
                     && (import.exported
                         || !namespace_used_by_static_members(file, import.local.span))
             });
+            // A load whose read is named hands out only the names it reads, so it
+            // escapes nothing (ADR 0347, amendment); every other load may hand out the lot.
             let loaded = file.ast.module_loads.iter().any(|load| {
-                load.specifier.as_deref().is_none_or(|specifier| {
-                    self.specifier_reaches(
-                        file,
-                        load.specifier_span,
-                        specifier,
-                        path,
-                        &mut Vec::new(),
-                    )
-                })
+                self.named_load_members(file, load).is_none()
+                    && load
+                        .specifier
+                        .as_deref()
+                        .map_or(self.may_name_unresolved, |specifier| {
+                            self.specifier_reaches(
+                                file,
+                                load.specifier_span,
+                                specifier,
+                                path,
+                                &mut Vec::new(),
+                            )
+                        })
             });
             namespace_escapes || reexported || required || loaded
         })
@@ -354,7 +471,7 @@ impl<'a> CallGraph<'a, '_> {
         // external or a built-in module imports no project module (ADR 0193).
         if let Some(runtime) = self.lookup.runtime_resolutions() {
             let Some(at) = at else {
-                return true;
+                return self.may_name_unresolved;
             };
             return match runtime.outcome(from.path.as_str(), at, specifier) {
                 solid_facts::runtime_resolution::RuntimeOutcome::File {
@@ -366,7 +483,9 @@ impl<'a> CallGraph<'a, '_> {
                     .is_some_and(|target| self.module_exposes(target, path, visiting)),
                 solid_facts::runtime_resolution::RuntimeOutcome::External
                 | solid_facts::runtime_resolution::RuntimeOutcome::Builtin => false,
-                solid_facts::runtime_resolution::RuntimeOutcome::Unknown => true,
+                solid_facts::runtime_resolution::RuntimeOutcome::Unknown => {
+                    self.may_name_unresolved
+                }
             };
         }
         let attested = at.and_then(|at| {
@@ -381,7 +500,7 @@ impl<'a> CallGraph<'a, '_> {
         });
         if let Some(row) = attested {
             if row.resolution == solid_facts::ImportResolution::Unresolved {
-                return true;
+                return self.may_name_unresolved;
             }
             let resolved = if row.included_path.is_empty() {
                 row.resolved_path.as_ref()
@@ -400,11 +519,14 @@ impl<'a> CallGraph<'a, '_> {
             if row.resolution != solid_facts::ImportResolution::NodeModules
                 || !resolved.contains("/node_modules/")
             {
-                return true;
+                return self.may_name_unresolved;
             }
             // An installed package exposes no project module, unless its
             // directory holds a program file: an analyzed workspace source
             // installed there. An unknown package directory may hold one.
+            if !self.may_name_unresolved {
+                return false;
+            }
             return row
                 .package_manifest
                 .as_deref()
@@ -419,7 +541,7 @@ impl<'a> CallGraph<'a, '_> {
         }
         if !specifier.starts_with('.') {
             if !crate::runtime_semantics::is_node_builtin_module(specifier) {
-                return true;
+                return self.may_name_unresolved;
             }
             // A mapping the compiler resolves this name through elsewhere adds
             // the project file it names; it never removes a candidate.
@@ -434,7 +556,166 @@ impl<'a> CallGraph<'a, '_> {
             specifier,
             files.iter().map(|file| file.path.as_str()),
         )
-        .is_none_or(|resolved| self.module_exposes(resolved, path, visiting))
+        .map_or(self.may_name_unresolved, |resolved| {
+            self.module_exposes(resolved, path, visiting)
+        })
+    }
+
+    /// Whether `callee` is Solid's `lazy` (ADR 0347, amendment): a named import of `lazy`
+    /// from a module the dialect's export table names for it, which is
+    /// `solid-js` alone. The callee's binder declaration decides which import,
+    /// and the call's own entity does not need typefacts to name it: an
+    /// overloaded declaration is not named there.
+    fn solid_lazy_callee(&self, file: &solid_facts::FileFacts, callee: Span) -> bool {
+        let Some(declaration) = file.ast.reference_declaration(callee) else {
+            return false;
+        };
+        file.ast
+            .imports
+            .iter()
+            .filter(|import| !import.type_only)
+            .any(|import| {
+                import.bindings.iter().any(|binding| {
+                    binding.local.span == declaration
+                        && !binding.type_only
+                        && binding.kind == solid_facts::ast::ImportKind::Named
+                        && binding.imported.as_deref() == Some("lazy")
+                        && solid_dialect::Dialect::export_modules(
+                            self.lookup.dialect,
+                            "lazy",
+                            solid_dialect::ExportPosition::Value,
+                        )
+                        .contains(&import.module.as_str())
+                })
+            })
+    }
+
+    /// The functions a dynamic import's named read hands out, as `(module path,
+    /// function span)` (ADR 0347, amendment). `None` when the read is not named, when the
+    /// specifier does not load one project module directly, or when a name is
+    /// not a local function export of it: the caller then counts the load as an
+    /// unnamed escape. Solid's `lazy` reads only the export its options name.
+    fn named_load_members(
+        &self,
+        file: &solid_facts::FileFacts,
+        load: &solid_facts::ast::ModuleLoadFact,
+    ) -> Option<Vec<(String, Span)>> {
+        let names: Vec<&str> = match load.consumer.as_ref()? {
+            solid_facts::ast::ModuleLoadConsumer::Members { names } => {
+                names.iter().map(|name| name.as_str()).collect()
+            }
+            solid_facts::ast::ModuleLoadConsumer::Lazy { call, export } => {
+                // Another function named `lazy` reads nothing from the module.
+                let callee = file
+                    .ast
+                    .calls
+                    .iter()
+                    .find(|fact| fact.span == *call)?
+                    .callee;
+                if !self.solid_lazy_callee(file, callee) {
+                    return None;
+                }
+                vec![export.as_str()]
+            }
+        };
+        let specifier = load.specifier.as_deref()?;
+        let target = self.direct_specifier_target(file, load.specifier_span, specifier)?;
+        let target_file = self.file(&target)?;
+        names
+            .into_iter()
+            .map(|name| self.exported_function(target_file, name))
+            .collect()
+    }
+
+    /// The project module a specifier loads, when it names exactly one: the
+    /// runtime's answer, else the compiler's attested resolution, else a relative
+    /// path. `None` for a bare specifier, an unresolved one, a declaration file,
+    /// or a target outside the project (ADR 0347, amendment).
+    fn direct_specifier_target(
+        &self,
+        from: &solid_facts::FileFacts,
+        at: Option<Span>,
+        specifier: &str,
+    ) -> Option<String> {
+        let target = if let Some(runtime) = self.lookup.runtime_resolutions() {
+            let at = at?;
+            match runtime.outcome(from.path.as_str(), at, specifier) {
+                solid_facts::runtime_resolution::RuntimeOutcome::File {
+                    path: runtime_path,
+                    physical_path,
+                } => [runtime_path.as_ref(), physical_path.as_ref()]
+                    .into_iter()
+                    .find(|target| self.file(target).is_some())?
+                    .to_string(),
+                _ => return None,
+            }
+        } else if let Some(row) = at.and_then(|at| {
+            match self
+                .lookup
+                .resolved_imports()?
+                .specifier(from.path.as_str(), at, specifier)
+            {
+                solid_facts::SpecifierAttestation::Attested(row) => Some(row),
+                solid_facts::SpecifierAttestation::Unattested => None,
+            }
+        }) {
+            if row.resolution == solid_facts::ImportResolution::Unresolved {
+                return None;
+            }
+            if row.included_path.is_empty() {
+                row.resolved_path.to_string()
+            } else {
+                row.included_path.to_string()
+            }
+        } else if specifier.starts_with('.') {
+            solid_facts::resolve_relative_module_path(
+                from.path.as_str(),
+                specifier,
+                self.lookup.files().iter().map(|file| file.path.as_str()),
+            )?
+            .to_string()
+        } else {
+            return None;
+        };
+        if [".d.ts", ".d.mts", ".d.cts"]
+            .iter()
+            .any(|extension| target.ends_with(extension))
+        {
+            return None;
+        }
+        self.file(&target).map(|_| target)
+    }
+
+    /// The function a local export `name` of `file` names, resolved by symbol
+    /// (ADR 0347, amendment). `None` for a re-export or `export * as` of that name, for two
+    /// exports of it, for no export at all (a star export may supply it), and for
+    /// a binding that is not a function.
+    fn exported_function(
+        &self,
+        file: &solid_facts::FileFacts,
+        name: &str,
+    ) -> Option<(String, Span)> {
+        let mut local = None;
+        for export in &file.ast.exports {
+            if export.namespace.as_deref() == Some(name) {
+                return None;
+            }
+            for declaration in export.declarations.iter().chain(export.specifiers.iter()) {
+                if declaration.exported.as_str() != name
+                    || declaration.type_only
+                    || export.type_only
+                {
+                    continue;
+                }
+                if export.module.is_some() || local.is_some() {
+                    return None;
+                }
+                local = Some(declaration.local.span);
+            }
+        }
+        let symbol = self.lookup.entity_symbol(file, local?)?;
+        let (target_file, target) = self.lookup.function_for_symbol(symbol)?;
+        Some((target_file.path.to_string(), target.span))
     }
 
     /// The project files the compiler resolves `specifier` to, in any
@@ -482,14 +763,14 @@ impl<'a> CallGraph<'a, '_> {
             .iter()
             .any(|extension| target.ends_with(extension))
         {
-            return true;
+            return self.may_name_unresolved;
         }
         if visiting.iter().any(|seen| seen == target) {
             return false;
         }
         visiting.push(target.to_string());
         let Some(file) = self.file(target) else {
-            return true;
+            return self.may_name_unresolved;
         };
         let imported_from = |local: Span| -> Option<(Span, &str)> {
             file.ast

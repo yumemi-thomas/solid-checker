@@ -5,6 +5,8 @@
 An owner-requiring operation executes without a reactive owner. The rule covers
 effects, cleanup registration, `Loading`/`Errored` boundaries, and an `onSettled`
 callback that returns cleanup. Its message identifies the specific operation.
+A callback of an `onSettled` called inside another leaf body runs with no owner
+(rc.13 queues it), so an `onCleanup` there is this rule's claim.
 
 ## What it does
 
@@ -67,7 +69,7 @@ component's children runs inside the component's own memo, so it is
 uncertifiable. A call made at module initialization, where no owner is current,
 runs with none, so it is a violation. A call whose enclosing function no owner
 edge reaches (a method or constructor no resolved call names, a getter, an
-exported function that a closed program never calls) is uncertifiable. A
+exported function that no namespace import hands out in a closed program) is uncertifiable. A
 generator never runs when called, and a callback no dialect slot describes may
 run with or without an owner. A function the expression evaluates without
 yielding it (a getter's body, a tagged template's substitution, an operand of
@@ -79,10 +81,28 @@ edge at all, such as a callback handed to a function the analysis does not
 model, or handed to a scheduler through a wrapper call
 (`setTimeout(wrap(() => ...))`), is still treated as owned by the
 owner-creating callback it is written in, and is not reported inside a
-component. Where it runs with no owner, that is a false negative. An IIFE is not
-an owner edge either: a plain IIFE at module scope that creates an effect is not
-reported, and neither is one inside a function no edge reaches
-(`docs/open-work.md`).
+component. Where it runs with no owner, that is a false negative.
+
+An invoked function literal is an owner edge (ADR 0347): the call runs its body
+under the owner of the code around the call, so a plain IIFE at module scope or
+inside an unowned callback is a violation, and one in a component body is owned.
+The call forms that run the literal are a direct call, `.call` and `.apply` on
+the literal, `new` on a plain function expression (an arrow, an async function
+or a method throws before its body runs), a comma expression whose last operand
+is the literal (`(0, () => …)()`), and a static field or static block
+initializer, which runs at class evaluation under the code around the class.
+Withheld, and so uncertain or silent: a generator (calling it runs no body), and
+a call placed under another owner, which is an instance field initializer (it
+runs at construction) or JSX in the owner's own body (a child or an attribute).
+The code after an async IIFE's first `await` is a continuation with no owner
+(ADR 0333), as for any async function. An operation in a literal that a
+synchronous guard invokes is guarded: `if (getOwner()) (() => { … })()` runs
+only under an owner, so it is not reported; the guard must be Solid's
+`getOwner`, and no `await` may separate it from the operation (ADR 0347).
+
+In a closed program (a project whose boundary is declared closed, or whose manifest publishes nothing), an export the program reads by name has a caller the analysis cannot see (ADR 0347). A name is read by a static member read `ns.fn` used as a value rather than called, or by a dynamic import's named read: `const { fn } = await import(x)`, `(await import(x)).fn`, or `lazy(() => import(x))`, which reads its `default` export, or the `export` option of a `lazy` call that is Solid's. Such an export is seeded as an open program's export is: a detached callback it passes to `runWithOwner(null, …)` is a violation, and a requirement in its own body is uncertifiable. An export that no read names stays dormant, unless its module's namespace escapes with no readable name: passed along, spread, given to `Object.keys` or `Object.entries`, bound to an alias, read by an element access, re-exported with `export * as`, loaded by `require`, or imported in a shape the census does not name. Such an escape could reach any export of the module, so an export only that escape reaches is uncertain: a detached callback in it is uncertifiable, not a violation (ADR 0347). The one case this leaves unreported is `Object.entries(ns)` whose values the program calls; see `docs/open-work.md`.
+
+A cleanup registered in a leaf whose leaf is itself owned runs in that leaf, which `leaf-owner-forbidden-call` reports, so it is not reported here. A `createTrackedEffect` body runs under its tracked node whatever the effect's owner, so its cleanup is that rule's claim too. A cleanup in an `onSettled` callback queued with no owner never runs, and that claim stays here (ADR 0347).
 
 The proven `onSettled` cleanup variant has **error** severity because Solid 2.0
 throws `SETTLED_CLEANUP_UNOWNED` in development and silently drops the cleanup

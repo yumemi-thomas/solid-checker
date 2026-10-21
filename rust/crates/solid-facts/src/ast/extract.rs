@@ -78,6 +78,10 @@ pub(super) struct Collector<'s, 'semantic> {
     pub(super) imports: Vec<ImportFact>,
     pub(super) exports: Vec<ExportFact>,
     pub(super) module_loads: Vec<ModuleLoadFact>,
+    /// The consumers of dynamic imports whose parent read is named, keyed by
+    /// the import's span until its own visit takes them (facts schema 72).
+    pub(super) module_consumers: Vec<(Span, ModuleLoadConsumer)>,
+    pub(super) sequences: Vec<SequenceFact>,
     pub(super) import_equals: Vec<ImportEqualsFact>,
     pub(super) type_imports: Vec<TypeImportFact>,
     pub(super) type_queries: Vec<Span>,
@@ -311,6 +315,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             imports: Vec::new(),
             exports: Vec::new(),
             module_loads: Vec::new(),
+            module_consumers: Vec::new(),
+            sequences: Vec::new(),
             import_equals: Vec::new(),
             type_imports: Vec::new(),
             type_queries: Vec::new(),
@@ -480,6 +486,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             imports: self.imports,
             exports: self.exports,
             module_loads: self.module_loads,
+            sequences: self.sequences,
             import_equals: self.import_equals,
             type_imports: self.type_imports,
             type_queries: self.type_queries,

@@ -275,6 +275,40 @@ mention runs after its declarator.
   into the cross-file owner cache, so a wrapper changed in one file invalidates its
   callers in others.
 
+### Invoked literals and namespace hand-outs (ADR 0347)
+
+- **Invoked literal edge.** `invoked_function_literal` and `invocation_runs_under_owner`
+  (`rust/crates/solid-reactive-ir/src/owners/owner_context.rs`) make a direct call of a
+  function literal an owner edge, after the callee's parentheses and type assertions are
+  peeled. `.call`/`.apply` on a literal, `new` on a plain function expression and a comma
+  expression's last operand (`SequenceFact`, `rust/crates/solid-facts/src/ast/types.rs`)
+  count too. Both owner passes read them: `find_missing_owners` (`owners/missing_owners.rs`)
+  and `discover_owner_file` (`owners/owner_discovery.rs`). The edge is withheld for an
+  instance field initializer and for JSX in the owner's own body.
+- **Hand-out census.** `namespace_hand_outs` (`rust/crates/solid-reactive-ir/src/attribution.rs`)
+  is built once per build by the pipeline (`SemanticLookup::set_namespace_hand_outs`). A
+  hand-out is a static member read `ns.fn` used as a value, or a namespace object used
+  other than by a static member (`Object.entries(ns)`, an alias, an element access,
+  `export * as`). A specifier that does not resolve to the module is not counted.
+- **Named reads.** `ModuleLoadConsumer` (`types.rs`) records the names a dynamic import's
+  result reads: `Members` for `const { a } = await import(x)` and `(await import(x)).a`,
+  and `Lazy` for `lazy(() => import(x), options)`, whose callee must be a named import of
+  `lazy` from a module the dialect's export table names. Typefacts does not name the
+  overloaded `lazy`, so the import binding decides. rc.13's `lazy` reads
+  `mod[options.export]`, or `mod.default` (`solid-js` `dist/solid.dev.js`).
+- **Seeds.** `seed_namespace_hand_outs` (`owners/owner_graph.rs`) applies the named
+  hand-outs at graph assembly, so per-file fragments stay cached; it seeds
+  `OWNER_CONTEXT_UNOWNED` without a proof. `seed_unnamed_hand_outs` seeds an export that
+  only an unnamed escape reaches the same way, and `propagate_owner_contexts` passes no
+  proof out of it. `open_world_unowned_only` (`owners.rs`) is the open-world test and
+  ignores `OWNER_CONTEXT_LEAF`.
+- **Leaf bits.** `OWNER_CONTEXT_LEAF_OWNED` (`owners.rs`) marks a leaf created under a
+  children-capable owner; `QueuedLeaf` edges (an `onSettled` inside a leaf body) run with
+  no owner. `tracked_leaf_body_context` (`owner_context.rs`) gives a `createTrackedEffect`
+  body `LEAF | LEAF_OWNED` on every live path. `OWNER_CONTEXT_LEAVES_REGION` includes
+  `LEAF`, since a leaf body is not region-owned. The owner gate reads the run-owned bit
+  (`owner_context.rs`).
+
 ## How the Solid 1.x dialect landed
 
 **Historical, and kept deliberately.** Solid 1.x was retired in 2026-09

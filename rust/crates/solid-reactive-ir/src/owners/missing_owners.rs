@@ -27,6 +27,7 @@ pub(crate) fn find_missing_owners(
         .filter_map(|(index, node)| node.symbol.clone().map(|symbol| (symbol, index)))
         .collect::<HashMap<_, _>>();
     let mut contexts = seed_contexts(&nodes);
+    seed_named_hand_outs(&nodes, lookup, &mut contexts);
     let mut edges = Vec::<(usize, usize, OwnerEdgeKind)>::new();
     let mut requirements = Vec::new();
     let mut seen = HashSet::default();
@@ -51,6 +52,32 @@ pub(crate) fn find_missing_owners(
                     edges.push((owner, target_index, OwnerEdgeKind::Preserve));
                 } else {
                     contexts[target_index] |= OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED;
+                }
+            }
+            // ADR 0347: an invoked function literal runs in the call, under the
+            // owner of the code around it (`invocation_runs_under_owner`).
+            if let Some(function) = invoked_function_literal(file, call)
+                && let Some(target_index) = nodes_by_path
+                    .get(file.path.as_str())
+                    .into_iter()
+                    .flatten()
+                    .copied()
+                    .find(|index| nodes[*index].span == function.span)
+            {
+                let owner =
+                    enclosing_function_span(&nodes, &nodes_by_path, file.path.as_str(), call.span);
+                if invocation_runs_under_owner(
+                    file,
+                    call.span,
+                    owner.map(|index| nodes[index].span),
+                ) {
+                    match owner {
+                        Some(owner) => edges.push((owner, target_index, OwnerEdgeKind::Preserve)),
+                        None => {
+                            contexts[target_index] |=
+                                OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED;
+                        }
+                    }
                 }
             }
             for edge in owner_callback_edges(
@@ -175,8 +202,10 @@ pub(crate) fn find_missing_owners(
     for (source, target, kind) in edges {
         outgoing[source].push((target, kind));
     }
-    propagate_owner_contexts(&mut contexts, &outgoing);
-    settle_eager_owners(&mut contexts, &outgoing);
+    let candidates = unnamed_hand_out_candidates(&nodes, lookup);
+    let uncertain = seed_unnamed_hand_outs(&mut contexts, &outgoing, &candidates);
+    propagate_owner_contexts(&mut contexts, &outgoing, &uncertain);
+    settle_eager_owners(&mut contexts, &outgoing, &uncertain);
 
     let continuations = AwaitContinuations::new(facts, lookup);
     let mut settled_gates = SettledGateDecisions::default();
@@ -265,9 +294,15 @@ pub(crate) fn find_missing_owners(
                         registration == ProofStatus::Uncertain,
                     ))
                 }
+                // A cleanup in an owned leaf is SC3001's claim, not "never
+                // runs": the runtime throws CLEANUP_IN_FORBIDDEN_SCOPE there. An
+                // unowned or conditional leaf never runs it, which stays SC4001's
+                // (ADR 0347 amendment).
                 (Some(OwnerRequirementRole::Cleanup), _) if !root_owned => Some((
                     "cleanup",
-                    context & (OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LEAF) != 0,
+                    context & OWNER_CONTEXT_UNOWNED != 0
+                        || (context & OWNER_CONTEXT_LEAF != 0
+                            && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED) == 0),
                     false,
                 )),
                 (Some(OwnerRequirementRole::SettledCleanup), _) if !root_owned => {
@@ -347,8 +382,8 @@ pub(crate) fn find_missing_owners(
                 let conditional_owner = !component_uncertain
                     && !proven_unowned
                     && !later_run_unowned
-                    && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED)
-                        == (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED);
+                    && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED) != 0
+                    && context & OWNER_CONTEXT_UNOWNED != 0;
                 let caller_uncertain = !proven_unowned
                     && owner_index.is_some_and(|index| {
                         (nodes[index].exported
@@ -430,8 +465,8 @@ pub(crate) fn find_missing_owners(
             let conditional_owner = !component_uncertain
                 && !proven_unowned
                 && !later_run_unowned
-                && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED)
-                    == (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED);
+                && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED) != 0
+                && context & OWNER_CONTEXT_UNOWNED != 0;
             push_owner_requirement(
                 &mut requirements,
                 &mut seen,
