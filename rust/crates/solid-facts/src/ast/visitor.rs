@@ -1682,6 +1682,21 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 .iter()
                 .map(|child| span(child.span()))
                 .collect(),
+            empty_children: element
+                .children
+                .iter()
+                .filter_map(|child| match child {
+                    oxc_ast::ast::JSXChild::ExpressionContainer(container)
+                        if matches!(
+                            container.expression,
+                            oxc_ast::ast::JSXExpression::EmptyExpression(_)
+                        ) =>
+                    {
+                        Some(span(child.span()))
+                    }
+                    _ => None,
+                })
+                .collect(),
         });
         walk::walk_jsx_element(self, element);
     }

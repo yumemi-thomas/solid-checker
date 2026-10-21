@@ -92,16 +92,6 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/value-flow-review/App.tsx",
-      "start": 1725,
-      "end": 1736,
-      "fixes": 0
-    },
-    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",

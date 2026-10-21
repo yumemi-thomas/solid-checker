@@ -97,6 +97,26 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/prop-body-call-guard/App.tsx",
+      "start": 1791,
+      "end": 1803,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/prop-body-call-guard/App.tsx",
+      "start": 1878,
+      "end": 1890,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/prop-body-call-guard/App.tsx",
       "start": 2068,
       "end": 2075,
       "fixes": 0

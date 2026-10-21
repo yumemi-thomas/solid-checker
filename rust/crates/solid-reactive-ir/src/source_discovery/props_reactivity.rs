@@ -635,8 +635,8 @@ pub(super) type SpreadForward = (Location, BTreeSet<String>);
 
 /// The forward a spread call site makes when its last spread is exactly the
 /// props parameter of a component (the props object itself, still current,
-/// with no `merge` result or destructured view attached to its declaration —
-/// the same identity `props.x` forwarding requires). Any other spread, or an
+/// with nothing but proven views and const aliases attached to its
+/// declaration — the same identity `props.x` forwarding requires). Any other spread, or an
 /// attribute whose name cannot be read, forwards nothing.
 fn spread_of_own_props(
     lookup: &SemanticLookup<'_>,
@@ -674,9 +674,14 @@ fn spread_of_own_props(
             &symbol,
             SPREAD_RECEIVER_DEPTH,
         )
-        || prop_sources
-            .iter()
-            .any(|(other, (_, attached))| other != &symbol && attached == declaration)
+        || !crate::local_access::props_root_attachments_are_views(
+            file,
+            prop_sources,
+            declaration,
+            &symbol,
+            entities,
+            lookup,
+        )
     {
         return None;
     }
@@ -698,11 +703,13 @@ const SPREAD_RECEIVER_DEPTH: usize = 4;
 
 /// Whether a props root still holds the getters its callers wrote, allowing
 /// one more kind of whole-object use than [`crate::local_access::props_root_is_current`]:
-/// a JSX spread into a component. With any other attribute, spread or child,
-/// the compiler passes `mergeProps(...)`, a view whose `set` and
-/// `deleteProperty` are no-ops on rc.13. A lone spread passes the object
-/// itself (`createComponent(Child, props)`), so the receiver's own props root
-/// must be proven inert the same way.
+/// a JSX spread into a component. When a source other than the props is
+/// provably never falsy, the compiler's `mergeProps(...)` is a view whose `set`
+/// and `deleteProperty` are no-ops on rc.13
+/// ([`crate::local_access::component_element_builds_view`]). Otherwise the
+/// callee may get the object itself (`createComponent(Child, props)`, or a
+/// `mergeProps` of an `undefined` second spread), so the receiver's own props
+/// root must be proven inert the same way.
 fn props_root_is_current_through_spreads(
     lookup: &SemanticLookup<'_>,
     entities: &EntitySymbols,
@@ -711,9 +718,13 @@ fn props_root_is_current_through_spreads(
     symbol: &SymbolId,
     depth: usize,
 ) -> bool {
-    let Some(uses) =
-        crate::local_access::props_root_unaccounted_uses(file, declaration, symbol, entities)
-    else {
+    let Some(uses) = crate::local_access::props_root_unaccounted_uses(
+        file,
+        declaration,
+        symbol,
+        entities,
+        lookup,
+    ) else {
         return false;
     };
     uses.iter().all(|span| {
@@ -725,10 +736,11 @@ fn props_root_is_current_through_spreads(
         }) else {
             return false;
         };
-        let lone = element.spreads.len() == 1
-            && element.attributes.is_empty()
-            && element.children.is_empty();
-        !lone
+        // Several sources are a `mergeProps` view only when one is provably
+        // never falsy; otherwise `merge` can return the spread props object
+        // itself (a second spread of an `undefined` identifier), exactly as
+        // a lone spread does, and the receiver must be proven inert.
+        crate::local_access::component_element_builds_view(file, element)
             || (depth > 0
                 && lone_spread_receiver_is_inert(lookup, entities, file, element, depth - 1))
     })
@@ -956,19 +968,26 @@ pub(super) fn classify_passed_expression(
             // in the parent: decided once every component is classified.
             Some(symbol) if prop_sources.contains_key(&symbol) => {
                 let (_, declaration) = &prop_sources[&symbol];
-                // Only the props parameter itself: a `merge` result or a
-                // destructured binding attached to it is a view whose keys
-                // this does not map back to the parent's props.
+                // Only the props parameter itself: a view or alias attached
+                // to it never certifies a read of its own (its keys are not
+                // mapped back to the parent's props), and a destructured
+                // binding attached to it still blocks the forward.
                 if entities.get(declaration) != Some(&symbol)
                     || !crate::local_access::props_root_is_current(
                         file,
                         declaration,
                         &symbol,
                         entities,
+                        lookup,
                     )
-                    || prop_sources
-                        .iter()
-                        .any(|(other, (_, attached))| other != &symbol && attached == declaration)
+                    || !crate::local_access::props_root_attachments_are_views(
+                        file,
+                        prop_sources,
+                        declaration,
+                        &symbol,
+                        entities,
+                        lookup,
+                    )
                 {
                     result = PropUse::Unknown;
                     continue;

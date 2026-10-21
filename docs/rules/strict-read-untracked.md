@@ -116,7 +116,13 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   proven signal-backed and reported as a violation. When the component's call
   sites cannot be enumerated — it is exported, spread into (`<Card {...rest}/>`),
   or referenced outside JSX — the finding is reported as **uncertifiable**: a
-  proof obligation rather than a proven runtime warning.
+  proof obligation rather than a proven runtime warning. A `props.x` read keeps
+  that classification when the body also passes `props` to an `omit`, to a
+  `merge` with another never-falsy source, or to a spread onto a DOM element, or
+  binds a `const` alias that does the same: none can write to the object
+  (ADR 0337, `fixtures/reactive-ir/omit-view-props-root`). A read through the
+  view or alias (`rest.x`, `local.x`), a destructured binding, a `merge` that may
+  return its only source, and a spread onto a component stay uncertifiable.
 
 ## Why is this bad?
 

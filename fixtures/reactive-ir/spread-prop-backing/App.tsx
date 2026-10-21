@@ -101,6 +101,183 @@ function DeletingOuter(props: { count: number }) {
   );
 }
 
+// A second spread is a `mergeProps` view only when some source is provably
+// never falsy. `extra` is a bare identifier that may be `undefined`, so
+// `mergeProps(props, extra)` can hand the callee the parent's props object
+// itself (rc.13 `merge` returns its one non-falsy source), and the callee may
+// delete or redefine the getter before a sibling reads it.
+type Wide = { count?: number; label?: string; children?: unknown; extra?: { tag?: string } };
+const extra: { tag?: string } | undefined = undefined;
+function WipeByDelete(props: Wide) {
+  delete props.count;
+  return <span />;
+}
+function WipeByDefine(props: Wide) {
+  Object.defineProperty(props, "count", { value: 0 });
+  return <span />;
+}
+function ExtraDeleteReader(props: Wide) {
+  const count = props.count;
+  return <span>{count}</span>;
+}
+function ExtraDefineReader(props: Wide) {
+  const count = props.count;
+  return <span>{count}</span>;
+}
+// Uncertifiable: the bare-identifier second spread may be `undefined`.
+function ExtraDeleteOuter(props: Wide) {
+  return (
+    <div>
+      <WipeByDelete {...props} {...extra} />
+      <ExtraDeleteReader {...props} />
+    </div>
+  );
+}
+// Uncertifiable: the same through `Object.defineProperty`.
+function ExtraDefineOuter(props: Wide) {
+  return (
+    <div>
+      <WipeByDefine {...props} {...extra} />
+      <ExtraDefineReader {...props} />
+    </div>
+  );
+}
+
+// Violation: a member spread is dynamic, compiled to the function source
+// `() => props.extra`, which `merge` never drops: the callee gets a view.
+function MemberSpreadReader(props: Wide) {
+  const count = props.count;
+  return <span>{count}</span>;
+}
+function MemberSpreadOuter(props: Wide) {
+  return (
+    <div>
+      <WipeByDelete {...props} {...props.extra} />
+      <MemberSpreadReader {...props} />
+    </div>
+  );
+}
+
+// Violation: an attribute is an object-literal source, never falsy.
+function AttributeSpreadReader(props: Wide) {
+  const count = props.count;
+  return <span>{count}</span>;
+}
+function AttributeSpreadOuter(props: Wide) {
+  return (
+    <div>
+      <WipeByDelete {...props} {...extra} label="x" />
+      <AttributeSpreadReader {...props} />
+    </div>
+  );
+}
+
+// Violation: a rendered child is an object-literal source too.
+function ChildSpreadReader(props: Wide) {
+  const count = props.count;
+  return <span>{count}</span>;
+}
+function ChildSpreadOuter(props: Wide) {
+  return (
+    <div>
+      <WipeByDelete {...props} {...extra}>
+        <span />
+      </WipeByDelete>
+      <ChildSpreadReader {...props} />
+    </div>
+  );
+}
+
+// Babel drops a `children` attribute when the element has any raw child node
+// (`hasChildren && key === "children"`), even whitespace or `{/* */}`, so the
+// element has no never-falsy source and the callee gets the props object.
+// Uncertifiable.
+function ChildrenAttrReader(props: Wide) {
+  const count = props.count;
+  return <span>{count}</span>;
+}
+function ChildrenAttrOuter(props: Wide) {
+  return (
+    <div>
+      <WipeByDelete {...props} {...extra} children="x">
+        {/* nothing */}
+      </WipeByDelete>
+      <ChildrenAttrReader {...props} />
+    </div>
+  );
+}
+// Violation: without a raw child the `children` attribute is a real source.
+function ChildrenAttrSelfReader(props: Wide) {
+  const count = props.count;
+  return <span>{count}</span>;
+}
+function ChildrenAttrSelfOuter(props: Wide) {
+  return (
+    <div>
+      <WipeByDelete {...props} {...extra} children="x" />
+      <ChildrenAttrSelfReader {...props} />
+    </div>
+  );
+}
+
+// Babel's `isDynamic` reads a leading `/*@static*/` comment and passes the
+// member spread raw (`mergeProps(props, props.extra)`), which is `props` when
+// `extra` is undefined. Uncertifiable.
+function StaticMemberReader(props: Wide) {
+  const count = props.count;
+  return <span>{count}</span>;
+}
+function StaticMemberOuter(props: Wide) {
+  return (
+    <div>
+      <WipeByDelete {...props} {.../*@static*/ props.extra} />
+      <StaticMemberReader {...props} />
+    </div>
+  );
+}
+
+// Babel's `filterChildren` drops newline-led text that is whitespace by
+// JavaScript's `\s`, which includes U+FEFF; the only child below is a newline,
+// a U+FEFF and a newline, so the callee gets the props object. Uncertifiable.
+function BomReader(props: Wide) {
+  const count = props.count;
+  return <span>{count}</span>;
+}
+function BomOuter(props: Wide) {
+  return (
+    <div>
+      <WipeByDelete {...props}>
+﻿
+      </WipeByDelete>
+      <BomReader {...props} />
+    </div>
+  );
+}
+
+// The native parser reads `{\u200B}` as an empty expression container, which
+// no lowering turns into a children source, so the callee gets the props
+// object. Uncertifiable.
+function ZwspReader(props: Wide) {
+  const count = props.count;
+  return <span>{count}</span>;
+}
+function ZwspOuter(props: Wide) {
+  return (
+    <div>
+      <WipeByDelete {...props}>{​}</WipeByDelete>
+      <ZwspReader {...props} />
+    </div>
+  );
+}
+
+// `arguments[0]` is the props object under another name: deleting through it
+// removes the caller's getter before the read. Uncertifiable.
+function ArgumentsDeleteReader(props: Wide) {
+  delete arguments[0].count;
+  const count = props.count;
+  return <span>{count}</span>;
+}
+
 export function App() {
   const [count] = createSignal(1);
   return (
@@ -114,6 +291,17 @@ export function App() {
       <StaticOuter count={1} />
       <ChainOuter count={count()} />
       <DeletingOuter count={count()} />
+      <ExtraDeleteOuter count={count()} />
+      <ExtraDefineOuter count={count()} />
+      <MemberSpreadOuter count={count()} />
+      <AttributeSpreadOuter count={count()} />
+      <ChildSpreadOuter count={count()} />
+      <ChildrenAttrOuter count={count()} />
+      <ChildrenAttrSelfOuter count={count()} />
+      <StaticMemberOuter count={count()} />
+      <BomOuter count={count()} />
+      <ZwspOuter count={count()} />
+      <ArgumentsDeleteReader count={count()} />
     </div>
   );
 }
