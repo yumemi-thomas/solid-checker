@@ -467,6 +467,17 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether the callback at `argument` runs during the call inline, and
+    /// this vocabulary has not read that the call creates a root for it. Such
+    /// a write's legality depends on a fact nobody measured, so it is unplaced
+    /// (uncertifiable), never legal. A callback that is a root on this release
+    /// answers [`Dialect::callback_runs_in_created_root`] instead, and the
+    /// default claims nothing.
+    fn callback_root_is_unaudited(&self, primitive: Primitive, argument: usize) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
     /// Whether the callback at `argument` runs synchronously at the call, in the
     /// strict-read window the call itself is in, while clearing the listener.
     ///

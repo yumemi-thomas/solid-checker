@@ -1,0 +1,1 @@
+{"note":"render(() => Home()) and hydrate(() => markHydrated()) write under the root those calls create (@solidjs/web rc.13 web.dev.js:488-495, :1521-1620); Control's write sits in a click handler and must stay silent"}

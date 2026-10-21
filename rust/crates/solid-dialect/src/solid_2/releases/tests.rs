@@ -435,6 +435,42 @@ fn lazy_renders_its_loaded_default_only_on_solid_js_rc13() {
     );
 }
 
+/// ADR 0353: `render` and `hydrate` run `code` under the root they create on
+/// `@solidjs/web` rc.13 alone. Only the web owner decides it, whatever
+/// `solid-js` and `@solidjs/signals` resolve to.
+#[test]
+fn render_and_hydrate_create_a_root_only_on_web_rc13() {
+    for release in ["2.0.0-rc.3", "2.0.0-rc.9", "2.0.0-rc.14"] {
+        assert!(!analyzed(&same(release)).0.render_creates_root, "{release}");
+    }
+    assert!(analyzed(&same("2.0.0-rc.13")).0.render_creates_root);
+    for primitive in [Primitive::Render, Primitive::Hydrate] {
+        assert!(
+            vocabulary_for(Release::Read(13), Release::Read(13), Release::Read(13))
+                .callback_runs_in_created_root(primitive, 0),
+            "{primitive:?}"
+        );
+        assert!(
+            !vocabulary_for(Release::Read(13), Release::Read(13), Release::Read(9))
+                .callback_runs_in_created_root(primitive, 0),
+            "{primitive:?} with rc.9 web"
+        );
+        assert!(
+            vocabulary_for(Release::Read(9), Release::Read(9), Release::Read(13))
+                .callback_runs_in_created_root(primitive, 0),
+            "{primitive:?} with rc.13 web and rc.9 solid-js"
+        );
+    }
+    // Off rc.13 the callback's root is unaudited, so its writes are unplaced.
+    for primitive in [Primitive::Render, Primitive::Hydrate] {
+        assert!(Solid2::CONSERVATIVE.callback_root_is_unaudited(primitive, 0));
+        assert!(Solid2::RC9.callback_root_is_unaudited(primitive, 0));
+        assert!(!Solid2::RC13.callback_root_is_unaudited(primitive, 0));
+        assert!(!Solid2::RC13.callback_root_is_unaudited(primitive, 1));
+    }
+    assert!(!Solid2::RC9.callback_root_is_unaudited(Primitive::CreateRoot, 0));
+}
+
 /// ADR 0138: `Dynamic` renders `component` on every release the reviews
 /// read, and only a one-argument `createMemo` is a holder a rendered value
 /// may be followed through. `dynamic`'s returned component, the store and
@@ -781,7 +817,9 @@ fn the_trait_answers_from_the_variant() {
             "{release}"
         );
     }
-    // Only `createRoot`'s own body is a created root.
+    // Only `createRoot`'s own body is a created root on the conservative
+    // vocabulary. `render` and `hydrate` join it on the audited rc.13 web
+    // alone (ADR 0353).
     assert!(Solid2.callback_runs_in_created_root(Primitive::CreateRoot, 0));
     for (primitive, argument) in [
         (Primitive::CreateRoot, 1),
@@ -790,10 +828,22 @@ fn the_trait_answers_from_the_variant() {
         (Primitive::Flush, 0),
         (Primitive::CreateMemo, 0),
         (Primitive::Render, 0),
+        (Primitive::Hydrate, 0),
     ] {
         assert!(
             !Solid2.callback_runs_in_created_root(primitive, argument),
             "{primitive:?} {argument}"
+        );
+    }
+    assert!(Solid2::RC13.callback_runs_in_created_root(Primitive::CreateRoot, 0));
+    for primitive in [Primitive::Render, Primitive::Hydrate] {
+        assert!(
+            Solid2::RC13.callback_runs_in_created_root(primitive, 0),
+            "{primitive:?}"
+        );
+        assert!(
+            !Solid2::RC13.callback_runs_in_created_root(primitive, 1),
+            "{primitive:?} 1"
         );
     }
     // `flush(fn)` creates no root: it keeps the caller's owner, as

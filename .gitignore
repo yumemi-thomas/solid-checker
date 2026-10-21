@@ -109,6 +109,10 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/setter-in-root-rc3/node_modules/**
 !fixtures/reactive-ir/setter-in-root-rc9/node_modules/
 !fixtures/reactive-ir/setter-in-root-rc9/node_modules/**
+!fixtures/reactive-ir/setter-in-render-root/node_modules/
+!fixtures/reactive-ir/setter-in-render-root/node_modules/**
+!fixtures/reactive-ir/setter-in-render-root-rc9/node_modules/
+!fixtures/reactive-ir/setter-in-render-root-rc9/node_modules/**
 !fixtures/reactive-ir/write-scope-roots-rc3/node_modules/
 !fixtures/reactive-ir/write-scope-roots-rc3/node_modules/**
 !fixtures/reactive-ir/write-scope-roots-rc9/node_modules/

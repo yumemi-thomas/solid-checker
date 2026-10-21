@@ -117,6 +117,14 @@ pub struct Solid2 {
     /// no strict-read window there. `true` on rc.13 alone; every other
     /// release, unread and unresolved included, keeps `false`.
     lazy_renders_component: bool,
+    /// ADR 0353, from `@solidjs/web`: whether `render` and `hydrate` run their
+    /// `code` callback under the root they create
+    /// ([`Dialect::callback_runs_in_created_root`]). `true` on rc.13 alone:
+    /// its `render` calls `code()` inside `createRoot(dispose => …)`
+    /// (`dist/web.dev.js:488-495`), and its `hydrate` reaches that `render` on
+    /// every path (`dist/web.dev.js:1521-1620`). No other `@solidjs/web` release
+    /// was read for this, so each keeps `false`.
+    render_creates_root: bool,
 }
 
 /// The Solid 2 language's own vocabulary, [`Solid2::CONSERVATIVE`], spelled
@@ -527,12 +535,31 @@ impl Dialect for Solid2 {
     /// module scope, in a component body, in a memo compute or in an effect
     /// apply. Prod builds carry no guard and throw nothing.
     ///
-    /// Only `createRoot`. `runWithOwner(owner, fn)` also runs `fn` inline under
-    /// an owner, but a supplied owner can be a leaf (`getOwner()` in a tracked
-    /// effect), where every write is legal; `render`, `hydrate` and
-    /// `createRevealOrder` create a root too but were not probed for this.
+    /// `createRoot`, and `render` and `hydrate` on the audited `@solidjs/web`
+    /// rc.13 (`render_creates_root`). Their `code` argument is called inside
+    /// the `createRoot` that `render` makes (`@solidjs/web@2.0.0-rc.13`
+    /// `dist/web.dev.js:488-495`), and `hydrate` reaches that `render` on every
+    /// path (`:1521-1620`), so the write guard reads the same root there. Only
+    /// rc.13 was read for `render`, so no other release claims it. Not
+    /// `runWithOwner(owner, fn)`, which also runs `fn` inline under an owner,
+    /// but a supplied owner can be a leaf (`getOwner()` in a tracked effect),
+    /// where every write is legal. `createRevealOrder` makes a root too, but
+    /// was not probed.
     fn callback_runs_in_created_root(&self, primitive: Primitive, argument: usize) -> bool {
-        primitive == Primitive::CreateRoot && argument == 0
+        argument == 0
+            && (primitive == Primitive::CreateRoot
+                || (self.render_creates_root
+                    && matches!(primitive, Primitive::Render | Primitive::Hydrate)))
+    }
+
+    /// ADR 0353. Off rc.13, `render`'s and `hydrate`'s `code` callback is not
+    /// audited as a root body ([`Solid2::render_creates_root`]), so a write
+    /// directly in it is unplaced rather than legal: a call at module scope is
+    /// legal only if no root wraps the callback, and nothing read says so.
+    fn callback_root_is_unaudited(&self, primitive: Primitive, argument: usize) -> bool {
+        argument == 0
+            && !self.render_creates_root
+            && matches!(primitive, Primitive::Render | Primitive::Hydrate)
     }
 
     /// ADR 0323 (review round 10). `createRoot(init)` is `runWithOwner(createOwner(),

@@ -342,6 +342,7 @@ impl Solid2 {
         flush_in_effect_callback: true,
         optimistic_store_setter: OptimisticStoreSetterGuard::Guarded,
         lazy_renders_component: false,
+        render_creates_root: false,
     };
 
     /// The vocabulary of the audited triple, [`AUDITED_INSTALLATION`]: what
@@ -370,6 +371,7 @@ impl Solid2 {
         flush_in_effect_callback: true,
         optimistic_store_setter: OptimisticStoreSetterGuard::Guarded,
         lazy_renders_component: false,
+        render_creates_root: false,
     };
 
     /// rc.13 adds one audited strict store-key premise; older reviews
@@ -379,13 +381,14 @@ impl Solid2 {
     pub const RC13: Self = Self {
         store_strict_keys_audited: true,
         lazy_renders_component: true,
+        render_creates_root: true,
         ..Self::RC9
     };
 
     /// How many distinct vocabularies the answers above combine into: every
     /// combination is reachable, because the three owners install
     /// independently.
-    const VARIANT_COUNT: usize = 2 * 2 * 2 * 3 * 2 * 2 * 2 * 2 * 2 * 2;
+    const VARIANT_COUNT: usize = 2 * 2 * 2 * 3 * 2 * 2 * 2 * 2 * 2 * 2 * 2;
 
     /// The vocabulary at one mixed-radix index, [`Solid2::CONSERVATIVE`] at
     /// `0`: digit `0` of every answer is its conservative one. A new
@@ -396,6 +399,7 @@ impl Solid2 {
             store_strict_keys_audited: (index / 192) % 2 == 1,
             lazy_renders_component: (index / 384) % 2 == 1,
             flush_in_effect_callback: (index / 768) % 2 == 1,
+            render_creates_root: (index / 1536) % 2 == 1,
             store_root: if index % 2 == 1 {
                 StoreRootTyping::Mutable
             } else {
@@ -453,6 +457,7 @@ impl Solid2 {
             + 192 * (if self.store_strict_keys_audited { 1 } else { 0 })
             + 384 * (if self.lazy_renders_component { 1 } else { 0 })
             + 768 * (if self.flush_in_effect_callback { 1 } else { 0 })
+            + 1536 * (if self.render_creates_root { 1 } else { 0 })
     }
 
     /// The one `'static` value per vocabulary, which is what an analysis holds.
@@ -524,6 +529,9 @@ fn variant_key(vocabulary: Solid2) -> Option<String> {
     }
     if vocabulary.lazy_renders_component {
         tokens.push("lazy-renders-component");
+    }
+    if vocabulary.render_creates_root {
+        tokens.push("render-creates-root");
     }
     (!tokens.is_empty()).then(|| tokens.join("+"))
 }
@@ -713,6 +721,9 @@ fn vocabulary_for(solid_js: Release<'_>, signals: Release<'_>, web: Release<'_>)
         // release whose wrapper renders through `createComponent`; rc.3 and
         // rc.9 call the loaded member themselves without a strict-read label.
         lazy_renders_component: matches!(solid_js, Release::Read(13)),
+        // ADR 0353. `render` and `hydrate` are `@solidjs/web`'s, so only its
+        // version decides; rc.13 is the one release whose `render` was read.
+        render_creates_root: matches!(web, Release::Read(13)),
         // B1. An unread or unresolved signals keeps `Readonly` (module docs).
         store_root: match signals {
             Release::Read(number) if number >= 7 => StoreRootTyping::Mutable,
