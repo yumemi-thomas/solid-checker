@@ -128,6 +128,8 @@ pub(crate) const fn owner_edge_context(kind: OwnerEdgeKind, source: u8) -> u8 {
             source | OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LATER_RUN_UNOWNED
         }
         OwnerEdgeKind::Leaf => OWNER_CONTEXT_LEAF,
+        OwnerEdgeKind::RefApplied => OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED,
+        OwnerEdgeKind::MayBeUnowned => OWNER_CONTEXT_UNOWNED,
     }
 }
 
@@ -401,6 +403,125 @@ pub(crate) fn owner_callback_edges(
         }
     }
     edges
+}
+
+/// What the value of an intrinsic `ref` does to the owner graph, per function
+/// literal the value writes at its top level (ADR 0345).
+///
+/// The expression is evaluated while the component renders, and the ref
+/// application invokes the value it yields. A function in value position runs
+/// with no owner at that application ([`Applied`](Self::Applied)). A function a
+/// call in the expression calls directly runs while the expression evaluates,
+/// under the owner of the code around it ([`Eager`](Self::Eager)). Any other
+/// top-level function there may be the applied callback, or may run with no
+/// owner, and no proof says which ([`Unproven`](Self::Unproven)).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum RefValueMark {
+    /// The function is written in value position and no call in the expression
+    /// receives it.
+    Applied { function: Span },
+    /// The function is the callee of `call`, which the expression makes.
+    Eager { function: Span, call: Span },
+    /// The function's owner is unproven: a generator (a call runs none of its
+    /// body), a callback handed to a callee no owner edge describes, or a
+    /// function a call in the expression receives or returns.
+    Unproven { function: Span },
+}
+
+/// The [`RefValueMark`]s of the function literals inside each DirectiveApply
+/// role of an intrinsic `ref`, shared by both owner passes.
+///
+/// Only a function no other function in the same role contains is marked. A
+/// function nested in one runs when its own callers run it, and the owner
+/// graph already places it through those calls. A marked generator is
+/// [`Unproven`](RefValueMark::Unproven): calling one runs none of its body, and
+/// the ref application never iterates it.
+pub(crate) fn ref_value_marks(
+    file: &solid_facts::FileFacts,
+    call_primitives: &[Option<PrimitiveName>],
+    lookup: &SemanticLookup<'_>,
+) -> Vec<RefValueMark> {
+    let mut marks = Vec::new();
+    for callback in &file.compiler.callback_roles {
+        if callback.role != solid_facts::compiler::CallbackRoleKind::DirectiveApply
+            || !ref_application_on_intrinsic(file, callback.span)
+        {
+            continue;
+        }
+        let calls = file
+            .ast
+            .calls
+            .iter()
+            .enumerate()
+            .filter(|(_, call)| callback.span.contains(call.span))
+            .collect::<Vec<_>>();
+        let functions = file.ast.functions_within(callback.span).collect::<Vec<_>>();
+        for function in functions.iter().filter(|function| {
+            !functions
+                .iter()
+                .any(|outer| outer.span != function.span && outer.span.contains(function.span))
+        }) {
+            if function.generator {
+                marks.push(RefValueMark::Unproven {
+                    function: function.span,
+                });
+                continue;
+            }
+            if let Some((_, call)) = calls
+                .iter()
+                .find(|(_, call)| file.ast.peel_ts_sugar_span(call.callee) == function.span)
+            {
+                marks.push(RefValueMark::Eager {
+                    function: function.span,
+                    call: call.span,
+                });
+                continue;
+            }
+            let containing = calls
+                .iter()
+                .filter(|(_, call)| call.span.contains(function.span))
+                .collect::<Vec<_>>();
+            if containing.is_empty() {
+                marks.push(RefValueMark::Applied {
+                    function: function.span,
+                });
+                continue;
+            }
+            // A callback whose callee the dialect describes (a synchronous
+            // slot, an effect's apply, a fresh-stack scheduler) is placed by
+            // the owner edges its callers already add.
+            let described = containing.iter().any(|(index, call)| {
+                call.arguments.iter().enumerate().any(|(argument, value)| {
+                    file.ast.peel_ts_sugar_span(value.span) == function.span
+                        && owner_callback_edges(file, call, &call_primitives[*index], lookup)
+                            .iter()
+                            .any(|edge| edge.argument == argument)
+                })
+            });
+            if !described {
+                marks.push(RefValueMark::Unproven {
+                    function: function.span,
+                });
+            }
+        }
+    }
+    marks
+}
+
+/// Whether `span` is one identifier. A ref application that invokes a named
+/// function (`ref={apply}`) resolves its symbol exactly only then: a longer
+/// span's start names some other symbol.
+pub(crate) fn is_identifier_span(file: &solid_facts::FileFacts, span: Span) -> bool {
+    let span = file.ast.peel_ts_sugar_span(span);
+    let text = file
+        .source
+        .get(span.start as usize..span.end as usize)
+        .unwrap_or_default();
+    let mut chars = text.chars();
+    chars
+        .next()
+        .is_some_and(|c| c.is_alphabetic() || c == '_' || c == '$')
+        && chars.all(|c| c.is_alphanumeric() || c == '_' || c == '$')
 }
 
 /// The owner edges of callbacks handed to a reviewed fresh-stack host

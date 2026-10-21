@@ -49,12 +49,12 @@ A known miss is listed as `{ "rule": ..., "site": ..., "reason": ... }` in `open
 | --- | --- | --- | --- |
 | `oracle-behaviour-uncalled-accessor` | SC1005 | text: the violation keeps the accessor's source after the write; the control shows `Count: 7` | `behaviour-confirmed` |
 | `oracle-behaviour-no-direct-mutation` | SC2003 | text: the direct store write is dropped (`Ada`); the setter write shows `Grace` | `behaviour-confirmed` |
-| `oracle-behaviour-primitive-in-directive` | SC6001 | window: the apply-phase effect runs again after its element is hidden (2, not 1); the control's setup-phase effect does not | `behaviour-refuted` (below) |
+| `oracle-behaviour-primitive-in-directive` | SC6001 | window: the apply-phase effect runs again after its element is hidden (2, not 1); the control's setup-phase effect does not | `covered-violation`; behaviour rows confirmed and clean (below) |
 | `oracle-behaviour-jsx-no-duplicate-props` | SC8003 | text: one content slot shows `b`; the children win and the `textContent` value is lost | `behaviour-confirmed` |
 | `oracle-behaviour-components-return-once` | SC1004 | text: the early return stays on screen after the write (`logged out`) | `covered-violation` (dev `STRICT_READ_UNTRACKED` covers the finding); behaviour rows confirmed and clean |
 | `oracle-frame-covered-sc1004` | SC1004 | none: the frame pin (below) | `covered-violation`, empty `staticOnly` |
 
-The `oracle-behaviour-primitive-in-directive` control's `missing-owner` finding (`App.tsx:18`) is refuted by its observation: the runtime disposes the effect when its `Show` branch hides. The rule page's own correct example has the same shape. The finding is a false-positive candidate, recorded with the known false positives in `docs/open-work.md`, not fixed here.
+The `oracle-behaviour-primitive-in-directive` control's `missing-owner` finding (`App.tsx:18`) was refuted by its observation: the runtime disposes the effect when its `Show` branch hides. ADR 0345 removed it, so the control is `behaviour-clean` and no row is refuted.
 
 `NO_OWNER_EFFECT` is claimed by `primitive-in-directive-application` as well as `missing-owner`, because that rule's page names the warning for an apply-phase `createEffect`.
 

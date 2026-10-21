@@ -111,6 +111,16 @@ fn owner_edge_context_transforms_the_source_bits_per_edge_kind() {
         owner_edge_context(OwnerEdgeKind::Leaf, OWNER_CONTEXT_OWNED),
         OWNER_CONTEXT_LEAF
     );
+    // A ref application proves the unowned run; a may-be-unowned callback
+    // carries only the open-world bit, whatever its source.
+    assert_eq!(
+        owner_edge_context(OwnerEdgeKind::RefApplied, 0),
+        OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED
+    );
+    assert_eq!(
+        owner_edge_context(OwnerEdgeKind::MayBeUnowned, OWNER_CONTEXT_OWNED),
+        OWNER_CONTEXT_UNOWNED
+    );
 }
 
 #[test]
@@ -161,6 +171,7 @@ fn node(seed_context: u8) -> OwnerNode {
         body: Span::new(0, 10),
         symbol: None,
         exported: false,
+        generator: false,
         component: seed_context & OWNER_CONTEXT_OWNED != 0,
         component_uncertain: false,
         seed_context,

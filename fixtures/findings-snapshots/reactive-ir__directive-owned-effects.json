@@ -1,0 +1,105 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/directive-owned-effects/App.tsx",
+      "start": 820,
+      "end": 832,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-directive-application",
+      "code": "SC6001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/directive-owned-effects/App.tsx",
+      "start": 820,
+      "end": 832,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-directive-application",
+      "code": "SC6001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/directive-owned-effects/App.tsx",
+      "start": 1348,
+      "end": 1360,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/directive-owned-effects/App.tsx",
+      "start": 1725,
+      "end": 1737,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-directive-application",
+      "code": "SC6001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/directive-owned-effects/App.tsx",
+      "start": 1725,
+      "end": 1737,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/directive-owned-effects/App.tsx",
+      "start": 1959,
+      "end": 1971,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-directive-application",
+      "code": "SC6001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/directive-owned-effects/App.tsx",
+      "start": 1959,
+      "end": 1971,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/directive-owned-effects/App.tsx",
+      "start": 2132,
+      "end": 2144,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-directive-application",
+      "code": "SC6001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/directive-owned-effects/App.tsx",
+      "start": 2132,
+      "end": 2144,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/directive-owned-effects/App.tsx",
+      "start": 2318,
+      "end": 2330,
+      "fixes": 0
+    }
+  ]
+}

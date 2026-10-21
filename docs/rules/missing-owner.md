@@ -54,6 +54,16 @@ runtime premises. A call proved to allocate without an owner is a violation;
 unresolved execution or ownership remains uncertifiable. No contract or receipt
 can supply the missing behavior.
 
+A ref expression on an intrinsic element runs in two places. The function a ref
+application invokes, written in the expression as the value or an array element,
+runs with no owner: a violation. Code a call in the expression evaluates runs
+while the component renders, under the owner of the code around the expression:
+an IIFE, the body of a factory the expression calls, and a callback a dialect
+slot runs during its call (`untrack`) are owned, so an effect there is not
+reported. A generator never runs when called, and a callback no dialect slot
+describes may run with or without an owner. Both are uncertifiable, never
+violations (ADR 0345).
+
 One approximation remains: a nested callback the owner graph gives no owner
 edge at all, such as a callback handed to a function the analysis does not
 model, or handed to a scheduler through a wrapper call

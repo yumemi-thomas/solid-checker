@@ -163,14 +163,47 @@ pub(crate) fn discover_owner_file(
             solid_facts::compiler::CallbackRoleKind::EventHandler
                 | solid_facts::compiler::CallbackRoleKind::DirectiveApply
         ) && (callback.role != solid_facts::compiler::CallbackRoleKind::DirectiveApply
-            || ref_application_on_intrinsic(file, callback.span))
+            || (ref_application_on_intrinsic(file, callback.span)
+                && is_identifier_span(file, callback.span)))
             && let Some(target) = callback_target(callback.span)
         {
+            // A ref application's callback is resolved against its node: a
+            // generator there never runs its body (`RefApplied`).
+            let kind = match callback.role {
+                solid_facts::compiler::CallbackRoleKind::DirectiveApply => {
+                    OwnerEdgeKind::RefApplied
+                }
+                _ => OwnerEdgeKind::Unowned,
+            };
             edges.push(SymbolicOwnerEdge {
                 source: None,
                 target,
-                kind: OwnerEdgeKind::Unowned,
+                kind,
             });
+        }
+    }
+    // The function literals a ref value writes at its top level (ADR 0345),
+    // placed by position as the batch pass places them.
+    for mark in ref_value_marks(file, &call_primitives, lookup) {
+        match mark {
+            RefValueMark::Applied { function } => edges.push(SymbolicOwnerEdge {
+                source: None,
+                target: OwnerTarget::LocalSpan(function),
+                kind: OwnerEdgeKind::Unowned,
+            }),
+            RefValueMark::Eager { function, call } => edges.push(SymbolicOwnerEdge {
+                source: owner_at(call).map(|span| OwnerSource {
+                    path: file.path.to_string(),
+                    span,
+                }),
+                target: OwnerTarget::LocalSpan(function),
+                kind: OwnerEdgeKind::Preserve,
+            }),
+            RefValueMark::Unproven { function } => edges.push(SymbolicOwnerEdge {
+                source: None,
+                target: OwnerTarget::LocalSpan(function),
+                kind: OwnerEdgeKind::MayBeUnowned,
+            }),
         }
     }
     for element in &file.ast.jsx_elements {
@@ -305,18 +338,22 @@ pub(crate) fn find_missing_owners_incremental(
             else {
                 continue;
             };
+            // The same answer the fresh pass gives a ref application's
+            // callback: a generator's body never runs, so nothing is proven.
+            let kind = match edge.kind {
+                OwnerEdgeKind::RefApplied if nodes[target].generator => OwnerEdgeKind::MayBeUnowned,
+                kind => kind,
+            };
             if let Some(source) = edge.source.as_ref().and_then(|source| {
                 nodes_by_span
                     .get(&source.path)
                     .and_then(|nodes| nodes.get(&source.span))
                     .copied()
             }) {
-                outgoing[source].push((target, edge.kind));
+                outgoing[source].push((target, kind));
             } else {
-                contexts[target] |= owner_edge_context(
-                    edge.kind,
-                    OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED,
-                );
+                contexts[target] |=
+                    owner_edge_context(kind, OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED);
             }
         }
     }

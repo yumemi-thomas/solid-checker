@@ -79,6 +79,7 @@ pub(super) fn owner_node(
         body: function.body,
         symbol,
         exported,
+        generator: function.generator,
         component,
         component_uncertain,
         seed_context,
