@@ -498,8 +498,8 @@ pub(crate) fn find_missing_owners_incremental(
             let conditional_owner = !component_uncertain
                 && !proven_unowned
                 && !later_run_unowned
-                && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED)
-                    == (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED);
+                && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED) != 0
+                && context & OWNER_CONTEXT_UNOWNED != 0;
             let caller_uncertain = candidate.allow_uncertain
                 && !proven_unowned
                 && owner_index.is_some_and(|index| {
@@ -558,7 +558,7 @@ pub(crate) fn find_missing_owners_incremental(
                     report: context & candidate.report_mask != 0
                         || (candidate.operation == "cleanup"
                             && context & OWNER_CONTEXT_LEAF != 0
-                            && context & OWNER_CONTEXT_OWNED == 0),
+                            && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED) == 0),
                 },
                 lookup,
             );

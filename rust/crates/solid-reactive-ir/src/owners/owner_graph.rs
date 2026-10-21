@@ -228,6 +228,11 @@ pub(super) fn propagate_owner_contexts(
                 && matches!(kind, OwnerEdgeKind::Unowned | OwnerEdgeKind::RefApplied)
             {
                 OWNER_CONTEXT_UNOWNED
+            } else if uncertain[source] && kind == OwnerEdgeKind::QueuedLeaf {
+                // The callback's proof is the leaf body that creates it, and an
+                // unnamed escape reaches that body without proof: the proof is
+                // withheld, as on an unowned edge out of the same node.
+                owner_edge_context(kind, contexts[source]) & !OWNER_CONTEXT_PROVEN_UNOWNED
             } else {
                 owner_edge_context(kind, contexts[source])
             };
@@ -344,8 +349,12 @@ pub(super) fn leaf_gate_decision(
         return LeafGateDecision::OutOfBand;
     };
     let context = contexts[index];
-    let conditional = context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED)
-        == (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED);
+    // A leaf body never gives its own code a children-capable owner: its nested
+    // `onSettled` is queued out of band (rc.13), so only the run-owned bit can
+    // make the call owned, and a body reached both ways is conditional.
+    let owned = context & OWNER_CONTEXT_OWNED != 0;
+    let out_of_band = context & (OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LEAF) != 0;
+    let conditional = owned && out_of_band;
     // The same escalation the owner requirements use: an exported
     // non-component helper has callers the analysis cannot see, so assuming
     // either owned or out-of-band would be a guess.
@@ -353,7 +362,7 @@ pub(super) fn leaf_gate_decision(
         nodes[index].exported && context & OWNER_CONTEXT_UNOWNED != 0 && !nodes[index].component;
     if conditional || exported_unproven {
         LeafGateDecision::Uncertain
-    } else if context & OWNER_CONTEXT_OWNED != 0 {
+    } else if owned {
         LeafGateDecision::Owned
     } else {
         LeafGateDecision::OutOfBand

@@ -1,0 +1,85 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-leaf-nested-cleanup/App.tsx",
+      "start": 310,
+      "end": 319,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-leaf-nested-cleanup/App.tsx",
+      "start": 503,
+      "end": 512,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-leaf-nested-cleanup/App.tsx",
+      "start": 600,
+      "end": 609,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-leaf-nested-cleanup/App.tsx",
+      "start": 834,
+      "end": 843,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-leaf-nested-cleanup/App.tsx",
+      "start": 1304,
+      "end": 1323,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-leaf-nested-cleanup/App.tsx",
+      "start": 1332,
+      "end": 1341,
+      "fixes": 1
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-leaf-nested-cleanup/App.tsx",
+      "start": 1553,
+      "end": 1562,
+      "fixes": 1
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-leaf-nested-cleanup/App.tsx",
+      "start": 1754,
+      "end": 1773,
+      "fixes": 0
+    }
+  ]
+}

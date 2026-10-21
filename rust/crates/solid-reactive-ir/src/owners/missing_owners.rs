@@ -300,7 +300,7 @@ pub(crate) fn find_missing_owners(
                     "cleanup",
                     context & OWNER_CONTEXT_UNOWNED != 0
                         || (context & OWNER_CONTEXT_LEAF != 0
-                            && context & OWNER_CONTEXT_OWNED == 0),
+                            && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED) == 0),
                     false,
                 )),
                 (Some(OwnerRequirementRole::SettledCleanup), _) if !root_owned => {
@@ -379,8 +379,8 @@ pub(crate) fn find_missing_owners(
                 let conditional_owner = !component_uncertain
                     && !proven_unowned
                     && !later_run_unowned
-                    && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED)
-                        == (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED);
+                    && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED) != 0
+                    && context & OWNER_CONTEXT_UNOWNED != 0;
                 let caller_uncertain = !proven_unowned
                     && owner_index.is_some_and(|index| {
                         (nodes[index].exported
@@ -462,8 +462,8 @@ pub(crate) fn find_missing_owners(
             let conditional_owner = !component_uncertain
                 && !proven_unowned
                 && !later_run_unowned
-                && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED)
-                    == (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED);
+                && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED) != 0
+                && context & OWNER_CONTEXT_UNOWNED != 0;
             push_owner_requirement(
                 &mut requirements,
                 &mut seen,

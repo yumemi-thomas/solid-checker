@@ -5,6 +5,8 @@
 An owner-requiring operation executes without a reactive owner. The rule covers
 effects, cleanup registration, `Loading`/`Errored` boundaries, and an `onSettled`
 callback that returns cleanup. Its message identifies the specific operation.
+A callback of an `onSettled` called inside another leaf body runs with no owner
+(rc.13 queues it), so an `onCleanup` there is this rule's claim.
 
 ## What it does
 

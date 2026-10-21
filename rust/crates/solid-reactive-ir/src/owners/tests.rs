@@ -1,10 +1,10 @@
 use super::{
     OWNER_CONTEXT_COMPONENT_UNCERTAIN, OWNER_CONTEXT_LATER_RUN_UNOWNED, OWNER_CONTEXT_LEAF,
-    OWNER_CONTEXT_OWNED, OWNER_CONTEXT_PROVEN_UNOWNED, OWNER_CONTEXT_UNOWNED, OwnerEdgeKind,
-    OwnerNode, binding_returns_reactive_source, callback_owner_edge_kind, compiler_owner_context,
-    compose_owner_edge, owner_edge_context, propagate_owner_contexts, providing_region_chain,
-    returned_arrow_function, root_owned_at, seed_contexts, seed_unnamed_hand_outs,
-    settle_eager_owners,
+    OWNER_CONTEXT_LEAF_OWNED, OWNER_CONTEXT_OWNED, OWNER_CONTEXT_PROVEN_UNOWNED,
+    OWNER_CONTEXT_UNOWNED, OwnerEdgeKind, OwnerNode, binding_returns_reactive_source,
+    callback_owner_edge_kind, compiler_owner_context, compose_owner_edge, owner_edge_context,
+    propagate_owner_contexts, providing_region_chain, returned_arrow_function, root_owned_at,
+    seed_contexts, seed_unnamed_hand_outs, settle_eager_owners,
 };
 use solid_facts::ast;
 use solid_facts::compiler::{
@@ -109,17 +109,40 @@ fn owner_edge_context_transforms_the_source_bits_per_edge_kind() {
         OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED
     );
     // A leaf keeps whether its creation site is owned (ADR 0347 amendment): an
-    // owned leaf's cleanup is SC3001's, an unowned one's is SC4001's.
+    // owned leaf's cleanup is SC3001's (`LEAF_OWNED`), an unowned one's is
+    // SC4001's and keeps the proof of its unowned creation.
     assert_eq!(
         owner_edge_context(OwnerEdgeKind::Leaf, OWNER_CONTEXT_OWNED),
-        OWNER_CONTEXT_LEAF | OWNER_CONTEXT_OWNED
+        OWNER_CONTEXT_LEAF | OWNER_CONTEXT_LEAF_OWNED
     );
     assert_eq!(
         owner_edge_context(
             OwnerEdgeKind::Leaf,
             OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED
         ),
-        OWNER_CONTEXT_LEAF | OWNER_CONTEXT_UNOWNED
+        OWNER_CONTEXT_LEAF | OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED
+    );
+    // A leaf inside a creation-owned leaf body is dead: a tracked effect there
+    // throws before its callback runs.
+    assert_eq!(
+        owner_edge_context(
+            OwnerEdgeKind::Leaf,
+            OWNER_CONTEXT_LEAF | OWNER_CONTEXT_LEAF_OWNED
+        ),
+        0
+    );
+    // An onSettled inside a leaf body is queued out of band: proven unowned
+    // whatever the body's owner (rc.13). Outside one it is an ordinary leaf.
+    assert_eq!(
+        owner_edge_context(
+            OwnerEdgeKind::QueuedLeaf,
+            OWNER_CONTEXT_LEAF | OWNER_CONTEXT_LEAF_OWNED
+        ),
+        OWNER_CONTEXT_LEAF | OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED
+    );
+    assert_eq!(
+        owner_edge_context(OwnerEdgeKind::QueuedLeaf, OWNER_CONTEXT_OWNED),
+        OWNER_CONTEXT_LEAF | OWNER_CONTEXT_LEAF_OWNED
     );
     // A ref application proves the unowned run; a may-be-unowned callback
     // carries only the open-world bit, whatever its source.

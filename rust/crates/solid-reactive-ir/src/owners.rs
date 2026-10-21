@@ -256,6 +256,13 @@ pub(crate) const OWNER_CONTEXT_PROVEN_UNOWNED: u8 = 16;
 /// scheduler's flush, runs with no owner. Kept as its own bit so the finding
 /// names that reason instead of a nullable `runWithOwner` owner.
 pub(crate) const OWNER_CONTEXT_LATER_RUN_UNOWNED: u8 = 32;
+/// The leaf body ([`OWNER_CONTEXT_LEAF`]) is created under a children-capable
+/// owner, so the body's own owner is the children-forbidden leaf owner: an
+/// `onCleanup` there throws (SC3001's claim) and a nested `onSettled` is queued
+/// out of band. A run-owned path ([`OWNER_CONTEXT_OWNED`]) is children-capable
+/// and carries no leaf shape, so the owner gate can tell a conditional leaf
+/// body from a plain one. A leaf body created unowned never carries this bit.
+pub(crate) const OWNER_CONTEXT_LEAF_OWNED: u8 = 64;
 
 /// Whether a node's unowned context is *only* the open-world assumption an
 /// exported non-component entry seeds ([`owner_node`]), carried to this node
@@ -269,7 +276,9 @@ pub(crate) const OWNER_CONTEXT_LATER_RUN_UNOWNED: u8 = 32;
 /// first-run edge sets later-run), so the bare bit names the open world and
 /// nothing else. A requirement under it is a caller obligation exactly like
 /// the same call written inside the exported function itself, and is no more a
-/// proven violation one call-edge away.
+/// proven violation one call-edge away. A leaf body the open-world bit creates
+/// keeps the bare bit (`LEAF` is the leaf's shape, not a proof), so `LEAF` is
+/// not part of the test; a creation-owned leaf body is not open-world.
 const fn open_world_unowned_only(context: u8, node: &OwnerNode) -> bool {
     !node.component
         && !node.component_uncertain
@@ -278,7 +287,7 @@ const fn open_world_unowned_only(context: u8, node: &OwnerNode) -> bool {
                 | OWNER_CONTEXT_UNOWNED
                 | OWNER_CONTEXT_PROVEN_UNOWNED
                 | OWNER_CONTEXT_LATER_RUN_UNOWNED
-                | OWNER_CONTEXT_LEAF)
+                | OWNER_CONTEXT_LEAF_OWNED)
             == OWNER_CONTEXT_UNOWNED
 }
 
@@ -305,6 +314,12 @@ pub(crate) enum OwnerEdgeKind {
     /// [`OwnerEdgeKind::Preserve`] does, and a source with no owner context
     /// settles to the uncertain unowned bit ([`settle_eager_owners`]).
     EagerCall,
+    /// The callback of a leaf owner that `onSettled` is, when the call sits in
+    /// another leaf body (the dialect's `leaf_owner_requires_owned_call_site`).
+    /// rc.13 queues `onSettled` under a children-forbidden owner, so the callback
+    /// runs with no owner whatever the enclosing leaf's owner: it is proven
+    /// unowned. Any other leaf callback takes [`OwnerEdgeKind::Leaf`].
+    QueuedLeaf,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

@@ -161,6 +161,24 @@ pub(crate) fn owner_callback_index(
         .copied()
 }
 
+/// The context a leaf callback takes from the context of the function that
+/// creates it ([`OwnerEdgeKind::Leaf`]). A leaf created under a children-capable
+/// owner carries [`OWNER_CONTEXT_LEAF_OWNED`]. A leaf created inside a
+/// creation-owned leaf body is dead: a `createTrackedEffect` under a
+/// children-forbidden owner throws before its callback runs, so it carries no
+/// context at all, and nothing it contains is claimed (ADR 0347). Its live
+/// unowned path, if any, is kept.
+const fn leaf_body_context(source: u8) -> u8 {
+    let unowned = source & (OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED);
+    if source & OWNER_CONTEXT_OWNED != 0 {
+        OWNER_CONTEXT_LEAF | OWNER_CONTEXT_LEAF_OWNED | unowned
+    } else if source & OWNER_CONTEXT_LEAF_OWNED != 0 && source & OWNER_CONTEXT_UNOWNED == 0 {
+        0
+    } else {
+        OWNER_CONTEXT_LEAF | unowned
+    }
+}
+
 pub(crate) const fn owner_edge_context(kind: OwnerEdgeKind, source: u8) -> u8 {
     match kind {
         OwnerEdgeKind::Preserve | OwnerEdgeKind::EagerCall => source,
@@ -174,11 +192,28 @@ pub(crate) const fn owner_edge_context(kind: OwnerEdgeKind, source: u8) -> u8 {
         OwnerEdgeKind::InheritsFirstRun => {
             source | OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LATER_RUN_UNOWNED
         }
-        // A leaf callback keeps whether its leaf is created under an owner (ADR
-        // 0347 amendment): an owned leaf runs its cleanup in the leaf (SC3001's claim), an
-        // unowned one never runs it (SC4001's claim).
-        OwnerEdgeKind::Leaf => {
-            OWNER_CONTEXT_LEAF | (source & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED))
+        // A leaf callback's body runs under the leaf owner when its leaf is
+        // created under a children-capable owner (an `onCleanup` there throws:
+        // SC3001's claim), and with no owner when its leaf is created unowned
+        // (SC4001's claim). See [`leaf_body_context`].
+        OwnerEdgeKind::Leaf => leaf_body_context(source),
+        // Inside a leaf body `onSettled` takes the out-of-band queue whatever
+        // the body's owner (rc.13), so its callback runs with no owner: proven
+        // unowned. A run-owned part of the source still creates a leaf.
+        OwnerEdgeKind::QueuedLeaf => {
+            if source & OWNER_CONTEXT_LEAF != 0 {
+                let run_owned = if source & OWNER_CONTEXT_OWNED != 0 {
+                    OWNER_CONTEXT_LEAF_OWNED
+                } else {
+                    0
+                };
+                OWNER_CONTEXT_LEAF
+                    | OWNER_CONTEXT_UNOWNED
+                    | OWNER_CONTEXT_PROVEN_UNOWNED
+                    | run_owned
+            } else {
+                leaf_body_context(source)
+            }
         }
         OwnerEdgeKind::RefApplied => OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED,
         OwnerEdgeKind::MayBeUnowned => OWNER_CONTEXT_UNOWNED,
@@ -235,6 +270,7 @@ pub(super) const fn await_continuation_context(context: u8) -> u8 {
     (context | OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED)
         & !(OWNER_CONTEXT_OWNED
             | OWNER_CONTEXT_LEAF
+            | OWNER_CONTEXT_LEAF_OWNED
             | OWNER_CONTEXT_COMPONENT_UNCERTAIN
             | OWNER_CONTEXT_LATER_RUN_UNOWNED)
 }
@@ -433,7 +469,7 @@ pub(crate) fn owner_callback_edges(
                     .owner
                     .map(|owner| OwnerCallbackEdge {
                         argument,
-                        kind: callback_owner_edge_kind(owner),
+                        kind: callback_owner_edge_kind_at(lookup, returned, owner),
                         source_path: file.path.to_string(),
                         source: call.span,
                     })
@@ -445,7 +481,7 @@ pub(crate) fn owner_callback_edges(
         let Some(owner) = callback_owner_at_call(file, call, primitive, argument, lookup) else {
             continue;
         };
-        let kind = callback_owner_edge_kind(owner);
+        let kind = callback_owner_edge_kind_at(lookup, primitive, owner);
         if lookup
             .dialect
             .callback_semantics_at(primitive, argument, call.arguments.len())
@@ -876,6 +912,26 @@ pub(crate) const fn callback_owner_edge_kind(owner: solid_dialect::CallbackOwner
         solid_dialect::CallbackOwner::None => OwnerEdgeKind::Unowned,
         solid_dialect::CallbackOwner::InheritsFirstRun => OwnerEdgeKind::InheritsFirstRun,
         solid_dialect::CallbackOwner::Leaf => OwnerEdgeKind::Leaf,
+    }
+}
+
+/// [`callback_owner_edge_kind`] for a callback handed to `primitive`: a leaf
+/// owner that the dialect says only an owned call site makes a leaf (`onSettled`)
+/// is [`OwnerEdgeKind::QueuedLeaf`].
+pub(crate) fn callback_owner_edge_kind_at(
+    lookup: &SemanticLookup<'_>,
+    primitive: Primitive,
+    owner: solid_dialect::CallbackOwner,
+) -> OwnerEdgeKind {
+    match callback_owner_edge_kind(owner) {
+        OwnerEdgeKind::Leaf
+            if lookup
+                .dialect
+                .leaf_owner_requires_owned_call_site(primitive) =>
+        {
+            OwnerEdgeKind::QueuedLeaf
+        }
+        kind => kind,
     }
 }
 
