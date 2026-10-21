@@ -471,12 +471,22 @@ pub(crate) fn callback_argument_literal(
     let end = usize::try_from(argument.end).ok()?;
     let inner_start = usize::try_from(function.span.start).ok()?;
     let inner_end = usize::try_from(function.span.end).ok()?;
-    let filler = |text: &str| {
+    // Opening parentheses only before the function and closing ones only
+    // after it: `(() => get)()` ends in `)()`, an invocation of the literal,
+    // which is its result and not the function.
+    let filler = |text: &str, paren: u8| {
         text.bytes()
-            .all(|byte| byte.is_ascii_whitespace() || byte == b'(' || byte == b')')
+            .all(|byte| byte.is_ascii_whitespace() || byte == paren)
     };
-    (filler(file.source.get(start..inner_start)?) && filler(file.source.get(inner_end..end)?))
-        .then_some(function)
+    let (before, after) = (
+        file.source.get(start..inner_start)?,
+        file.source.get(inner_end..end)?,
+    );
+    (filler(before, b'(')
+        && filler(after, b')')
+        && before.bytes().filter(|byte| *byte == b'(').count()
+            == after.bytes().filter(|byte| *byte == b')').count())
+    .then_some(function)
 }
 
 /// The leaf-owner operation kind a call performs under `dialect`, or `None`

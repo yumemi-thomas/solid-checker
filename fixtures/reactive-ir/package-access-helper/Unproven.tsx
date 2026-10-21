@@ -1,4 +1,4 @@
-import { createMemo, createSignal } from "solid-js";
+import { createMemo, createSignal, createStore } from "solid-js";
 import { access } from "@solid-primitives/utils";
 
 // ADR 0338, inverted: `access` calls its argument unless the argument is
@@ -115,4 +115,99 @@ const label: string = String(Math.random());
 export function GoodPrimitiveTyped() {
   const result = access(label);
   return <span>{result}</span>;
+}
+
+// ADR 0338, round 4: an argument that is an expression rather than a symbol
+// takes the same proof. Each of these reaches `access` as a getter at runtime.
+export function UncertifiableLiteralArray() {
+  const [get] = createSignal(1);
+  const result = access([get][0]);
+  return <span>{String(result)}</span>;
+}
+
+export function UncertifiableLiteralObject() {
+  const [get] = createSignal(1);
+  const result = access({ value: get }.value);
+  return <span>{String(result)}</span>;
+}
+
+export function UncertifiableConditional() {
+  const [get] = createSignal(1);
+  const result = access(true ? get : get);
+  return <span>{String(result)}</span>;
+}
+
+export function UncertifiableSpreadSlot() {
+  const [get] = createSignal(1);
+  const result = access([...createSignal(1)][0]);
+  return <span>{String(result)}</span>;
+}
+
+export function UncertifiableIife() {
+  const [get] = createSignal(1);
+  const result = access((() => get)());
+  return <span>{String(result)}</span>;
+}
+
+// A cast voids the primitive-wrapper exemption: the receiver is an object
+// whose own `slice` returns the getter.
+export function UncertifiableCastMethod() {
+  const [get] = createSignal(1);
+  const value = ({ slice: () => get } as unknown as string).slice(0);
+  const result = access(value);
+  return <span>{String(result)}</span>;
+}
+
+export function UncertifiableCastMethodDirect() {
+  const [get] = createSignal(1);
+  const result = access(({ slice: () => get } as unknown as string).slice(0));
+  return <span>{String(result)}</span>;
+}
+
+// A call result's provenance is the callee's returns, not the callee.
+function give() {
+  return createSignal(1)[0];
+}
+export function UncertifiableProjectReturnHeld() {
+  const value = access(give);
+  const result = access(value);
+  return <span>{String(result)}</span>;
+}
+
+export function UncertifiableProjectReturn() {
+  const result = access(give());
+  return <span>{String(result)}</span>;
+}
+
+// A store proxy is not callable, but a property of one may hold a getter.
+export function UncertifiableStoreProperty() {
+  const [get] = createSignal(1);
+  const [store] = createStore({ value: get });
+  const value = store.value;
+  const result = access(value);
+  return <span>{String(result)}</span>;
+}
+
+// Controls: a primitive-literal receiver, a String() receiver, a store proxy,
+// and an all-literal conditional are proven non-getters.
+export function GoodPrimitiveReceiver() {
+  const result = access("abc".slice(0));
+  return <span>{result}</span>;
+}
+
+export function GoodStringCallReceiver() {
+  const value = String(3).slice(0);
+  const result = access(value);
+  return <span>{result}</span>;
+}
+
+export function GoodStoreProxy() {
+  const [store] = createStore({ count: 1 });
+  const result = access(store);
+  return <span>{String(result.count)}</span>;
+}
+
+export function GoodLiteralConditional() {
+  const result = access(Math.random() > 0.5 ? 1 : 2);
+  return <span>{String(result)}</span>;
 }

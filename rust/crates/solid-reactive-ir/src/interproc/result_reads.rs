@@ -773,22 +773,40 @@ fn add_invoked_parameter_reads(
         let Some(argument) = call.arguments.get(*parameter) else {
             continue;
         };
-        let Some(argument_symbol) = entities.get(&location(file.path.shared(), argument.span))
-        else {
-            continue;
-        };
-        dependencies.insert(InterproceduralResultDependency::Symbol(
-            argument_symbol.clone(),
-        ));
-        let argument_summary = by_symbol
-            .get(argument_symbol)
-            .map(|index| &summaries[*index][..])
-            .or_else(|| returned_bindings.get(argument_symbol).map(Vec::as_slice));
-        if let Some(argument_summary) = argument_summary {
-            for read in argument_summary {
-                push_unique_summary_read(effective, read.clone());
+        // ADR 0338: an argument that is an expression rather than a symbol
+        // (`[get][0]`, `cond ? a : b`, `(() => get)()`) has no entity, but
+        // the callee still calls it: it takes the same proof below.
+        let argument_symbol = entities.get(&location(file.path.shared(), argument.span));
+        let mut summarized = false;
+        let mut function_value = false;
+        if let Some(argument_symbol) = argument_symbol {
+            dependencies.insert(InterproceduralResultDependency::Symbol(
+                argument_symbol.clone(),
+            ));
+            let argument_summary = by_symbol
+                .get(argument_symbol)
+                .map(|index| &summaries[*index][..])
+                .or_else(|| returned_bindings.get(argument_symbol).map(Vec::as_slice));
+            if let Some(argument_summary) = argument_summary {
+                for read in argument_summary {
+                    push_unique_summary_read(effective, read.clone());
+                }
+                summarized = true;
             }
-            continue;
+            // A project function passed by its own name: the function value
+            // is what is passed, so the callee calling it reads what the
+            // summary says and no getter hides behind it. A call result held
+            // in a binding (`returned_bindings`) is not that: it is whatever
+            // the callee returned.
+            // `binding_declaration` is set for a bare identifier only: the
+            // entity of a call span names its callee, not the call's result.
+            function_value = argument.binding_declaration.is_some()
+                && by_symbol.contains_key(argument_symbol)
+                && lookup
+                    .function_for_symbol(argument_symbol.as_str())
+                    .is_some_and(|(callee_file, callee)| {
+                        lookup.function_value_is_current(callee_file, callee)
+                    });
         }
         // An accessor passed by reference, `run(count)`: the callee
         // calling the parameter reads the accessor at that moment.
@@ -847,8 +865,10 @@ fn add_invoked_parameter_reads(
             dependencies.insert(InterproceduralResultDependency::FunctionSource(path, span));
         }
         let mut proven_read = false;
-        if ambiguous_candidates.is_none()
+        if !summarized
+            && ambiguous_candidates.is_none()
             && !argument.spread
+            && let Some(argument_symbol) = argument_symbol
             && source_kinds.get(argument_symbol.as_str()) == Some(&ReactiveSourceKind::Accessor)
             && let Some((display, declaration)) = accessors.get(argument_symbol.as_str())
             && let Some(guaranteed) = invocation
@@ -880,6 +900,7 @@ fn add_invoked_parameter_reads(
         if !proven_read
             && invocation.is_some()
             && site.valid_call
+            && !function_value
             && !argument_proven_not_a_getter(file, argument, entities, source_kinds, lookup)
         {
             let defect = StaticDefect {
@@ -2348,8 +2369,21 @@ fn argument_proven_not_a_getter(
     {
         return true;
     }
+    // A store proxy is never callable, but a property read off one may hold a
+    // getter (`createStore({ value: get })`, then `store.value`), and a view
+    // alias of such a read is recorded as a store too. Only the proxy itself
+    // settles it: not a member read, and not a binding initialized by one.
     if let Some(symbol) = entities.get(&location(file.path.shared(), argument.span))
         && source_kinds.get(symbol.as_str()) == Some(&ReactiveSourceKind::Store)
+        && file.ast.member_at(argument.span).is_none()
+        && !argument.binding_declaration.is_some_and(|declaration| {
+            file.ast.bindings.iter().any(|binding| {
+                binding.names.iter().any(|name| name.span == declaration)
+                    && binding
+                        .initializer
+                        .is_some_and(|initializer| member_initializer(file, initializer))
+            })
+        })
     {
         return true;
     }
@@ -2371,9 +2405,19 @@ fn argument_proven_not_a_getter(
     }
     // A call of a primitive wrapper's own method (`String(1).slice(0)`) or a
     // const bound to one returns a primitive or an array of primitives.
+    // ADR 0338: the resolved declaration is a type fact; what runs is the
+    // receiver's own method unless the receiver is proven primitive at
+    // runtime (a literal, a template, a `String`/`Number` call result). Any
+    // TS assertion on the way voids it: `({ slice: () => get } as unknown as
+    // string).slice(0)` resolves to `String.prototype.slice` and returns a getter.
     let primitive_method_call = |call_span: Span| {
         file.ast.call_at(call_span).is_some_and(|call| {
-            !call.construct && primitive_builtin_member_call(file, call.callee, lookup)
+            !call.construct
+                && primitive_builtin_member_call(file, call.callee, lookup)
+                && file
+                    .ast
+                    .member_at(call.callee)
+                    .is_some_and(|member| lookup.proven_primitive(file, member.object, 6))
         })
     };
     if primitive_method_call(file.ast.peel_ts_sugar_span(argument.span)) {
@@ -2394,4 +2438,12 @@ fn argument_proven_not_a_getter(
     // here: `slice`, `bind`, `Array.from`, `Reflect.apply` and `at` all hand a
     // getter back.
     false
+}
+
+/// Whether the expression at `initializer` is a member or element read (under
+/// parentheses and TS wrappers).
+fn member_initializer(file: &solid_facts::FileFacts, initializer: Span) -> bool {
+    file.ast
+        .member_at(file.ast.peel_ts_sugar_span(initializer))
+        .is_some()
 }

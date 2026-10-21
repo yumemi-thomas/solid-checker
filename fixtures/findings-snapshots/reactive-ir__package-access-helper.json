@@ -277,8 +277,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/package-access-helper/Unproven.tsx",
-      "start": 857,
-      "end": 862,
+      "start": 870,
+      "end": 875,
       "fixes": 0
     },
     {
@@ -287,8 +287,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/package-access-helper/Unproven.tsx",
-      "start": 1022,
-      "end": 1027,
+      "start": 1035,
+      "end": 1040,
       "fixes": 0
     },
     {
@@ -297,8 +297,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/package-access-helper/Unproven.tsx",
-      "start": 1211,
-      "end": 1216,
+      "start": 1224,
+      "end": 1229,
       "fixes": 0
     },
     {
@@ -307,8 +307,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/package-access-helper/Unproven.tsx",
-      "start": 1409,
-      "end": 1414,
+      "start": 1422,
+      "end": 1427,
       "fixes": 0
     },
     {
@@ -317,8 +317,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/package-access-helper/Unproven.tsx",
-      "start": 1583,
-      "end": 1588,
+      "start": 1596,
+      "end": 1601,
       "fixes": 0
     },
     {
@@ -327,8 +327,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/package-access-helper/Unproven.tsx",
-      "start": 1789,
-      "end": 1794,
+      "start": 1802,
+      "end": 1807,
       "fixes": 0
     },
     {
@@ -337,8 +337,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/package-access-helper/Unproven.tsx",
-      "start": 1974,
-      "end": 1979,
+      "start": 1987,
+      "end": 1992,
       "fixes": 0
     },
     {
@@ -347,8 +347,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/package-access-helper/Unproven.tsx",
-      "start": 2201,
-      "end": 2206,
+      "start": 2214,
+      "end": 2219,
       "fixes": 0
     },
     {
@@ -357,8 +357,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/package-access-helper/Unproven.tsx",
-      "start": 2382,
-      "end": 2387,
+      "start": 2395,
+      "end": 2400,
       "fixes": 0
     },
     {
@@ -367,8 +367,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/package-access-helper/Unproven.tsx",
-      "start": 2563,
-      "end": 2568,
+      "start": 2576,
+      "end": 2581,
       "fixes": 0
     },
     {
@@ -377,8 +377,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/package-access-helper/Unproven.tsx",
-      "start": 2714,
-      "end": 2718,
+      "start": 2727,
+      "end": 2731,
       "fixes": 0
     },
     {
@@ -387,8 +387,118 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/package-access-helper/Unproven.tsx",
-      "start": 2745,
-      "end": 2750,
+      "start": 2758,
+      "end": 2763,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-access-helper/Unproven.tsx",
+      "start": 3673,
+      "end": 3681,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-access-helper/Unproven.tsx",
+      "start": 3831,
+      "end": 3851,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-access-helper/Unproven.tsx",
+      "start": 3999,
+      "end": 4015,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-access-helper/Unproven.tsx",
+      "start": 4162,
+      "end": 4185,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-access-helper/Unproven.tsx",
+      "start": 4326,
+      "end": 4339,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-access-helper/Unproven.tsx",
+      "start": 4672,
+      "end": 4677,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-access-helper/Unproven.tsx",
+      "start": 4830,
+      "end": 4882,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-access-helper/Unproven.tsx",
+      "start": 5153,
+      "end": 5158,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-access-helper/Unproven.tsx",
+      "start": 5275,
+      "end": 5281,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-access-helper/Unproven.tsx",
+      "start": 5545,
+      "end": 5556,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-access-helper/Unproven.tsx",
+      "start": 5582,
+      "end": 5587,
       "fixes": 0
     }
   ]
