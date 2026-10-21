@@ -6,8 +6,8 @@ import { namedValue } from "./member";
 // never called.
 export const values = [member.handedOut, member.handedOutDirect];
 
-// The namespace object itself is handed out, so every export of `./objects` is
-// reachable from whatever receives these entries.
+// The namespace's values are handed out with no name the program reads, so each
+// export of `./objects` is reachable only through what receives these entries.
 export const everything = Object.entries(objects);
 
 // A named import used as a value. Not a namespace hand-out.

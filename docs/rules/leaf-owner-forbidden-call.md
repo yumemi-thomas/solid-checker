@@ -29,6 +29,13 @@ merely created by the callback executes outside the leaf extent.
 Out-of-band calls enqueue a plain callback and remain outside this rule; an
 unprovable caller or nullable owner is uncertifiable.
 
+An `onCleanup` in an owned leaf is this rule's claim: the runtime throws
+`CLEANUP_IN_FORBIDDEN_SCOPE` there, and it does so wherever the cleanup sits in
+the leaf's extent, a helper the leaf calls included. The same site is not also
+reported as `missing-owner` (SC4001), which claims only a cleanup that never
+runs: one in a leaf created with no owner, or with an owner that may be absent
+(ADR 0347, amendment of 2026-10-21).
+
 ## Examples
 
 Incorrect:

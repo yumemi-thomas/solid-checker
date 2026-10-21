@@ -174,7 +174,12 @@ pub(crate) const fn owner_edge_context(kind: OwnerEdgeKind, source: u8) -> u8 {
         OwnerEdgeKind::InheritsFirstRun => {
             source | OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LATER_RUN_UNOWNED
         }
-        OwnerEdgeKind::Leaf => OWNER_CONTEXT_LEAF,
+        // A leaf callback keeps whether its leaf is created under an owner (ADR
+        // 0347 amendment): an owned leaf runs its cleanup in the leaf (SC3001's claim), an
+        // unowned one never runs it (SC4001's claim).
+        OwnerEdgeKind::Leaf => {
+            OWNER_CONTEXT_LEAF | (source & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED))
+        }
         OwnerEdgeKind::RefApplied => OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED,
         OwnerEdgeKind::MayBeUnowned => OWNER_CONTEXT_UNOWNED,
     }
@@ -275,12 +280,28 @@ pub(super) fn guarded_by_owner_probe(
     };
     let function = containing_ast_function(&file.ast, span).map(|function| function.span);
     let same_invocation = |test: Span, region: Span| {
-        containing_ast_function(&file.ast, test).map(|function| function.span) == function
-            && !file
-                .ast
-                .awaits
-                .iter()
-                .any(|awaited| region.contains(*awaited) && awaited.start < span.start)
+        let guard_function = containing_ast_function(&file.ast, test).map(|function| function.span);
+        // The operation's function is the guard's, or is reached from it through
+        // synchronous invoked literals, each invoked inside the guarded region
+        // (ADR 0347 amendment): an IIFE in the guarded branch runs under the same owner.
+        let mut current = function;
+        while current != guard_function {
+            let Some(literal) = current else {
+                return false;
+            };
+            let Some(invocation) = file.ast.calls.iter().find(|call| {
+                region.contains(call.span)
+                    && invoked_function_literal(file, call).is_some_and(|f| f.span == literal)
+            }) else {
+                return false;
+            };
+            current = containing_ast_function(&file.ast, invocation.span).map(|f| f.span);
+        }
+        !file
+            .ast
+            .awaits
+            .iter()
+            .any(|awaited| region.contains(*awaited) && awaited.start < span.start)
     };
     file.ast.logical_expressions.iter().any(|logical| {
         logical.operator == solid_facts::ast::LogicalOperatorKind::And
@@ -681,23 +702,60 @@ fn runs_at_module_init(file: &solid_facts::FileFacts, span: Span) -> bool {
     })
 }
 
-/// The function literal an invocation calls directly, when the call runs that
-/// literal's body synchronously (ADR 0347): the callee, with parentheses and
-/// type assertions peeled, is a function literal, the call is not `new`, and
-/// the literal is not a generator, since calling one runs none of its body. An
-/// `async` literal qualifies. Code before its first `await` runs in the call;
-/// code after it is a continuation, which [`await_continuation_context`] places.
+/// The function literal an invocation runs synchronously (ADR 0347 amendment).
+/// The callee, with parentheses and type assertions peeled, is a function
+/// literal, or the last operand of a comma expression (`(0, () => …)()`), or the
+/// object of a `.call` / `.apply` on one. A `new` runs only a plain function
+/// expression: an arrow, an async function or a method throws before its body
+/// runs. A generator is never run by the call, since calling one runs none of
+/// its body. An `async` literal qualifies: code before its first `await` runs in
+/// the call, and code after it is a continuation, which
+/// [`await_continuation_context`] places.
 pub(crate) fn invoked_function_literal<'f>(
     file: &'f solid_facts::FileFacts,
     call: &solid_facts::ast::CallFact,
 ) -> Option<&'f solid_facts::ast::FunctionFact> {
-    if call.construct {
+    let mut callee = file.ast.peel_ts_sugar_span(call.callee);
+    let mut through_method = false;
+    loop {
+        if let Some(sequence) = file
+            .ast
+            .sequences
+            .iter()
+            .find(|sequence| sequence.span == callee)
+        {
+            callee = file.ast.peel_ts_sugar_span(sequence.tail);
+            continue;
+        }
+        if !through_method
+            && let Some(member) = file.ast.members.iter().find(|member| member.span == callee)
+            && file
+                .ast
+                .computed_members
+                .binary_search(&member.span)
+                .is_err()
+            && matches!(
+                file.source
+                    .get(member.property.start as usize..member.property.end as usize),
+                Some("call" | "apply")
+            )
+        {
+            callee = file.ast.peel_ts_sugar_span(member.object);
+            through_method = true;
+            continue;
+        }
+        break;
+    }
+    let function = file.ast.function_at(callee)?;
+    if function.generator
+        || (call.construct
+            && (through_method
+                || function.r#async
+                || function.kind != solid_facts::ast::FunctionKind::Expression))
+    {
         return None;
     }
-    let function = file
-        .ast
-        .function_at(file.ast.peel_ts_sugar_span(call.callee))?;
-    (!function.generator).then_some(function)
+    Some(function)
 }
 
 /// Whether an invocation at `call` runs under the owner of the code around it
@@ -705,9 +763,11 @@ pub(crate) fn invoked_function_literal<'f>(
 /// or `None` at module scope. Two placements run under another owner, so the
 /// walk makes no claim there:
 ///
-/// - a class field initializer or static block, which runs at construction or
-///   class evaluation, as `runs_at_module_init` refuses an instance field. A
-///   function inside the initializer is its own owner, and is not refused;
+/// - an instance field initializer, which runs at construction, as
+///   `runs_at_module_init` refuses it. A static field or block runs at class
+///   evaluation, under the code around the class, so it keeps the edge (ADR
+///   0347 amendment). A function inside the initializer is its own owner, and is not
+///   refused;
 /// - JSX written in the owner's own body. A component runs its children inside
 ///   its own memo, and an attribute is evaluated as the compiler places it
 ///   (ADR 0345). JSX that only contains the owner, such as an event handler
@@ -720,8 +780,7 @@ pub(crate) fn invocation_runs_under_owner(
     let in_field_initializer = file.ast.classes.iter().any(|class| {
         class.elements.iter().any(|element| {
             let initializer = match element.kind {
-                solid_facts::ast::ClassElementKind::Field => element.value,
-                solid_facts::ast::ClassElementKind::StaticBlock => Some(element.span),
+                solid_facts::ast::ClassElementKind::Field if !element.r#static => element.value,
                 _ => None,
             };
             initializer.is_some_and(|initializer| {

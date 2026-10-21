@@ -3,7 +3,8 @@ use super::{
     OWNER_CONTEXT_OWNED, OWNER_CONTEXT_PROVEN_UNOWNED, OWNER_CONTEXT_UNOWNED, OwnerEdgeKind,
     OwnerNode, binding_returns_reactive_source, callback_owner_edge_kind, compiler_owner_context,
     compose_owner_edge, owner_edge_context, propagate_owner_contexts, providing_region_chain,
-    returned_arrow_function, root_owned_at, seed_contexts, settle_eager_owners,
+    returned_arrow_function, root_owned_at, seed_contexts, seed_unnamed_hand_outs,
+    settle_eager_owners,
 };
 use solid_facts::ast;
 use solid_facts::compiler::{
@@ -107,9 +108,18 @@ fn owner_edge_context_transforms_the_source_bits_per_edge_kind() {
         owner_edge_context(OwnerEdgeKind::Conditional, 0),
         OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED
     );
+    // A leaf keeps whether its creation site is owned (ADR 0347 amendment): an
+    // owned leaf's cleanup is SC3001's, an unowned one's is SC4001's.
     assert_eq!(
         owner_edge_context(OwnerEdgeKind::Leaf, OWNER_CONTEXT_OWNED),
-        OWNER_CONTEXT_LEAF
+        OWNER_CONTEXT_LEAF | OWNER_CONTEXT_OWNED
+    );
+    assert_eq!(
+        owner_edge_context(
+            OwnerEdgeKind::Leaf,
+            OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED
+        ),
+        OWNER_CONTEXT_LEAF | OWNER_CONTEXT_UNOWNED
     );
     // A ref application proves the unowned run; a may-be-unowned callback
     // carries only the open-world bit, whatever its source.
@@ -210,7 +220,7 @@ fn propagation_reaches_a_fixed_point_and_accumulates_bits() {
         ],
         vec![],
     ];
-    propagate_owner_contexts(&mut contexts, &outgoing);
+    propagate_owner_contexts(&mut contexts, &outgoing, &[false; 3]);
     assert_eq!(
         contexts,
         vec![
@@ -233,7 +243,7 @@ fn propagation_reaches_a_fixed_point_and_accumulates_bits() {
 fn propagation_does_not_walk_edges_out_of_context_free_nodes() {
     let mut contexts = vec![0, 0];
     let outgoing = vec![vec![(1, OwnerEdgeKind::Owned)], vec![]];
-    propagate_owner_contexts(&mut contexts, &outgoing);
+    propagate_owner_contexts(&mut contexts, &outgoing, &[false; 2]);
     assert_eq!(contexts, vec![0, 0]);
 }
 
@@ -244,13 +254,47 @@ fn propagation_does_not_walk_edges_out_of_context_free_nodes() {
 fn a_namespace_handed_out_export_reaches_its_detached_callback() {
     let mut contexts = vec![OWNER_CONTEXT_UNOWNED, 0];
     let outgoing = vec![vec![(1, OwnerEdgeKind::Unowned)], vec![]];
-    propagate_owner_contexts(&mut contexts, &outgoing);
+    propagate_owner_contexts(&mut contexts, &outgoing, &[false; 2]);
     assert_eq!(
         contexts,
         vec![
             OWNER_CONTEXT_UNOWNED,
             OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED
         ]
+    );
+}
+
+/// ADR 0347 amendment: a detached callback whose function is reached only through an
+/// unnamed namespace escape is not proven unowned: whether the function runs is
+/// unproven, so the callback's unowned context has no proof bit.
+#[test]
+fn an_unnamed_escape_reaches_a_detached_callback_without_proof() {
+    let mut contexts = vec![0, 0];
+    let outgoing = vec![vec![(1, OwnerEdgeKind::Unowned)], vec![]];
+    let uncertain = seed_unnamed_hand_outs(&mut contexts, &outgoing, &[true, false]);
+    propagate_owner_contexts(&mut contexts, &outgoing, &uncertain);
+    assert_eq!(contexts, vec![OWNER_CONTEXT_UNOWNED, OWNER_CONTEXT_UNOWNED]);
+}
+
+/// ADR 0347 amendment: a function the program also reaches with a certain caller keeps
+/// its proof: the unnamed escape adds no uncertainty to a certain reach.
+#[test]
+fn a_certain_reach_keeps_the_proof_an_unnamed_escape_also_gives() {
+    // 0 is an unnamed candidate and calls 1; 1 is certainly reached (proven
+    // unowned); 1's detached callback 2 is proven.
+    let mut contexts = vec![0, OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED, 0];
+    let outgoing = vec![
+        vec![(1, OwnerEdgeKind::Preserve)],
+        vec![(2, OwnerEdgeKind::Unowned)],
+        vec![],
+    ];
+    let uncertain = seed_unnamed_hand_outs(&mut contexts, &outgoing, &[true, false, false]);
+    // The candidate has no certain reach of its own; 1 and 2 have one.
+    assert_eq!(uncertain, vec![true, false, false]);
+    propagate_owner_contexts(&mut contexts, &outgoing, &uncertain);
+    assert_eq!(
+        contexts[2],
+        OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED
     );
 }
 
@@ -274,8 +318,8 @@ fn an_eager_call_settles_uncertain_from_a_context_free_source() {
         vec![(4, OwnerEdgeKind::EagerCall)],
         vec![],
     ];
-    propagate_owner_contexts(&mut contexts, &outgoing);
-    settle_eager_owners(&mut contexts, &outgoing);
+    propagate_owner_contexts(&mut contexts, &outgoing, &[false; 5]);
+    settle_eager_owners(&mut contexts, &outgoing, &[false; 5]);
     let uncertain = OWNER_CONTEXT_UNOWNED;
     let proven = OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED;
     assert_eq!(contexts, vec![0, uncertain, uncertain, proven, proven]);

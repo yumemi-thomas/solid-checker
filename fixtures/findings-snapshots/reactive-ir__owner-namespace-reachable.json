@@ -24,8 +24,8 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
+      "kind": "uncertifiable",
+      "severity": "error",
       "path": "fixtures/reactive-ir/owner-namespace-reachable/objects.ts",
       "start": 325,
       "end": 337,

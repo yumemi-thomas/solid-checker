@@ -1,0 +1,45 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-namespace-named-reads/escapes.ts",
+      "start": 408,
+      "end": 420,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-namespace-named-reads/member.ts",
+      "start": 288,
+      "end": 300,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-namespace-named-reads/other.ts",
+      "start": 291,
+      "end": 303,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-namespace-named-reads/page.tsx",
+      "start": 517,
+      "end": 529,
+      "fixes": 0
+    }
+  ]
+}

@@ -144,13 +144,12 @@ pub(crate) fn discover_owner_file(
                     registration == ProofStatus::Uncertain,
                 ))
             }
-            (Some(OwnerRequirementRole::Cleanup), _) => Some((
-                "cleanup",
-                OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LEAF,
-                None,
-                call.callee,
-                false,
-            )),
+            // A leaf owner exists here, and the runtime throws
+            // CLEANUP_IN_FORBIDDEN_SCOPE (SC3001's claim), not an unowned
+            // registration: the mask is unowned only (ADR 0347 amendment).
+            (Some(OwnerRequirementRole::Cleanup), _) => {
+                Some(("cleanup", OWNER_CONTEXT_UNOWNED, None, call.callee, false))
+            }
             (Some(OwnerRequirementRole::SettledCleanup), _) => Some((
                 "settled-cleanup",
                 OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LEAF,
@@ -362,7 +361,7 @@ pub(crate) fn find_missing_owners_incremental(
         .filter_map(|(index, node)| node.symbol.clone().map(|symbol| (symbol, index)))
         .collect::<HashMap<_, _>>();
     let mut contexts = seed_contexts(&nodes);
-    seed_namespace_hand_outs(&nodes, lookup, &mut contexts);
+    seed_named_hand_outs(&nodes, lookup, &mut contexts);
     let mut outgoing = vec![Vec::<(usize, OwnerEdgeKind)>::new(); nodes.len()];
     for file in &facts.files {
         let Some(fragment) = cache.get(file.path.as_str()) else {
@@ -396,8 +395,10 @@ pub(crate) fn find_missing_owners_incremental(
     let graph_assembly = graph_started.elapsed();
 
     let propagation_started = Instant::now();
-    propagate_owner_contexts(&mut contexts, &outgoing);
-    settle_eager_owners(&mut contexts, &outgoing);
+    let candidates = unnamed_hand_out_candidates(&nodes, lookup);
+    let uncertain = seed_unnamed_hand_outs(&mut contexts, &outgoing, &candidates);
+    propagate_owner_contexts(&mut contexts, &outgoing, &uncertain);
+    settle_eager_owners(&mut contexts, &outgoing, &uncertain);
     let propagation = propagation_started.elapsed();
 
     let requirements_started = Instant::now();
@@ -551,7 +552,13 @@ pub(crate) fn find_missing_owners_incremental(
                     later_run_unowned,
                     component_uncertain,
                     after_await,
-                    report: context & candidate.report_mask != 0,
+                    // The batch pass's cleanup rule (ADR 0347 amendment): a cleanup in a
+                    // leaf that is not owned is reported; in an owned leaf it is
+                    // SC3001's claim.
+                    report: context & candidate.report_mask != 0
+                        || (candidate.operation == "cleanup"
+                            && context & OWNER_CONTEXT_LEAF != 0
+                            && context & OWNER_CONTEXT_OWNED == 0),
                 },
                 lookup,
             );

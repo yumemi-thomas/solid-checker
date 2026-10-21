@@ -841,12 +841,21 @@ impl<'a> SemanticLookup<'a> {
         let _ = self.namespace_hand_outs.set(hand_outs);
     }
 
-    /// Whether a namespace import hands out the function at `function` in the
-    /// module at `path` (ADR 0347). Until the census is set, nothing is.
-    pub(crate) fn hands_out_through_namespace(&self, path: &str, function: Span) -> bool {
+    /// Whether the program names the function at `function` in the module at
+    /// `path` as a value it hands out (ADR 0347, amendment): a static member read or
+    /// a named dynamic-import read. Until the census is set, nothing is.
+    pub(crate) fn hands_out_by_name(&self, path: &str, function: Span) -> bool {
         self.namespace_hand_outs
             .get()
-            .is_some_and(|hand_outs| hand_outs.hands_out(path, function))
+            .is_some_and(|hand_outs| hand_outs.named(path, function))
+    }
+
+    /// Whether the module at `path`'s namespace escapes with no name the
+    /// analysis can read (ADR 0347, amendment). Until the census is set, nothing does.
+    pub(crate) fn escapes_unnamed(&self, path: &str) -> bool {
+        self.namespace_hand_outs
+            .get()
+            .is_some_and(|hand_outs| hand_outs.escapes_unnamed(path))
     }
 
     pub(super) fn new(
