@@ -1,6 +1,6 @@
 # runtime-oracle
 
-Cases for `scripts/runtime-oracle.mjs`: each runs in Chrome on the Solid 2 dev build, and the runtime's diagnostics are compared with the checker's verdict at the same site. A dev diagnostic where the checker reports nothing is an unproven clean claim. Cases run in `../solid-checker-rc13-corpus/apps/helge-dev` (rc.13; `--install` overrides) against the real packages: `*.d.ts` stubs and `node_modules` are not copied, and a case `tsc` rejects is `type-error`.
+Cases for `scripts/runtime-oracle.mjs`: each runs in Chrome on the Solid 2 dev build, and its diagnostics are compared with the checker's verdict at the same site. A dev diagnostic where the checker reports nothing is an unproven clean claim. Cases run in `../solid-checker-rc13-corpus/apps/helge-dev` (rc.13; `--install` overrides) against the real packages: `*.d.ts` stubs and `node_modules` are not copied, and a case `tsc` rejects is `type-error`.
 
 A case is a directory with an `App.tsx` and no `tsconfig.json`; every exported component is rendered and events are dispatched on every element. Optional `oracle.json`: `note`, `steps`, `install` (corpus app with the same Solid version), `open` (known unproven clean sites `{ code, site, reason }`, or `{ rule, site, reason }` for an observation; a site that stops firing is `stale-open`), and `behaviour` (below).
 
@@ -60,7 +60,7 @@ A static violation no dev diagnostic covers is classified by the observations of
 
 The `StaticText` site (static `textContent` beside children) has no write to show its loss: its children win (checked in Chrome on rc.13), and a reflected observation there would read as a false candidate, so it stays static-only.
 
-The `oracle-behaviour-primitive-in-directive` control's `missing-owner` finding (`App.tsx:18`) was refuted by its observation: the runtime disposes the effect when its `Show` branch hides. ADR 0345 removed it, so the control is `behaviour-clean` and no row is refuted.
+The `oracle-behaviour-primitive-in-directive` control's `missing-owner` finding (`App.tsx:18`) was refuted by observation: the runtime disposes the effect when its `Show` branch hides. ADR 0345 removed it: the control is `behaviour-clean` and no row is refuted.
 
 `NO_OWNER_EFFECT` is also claimed by `primitive-in-directive-application`, whose page names that warning.
 

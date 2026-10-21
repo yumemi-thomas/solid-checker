@@ -2,7 +2,7 @@
 
 Every design decision that still governs the code, by ADR number. Code cites
 these numbers; link one as `docs/decisions.md#adr-NNNN`. A new decision gets the
-next number (0330 onward) and a short entry here: the rule as it holds, its
+next number (0347 onward) and a short entry here: the rule as it holds, its
 premise, and the owning files. History, alternatives and review rounds go in
 the commit message. The original ADR texts are in git:
 `git show docs-archive-2026-10-19:docs/adr/<file>`.
