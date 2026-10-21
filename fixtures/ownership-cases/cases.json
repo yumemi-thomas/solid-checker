@@ -597,6 +597,32 @@
    "note": "TypeScript owns this diagnostic (TS2322: the prop does not exist on the element's attribute type) and the checker deliberately carries no rule for it. The expectation asserts both halves: TypeScript really does report it at this span, and no checker finding is emitted there. `silent` keeps the broader claim that nothing else fires either."
   },
   {
+   "id": "innerhtml/typescript-owned/003",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "export const Case = () => <div innerhtml=\"x\">child</div>;\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [],
+    "absent": [],
+    "silent": true,
+    "typescript": [
+     {
+      "code": "TS2322",
+      "span": {
+       "marker": "innerhtml"
+      }
+     }
+    ]
+   },
+   "note": "Kept divergence: eslint-plugin-solid 0.14.5 reads a lowercase `innerhtml` alias as inner HTML (rule line 77). In Solid 2.0 rc.13 the spelling is neither typed nor treated as inner HTML. TypeScript rejects it (TS2322 at the attribute name, \"Did you mean 'innerHTML'?\"), and @solidjs/web rc.13 writes it with setAttribute, because its ChildProperties set holds only innerHTML, textContent, innerText and children. It therefore overwrites no content and no SC8003 is emitted. The camel-case spelling still reports (jsx-no-duplicate-props/solid-v2/content-positive/001). `silent` keeps the claim that no other rule fires either."
+  },
+  {
    "id": "prefer-for/solid-v2/positive/001",
    "dialect": "solid-v2",
    "source": {

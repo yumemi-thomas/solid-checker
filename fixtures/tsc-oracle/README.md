@@ -1,6 +1,6 @@
 # The `tsc` oracle
 
-AGENTS.md's absolute rule: never report what TypeScript already reports, judged against the library's real published typings. Fixture stubs cannot answer that (a stub looser than the package invents defects: SC3004/SC9002 survived because stubs typed `apply` as `(value: T) => unknown` where `@solidjs/signals` says `EffectFunction = (v, p?) => (() => void) | void`). The oracle installs the packages in `packages.json` at the audited versions (`2.0.0-rc.9` triple of `solid-js`, `@solidjs/signals`, `@solidjs/web`; SRI integrities pinned there) and compiles against those. The checker half of every case must run with no SC9014 notice (`AUDITED_INSTALLATION`, `rust/crates/solid-dialect/src/solid_2/releases.rs`).
+AGENTS.md's absolute rule: never report what TypeScript already reports, judged against the library's real published typings. Fixture stubs cannot answer that (a stub looser than the package invents defects: SC3004/SC9002 survived because stubs typed `apply` as `(value: T) => unknown` where `@solidjs/signals` says `EffectFunction = (v, p?) => (() => void) | void`). The oracle installs the packages in `packages.json` at the audited versions (`2.0.0-rc.13` triple of `solid-js`, `@solidjs/signals`, `@solidjs/web`; SRI integrities pinned there) and compiles against those. The checker half of every case must run with no SC9014 notice (`AUDITED_INSTALLATION`, `rust/crates/solid-dialect/src/solid_2/releases.rs`).
 
 `rule-cases.json` holds one case per rule whose positive spelling could also be a `tsc` error, with `expect` (TypeScript) and `checker` (this checker) and a reason. `removed-because-redundant` requires `checker: "silent"`; `distinct-claim` requires `checker: "reports"` plus diagnostic codes and a reason naming what the finding claims that the type error does not; every exact dialect catalog rule needs a keystone (`expect: "silent"`, `checker: "reports"`) unless listed in the gate's `EXEMPT` map.
 
@@ -14,7 +14,7 @@ The gate (`make tsc-oracle`) needs both binaries; an absent or version/integrity
 
 ## Redundancy ledger
 
-Rules or arms removed because `tsc` reports them (executable record: `removed-because-redundant` cases; code record: `RETIRED_RULES` in `rust/crates/solid-facts-backend/src/dialect.rs`). Judged on rc.9.
+Rules or arms removed because `tsc` reports them (executable record: `removed-because-redundant` cases; code record: `RETIRED_RULES` in `rust/crates/solid-facts-backend/src/dialect.rs`). Judged on rc.9 when each removal landed. The `removed-because-redundant` cases in `rule-cases.json` are re-checked against the pinned rc.13 by the gate; a row with no case there has not been re-judged on rc.13.
 
 | Rule (code) | Removed claim | What `tsc` says | Still valid |
 | --- | --- | --- | --- |
@@ -28,6 +28,7 @@ Rules or arms removed because `tsc` reports them (executable record: `removed-be
 | `missing-owner` (SC4004), return arm | `onSettled` callback returns a number | TS2322 against `onSettled(callback: () => void \| (() => void))` | yes |
 | `no-implicit-draggable`; `reactive-dispatch-unresolved` (SC9012) invalid call; `server-function-rich-argument` (SC7007) arity arm | `draggable` shorthand; computed numeric call; extra rich argument | TS2322 `EnumeratedPseudoBoolean`; TS2349; TS2554 | yes |
 | `no-direct-mutation` (SC2003) root-record write | `state.count = 1` on a store root | TS2540 on rc.0-rc.6, clean on rc.9 (`Store<T> = T`): reversed, now a keystone | reversed |
+| `jsx-no-duplicate-props` (SC8003), lowercase `innerhtml` arm | `innerhtml` counted as inner HTML beside children | TS2322 `Property 'innerhtml' does not exist ... Did you mean 'innerHTML'?` (rc.13) | yes |
 
 Retired with Solid 1.x (ADR 0110; git tag `docs-archive-2026-10-19`): `v1/imports`, and the `v1/no-innerhtml`, `v1/jsx-no-duplicate-props`, `v1/event-handlers`, `v1/no-react-specific-props`, `v1/style-prop`, `v1/no-unknown-namespaces` arms `tsc` covers (TS2305, TS2322, TS17001, TS2783, TS1117, TS2710, TS2561, TS2353).
 

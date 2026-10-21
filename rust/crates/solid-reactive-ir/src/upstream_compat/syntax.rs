@@ -156,7 +156,13 @@ fn jsx_no_duplicate_props(
 
     let has_children_prop = seen_slots.contains("children");
     let has_children = !element.children.is_empty();
-    let has_inner_html = seen_slots.contains("innerHTML") || seen_slots.contains("innerhtml");
+    // Only the camel-case `innerHTML` writes inner HTML. Upstream also reads a
+    // lowercase `innerhtml` alias (eslint-plugin-solid 0.14.5, rule line 77),
+    // but rc.13 types only `innerHTML` (TS2322 on the lowercase spelling), and
+    // the runtime's property set (`ChildProperties`) has no lowercase entry, so
+    // a lowercase attribute goes through `setAttribute` and overwrites nothing. The kept
+    // divergence is pinned as `innerhtml/typescript-owned/003`.
+    let has_inner_html = seen_slots.contains("innerHTML");
     let has_text_content = seen_slots.contains("textContent");
     let used = [
         has_children_prop.then_some("`props.children`"),

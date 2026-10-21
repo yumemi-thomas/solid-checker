@@ -10,6 +10,12 @@ Reports combinations of JSX children, `children`, `innerHTML`, and
 `textContent` when more than one mechanism writes the same intrinsic element's
 content. The `children`-prop plus JSX-children pair alone is left to TS2710.
 
+Only the camel-case `innerHTML` is inner HTML. A lowercase `innerhtml` is not a
+content source in Solid 2.0: TypeScript rejects it (TS2322), and the runtime
+writes it as a plain attribute, so the rule stays silent on it. Upstream's
+lowercase alias is deliberately not carried; the divergence is pinned in
+`fixtures/ownership-cases/cases.json`.
+
 Solid 2.0 has no Solid 1.x lowercase `on*` or `attr:` alias domain, so this
 rule deliberately does not port the 1.x compiler-slot folding arm. Component
 props are ordinary object keys and remain outside the rule.

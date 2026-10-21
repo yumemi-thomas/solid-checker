@@ -913,6 +913,17 @@
       "code": "export const Case = (props: { html: string }) => <div innerHTML={props.html}>fallback</div>;\n"
     },
     {
+      "rule": "jsx-no-duplicate-props",
+      "dialect": "v2",
+      "expect": "removed-because-redundant",
+      "checker": "silent",
+      "allow": [
+        2322
+      ],
+      "why": "Lowercase `innerhtml` arm of SC8003, removed 2026-10-21. The rc.13 typings reject the attribute (TS2322, `Did you mean 'innerHTML'?`), and @solidjs/web writes it with setAttribute, so it is never a content slot. Upstream's lowercase alias (eslint-plugin-solid 0.14.5, rule line 77) is narrowed away, not demoted. The camel-case keystone above still reports.",
+      "code": "export const Case = () => <div innerhtml=\"x\">child</div>;\n"
+    },
+    {
       "rule": "until-in-tracked-scope",
       "dialect": "v2",
       "expect": "silent",
