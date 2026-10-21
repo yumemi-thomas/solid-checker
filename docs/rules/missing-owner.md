@@ -79,10 +79,16 @@ edge at all, such as a callback handed to a function the analysis does not
 model, or handed to a scheduler through a wrapper call
 (`setTimeout(wrap(() => ...))`), is still treated as owned by the
 owner-creating callback it is written in, and is not reported inside a
-component. Where it runs with no owner, that is a false negative. An IIFE is not
-an owner edge either: a plain IIFE at module scope that creates an effect is not
-reported, and neither is one inside a function no edge reaches
-(`docs/open-work.md`).
+component. Where it runs with no owner, that is a false negative.
+
+An invoked function literal is an owner edge (ADR 0347): the call runs its body
+under the owner of the code around the call, so a plain IIFE at module scope or
+inside an unowned callback is a violation, and one in a component body is owned.
+Withheld, and so uncertain or silent: a generator (calling it runs no body), a
+`new` call, and a call placed under another owner, which is a class field or
+static block initializer or JSX in the owner's own body (a child or an attribute).
+The code after an async IIFE's first `await` is a continuation with no owner
+(ADR 0333), as for any async function.
 
 The proven `onSettled` cleanup variant has **error** severity because Solid 2.0
 throws `SETTLED_CLEANUP_UNOWNED` in development and silently drops the cleanup

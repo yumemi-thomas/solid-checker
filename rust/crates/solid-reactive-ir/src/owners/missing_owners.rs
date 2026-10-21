@@ -53,6 +53,32 @@ pub(crate) fn find_missing_owners(
                     contexts[target_index] |= OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED;
                 }
             }
+            // ADR 0347: an invoked function literal runs in the call, under the
+            // owner of the code around it (`invocation_runs_under_owner`).
+            if let Some(function) = invoked_function_literal(file, call)
+                && let Some(target_index) = nodes_by_path
+                    .get(file.path.as_str())
+                    .into_iter()
+                    .flatten()
+                    .copied()
+                    .find(|index| nodes[*index].span == function.span)
+            {
+                let owner =
+                    enclosing_function_span(&nodes, &nodes_by_path, file.path.as_str(), call.span);
+                if invocation_runs_under_owner(
+                    file,
+                    call.span,
+                    owner.map(|index| nodes[index].span),
+                ) {
+                    match owner {
+                        Some(owner) => edges.push((owner, target_index, OwnerEdgeKind::Preserve)),
+                        None => {
+                            contexts[target_index] |=
+                                OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED;
+                        }
+                    }
+                }
+            }
             for edge in owner_callback_edges(
                 file,
                 call,

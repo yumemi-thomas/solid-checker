@@ -81,6 +81,23 @@ pub(crate) fn discover_owner_file(
                 kind: OwnerEdgeKind::Preserve,
             });
         }
+        // ADR 0347: an invoked function literal runs in the call, under the
+        // owner of the code around it (`invocation_runs_under_owner`).
+        if let Some(function) = invoked_function_literal(file, call) {
+            let invoker =
+                enclosing_function_span(&nodes, &nodes_by_path, file.path.as_str(), call.span);
+            if invocation_runs_under_owner(file, call.span, invoker.map(|index| nodes[index].span))
+            {
+                edges.push(SymbolicOwnerEdge {
+                    source: invoker.map(|index| OwnerSource {
+                        path: file.path.to_string(),
+                        span: nodes[index].span,
+                    }),
+                    target: OwnerTarget::LocalSpan(function.span),
+                    kind: OwnerEdgeKind::Preserve,
+                });
+            }
+        }
         for edge in owner_callback_edges(file, call, &call_primitives[call_index], lookup) {
             if let Some(target) = call
                 .arguments

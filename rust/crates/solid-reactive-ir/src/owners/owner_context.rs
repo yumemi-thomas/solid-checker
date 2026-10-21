@@ -681,6 +681,61 @@ fn runs_at_module_init(file: &solid_facts::FileFacts, span: Span) -> bool {
     })
 }
 
+/// The function literal an invocation calls directly, when the call runs that
+/// literal's body synchronously (ADR 0347): the callee, with parentheses and
+/// type assertions peeled, is a function literal, the call is not `new`, and
+/// the literal is not a generator, since calling one runs none of its body. An
+/// `async` literal qualifies. Code before its first `await` runs in the call;
+/// code after it is a continuation, which [`await_continuation_context`] places.
+pub(crate) fn invoked_function_literal<'f>(
+    file: &'f solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+) -> Option<&'f solid_facts::ast::FunctionFact> {
+    if call.construct {
+        return None;
+    }
+    let function = file
+        .ast
+        .function_at(file.ast.peel_ts_sugar_span(call.callee))?;
+    (!function.generator).then_some(function)
+}
+
+/// Whether an invocation at `call` runs under the owner of the code around it
+/// (ADR 0347). `owner` is the span of the innermost function holding the call,
+/// or `None` at module scope. Two placements run under another owner, so the
+/// walk makes no claim there:
+///
+/// - a class field initializer or static block, which runs at construction or
+///   class evaluation, as `runs_at_module_init` refuses an instance field. A
+///   function inside the initializer is its own owner, and is not refused;
+/// - JSX written in the owner's own body. A component runs its children inside
+///   its own memo, and an attribute is evaluated as the compiler places it
+///   (ADR 0345). JSX that only contains the owner, such as an event handler
+///   written in an attribute, is not such a placement.
+pub(crate) fn invocation_runs_under_owner(
+    file: &solid_facts::FileFacts,
+    call: Span,
+    owner: Option<Span>,
+) -> bool {
+    let in_field_initializer = file.ast.classes.iter().any(|class| {
+        class.elements.iter().any(|element| {
+            let initializer = match element.kind {
+                solid_facts::ast::ClassElementKind::Field => element.value,
+                solid_facts::ast::ClassElementKind::StaticBlock => Some(element.span),
+                _ => None,
+            };
+            initializer.is_some_and(|initializer| {
+                initializer.contains(call) && owner.is_none_or(|owner| !initializer.contains(owner))
+            })
+        })
+    });
+    let in_owner_jsx = file
+        .ast
+        .jsx_containing(call)
+        .any(|element| owner.is_none_or(|owner| owner.contains(element.span)));
+    !in_field_initializer && !in_owner_jsx
+}
+
 /// Whether `span` is one identifier. A ref application that invokes a named
 /// function (`ref={apply}`) resolves its symbol exactly only then: a longer
 /// span's start names some other symbol.
