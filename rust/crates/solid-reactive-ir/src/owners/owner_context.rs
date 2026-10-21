@@ -409,22 +409,23 @@ pub(crate) fn owner_callback_edges(
 /// literal the value writes at its top level (ADR 0345).
 ///
 /// The expression is evaluated while the component renders, and the ref
-/// application invokes the value it yields. A function in value position runs
-/// with no owner at that application ([`Applied`](Self::Applied)). A function a
-/// call in the expression calls directly runs while the expression evaluates,
-/// under the owner of the code around it ([`Eager`](Self::Eager)). Any other
-/// top-level function there may be the applied callback, or may run with no
-/// owner, and no proof says which ([`Unproven`](Self::Unproven)).
+/// application invokes the values it yields. A yielded function runs with no
+/// owner at that application ([`Applied`](Self::Applied)). A function a call in
+/// the expression calls directly runs while the expression evaluates, under the
+/// owner of the code around it ([`Eager`](Self::Eager)). Any other top-level
+/// function there may be the applied callback, or may run with no owner, and no
+/// proof says which ([`Unproven`](Self::Unproven)).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum RefValueMark {
-    /// The function is written in value position and no call in the expression
-    /// receives it.
+    /// The function is a value the ref application receives
+    /// ([`yielded_value_contains`]).
     Applied { function: Span },
     /// The function is the callee of `call`, which the expression makes.
     Eager { function: Span, call: Span },
     /// The function's owner is unproven: a generator (a call runs none of its
     /// body), a callback handed to a callee no owner edge describes, or a
-    /// function a call in the expression receives or returns.
+    /// function the expression evaluates without yielding it (a getter's body,
+    /// a tagged template's substitution, an operand of `void`).
     Unproven { function: Span },
 }
 
@@ -477,11 +478,7 @@ pub(crate) fn ref_value_marks(
                 });
                 continue;
             }
-            let containing = calls
-                .iter()
-                .filter(|(_, call)| call.span.contains(function.span))
-                .collect::<Vec<_>>();
-            if containing.is_empty() {
+            if yielded_value_contains(file, callback.span, function.span) {
                 marks.push(RefValueMark::Applied {
                     function: function.span,
                 });
@@ -489,14 +486,17 @@ pub(crate) fn ref_value_marks(
             }
             // A callback whose callee the dialect describes (a synchronous
             // slot, an effect's apply, a fresh-stack scheduler) is placed by
-            // the owner edges its callers already add.
-            let described = containing.iter().any(|(index, call)| {
-                call.arguments.iter().enumerate().any(|(argument, value)| {
-                    file.ast.peel_ts_sugar_span(value.span) == function.span
-                        && owner_callback_edges(file, call, &call_primitives[*index], lookup)
-                            .iter()
-                            .any(|edge| edge.argument == argument)
-                })
+            // the owner edges its callers already add. Any other function is
+            // evaluated by something the expression does (a getter's body, a
+            // tagged template's substitution, an operand of `void`): unproven.
+            let described = calls.iter().any(|(index, call)| {
+                call.span.contains(function.span)
+                    && call.arguments.iter().enumerate().any(|(argument, value)| {
+                        file.ast.peel_ts_sugar_span(value.span) == function.span
+                            && owner_callback_edges(file, call, &call_primitives[*index], lookup)
+                                .iter()
+                                .any(|edge| edge.argument == argument)
+                    })
             });
             if !described {
                 marks.push(RefValueMark::Unproven {
@@ -506,6 +506,77 @@ pub(crate) fn ref_value_marks(
         }
     }
     marks
+}
+
+/// Whether `function` is one of the values a ref expression yields: the
+/// expression's own value (parentheses and type wrappers are transparent), or
+/// an element, a branch or an operand of a value it yields. A ref application
+/// receives exactly those values, so only they run in its apply phase. A
+/// function anywhere else is evaluated by something the expression does: a
+/// getter's body when `.x` reads it, a tagged template's substitution, an
+/// operand of `void` (never called at all).
+pub(crate) fn yielded_value_contains(
+    file: &solid_facts::FileFacts,
+    value: Span,
+    function: Span,
+) -> bool {
+    let value = file.ast.peel_ts_sugar_span(value);
+    if value == function {
+        return true;
+    }
+    if let Some(conditional) = file
+        .ast
+        .conditional_expressions
+        .iter()
+        .find(|fact| file.ast.peel_ts_sugar_span(fact.span) == value)
+    {
+        return [conditional.consequent, conditional.alternate]
+            .into_iter()
+            .any(|branch| yielded_value_contains(file, branch, function));
+    }
+    if let Some(logical) = file
+        .ast
+        .logical_expressions
+        .iter()
+        .find(|fact| file.ast.peel_ts_sugar_span(fact.span) == value)
+    {
+        return [logical.left, logical.right]
+            .into_iter()
+            .any(|operand| yielded_value_contains(file, operand, function));
+    }
+    if let Some(array) = file
+        .ast
+        .array_literal_elements
+        .iter()
+        .find(|fact| file.ast.peel_ts_sugar_span(fact.span) == value)
+    {
+        return array.elements.iter().any(|element| {
+            element.kind == solid_facts::ast::ArrayElementKind::Value
+                && yielded_value_contains(file, element.span, function)
+        });
+    }
+    false
+}
+
+/// The innermost function whose whole span, parameters included, contains
+/// `span`. A call in a default parameter initializer runs in that function's
+/// call, under the owner of the code that makes it, so its owner is the
+/// function that owns the parameter list, not the enclosing body alone.
+pub(crate) fn enclosing_function_span(
+    nodes: &[OwnerNode],
+    nodes_by_path: &HashMap<String, Vec<usize>>,
+    path: &str,
+    span: Span,
+) -> Option<usize> {
+    nodes_by_path
+        .get(path)?
+        .iter()
+        .copied()
+        .filter(|index| nodes[*index].span.contains(span))
+        .min_by_key(|index| {
+            let function = nodes[*index].span;
+            function.end - function.start
+        })
 }
 
 /// Whether `span` is one identifier. A ref application that invokes a named

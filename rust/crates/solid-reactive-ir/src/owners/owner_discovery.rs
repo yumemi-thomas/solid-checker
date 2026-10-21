@@ -192,10 +192,14 @@ pub(crate) fn discover_owner_file(
                 kind: OwnerEdgeKind::Unowned,
             }),
             RefValueMark::Eager { function, call } => edges.push(SymbolicOwnerEdge {
-                source: owner_at(call).map(|span| OwnerSource {
-                    path: file.path.to_string(),
-                    span,
-                }),
+                source: nodes
+                    .iter()
+                    .filter(|node| node.span.contains(call))
+                    .min_by_key(|node| node.span.end - node.span.start)
+                    .map(|node| OwnerSource {
+                        path: file.path.to_string(),
+                        span: node.span,
+                    }),
                 target: OwnerTarget::LocalSpan(function),
                 kind: OwnerEdgeKind::Preserve,
             }),

@@ -254,20 +254,17 @@ fn ref_phase(file: &solid_facts::FileFacts, span: Span) -> RefPhase {
     if enclosing.iter().any(|function| function.generator) {
         return RefPhase::Undecided;
     }
-    let in_expression = |call: &solid_facts::ast::CallFact| callback.span.contains(call.span);
-    if !file
-        .ast
-        .calls
-        .iter()
-        .any(|call| in_expression(call) && call.span.contains(outermost.span))
-    {
+    // Only a function the ref application receives is applied: a getter's
+    // body, a tagged template's substitution or an operand of `void` is
+    // evaluated by the expression itself (ADR 0345).
+    if crate::owners::yielded_value_contains(file, callback.span, outermost.span) {
         return RefPhase::Apply;
     }
     let iife = |function: Span| {
-        file.ast
-            .calls
-            .iter()
-            .any(|call| in_expression(call) && file.ast.peel_ts_sugar_span(call.callee) == function)
+        file.ast.calls.iter().any(|call| {
+            callback.span.contains(call.span)
+                && file.ast.peel_ts_sugar_span(call.callee) == function
+        })
     };
     if enclosing.iter().all(|function| iife(function.span)) {
         RefPhase::Render

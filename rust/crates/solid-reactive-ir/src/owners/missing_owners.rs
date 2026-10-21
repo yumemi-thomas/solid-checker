@@ -150,12 +150,9 @@ pub(crate) fn find_missing_owners(
                     contexts[target] |= OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED;
                 }
                 RefValueMark::Eager { call, .. } => {
-                    if let Some(owner) = containing_function_indexed(
-                        &nodes,
-                        &nodes_by_path,
-                        file.path.as_str(),
-                        call,
-                    ) {
+                    if let Some(owner) =
+                        enclosing_function_span(&nodes, &nodes_by_path, file.path.as_str(), call)
+                    {
                         edges.push((owner, target, OwnerEdgeKind::Preserve));
                     } else {
                         contexts[target] |= OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED;

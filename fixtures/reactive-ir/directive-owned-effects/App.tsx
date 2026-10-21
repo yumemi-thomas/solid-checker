@@ -44,3 +44,26 @@ export function App() {
 
 // Positive: at module scope the IIFE runs with no owner, whatever the ref does.
 export const detached = <div ref={(() => { createEffect(() => count(), () => {}); return (element: HTMLDivElement) => { void element; }; })()} />;
+
+// Uncertifiable: the getter's body runs when the expression reads `.x`, not when the ref applies the value.
+export const viaGetter = <div ref={({ get x() { createEffect(() => count(), () => {}); return (element: HTMLDivElement) => { void element; }; } }).x as any} />;
+
+// Uncertifiable: the tag calls its substitution while the expression evaluates.
+function tag(strings: TemplateStringsArray, run: () => void): (element: HTMLDivElement) => void { void strings; run(); return element => { void element; }; }
+export const viaTemplate = <div ref={tag`${() => { createEffect(() => count(), () => {}); }}`} />;
+
+// Uncertifiable: an operand of void is never called; the comma yields the other operand.
+const noop = (element: HTMLDivElement) => { void element; };
+export const viaVoid = <div ref={(void (() => { createEffect(() => count(), () => {}); }), noop)} />;
+
+// Negative: a default parameter initializer runs in its function's call, under the caller's owner (Host renders it).
+function Holder(scope = <div ref={(() => { createEffect(() => count(), () => {}); return noop; })()} />) { return scope; }
+export function Host() {
+  return <>{Holder()}</>;
+}
+
+// Positive: a logical operand is a value the ref application receives, applied with no owner.
+export function Logical() {
+  const on = true;
+  return <div ref={(on && (element => { createEffect(() => count(), () => { void element; }); })) || undefined} />;
+}
