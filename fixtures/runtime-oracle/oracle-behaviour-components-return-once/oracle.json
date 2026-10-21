@@ -1,0 +1,21 @@
+{
+  "note": "SC1004 behaviour: after the login write the violation's early return stays on screen; the control's Show switches to the logged-in branch",
+  "behaviour": [
+    {
+      "rule": "components-return-once",
+      "site": "App.tsx:8",
+      "act": [{ "click": "[data-probe=violation-login]" }],
+      "observe": { "text": "[data-probe=violation-status]" },
+      "defect": "logged out",
+      "correct": "logged in as ada"
+    },
+    {
+      "rule": "components-return-once",
+      "site": "App.tsx:28",
+      "act": [{ "click": "[data-probe=control-login]" }],
+      "observe": { "text": "[data-probe=control-status]" },
+      "defect": "logged out",
+      "correct": "logged in as ada"
+    }
+  ]
+}

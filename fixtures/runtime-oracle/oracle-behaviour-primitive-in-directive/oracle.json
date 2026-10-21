@@ -1,0 +1,29 @@
+{
+  "note": "SC6001 behaviour: the violation's apply-phase effect outlives its hidden element and runs again on the write. The control's setup-phase effect is disposed with its element, so its missing-owner finding (App.tsx:18) is refuted: a false-positive candidate, reported as such",
+  "behaviour": [
+    {
+      "rule": "primitive-in-directive-application",
+      "site": "App.tsx:13",
+      "act": [{ "click": "[data-probe=violation-hide]" }, { "click": "[data-probe=violation-write]" }],
+      "observe": { "window": "oracleProbe.violationRuns" },
+      "defect": 2,
+      "correct": 1
+    },
+    {
+      "rule": "primitive-in-directive-application",
+      "site": "App.tsx:18",
+      "act": [{ "click": "[data-probe=control-hide]" }, { "click": "[data-probe=control-write]" }],
+      "observe": { "window": "oracleProbe.controlRuns" },
+      "defect": 2,
+      "correct": 1
+    },
+    {
+      "rule": "missing-owner",
+      "site": "App.tsx:18",
+      "act": [{ "click": "[data-probe=control-hide]" }, { "click": "[data-probe=control-write]" }],
+      "observe": { "window": "oracleProbe.controlRuns" },
+      "defect": 2,
+      "correct": 1
+    }
+  ]
+}

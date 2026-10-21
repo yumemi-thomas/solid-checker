@@ -1,0 +1,21 @@
+{
+  "note": "SC1005 behaviour: the violation's text keeps the accessor's source after the write; the control calls the accessor and shows the value",
+  "behaviour": [
+    {
+      "rule": "uncalled-accessor",
+      "site": "App.tsx:11",
+      "act": [{ "click": "[data-probe=violation-write]" }],
+      "observe": { "text": "[data-probe=violation-label]" },
+      "defect": { "pattern": "^Count: .*(function|=>)" },
+      "correct": "Count: 7"
+    },
+    {
+      "rule": "uncalled-accessor",
+      "site": "App.tsx:21",
+      "act": [{ "click": "[data-probe=control-write]" }],
+      "observe": { "text": "[data-probe=control-label]" },
+      "defect": { "pattern": "^Count: .*(function|=>)" },
+      "correct": "Count: 7"
+    }
+  ]
+}

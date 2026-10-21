@@ -1,0 +1,21 @@
+{
+  "note": "SC2003 behaviour: the violation's direct store write is dropped and the DOM keeps the old name; the control's setter write shows",
+  "behaviour": [
+    {
+      "rule": "no-direct-mutation",
+      "site": "App.tsx:10",
+      "act": [{ "click": "[data-probe=violation-write]" }],
+      "observe": { "text": "[data-probe=violation-name]" },
+      "defect": "Ada",
+      "correct": "Grace"
+    },
+    {
+      "rule": "no-direct-mutation",
+      "site": "App.tsx:20",
+      "act": [{ "click": "[data-probe=control-write]" }],
+      "observe": { "text": "[data-probe=control-name]" },
+      "defect": "Ada",
+      "correct": "Grace"
+    }
+  ]
+}

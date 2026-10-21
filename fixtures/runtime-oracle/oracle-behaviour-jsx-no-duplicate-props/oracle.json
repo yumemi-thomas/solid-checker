@@ -1,0 +1,19 @@
+{
+  "note": "SC8003 behaviour: the textContent attribute and the children share one content slot, so the DOM shows only one of them; the control's children alone show",
+  "behaviour": [
+    {
+      "rule": "jsx-no-duplicate-props",
+      "site": "App.tsx:11",
+      "observe": { "text": "[data-probe=violation-content]" },
+      "defect": { "pattern": "^[lb]$" },
+      "correct": { "pattern": "^(lb|bl)$" }
+    },
+    {
+      "rule": "jsx-no-duplicate-props",
+      "site": "App.tsx:20",
+      "observe": { "text": "[data-probe=control-content]" },
+      "defect": "l",
+      "correct": "b"
+    }
+  ]
+}
