@@ -19,6 +19,7 @@ use solid_facts::core::Span;
 use typefacts::Location;
 
 mod after_await;
+mod native_promise;
 mod pre_await;
 
 /// The static-prepass stage: every prepass rule, in their pipeline order.

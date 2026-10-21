@@ -3,7 +3,7 @@ import { createContext, createMemo, useContext } from "solid-js";
 type Theme = "light" | "dark";
 // Defaulted, so the only throw in this case is the owner's: `getContext` checks
 // the owner before the default, so a read with no owner throws NoOwnerError
-// whatever the default (ADR 0349).
+// whatever the default (ADR 0352).
 const ThemeContext = createContext<Theme>("light");
 
 // Throws NoOwnerError when clicked: an event handler has no owner.

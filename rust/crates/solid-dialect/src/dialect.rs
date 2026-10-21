@@ -5,7 +5,7 @@ use super::*;
 /// The owner-requirement partition every dialect so far agrees on: the three
 /// effect constructors register a computation on the owner, and the two
 /// cleanup registrars are each their own role. A dialect that adds a role
-/// (Solid 2's `useContext`, ADR 0349) matches its own and delegates the rest
+/// (Solid 2's `useContext`, ADR 0352) matches its own and delegates the rest
 /// here, so the shared list is written once.
 pub(crate) fn shared_owner_requirement_role(primitive: Primitive) -> Option<OwnerRequirementRole> {
     match primitive {

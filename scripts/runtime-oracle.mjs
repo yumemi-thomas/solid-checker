@@ -112,7 +112,7 @@ for (const [name, value] of Object.entries(mod as Record<string, unknown>)) {
   } catch (error) {
     console.error("render failed", name, error);
     // Rethrown from a timer, so the uncaught error reaches the feedback run's
-    // source mapping as a runtime exception (ADR 0349); the others still render.
+    // source mapping as a runtime exception (ADR 0352); the others still render.
     setTimeout(() => { throw error; });
   }
 }
@@ -156,9 +156,9 @@ const codeRules = {
   // An apply-phase createEffect warns this code, as the primitive-in-directive-application page states.
   NO_OWNER_EFFECT: ["missing-owner", "primitive-in-directive-application"],
   NO_OWNER_BOUNDARY: ["missing-owner"],
-  // Thrown, not reported: `useContext` with no owner (ADR 0349). See `thrownCodes`.
+  // Thrown, not reported: `useContext` with no owner (ADR 0352). See `thrownCodes`.
   NO_OWNER_CONTEXT: ["missing-owner"],
-  // ADR 0349: a default-less context with no provider throws when its reader renders.
+  // ADR 0352: a default-less context with no provider throws when its reader renders.
   CONTEXT_NOT_FOUND: ["missing-context-provider"],
   SETTLED_CLEANUP_UNOWNED: ["missing-owner"],
   REACTIVE_WRITE_IN_OWNED_SCOPE: ["reactive-write-in-owned-scope"],

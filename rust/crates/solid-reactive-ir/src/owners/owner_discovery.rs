@@ -162,7 +162,7 @@ pub(crate) fn discover_owner_file(
                     .map_or(call.callee, |argument| argument.span),
                 false,
             )),
-            // ADR 0349: `useContext` with no owner throws `NoOwnerError`; the
+            // ADR 0352: `useContext` with no owner throws `NoOwnerError`; the
             // batch pass asks the same unowned question.
             (Some(OwnerRequirementRole::ContextRead), _) => Some((
                 "context-read",
@@ -180,7 +180,7 @@ pub(crate) fn discover_owner_file(
                 .filter(|primitive| dialect.leaf_owner_requires_owned_call_site(*primitive))
                 .map(|_| call.span);
             // The context argument of a `useContext` read, for the closed
-            // provider census (ADR 0349). Only a read with exactly one argument.
+            // provider census (ADR 0352). Only a read with exactly one argument.
             let context_argument = (operation == "context-read")
                 .then(|| call.arguments.first())
                 .flatten()
@@ -425,7 +425,7 @@ pub(crate) fn find_missing_owners_incremental(
     let continuations = AwaitContinuations::new(facts, lookup);
     let mut settled_gates = SettledGateDecisions::default();
     let mut seen = HashSet::default();
-    // Program-wide: a context's provider census spans every file (ADR 0349).
+    // Program-wide: a context's provider census spans every file (ADR 0352).
     let provider_free = provider_free_contexts(facts, lookup, symbol_names);
     for file in &facts.files {
         let Some(fragment) = cache.get(file.path.as_str()) else {
@@ -441,7 +441,7 @@ pub(crate) fn find_missing_owners_incremental(
             let context = owner_index.map_or(OWNER_CONTEXT_UNOWNED, |index| contexts[index]);
             // As in the batch pass: effects, cleanups and context reads, never a
             // JSX boundary or `onSettled`'s returned cleanup. The two passes must
-            // agree here: a context read after an `await` is unowned (ADR 0349).
+            // agree here: a context read after an `await` is unowned (ADR 0352).
             let after_await = matches!(candidate.operation, "effect" | "cleanup" | "context-read")
                 && continuations.contains(file.path.as_str(), candidate.operation_span.start);
             let context = if after_await {
@@ -450,7 +450,7 @@ pub(crate) fn find_missing_owners_incremental(
                 context
             };
             // A read of a provider-free context under an owner throws
-            // `ContextNotFoundError` (ADR 0349). The batch pass decides the same.
+            // `ContextNotFoundError` (ADR 0352). The batch pass decides the same.
             let provider_free_read = candidate.operation == "context-read"
                 && candidate.context_argument.is_some_and(|argument| {
                     context_key_at(lookup, file, argument)
@@ -466,7 +466,7 @@ pub(crate) fn find_missing_owners_incremental(
                     .map_or(OWNER_CONTEXT_LEAVES_REGION, |index| contexts[*index])
             });
             // A providing region owns its reads, so a provider-free read there is
-            // a provider finding, not an owner question (ADR 0349).
+            // a provider finding, not an owner question (ADR 0352).
             let provider = provider_free_read && (root_owned || owned_on_every_path(context));
             if root_owned && !provider {
                 continue;

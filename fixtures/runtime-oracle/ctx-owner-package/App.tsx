@@ -1,7 +1,7 @@
 import { Dialog, useDialogContext } from "@kobalte/core/dialog";
 
 // Throws NoOwnerError when the button is clicked: an event handler has no
-// owner, and the package hook reads the dialog's context in it (ADR 0349).
+// owner, and the package hook reads the dialog's context in it (ADR 0352).
 export function Clicked() {
   return (
     <Dialog>

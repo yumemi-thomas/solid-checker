@@ -16,6 +16,7 @@
 //! "Unresolved" is not evidence of anything, so a call the analysis cannot see
 //! into is a possible read.
 
+use super::native_promise::{direct_builtin, native_promise};
 use super::{
     call_accessor_symbol, store_path_tracked, tracked_before_first_suspension,
     tracked_store_paths_before_first_suspension,
@@ -27,7 +28,7 @@ use crate::owners::containing_ast_function;
 use crate::pipeline::AnalysisContext;
 use crate::runtime_semantics::{is_inline_standard_callback, standard_call_name};
 use solid_facts::FileFacts;
-use solid_facts::ast::{CallFact, FunctionFact, IdentifierRole};
+use solid_facts::ast::{ArrayElementKind, CallFact, FunctionFact, IdentifierRole};
 use solid_facts::core::Span;
 use std::cell::OnceCell;
 use std::collections::HashMap;
@@ -37,81 +38,31 @@ use typefacts::AsyncFunctionFact;
 /// read).
 const MAX_DEPTH: usize = 6;
 
-/// The standard-library declarations whose call runs no user code but what its
-/// arguments hand it (a callback literal argument is scanned as part of the
-/// segment, a function reference as a helper): timers and microtasks only
-/// schedule, `Promise` statics only create or chain, `Math`, number and URI
-/// functions and `Date.now` compute, an error, collection or date constructor
-/// builds a value, and `fetch` starts a request. Everything
-/// else is opaque: nothing audited says it cannot run a callback an earlier
-/// call registered (`dispatchEvent`, `Function.call`, `Reflect.apply`, an
-/// iterator, a getter, a `toString`).
-fn inert_standard_call(name: &str) -> bool {
-    name.starts_with("Math.")
-        || name
-            .strip_suffix("Constructor.construct")
-            .is_some_and(|class| {
-                matches!(
-                    class,
-                    "Error"
-                        | "TypeError"
-                        | "RangeError"
-                        | "SyntaxError"
-                        | "ReferenceError"
-                        | "EvalError"
-                        | "URIError"
-                        | "Array"
-                        | "Date"
-                        | "Map"
-                        | "Set"
-                        | "WeakMap"
-                        | "WeakSet"
-                        | "RegExp"
-                )
-            })
-        || matches!(
-            name,
-            "setTimeout"
-                | "setInterval"
-                | "clearTimeout"
-                | "clearInterval"
-                | "queueMicrotask"
-                | "requestAnimationFrame"
-                | "cancelAnimationFrame"
-                | "WindowOrWorkerGlobalScope.setTimeout"
-                | "WindowOrWorkerGlobalScope.setInterval"
-                | "WindowOrWorkerGlobalScope.clearTimeout"
-                | "WindowOrWorkerGlobalScope.clearInterval"
-                | "WindowOrWorkerGlobalScope.queueMicrotask"
-                | "WindowOrWorkerGlobalScope.fetch"
-                | "fetch"
-                | "PromiseConstructor.construct"
-                | "PromiseConstructor.resolve"
-                | "PromiseConstructor.reject"
-                | "PromiseConstructor.all"
-                | "PromiseConstructor.allSettled"
-                | "PromiseConstructor.race"
-                | "PromiseConstructor.any"
-                | "Promise.then"
-                | "Promise.catch"
-                | "Promise.finally"
-                | "DateConstructor.now"
-                | "ArrayConstructor.isArray"
-                | "parseInt"
-                | "parseFloat"
-                | "isNaN"
-                | "isFinite"
-                | "NumberConstructor.parseInt"
-                | "NumberConstructor.parseFloat"
-                | "NumberConstructor.isFinite"
-                | "NumberConstructor.isInteger"
-                | "NumberConstructor.isNaN"
-                | "NumberConstructor.isSafeInteger"
-                | "encodeURIComponent"
-                | "decodeURIComponent"
-                | "encodeURI"
-                | "decodeURI"
-        )
+/// Whether the compiler proves a value is a number and nothing else: the type
+/// facts' primitive domain at the call, with no string, boolean, bigint,
+/// symbol, nullish, object or unknown possibility (ADR 0350).
+fn only_numbers(domain: typefacts::PrimitiveValueDomain) -> bool {
+    domain.may_be_number()
+        && !domain.may_be_string()
+        && !domain.may_be_boolean()
+        && !domain.may_be_big_int()
+        && !domain.may_be_symbol()
+        && !domain.may_be_null()
+        && !domain.may_be_undefined()
+        && !domain.may_be_object()
+        && !domain.unknown()
+}
+
+/// A plain decimal numeric literal (`0`, `12`, `2.5`): a Number, never a
+/// string, an identifier or a signed expression. Exponents and other forms are
+/// not claimed.
+fn is_numeric_literal(file: &FileFacts, span: Span) -> bool {
+    let Some(text) = file.source_text(file.ast.peel_ts_sugar_span(span)) else {
+        return false;
+    };
+    text.starts_with(|c: char| c.is_ascii_digit())
+        && text.chars().all(|c| c.is_ascii_digit() || c == '.')
+        && text.matches('.').count() <= 1
 }
 
 /// What the pre-await segment is known to have done to a source.
@@ -152,6 +103,8 @@ pub(super) struct PreAwait<'f, 'a> {
     /// Project functions by the property name they are declared under: what
     /// a member read or a member call may run.
     methods: OnceCell<HashMap<String, Vec<(&'f FileFacts, &'f FunctionFact)>>>,
+    /// ADR 0350: the accessors of signals that only ever hold numbers.
+    number_accessors: OnceCell<HashSet<SymbolId>>,
 }
 
 impl<'f, 'a> PreAwait<'f, 'a> {
@@ -165,6 +118,7 @@ impl<'f, 'a> PreAwait<'f, 'a> {
                 .map(|file| (file.path.as_str(), file))
                 .collect(),
             methods: OnceCell::new(),
+            number_accessors: OnceCell::new(),
         }
     }
 
@@ -423,6 +377,14 @@ impl<'f, 'a> PreAwait<'f, 'a> {
                 reads.opaque = true;
             }
         }
+        if file.ast.coercing_operands.iter().any(|operand| {
+            region.contains(*operand)
+                && !skipped(*operand)
+                && !self.primitive_value(file, *operand)
+                && !self.suspends_within(file, *operand)
+        }) {
+            reads.opaque = true;
+        }
         // A plain member read may run a getter of that name.
         for member in &file.ast.members {
             if !region.contains(member.span)
@@ -541,13 +503,29 @@ impl<'f, 'a> PreAwait<'f, 'a> {
         // `Reflect.apply`) may invoke a callback captured earlier, and a
         // package or global callee may read a source it was handed before
         // (ADR 0340): a possible read.
-        if ctx
+        if let Some(name) = ctx
             .semantic_lookup
             .resolved_callee_call(file, call.callee)
             .and_then(standard_call_name)
-            .is_some_and(inert_standard_call)
         {
-            return false;
+            // A handler runs on its receiver. `then` on a native promise runs
+            // no code now: its callbacks run later, and are scanned as deferred
+            // (ADR 0349). Any other receiver may run its own `then`.
+            if matches!(name, "Promise.then" | "Promise.catch" | "Promise.finally") {
+                let receiver = file
+                    .ast
+                    .member_at(callee)
+                    .filter(|_| !file.ast.computed_members.contains(&callee))
+                    .map(|member| member.object);
+                return !receiver.is_some_and(|receiver| native_promise(ctx, file, receiver, 0));
+            }
+            if direct_builtin(file, call, name) && self.inert_row(file, name, call) {
+                return false;
+            }
+            // The declaration names the built-in, so a project member that
+            // shares its property name (`stats.max` beside `Math.max`) is never
+            // the callee. A call that is not inert may run what it holds.
+            return true;
         }
         // A project function whose body is visible.
         let member = file
@@ -572,6 +550,374 @@ impl<'f, 'a> PreAwait<'f, 'a> {
         }
         // Not visible: nothing rules out a read.
         true
+    }
+
+    /// ADR 0350: a call of a signal accessor whose stored value is always a
+    /// number. The signal is a `createSignal` array binding whose initial value
+    /// is a numeric literal and whose setter is only ever called with numeric
+    /// literals ([`Self::number_accessors`]). The type facts must also resolve
+    /// the call to `number`. Coercing a number runs no code.
+    fn number_signal_call(&self, file: &FileFacts, call: &CallFact) -> bool {
+        let ctx = self.ctx;
+        call.arguments.is_empty()
+            && call_accessor_symbol(ctx, file, call)
+                .is_some_and(|symbol| self.number_accessors().contains(symbol))
+            && ctx
+                .semantic_lookup
+                .entity_at(file.path.as_str(), call.span)
+                .and_then(|entity| entity.primitive_value_domain.present())
+                .is_some_and(only_numbers)
+    }
+
+    /// The accessors of the numeric signals (ADR 0350), computed once: every
+    /// `createSignal` array binding `[get, set]` with a numeric literal initial
+    /// value, whose setter has no reference that is not a call with one numeric
+    /// literal argument. A setter passed or read elsewhere may hold anything.
+    fn number_accessors(&self) -> &HashSet<SymbolId> {
+        self.number_accessors.get_or_init(|| {
+            let ctx = self.ctx;
+            // A signal without a setter (`const [count] = createSignal(0)`) is never written.
+            let mut candidates: Vec<(SymbolId, Option<SymbolId>)> = Vec::new();
+            for file in self.files.values() {
+                for binding in &file.ast.bindings {
+                    let (get, set) = match binding.array_slots.as_slice() {
+                        [Some(get)] => (get, None),
+                        [Some(get), None] => (get, None),
+                        [Some(get), Some(set)] => (get, Some(set)),
+                        _ => continue,
+                    };
+                    // A `let` pair could be reassigned to another accessor.
+                    if binding.shape != solid_facts::ast::BindingShape::Array || !binding.immutable {
+                        continue;
+                    }
+                    let Some(call) = binding
+                        .call_initializer
+                        .and_then(|span| file.ast.call_at(file.ast.peel_ts_sugar_span(span)))
+                    else {
+                        continue;
+                    };
+                    let creates_signal = !call.construct
+                        && crate::call_primitive_name_cached(
+                            ctx.semantic_lookup,
+                            file,
+                            call,
+                            ctx.entities,
+                            ctx.symbol_names,
+                            ctx.dialect,
+                        )
+                        .and_then(|name| name.primitive())
+                            == Some(solid_dialect::Primitive::CreateSignal);
+                    let initial_is_number = matches!(
+                        call.arguments.as_slice(),
+                        [argument] if !argument.spread && is_numeric_literal(file, argument.span)
+                    );
+                    if !creates_signal || !initial_is_number {
+                        continue;
+                    }
+                    let accessor = ctx.entities.at(file.path.as_str(), get.span);
+                    let setter = match set {
+                        Some(set) => ctx.entities.at(file.path.as_str(), set.span).map(Some),
+                        None => Some(None),
+                    };
+                    if let (Some(accessor), Some(setter)) = (accessor, setter) {
+                        candidates.push((accessor.clone(), setter.cloned()));
+                    }
+                }
+            }
+            if candidates.is_empty() {
+                return HashSet::default();
+            }
+            let setters: HashSet<&SymbolId> = candidates
+                .iter()
+                .filter_map(|(_, setter)| setter.as_ref())
+                .collect();
+            // A setter reference is a numeric write unless it is anything else.
+            let mut escaped: HashSet<SymbolId> = HashSet::default();
+            for file in self.files.values() {
+                let calls: HashMap<Span, &CallFact> = file
+                    .ast
+                    .calls
+                    .iter()
+                    .map(|call| (file.ast.peel_ts_sugar_span(call.callee), call))
+                    .collect();
+                for identifier in &file.ast.identifiers {
+                    if identifier.role != IdentifierRole::Reference {
+                        continue;
+                    }
+                    let Some(symbol) = ctx.entities.at(file.path.as_str(), identifier.span) else {
+                        continue;
+                    };
+                    if !setters.contains(symbol) {
+                        continue;
+                    }
+                    let numeric_write = calls.get(&identifier.span).is_some_and(|call| {
+                        !call.construct
+                            && matches!(
+                                call.arguments.as_slice(),
+                                [argument] if !argument.spread && is_numeric_literal(file, argument.span)
+                            )
+                    });
+                    if !numeric_write {
+                        escaped.insert(symbol.clone());
+                    }
+                }
+            }
+            candidates
+                .into_iter()
+                .filter(|(_, setter)| setter.as_ref().is_none_or(|setter| !escaped.contains(setter)))
+                .map(|(accessor, _)| accessor)
+                .collect()
+        })
+    }
+
+    /// Whether an own suspension lies inside `operand`. Its value, and so the
+    /// coercion of it, is produced only after the function resumed (ADR 0348).
+    fn suspends_within(&self, file: &FileFacts, operand: Span) -> bool {
+        let owner = containing_ast_function(&file.ast, operand).map(|function| function.span);
+        file.ast
+            .awaits
+            .iter()
+            .chain(&file.ast.implicit_suspensions)
+            .any(|suspension| {
+                operand.contains(*suspension)
+                    && containing_ast_function(&file.ast, *suspension).map(|function| function.span)
+                        == owner
+            })
+    }
+
+    /// Whether the audited row `name` runs no code for the values `call`
+    /// receives (ADR 0349). The caller has proven `call` is that built-in; each
+    /// slot is judged by the value it holds, and a Promise row also needs the
+    /// Promise premise, and the aggregates the array-iteration premise.
+    fn inert_row(&self, file: &FileFacts, name: &str, call: &CallFact) -> bool {
+        if call.arguments.iter().any(|argument| argument.spread) {
+            // ArgumentListEvaluation itself drives an iterator.
+            return false;
+        }
+        let semantic = self.ctx.semantic_lookup;
+        let intrinsics = semantic.promise_intrinsics_intact();
+        let all_primitive = || {
+            call.arguments
+                .iter()
+                .all(|argument| self.primitive_value(file, argument.span))
+        };
+        match name {
+            // These operations do not coerce or inspect argument properties.
+            "ArrayConstructor.construct"
+            | "ArrayConstructor.isArray"
+            | "NumberConstructor.isFinite"
+            | "NumberConstructor.isInteger"
+            | "NumberConstructor.isNaN"
+            | "NumberConstructor.isSafeInteger"
+            | "DateConstructor.now" => true,
+            // The reason is stored without thenable assimilation.
+            "PromiseConstructor.reject" => intrinsics,
+            "setTimeout"
+            | "setInterval"
+            | "WindowOrWorkerGlobalScope.setTimeout"
+            | "WindowOrWorkerGlobalScope.setInterval" => {
+                call.arguments.first().is_none_or(|argument| {
+                    self.function_value(file, argument.span)
+                        || self.primitive_value(file, argument.span)
+                }) && call
+                    .arguments
+                    .get(1)
+                    .is_none_or(|argument| self.primitive_value(file, argument.span))
+                // Remaining arguments are retained without coercion.
+            }
+            "queueMicrotask"
+            | "requestAnimationFrame"
+            | "WindowOrWorkerGlobalScope.queueMicrotask" => call
+                .arguments
+                .first()
+                .is_none_or(|argument| self.function_value(file, argument.span)),
+            // The executor runs at once; its body is scanned as a callback.
+            "PromiseConstructor.construct" => {
+                intrinsics
+                    && call
+                        .arguments
+                        .first()
+                        .is_some_and(|argument| self.function_value(file, argument.span))
+            }
+            "PromiseConstructor.all"
+            | "PromiseConstructor.allSettled"
+            | "PromiseConstructor.race"
+            | "PromiseConstructor.any" => {
+                intrinsics && semantic.array_iteration_intact() && self.settled_elements(file, call)
+            }
+            "PromiseConstructor.resolve" => intrinsics && all_primitive(),
+            "clearTimeout"
+            | "clearInterval"
+            | "cancelAnimationFrame"
+            | "WindowOrWorkerGlobalScope.clearTimeout"
+            | "WindowOrWorkerGlobalScope.clearInterval"
+            | "fetch"
+            | "WindowOrWorkerGlobalScope.fetch"
+            | "parseInt"
+            | "parseFloat"
+            | "isNaN"
+            | "isFinite"
+            | "NumberConstructor.parseInt"
+            | "NumberConstructor.parseFloat"
+            | "encodeURIComponent"
+            | "decodeURIComponent"
+            | "encodeURI"
+            | "decodeURI"
+            | "ErrorConstructor.construct"
+            | "TypeErrorConstructor.construct"
+            | "RangeErrorConstructor.construct"
+            | "SyntaxErrorConstructor.construct"
+            | "ReferenceErrorConstructor.construct"
+            | "EvalErrorConstructor.construct"
+            | "URIErrorConstructor.construct"
+            | "DateConstructor.construct"
+            | "MapConstructor.construct"
+            | "SetConstructor.construct"
+            | "WeakMapConstructor.construct"
+            | "WeakSetConstructor.construct"
+            | "RegExpConstructor.construct"
+            | "Math.abs"
+            | "Math.acos"
+            | "Math.acosh"
+            | "Math.asin"
+            | "Math.asinh"
+            | "Math.atan"
+            | "Math.atanh"
+            | "Math.atan2"
+            | "Math.cbrt"
+            | "Math.ceil"
+            | "Math.clz32"
+            | "Math.cos"
+            | "Math.cosh"
+            | "Math.exp"
+            | "Math.expm1"
+            | "Math.floor"
+            | "Math.fround"
+            | "Math.hypot"
+            | "Math.imul"
+            | "Math.log"
+            | "Math.log1p"
+            | "Math.log2"
+            | "Math.log10"
+            | "Math.max"
+            | "Math.min"
+            | "Math.pow"
+            | "Math.random"
+            | "Math.round"
+            | "Math.sign"
+            | "Math.sin"
+            | "Math.sinh"
+            | "Math.sqrt"
+            | "Math.tan"
+            | "Math.tanh"
+            | "Math.trunc" => all_primitive(),
+            _ => false,
+        }
+    }
+
+    /// `Promise.all([...])` and its siblings over an array literal whose every
+    /// element is a native promise or a primitive (ADR 0349): driving the
+    /// iterator and each element's `then` then runs only the intrinsics.
+    fn settled_elements(&self, file: &FileFacts, call: &CallFact) -> bool {
+        let [argument] = call.arguments.as_slice() else {
+            return false;
+        };
+        if argument.spread {
+            return false;
+        }
+        let Some(array) = file
+            .ast
+            .array_literal_at(file.ast.peel_ts_sugar_span(argument.span))
+        else {
+            return false;
+        };
+        array.elements.iter().all(|element| {
+            element.kind == ArrayElementKind::Value && {
+                let value = file.ast.peel_ts_sugar_span(element.span);
+                native_promise(self.ctx, file, value, 0) || self.primitive_value(file, value)
+            }
+        })
+    }
+
+    /// Runtime function provenance, not a callable assertion. In addition to
+    /// project functions, Promise supplies its executor's resolve/reject as
+    /// native functions. This keeps `new Promise(done => setTimeout(done, 20))`
+    /// inspectable without trusting an arbitrary callable-typed parameter.
+    fn function_value(&self, file: &FileFacts, value: Span) -> bool {
+        let value = file.ast.peel_ts_sugar_span(value);
+        if callback_argument_literal(file, value).is_some()
+            || self
+                .ctx
+                .semantic_lookup
+                .function_called_at(file.path.as_str(), value)
+                .is_some_and(|(f, fun)| self.ctx.semantic_lookup.function_value_is_current(f, fun))
+        {
+            return true;
+        }
+        let Some(declaration) = file.ast.reference_declaration(value) else {
+            return false;
+        };
+        if file
+            .ast
+            .write_targets
+            .iter()
+            .any(|written| file.ast.reference_declaration(*written) == Some(declaration))
+        {
+            return false;
+        }
+        file.ast.calls.iter().any(|call| {
+            call.construct
+                && file.source_text(call.callee) == Some("Promise")
+                && file.ast.reference_declaration(call.callee).is_none()
+                && self
+                    .ctx
+                    .semantic_lookup
+                    .resolved_callee_call(file, call.callee)
+                    .and_then(standard_call_name)
+                    == Some("PromiseConstructor.construct")
+                && call
+                    .arguments
+                    .first()
+                    .filter(|argument| !argument.spread)
+                    .and_then(|argument| callback_argument_literal(file, argument.span))
+                    .is_some_and(|executor| {
+                        executor.parameters.iter().take(2).any(|parameter| {
+                            parameter.shape == solid_facts::ast::BindingShape::Identifier
+                                && parameter.names.len() == 1
+                                && parameter.names[0].span == declaration
+                        })
+                    })
+        })
+    }
+
+    fn primitive_value(&self, file: &FileFacts, value: Span) -> bool {
+        let value = file.ast.peel_ts_sugar_span(value);
+        // The result domain of an operator or member does not prove that
+        // evaluating it is inert (`delete proxy.key` returns a boolean, a
+        // member Get may run a getter). A call is different: the segment scan
+        // judges the call's own evaluation, so only its result is asked here
+        // (ADR 0350).
+        if file.ast.primitive_results.binary_search(&value).is_ok()
+            || file.ast.member_at(value).is_some()
+            || file.ast.conditional_at(value).is_some()
+            || file.ast.logical_at(value).is_some()
+        {
+            return false;
+        }
+        if let Some(call) = file.ast.call_at(value) {
+            return self
+                .ctx
+                .semantic_lookup
+                .proven_primitive(file, value, MAX_DEPTH)
+                || self.number_signal_call(file, call);
+        }
+        file.source_text(value) == Some("null")
+            || (file.source_text(value) == Some("undefined")
+                && file.ast.reference_declaration(value).is_none())
+            || self
+                .ctx
+                .semantic_lookup
+                .proven_primitive(file, value, MAX_DEPTH)
     }
 
     /// Whether running a project function may read `symbol`.

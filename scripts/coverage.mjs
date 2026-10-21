@@ -153,11 +153,11 @@ const KEEPS_WORDING = new Set([
   // 2026-09-26, `createRenderEffect`'s included; only the text can say which
   // primitive a read's apply belongs to.
   "reactive-ir/render-effect-apply-root",
-  // ADR 0349: the SC4001 wording names the NoOwnerError throw, which is the
+  // ADR 0352: the SC4001 wording names the NoOwnerError throw, which is the
   // claim; the package case also pins that the finding is placed at the call.
   "reactive-ir/context-read-owner",
   "reactive-ir/context-read-package",
-  // ADR 0349: the SC4002 wording names the ContextNotFoundError throw, the claim.
+  // ADR 0352: the SC4002 wording names the ContextNotFoundError throw, the claim.
   "reactive-ir/context-provider-closed"
 ]);
 

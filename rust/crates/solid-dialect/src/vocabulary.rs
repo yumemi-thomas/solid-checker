@@ -161,7 +161,7 @@ pub enum OwnerRequirementRole {
     Cleanup,
     SettledCleanup,
     /// `useContext(context)`: the read throws `NoOwnerError` when no owner is
-    /// current, whatever default the context was created with (ADR 0349).
+    /// current, whatever default the context was created with (ADR 0352).
     ContextRead,
 }
 

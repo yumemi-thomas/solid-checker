@@ -1,4 +1,4 @@
-//! The closed provider census behind `missing-context-provider` (ADR 0349).
+//! The closed provider census behind `missing-context-provider` (ADR 0352).
 //!
 //! `useContext(Ctx)` throws `ContextNotFoundError` when no provider stores a
 //! value for a context created with no default. A project context has no
@@ -30,7 +30,7 @@ pub(crate) fn provider_free_contexts(
     }
     let entities = lookup.entities();
     // Candidates: `const Ctx = createContext()` with no argument, an exact,
-    // unwritten identifier binding (ADR 0349). Dependency source is not the
+    // unwritten identifier binding (ADR 0352). Dependency source is not the
     // project's to close.
     // Each candidate's name, and whether its file exports it.
     let mut candidates = HashMap::<Location, (String, bool)>::default();
@@ -196,7 +196,7 @@ pub(crate) fn provider_free_contexts(
 }
 
 /// Whether an owner context holds an owner on every path: an owned bit, and no
-/// unowned bit (ADR 0349). A context with any unowned bit may run with no owner.
+/// unowned bit (ADR 0352). A context with any unowned bit may run with no owner.
 pub(crate) const fn owned_on_every_path(context: u8) -> bool {
     context & OWNER_CONTEXT_UNOWNED == 0
         && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED) != 0

@@ -146,7 +146,7 @@ const validate = (testCase, index) => {
     }
   }
   // `closed`: the snippet's project is a closed program (its own private
-  // manifest), for a rule whose claim is about the program boundary (ADR 0349).
+  // manifest), for a rule whose claim is about the program boundary (ADR 0352).
   if (testCase.programBoundary !== undefined && testCase.programBoundary !== "closed") {
     failures.push(`${label}: programBoundary must be "closed" when present`);
   }

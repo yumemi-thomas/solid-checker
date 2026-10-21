@@ -8,7 +8,7 @@ callback that returns cleanup, and a `useContext` read. Its message identifies
 the specific operation.
 
 A `useContext(context)` read with no owner is the `context-read` operation (ADR
-0349). rc.13's `getContext` checks the owner before it reads, so the read throws
+0352). rc.13's `getContext` checks the owner before it reads, so the read throws
 `NoOwnerError` whatever default the context has, and the message says so. The
 owner walk places it as it places an effect: an event handler, a timer callback,
 module scope, code after an `await`, or a `runWithOwner(null)` callback is

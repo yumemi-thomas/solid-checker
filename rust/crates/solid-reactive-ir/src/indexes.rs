@@ -18,14 +18,17 @@ use crate::owners::function_binding_name;
 
 mod callees;
 mod class_prototype;
+mod closed_members;
 mod completion;
 mod components;
 mod compound;
 mod identity_wrappers;
 pub(crate) use identity_wrappers::identity_wrapped_literal_span;
 mod initialization;
+mod intrinsics;
 mod member_values;
 mod primitive_proof;
+pub(crate) use intrinsics::mentions_word;
 
 /// Functions by `(path, span)`: the proven components, then the escaped ones
 /// among them ([`SemanticLookup::escaped_component_functions`]).
@@ -766,6 +769,10 @@ pub(super) struct SemanticLookup<'a> {
     /// Review round 1 of ADR 0293: whether some file may define a property
     /// reflectively ([`Self::property_may_be_defined_reflectively`]).
     reflective_property_definition: OnceLock<bool>,
+    /// ADR 0349: the Promise and array-iteration premises, by their tripwires.
+    intrinsics: OnceLock<intrinsics::Intrinsics>,
+    /// ADR 0351: each member read that names a closed object literal's function.
+    closed_members: OnceLock<HashMap<(&'a str, Span), Span>>,
     entities_by_location: OnceLock<HashMap<(&'a str, u64, u64), &'a EntityFact>>,
     contained_entities_by_path: OnceLock<HashMap<&'a str, Vec<&'a EntityFact>>>,
     descriptors_by_symbol: OnceLock<HashMap<&'a str, &'a TypeDescriptor>>,
@@ -972,6 +979,8 @@ impl<'a> SemanticLookup<'a> {
             route_component_values: OnceLock::new(),
             assigned_member_names: OnceLock::new(),
             reflective_property_definition: OnceLock::new(),
+            intrinsics: OnceLock::new(),
+            closed_members: OnceLock::new(),
             entities_by_location: OnceLock::new(),
             contained_entities_by_path: OnceLock::new(),
             descriptors_by_symbol: OnceLock::new(),

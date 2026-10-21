@@ -194,7 +194,7 @@ const runChecker = (testCase, index, strict, { checker, typefacts }) => {
     code,
   );
   // A case directory is reused by index, so an earlier closed case's manifest is
-  // removed unless this case is closed too (ADR 0349).
+  // removed unless this case is closed too (ADR 0352).
   const manifest = join(dir, "package.json");
   if (testCase.programBoundary === "closed") {
     writeFileSync(manifest, '{"name":"tsc-oracle-case","private":true}\n');

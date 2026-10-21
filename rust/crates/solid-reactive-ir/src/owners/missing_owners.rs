@@ -365,7 +365,7 @@ pub(crate) fn find_missing_owners(
                     }
                 }
                 // `useContext` throws `NoOwnerError` when no owner is current
-                // (ADR 0349): the unowned question an effect asks, with nothing
+                // (ADR 0352): the unowned question an effect asks, with nothing
                 // to register. An owned leaf has an owner, so only the unowned
                 // bit reports it. Under an owner, a read of a context the closed
                 // program never provides throws `ContextNotFoundError` instead.

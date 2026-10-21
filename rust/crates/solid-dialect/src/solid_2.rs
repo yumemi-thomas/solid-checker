@@ -1898,7 +1898,7 @@ impl Dialect for Solid2 {
 
     /// rc.13's `getContext` (the read `useContext` wraps, `solid-js`
     /// `dist/solid.dev.js`) checks the owner before anything else and throws
-    /// `NoOwnerError`, whatever default the context has (ADR 0349). The
+    /// `NoOwnerError`, whatever default the context has (ADR 0352). The
     /// `ContextNotFoundError` half is a different claim (a missing provider),
     /// so it is not a role here.
     fn owner_requirement_role(&self, primitive: Primitive) -> Option<OwnerRequirementRole> {

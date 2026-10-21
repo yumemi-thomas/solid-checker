@@ -172,7 +172,7 @@ impl Rule {
             // the rc.0 dev runtime throws SETTLED_CLEANUP_UNOWNED, while the
             // other missing-owner operations leak silently.
             Self::MissingOwner => ("SC4001", "missing-owner", "warning", false),
-            // ADR 0349: a read under an owner of a context no provider supplies
+            // ADR 0352: a read under an owner of a context no provider supplies
             // throws `ContextNotFoundError` in the dev and production builds, a
             // crash at the read, so it is an error like SC2006's dev throw.
             Self::MissingContextProvider => ("SC4002", "missing-context-provider", "error", false),

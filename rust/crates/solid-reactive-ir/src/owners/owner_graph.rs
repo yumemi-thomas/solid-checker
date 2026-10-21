@@ -317,7 +317,7 @@ pub(crate) struct OwnerRequirementCandidate {
     /// it depends on those functions' propagated owner contexts, which a
     /// per-file fragment does not have yet; see [`root_owned_at`].
     pub(crate) providing_region_chain: Option<Vec<Span>>,
-    /// For a `context-read` (ADR 0349): the one context argument's span. The
+    /// For a `context-read` (ADR 0352): the one context argument's span. The
     /// emission pass resolves its binding against the closed provider census,
     /// which is program-wide, so the binding is not cached with the file.
     pub(crate) context_argument: Option<Span>,

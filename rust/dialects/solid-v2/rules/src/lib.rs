@@ -173,7 +173,7 @@ impl CatalogWording for Catalog {
                 if requirement.operation == OwnerRequirementOperation::SettledCleanup {
                     metadata.severity = "error";
                 }
-                // The provider question is its own rule (ADR 0349): a missing
+                // The provider question is its own rule (ADR 0352): a missing
                 // provider is not a missing owner, and its fix is different.
                 if requirement.operation == OwnerRequirementOperation::ContextProvider {
                     metadata = Rule::MissingContextProvider.metadata();

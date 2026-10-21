@@ -494,7 +494,7 @@
     {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
       "start": 5841,

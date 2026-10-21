@@ -4,7 +4,7 @@ import { createContext, useContext } from "solid-js";
 const MissingContext = createContext<string>();
 // Default-less and provided above `Reader`: no throw.
 const ProvidedContext = createContext<string>();
-// With a default: the read returns the default, no throw (ADR 0349).
+// With a default: the read returns the default, no throw (ADR 0352).
 const DefaultedContext = createContext<string>("fallback");
 
 // Throws ContextNotFoundError when rendered: no provider exists for MissingContext.
