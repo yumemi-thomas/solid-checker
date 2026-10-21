@@ -362,6 +362,7 @@ pub(crate) fn find_missing_owners_incremental(
         .filter_map(|(index, node)| node.symbol.clone().map(|symbol| (symbol, index)))
         .collect::<HashMap<_, _>>();
     let mut contexts = seed_contexts(&nodes);
+    seed_namespace_hand_outs(&nodes, lookup, &mut contexts);
     let mut outgoing = vec![Vec::<(usize, OwnerEdgeKind)>::new(); nodes.len()];
     for file in &facts.files {
         let Some(fragment) = cache.get(file.path.as_str()) else {

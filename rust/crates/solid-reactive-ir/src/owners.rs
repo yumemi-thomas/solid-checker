@@ -355,6 +355,10 @@ pub(crate) struct OwnerNode {
     pub(crate) component: bool,
     pub(crate) component_uncertain: bool,
     pub(crate) seed_context: u8,
+    /// An exported, named, non-component function of a closed program. Its
+    /// unknown-caller seed waits for the namespace census
+    /// ([`seed_namespace_hand_outs`], ADR 0347), which is not cached per file.
+    pub(crate) namespace_candidate: bool,
 }
 
 impl FunctionBoundary for OwnerNode {

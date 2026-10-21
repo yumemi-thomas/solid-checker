@@ -67,7 +67,8 @@ component's children runs inside the component's own memo, so it is
 uncertifiable. A call made at module initialization, where no owner is current,
 runs with none, so it is a violation. A call whose enclosing function no owner
 edge reaches (a method or constructor no resolved call names, a getter, an
-exported function that a closed program never calls) is uncertifiable. A
+exported function that no namespace import hands out in a closed program) is
+uncertifiable. A
 generator never runs when called, and a callback no dialect slot describes may
 run with or without an owner. A function the expression evaluates without
 yielding it (a getter's body, a tagged template's substitution, an operand of
@@ -89,6 +90,8 @@ Withheld, and so uncertain or silent: a generator (calling it runs no body), a
 static block initializer or JSX in the owner's own body (a child or an attribute).
 The code after an async IIFE's first `await` is a continuation with no owner
 (ADR 0333), as for any async function.
+
+In a closed program (a project whose boundary is declared closed, or whose manifest publishes nothing), an export that a namespace import hands out has a caller the analysis cannot see (ADR 0347). It is handed out when the namespace object is used other than by a static member (`Object.entries(ns)`, an alias, an element access), or when a static member read `ns.fn` is used as a value rather than called. Such an export is seeded as an open program's export is: a detached callback it passes to `runWithOwner(null, …)` is a violation, and a requirement in its own body is uncertifiable. An export nothing hands out keeps the closed program's dormancy.
 
 The proven `onSettled` cleanup variant has **error** severity because Solid 2.0
 throws `SETTLED_CLEANUP_UNOWNED` in development and silently drops the cleanup

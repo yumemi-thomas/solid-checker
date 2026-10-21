@@ -41,6 +41,13 @@ pub(super) fn owner_node(
     let component_status = lookup.function_component_status(file, function);
     let component = component_status == crate::indexes::ComponentStatus::Proven;
     let component_uncertain = component_status == crate::indexes::ComponentStatus::Uncertain;
+    // ADR 0347: in a closed program an export gets its unknown-caller seed only
+    // when a namespace import hands it out, which `seed_namespace_hand_outs`
+    // decides once the graph is assembled.
+    let namespace_candidate = component_status == crate::indexes::ComponentStatus::No
+        && exported
+        && name.is_some()
+        && lookup.program_closed;
     let mut seed_context = compiler_owner_context(file, function.body);
     // ADR 0319's walk, in its owner mode, proved that every invocation of
     // this literal is a host event dispatch (a callback a helper calls from
@@ -83,6 +90,7 @@ pub(super) fn owner_node(
         component,
         component_uncertain,
         seed_context,
+        namespace_candidate,
     }
 }
 
@@ -110,6 +118,25 @@ pub(super) fn compiler_owner_context(file: &solid_facts::FileFacts, body: Span) 
 /// The context bits proved at the facts seam before graph propagation.
 pub(super) fn seed_contexts(nodes: &[OwnerNode]) -> Vec<u8> {
     nodes.iter().map(|node| node.seed_context).collect()
+}
+
+/// ADR 0347: an exported function that a namespace import hands out has a
+/// caller the analysis cannot see, so in a closed program it is seeded with the
+/// open-world unowned bit, as an export of an open program is. A detached
+/// callback it passes to `runWithOwner(null)` is still proven unowned, so the
+/// seed reaches it; a requirement directly in the function stays uncertain.
+/// Applied at assembly, after the per-file fragments are read, so the census
+/// is never cached with a file.
+pub(super) fn seed_namespace_hand_outs(
+    nodes: &[OwnerNode],
+    lookup: &SemanticLookup<'_>,
+    contexts: &mut [u8],
+) {
+    for (index, node) in nodes.iter().enumerate() {
+        if node.namespace_candidate && lookup.hands_out_through_namespace(&node.path, node.span) {
+            contexts[index] |= OWNER_CONTEXT_UNOWNED;
+        }
+    }
 }
 
 /// Worklist fixed point over the owner graph: every context bit flows along

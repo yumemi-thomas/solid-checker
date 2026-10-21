@@ -175,6 +175,7 @@ fn node(seed_context: u8) -> OwnerNode {
         component: seed_context & OWNER_CONTEXT_OWNED != 0,
         component_uncertain: false,
         seed_context,
+        namespace_candidate: false,
     }
 }
 
@@ -220,16 +221,37 @@ fn propagation_reaches_a_fixed_point_and_accumulates_bits() {
     );
 }
 
-/// Documents current behavior: only nodes whose seeded context is nonzero
-/// enter the worklist, so even an `Owned` edge (whose contribution does
-/// not depend on the source's bits) stays dormant when its source has no
-/// context of its own.
+/// Only nodes whose seeded context is nonzero enter the worklist, so even an
+/// `Owned` edge (whose contribution does not depend on the source's bits) stays
+/// dormant when its source has no context of its own. That dormancy is the
+/// closed program's, kept on purpose (ADR 0347): an unexported function nothing
+/// calls, and an export no namespace import hands out, have no caller at all,
+/// so the callbacks they pass are not reached. An export a namespace import
+/// does hand out is not context-free: `seed_namespace_hand_outs` gives it an
+/// unknown caller first, and its edges walk (the test below).
 #[test]
 fn propagation_does_not_walk_edges_out_of_context_free_nodes() {
     let mut contexts = vec![0, 0];
     let outgoing = vec![vec![(1, OwnerEdgeKind::Owned)], vec![]];
     propagate_owner_contexts(&mut contexts, &outgoing);
     assert_eq!(contexts, vec![0, 0]);
+}
+
+/// ADR 0347: a `runWithOwner(null)` callback of an export that a namespace
+/// import hands out is reached through the unknown-caller seed, and the
+/// callback is proven unowned whatever that caller does.
+#[test]
+fn a_namespace_handed_out_export_reaches_its_detached_callback() {
+    let mut contexts = vec![OWNER_CONTEXT_UNOWNED, 0];
+    let outgoing = vec![vec![(1, OwnerEdgeKind::Unowned)], vec![]];
+    propagate_owner_contexts(&mut contexts, &outgoing);
+    assert_eq!(
+        contexts,
+        vec![
+            OWNER_CONTEXT_UNOWNED,
+            OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED
+        ]
+    );
 }
 
 /// An eager ref call from a function with no owner context settles to the

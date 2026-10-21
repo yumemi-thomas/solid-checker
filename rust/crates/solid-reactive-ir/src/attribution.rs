@@ -79,6 +79,7 @@ pub(crate) fn discharge_closed_program_export_dispatch(
         symbols_by_root,
         namespace_escapes: RefCell::new(HashMap::default()),
         attested_project_texts: RefCell::new(None),
+        may_name_unresolved: true,
     };
     defects.retain(|defect| {
         let Some(file) = graph.file(defect.location.path.as_ref()) else {
@@ -121,6 +122,96 @@ pub(crate) fn discharge_closed_program_export_dispatch(
 /// How many functions a parameter's value is followed back through (ADR 0213).
 const PASS_THROUGH_DEPTH: usize = 4;
 
+/// ADR 0347: the exported functions of a closed program that a namespace import
+/// hands out, so a caller the analysis cannot enumerate may run them.
+///
+/// Two shapes reach an export without a call the graph names. The module's
+/// namespace object escapes other than by a static member (`Object.entries(ns)`,
+/// an alias, an element access, `export * as`): every export of that module is
+/// handed out ([`CallGraph::module_namespace_escapes`]). Or a static member read
+/// `ns.fn` is used as a value rather than called. A named import used as a value
+/// is neither, and keeps its dormancy.
+#[derive(Default)]
+pub(crate) struct NamespaceHandOuts {
+    /// Modules whose namespace object escapes.
+    modules: HashSet<String>,
+    /// Functions a static member read names without calling it, as
+    /// `(module path, function span)`.
+    members: HashSet<(String, Span)>,
+}
+
+impl NamespaceHandOuts {
+    /// Whether the function at `function` in the module at `path` is handed out.
+    pub(crate) fn hands_out(&self, path: &str, function: Span) -> bool {
+        self.modules.contains(path) || self.members.contains(&(path.to_string(), function))
+    }
+}
+
+/// The namespace census of a closed program (ADR 0347). An open program's
+/// exports already have an unknown caller, so it has nothing to add.
+pub(crate) fn namespace_hand_outs(
+    lookup: &SemanticLookup<'_>,
+    aliases: &HashMap<SymbolId, SymbolId>,
+    symbols_by_root: &HashMap<SymbolId, Vec<SymbolId>>,
+) -> NamespaceHandOuts {
+    let mut hand_outs = NamespaceHandOuts::default();
+    if !lookup.program_closed {
+        return hand_outs;
+    }
+    let files = lookup.files();
+    let graph = CallGraph {
+        files_by_path: files
+            .iter()
+            .map(|file| (file.path.as_str(), file))
+            .collect(),
+        lookup,
+        entities: lookup.entities(),
+        aliases,
+        symbols_by_root,
+        namespace_escapes: RefCell::new(HashMap::default()),
+        attested_project_texts: RefCell::new(None),
+        may_name_unresolved: false,
+    };
+    for file in files {
+        if !file.ast.exports.is_empty() && graph.module_namespace_escapes(file.path.as_str()) {
+            hand_outs.modules.insert(file.path.to_string());
+        }
+        // The member a call invokes is a call, not a hand-out; every other read
+        // of a static member in a runtime position hands its value out.
+        let callees = file
+            .ast
+            .calls
+            .iter()
+            .map(|call| file.ast.peel_ts_sugar_span(call.callee))
+            .collect::<HashSet<_>>();
+        for member in &file.ast.members {
+            if file
+                .ast
+                .computed_members
+                .binary_search(&member.span)
+                .is_ok()
+                || callees.contains(&member.span)
+                || file
+                    .ast
+                    .type_queries
+                    .iter()
+                    .any(|query| query.contains(member.span))
+            {
+                continue;
+            }
+            let Some(symbol) = lookup.entity_symbol(file, member.property) else {
+                continue;
+            };
+            if let Some((target_file, target)) = lookup.function_for_symbol(symbol) {
+                hand_outs
+                    .members
+                    .insert((target_file.path.to_string(), target.span));
+            }
+        }
+    }
+    hand_outs
+}
+
 struct CallGraph<'a, 'b> {
     files_by_path: HashMap<&'a str, &'a FileFacts>,
     lookup: &'a SemanticLookup<'b>,
@@ -132,6 +223,12 @@ struct CallGraph<'a, 'b> {
     /// Specifier texts the compiler resolves to a project file somewhere,
     /// built on first use.
     attested_project_texts: RefCell<Option<HashMap<String, Vec<String>>>>,
+    /// Whether a specifier this analysis cannot resolve may name any module. The
+    /// closed-program discharge takes that premise (ADR 0203), so an unknown
+    /// namespace escapes every module. The namespace census (ADR 0347) does not:
+    /// a hand-out it cannot prove is not one, and a reachable export there would
+    /// make an unproven owner question a violation.
+    may_name_unresolved: bool,
 }
 
 impl<'a> CallGraph<'a, '_> {
@@ -262,7 +359,7 @@ impl<'a> CallGraph<'a, '_> {
             None => self
                 .lookup
                 .namespace_module_paths(file.path.as_str(), span)
-                .is_none_or(|paths| {
+                .map_or(self.may_name_unresolved, |paths| {
                     paths
                         .iter()
                         .any(|target| self.module_exposes(target, path, &mut Vec::new()))
@@ -306,15 +403,17 @@ impl<'a> CallGraph<'a, '_> {
                         || !namespace_used_by_static_members(file, import.local.span))
             });
             let loaded = file.ast.module_loads.iter().any(|load| {
-                load.specifier.as_deref().is_none_or(|specifier| {
-                    self.specifier_reaches(
-                        file,
-                        load.specifier_span,
-                        specifier,
-                        path,
-                        &mut Vec::new(),
-                    )
-                })
+                load.specifier
+                    .as_deref()
+                    .map_or(self.may_name_unresolved, |specifier| {
+                        self.specifier_reaches(
+                            file,
+                            load.specifier_span,
+                            specifier,
+                            path,
+                            &mut Vec::new(),
+                        )
+                    })
             });
             namespace_escapes || reexported || required || loaded
         })
@@ -354,7 +453,7 @@ impl<'a> CallGraph<'a, '_> {
         // external or a built-in module imports no project module (ADR 0193).
         if let Some(runtime) = self.lookup.runtime_resolutions() {
             let Some(at) = at else {
-                return true;
+                return self.may_name_unresolved;
             };
             return match runtime.outcome(from.path.as_str(), at, specifier) {
                 solid_facts::runtime_resolution::RuntimeOutcome::File {
@@ -366,7 +465,9 @@ impl<'a> CallGraph<'a, '_> {
                     .is_some_and(|target| self.module_exposes(target, path, visiting)),
                 solid_facts::runtime_resolution::RuntimeOutcome::External
                 | solid_facts::runtime_resolution::RuntimeOutcome::Builtin => false,
-                solid_facts::runtime_resolution::RuntimeOutcome::Unknown => true,
+                solid_facts::runtime_resolution::RuntimeOutcome::Unknown => {
+                    self.may_name_unresolved
+                }
             };
         }
         let attested = at.and_then(|at| {
@@ -381,7 +482,7 @@ impl<'a> CallGraph<'a, '_> {
         });
         if let Some(row) = attested {
             if row.resolution == solid_facts::ImportResolution::Unresolved {
-                return true;
+                return self.may_name_unresolved;
             }
             let resolved = if row.included_path.is_empty() {
                 row.resolved_path.as_ref()
@@ -400,11 +501,14 @@ impl<'a> CallGraph<'a, '_> {
             if row.resolution != solid_facts::ImportResolution::NodeModules
                 || !resolved.contains("/node_modules/")
             {
-                return true;
+                return self.may_name_unresolved;
             }
             // An installed package exposes no project module, unless its
             // directory holds a program file: an analyzed workspace source
             // installed there. An unknown package directory may hold one.
+            if !self.may_name_unresolved {
+                return false;
+            }
             return row
                 .package_manifest
                 .as_deref()
@@ -419,7 +523,7 @@ impl<'a> CallGraph<'a, '_> {
         }
         if !specifier.starts_with('.') {
             if !crate::runtime_semantics::is_node_builtin_module(specifier) {
-                return true;
+                return self.may_name_unresolved;
             }
             // A mapping the compiler resolves this name through elsewhere adds
             // the project file it names; it never removes a candidate.
@@ -434,7 +538,9 @@ impl<'a> CallGraph<'a, '_> {
             specifier,
             files.iter().map(|file| file.path.as_str()),
         )
-        .is_none_or(|resolved| self.module_exposes(resolved, path, visiting))
+        .map_or(self.may_name_unresolved, |resolved| {
+            self.module_exposes(resolved, path, visiting)
+        })
     }
 
     /// The project files the compiler resolves `specifier` to, in any
@@ -482,14 +588,14 @@ impl<'a> CallGraph<'a, '_> {
             .iter()
             .any(|extension| target.ends_with(extension))
         {
-            return true;
+            return self.may_name_unresolved;
         }
         if visiting.iter().any(|seen| seen == target) {
             return false;
         }
         visiting.push(target.to_string());
         let Some(file) = self.file(target) else {
-            return true;
+            return self.may_name_unresolved;
         };
         let imported_from = |local: Span| -> Option<(Span, &str)> {
             file.ast

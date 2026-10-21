@@ -27,6 +27,7 @@ pub(crate) fn find_missing_owners(
         .filter_map(|(index, node)| node.symbol.clone().map(|symbol| (symbol, index)))
         .collect::<HashMap<_, _>>();
     let mut contexts = seed_contexts(&nodes);
+    seed_namespace_hand_outs(&nodes, lookup, &mut contexts);
     let mut edges = Vec::<(usize, usize, OwnerEdgeKind)>::new();
     let mut requirements = Vec::new();
     let mut seen = HashSet::default();
