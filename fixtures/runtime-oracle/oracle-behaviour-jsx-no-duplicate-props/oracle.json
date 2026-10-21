@@ -1,36 +1,32 @@
 {
-  "note": "SC8003 behaviour: a textContent beside children is dropped by the compiler, so the page shows the children alone ('b', the control's output, so no text can refute the finding); an innerHTML beside children shows on first render and still after the children update (rc.13), so the children never show. Each correct pattern is the no-loss page, which no content slot shows: these observations confirm, and cannot refute",
+  "note": "SC8003, write-reflected: a textContent beside children is dropped by the compiler, so a write to its source leaves the text unchanged (lost, the defect). An innerHTML beside children takes its markup write (reflected) but never shows the children (lost). The two one-source controls reflect every write, so the correct answer is reachable",
   "behaviour": [
     {
       "rule": "jsx-no-duplicate-props",
-      "site": "App.tsx:11",
-      "observe": { "text": "[data-probe=violation-content]" },
-      "defect": { "pattern": "^[lb]$" },
-      "correct": { "pattern": "^(lb|bl)$" },
-      "defectExample": "b",
-      "correctExample": "lb"
+      "site": "App.tsx:17",
+      "observe": { "reflected": "[data-probe=violation-content]" },
+      "writes": [{ "click": "[data-probe=violation-write]", "expect": "lost" }]
     },
     {
       "rule": "jsx-no-duplicate-props",
-      "site": "App.tsx:33",
-      "observe": { "text": "[data-probe=html-content]" },
-      "defect": "h",
-      "correct": { "pattern": "^(hb|bh)$" }
+      "site": "App.tsx:31",
+      "observe": { "reflected": "[data-probe=html-content]" },
+      "writes": [
+        { "click": "[data-probe=html-write-markup]", "expect": "reflected" },
+        { "click": "[data-probe=html-write-body]", "expect": "lost" }
+      ]
     },
     {
       "rule": "jsx-no-duplicate-props",
-      "site": "App.tsx:33",
-      "act": [{ "click": "[data-probe=html-write]" }],
-      "observe": { "text": "[data-probe=html-content]" },
-      "defect": "h",
-      "correct": { "pattern": "^(hc|ch)$" }
+      "site": "App.tsx:41",
+      "observe": { "reflected": "[data-probe=text-control-content]" },
+      "writes": [{ "click": "[data-probe=text-control-write]", "expect": "reflected" }]
     },
     {
       "rule": "jsx-no-duplicate-props",
-      "site": "App.tsx:20",
-      "observe": { "text": "[data-probe=control-content]" },
-      "defect": "l",
-      "correct": "b"
+      "site": "App.tsx:51",
+      "observe": { "reflected": "[data-probe=control-content]" },
+      "writes": [{ "click": "[data-probe=control-write]", "expect": "reflected" }]
     }
   ]
 }

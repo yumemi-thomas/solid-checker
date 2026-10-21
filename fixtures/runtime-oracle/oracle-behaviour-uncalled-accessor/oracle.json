@@ -1,9 +1,9 @@
 {
-  "note": "SC1005 behaviour: the violation's text keeps the accessor's source after the write; the control calls the accessor and shows the value",
+  "note": "SC1005 behaviour: the violation's text keeps the accessor's source after the write; the control calls the accessor and shows the value. The reflect rows write fresh numbers, so a lost write is the source, not a repeated value",
   "behaviour": [
     {
       "rule": "uncalled-accessor",
-      "site": "App.tsx:11",
+      "site": "App.tsx:16",
       "act": [{ "click": "[data-probe=violation-write]" }],
       "observe": { "text": "[data-probe=violation-label]" },
       "defect": { "pattern": "^Count: .*(function|=>)" },
@@ -11,11 +11,23 @@
     },
     {
       "rule": "uncalled-accessor",
-      "site": "App.tsx:21",
+      "site": "App.tsx:27",
       "act": [{ "click": "[data-probe=control-write]" }],
       "observe": { "text": "[data-probe=control-label]" },
       "defect": { "pattern": "^Count: .*(function|=>)" },
       "correct": "Count: 7"
+    },
+    {
+      "rule": "uncalled-accessor",
+      "site": "App.tsx:16",
+      "observe": { "reflected": "[data-probe=violation-label]" },
+      "writes": [{ "click": "[data-probe=violation-reflect]", "expect": "lost" }]
+    },
+    {
+      "rule": "uncalled-accessor",
+      "site": "App.tsx:27",
+      "observe": { "reflected": "[data-probe=control-label]" },
+      "writes": [{ "click": "[data-probe=control-reflect]", "expect": "reflected" }]
     }
   ]
 }

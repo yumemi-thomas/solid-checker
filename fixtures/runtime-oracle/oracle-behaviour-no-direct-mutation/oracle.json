@@ -1,9 +1,9 @@
 {
-  "note": "SC2003 behaviour: the violation's direct store write is dropped and the DOM keeps the old name; the control's setter write shows",
+  "note": "SC2003 behaviour: the violation's direct store write is dropped and the DOM keeps the old name; the control's setter write shows. The reflect rows write fresh values, so a lost write is the dropped write, not a repeated value",
   "behaviour": [
     {
       "rule": "no-direct-mutation",
-      "site": "App.tsx:10",
+      "site": "App.tsx:13",
       "act": [{ "click": "[data-probe=violation-write]" }],
       "observe": { "text": "[data-probe=violation-name]" },
       "defect": "Ada",
@@ -11,11 +11,23 @@
     },
     {
       "rule": "no-direct-mutation",
-      "site": "App.tsx:20",
+      "site": "App.tsx:24",
       "act": [{ "click": "[data-probe=control-write]" }],
       "observe": { "text": "[data-probe=control-name]" },
       "defect": "Ada",
       "correct": "Grace"
+    },
+    {
+      "rule": "no-direct-mutation",
+      "site": "App.tsx:14",
+      "observe": { "reflected": "[data-probe=violation-name]" },
+      "writes": [{ "click": "[data-probe=violation-reflect]", "expect": "lost" }]
+    },
+    {
+      "rule": "no-direct-mutation",
+      "site": "App.tsx:25",
+      "observe": { "reflected": "[data-probe=control-name]" },
+      "writes": [{ "click": "[data-probe=control-reflect]", "expect": "reflected" }]
     }
   ]
 }

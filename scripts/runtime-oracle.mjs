@@ -28,8 +28,10 @@
 // shows the defect and the value that shows correct behaviour. Its verdict:
 // behaviour-confirmed, behaviour-refuted (a false-positive candidate), or
 // unproven-clean when the page shows the defect and no finding covers the site.
-// A malformed `behaviour` spec refuses its case: that case is a harness-error
-// with the reason, and the other cases still run.
+// A `reflected` observation instead scripts writes and reads the element's text
+// before and after each one: lost (unchanged) or reflected (changed). A malformed
+// `behaviour` spec refuses its case: that case is a harness-error with the reason,
+// and the other cases still run.
 // Files named *.d.ts and node_modules directories are not copied: the case
 // runs against the real packages of `--install`, never against a stub.
 //
@@ -209,13 +211,20 @@ function run(command, args, cwd) {
   });
 }
 
-const behaviourKinds = ["text", "window", "identity", "thrown"];
+const behaviourKinds = ["text", "window", "identity", "thrown", "reflected"];
+// A write's expectation: lost is the defect, reflected the correct behaviour (the two values a reflected observation has).
+const writeExpectations = ["lost", "reflected"];
 // The page reports these names for an identity or thrown observation; any other value is a case error.
 const behaviourValues = { identity: ["same", "replaced", "missing"], thrown: ["threw", "none"] };
 const isPattern = (expected) => typeof expected === "object" && expected !== null && Object.keys(expected).join() === "pattern"
   && typeof expected.pattern === "string";
 const matches = (value, expected) => isPattern(expected) ? typeof value === "string" && new RegExp(expected.pattern).test(value)
   : JSON.stringify(value) === JSON.stringify(expected);
+// A reflected observation's page: the defect when any write leaves its text unchanged (lost), the correct
+// behaviour when every write changes it (reflected). No writes, or any other result, is unexpected.
+const reflectedOutcome = (writes) => !Array.isArray(writes) || writes.length === 0 ? "unexpected"
+  : writes.some((write) => write.observed === "lost") ? "defect"
+  : writes.every((write) => write.observed === "reflected") ? "correct" : "unexpected";
 
 // The rule ids a behaviour may name: each code's rules, and each rule page (a rule with neither is not one the checker reports).
 const knownRules = new Set([
@@ -239,10 +248,30 @@ function behaviourSpec(id, spec, source, files) {
     assert(site && files.includes(site[1]), `${where} needs a site App.tsx:<line> inside the case`);
     const line = Number(site[2]);
     assert(line <= readFileSync(join(source, site[1]), "utf8").split("\n").length, `${where} site is past the end of ${site[1]}`);
+    const [kind, ...extra] = Object.keys(entry.observe ?? {});
+    const reflected = kind === "reflected";
+    // A reflected observation's writes are its steps: it takes no act, and names no defect or correct (lost and reflected are fixed).
+    assert(entry.writes === undefined || reflected, `${where} writes is for observe.reflected`);
+    assert(!reflected || (entry.act === undefined && entry.defect === undefined && entry.correct === undefined), `${where} reflected takes writes, not act, defect or correct`);
     const act = entry.act ?? [];
     assert(Array.isArray(act) && act.every((step) => typeof step?.click === "string" && step.click.trim()), `${where} act steps are { "click": selector }`);
-    const [kind, ...extra] = Object.keys(entry.observe ?? {});
     assert(extra.length === 0 && behaviourKinds.includes(kind), `${where} observe names exactly one of ${behaviourKinds.join(", ")}`);
+    if (reflected) {
+      assert(typeof entry.observe.reflected === "string" && entry.observe.reflected.trim(), `${where} observe.reflected is a selector`);
+      assert(Array.isArray(entry.writes) && entry.writes.length > 0, `${where} reflected needs a non-empty writes list`);
+      const writes = entry.writes.map((write, position) => {
+        const at = `${where} writes[${position}]`;
+        assert(write !== null && typeof write === "object" && !Array.isArray(write), `${at} is an object`);
+        assert(Object.keys(write).sort().join() === "click,expect", `${at} is { "click": selector, "expect": "lost" or "reflected" }`);
+        assert(typeof write.click === "string" && write.click.trim(), `${at} click is a selector`);
+        assert(writeExpectations.includes(write.expect), `${at} expect is ${writeExpectations.join(" or ")}`);
+        return { click: write.click, expect: write.expect };
+      });
+      // A click listed twice is one write with two expectations, or one claim twice.
+      const clicks = writes.map((write) => write.click);
+      assert(new Set(clicks).size === clicks.length, `${where} lists a click twice; each write is listed once`);
+      return { rule: entry.rule, site: entry.site, file: site[1], line, kind, act, observe: entry.observe, writes, defect: "lost", correct: "reflected" };
+    }
     if (kind === "thrown") assert(entry.observe.thrown === true, `${where} observe.thrown is true`);
     else assert(typeof entry.observe[kind] === "string" && entry.observe[kind].trim(), `${where} observe.${kind} is a path or a selector`);
     for (const expected of ["defect", "correct"]) {
@@ -281,10 +310,50 @@ function behaviourSpec(id, spec, source, files) {
 // the exercise's events would change the state the scripted clicks start from.
 function behaviourProbe(observations) {
   if (!observations.length) return "";
-  const payload = JSON.stringify(observations.map(({ act, observe }) => ({ act, observe })));
+  const payload = JSON.stringify(observations.map(({ act, observe, writes }) => ({ act, observe, writes })));
   return `// Behavioural observations: each runs its scripted clicks (a flush after each), then
 // reads the page. The results go to a <pre> that the feedback run reads back.
 const observations: any[] = ${payload};
+// A write-reflected observation: the observed element's text is read before and after each write
+// (the write's click, then a flush). A write that changes the text reports reflected; one that
+// leaves it unchanged reports lost. A missing element, a step that throws, or a step still running
+// after writeLimitMs fails the observation. flush() is synchronous in rc.13, so the limit binds only
+// an asynchronous flush; a page that never returns from a step ends the feedback run (harness-error).
+const writeLimitMs = 2000;
+function bounded<T>(step: () => T): Promise<T> {
+  return new Promise<T>((done, fail) => {
+    const timer = setTimeout(() => fail(new Error("timeout after " + writeLimitMs + " ms")), writeLimitMs);
+    Promise.resolve().then(step).then(
+      (value) => { clearTimeout(timer); done(value); },
+      (error) => { clearTimeout(timer); fail(error); });
+  });
+}
+function textAt(selector: string): string {
+  const element = document.querySelector(selector);
+  if (element === null) throw new Error("no element matches " + selector);
+  return element.textContent ?? "";
+}
+async function reflectWrites(selector: string, writes: any[]): Promise<unknown[]> {
+  const rows: unknown[] = [];
+  for (const write of writes) {
+    const before = textAt(selector);
+    const errors: string[] = [];
+    const onError = (event: ErrorEvent) => { errors.push(String(event.message)); };
+    addEventListener("error", onError);
+    try {
+      const target = document.querySelector(write.click);
+      if (!(target instanceof HTMLElement)) throw new Error("no HTMLElement matches " + write.click);
+      await bounded(() => { target.click(); flush(); });
+    } finally {
+      removeEventListener("error", onError);
+    }
+    if (errors.length) throw new Error("write " + write.click + " threw: " + errors[0]);
+    const after = textAt(selector);
+    const observed = after === before ? "lost" : "reflected";
+    rows.push({ click: write.click, expect: write.expect, before, after, observed, match: observed === write.expect });
+  }
+  return rows;
+}
 function readObserved(spec: any, reference: Element | null, errors: string[]): unknown {
   if (spec.text !== undefined) return document.querySelector(spec.text)?.textContent ?? null;
   if (spec.window !== undefined) return spec.window.split(".").reduce((value: any, key: string) => value?.[key], globalThis) ?? null;
@@ -298,8 +367,12 @@ function readObserved(spec: any, reference: Element | null, errors: string[]): u
 async function behave(): Promise<void> {
   await flush();
   const results: unknown[] = [];
-  for (const [index, { act, observe: spec }] of observations.entries()) {
+  for (const [index, { act, observe: spec, writes }] of observations.entries()) {
     try {
+      if (spec.reflected !== undefined) {
+        results.push({ index, writes: await reflectWrites(spec.reflected, writes) });
+        continue;
+      }
       const reference = spec.identity === undefined ? null : document.querySelector(spec.identity);
       const errors: string[] = [];
       const onError = (event: ErrorEvent) => { errors.push(String(event.message)); };
@@ -449,7 +522,10 @@ async function runCase(id) {
     const key = `behaviour ${observation.rule} ${observation.site}`;
     const covering = findings.filter((finding) => finding.file === observation.file && finding.rule === observation.rule
       && finding.line <= observation.line && observation.line <= finding.endLine);
-    const outcome = !probe || probe.error !== undefined || probe.observed === undefined ? "unexpected"
+    const reflected = observation.kind === "reflected";
+    const outcome = !probe || probe.error !== undefined ? "unexpected"
+      : reflected ? reflectedOutcome(probe.writes)
+      : probe.observed === undefined ? "unexpected"
       : matches(probe.observed, observation.defect) ? "defect"
       : matches(probe.observed, observation.correct) ? "correct" : "unexpected";
     const violated = covering.some((finding) => finding.kind === "violation");
@@ -458,7 +534,9 @@ async function runCase(id) {
       : violated ? "behaviour-refuted" : "behaviour-clean";
     return {
       source: "behaviour", rule: observation.rule, site: observation.site, file: observation.file, line: observation.line,
-      observation: observation.kind, outcome, verdict, observed: probe?.observed ?? null,
+      observation: observation.kind, outcome, verdict,
+      observed: reflected ? probe?.writes?.map((write) => write.observed) ?? null : probe?.observed ?? null,
+      ...(reflected ? { writes: probe?.writes ?? null } : {}),
       expected: { defect: observation.defect, correct: observation.correct },
       detail: probe?.detail ?? null, error: probe ? (probe.error ?? null) : "no probe result",
       covering: covering.map((finding) => `${finding.file}:${finding.line} ${finding.id} ${finding.kind} ${finding.rule}`),
