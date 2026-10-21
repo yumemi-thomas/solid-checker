@@ -53,8 +53,14 @@ export function GoodMemoCompute() {
 // Negative: plain values are returned as they are.
 export function GoodPlain() {
   const plain = 5;
+  return <span>{access(plain)}</span>;
+}
+
+// Uncertifiable: `config` is a mutable object, so `config.label` may hold a
+// getter by the time `access` runs; only a proven non-function settles it.
+export function UncertifiableMutableMember() {
   const label = access(config.label);
-  return <span>{access(plain)}{label}</span>;
+  return <span>{label}</span>;
 }
 
 // Negative: a store is an object, not a function, so `access` returns it.

@@ -252,15 +252,7 @@ fn call_result_reads(
         return;
     };
     if let Some(target) = target {
-        add_invoked_parameter_reads(
-            scope,
-            &mut out.dependencies,
-            call,
-            &site,
-            &label,
-            target,
-            &mut effective,
-        );
+        add_invoked_parameter_reads(scope, out, call, &site, &label, target, &mut effective);
         add_parameter_member_reads(scope, out, call, &site, &label, target, &mut effective);
     }
     let obligations_before = site.obligations_before;
@@ -748,13 +740,18 @@ fn call_summary(
 
 fn add_invoked_parameter_reads(
     scope: &FileReadScope<'_, '_, '_>,
-    dependencies: &mut HashSet<InterproceduralResultDependency>,
+    out: &mut FileReadOutput,
     call: &solid_facts::ast::CallFact,
     site: &CallSite<'_>,
     label: &str,
     target: usize,
     effective: &mut Vec<SummaryRead>,
 ) {
+    let FileReadOutput {
+        dependencies,
+        dispatch_obligations,
+        ..
+    } = out;
     let file = scope.file;
     let InterproceduralResultReadContext {
         result:
@@ -849,12 +846,14 @@ fn add_invoked_parameter_reads(
         if let Some((path, span)) = decided_source {
             dependencies.insert(InterproceduralResultDependency::FunctionSource(path, span));
         }
+        let mut proven_read = false;
         if ambiguous_candidates.is_none()
             && !argument.spread
             && source_kinds.get(argument_symbol.as_str()) == Some(&ReactiveSourceKind::Accessor)
             && let Some((display, declaration)) = accessors.get(argument_symbol.as_str())
             && let Some(guaranteed) = invocation
         {
+            proven_read = true;
             push_unique_summary_read(
                 effective,
                 SummaryRead {
@@ -871,6 +870,31 @@ fn add_invoked_parameter_reads(
                     undecided: false,
                 },
             );
+        }
+        // ADR 0338 (inverted): the callee may call this parameter, and the
+        // argument is not an accessor the analysis proved. "Not a proven
+        // getter" is not "not a function": a getter that reached here through
+        // a spread, a rest pattern, a held alias, a helper's return or
+        // `Reflect.apply` is called all the same. Only a value proven not to
+        // be a getter settles it; everything else keeps an SC9012 obligation.
+        if !proven_read
+            && invocation.is_some()
+            && site.valid_call
+            && !argument_proven_not_a_getter(file, argument, entities, source_kinds, lookup)
+        {
+            let defect = StaticDefect {
+                kind: StaticDefectKind::ReactiveDispatchUnresolved {
+                    callee: label.to_owned(),
+                    member: None,
+                },
+                location: location(file.path.shared(), argument.span),
+                analysis_context: "parameter-call-argument-unproven".into(),
+                fixes: vec![],
+                uncertain: true,
+            };
+            if !dispatch_obligations.contains(&defect) {
+                dispatch_obligations.push(defect);
+            }
         }
     }
 }
@@ -2299,4 +2323,75 @@ pub(super) fn enter_directly_called(
         }
     }
     true
+}
+
+/// ADR 0338: whether `argument` is proven not to be a Solid getter, so a callee
+/// calling the parameter it lands in reads nothing reactive through it: a
+/// literal (function, primitive, object, array, nullish), an unwritten
+/// project function (a declaration, or a `const` bound to a function
+/// literal), a store (never callable), a value Type Facts proves a primitive,
+///. A getter is only ever produced by a primitive, so a project function is
+/// never one; a standard-library call's result may be (`slice`, `bind`).
+fn argument_proven_not_a_getter(
+    file: &solid_facts::FileFacts,
+    argument: &solid_facts::ast::ArgumentFact,
+    entities: &EntitySymbols,
+    source_kinds: &HashMap<SymbolId, ReactiveSourceKind>,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    if argument.spread {
+        return false;
+    }
+    if argument.runtime_value_kind != solid_facts::ast::RuntimeValueKind::Unknown
+        || crate::cleanup::callback_argument_literal(file, argument.span).is_some()
+        || argument_is_proven_primitive(file, argument, lookup)
+    {
+        return true;
+    }
+    if let Some(symbol) = entities.get(&location(file.path.shared(), argument.span))
+        && source_kinds.get(symbol.as_str()) == Some(&ReactiveSourceKind::Store)
+    {
+        return true;
+    }
+    if let Some(declaration) = argument.binding_declaration
+        && !crate::indexes::binding_written(file, declaration)
+        && (file.ast.functions.iter().any(|function| {
+            function.kind == solid_facts::ast::FunctionKind::Declaration
+                && function
+                    .name
+                    .as_ref()
+                    .is_some_and(|name| name.span == declaration)
+        }) || file.ast.bindings.iter().any(|binding| {
+            binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding.initializer_function
+                && binding.names.iter().any(|name| name.span == declaration)
+        }))
+    {
+        return true;
+    }
+    // A call of a primitive wrapper's own method (`String(1).slice(0)`) or a
+    // const bound to one returns a primitive or an array of primitives.
+    let primitive_method_call = |call_span: Span| {
+        file.ast.call_at(call_span).is_some_and(|call| {
+            !call.construct && primitive_builtin_member_call(file, call.callee, lookup)
+        })
+    };
+    if primitive_method_call(file.ast.peel_ts_sugar_span(argument.span)) {
+        return true;
+    }
+    if let Some(declaration) = argument.binding_declaration
+        && !crate::indexes::binding_written(file, declaration)
+        && file.ast.bindings.iter().any(|binding| {
+            binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding.immutable
+                && binding.names.iter().any(|name| name.span == declaration)
+                && binding.call_initializer.is_some_and(primitive_method_call)
+        })
+    {
+        return true;
+    }
+    // A local bound to a standard-library call's result is otherwise not
+    // here: `slice`, `bind`, `Array.from`, `Reflect.apply` and `at` all hand a
+    // getter back.
+    false
 }
