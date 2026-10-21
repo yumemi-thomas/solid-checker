@@ -188,6 +188,15 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
             ),
             "Call the primitive directly by its imported name, so solid-checker can see each call.".into(),
         ),
+        StaticDefectKind::ReactiveDispatchUnresolved {
+            callee,
+            member: Some(member),
+        } if defect.analysis_context == crate::PRIMITIVE_RESULT_METHOD => (
+            format!(
+                "`.{member}(...)` is called on the result of {callee}, so the value it returns is not the getter, tuple or setter the primitive made, and which one it is cannot be proven; a read of it through a helper cannot be certified"
+            ),
+            "Destructure the primitive's result directly (`const [value, setValue] = createSignal(...)`) so solid-checker can see which slot is the getter.".into(),
+        ),
         StaticDefectKind::ReactiveDispatchUnresolved { callee, member } => (
             if let Some(member) = member {
                 format!(

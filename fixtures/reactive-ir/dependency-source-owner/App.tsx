@@ -11,8 +11,8 @@ export function NumericInHandler() {
   return <button onClick={() => useTicker(() => {}, 1000)}>start</button>;
 }
 
-// Uncertifiable at the call: a signal argument proves no `typeof` from its
-// syntax (ADR 0280), so neither branch is decided for this call.
+// Violation at the call: a signal getter is a function (ADR 0338), so the
+// effect branch runs on every such call, as the arrow below does.
 export function AccessorInHandler() {
   const [delay] = createSignal(1000);
   return <button onClick={() => useTicker(() => {}, delay)}>start</button>;

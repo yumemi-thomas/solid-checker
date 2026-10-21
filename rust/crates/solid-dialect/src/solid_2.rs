@@ -1043,6 +1043,31 @@ impl Dialect for Solid2 {
         }
     }
 
+    /// ADR 0338. Source: `@solidjs/signals@2.0.0-rc.13`. Every getter these
+    /// primitives return is `accessor(node)`, which is
+    /// `read.bind(null, node)`: `dist/dev.js` `accessor` (line 2341; callers
+    /// `createSignal` 2350 and 2354, `createMemo` 2357, `createOptimistic`
+    /// 2931 and 2935) and `dist/prod/signals.js` `accessor` (line 68). `read`
+    /// is declared `function read(el)` (`dist/dev-shared.js` line 6333,
+    /// `dist/prod/core/core.js` line 1494), so a function of length 1 bound
+    /// to one argument has `length` 0, in both builds. `solid-js@2.0.0-rc.13`
+    /// wraps the client primitives only to choose between them
+    /// (`dist/solid.dev.js` `hydratedCreateSignal`, `createOptimistic`) and
+    /// returns what they return; its server build (`dist/server.js`
+    /// `createSignal`, `createMemo`, `createSyncMemo`, `createOptimistic`)
+    /// returns arrow functions with no parameter, also length 0. A
+    /// `createSignal(fn)` getter and a `createOptimistic` getter are the same.
+    fn accessor_getter_length(&self, primitive: Primitive, slot: ResultSlot) -> Option<u32> {
+        matches!(
+            (primitive, slot),
+            (
+                Primitive::CreateSignal | Primitive::CreateOptimistic,
+                ResultSlot::TupleItem(0)
+            ) | (Primitive::CreateMemo, ResultSlot::Whole)
+        )
+        .then_some(0)
+    }
+
     /// ADR 0183. Source: `@solidjs/signals@2.0.0-rc.9`, `dist/dev-shared.js`
     /// `computed` and `setupComputedNode`: `createMemo(fn, options)` builds a
     /// computed node and ends with `!options?.lazy && recompute(self, true)`,

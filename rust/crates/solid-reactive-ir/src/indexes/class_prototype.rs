@@ -13,6 +13,20 @@ impl<'a> SemanticLookup<'a> {
             || assigned.names.contains(name)
     }
 
+    /// ADR 0338: whether any analysed file may replace `Function.prototype.bind`,
+    /// which builds every `read.bind(null, node)` getter: a plain write to a
+    /// member named `bind` (`Function.prototype.bind = …`), a write through a
+    /// prototype whose key or owner is not proven, or a reflective write
+    /// spelled through a `prototype` (`Object.defineProperty(Function.prototype,
+    /// …)`, `Object.assign`, `Reflect.set`; ADR 0292's veto). A tripwire over
+    /// what the project visibly writes, not a proof about the builtin.
+    pub(crate) fn function_bind_may_be_patched(&self) -> bool {
+        *self.function_bind_patched.get_or_init(|| {
+            self.member_may_be_reassigned_on_builtin("bind")
+                || crate::interproc::accessor_provenance::reflective_prototype_write(self)
+        })
+    }
+
     /// ADR 0314: [`Self::member_name_may_be_reassigned`] for a value whose
     /// prototype chain holds only built-in ECMAScript prototypes -- a fresh
     /// literal, a primitive, a built-in collection (the ADR 0211 `Builtin`

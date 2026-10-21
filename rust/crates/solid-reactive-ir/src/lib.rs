@@ -677,6 +677,13 @@ pub const TYPE_ONLY_SOURCE: &str = "type-only-source";
 /// reference's text. Producer: `static_rules.rs`; consumer: `projection.rs`.
 pub const PRIMITIVE_VALUE: &str = "primitive-value";
 
+/// The `analysis_context` of a dispatch obligation at a member call on the
+/// result of a primitive that returns a getter (`createSignal(1).slice(0)`,
+/// ADR 0338): the value it returns has no provenance the analysis can state.
+/// Its `callee` is the primitive and its `member` the method. Producer:
+/// `static_rules.rs`; consumer: `projection.rs`.
+pub const PRIMITIVE_RESULT_METHOD: &str = "primitive-result-method";
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StaticDefect {
@@ -1975,6 +1982,17 @@ fn call_primitive_name(
     // that method's, not the primitive's. A namespace member
     // (`Solid.createEffect`), whose object is the namespace, keeps its answer.
     let callee = file.ast.peel_ts_sugar_span(call.callee);
+    // A member call on the *result* of a call (`createSignal(1).slice(1)`,
+    // `createMemo(fn).toString()`) is that value's method, never the
+    // primitive: the whole member span carries the inner callee's symbol.
+    if let Some(member) = file.ast.member_at(callee)
+        && file
+            .ast
+            .call_at(file.ast.peel_ts_sugar_span(member.object))
+            .is_some()
+    {
+        return None;
+    }
     if let Some(member) = file.ast.member_at(callee)
         && referenced_primitive(
             file,

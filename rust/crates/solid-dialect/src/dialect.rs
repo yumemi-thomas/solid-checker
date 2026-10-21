@@ -1056,6 +1056,22 @@ pub trait Dialect: Sync {
         None
     }
 
+    /// The exact `length` of the function a call of `primitive` returns in
+    /// `slot`, when that slot is a getter this dialect builds and its
+    /// audited source states the arity (ADR 0338). It lets a helper that
+    /// tests `typeof p === "function"` or `p.length` be decided for a call
+    /// that passes such a getter, without guessing from the declared
+    /// type: `Accessor<T>` is `() => T` to the compiler and says nothing of
+    /// a function's runtime arity.
+    ///
+    /// `None` states nothing: a slot that is not a getter, a getter the
+    /// audit did not reach, or a dialect that has not audited it. It is
+    /// never a claim that the length is non-zero.
+    fn accessor_getter_length(&self, primitive: Primitive, slot: ResultSlot) -> Option<u32> {
+        let _ = (primitive, slot);
+        None
+    }
+
     /// ADR 0183: whether a callback written at `argument` of a call of
     /// `primitive` with `argument_count` arguments runs during that call, at
     /// least once, as the compute of a computation the call creates -- under
