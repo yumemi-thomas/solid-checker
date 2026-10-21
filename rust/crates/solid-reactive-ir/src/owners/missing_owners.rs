@@ -152,11 +152,37 @@ pub(crate) fn find_missing_owners(
                     solid_facts::compiler::CallbackRoleKind::DirectiveApply => {
                         OwnerEdgeKind::RefApplied
                     }
-                    _ if lookup.synchronous_event_dispatch_present() => OwnerEdgeKind::Conditional,
-                    _ => OwnerEdgeKind::Unowned,
+                    _ => event_owner_edge(lookup, nodes[index].generator),
                 };
                 contexts[index] |=
                     owner_edge_context(kind, OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED);
+            }
+        }
+        // ADR 0358: the handlers an intrinsic element's spread supplies are run
+        // by the host with no owner, as an event attribute's literal is.
+        for element in &file.ast.jsx_elements {
+            if !crate::object_members::intrinsic_element(file, element) {
+                continue;
+            }
+            for spread in &element.spreads {
+                let key = crate::location(file.path.shared(), spread.argument);
+                let Some(Some(targets)) = lookup.spread_handler_targets().get(&key) else {
+                    continue;
+                };
+                for (path, span) in targets {
+                    let index = nodes_by_path
+                        .get(path.as_str())
+                        .into_iter()
+                        .flatten()
+                        .copied()
+                        .find(|index| nodes[*index].span == *span);
+                    if let Some(index) = index {
+                        contexts[index] |= owner_edge_context(
+                            event_owner_edge(lookup, nodes[index].generator),
+                            OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED,
+                        );
+                    }
+                }
             }
         }
         // The function literals a ref value writes at its top level (ADR 0345),

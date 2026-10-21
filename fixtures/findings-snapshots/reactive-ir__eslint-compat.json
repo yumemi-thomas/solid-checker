@@ -2,6 +2,16 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
+      "start": 2482,
+      "end": 2498,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-handler-frozen",
       "code": "SC1007",
       "kind": "violation",

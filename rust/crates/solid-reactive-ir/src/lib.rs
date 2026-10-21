@@ -809,6 +809,14 @@ pub enum StaticDefectKind {
         attribute: String,
         expression: String,
     },
+    /// An event handler whose function the checker cannot place exactly: an
+    /// `on…` attribute reads a member with no exact target, or an intrinsic
+    /// element spreads an object it cannot resolve (ADR 0358). The handler may
+    /// run owner-requiring work this analysis cannot see, so it is an obligation.
+    HandlerTargetUnresolved {
+        attribute: String,
+        expression: String,
+    },
     UncalledAccessor {
         name: String,
         position: String,
@@ -895,6 +903,9 @@ pub enum StaticDefectFamily {
     ReactiveSourceUncaptured,
     ReactiveDispatchUnresolved,
     ExpectedFunctionGotExpression,
+    /// A handler the checker cannot place at an exact function, so the owner it
+    /// runs under is unknown (ADR 0358). Its uncertain side is `missing-owner`.
+    HandlerOwnerUnresolved,
     UncalledAccessor,
     DirectMutation,
     /// A value crossing the default server-function transport. Deliberately
@@ -919,6 +930,7 @@ impl StaticDefectFamily {
             Self::ReactiveSourceUncaptured => "reactive-source-uncaptured",
             Self::ReactiveDispatchUnresolved => "reactive-dispatch-unresolved",
             Self::ExpectedFunctionGotExpression => "expected-function-got-expression",
+            Self::HandlerOwnerUnresolved => "handler-owner-unresolved",
             Self::UncalledAccessor => "uncalled-accessor",
             Self::DirectMutation => "no-direct-mutation",
             Self::ServerFunctionRichArgument => "server-function-rich-argument",
@@ -957,6 +969,7 @@ impl StaticDefectKind {
             Self::ReactiveHandlerRead { .. } | Self::HandlerValueUnresolved { .. } => {
                 StaticDefectFamily::ExpectedFunctionGotExpression
             }
+            Self::HandlerTargetUnresolved { .. } => StaticDefectFamily::HandlerOwnerUnresolved,
             Self::UncalledAccessor { .. } => StaticDefectFamily::UncalledAccessor,
             Self::DirectMutation { .. } => StaticDefectFamily::DirectMutation,
             Self::ServerFunctionRichArgument { .. } => {
@@ -986,6 +999,7 @@ impl StaticDefectKind {
             Self::StructuredReturnUnresolved { .. } => "StructuredReturnUnresolved",
             Self::ReactiveHandlerRead { .. } => "ReactiveHandlerRead",
             Self::HandlerValueUnresolved { .. } => "HandlerValueUnresolved",
+            Self::HandlerTargetUnresolved { .. } => "HandlerTargetUnresolved",
             Self::UncalledAccessor { .. } => "UncalledAccessor",
             Self::DirectMutation { .. } => "DirectMutation",
             Self::ServerFunctionRichArgument { .. } => "ServerFunctionRichArgument",

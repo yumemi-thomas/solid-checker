@@ -2,6 +2,16 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/App.tsx",
+      "start": 590,
+      "end": 607,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -19,6 +29,16 @@
       "path": "fixtures/reactive-ir/invocation-flow/App.tsx",
       "start": 1438,
       "end": 1445,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/App.tsx",
+      "start": 1560,
+      "end": 1577,
       "fixes": 0
     },
     {
@@ -102,6 +122,16 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
+      "start": 525,
+      "end": 532,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -109,6 +139,16 @@
       "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
       "start": 758,
       "end": 765,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
+      "start": 961,
+      "end": 968,
       "fixes": 0
     },
     {
@@ -142,6 +182,16 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
+      "start": 2147,
+      "end": 2150,
+      "fixes": 0
+    },
+    {
       "rule": "prefer-show",
       "code": "SC8015",
       "kind": "violation",
@@ -162,6 +212,16 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
+      "start": 2756,
+      "end": 2762,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -169,6 +229,16 @@
       "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
       "start": 3131,
       "end": 3138,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
+      "start": 3271,
+      "end": 3281,
       "fixes": 0
     },
     {
@@ -182,6 +252,16 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
+      "start": 3796,
+      "end": 3804,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -189,6 +269,16 @@
       "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
       "start": 4104,
       "end": 4111,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
+      "start": 4136,
+      "end": 4144,
       "fixes": 0
     },
     {
@@ -202,6 +292,16 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
+      "start": 4474,
+      "end": 4482,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -209,6 +309,16 @@
       "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
       "start": 4750,
       "end": 4757,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
+      "start": 4782,
+      "end": 4790,
       "fixes": 0
     },
     {
@@ -222,6 +332,16 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
+      "start": 5100,
+      "end": 5108,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -232,6 +352,16 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
+      "start": 5461,
+      "end": 5469,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -239,6 +369,16 @@
       "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
       "start": 5992,
       "end": 6002,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
+      "start": 6027,
+      "end": 6033,
       "fixes": 0
     },
     {
@@ -259,6 +399,16 @@
       "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
       "start": 6201,
       "end": 6211,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
+      "start": 6236,
+      "end": 6242,
       "fixes": 0
     },
     {
@@ -292,6 +442,16 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
+      "start": 7530,
+      "end": 7538,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -302,6 +462,26 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
+      "start": 7942,
+      "end": 7950,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/tree.tsx",
+      "start": 1215,
+      "end": 1241,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -309,6 +489,16 @@
       "path": "fixtures/reactive-ir/invocation-flow/tree.tsx",
       "start": 1727,
       "end": 2217,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/tree.tsx",
+      "start": 1898,
+      "end": 1924,
       "fixes": 0
     }
   ]

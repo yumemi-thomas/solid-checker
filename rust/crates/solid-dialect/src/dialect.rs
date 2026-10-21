@@ -920,6 +920,13 @@ pub trait Dialect: Sync {
         &[]
     }
 
+    /// Whether an intrinsic spread key installs an event listener. `None`
+    /// means that runtime spelling rule has not been audited for this dialect.
+    fn spread_key_is_event(&self, key: &str) -> Option<bool> {
+        let _ = key;
+        None
+    }
+
     /// Whether a call of `primitive` with exactly one argument, a compute
     /// function that takes no parameters, returns an accessor that is the
     /// only way the values the compute returns reach program code.

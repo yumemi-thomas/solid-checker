@@ -139,6 +139,19 @@ pub(crate) fn callback_literal_span(
     is_function(first).then_some(first)
 }
 
+/// The callback value a JSX event slot receives, including tuple element 0.
+/// Unknown/spread tuple elements keep the original span for refusal.
+pub(crate) fn handler_value_span(file: &solid_facts::FileFacts, value: Span) -> Span {
+    let value = file.ast.peel_ts_sugar_span(value);
+    file.ast
+        .array_literal_elements
+        .iter()
+        .find(|array| file.ast.peel_ts_sugar_span(array.span) == value)
+        .and_then(|array| array.elements.first())
+        .filter(|element| element.kind == solid_facts::ast::ArrayElementKind::Value)
+        .map_or(value, |element| file.ast.peel_ts_sugar_span(element.span))
+}
+
 /// The owner-graph node of the callback `argument` names, if it names one
 /// exactly ([`callback_literal_span`]), or the function its identifier names.
 /// Any other expression names no callback: an entity at a call's span carries
@@ -165,6 +178,17 @@ pub(crate) fn owner_callback_index(
             .flatten()
             .copied()
             .find(|index| nodes[*index].span == span);
+    }
+    // ADR 0358: an event attribute's member read names the function it holds
+    // exactly, when the object literal it reads resolves (`object_member_function`).
+    if handler_tuple && let Some((target, function)) = lookup.object_member_function(file, argument)
+    {
+        return nodes_by_path
+            .get(target.path.as_str())
+            .into_iter()
+            .flatten()
+            .copied()
+            .find(|index| nodes[*index].span == function.span);
     }
     if !is_identifier_span(file, argument) {
         return None;
@@ -251,6 +275,16 @@ pub(crate) const fn owner_edge_context(kind: OwnerEdgeKind, source: u8) -> u8 {
         }
         OwnerEdgeKind::RefApplied => OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED,
         OwnerEdgeKind::MayBeUnowned => OWNER_CONTEXT_UNOWNED,
+    }
+}
+
+pub(super) fn event_owner_edge(lookup: &SemanticLookup<'_>, generator: bool) -> OwnerEdgeKind {
+    if generator {
+        OwnerEdgeKind::MayBeUnowned
+    } else if lookup.synchronous_event_dispatch_present() {
+        OwnerEdgeKind::Conditional
+    } else {
+        OwnerEdgeKind::Unowned
     }
 }
 

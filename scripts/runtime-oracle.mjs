@@ -480,6 +480,14 @@ async function runCase(id) {
   writeFileSync(join(dir, "index.html"), html);
   writeFileSync(join(dir, "scenario.json"), JSON.stringify({ schemaVersion: 1, steps: [settle, ...(observations.length ? [probeStep] : []), ...(spec.steps ?? [])] }));
   writeFileSync(join(dir, "tsconfig.json"), JSON.stringify({ compilerOptions, files: ["main.tsx", ...files] }, null, 2));
+  // The checker's program boundary follows the nearest manifest, which is the corpus app's: it publishes
+  // nothing, so the boundary is closed. `programBoundary` writes this case's own manifest: a publishing one
+  // (an entry field) is open, a private one is closed.
+  if (spec.programBoundary !== undefined) {
+    assert(["open", "closed"].includes(spec.programBoundary), `${id}: programBoundary must be open or closed`);
+    const manifest = spec.programBoundary === "open" ? { name: id, main: "main.tsx" } : { name: id, private: true };
+    writeFileSync(join(dir, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+  }
   const started = Date.now();
   const result = await run(process.execPath, [join(repo, "packages/cli/bin/solid-checker.mjs"), "feedback", "run",
     "--project", join(dir, "tsconfig.json"), "--scenario", join(dir, "scenario.json"),

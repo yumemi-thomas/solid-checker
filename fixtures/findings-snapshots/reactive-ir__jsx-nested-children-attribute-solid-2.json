@@ -2,6 +2,26 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/jsx-nested-children-attribute-solid-2/App.tsx",
+      "start": 7945,
+      "end": 7950,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/jsx-nested-children-attribute-solid-2/App.tsx",
+      "start": 8387,
+      "end": 8392,
+      "fixes": 0
+    },
+    {
       "rule": "no-destructure",
       "code": "SC1003",
       "kind": "violation",

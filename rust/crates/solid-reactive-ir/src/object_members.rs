@@ -14,6 +14,12 @@ use crate::{
     location,
 };
 
+#[path = "object_members/handlers.rs"]
+mod handlers;
+pub(crate) use handlers::{
+    SpreadTargets, intrinsic_element, spread_index, unresolved_handler_defects,
+};
+
 pub(crate) type Targets = HashMap<Location, (String, Span)>;
 
 pub(crate) fn index(facts: &ProjectFacts, lookup: &SemanticLookup<'_>) -> Targets {
@@ -37,11 +43,31 @@ pub(crate) fn index(facts: &ProjectFacts, lookup: &SemanticLookup<'_>) -> Target
             .map(|member| (member.span, member))
             .collect::<HashMap<_, _>>();
         let references = references(file);
-        for call in &file.ast.calls {
-            if call.construct {
-                continue;
-            }
-            let callee = file.ast.peel_ts_sugar_span(call.callee);
+        // The member a call invokes, and the member a JSX event handler attribute
+        // takes as its value: both name the function the member holds (ADR 0358).
+        let reads = file
+            .ast
+            .calls
+            .iter()
+            .filter(|call| !call.construct)
+            .map(|call| (call.callee, call.callee))
+            .chain(
+                file.compiler
+                    .callback_roles
+                    .iter()
+                    .filter(|callback| {
+                        callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
+                    })
+                    .map(|callback| {
+                        (
+                            callback.span,
+                            crate::owners::handler_value_span(file, callback.span),
+                        )
+                    }),
+            )
+            .collect::<Vec<_>>();
+        for (read, value) in reads {
+            let callee = file.ast.peel_ts_sugar_span(value);
             let Some(member) = members.get(&callee) else {
                 continue;
             };
@@ -94,7 +120,7 @@ pub(crate) fn index(facts: &ProjectFacts, lookup: &SemanticLookup<'_>) -> Target
             // Both receiver and own callable are now proven non-nullish;
             // optional links therefore select the same function.
             targets.insert(
-                location(file.path.shared(), call.callee),
+                location(file.path.shared(), read),
                 (function.0.path.to_string(), function.1.span),
             );
         }
@@ -1050,6 +1076,19 @@ fn receiver_closed<'a>(
         if !initialized_use(owner, literal, declaration, file, span, modules) {
             return false;
         }
+        // A spread onto an intrinsic element copies the object's own handlers
+        // onto the element (ADR 0358): a read that neither escapes the object nor
+        // hands it to a callee. A spread into a component hands it on, so it is
+        // not this case.
+        if file.ast.jsx_elements.iter().any(|element| {
+            intrinsic_element(file, element)
+                && element
+                    .spreads
+                    .iter()
+                    .any(|spread| file.ast.peel_ts_sugar_span(spread.argument) == span)
+        }) {
+            continue;
+        }
         let Some(member) = file.ast.members.iter().find(|member| {
             file.ast.peel_ts_sugar_span(member.object) == span
                 && !file.ast.computed_members.contains(&member.span)
@@ -1059,12 +1098,17 @@ fn receiver_closed<'a>(
         // Merely extracting a member lets a method receive an opaque `this`.
         // Require immediate calls, rather than treating all member reads as
         // harmless receiver uses.
-        if !file
-            .ast
-            .calls
-            .iter()
-            .any(|call| !call.construct && file.ast.peel_ts_sugar_span(call.callee) == member.span)
-        {
+        // An event attribute's value is read by the host with no receiver of the
+        // program's, the same way an immediate call of a function literal
+        // without `this` is (ADR 0358).
+        let invoked =
+            file.ast.calls.iter().any(|call| {
+                !call.construct && file.ast.peel_ts_sugar_span(call.callee) == member.span
+            }) || file.compiler.callback_roles.iter().any(|callback| {
+                callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
+                    && crate::owners::handler_value_span(file, callback.span) == member.span
+            });
+        if !invoked {
             return false;
         }
         let Some((function_file, function)) = file

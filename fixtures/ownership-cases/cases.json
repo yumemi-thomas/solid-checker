@@ -1257,6 +1257,22 @@
        "ownership": "checker-only",
        "diagnostics": []
       }
+     },
+     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "marker": "props.onSave"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
      }
     ],
     "absent": []

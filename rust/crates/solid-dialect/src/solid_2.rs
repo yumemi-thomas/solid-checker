@@ -125,6 +125,8 @@ pub struct Solid2 {
     /// every path (`dist/web.dev.js:1521-1620`). No other `@solidjs/web` release
     /// was read for this, so each keeps `false`.
     render_creates_root: bool,
+    /// ADR 0358: rc.13 web assignProp installs un-namespaced `on` keys.
+    spread_event_keys_audited: bool,
 }
 
 /// The Solid 2 language's own vocabulary, [`Solid2::CONSERVATIVE`], spelled
@@ -225,6 +227,10 @@ pub(crate) fn names() -> Vec<&'static str> {
 pub(crate) const RELEASE_GATED_NAMES: &[&str] = &["until"];
 
 impl Dialect for Solid2 {
+    fn spread_key_is_event(&self, key: &str) -> Option<bool> {
+        self.spread_event_keys_audited
+            .then(|| key.starts_with("on") && !key.contains(':'))
+    }
     fn host_boolean_exports(&self) -> &'static [crate::HostBooleanExport] {
         &[crate::HostBooleanExport {
             module: "@solidjs/web",

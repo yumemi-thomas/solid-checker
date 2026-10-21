@@ -78,6 +78,13 @@ visible call selecting the standard-library `EventTarget.dispatchEvent` or
 (ADR 0356). Event-owner proofs then remain uncertifiable across the program,
 including forwarded callbacks. No target-specific dispatch edge is guessed.
 
+Exact event members (including tuple slot zero) and intrinsic spreads join the
+owner graph through the immutable object-literal census (ADR 0358). On audited
+web rc.13, spread keys beginning with `on` and containing no colon install
+listeners, including lowercase keys. Unknown holders, getters, generators and
+unaudited web spread keys retain internal obligations. These placements obey
+the synchronous-dispatch veto above; no unresolved target proves a violation.
+
 Package owner requirements must come from exact analyzed source or dialect
 runtime premises. A call proved to allocate without an owner is a violation;
 unresolved execution or ownership remains uncertifiable. No contract or receipt

@@ -253,6 +253,15 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
                 "Wrap the read so it happens when the event fires: {attribute}={{event => {expression}(event)}}."
             ),
         ),
+        StaticDefectKind::HandlerTargetUnresolved {
+            attribute,
+            expression,
+        } => (
+            format!(
+                "{attribute} hands {expression} to an element as an event handler, and the function it holds is not resolved exactly, so the owner it runs under is not proven"
+            ),
+            "Bind the handler to a function literal the analysis can read, or write the object literal in the spread or the attribute directly.".into(),
+        ),
         StaticDefectKind::HandlerValueUnresolved {
             attribute,
             expression,
@@ -362,6 +371,9 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         StaticDefectKind::StructuredReturnUnresolved { .. } => {
             "the exported shorthand value is type-correct, but its exact runtime binding and reactive return behavior are not proven"
         }
+        StaticDefectKind::HandlerTargetUnresolved { .. } if defect.uncertain => {
+            "the handler's function is not resolved to an exact literal, so whether it runs under an owner is not proven"
+        }
         StaticDefectKind::HandlerValueUnresolved { .. } if defect.uncertain => {
             "TypeScript deliberately skips this hyphenated JSX attribute name, and the runtime handler shape is not closed by the available compiler facts"
         }
@@ -392,6 +404,7 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         | StaticDefectKind::MissingEffectFunction
         | StaticDefectKind::ReactiveHandlerRead { .. }
         | StaticDefectKind::HandlerValueUnresolved { .. }
+        | StaticDefectKind::HandlerTargetUnresolved { .. }
         | StaticDefectKind::UncalledAccessor { .. }
         | StaticDefectKind::DirectMutation { .. } => {
             "the invalid API shape is statically present at this call"

@@ -936,3 +936,18 @@ fn every_review_names_a_document_that_exists() {
         assert!(OWNERS.iter().any(|owner| owner.package == known.package));
     }
 }
+
+/// ADR 0358: spread listener grammar belongs to the audited web runtime.
+#[test]
+fn spread_event_keys_require_web_rc13() {
+    let audited = vocabulary_for(Release::Read(9), Release::Read(9), Release::Read(13));
+    for key in ["onClick", "onclick", "onpointerdown", "on"] {
+        assert_eq!(audited.spread_key_is_event(key), Some(true), "{key}");
+    }
+    for key in ["title", "OnClick", "on:click", "prop:onClick"] {
+        assert_eq!(audited.spread_key_is_event(key), Some(false), "{key}");
+    }
+    let older_web = vocabulary_for(Release::Read(13), Release::Read(13), Release::Read(9));
+    assert_eq!(older_web.spread_key_is_event("onClick"), None);
+    assert_eq!(Solid2::CONSERVATIVE.spread_key_is_event("onClick"), None);
+}

@@ -2,6 +2,16 @@
   "status": "uncertifiable",
   "findings": [
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/mixed-role-flow/App.tsx",
+      "start": 1339,
+      "end": 1346,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",

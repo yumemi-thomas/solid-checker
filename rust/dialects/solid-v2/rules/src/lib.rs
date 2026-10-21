@@ -641,6 +641,7 @@ fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
         StaticDefectFamily::ReactiveSourceUncaptured => Rule::ReactiveSourceUncaptured,
         StaticDefectFamily::ReactiveDispatchUnresolved => Rule::ReactiveDispatchUnresolved,
         StaticDefectFamily::ExpectedFunctionGotExpression => Rule::ExpectedFunctionGotExpression,
+        StaticDefectFamily::HandlerOwnerUnresolved => Rule::MissingOwner,
         StaticDefectFamily::UncalledAccessor => Rule::UncalledAccessor,
         StaticDefectFamily::DirectMutation => Rule::NoDirectMutation,
         StaticDefectFamily::ServerFunctionRichArgument => Rule::ServerFunctionRichArgument,
@@ -662,6 +663,7 @@ fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
                 | StaticDefectKind::ResultAccessCallbackUnplaced { .. }
                 | StaticDefectKind::StructuredReturnUnresolved { .. }
                 | StaticDefectKind::HandlerValueUnresolved { .. }
+                | StaticDefectKind::HandlerTargetUnresolved { .. }
                 // The open transport proof names its own reason in the
                 // message; there is no component whose call sites could be
                 // enumerated, so the props sentence would describe a

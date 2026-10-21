@@ -737,6 +737,8 @@ pub(super) struct ResultAccessForwarded {
 /// never pay for an index.
 pub(super) struct SemanticLookup<'a> {
     object_members: OnceLock<crate::object_members::Targets>,
+    /// ADR 0358: the handlers each intrinsic element's spread supplies.
+    spread_handlers: OnceLock<crate::object_members::SpreadTargets>,
     literal_receiver_members: OnceLock<HashSet<(String, Span)>>,
     facts: &'a ProjectFacts,
     /// The Solid-version vocabulary this build analyzes with. Every consumer
@@ -964,6 +966,7 @@ impl<'a> SemanticLookup<'a> {
         );
         Self {
             object_members: OnceLock::new(),
+            spread_handlers: OnceLock::new(),
             literal_receiver_members: OnceLock::new(),
             facts,
             dialect,
@@ -1380,6 +1383,34 @@ impl<'a> SemanticLookup<'a> {
                 hasher.update(span.start.to_le_bytes());
                 hasher.update(span.end.to_le_bytes());
             }
+            // A remote handler replacement moves the exact function spans
+            // cached by the owner fragments, even when the spread is unchanged.
+            let mut spreads = self.spread_handler_targets().iter().collect::<Vec<_>>();
+            spreads.sort_unstable_by_key(|(site, _)| {
+                (site.path.as_ref(), site.start_byte, site.end_byte)
+            });
+            hasher.update(b"spread-handler-targets\0");
+            for (site, targets) in spreads {
+                hasher.update(
+                    u64::try_from(site.path.len())
+                        .unwrap_or(u64::MAX)
+                        .to_le_bytes(),
+                );
+                hasher.update(site.path.as_bytes());
+                hasher.update(site.start_byte.to_le_bytes());
+                hasher.update(site.end_byte.to_le_bytes());
+                hasher.update([u8::from(targets.is_some())]);
+                if let Some(targets) = targets {
+                    let mut targets = targets.iter().collect::<Vec<_>>();
+                    targets.sort_unstable();
+                    for (path, span) in targets {
+                        hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
+                        hasher.update(path.as_bytes());
+                        hasher.update(span.start.to_le_bytes());
+                        hasher.update(span.end.to_le_bytes());
+                    }
+                }
+            }
             // Returned-source proofs inspect callee syntax and binding facts,
             // even when its public type and read summary do not change. Bind
             // the byte identity of every file that can hold such a proof (a
@@ -1626,6 +1657,12 @@ impl<'a> SemanticLookup<'a> {
     pub(super) fn object_member_targets(&self) -> &crate::object_members::Targets {
         self.object_members
             .get_or_init(|| crate::object_members::index(self.facts, self))
+    }
+
+    /// ADR 0358: what each spread argument of an intrinsic element supplies.
+    pub(crate) fn spread_handler_targets(&self) -> &crate::object_members::SpreadTargets {
+        self.spread_handlers
+            .get_or_init(|| crate::object_members::spread_index(self.facts, self))
     }
 
     pub(super) fn literal_receiver_members(&self) -> &HashSet<(String, Span)> {

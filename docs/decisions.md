@@ -519,4 +519,8 @@ Standard-library `EventTarget.dispatchEvent`/`HTMLElement.click` calls withhold 
 
 <a id="adr-0357"></a>
 ## ADR 0357 — Possible suspension retains both owner contexts
-An operation possibly after its own async function's suspension keeps its original owner and an unowned possibility. SC4001 remains an obligation instead of silently retaining an owned leaf. The context propagates through ordinary calls and owner-preserving callbacks, invalidates lexical-root shortcuts, and never seeds an uninvoked function. Definite Type Facts continuations retain their proof; newly created roots own their callbacks. Argument-specific take/skip proofs remain open. Owners: `owners/{owner_context,missing_owners,owner_discovery}.rs`; mechanics: `docs/rules/missing-owner.md`; fixtures `leaf-scope-skippable-await`, oracle `cleanup-possible-await`.
+Possible suspension keeps the original and unowned contexts: SC4001 is an obligation. It follows ordinary calls and owner-preserving callbacks, invalidates lexical-root shortcuts, and never seeds dormant functions. Definite continuations retain their proof; fresh roots own their callbacks. Argument-specific take/skip proofs remain open. Owners: `owners/{owner_context,missing_owners,owner_discovery}.rs`; mechanics: `docs/rules/missing-owner.md`; fixtures `leaf-scope-skippable-await`, oracle `cleanup-possible-await`.
+
+<a id="adr-0358"></a>
+## ADR 0358 — Exact handler holders enter the owner graph
+Event members/tuples and intrinsic spreads resolve through the immutable receiver census. Web rc.13 alone enables non-namespaced `on` spread keys, including lowercase. Getters, generators and unknown holders retain obligations; synchronous dispatch withholds unowned proof. Remote targets enter the retained digest. Owners: `object_members/handlers.rs`, `owners/`; mechanics: `docs/rules/missing-owner.md`.

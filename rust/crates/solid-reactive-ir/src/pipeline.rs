@@ -576,6 +576,12 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     // Static and compatibility passes deliberately operate on source facts.
     // Apply the compiler's stronger "this code was not emitted" fact once,
     // after every producer has run.
+    draft
+        .static_defects
+        .extend(crate::object_members::unresolved_handler_defects(
+            facts,
+            semantic_lookup,
+        ));
     draft.discard_deleted_static_diagnostics(facts);
     crate::effect_execution::gate_diagnostics(semantic_lookup, &mut draft);
     crate::attribution::discharge_closed_program_export_dispatch(

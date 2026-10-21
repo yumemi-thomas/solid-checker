@@ -62,6 +62,45 @@ pub(crate) fn discover_owner_file(
     };
     let mut edges = Vec::new();
     let mut requirements = Vec::new();
+    // ADR 0358: an event attribute's member read, and the handlers an intrinsic
+    // element's spread supplies, name their functions exactly; the host runs
+    // them with no owner.
+    for callback in &file.compiler.callback_roles {
+        if callback.role != solid_facts::compiler::CallbackRoleKind::EventHandler {
+            continue;
+        }
+        if let Some((target, function)) = lookup.object_member_function(file, callback.span) {
+            edges.push(SymbolicOwnerEdge {
+                source: None,
+                target: OwnerTarget::Function(target.path.to_string(), function.span),
+                kind: event_owner_edge(lookup, function.generator),
+            });
+        }
+    }
+    for element in &file.ast.jsx_elements {
+        if !crate::object_members::intrinsic_element(file, element) {
+            continue;
+        }
+        for spread in &element.spreads {
+            let key = crate::location(file.path.shared(), spread.argument);
+            let Some(Some(targets)) = lookup.spread_handler_targets().get(&key) else {
+                continue;
+            };
+            for (path, span) in targets {
+                edges.push(SymbolicOwnerEdge {
+                    source: None,
+                    target: OwnerTarget::Function(path.clone(), *span),
+                    kind: event_owner_edge(
+                        lookup,
+                        lookup
+                            .file_by_path(path)
+                            .and_then(|file| file.ast.function_at(*span))
+                            .is_some_and(|function| function.generator),
+                    ),
+                });
+            }
+        }
+    }
     for (call_index, call) in file.ast.calls.iter().enumerate() {
         let owner = owner_at(call.span);
         let target = lookup

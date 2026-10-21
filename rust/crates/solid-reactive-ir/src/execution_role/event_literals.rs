@@ -472,7 +472,7 @@ impl<'a> InvocationFlow<'a, '_, '_> {
                 if intrinsic_element(file, element) {
                     return match path.as_slice() {
                         [] => Some(()),
-                        [key] if flow_event_key(key) => {
+                        [key] if self.lookup.dialect.spread_key_is_event(key) == Some(true) => {
                             out.push(Invocation::Role(ExecutionRole::EventCallback));
                             Some(())
                         }
