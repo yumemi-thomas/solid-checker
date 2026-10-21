@@ -922,6 +922,37 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether the callback at `argument` of a `primitive` call is the **effect
+    /// phase** of a user effect: the runtime queues it and runs it from inside
+    /// the flush that drains effects, with the effect-callback marker set for
+    /// exactly the duration of that call.
+    ///
+    /// A primitive that runs its callback at its own call, or only on a first
+    /// run that is not queued, is not one: `createRenderEffect`'s first run is
+    /// synchronous at creation, outside any flush, so a `flush` there still
+    /// drains. The default is `false`.
+    fn callback_runs_in_effect_phase(&self, primitive: Primitive, argument: usize) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
+    /// Whether calling `primitive` synchronously from an effect phase
+    /// ([`Dialect::callback_runs_in_effect_phase`]) is a **no-op**, one the
+    /// development build usually reports (`FLUSH_IN_EFFECT_CALLBACK`, a
+    /// warning).
+    ///
+    /// A release's answer: the flush that runs effects is already in progress,
+    /// so a nested `flush` returns without draining in every client build.
+    /// Only the no-op is the claim: the development build of
+    /// `@solidjs/signals` from rc.1 warns through a global marker that a
+    /// nested synchronous effect run lowers, so the warning is not
+    /// guaranteed. An unread or unresolved release states nothing. The
+    /// default is `false`.
+    fn warns_inside_effect_phase(&self, primitive: Primitive) -> bool {
+        let _ = primitive;
+        false
+    }
+
     /// Whether a call of `primitive` returns a **tuple** whose first slot
     /// carries the reactive value.
     ///

@@ -28,6 +28,7 @@ pub enum Rule {
     UntilInTrackedScope,
     FlushInAction,
     StaticDynamicAsyncSource,
+    FlushInEffectCallback,
     LeafOwnerForbiddenCall,
     MissingOwner,
     PendingAsyncUnsuspendableRead,
@@ -70,7 +71,7 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 31] = [
+    pub const ALL: [Self; 32] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::UncalledAccessor,
@@ -86,6 +87,7 @@ impl Rule {
         Self::UntilInTrackedScope,
         Self::FlushInAction,
         Self::StaticDynamicAsyncSource,
+        Self::FlushInEffectCallback,
         Self::LeafOwnerForbiddenCall,
         Self::MissingOwner,
         Self::PendingAsyncUnsuspendableRead,
@@ -147,6 +149,14 @@ impl Rule {
             // `dist/dev-shared.js:2210-2219`): an error like the other
             // runtime-mirrored throws in the family.
             Self::FlushInAction => ("SC2006", "flush-in-action", "error", false),
+            // `flush()` run by an effect's apply callback is a no-op in every
+            // client build, and the dev build usually also *warns*
+            // (`@solidjs/signals` `FLUSH_IN_EFFECT_CALLBACK`, severity "warn",
+            // rc.13 `dist/dev-shared.js:2687-2698`; not after a nested
+            // synchronous render effect): nothing throws, the writes land in
+            // the running flush's continuation. A proven defect at the
+            // runtime's own severity, hence a warning.
+            Self::FlushInEffectCallback => ("SC2008", "flush-in-effect-callback", "warning", false),
             // rc.9's static `dynamic` form refuses a promise-valued source:
             // the dev builds throw at the call (`@solidjs/web@2.0.0-rc.9`
             // `dist/web.dev.js:2249`, `dist/server.dev.js:3979`) and the
@@ -315,6 +325,7 @@ mod tests {
             ("SC2004", "resolve-in-tracked-scope"),
             ("SC2005", "until-in-tracked-scope"),
             ("SC2006", "flush-in-action"),
+            ("SC2008", "flush-in-effect-callback"),
             ("SC2007", "static-dynamic-async-source"),
             ("SC7002", "sync-computation-received-async"),
             ("SC7005", "http-response-after-flush"),
@@ -377,6 +388,9 @@ mod tests {
         // flush() in an action step throws FLUSH_IN_ACTION in dev (rc.8 and
         // rc.9 signals dev bundles, probed).
         assert_eq!(Rule::FlushInAction.metadata().severity, "error");
+        // flush() in an effect's apply callback is a no-op the dev build warns
+        // about (FLUSH_IN_EFFECT_CALLBACK, severity "warn", rc.13 signals).
+        assert_eq!(Rule::FlushInEffectCallback.metadata().severity, "warning");
         // A promise-valued static dynamic() source is a dev *throw*
         // ("dynamic(): a static source must resolve synchronously, not to a
         // promise", rc.9 web.dev.js and server.dev.js).

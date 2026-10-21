@@ -341,6 +341,39 @@ fn the_flush_throw_follows_the_resolved_signals() {
     }
 }
 
+/// ADR 0341: `flush` from an effect's apply reports `FLUSH_IN_EFFECT_CALLBACK`
+/// on every signals release some review read from rc.1, and on none before it,
+/// none unread and none unresolved. The effect phase is `createEffect`'s apply
+/// alone: `createRenderEffect`'s first run is not queued.
+#[test]
+fn the_effect_phase_report_follows_the_resolved_signals() {
+    for (signals, reports) in [
+        (Some("2.0.0-rc.0"), false),
+        (Some("2.0.0-rc.1"), true),
+        (Some("2.0.0-rc.3"), true),
+        (Some("2.0.0-rc.8"), true),
+        (Some("2.0.0-rc.9"), true),
+        (Some("2.0.0-rc.13"), true),
+        (Some("2.0.0-rc.10"), false),
+        (Some("2.0.0-rc.15"), false),
+        (Some("2.0.0-beta.2"), false),
+        (None, false),
+    ] {
+        let (vocabulary, _) = analyzed(&triple(Some("2.0.0-rc.3"), signals, Some("2.0.0-rc.3")));
+        assert_eq!(vocabulary.flush_in_effect_callback, reports, "{signals:?}");
+        assert_eq!(
+            vocabulary.warns_inside_effect_phase(Primitive::Flush),
+            reports,
+            "{signals:?}"
+        );
+        assert!(!vocabulary.warns_inside_effect_phase(Primitive::Untrack));
+        assert!(vocabulary.callback_runs_in_effect_phase(Primitive::CreateEffect, 1));
+        assert!(!vocabulary.callback_runs_in_effect_phase(Primitive::CreateEffect, 0));
+        assert!(!vocabulary.callback_runs_in_effect_phase(Primitive::CreateRenderEffect, 1));
+        assert!(!vocabulary.callback_runs_in_effect_phase(Primitive::CreateMemo, 1));
+    }
+}
+
 /// ADR 0136: `createComponent` renders its first argument on every
 /// release the reviews read (rc.0-rc.9 all call `Comp` in place), so the
 /// answer is the same in every vocabulary, and no other name renders.
@@ -616,7 +649,7 @@ fn every_variant_has_its_own_key() {
     assert_eq!(
         Solid2::RC9.key(),
         Some(
-            "store-root-mutable+omit-predicate+until+flush-in-action+dynamic-static+store-setter-guards-roots"
+            "store-root-mutable+omit-predicate+until+flush-in-action+flush-in-effect-callback+dynamic-static+store-setter-guards-roots"
         )
     );
 }
@@ -640,6 +673,7 @@ fn the_conservative_answers_do_not_depend_on_the_audited_release() {
         StoreSetterRootGuard::Exempt
     );
     assert!(!conservative.flush_in_action);
+    assert!(!conservative.flush_in_effect_callback);
     assert_eq!(
         conservative.optimistic_store_setter,
         OptimisticStoreSetterGuard::Guarded
@@ -672,14 +706,20 @@ fn the_conservative_answers_do_not_depend_on_the_audited_release() {
         );
         assert_eq!(vocabulary.flush_in_action, conservative.flush_in_action);
         assert_eq!(
+            vocabulary.flush_in_effect_callback,
+            conservative.flush_in_effect_callback
+        );
+        assert_eq!(
             vocabulary.optimistic_store_setter,
             conservative.optimistic_store_setter
         );
     }
-    // Ids are spelled against it, so either candidate audited release
-    // keeps the id it has today.
+    // Ids are spelled against it. rc.3 is no longer the vocabulary that
+    // names nothing: it reports `flush` in an effect's apply (N6), which an
+    // installation whose signals nobody read does not, so its id carries that
+    // answer (ADR 0341).
     assert_eq!(conservative.key(), None);
-    assert_eq!(Solid2::RC3.key(), None);
+    assert_eq!(Solid2::RC3.key(), Some("flush-in-effect-callback"));
     assert!(Solid2::RC9.key().is_some());
 }
 

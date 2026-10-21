@@ -155,6 +155,7 @@ const codeRules = {
   RESOLVE_IN_REACTIVE_SCOPE: ["resolve-in-tracked-scope"],
   UNTIL_IN_REACTIVE_SCOPE: ["until-in-tracked-scope"],
   FLUSH_IN_ACTION: ["flush-in-action"],
+  FLUSH_IN_EFFECT_CALLBACK: ["flush-in-effect-callback"],
   FLUSH_IN_TRACKED_QUEUE_CALLBACK: ["leaf-owner-forbidden-call"],
   DYNAMIC_STATIC_PROMISE: ["static-dynamic-async-source"],
 };

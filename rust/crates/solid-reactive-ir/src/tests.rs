@@ -83,6 +83,7 @@ fn runtime_environment_requires_exact_noncontradictory_selection() {
         framework_transforms: BTreeSet::from(["use-server".into()]),
         program_boundary: None,
         router_install: router_params::RouterInstallEvidence::default(),
+        package_instances: PackageInstanceEvidence::default(),
     };
     assert!(environment.validate().is_ok());
     assert_eq!(

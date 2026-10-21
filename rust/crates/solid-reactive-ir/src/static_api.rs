@@ -37,6 +37,8 @@ pub(crate) fn check_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft)
         value_form_stores: ctx.value_form_stores,
         accessors: ctx.accessors,
         reachable_calls: ctx.reachable_calls,
+        client_build: !ctx.rule_options.runtime.selects_server_build(),
+        package_instances: &ctx.rule_options.runtime.package_instances,
     };
     for result in parallel_file_results(&ctx.facts.files, |file| checker.check_file(file)) {
         draft.static_defects.extend(result.defects);
@@ -57,6 +59,10 @@ pub(super) struct StaticApiContext<'a> {
     pub(super) value_form_stores: &'a HashSet<SymbolId>,
     pub(super) accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
     pub(super) reachable_calls: &'a HashMap<Location, usize>,
+    /// No server build of the Solid packages is selected.
+    pub(super) client_build: bool,
+    /// Which installed `solid-js` each file loads at runtime.
+    pub(super) package_instances: &'a crate::PackageInstanceEvidence,
 }
 
 impl StaticApiContext<'_> {
@@ -292,6 +298,63 @@ impl StaticApiContext<'_> {
                         "{primitive}() is called in an action's {body} body, inside one of its steps; the installed @solidjs/signals throws FLUSH_IN_ACTION here in dev, and in production the call drains nothing, so the writes it was meant to reveal stay held until the action settles"
                     ),
                     hint: "Remove the flush(): an action's writes are held by its transaction and commit when the action settles, so no flush inside the body can reveal them. To observe the result, read after the action resolves (`await save(); …`).".into(),
+                    location: location(file.path.shared(), call.callee),
+                    analysis_context: String::new(),
+                    fixes: vec![],
+                    uncertain: false,
+                });
+            }
+            // SC2008: a flush() that only ever runs on a user effect's apply
+            // callback. The claim is universal: whenever the call runs, the
+            // flush that runs effects is already in progress
+            // (`globalQueue._running`), so the nested call returns without
+            // draining in every client build, and a call that never runs is
+            // as pointless, so reachability is no part of the proof. The dev
+            // build of `@solidjs/signals` (from rc.1) usually also warns
+            // `FLUSH_IN_EFFECT_CALLBACK`, but only while its global
+            // `inEffectCallback` marker is still up: a nested synchronous
+            // `runEffect` lowers it in its `finally` (rc.13 `dist/dev.js:1906`),
+            // so the warning is not part of the claim. Which primitive, on
+            // which release, and which callback is the effect phase are the
+            // dialect's; the proof that no execution of the call is outside
+            // that callback's stack, on the same package instance's queue, is
+            // `effect_phase`'s. A server build selects neither.
+            if let Some(kind) = kind
+                && self.client_build
+                && dialect.warns_inside_effect_phase(kind)
+                && let Some(root) = self
+                    .lookup
+                    .resolved_callee_call(file, call.callee)
+                    .and_then(|resolved| resolved.declaration.as_ref())
+                    .and_then(|declaration| {
+                        crate::effect_phase::package_root(declaration.location.path.as_ref())
+                    })
+                && let Some(origin) = crate::effect_phase::effect_phase_origin(
+                    file,
+                    call.span,
+                    &root,
+                    self.package_instances,
+                    self.lookup,
+                )
+            {
+                let reached = match origin.helper_calls {
+                    0 => "directly in the apply callback of a createEffect".to_owned(),
+                    1 => format!(
+                        "in a function that the apply callback of a createEffect in {} calls",
+                        origin.path
+                    ),
+                    calls => format!(
+                        "in a function reached through {calls} calls from the apply callback of a createEffect in {}",
+                        origin.path
+                    ),
+                };
+                result.violations.push(StaticViolation {
+                    id: "SC2008".into(),
+                    rule: "flush-in-effect-callback".into(),
+                    message: format!(
+                        "{primitive}() is called {reached}; whenever it runs, it runs inside the flush that drains effects, so the queue is already running and this flush drains nothing (the dev build usually also warns FLUSH_IN_EFFECT_CALLBACK), and the writes it was meant to reveal are processed in that flush's continuation, not at this call"
+                    ),
+                    hint: "Remove the flush(): writes made in an effect are processed by the flush that is already running. To force a drain afterwards, defer it (`queueMicrotask(() => flush())`) or call it from an event handler or other code that runs outside the effect.".into(),
                     location: location(file.path.shared(), call.callee),
                     analysis_context: String::new(),
                     fixes: vec![],
@@ -747,41 +810,8 @@ fn action_step_body(
     if !body.r#async {
         return Some("sync generator");
     }
-    let own = |span: Span| {
-        crate::owners::containing_ast_function(&file.ast, span)
-            .is_some_and(|function| function.span == body.span)
-    };
-    let awaits = file
-        .ast
-        .awaits
-        .iter()
-        .copied()
-        .filter(|span| body.body.contains(*span) && own(*span))
-        .collect::<Vec<_>>();
-    let implicit = file
-        .ast
-        .implicit_suspensions
-        .iter()
-        .copied()
-        .filter(|span| body.body.contains(*span) && own(*span))
-        .collect::<Vec<_>>();
-    let before = |suspension: &Span| suspension.start < call.span.end;
-    if awaits
-        .iter()
-        .any(|suspension| before(suspension) && !suspension.contains(call.span))
-        || implicit.iter().any(before)
-    {
-        return None;
-    }
-    let repeated_past_a_suspension = file.ast.loop_statements.iter().any(|looped| {
-        looped.contains(call.span)
-            && body.body.contains(*looped)
-            && awaits
-                .iter()
-                .chain(&implicit)
-                .any(|suspension| looped.contains(*suspension))
-    });
-    (!repeated_past_a_suspension).then_some("async generator")
+    crate::effect_phase::runs_before_first_suspension(file, body, call.span)
+        .then_some("async generator")
 }
 
 /// The root expression span of a member/call chain: `state.user` and

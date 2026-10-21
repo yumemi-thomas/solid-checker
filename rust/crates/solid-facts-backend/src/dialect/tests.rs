@@ -657,7 +657,7 @@ fn detection_classifies_the_installed_triple() {
     const RC9: Option<&str> = Some("2.0.0-rc.9");
     // (solid-js, signals, web, selected dialect id, notice due)
     let rows = [
-        (RC3, RC3, RC3, "solid-v2", true),
+        (RC3, RC3, RC3, "solid-v2@flush-in-effect-callback", true),
         // rc.0's optimistic-store setter meets no owned-scope guard (N5),
         // its one answer that differs from rc.3's: a reviewed variant, so
         // no notice.
@@ -672,22 +672,22 @@ fn detection_classifies_the_installed_triple() {
             Some("2.0.0-rc.1"),
             Some("2.0.0-rc.1"),
             Some("2.0.0-rc.1"),
-            "solid-v2",
+            "solid-v2@flush-in-effect-callback",
             true,
         ),
         (
             Some("2.0.0-rc.2"),
             Some("2.0.0-rc.2"),
             Some("2.0.0-rc.2"),
-            "solid-v2",
+            "solid-v2@flush-in-effect-callback",
             true,
         ),
-        (RC3, RC3, None, "solid-v2", true),
+        (RC3, RC3, None, "solid-v2@flush-in-effect-callback", true),
         (
             RC9,
             RC9,
             RC9,
-            "solid-v2@store-root-mutable+omit-predicate+until+flush-in-action+dynamic-static+store-setter-guards-roots",
+            "solid-v2@store-root-mutable+omit-predicate+until+flush-in-action+flush-in-effect-callback+dynamic-static+store-setter-guards-roots",
             true,
         ),
         // A fresh install of the audited solid-js today (the rc.1-rc.8
@@ -696,28 +696,28 @@ fn detection_classifies_the_installed_triple() {
             RC3,
             RC9,
             RC3,
-            "solid-v2@store-root-mutable+omit-predicate+flush-in-action+store-setter-guards-roots",
+            "solid-v2@store-root-mutable+omit-predicate+flush-in-action+flush-in-effect-callback+store-setter-guards-roots",
             true,
         ),
         (
             Some("2.0.0-rc.4"),
             Some("2.0.0-rc.4"),
             Some("2.0.0-rc.4"),
-            "solid-v2",
+            "solid-v2@flush-in-effect-callback",
             true,
         ),
         (
             Some("2.0.0-rc.6"),
             Some("2.0.0-rc.6"),
             Some("2.0.0-rc.6"),
-            "solid-v2@until",
+            "solid-v2@until+flush-in-effect-callback",
             true,
         ),
         (
             Some("2.0.0-rc.7"),
             Some("2.0.0-rc.7"),
             Some("2.0.0-rc.7"),
-            "solid-v2@store-root-mutable+until",
+            "solid-v2@store-root-mutable+until+flush-in-effect-callback",
             true,
         ),
         // No signals beside solid-js: the conservative answers, and the
@@ -731,8 +731,20 @@ fn detection_classifies_the_installed_triple() {
             "solid-v2@dynamic-options-unread",
             true,
         ),
-        (Some("2.0.0-beta.19"), RC3, RC3, "solid-v2", true),
-        (Some("2.0.0"), RC3, RC3, "solid-v2", true),
+        (
+            Some("2.0.0-beta.19"),
+            RC3,
+            RC3,
+            "solid-v2@flush-in-effect-callback",
+            true,
+        ),
+        (
+            Some("2.0.0"),
+            RC3,
+            RC3,
+            "solid-v2@flush-in-effect-callback",
+            true,
+        ),
     ];
     for (index, (solid_js, signals, web, id, notice_due)) in rows.into_iter().enumerate() {
         let (root, project) = installed_triple(&format!("row{index}"), solid_js, signals, web);
@@ -792,7 +804,14 @@ fn signals_resolves_from_the_installed_solid_js() {
     );
     // The rc.3 triple is reviewed, and older than the audited release:
     // that is its one gap.
-    let notice = release_notice(&SOLID_V2, &project).expect("rc.3 is older than audited");
+    let Detection::Installed {
+        dialect: reviewed, ..
+    } = detect_detailed(&project)
+    else {
+        panic!("analyzed");
+    };
+    assert_eq!(reviewed.id, "solid-v2@flush-in-effect-callback");
+    let notice = release_notice(reviewed, &project).expect("rc.3 is older than audited");
     assert_eq!(notice.gaps.len(), 1, "{notice:?}");
     let nested = root.join("node_modules/solid-js/node_modules/@solidjs/signals");
     std::fs::create_dir_all(&nested).unwrap();
@@ -809,7 +828,7 @@ fn signals_resolves_from_the_installed_solid_js() {
     };
     assert_eq!(
         dialect.id,
-        "solid-v2@store-root-mutable+omit-predicate+flush-in-action+store-setter-guards-roots"
+        "solid-v2@store-root-mutable+omit-predicate+flush-in-action+flush-in-effect-callback+store-setter-guards-roots"
     );
     assert_eq!(releases[1].version.as_deref(), Some("2.0.0-rc.9"));
     let nested_manifest = "node_modules/solid-js/node_modules/@solidjs/signals/package.json";

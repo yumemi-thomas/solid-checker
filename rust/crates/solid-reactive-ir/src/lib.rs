@@ -48,6 +48,7 @@ pub use development_feedback::{
 };
 mod effect_api;
 mod effect_execution;
+mod effect_phase;
 mod execution_role;
 mod findings;
 mod identity;
@@ -221,6 +222,23 @@ pub struct RuntimeEnvironment {
     /// No request or options document sets it, so it is skipped on the wire.
     #[serde(skip)]
     pub router_install: router_params::RouterInstallEvidence,
+    /// Which installed copy of `solid-js` each analyzed file loads at runtime.
+    /// Read from disk by the backend; a caller with no disk carries none.
+    #[serde(skip)]
+    pub package_instances: PackageInstanceEvidence,
+}
+
+/// Runtime package identity, decided by module resolution rather than by
+/// declarations: TypeScript merges a second installed copy of the same package
+/// at the same version into the first copy's declarations, while the runtime
+/// loads both and each has its own scheduler queue.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct PackageInstanceEvidence {
+    /// The real directory of the `solid-js` that resolving `solid-js` from the
+    /// file's directory finds (the nearest `node_modules/solid-js` up the
+    /// tree, symlinks resolved), by the file's path. A file with no entry has
+    /// no resolved copy, or was not resolved.
+    pub solid_js_by_file: std::collections::BTreeMap<String, String>,
 }
 
 /// Whether callers outside the analyzed project may exist.
@@ -242,6 +260,22 @@ impl RuntimeEnvironment {
     #[must_use]
     pub const fn program_is_closed(&self) -> bool {
         matches!(self.program_boundary, Some(ProgramBoundary::Closed))
+    }
+
+    /// Whether the selection names a server build of the Solid packages: a
+    /// Node-family target, or server rendering. There an effect's apply never
+    /// runs and `flush` is empty, so a rule about what the *client* runtime
+    /// does with them claims nothing. No selection is the client default, as
+    /// everywhere else the audited release is assumed.
+    #[must_use]
+    pub fn selects_server_build(&self) -> bool {
+        matches!(
+            self.rendering,
+            Some(RuntimeRendering::StringSsr | RuntimeRendering::StreamingSsr)
+        ) || self
+            .selected_conditions()
+            .iter()
+            .any(|condition| matches!(condition.as_str(), "node" | "deno" | "worker"))
     }
 }
 

@@ -961,6 +961,24 @@
       "sourceExtension": "ts",
       "why": "The negative beside the keystone: after an `await` an async generator body continues from a microtask, outside any step, so the same `flush()` is legal there and the rule must stay quiet.",
       "code": "import { action, flush } from \"solid-js\";\nexport const save = action(async function* () {\n  await Promise.resolve();\n  flush();\n});\n"
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "reports",
+      "sourceExtension": "ts",
+      "why": "`EffectFunction` is `(v, p?) => (() => void) | void` and `flush(): void`, so `flush()` in a createEffect apply type-checks; the claim is the runtime's: the flush that runs effects is already in progress, so the nested call drains nothing in every build and the dev build warns FLUSH_IN_EFFECT_CALLBACK, which no type expresses.",
+      "code": "import { createEffect, createRoot, createSignal, flush } from \"solid-js\";\nexport const dispose = createRoot((dispose) => {\n  const [value] = createSignal(1);\n  createEffect(value, () => {\n    flush();\n  });\n  return dispose;\n});\n"
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "silent",
+      "sourceExtension": "ts",
+      "why": "The negative beside the keystone: a microtask created in the apply runs after the effect phase, where `flush()` drains normally, so the rule must stay quiet.",
+      "code": "import { createEffect, createRoot, createSignal, flush } from \"solid-js\";\nexport const dispose = createRoot((dispose) => {\n  const [value] = createSignal(1);\n  createEffect(value, () => {\n    queueMicrotask(() => flush());\n  });\n  return dispose;\n});\n"
     }
   ]
 }

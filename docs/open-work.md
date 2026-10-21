@@ -26,6 +26,12 @@ Write in an owned scope (`reactive-write-in-owned-scope`, SC2001):
 - A named handler both attached as `onClick` and called directly in the component body hides the write in a helper it calls; the runtime warns at that call (review probe `r2-event-reuse`, step 4; present before it).
 - A setter call in a component's default parameter initializer runs in the owned component scope; the write rule places nothing there (reviewer case `r4-param-write`).
 
+`flush` in an effect apply (`flush-in-effect-callback`, SC2008). The runtime reports these; the rule claims none of them (ADR 0341). Positions and premises are in the rule page:
+
+- `createRenderEffect` re-runs and a cleanup returned from an apply report only on some runs (a render effect's first run is outside any flush). The rule cannot say which run a call is in, so neither is claimed.
+- A helper with a handler, timer, module-level or exported caller, an alias, or an argument use is not claimed, though its call from the effect is still a no-op (accepted: the claim is universal, and `endProviderCodeLogin` in openbot is now silent). `runtime-oracle/flush-in-effect-callback` lists the exported-helper case as `open`.
+- A `flush` imported through another package's `exports` conditions, an apply passed by name or in a `{ effect }` bundle, and a helper in a callback given to an unmodelled consumer are not claimed.
+
 Async read outside a loading boundary (`async-outside-loading-boundary`, SC5003):
 
 - `r9-b3-childrenasync` (App.tsx:15): an async memo read flows through `children()` into JSX with no `Loading`.
@@ -37,6 +43,7 @@ Missing owner (`missing-owner`, SC4001):
 - `review-r5-owner-class-control`, `review-r6-owner-default-control`, `review-r6-owner-jsx-getter-control`: the call sits inside a class field, a default parameter, or a JSX getter; the owner walk refuses those containers.
 - `review-r7-event-array`: the typed `[handler, data]` event tuple is not followed by owner seeding.
 - `review-opus5-t6-rest-timer-owner` (App.tsx:8): an effect created in a timer inside a `Show` callback.
+- JSX written in a `createEffect` apply (no `createRoot`) makes a render effect with no owner: the runtime reports `NO_OWNER_EFFECT`, and the owner walk places nothing there. So does a helper creating a render effect that an apply calls (found by the SC2008 review; probe: the first `flush-in-effect-callback` oracle case).
 - `review-opus2-o15-settled-class-field-new-in-timeout` (App.tsx:5): a class constructed in a timer. The field stays an uncertifiable SC3001.
 
 Read after an await (`reactive-read-after-await`, SC1002), `after-await-open`: a handler on a promise held in a variable before it is returned; a member helper (`api.read()`); `fetch(...).then`; a `.then` on a typed `Promise<T>` the analysis cannot prove native; `Promise.race` of helpers; an async IIFE the computation awaits. Each fires the runtime warning and needs a proof the analysis does not have (ADR 0340).
@@ -44,6 +51,8 @@ Read after an await (`reactive-read-after-await`, SC1002), `after-await-open`: a
 Primitive used as a value (`reactive-dispatch-unresolved`, SC9012):
 
 - Found only through a named or namespace import of the primitive. Not followed: a stored or aliased namespace object (`const NS = Solid; NS.createEffect(…)`), a namespace import of a project barrel, a computed member (`S["createEffect"]`), an `import S = require(…)` member (review round 3, probes `r3-ns-escape-defect`, `r3-barrel-escape-only`, `r3-computed`). The exact fix is a reference census: every TypeFacts reference of a primitive's symbol that is not a primitive callee is an obligation. None of these shapes is in the corpus.
+
+`runWithOwner` with a disposed owner (`RUN_WITH_DISPOSED_OWNER`, a dev warning, rc.13 `dist/dev-shared.js:6919-6932`) is claimed by no rule. Proof needs three facts no single engine query gives: the owner variable is written once, from `getOwner()` directly in a `createRoot` body; that body calls its own `dispose` parameter unconditionally at statement level after the capture (no earlier exit, parameter never reassigned); and every `runWithOwner` reading the variable runs after the root body, which holds for any handler or later callback. A shape failing one (a conditional disposal, an owner captured in a store or in a closure the body calls) is only sometimes disposed. Not built: the corpus has no `runWithOwner` on a root owner it disposes, so no yield is measured. Reopen with a report or a corpus site.
 
 Other:
 
