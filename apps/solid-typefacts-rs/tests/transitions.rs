@@ -1,24 +1,23 @@
-//! The session's transport half against a fake backend: full, delta, sparse,
-//! reuse, and the sparse-unavailable rebuild, inline and through the arena,
-//! plus symbol-evidence packing and the failure codes around them.
+//! The session's transport half over the real demand closure and a fake
+//! compiler: full, delta, sparse, reuse, and the sparse-unavailable rebuild,
+//! inline and through the arena, plus symbol-evidence packing and the failure
+//! codes around them.
 
 mod common;
 
 use common::request;
 use solid_typefacts::arena;
-use solid_typefacts::backend::{AnalysisStats, AnalyzedTable};
 use solid_typefacts::context::Context;
-use solid_typefacts::fake::FakeBackend;
+use solid_typefacts::fake::{FakeBackend, symbol_id};
 use solid_typefacts::session::Session;
 use solid_typefacts::wire::Incoming;
 use std::path::PathBuf;
 use std::sync::Arc;
+use typefacts::Location;
 use typefacts::producer::{
-    EntityRows, ProducerTable, TransitionMode, TransitionSummary, inspect_table_transition,
-    reencode_table_transition, rust_owned_transport_manifest,
+    TransitionMode, TransitionSummary, inspect_table_transition, reencode_table_transition,
 };
 use typefacts::v3::{EntityDemand, FileChange, Operation, Request, Response, SymbolQuery};
-use typefacts::{EntityFact, Location, PrimitiveValueDomain, SymbolClaim, SymbolFact};
 
 const PROJECT: &str = "/p/tsconfig.json";
 
@@ -98,7 +97,7 @@ fn code(response: &Response) -> Option<&str> {
 
 #[test]
 fn full_then_sparse_then_reuse() {
-    let mut session = session_over(FakeBackend::deriving());
+    let mut session = session_over(FakeBackend::default());
     let demands = vec![demand("/p/a.ts", 1), demand("/p/b.ts", 5)];
 
     let first = ask(&mut session, analyze(1, 1, "", demands));
@@ -110,7 +109,8 @@ fn full_then_sparse_then_reuse() {
     assert_eq!(full.mode, TransitionMode::Full);
     assert_eq!((full.base_generation, full.target_generation), (0, 1));
     assert_eq!(full.path_operations, 2);
-    assert_eq!(full.symbol_operations, 2);
+    // Symbol closure belongs to the client: the demand table has no symbol rows.
+    assert_eq!(full.symbol_operations, 0);
     assert_eq!(full.table_schema, typefacts::v3::TYPE_FACTS_SCHEMA_V1 + 21);
     assert!(reencode_table_transition(&first.table_transition).unwrap() == first.table_transition);
 
@@ -121,7 +121,7 @@ fn full_then_sparse_then_reuse() {
     assert!(reuse.table_transition.is_empty());
     assert_eq!(reuse.timings.map(|t| t.analyze_ns), Some(0));
 
-    // An edit advances the generation; the fake's exact manifest makes the
+    // An edit advances the generation; the closure's exact manifest makes the
     // delta sparse: one unconditional upsert for the edited path.
     assert!(ask(&mut session, update(3, 2, "/p/a.ts", "edited")).ok);
     let delta = ask(&mut session, analyze(4, 2, "1", Vec::new()));
@@ -150,15 +150,17 @@ fn full_then_sparse_then_reuse() {
 
 #[test]
 fn a_missing_manifest_rebuilds_the_table_in_full() {
-    let mut fake = FakeBackend::deriving();
-    fake.withhold_manifest = true;
-    let calls = Arc::clone(&fake.analysis_calls);
+    let fake = FakeBackend::default();
+    let semantic_calls = Arc::clone(&fake.semantic_calls);
     let mut session = session_over(fake);
     let first = ask(&mut session, analyze(1, 1, "", vec![demand("/p/a.ts", 1)]));
     assert_eq!(summary(&first).mode, TransitionMode::Full);
 
+    // Two accepted updates with no analysis between them: the second one's
+    // predecessor is no table at all, so the closure cannot prove a manifest.
     assert!(ask(&mut session, update(2, 2, "/p/a.ts", "edited")).ok);
-    let rebuilt = ask(&mut session, analyze(3, 2, "1", Vec::new()));
+    assert!(ask(&mut session, update(3, 3, "/p/a.ts", "edited again")).ok);
+    let rebuilt = ask(&mut session, analyze(4, 3, "1", Vec::new()));
     assert!(rebuilt.ok, "{:?}", rebuilt.error);
     let full = summary(&rebuilt);
     assert_eq!(
@@ -167,103 +169,11 @@ fn a_missing_manifest_rebuilds_the_table_in_full() {
         "no sparse without a manifest"
     );
     assert_eq!(full.base_state_token, "");
-    assert_eq!(full.target_generation, 2);
-    assert_eq!(*calls.lock().unwrap(), [false, false, true]);
+    assert_eq!(full.target_generation, 3);
+    // The cold analysis, the sparse attempt, and the one full rebuild.
+    assert_eq!(*semantic_calls.lock().unwrap(), 3);
     // The token still advances, so the client's next request names it.
     assert_eq!(rebuilt.state_token, "2");
-}
-
-fn scripted_table(generation: u64, state_id: u64, paths: &[&str]) -> AnalyzedTable {
-    let mut table = ProducerTable::new(generation, PROJECT);
-    table.state_id = state_id;
-    table.entities = EntityRows::Flat(
-        paths
-            .iter()
-            .map(|path| EntityFact {
-                location: Location {
-                    path: (*path).into(),
-                    start_byte: 1,
-                    end_byte: 2,
-                },
-                symbol: "s".into(),
-                symbol_claim: SymbolClaim::Partial,
-                type_descriptor: None,
-                resolved_call: None,
-                callability: None,
-                constructability: None,
-                runtime_binding_kind: None,
-                runtime_value_domain: None,
-                primitive_value_domain: PrimitiveValueDomain::default(),
-                primitive_literal_candidates: None,
-                call_result_domain: None,
-                constant_value: None,
-                array_shape: None,
-                tuple_shape: None,
-                library_types: None,
-                reference_space: None,
-                runtime_identity: "".into(),
-            })
-            .collect(),
-    );
-    table.symbols = vec![SymbolFact {
-        id: "s".into(),
-        alias_target: "".into(),
-        declarations: Arc::from(Vec::new()),
-        references: Arc::from(Vec::new()),
-    }];
-    AnalyzedTable {
-        table,
-        stats: AnalysisStats {
-            materialized: true,
-            ..AnalysisStats::default()
-        },
-    }
-}
-
-#[test]
-fn sparse_unavailable_asks_the_backend_to_rebuild_once() {
-    let first = scripted_table(1, 1, &["a.ts"]);
-    // Generation 2 arrives without a manifest; the rebuild answers in full.
-    let second = scripted_table(2, 2, &["a.ts"]);
-    let rebuilt = scripted_table(2, 3, &["a.ts", "b.ts"]);
-    let fake = FakeBackend::scripted([first, second, rebuilt]);
-    let calls = Arc::clone(&fake.analysis_calls);
-    let mut session = session_over(fake);
-    assert_eq!(
-        summary(&ask(
-            &mut session,
-            analyze(1, 1, "", vec![demand("a.ts", 1)])
-        ))
-        .mode,
-        TransitionMode::Full
-    );
-    assert!(ask(&mut session, update(2, 2, "a.ts", "x")).ok);
-    let response = ask(&mut session, analyze(3, 2, "1", vec![demand("b.ts", 1)]));
-    assert!(response.ok, "{:?}", response.error);
-    let rebuilt = summary(&response);
-    assert_eq!(rebuilt.mode, TransitionMode::Full);
-    assert_eq!(rebuilt.path_operations, 2);
-    assert_eq!(*calls.lock().unwrap(), [false, false, true]);
-}
-
-#[test]
-fn a_scripted_manifest_drives_a_sparse_delta() {
-    let first = scripted_table(1, 1, &["a.ts"]);
-    let mut second = scripted_table(2, 2, &["a.ts", "b.ts"]);
-    // The session always asks for a sparse delta, which trusts an exact
-    // manifest outright: one upsert for the named path and nothing else.
-    second.table.transport = rust_owned_transport_manifest(
-        Some(&first.table),
-        Some(&["b.ts".to_owned()].into_iter().collect()),
-    );
-    let mut session = session_over(FakeBackend::scripted([first, second]));
-    ask(&mut session, analyze(1, 1, "", vec![demand("a.ts", 1)]));
-    assert!(ask(&mut session, update(2, 2, "b.ts", "x")).ok);
-    let response = ask(&mut session, analyze(3, 2, "1", vec![demand("b.ts", 1)]));
-    assert!(response.ok, "{:?}", response.error);
-    let delta = summary(&response);
-    assert_eq!(delta.mode, TransitionMode::Delta);
-    assert_eq!(delta.path_operations, 1);
 }
 
 fn arena_file(name: &str) -> PathBuf {
@@ -310,13 +220,13 @@ fn read_arena(response: &Response) -> Vec<u8> {
 #[test]
 fn the_arena_carries_exactly_the_bytes_the_response_would() {
     let demands = vec![demand("/p/a.ts", 1), demand("/p/b.ts", 5)];
-    let mut inline = session_over(FakeBackend::deriving());
+    let mut inline = session_over(FakeBackend::default());
     let expected = ask(&mut inline, analyze(1, 1, "", demands.clone()));
     assert!(!expected.table_transition.is_empty());
 
     let path = arena_file("same-bytes");
     let mut arena = arena::open(path.to_str().unwrap()).unwrap().unwrap();
-    let mut streamed = session_over(FakeBackend::deriving());
+    let mut streamed = session_over(FakeBackend::default());
     let response = ask_into(&mut streamed, analyze(1, 1, "", demands), Some(&mut arena));
     assert!(response.ok, "{:?}", response.error);
     assert_eq!(response.source_arena, path.to_str().unwrap());
@@ -357,10 +267,15 @@ fn the_arena_carries_exactly_the_bytes_the_response_would() {
 
 #[test]
 fn symbols_pack_into_a_full_transition_or_stay_inline() {
-    let mut session = session_over(FakeBackend::deriving());
+    let mut session = session_over(FakeBackend::default());
     let first = ask(&mut session, analyze(1, 1, "", vec![demand("/p/a.ts", 1)]));
     assert!(reencode_table_transition(&first.table_transition).unwrap() == first.table_transition);
-    let id = derived_symbol();
+    let id = symbol_id(&Location {
+        path: "/p/a.ts".into(),
+        start_byte: 1,
+        end_byte: 4,
+    })
+    .to_string();
     let mut symbols = request(2, Operation::Symbols, 1);
     symbols.state_token = "1".to_owned();
     symbols.symbol_queries = vec![SymbolQuery {
@@ -380,11 +295,6 @@ fn symbols_pack_into_a_full_transition_or_stay_inline() {
     // No evidence to pack: the answer is the (empty) inline list.
     let mut none = request(3, Operation::Symbols, 1);
     none.state_token = "1".to_owned();
-    none.symbol_queries = vec![SymbolQuery {
-        id: "symbol:h:000000000000000000000000".into(),
-        references: false,
-        references_only: false,
-    }];
     let empty = ask(&mut session, none);
     assert!(empty.ok && empty.table_transition.is_empty() && empty.symbol_evidence.is_empty());
 
@@ -403,29 +313,9 @@ fn symbols_pack_into_a_full_transition_or_stay_inline() {
     let _ = std::fs::remove_file(path);
 }
 
-/// The id the deriving fake gives the demand at `/p/a.ts`:1.
-fn derived_symbol() -> String {
-    // Recomputed through a second fake so the test does not reach into the
-    // session's backend.
-    let mut probe = FakeBackend::deriving();
-    let ctx = Context::new();
-    let probe_request = analyze(1, 1, "", vec![demand("/p/a.ts", 1)]);
-    let table = solid_typefacts::backend::ClosureBackend::analyze(
-        &mut probe,
-        &ctx,
-        &solid_typefacts::backend::AnalysisRequest {
-            generation: 1,
-            request: &probe_request,
-            force_full: false,
-        },
-    )
-    .unwrap();
-    table.table.symbols[0].id.to_string()
-}
-
 #[test]
 fn reference_changes_and_release_ride_along_with_analyze() {
-    let fake = FakeBackend::deriving();
+    let fake = FakeBackend::default();
     let released = Arc::clone(&fake.released);
     let mut session = session_over(fake);
     let mut cold = analyze(1, 1, "", vec![demand("/p/a.ts", 1)]);
@@ -439,44 +329,46 @@ fn reference_changes_and_release_ride_along_with_analyze() {
 
 #[test]
 fn failures_carry_go_codes() {
-    // The backend cannot analyze at all.
-    let mut session = session_over(FakeBackend::default());
-    let failed = ask(&mut session, analyze(1, 1, "", Vec::new()));
+    // The backend cannot resolve the demands.
+    let fake = FakeBackend {
+        fail_semantic: Some("checker unavailable".to_owned()),
+        ..FakeBackend::default()
+    };
+    let mut session = session_over(fake);
+    let failed = ask(&mut session, analyze(1, 1, "", vec![demand("/p/a.ts", 1)]));
     assert_eq!(code(&failed), Some("analysis-failed"));
-    assert_eq!(
-        failed.error.unwrap().message,
-        "analyze is not implemented in this build (migration slice S2)"
-    );
+    assert_eq!(failed.error.unwrap().message, "checker unavailable");
     // Nothing was retained: the next analyze still presents no token.
     assert_eq!(
         code(&ask(&mut session, analyze(2, 1, "1", Vec::new()))),
         Some("state-mismatch")
     );
 
-    // A table the wire cannot carry is an assembly failure, and publishes
-    // nothing: the state token stays where it was.
-    let mut bad = scripted_table(1, 1, &["a.ts"]);
-    bad.table.schema = 2;
-    let good = scripted_table(1, 2, &["a.ts"]);
-    let mut session = session_over(FakeBackend::scripted([bad, good]));
-    let assembly = ask(&mut session, analyze(1, 1, "", vec![demand("a.ts", 1)]));
+    // A table the wire cannot carry (an inverted span) is an assembly failure,
+    // and publishes nothing: the state token stays where it was.
+    let mut session = session_over(FakeBackend::default());
+    let mut inverted = demand("/p/a.ts", 1);
+    inverted.location.end_byte = 0;
+    let assembly = ask(&mut session, analyze(1, 1, "", vec![inverted]));
     assert_eq!(code(&assembly), Some("assembly-failed"));
     assert_eq!(
         assembly.state_token, "1",
         "Go reports the token it would have issued"
     );
-    let retry = ask(&mut session, analyze(2, 1, "", vec![demand("a.ts", 1)]));
+    let retry = ask(&mut session, analyze(2, 1, "", vec![demand("/p/a.ts", 1)]));
     assert!(retry.ok, "{:?}", retry.error);
     assert_eq!(retry.state_token, "1");
 
     // A cancelled request never publishes.
-    let mut session = session_over(FakeBackend::scripted([scripted_table(1, 1, &["a.ts"])]));
+    let mut session = session_over(FakeBackend::default());
     let incoming = Incoming {
-        request: analyze(1, 1, "", vec![demand("a.ts", 1)]),
+        request: analyze(1, 1, "", vec![demand("/p/a.ts", 1)]),
         bad_operation: None,
     };
     let ctx = Context::new();
     ctx.cancel();
     let cancelled = session.lifecycle(&ctx, &incoming);
     assert_eq!(code(&cancelled), Some("analysis-cancelled"));
+    let retry = ask(&mut session, analyze(2, 1, "", vec![demand("/p/a.ts", 1)]));
+    assert!(retry.ok && retry.state_token == "1", "{:?}", retry.error);
 }

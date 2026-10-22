@@ -26,7 +26,10 @@ mod writer;
 mod tests;
 
 pub use crate::v3::TransitionMode;
-pub use compact::expand_compact_demands;
+pub use compact::{
+    append_compact_demands_with_flag, compact_demand_shape, expand_compact_demands,
+    expand_compact_group,
+};
 pub use encoder::{
     EncodeError, EncodedTransition, TransitionEncoder, TransitionInput, TransitionSink,
     TransitionSummary, inspect_table_transition, reencode_table_transition,

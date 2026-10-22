@@ -1726,3 +1726,97 @@ fn compact_expansion_fails_closed_on_string_gaps_and_bad_varints() {
             .contains("location overflow")
     );
 }
+
+#[test]
+fn compact_groups_expand_alone_and_filter_by_flag() {
+    use crate::v3::{
+        CompactDemandGroup, CompactDemands, DEMAND_FLAG_ASYNC, DEMAND_FLAG_REFERENCES,
+        EntityDemand, compact_demands,
+    };
+    let demand = |path: &str, start: u64, edit: &dyn Fn(&mut EntityDemand)| {
+        let mut demand = EntityDemand {
+            location: location(path, start, start + 2),
+            symbol: true,
+            ..EntityDemand::default()
+        };
+        edit(&mut demand);
+        demand
+    };
+    let demands = vec![
+        demand("/p/a.ts", 1, &|_| {}),
+        demand("/p/a.ts", 5, &|demand| {
+            demand.r#async = true;
+            demand.query_location = Some(location("/p/other.ts", 0, 3));
+        }),
+        demand("/p/b.ts", 2, &|demand| demand.r#async = true),
+    ];
+    let compact = compact_demands(&demands);
+    assert_eq!(compact.groups.len(), 2);
+
+    // One group expands on its own, shape-checked first.
+    let first = expand_compact_group(&compact.groups[0], &compact.strings).unwrap();
+    assert_eq!(first, demands[..2]);
+    assert_eq!(compact_demand_shape(&compact.groups).unwrap(), (3, 1));
+    assert_eq!(
+        compact_demand_shape(std::slice::from_ref(&compact.groups[1])).unwrap(),
+        (1, 0)
+    );
+
+    // Only the rows carrying the flag are materialized.
+    let mut asynchronous = Vec::new();
+    for group in &compact.groups {
+        append_compact_demands_with_flag(
+            &mut asynchronous,
+            group,
+            &compact.strings,
+            DEMAND_FLAG_ASYNC,
+        )
+        .unwrap();
+    }
+    assert_eq!(asynchronous, [demands[1].clone(), demands[2].clone()]);
+    let mut references = Vec::new();
+    append_compact_demands_with_flag(
+        &mut references,
+        &compact.groups[0],
+        &compact.strings,
+        DEMAND_FLAG_REFERENCES,
+    )
+    .unwrap();
+    assert!(references.is_empty());
+
+    // A malformed group is refused whole, before any row is returned, and a
+    // filtered walk still validates the rows it skips.
+    let strings = vec![String::new(), "/p/a.ts".into()];
+    let truncated = CompactDemandGroup(1, vec![0x80]);
+    assert!(
+        expand_compact_group(&truncated, &strings)
+            .unwrap_err()
+            .contains("truncated")
+    );
+    let mut sink = Vec::new();
+    assert!(
+        append_compact_demands_with_flag(&mut sink, &truncated, &strings, DEMAND_FLAG_ASYNC)
+            .is_err()
+    );
+    // The path index is checked before the rows are read.
+    let bad_path = CompactDemands {
+        strings,
+        groups: vec![CompactDemandGroup(7, vec![0x80])],
+    };
+    assert!(
+        expand_compact_group(&bad_path.groups[0], &bad_path.strings)
+            .unwrap_err()
+            .contains("truncated"),
+        "a group's shape is checked before its path"
+    );
+    assert!(
+        append_compact_demands_with_flag(
+            &mut Vec::new(),
+            &bad_path.groups[0],
+            &bad_path.strings,
+            DEMAND_FLAG_ASYNC
+        )
+        .unwrap_err()
+        .contains("out of range")
+    );
+}

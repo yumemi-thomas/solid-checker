@@ -1,86 +1,213 @@
-//! A backend with fixed answers, standing in for a compiler. It exists so the
-//! session, service loop and process behaviour can be exercised live before
-//! S3 provides a real program; the `solid-typefacts-fake` binary serves it.
-//! It is not an authority on anything and is never used by `solid-typefacts`.
+//! A thin compiler stand-in. It answers the per-run, per-demand and
+//! per-symbol questions of [`crate::backend::ClosureBackend`] with fixed,
+//! deterministic facts, and nothing else: the demand closure, retained
+//! contributions, source digests, the transport manifest and the table are the
+//! real ones (`closure`, `retained`, `session`). It exists so the session,
+//! service loop and process behaviour can be exercised before S3 provides a
+//! real program; the `solid-typefacts-fake` binary serves it. It is not an
+//! authority on anything and is never used by `solid-typefacts`.
 //!
-//! Three modes, by constructor:
+//! It is the port of Go's `transportOnlyBackend` test double
+//! (`semantic_demand_test.go`) plus the per-test variations Go builds by
+//! embedding it, as fields:
 //!
-//! * [`FakeBackend::default`]: no analysis (`analyze` reports the S1 failure),
-//!   the S1 fixed answers for everything else.
-//! * [`FakeBackend::scripted`]: `analyze` pops pre-built tables, so a test can
-//!   hand the session any table sequence (and see what it asked for).
-//! * [`FakeBackend::deriving`]: `analyze` builds a deterministic table from the
-//!   demands and updates it has seen, with the exact transport manifest a
-//!   compiler-backed closure would supply, so full, delta, and sparse
-//!   transitions are reachable over a real process boundary.
+//! * a symbol's id encodes its location (`symbol:h:<path>:<start>:<end>`), so
+//!   the fake answers `declarations` and `references_batch` with no state
+//!   while the ids still count as durable (ADR 0001);
+//! * `semantic_demand_runs` ignores the scope, as the Go double does:
+//!   honouring it would be a second implementation of a rule the compiler
+//!   adapter owns;
+//! * `changed_references` reports an exact, empty delta unless told otherwise.
 
 use crate::backend::{
-    AnalysisRequest, AnalysisStats, AnalyzedTable, Backend, BackendError, ClosureBackend,
-    ModuleGraph, ModuleInventory, OpenBackend, SymbolEvidence, UpdateOutcome,
+    Backend, BackendError, ClosureBackend, ModuleGraph, ModuleInventory, OpenBackend,
+    SymbolEvidence, UpdateOutcome,
 };
 use crate::context::Context;
 use crate::gocompat::clean;
-use std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque};
+use crate::model::{
+    SemanticDemandRun, SemanticDemandRunResult, SemanticScope, SymbolId, blank_entity,
+};
+use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex};
-use typefacts::producer::{
-    EntityRows, ProducerTable, rust_owned_transport_manifest, source_digest,
-};
-use typefacts::v3::{EntityDemand, FileChange, ModuleGraphRequest, SourceFile, SymbolQuery};
-use typefacts::{
-    Callability, Declaration, EntityFact, FileFact, Location, PrimitiveValueDomain, ReferenceSpace,
-    SourceCall, SymbolClaim, SymbolFact,
-};
+use typefacts::producer::source_digest;
+use typefacts::v3::{FileChange, ModuleGraphRequest, SourceFile};
+use typefacts::{AsyncFunctionFact, Declaration, Location, SourceDigest, SymbolClaim};
 
-#[derive(Default)]
-pub struct FakeBackend {
-    pub closed: Arc<Mutex<u32>>,
-    pub fail_update: bool,
-    /// Scripted mode: tables `analyze` answers with, in order.
-    pub scripted_analyses: VecDeque<Result<AnalyzedTable, BackendError>>,
-    /// Every `analyze` call's `force_full`, in order.
-    pub analysis_calls: Arc<Mutex<Vec<bool>>>,
-    /// Times `release_analysis_state` ran.
-    pub released: Arc<Mutex<u32>>,
-    /// What `symbol_evidence` answers in scripted mode.
-    pub evidence: Vec<SymbolFact>,
-    /// What `changed_references` answers in scripted mode.
-    pub changed: Option<(Vec<Arc<str>>, bool)>,
-    /// Deriving mode: withhold the transport manifest, as a closure does after
-    /// broad invalidation, so a sparse transition is impossible.
-    pub withhold_manifest: bool,
-    /// Set by [`FakeBackend::deriving`].
-    pub derived: Option<Derived>,
+/// One `semantic_demand_runs` call as the fake saw it.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ScopeSeen {
+    pub paths: Vec<String>,
+    pub suppression: std::collections::BTreeSet<String>,
+    pub descriptor_seed: std::collections::BTreeSet<String>,
 }
 
-/// Deriving mode's memory.
-#[derive(Default)]
-pub struct Derived {
-    demands: BTreeMap<(String, u64, u64), EntityDemand>,
-    sources: BTreeMap<String, Vec<u8>>,
-    changed_paths: HashSet<String>,
-    previous: Option<ProducerTable>,
-    state_id: u64,
+pub struct FakeBackend {
+    /// The program's files by path; `update` edits them.
+    pub sources: BTreeMap<String, Vec<u8>>,
+    /// Counts of `close` and `release_analysis_state` calls.
+    pub closed: Arc<Mutex<u32>>,
+    pub released: Arc<Mutex<u32>>,
+    pub fail_update: bool,
+    /// Applies `update`'s changes to the program's files. Go's double does not:
+    /// its `Update` reports an empty affected set and leaves the sources.
+    pub apply_updates: bool,
+    /// Calls `semantic_demand_runs` and `references_batch` have seen.
+    pub semantic_calls: Arc<Mutex<u32>>,
+    pub reference_calls: Arc<Mutex<u32>>,
+    /// Every id `references_batch` was asked for, per call.
+    pub reference_requests: Arc<Mutex<Vec<Vec<SymbolId>>>>,
+    /// Makes `semantic_demand_runs` fail with this message.
+    pub fail_semantic: Option<String>,
+    /// Replaces the dependencies of the first result of the next
+    /// `semantic_demand_runs` call, once.
+    pub tamper_dependencies: Option<Vec<String>>,
+    /// Per-location symbol ids replacing the minted ones, so tests can make
+    /// two files' demands reach one symbol.
+    pub symbol_overrides: HashMap<Location, SymbolId>,
+    /// Whether results claim every identity durable (Go: `Durable`).
+    pub durable: bool,
+    /// Dependency paths a run reports, by the run's path.
+    pub dependencies: HashMap<String, Vec<String>>,
+    /// What each `semantic_demand_runs` call was asked: the run paths and the
+    /// suppression union and descriptor seed of its scope.
+    pub scopes_seen: Arc<Mutex<Vec<ScopeSeen>>>,
+    /// Alias edges; `next_aliases` replaces them at the next `update`.
+    pub aliases: HashMap<SymbolId, SymbolId>,
+    pub next_aliases: Option<HashMap<SymbolId, SymbolId>>,
+    /// Async facts `async_functions_at` answers with when one of the requested
+    /// locations is in the fact's file.
+    pub async_facts: Vec<AsyncFunctionFact>,
+    /// Answer `async_functions_at` with every fact, whatever was requested.
+    pub async_ignore_locations: bool,
+    /// The `changed_references` answer.
+    pub changed: (Vec<SymbolId>, bool),
+    /// Answers `module_graph`; absent, the fake has no resolved module graph
+    /// and says so.
+    pub module_inventory: Option<ModuleInventory>,
+    /// Without an inventory, cancel the request before failing, as the S1 fake
+    /// did, so the session's cancellation mapping can be observed.
+    pub interrupt_modules: bool,
+    pub module_demands: Arc<Mutex<Vec<ModuleGraphRequest>>>,
+    /// Returned by `source_files` verbatim instead of the program's files.
+    pub raw_sources: Option<Vec<SourceFile>>,
+    /// Digest-only mode: `source_digests` returns these and `source_files`
+    /// fails, so any code that retains raw sources is caught.
+    pub digests: Option<Vec<SourceDigest>>,
+    /// Cancels this context after the next `references_batch` has answered. A
+    /// shared handle, so a test can arm it after the backend moved into a
+    /// session.
+    pub cancel_after_references: Arc<Mutex<Option<Context>>>,
+    /// Makes `references_batch` fail once the analysis was released.
+    pub strict_release: bool,
+    /// Set by the first `references_batch`.
+    pub reference_before_release: Arc<Mutex<bool>>,
+    /// Set by `release_analysis_state`.
+    pub is_released: bool,
+}
+
+impl Default for FakeBackend {
+    fn default() -> Self {
+        Self::with_sources([("/p/a.ts", "let a"), ("/p/b.ts", "")])
+    }
+}
+
+/// The id the fake mints for a location.
+#[must_use]
+pub fn symbol_id(location: &Location) -> SymbolId {
+    format!(
+        "symbol:h:{}:{}:{}",
+        location.path, location.start_byte, location.end_byte
+    )
+    .into()
+}
+
+/// The location a fake id encodes. Split from the right: the encoded path may
+/// itself contain separators.
+#[must_use]
+pub fn symbol_location(id: &str) -> Option<Location> {
+    let rest = id.strip_prefix("symbol:h:")?;
+    let (head, end) = rest.rsplit_once(':')?;
+    let (path, start) = head.rsplit_once(':')?;
+    Some(Location {
+        path: path.into(),
+        start_byte: start.parse().ok()?,
+        end_byte: end.parse().ok()?,
+    })
 }
 
 impl FakeBackend {
     #[must_use]
-    pub fn scripted(analyses: impl IntoIterator<Item = AnalyzedTable>) -> Self {
+    pub fn with_sources<'a>(files: impl IntoIterator<Item = (&'a str, &'a str)>) -> Self {
         Self {
-            scripted_analyses: analyses.into_iter().map(Ok).collect(),
-            ..Self::default()
-        }
-    }
-
-    #[must_use]
-    pub fn deriving() -> Self {
-        Self {
-            derived: Some(Derived::default()),
-            ..Self::default()
+            sources: files
+                .into_iter()
+                .map(|(path, source)| (path.to_owned(), source.as_bytes().to_vec()))
+                .collect(),
+            closed: Arc::default(),
+            released: Arc::default(),
+            fail_update: false,
+            apply_updates: false,
+            semantic_calls: Arc::default(),
+            reference_calls: Arc::default(),
+            reference_requests: Arc::default(),
+            fail_semantic: None,
+            tamper_dependencies: None,
+            symbol_overrides: HashMap::new(),
+            durable: true,
+            dependencies: HashMap::new(),
+            scopes_seen: Arc::default(),
+            aliases: HashMap::new(),
+            next_aliases: None,
+            async_facts: Vec::new(),
+            async_ignore_locations: false,
+            changed: (Vec::new(), true),
+            module_inventory: None,
+            interrupt_modules: false,
+            module_demands: Arc::default(),
+            raw_sources: None,
+            digests: None,
+            cancel_after_references: Arc::default(),
+            strict_release: false,
+            reference_before_release: Arc::default(),
+            is_released: false,
         }
     }
 }
 
 impl ClosureBackend for FakeBackend {
+    fn source_files(&mut self, _: &Context) -> Result<Vec<SourceFile>, BackendError> {
+        if self.digests.is_some() {
+            return Err(BackendError(
+                "semantic materialization retained raw sources".to_owned(),
+            ));
+        }
+        if let Some(raw) = &self.raw_sources {
+            return Ok(raw.clone());
+        }
+        Ok(self
+            .sources
+            .iter()
+            .map(|(path, source)| SourceFile {
+                path: path.clone(),
+                local: false,
+                source: source.clone(),
+            })
+            .collect())
+    }
+
+    fn source_digests(&mut self, ctx: &Context) -> Result<Vec<SourceDigest>, BackendError> {
+        if let Some(digests) = &self.digests {
+            return Ok(digests.clone());
+        }
+        let sources = self.source_files(ctx)?;
+        crate::backend::validate_canonical_source_files(&sources)?;
+        Ok(sources
+            .iter()
+            .map(|source| source_digest(&source.path, &source.source))
+            .collect())
+    }
+
     fn update(
         &mut self,
         _: &Context,
@@ -89,15 +216,17 @@ impl ClosureBackend for FakeBackend {
         if self.fail_update {
             return Err(BackendError("boom".to_owned()));
         }
-        if let Some(derived) = &mut self.derived {
+        if let Some(next) = self.next_aliases.take() {
+            self.aliases = next;
+        }
+        if self.apply_updates {
             for change in changes {
                 let path = clean(&change.path);
                 if change.deleted {
-                    derived.sources.remove(&path);
+                    self.sources.remove(&path);
                 } else {
-                    derived.sources.insert(path.clone(), change.source.clone());
+                    self.sources.insert(path, change.source.clone());
                 }
-                derived.changed_paths.insert(path);
             }
         }
         Ok(UpdateOutcome {
@@ -105,243 +234,169 @@ impl ClosureBackend for FakeBackend {
         })
     }
 
-    fn analyze(
-        &mut self,
-        _: &Context,
-        request: &AnalysisRequest<'_>,
-    ) -> Result<AnalyzedTable, BackendError> {
-        self.analysis_calls.lock().unwrap().push(request.force_full);
-        if let Some(derived) = &mut self.derived {
-            return Ok(derived.analyze(request, self.withhold_manifest));
-        }
-        self.scripted_analyses.pop_front().unwrap_or_else(|| {
-            Err(BackendError(
-                "analyze is not implemented in this build (migration slice S2)".to_owned(),
-            ))
-        })
-    }
-
-    fn release_analysis_state(&mut self) {
-        *self.released.lock().unwrap() += 1;
-    }
-
-    fn source_files(&mut self, _: &Context) -> Result<Vec<SourceFile>, BackendError> {
-        Ok(vec![
-            SourceFile {
-                path: "/p/a.ts".into(),
-                local: false,
-                source: b"let a".to_vec(),
-            },
-            SourceFile {
-                path: "/p/b.ts".into(),
-                local: false,
-                source: Vec::new(),
-            },
-        ])
-    }
-
     fn close(&mut self) -> Result<(), BackendError> {
         *self.closed.lock().unwrap() += 1;
         Ok(())
     }
-}
 
-impl SymbolEvidence for FakeBackend {
-    fn symbol_evidence(
+    fn resolve_alias(&mut self, _: &Context, id: &str) -> Result<Option<SymbolId>, BackendError> {
+        Ok(self.aliases.get(id).cloned())
+    }
+
+    fn declarations(
         &mut self,
         _: &Context,
-        queries: &[SymbolQuery],
-    ) -> Result<Vec<SymbolFact>, BackendError> {
-        let Some(derived) = &self.derived else {
-            return Ok(self.evidence.clone());
-        };
-        let Some(table) = &derived.previous else {
-            return Ok(Vec::new());
-        };
-        Ok(queries
+        id: &str,
+    ) -> Result<Option<Vec<Declaration>>, BackendError> {
+        // Only declaration-backed identities are eligible for cross-generation
+        // reuse, so a double that answered "unknown" here would silently
+        // disable the symbol-fact memo it is meant to exercise.
+        Ok(symbol_location(id).map(|location| {
+            vec![Declaration {
+                name: "value".into(),
+                kind: "variable".into(),
+                location,
+            }]
+        }))
+    }
+
+    fn semantic_demand_runs(
+        &mut self,
+        _: &Context,
+        runs: &[SemanticDemandRun<'_>],
+        scope: &SemanticScope<'_>,
+    ) -> Result<Vec<SemanticDemandRunResult>, BackendError> {
+        *self.semantic_calls.lock().unwrap() += 1;
+        self.scopes_seen.lock().unwrap().push(ScopeSeen {
+            paths: runs.iter().map(|run| run.path.to_owned()).collect(),
+            suppression: scope.suppression.iter().map(ToString::to_string).collect(),
+            descriptor_seed: scope
+                .descriptor_seed
+                .keys()
+                .map(ToString::to_string)
+                .collect(),
+        });
+        if let Some(message) = &self.fail_semantic {
+            return Err(BackendError(message.clone()));
+        }
+        let mut results: Vec<SemanticDemandRunResult> = runs
             .iter()
-            .filter_map(|query| table.symbol(&query.id))
-            .map(|fact| SymbolFact {
-                references: if queries.iter().any(|q| q.id == fact.id && q.references) {
-                    fact.references.clone()
-                } else {
-                    Arc::from(Vec::new())
-                },
-                ..fact.clone()
+            .map(|run| {
+                let mut result = SemanticDemandRunResult {
+                    durable: self.durable,
+                    dependencies: self.dependencies.get(run.path).cloned().unwrap_or_default(),
+                    ..SemanticDemandRunResult::default()
+                };
+                for demand in run.demands {
+                    let mut location = demand.location.clone();
+                    location.path = clean(&location.path).into();
+                    let mut entity = blank_entity(location.clone());
+                    let mut structural: SymbolId = "".into();
+                    if demand.symbol {
+                        entity.symbol = self
+                            .symbol_overrides
+                            .get(&location)
+                            .cloned()
+                            .unwrap_or_else(|| symbol_id(&location));
+                        entity.symbol_claim = SymbolClaim::Partial;
+                    }
+                    if demand.structural_accessor {
+                        structural = entity.symbol.clone();
+                    }
+                    result.entities.push(entity);
+                    result.structural.push(structural);
+                }
+                result
             })
+            .collect();
+        if let (Some(dependencies), Some(first)) =
+            (self.tamper_dependencies.take(), results.first_mut())
+        {
+            first.dependencies = dependencies;
+        }
+        Ok(results)
+    }
+
+    fn async_functions_at(
+        &mut self,
+        _: &Context,
+        locations: &[Location],
+    ) -> Result<Vec<AsyncFunctionFact>, BackendError> {
+        Ok(self
+            .async_facts
+            .iter()
+            .filter(|fact| {
+                self.async_ignore_locations
+                    || locations
+                        .iter()
+                        .any(|location| location.path == fact.expression.path)
+            })
+            .cloned()
             .collect())
     }
 
-    fn changed_references(&mut self, _: &Context) -> Result<(Vec<Arc<str>>, bool), BackendError> {
-        if let Some(derived) = &self.derived {
-            let mut ids: BTreeSet<Arc<str>> = BTreeSet::new();
-            if let Some(table) = &derived.previous {
-                for path in &derived.changed_paths {
-                    for entity in table.entities_in(path) {
-                        if !entity.symbol.is_empty() {
-                            ids.insert(entity.symbol.clone());
-                        }
-                    }
-                }
-            }
-            return Ok((ids.into_iter().collect(), true));
+    fn references_batch(
+        &mut self,
+        _: &Context,
+        ids: &[SymbolId],
+    ) -> Result<HashMap<SymbolId, Vec<Location>>, BackendError> {
+        if self.strict_release && self.is_released {
+            return Err(BackendError(
+                "reference evidence requested after analysis release".to_owned(),
+            ));
         }
-        self.changed.clone().ok_or_else(|| {
-            BackendError("symbols is not implemented in this build (migration slice S2)".to_owned())
-        })
+        *self.reference_before_release.lock().unwrap() = true;
+        *self.reference_calls.lock().unwrap() += 1;
+        self.reference_requests.lock().unwrap().push(ids.to_vec());
+        let references = ids
+            .iter()
+            .filter_map(|id| symbol_location(id).map(|location| (id.clone(), vec![location])))
+            .collect();
+        if let Some(context) = self.cancel_after_references.lock().unwrap().take() {
+            context.cancel();
+        }
+        Ok(references)
+    }
+
+    fn changed_references(&mut self, _: &Context) -> Result<(Vec<SymbolId>, bool), BackendError> {
+        Ok(self.changed.clone())
+    }
+
+    fn release_analysis_state(&mut self) {
+        self.is_released = true;
+        *self.released.lock().unwrap() += 1;
     }
 }
+
+impl FakeBackend {
+    fn module_graph_unavailable(&self) -> Result<ModuleInventory, BackendError> {
+        Err(BackendError(
+            crate::backend::ERR_MODULE_GRAPH_UNAVAILABLE.to_owned(),
+        ))
+    }
+}
+
+impl SymbolEvidence for FakeBackend {}
 
 impl ModuleGraph for FakeBackend {
     fn module_graph(
         &mut self,
         ctx: &Context,
-        _: &ModuleGraphRequest,
+        demand: &ModuleGraphRequest,
     ) -> Result<ModuleInventory, BackendError> {
-        ctx.cancel();
-        Err(BackendError("interrupted".to_owned()))
+        self.module_demands.lock().unwrap().push(demand.clone());
+        if let Some(inventory) = &self.module_inventory {
+            return Ok(inventory.clone());
+        }
+        if self.interrupt_modules {
+            ctx.cancel();
+            return Err(BackendError("interrupted".to_owned()));
+        }
+        self.module_graph_unavailable()
     }
 }
 
-impl Derived {
-    fn analyze(&mut self, request: &AnalysisRequest<'_>, withhold_manifest: bool) -> AnalyzedTable {
-        let wire = request.request;
-        if wire.reset_state {
-            self.demands.clear();
-            self.changed_paths.clear();
-            self.previous = None;
-        }
-        for path in &wire.removed_demand_paths {
-            let path = clean(path);
-            self.demands.retain(|(demanded, ..), _| *demanded != path);
-        }
-        for demand in &wire.demands {
-            let key = (
-                demand.location.path.to_string(),
-                demand.location.start_byte,
-                demand.location.end_byte,
-            );
-            self.demands.insert(key, demand.clone());
-        }
-
-        self.state_id += 1;
-        let mut table = ProducerTable::new(request.generation, &clean(&wire.project_id));
-        table.state_id = self.state_id;
-        let paths: BTreeSet<&str> = self.demands.keys().map(|key| key.0.as_str()).collect();
-        table.sources = paths
-            .iter()
-            .map(|path| {
-                self.sources.get(*path).map_or_else(
-                    || source_digest(path, path.as_bytes()),
-                    |bytes| source_digest(path, bytes),
-                )
-            })
-            .collect();
-        let mut entities = Vec::new();
-        let mut files: BTreeMap<&str, Vec<SourceCall>> = BTreeMap::new();
-        let mut symbols: BTreeMap<Arc<str>, SymbolFact> = BTreeMap::new();
-        for ((path, start, end), demand) in &self.demands {
-            let location = Location {
-                path: path.as_str().into(),
-                start_byte: *start,
-                end_byte: *end,
-            };
-            let id: Arc<str> = hashed_symbol(path, *start).into();
-            entities.push(EntityFact {
-                location: location.clone(),
-                symbol: id.clone(),
-                symbol_claim: SymbolClaim::Partial,
-                type_descriptor: None,
-                resolved_call: None,
-                callability: demand.callability.then_some(Callability::Callable),
-                constructability: None,
-                runtime_binding_kind: None,
-                runtime_value_domain: None,
-                primitive_value_domain: PrimitiveValueDomain::default(),
-                primitive_literal_candidates: None,
-                call_result_domain: None,
-                constant_value: None,
-                array_shape: None,
-                tuple_shape: None,
-                library_types: None,
-                reference_space: demand.reference_space.then_some(ReferenceSpace::Value),
-                runtime_identity: "".into(),
-            });
-            let fact = symbols.entry(id.clone()).or_insert_with(|| SymbolFact {
-                id: id.clone(),
-                alias_target: "".into(),
-                declarations: Arc::from(vec![Declaration {
-                    name: "fake".into(),
-                    kind: "Variable".into(),
-                    location: location.clone(),
-                }]),
-                references: Arc::from(Vec::new()),
-            });
-            if demand.references {
-                let mut references = fact.references.to_vec();
-                references.push(location.clone());
-                fact.references = references.into();
-            }
-            if demand.resolved_call {
-                files.entry(path.as_str()).or_default().push(SourceCall {
-                    location: location.clone(),
-                    callee: location,
-                    arguments: Vec::new(),
-                    target: id,
-                });
-            }
-        }
-        table.entities = EntityRows::Flat(entities);
-        table.symbols = symbols.into_values().collect();
-        table.files = paths
-            .iter()
-            .map(|path| FileFact {
-                path: (*path).into(),
-                calls: files.remove(*path).unwrap_or_default().into(),
-                bindings: Arc::from(Vec::new()),
-                functions: Arc::from(Vec::new()),
-                async_functions: Arc::from(Vec::new()),
-            })
-            .collect();
-        if !withhold_manifest && !request.force_full {
-            table.transport =
-                rust_owned_transport_manifest(self.previous.as_ref(), Some(&self.changed_paths));
-        }
-        self.changed_paths.clear();
-        self.previous = Some(table.clone());
-        AnalyzedTable {
-            table,
-            stats: AnalysisStats {
-                materialized: true,
-                ..AnalysisStats::default()
-            },
-        }
-    }
-}
-
-fn hashed_symbol(path: &str, start: u64) -> String {
-    let mut digest = [0_u8; 12];
-    for (half, seed) in [0xcbf2_9ce4_8422_2325_u64, 0x8422_2325_cbf2_9ce4]
-        .into_iter()
-        .enumerate()
-    {
-        let mut hash = seed;
-        for byte in path.bytes().chain(start.to_le_bytes()) {
-            hash = (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3);
-        }
-        digest[half * 6..half * 6 + 6].copy_from_slice(&hash.to_le_bytes()[..6]);
-    }
-    let hex: String = digest.iter().map(|byte| format!("{byte:02x}")).collect();
-    format!("symbol:h:{hex}")
-}
-
-/// Opens a [`FakeBackend`] for any project. The process double derives its
-/// tables from the demands it is sent; setting
-/// `SOLID_TYPEFACTS_FAKE_NO_MANIFEST` withholds the transport manifest.
+/// Opens a [`FakeBackend`] for any project.
 pub fn fake_opener() -> OpenBackend {
-    Box::new(|_ctx, _project, _config| {
-        let mut fake = FakeBackend::deriving();
-        fake.withhold_manifest = std::env::var_os("SOLID_TYPEFACTS_FAKE_NO_MANIFEST").is_some();
-        Ok(Box::new(fake) as Box<dyn Backend>)
-    })
+    Box::new(|_ctx, _project, _config| Ok(Box::new(FakeBackend::default()) as Box<dyn Backend>))
 }

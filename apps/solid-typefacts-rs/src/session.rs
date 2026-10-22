@@ -1,15 +1,18 @@
-//! One retained Type Facts lifecycle: project identity, generation, request
-//! validation and the exact error codes of internal/typefacts/session.go.
+//! One retained Type Facts lifecycle (Go: `session.go`): project identity,
+//! generation, request validation and the exact error codes.
 //!
-//! `analyze` and `symbols` run Go's pre-checks (generation, token, demand
-//! shape), ask the backend for a table, and own everything after it: the
-//! retained table and state token, the choice of full, delta, or sparse
-//! transition, the arena, and symbol evidence. The retained demand store and
-//! the demand closure itself are the backend's until S2b/S4; a backend without
-//! them reports `analysis-failed`, as the S1 stub does.
+//! The session owns the retained demand store, the state token and the table
+//! that token names; the [`DemandClosure`] owns the rest of the analysis
+//! (retained contributions, source digests, the transport manifest and the
+//! table), asking the backend only compiler questions. `analyze` edits the
+//! demand set in a transaction that rolls back unless every later step
+//! succeeds, then picks a full, delta, or sparse transition, writes it to the
+//! response or the arena, and only then publishes the new token.
 
-use crate::backend::{AnalysisRequest, AnalyzedTable, Backend};
+use crate::backend::Backend;
+use crate::closure::DemandClosure;
 use crate::context::Context;
+use crate::demands::RetainedDemandStore;
 use crate::gocompat::{clean, quote};
 use crate::trace::SharedTrace;
 use crate::wire::{Incoming, blank_response, error_response};
@@ -33,17 +36,17 @@ const ERR_SESSION_CLOSED: &str = "Type Facts session is closed";
 struct Retained {
     token: u64,
     token_text: String,
+    demands: RetainedDemandStore,
+    /// What the last `analyze` handed the client: the table that `token_text`
+    /// names, stripped to the identity the next transition is authenticated
+    /// against.
     table: Option<ProducerTable>,
 }
 
 pub struct Session {
-    backend: Box<dyn Backend>,
+    closure: DemandClosure,
     project_id: String,
-    generation: u64,
     schema: u64,
-    /// What the last `analyze` handed the client: its token (empty before the
-    /// first) and the table that token names, stripped to the identity the next
-    /// transition is authenticated against.
     retained: Retained,
     transition: TransitionEncoder,
     trace: SharedTrace,
@@ -69,9 +72,8 @@ impl Session {
             return Err("Type Facts session requires a project identity".to_owned());
         }
         Ok(Self {
-            backend,
+            closure: DemandClosure::new(backend, None),
             project_id,
-            generation: 1,
             schema: TYPE_FACTS_SCHEMA_V1,
             retained: Retained::default(),
             transition: TransitionEncoder::default(),
@@ -86,6 +88,7 @@ impl Session {
     /// Reports producer-side stages (`analyze-transport-*`) to `trace`.
     #[must_use]
     pub fn with_trace(mut self, trace: SharedTrace) -> Self {
+        self.closure.trace.clone_from(&trace);
         self.trace = trace;
         self
     }
@@ -97,7 +100,27 @@ impl Session {
 
     #[must_use]
     pub fn generation(&self) -> u64 {
-        self.generation
+        self.closure.generation()
+    }
+
+    /// The demand closure, for tests that inspect what it retains.
+    pub fn closure(&self) -> &DemandClosure {
+        &self.closure
+    }
+
+    /// The closure's backend, for tests that inspect their double.
+    pub fn backend_mut(&mut self) -> &mut dyn Backend {
+        self.closure.backend_mut()
+    }
+
+    /// The demand set the session retains.
+    pub fn demands(&mut self) -> &mut RetainedDemandStore {
+        &mut self.retained.demands
+    }
+
+    /// The table the last accepted `analyze` was published as, and its token.
+    pub fn published(&self) -> (Option<&ProducerTable>, &str) {
+        (self.retained.table.as_ref(), &self.retained.token_text)
     }
 
     /// Go's `ValidateLifecycleRequest`.
@@ -137,7 +160,7 @@ impl Session {
             self.schema,
             request.request_id,
             &self.project_id,
-            self.generation,
+            self.closure.generation(),
         );
         if let Err(message) = self.validate(incoming) {
             return error_response(response, "invalid-request", message);
@@ -152,7 +175,7 @@ impl Session {
             }
             return error_response(response, "session-closed", ERR_SESSION_CLOSED);
         }
-        let generation = self.generation;
+        let generation = self.closure.generation();
         match request.operation {
             Operation::Open => {
                 if request.generation != generation {
@@ -171,10 +194,9 @@ impl Session {
                         ERR_GENERATION_MISMATCH,
                     );
                 }
-                match self.backend.update(ctx, &request.changes) {
+                match self.closure.update(ctx, &request.changes) {
                     Ok(outcome) => {
-                        self.generation = generation + 1;
-                        response.generation = self.generation;
+                        response.generation = self.closure.generation();
                         response.affected = outcome.affected;
                     }
                     Err(error) => return error_response(response, "update-failed", error.0),
@@ -241,9 +263,15 @@ impl Session {
                         ),
                     );
                 }
-                if let Err(message) =
-                    self.populate_symbol_evidence(ctx, request, &mut response, sink)
-                {
+                if let Err(message) = populate_symbol_evidence(
+                    &mut self.closure,
+                    &self.transition,
+                    &self.project_id,
+                    ctx,
+                    request,
+                    &mut response,
+                    sink,
+                ) {
                     if let Some(reason) = ctx.err() {
                         return error_response(response, "analysis-cancelled", reason);
                     }
@@ -258,7 +286,7 @@ impl Session {
                         ERR_GENERATION_MISMATCH,
                     );
                 }
-                let sources = match self.backend.source_files(ctx) {
+                let sources = match self.closure.source_files(ctx) {
                     Ok(sources) => sources,
                     Err(error) => return error_response(response, "sources-failed", error.0),
                 };
@@ -293,7 +321,7 @@ impl Session {
                     );
                 }
                 let demand = request.module_graph.clone().unwrap_or_default();
-                match self.backend.module_graph(ctx, &demand) {
+                match self.closure.module_graph(ctx, &demand) {
                     Ok(inventory) => {
                         response.modules = inventory.modules;
                         response.module_imports = inventory.imports;
@@ -330,8 +358,12 @@ impl Session {
         response
     }
 
-    /// The tail of `analyze`: build the table, pick the transition, publish
-    /// the new retained state. Nothing is published unless every step succeeds.
+    /// The tail of `analyze`: edit the demand set, build the table, pick the
+    /// transition, publish the new retained state. Nothing is published unless
+    /// every step succeeds: the demand transaction rolls back when dropped
+    /// uncommitted, and a failure after the closure began materializing
+    /// abandons its derived caches.
+    #[allow(clippy::too_many_lines)]
     fn analyze(
         &mut self,
         ctx: &Context,
@@ -339,48 +371,79 @@ impl Session {
         mut response: Response,
         mut sink: Option<&mut dyn TransitionSink>,
     ) -> Response {
-        let generation = self.generation;
-        let started = Instant::now();
-        let analysis = |backend: &mut Box<dyn Backend>, force_full: bool| {
-            backend.analyze(
-                ctx,
-                &AnalysisRequest {
-                    generation,
-                    request,
-                    force_full,
-                },
+        let Self {
+            closure,
+            project_id,
+            retained,
+            transition: encoder,
+            trace,
+            ..
+        } = self;
+        let Retained {
+            token,
+            token_text,
+            demands,
+            table,
+        } = retained;
+        let generation = closure.generation();
+        let mut transaction = if let Some(compact) = &request.compact_demands {
+            match demands.begin_compact(compact, &request.removed_demand_paths, request.reset_state)
+            {
+                Ok(transaction) => transaction,
+                Err(message) => return error_response(response, "invalid-demands", message),
+            }
+        } else {
+            demands.begin(
+                &request.demands,
+                &request.removed_demand_paths,
+                request.reset_state,
             )
         };
-        let analyzed = match analysis(&mut self.backend, false) {
+        let started = Instant::now();
+        let build_sequence = closure.stats().build_sequence;
+        // From here a table that fails to publish drops every derived cache
+        // (Go: the deferred `abandonAnalysis`); the transaction rolls back
+        // when it is dropped.
+        macro_rules! bail {
+            ($code:expr, $message:expr) => {{
+                closure.abandon_analysis();
+                return error_response(response, $code, $message);
+            }};
+        }
+        let analyzed = {
+            let (groups, paths) = transaction.parts();
+            closure.demand_table_for_canonical_groups(ctx, generation, groups, paths)
+        };
+        let mut analyzed = match analyzed {
             Ok(analyzed) => analyzed,
             Err(error) => {
                 if let Some(reason) = ctx.err() {
-                    return error_response(response, "analysis-cancelled", reason);
+                    bail!("analysis-cancelled", reason);
                 }
-                return error_response(response, "analysis-failed", error.0);
+                bail!("analysis-failed", error.0);
             }
         };
         if let Some(reason) = ctx.err() {
-            return error_response(response, "analysis-cancelled", reason);
+            bail!("analysis-cancelled", reason);
         }
-        let stats = analyzed.stats;
+        let stats = closure.stats();
         let mut timings = ServerTimings {
             analyze_ns: nanos(started.elapsed()),
-            materialized: stats.materialized,
+            materialized: stats.build_sequence != build_sequence,
             ..ServerTimings::default()
         };
-        if stats.materialized {
-            timings.async_ns = stats.async_ns;
-            timings.demand_ns = stats.demand_ns;
-            timings.assembly_ns = stats.assembly_ns;
-            timings.sort_ns = stats.sort_ns;
-            timings.close_symbols_ns = stats.close_symbols_ns;
-            timings.retained_files = stats.retained_files;
-            timings.recomputed_files = stats.recomputed_files;
-            timings.non_durable_files = stats.non_durable_files;
+        if timings.materialized {
+            timings.async_ns = nanos(stats.async_duration);
+            timings.demand_ns = nanos(stats.demand_duration);
+            timings.assembly_ns = nanos(stats.assembly_duration);
+            timings.sort_ns = nanos(stats.sort_duration);
+            timings.close_symbols_ns = nanos(stats.close_duration);
+            timings.retained_files = stats.retention.retained_files as u64;
+            timings.recomputed_files = stats.retention.recomputed_files as u64;
+            timings.non_durable_files = stats.retention.non_durable_files as u64;
         }
         response.timings = Some(timings);
-        let next_token = self.retained.token + 1;
+        let next_token = *token + 1;
         let next_token_text = next_token.to_string();
         response.state_token.clone_from(&next_token_text);
 
@@ -391,21 +454,20 @@ impl Session {
         let base = if request.reset_state {
             None
         } else {
-            self.retained.table.as_ref()
+            table.as_ref()
         };
         let base_token = if base.is_some() {
-            self.retained.token_text.as_str()
+            token_text.as_str()
         } else {
             ""
         };
-        let mut analyzed = analyzed;
         let mut encoded = encode_transition(
-            &self.transition,
+            encoder,
             TransitionInput {
-                project_id: &self.project_id,
+                project_id,
                 base_state_token: base_token,
                 base,
-                target: &analyzed.table,
+                target: &analyzed,
                 sparse: true,
             },
             reborrow(&mut sink),
@@ -414,16 +476,21 @@ impl Session {
             // Exact reference evidence can be unavailable after broad compiler
             // invalidation. Rebuild once and send a full replacement; the
             // normal sparse edit path stays proportional to changed files.
-            encoded = match analysis(&mut self.backend, true) {
+            closure.force_full_materialization();
+            let rebuilt = {
+                let (groups, paths) = transaction.parts();
+                closure.demand_table_for_canonical_groups(ctx, generation, groups, paths)
+            };
+            encoded = match rebuilt {
                 Ok(rebuilt) => {
                     analyzed = rebuilt;
                     encode_transition(
-                        &self.transition,
+                        encoder,
                         TransitionInput {
-                            project_id: &self.project_id,
+                            project_id,
                             base_state_token: "",
                             base: None,
-                            target: &analyzed.table,
+                            target: &analyzed,
                             sparse: false,
                         },
                         reborrow(&mut sink),
@@ -434,15 +501,15 @@ impl Session {
         }
         let transition = match encoded {
             Ok(transition) => transition,
-            Err(error) => return error_response(response, "assembly-failed", error.to_string()),
+            Err(error) => bail!("assembly-failed", error.to_string()),
         };
         let mut mode = transition.mode.as_str();
         // Within one source generation an empty delta is genuine reuse and
         // needs no frame. Across generations the empty delta header still
         // advances the retained table identity.
-        let retained_generation = self.retained.table.as_ref().map(|table| table.generation);
+        let retained_generation = table.as_ref().map(|retained| retained.generation);
         if transition.mode != TransitionMode::Delta
-            || Some(analyzed.table.generation) != retained_generation
+            || Some(analyzed.generation) != retained_generation
             || transition.path_operations != 0
             || transition.symbol_operations != 0
         {
@@ -450,124 +517,52 @@ impl Session {
         } else {
             mode = "reuse";
         }
-        if let Some(trace) = &self.trace {
+        if let Some(trace) = trace {
             trace.stage(
                 &format!("analyze-transport-{mode}"),
                 transport_started.elapsed(),
             );
         }
         if let Some(reason) = ctx.err() {
-            return error_response(response, "analysis-cancelled", reason);
+            bail!("analysis-cancelled", reason);
         }
         let wants_evidence = !request.symbol_queries.is_empty()
             || request.reference_changes
             || request.release_analysis;
         if wants_evidence
-            && let Err(message) = self.populate_symbol_evidence(ctx, request, &mut response, None)
+            && let Err(message) = populate_symbol_evidence(
+                closure,
+                encoder,
+                project_id,
+                ctx,
+                request,
+                &mut response,
+                None,
+            )
         {
             if let Some(reason) = ctx.err() {
-                return error_response(response, "analysis-cancelled", reason);
+                bail!("analysis-cancelled", reason);
             }
-            return error_response(response, "analysis-failed", message);
+            bail!("analysis-failed", message);
         }
         if let Some(reason) = ctx.err() {
-            return error_response(response, "analysis-cancelled", reason);
+            bail!("analysis-cancelled", reason);
         }
-        self.retained.token = next_token;
-        self.retained.token_text = next_token_text;
+        *token = next_token;
+        *token_text = next_token_text;
+        transaction.commit();
         // The retained table is an intentionally detached header that
         // authenticates the next transition. Its expanded rows now belong to
         // the client; keeping them would pin them for the session.
-        let AnalyzedTable { table, .. } = analyzed;
-        self.retained.table = Some(ProducerTable {
+        *table = Some(ProducerTable {
             sources: Vec::new(),
             entities: typefacts::producer::EntityRows::default(),
             files: Vec::new(),
-            ..table
+            ..analyzed
         });
+        closure.release_transport_rows();
         response.ok = true;
         response
-    }
-
-    /// Go's `populateSymbolEvidence`: evidence for the request's queries, a
-    /// changed-reference census, and the post-analysis release.
-    fn populate_symbol_evidence(
-        &mut self,
-        ctx: &Context,
-        request: &Request,
-        response: &mut Response,
-        sink: Option<&mut dyn TransitionSink>,
-    ) -> Result<(), String> {
-        let mut evidence = self
-            .backend
-            .symbol_evidence(ctx, &request.symbol_queries)
-            .map_err(|error| error.0)?;
-        if request.operation == Operation::Symbols && !evidence.is_empty() {
-            evidence.sort_by(|left, right| left.id.cmp(&right.id));
-            let mut target = ProducerTable::new(request.generation, &self.project_id);
-            target.symbols = evidence;
-            let packed = encode_transition(
-                &self.transition,
-                TransitionInput {
-                    project_id: &self.project_id,
-                    base_state_token: "",
-                    base: None,
-                    target: &target,
-                    sparse: false,
-                },
-                sink,
-            )
-            .map_err(|error| format!("pack symbol evidence: {error}"))?;
-            response.table_transition = packed.bytes;
-        } else {
-            response.symbol_evidence = evidence;
-        }
-        if request.reference_changes {
-            let (ids, exact) = self
-                .backend
-                .changed_references(ctx)
-                .map_err(|error| error.0)?;
-            response.changed_reference_symbols = ids.clone();
-            response.reference_changes_exact = exact;
-            if exact && !ids.is_empty() {
-                let queries: Vec<_> = ids
-                    .into_iter()
-                    .map(|id| typefacts::v3::SymbolQuery {
-                        id,
-                        references: true,
-                        references_only: false,
-                    })
-                    .collect();
-                let mut evidence = self
-                    .backend
-                    .symbol_evidence(ctx, &queries)
-                    .map_err(|error| error.0)?;
-                if !request.reference_paths.is_empty() {
-                    let paths: HashSet<String> = request
-                        .reference_paths
-                        .iter()
-                        .map(|path| clean(path))
-                        .collect();
-                    for fact in &mut evidence {
-                        let kept: Vec<_> = fact
-                            .references
-                            .iter()
-                            .filter(|location| paths.contains(location.path.as_ref()))
-                            .cloned()
-                            .collect();
-                        *fact = SymbolFact {
-                            references: kept.into(),
-                            ..fact.clone()
-                        };
-                    }
-                }
-                response.reference_evidence = evidence;
-            }
-        }
-        if request.release_analysis {
-            self.backend.release_analysis_state();
-        }
-        Ok(())
     }
 
     /// Closes the backend and removes the sources arena. Idempotent: later
@@ -578,7 +573,7 @@ impl Session {
         }
         self.closed = true;
         let mut failures = Vec::new();
-        if let Err(error) = self.backend.close() {
+        if let Err(error) = self.closure.close() {
             failures.push(error.0);
         }
         if let Err(message) = remove_source_arena(self.source_arena_path.take()) {
@@ -629,6 +624,84 @@ impl Drop for Session {
     fn drop(&mut self) {
         let _ = self.close();
     }
+}
+
+/// Go's `populateSymbolEvidence`: evidence for the request's queries, a
+/// changed-reference census, and the post-analysis release.
+fn populate_symbol_evidence(
+    closure: &mut DemandClosure,
+    encoder: &TransitionEncoder,
+    project_id: &str,
+    ctx: &Context,
+    request: &Request,
+    response: &mut Response,
+    sink: Option<&mut dyn TransitionSink>,
+) -> Result<(), String> {
+    let mut evidence = closure
+        .resolve_symbol_evidence(ctx, &request.symbol_queries)
+        .map_err(|error| error.0)?;
+    if request.operation == Operation::Symbols && !evidence.is_empty() {
+        evidence.sort_by(|left, right| left.id.cmp(&right.id));
+        let mut target = ProducerTable::new(request.generation, project_id);
+        target.symbols = evidence;
+        let packed = encode_transition(
+            encoder,
+            TransitionInput {
+                project_id,
+                base_state_token: "",
+                base: None,
+                target: &target,
+                sparse: false,
+            },
+            sink,
+        )
+        .map_err(|error| format!("pack symbol evidence: {error}"))?;
+        response.table_transition = packed.bytes;
+    } else {
+        response.symbol_evidence = evidence;
+    }
+    if request.reference_changes {
+        let (ids, exact) = closure.changed_references(ctx).map_err(|error| error.0)?;
+        response.changed_reference_symbols.clone_from(&ids);
+        response.reference_changes_exact = exact;
+        if exact && !ids.is_empty() {
+            let queries: Vec<_> = ids
+                .into_iter()
+                .map(|id| typefacts::v3::SymbolQuery {
+                    id,
+                    references: true,
+                    references_only: false,
+                })
+                .collect();
+            let mut evidence = closure
+                .resolve_symbol_evidence(ctx, &queries)
+                .map_err(|error| error.0)?;
+            if !request.reference_paths.is_empty() {
+                let paths: HashSet<String> = request
+                    .reference_paths
+                    .iter()
+                    .map(|path| clean(path))
+                    .collect();
+                for fact in &mut evidence {
+                    let kept: Vec<_> = fact
+                        .references
+                        .iter()
+                        .filter(|location| paths.contains(location.path.as_ref()))
+                        .cloned()
+                        .collect();
+                    *fact = SymbolFact {
+                        references: kept.into(),
+                        ..fact.clone()
+                    };
+                }
+            }
+            response.reference_evidence = evidence;
+        }
+    }
+    if request.release_analysis {
+        closure.release_backend_analysis_state();
+    }
+    Ok(())
 }
 
 /// A shorter borrow of the optional sink. The explicit cast shortens the

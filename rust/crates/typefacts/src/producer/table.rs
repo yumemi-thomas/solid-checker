@@ -61,6 +61,15 @@ impl EntityRows {
         self.len() == 0
     }
 
+    /// Visits every row exactly as the wire layer does: the per-file runs when
+    /// the rows are grouped, otherwise the flat list (Go: `rangeWireEntities`).
+    pub fn for_each(&self, mut visit: impl FnMut(&EntityFact)) {
+        match self {
+            Self::Flat(entities) => entities.iter().for_each(&mut visit),
+            Self::Runs(runs) => runs.iter().flat_map(|run| run.iter()).for_each(&mut visit),
+        }
+    }
+
     /// The cursor space of the path walk: entity indexes when flat, run
     /// indexes when grouped.
     pub(super) fn cursor_len(&self) -> usize {

@@ -1,20 +1,37 @@
-//! The compiler seam. Everything the session needs from a program sits behind
-//! these traits, so the session, framing and lifecycle code never name a
-//! compiler type (mirroring Go's `ClosureBackend`, `symbolEvidenceBackend` and
-//! `ModuleGraphProvider`). `analyze` hands the session a [`ProducerTable`]; the
-//! session owns the retained state, the wire transition and the arena. The
-//! demand closure behind a real `analyze` arrives with S2b/S4, the tsrs project
-//! with S3; until then only test backends implement it.
+//! The compiler seam. Everything the session and the demand closure need from
+//! a program sits behind these traits, so the session, closure, framing and
+//! lifecycle code never name a compiler type (Go: `ClosureBackend`,
+//! `symbolEvidenceBackend` and `ModuleGraphProvider` of `closure.go`).
+//!
+//! A backend answers per-run, per-demand, per-symbol and per-file questions.
+//! It never builds a fact table: the demand closure (`closure`, `retained`)
+//! owns demand sets, retained contributions, source digests, the transport
+//! manifest and the table, and asks the backend only for what needs a
+//! compiler. S3 implements the lifetime and graph methods over a tsrs
+//! program; S4 implements `semantic_demand_runs` (Go: the tsgo adapter's
+//! `SemanticDemandRuns`, `semantic_runs.go`) and its per-family helpers.
+//!
+//! Every path crossing the seam is clean (`filepath.Clean`). `source_files`
+//! returns strictly path-ordered rows. `semantic_demand_runs` accepts runs
+//! whose paths and every nested location are already clean and returns clean,
+//! strictly ordered, unique dependency paths that exclude their owning run.
+//! The closure checks returned evidence and rejects malformed rows, but
+//! neither side normalizes paths again.
 //!
 //! A backend is created and used on the single worker thread and is dropped
 //! there; it need not be `Send` (tsrs state is thread-local).
 
 use crate::context::Context;
+use crate::model::{SemanticDemandRun, SemanticDemandRunResult, SemanticScope, SymbolId};
+use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
-use typefacts::producer::ProducerTable;
-use typefacts::v3::{FileChange, ModuleGraphRequest, Request, SourceFile, SymbolQuery};
-use typefacts::{ModuleFact, ModuleImportFact, SymbolFact};
+use typefacts::producer::source_digest;
+use typefacts::v3::{FileChange, ModuleGraphRequest, SourceFile, SymbolQuery};
+use typefacts::{
+    AsyncFunctionFact, Declaration, Location, ModuleFact, ModuleImportFact, SourceDigest,
+    SymbolFact,
+};
 
 /// A backend failure. The session picks the wire code from the operation
 /// (`update-failed`, `sources-failed`, `modules-failed`, `analysis-failed`),
@@ -36,120 +53,199 @@ impl From<String> for BackendError {
     }
 }
 
-/// The result of applying an `update`'s file changes.
+/// The text of Go's `ErrModuleGraphUnavailable`. There is deliberately no
+/// approximation: an inventory that omits files the analysis read, presented
+/// as the complete list, is the defect an attested closure exists to remove.
+pub const ERR_MODULE_GRAPH_UNAVAILABLE: &str =
+    "type facts backend reports no resolved module graph";
+
+/// The result of applying an `update`'s file changes (Go: `AffectedSet`).
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct UpdateOutcome {
     pub affected: Vec<String>,
 }
 
-/// The `modules` answer, flattened as the response carries it.
+/// The `modules` answer, flattened as the response carries it (Go:
+/// `ModuleInventory`).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ModuleInventory {
     pub modules: Vec<ModuleFact>,
     pub imports: Vec<ModuleImportFact>,
-    pub unknown_import_paths: Vec<std::sync::Arc<str>>,
+    pub unknown_import_paths: Vec<Arc<str>>,
 }
 
-/// One `analyze` as the backend sees it.
-#[derive(Clone, Copy, Debug)]
-pub struct AnalysisRequest<'a> {
-    /// The open generation the request was validated against.
-    pub generation: u64,
-    pub request: &'a Request,
-    /// Materialize every row rather than only what changed. Set when a sparse
-    /// transition was impossible because the previous table's manifest could
-    /// not prove its changes exact (Go: `forceFullMaterialization`).
-    pub force_full: bool,
-}
-
-/// The stage breakdown Go reports for a materialization (`LifecycleTimings`).
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct AnalysisStats {
-    /// A new table was built (rather than the previous one reused).
-    pub materialized: bool,
-    pub async_ns: u64,
-    pub demand_ns: u64,
-    pub assembly_ns: u64,
-    pub sort_ns: u64,
-    pub close_symbols_ns: u64,
-    pub retained_files: u64,
-    pub recomputed_files: u64,
-    pub non_durable_files: u64,
-}
-
-/// The table an `analyze` produced and what building it cost.
-#[derive(Clone, Debug)]
-pub struct AnalyzedTable {
-    pub table: ProducerTable,
-    pub stats: AnalysisStats,
-}
-
-/// The retained program: edits, source bytes, lifetime.
+/// The live project surface the demand closure materializes from. Every method
+/// is called by the closure; there are no optional capabilities and no
+/// fallbacks beyond the two defaulted ones, because there is exactly one
+/// implementation per build.
 pub trait ClosureBackend {
+    /// Every program source file with its bytes, strictly path-ordered (Go:
+    /// `SourceFiles`). Backs the `sources` operation, and the digests the
+    /// closure hashes into its table unless `source_digests` overrides them.
+    fn source_files(&mut self, ctx: &Context) -> Result<Vec<SourceFile>, BackendError>;
+
+    /// The source identity the closure's table retains instead of source
+    /// bodies (Go: the optional `sourceDigestBackend.SourceDigests`, which
+    /// production's tsgo adapter implements). The default hashes
+    /// `source_files` after checking they are clean and strictly path-ordered,
+    /// as Go's fallback does; the closure checks an override's rows the same
+    /// way.
+    fn source_digests(&mut self, ctx: &Context) -> Result<Vec<SourceDigest>, BackendError> {
+        let sources = self.source_files(ctx)?;
+        validate_canonical_source_files(&sources)?;
+        Ok(sources
+            .iter()
+            .map(|source| source_digest(&source.path, &source.source))
+            .collect())
+    }
+
     /// Applies versioned overlay changes transactionally: on error the
-    /// previous generation stays intact.
+    /// previous generation stays intact (Go: `Update`). The affected set is
+    /// the normalized source paths the update invalidated.
     fn update(
         &mut self,
         ctx: &Context,
         changes: &[FileChange],
     ) -> Result<UpdateOutcome, BackendError>;
 
-    /// Runs the demand closure over the retained demand set and returns the
-    /// fact table for the open generation. The default reports that no
-    /// closure exists in this build (every S1 backend).
-    fn analyze(
+    /// Releases the program (Go: `Close`).
+    fn close(&mut self) -> Result<(), BackendError>;
+
+    /// The alias target of one symbol, or `None` when it has none or is
+    /// unknown (Go: `ResolveAlias`, `ErrNotFound`).
+    fn resolve_alias(&mut self, ctx: &Context, id: &str) -> Result<Option<SymbolId>, BackendError>;
+
+    /// The declarations of one symbol, or `None` when it is unknown (Go:
+    /// `Declarations`, `ErrNotFound`).
+    fn declarations(
         &mut self,
-        _ctx: &Context,
-        _request: &AnalysisRequest<'_>,
-    ) -> Result<AnalyzedTable, BackendError> {
-        Err(BackendError(
-            "analyze is not implemented in this build (migration slice S2)".to_owned(),
-        ))
-    }
+        ctx: &Context,
+        id: &str,
+    ) -> Result<Option<Vec<Declaration>>, BackendError>;
+
+    /// Resolves canonically ordered per-file runs of demands (Go:
+    /// `SemanticDemandRuns`, `tsgo/semantic_runs.go`). Results are
+    /// index-aligned with `runs` and with each run's demands. `scope` carries
+    /// the structural-accessor symbols and type descriptors from outside the
+    /// subset, so a recomputed subset matches a whole-batch run.
+    fn semantic_demand_runs(
+        &mut self,
+        ctx: &Context,
+        runs: &[SemanticDemandRun<'_>],
+        scope: &SemanticScope<'_>,
+    ) -> Result<Vec<SemanticDemandRunResult>, BackendError>;
+
+    /// The async-function facts relevant at the requested locations (Go:
+    /// `AsyncFunctionsAt`). The closure cleans the returned expression paths.
+    fn async_functions_at(
+        &mut self,
+        ctx: &Context,
+        locations: &[Location],
+    ) -> Result<Vec<AsyncFunctionFact>, BackendError>;
+
+    /// Reference lists keyed by the requested id; an absent key means the
+    /// same as an empty list (Go: `ReferencesBatch`).
+    fn references_batch(
+        &mut self,
+        ctx: &Context,
+        ids: &[SymbolId],
+    ) -> Result<HashMap<SymbolId, Vec<Location>>, BackendError>;
+
+    /// The exact canonical-symbol keys whose reference lists moved since the
+    /// preceding generation, and `false` after a first build or a broad
+    /// invalidation: a live answer, not a missing capability. It must stay
+    /// stable for the generation so retries and cancelled analyses do not
+    /// advance hidden state (Go: `ChangedReferences`).
+    fn changed_references(&mut self, ctx: &Context) -> Result<(Vec<SymbolId>, bool), BackendError>;
 
     /// Drops checker-expanded query state after a cold materialization
-    /// (`releaseAnalysis`).
+    /// (Go: `ReleaseAnalysisState`).
     fn release_analysis_state(&mut self) {}
-
-    /// Every program source file, in the order the client should see them.
-    fn source_files(&mut self, ctx: &Context) -> Result<Vec<SourceFile>, BackendError>;
-
-    fn close(&mut self) -> Result<(), BackendError>;
 }
 
-/// Symbol-level evidence for the `symbols` operation.
-pub trait SymbolEvidence {
+/// Symbol-level evidence for the `symbols` operation and for `analyze`'s
+/// piggybacked queries (Go: `symbolEvidenceBackend.SymbolEvidence`, the
+/// production oracle seam of the active protocol).
+pub trait SymbolEvidence: ClosureBackend {
+    /// One batch holds the checker once. The default composes the per-symbol
+    /// questions of [`ClosureBackend`], as Go's `resolveSymbolEvidence`
+    /// fallback does to keep compiler-independent test adapters small.
     fn symbol_evidence(
         &mut self,
         ctx: &Context,
         queries: &[SymbolQuery],
-    ) -> Result<Vec<SymbolFact>, BackendError>;
-
-    /// Symbols whose references changed since the previous analysis, and
-    /// whether that list is exact. The default reports that the symbol store
-    /// does not exist in this build.
-    fn changed_references(
-        &mut self,
-        _ctx: &Context,
-    ) -> Result<(Vec<Arc<str>>, bool), BackendError> {
-        Err(BackendError(
-            "symbols is not implemented in this build (migration slice S2)".to_owned(),
-        ))
+    ) -> Result<Vec<SymbolFact>, BackendError> {
+        let mut facts: Vec<SymbolFact> = Vec::with_capacity(queries.len());
+        let mut reference_ids: Vec<SymbolId> = Vec::new();
+        for query in queries {
+            if let Some(reason) = ctx.err() {
+                return Err(BackendError(reason.to_owned()));
+            }
+            let mut fact = crate::model::blank_symbol(Arc::clone(&query.id));
+            if !query.references_only {
+                if let Some(target) = self.resolve_alias(ctx, &query.id)? {
+                    fact.alias_target = target;
+                }
+                if let Some(declarations) = self.declarations(ctx, &query.id)? {
+                    fact.declarations = declarations.into();
+                }
+            }
+            if query.references {
+                reference_ids.push(Arc::clone(&query.id));
+            }
+            facts.push(fact);
+        }
+        let references = self.references_batch(ctx, &reference_ids)?;
+        for (query, fact) in queries.iter().zip(&mut facts) {
+            if query.references {
+                // A duplicated id reads the same list for each query, as Go's
+                // map lookup does.
+                if let Some(list) = references.get(&query.id) {
+                    fact.references = list.clone().into();
+                }
+            }
+        }
+        Ok(facts)
     }
 }
 
-/// The resolved module graph for the `modules` operation.
+/// The resolved module graph for the `modules` operation (Go:
+/// `ModuleGraphProvider.ModuleGraph`). It is a compiler-resolution capability
+/// with no compiler-independent approximation: a backend that cannot answer
+/// must say so rather than return a partial graph.
 pub trait ModuleGraph {
     fn module_graph(
         &mut self,
-        ctx: &Context,
-        demand: &ModuleGraphRequest,
-    ) -> Result<ModuleInventory, BackendError>;
+        _ctx: &Context,
+        _demand: &ModuleGraphRequest,
+    ) -> Result<ModuleInventory, BackendError> {
+        Err(BackendError(ERR_MODULE_GRAPH_UNAVAILABLE.to_owned()))
+    }
 }
 
 pub trait Backend: ClosureBackend + SymbolEvidence + ModuleGraph {}
 
 impl<T: ClosureBackend + SymbolEvidence + ModuleGraph> Backend for T {}
+
+/// Source rows are clean, non-empty and strictly path-ordered (Go:
+/// `validateCanonicalSourceFiles`).
+pub fn validate_canonical_source_files(files: &[SourceFile]) -> Result<(), BackendError> {
+    for (index, file) in files.iter().enumerate() {
+        if file.path.is_empty() || crate::gocompat::clean(&file.path) != file.path {
+            return Err(BackendError(format!(
+                "source file path {} is not clean and non-empty",
+                crate::gocompat::quote(&file.path)
+            )));
+        }
+        if index != 0 && files[index - 1].path >= file.path {
+            return Err(BackendError(format!(
+                "source files are not strictly path-ordered at {}",
+                crate::gocompat::quote(&file.path)
+            )));
+        }
+    }
+    Ok(())
+}
 
 /// Opens the program for a project: its absolute, cleaned tsconfig path and,
 /// when the client passed `-project-config`, the bytes of that file.

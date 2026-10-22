@@ -185,7 +185,11 @@ fn sources_inline_and_through_an_arena() {
 
 #[test]
 fn modules_reports_cancellation_distinctly() {
-    let (mut session, _) = session(true);
+    let fake = FakeBackend {
+        interrupt_modules: true,
+        ..FakeBackend::default()
+    };
+    let mut session = Session::new(Box::new(fake), "/p/tsconfig.json", true).unwrap();
     let response = ask(&mut session, request(1, Operation::Modules, 1));
     assert_eq!(
         code(&response),
