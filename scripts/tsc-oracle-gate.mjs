@@ -56,7 +56,7 @@ import {
   catalogEntries,
   prepareDialectBases,
 } from "./lib/tsc-oracle-case.mjs";
-import { oracleProject } from "./tsc-oracle.mjs";
+import { oracleProject, oracleTypescriptTree } from "./tsc-oracle.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const LEDGER = join(ROOT, "fixtures/tsc-oracle/rule-cases.json");
@@ -335,7 +335,7 @@ const oracleRoots = DIALECTS.map((dialect) => oracleProject(dialect).root);
 const typescriptCache = openGateCache({
   gate: "tsc-oracle-typescript",
   scriptPath: fileURLToPath(import.meta.url),
-  trees: [...oracleRoots, join(ROOT, "packages/cli/node_modules/typescript")],
+  trees: [...oracleRoots, oracleTypescriptTree()],
 });
 const checkerCache = openGateCache({
   gate: "tsc-oracle-checker",

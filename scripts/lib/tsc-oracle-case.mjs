@@ -29,7 +29,7 @@ import { loadDialectManifests } from "../dialect-manifests.mjs";
 import {
   oracleCompilerOptions,
   oracleProject,
-  oracleSubjectSpan,
+  oracleSubjectSpans,
   runOracle,
 } from "../tsc-oracle.mjs";
 
@@ -222,9 +222,15 @@ const runChecker = (testCase, index, strict, { checker, typefacts }) => {
     },
   );
   const snapshot = JSON.parse(output);
-  const findings = (snapshot.findings ?? []).map((finding) => {
+  const rows = snapshot.findings ?? [];
+  const subjects = oracleSubjectSpans(
+    code,
+    rows.map((finding) => [finding.primaryLocation.startByte, finding.primaryLocation.endByte]),
+    caseSourceName,
+  );
+  const findings = rows.map((finding, at) => {
     const location = finding.primaryLocation;
-    const subject = oracleSubjectSpan(code, location.startByte, location.endByte, caseSourceName);
+    const subject = subjects[at];
     return {
       id: finding.id,
       rule: finding.rule,
