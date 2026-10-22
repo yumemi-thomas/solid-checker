@@ -52,6 +52,17 @@
 //!    so an update that is abandoned frees only its own program.
 //! 6. Diagnostics point into checker regions; callers copy `code/pos/end`
 //!    before the checker is released.
+//! 7. **One sanctioned nested acquisition: [`semantic_diagnostics`].** The
+//!    call-validity fallback needs a file's semantic diagnostics in the middle
+//!    of a run that already holds the checker through [`Generation::with_checker`]
+//!    (Go does the same: `Program.GetSemanticDiagnostics` asks the single pool
+//!    for the checker its caller holds). tsrs offers no entry point that takes
+//!    the caller's checker, so the pool hands out a second handle to the same
+//!    checker. The caller's `&mut Checker` is not used while that call runs
+//!    (the function takes `&mut Checker` to prove the caller holds the lease
+//!    and to make the suspension a borrow the caller cannot use around it),
+//!    the second handle is dropped before the function returns, and the pool's
+//!    region lock is re-entrant. Nothing else may take a second handle.
 //!
 //! Violations of 2 and 3 degrade to a leak. Violations of 1 and 6 cannot be
 //! detected here; the S3 suite runs under `TSRS_ARENA_POISON=1` so a read of
@@ -163,6 +174,37 @@ impl CheckerPool for SlotPool {
             })
         }
     }
+}
+
+/// One semantic diagnostic, copied out of the checker's regions (invariant 6).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RawDiagnostic {
+    pub code: i32,
+    /// `None` for a diagnostic without a source position (Go: `-1`).
+    pub pos: Option<u32>,
+    pub end: Option<u32>,
+}
+
+/// The semantic diagnostics of `file`, as the compiler reports them for the
+/// program's single checker (Go: `Program.GetSemanticDiagnostics`). `checker`
+/// is the lease the caller holds; see invariant 7 for why a second handle to
+/// it exists for the duration of this call.
+pub fn semantic_diagnostics(
+    program: &'static Program,
+    checker: &mut Checker,
+    file: P<SourceFile>,
+) -> Vec<RawDiagnostic> {
+    // The caller's lease is suspended, not used, until this returns.
+    let _suspended = checker;
+    program
+        .get_semantic_diagnostics(&Context::default(), Some(file))
+        .into_iter()
+        .map(|diagnostic| RawDiagnostic {
+            code: diagnostic.code(),
+            pos: diagnostic.pos(),
+            end: diagnostic.end(),
+        })
+        .collect()
 }
 
 /// How a head relates to the previous one when [`Generation::prepare_update`]

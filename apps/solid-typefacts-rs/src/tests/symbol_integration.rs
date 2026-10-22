@@ -4,11 +4,12 @@
 //!
 //! [`symbol_demands`] is Go's `realisticDemands` over `Source{Bindings,Calls}`:
 //! a symbol demand (with references and structural-accessor flags on a fixed
-//! rotation) for every call-initialized binding name, and a symbol demand for
-//! every callee with the async flag on a rotation. Resolved-call,
-//! type-descriptor and runtime-value-domain demands are left out until the
-//! resolved-call slice (see the comment at the flag); both sides of every comparison use the same
-//! helper, so parity is still between an incremental closure and a fresh one.
+//! rotation) for every call-initialized binding name, and for every callee a
+//! symbol and resolved-call demand with the type-descriptor,
+//! runtime-value-domain and async flags on a rotation. Resolved calls are what
+//! keep a retained descriptor honest when a restored file satisfies an import
+//! that was unresolved when it was computed: the call records the file as a
+//! dependency of the entity.
 
 use super::project_support::{Scratch, loc};
 use crate::closure::{DemandClosure, DemandInputGroup};
@@ -68,14 +69,9 @@ fn symbol_demands(closure: &mut DemandClosure) -> Vec<EntityDemand> {
             demands.push(EntityDemand {
                 location: call.callee,
                 symbol: true,
-                // Go also demands `resolvedCall` here, and that is what keeps
-                // a retained descriptor honest when a restored file satisfies
-                // an import that was unresolved (the leaf cutoff reports only
-                // the restored file; an unresolved call records no dependency
-                // on it). Go with symbol and descriptor demands alone diverges
-                // from a fresh open at that step too (reported separately), so
-                // the descriptor flag waits for the resolved-call slice.
-                type_descriptor: false,
+                type_descriptor: index % 2 == 0,
+                resolved_call: true,
+                runtime_value_domain: index % 3 == 0,
                 r#async: index % 5 == 0,
                 ..EntityDemand::default()
             });
@@ -778,4 +774,210 @@ fn deletion_restoration_and_config_alternation_match_fresh() {
             change("dependency.ts", 4, Some(originals("dependency.ts"))),
         ]
     });
+}
+
+// ---- semantic_retained_integration_test.go / suppression_delta_integration_test.go
+
+/// Go's `canonicalDemandGroups`: per-file runs built by sorting the flat list
+/// and splitting on path changes. `groups` builds the same runs through a map;
+/// keeping the two constructions independent is deliberate, so the incremental
+/// and fresh sides of the oracle cannot agree merely because they share a
+/// helper.
+fn canonical_groups(demands: &[EntityDemand]) -> Vec<DemandInputGroup> {
+    let mut sorted: Vec<EntityDemand> = demands.to_vec();
+    sorted.sort_by(|left, right| {
+        let (left, right) = (&left.location, &right.location);
+        crate::gocompat::clean(&left.path)
+            .cmp(&crate::gocompat::clean(&right.path))
+            .then(left.start_byte.cmp(&right.start_byte))
+            .then(left.end_byte.cmp(&right.end_byte))
+    });
+    let mut result: Vec<DemandInputGroup> = Vec::new();
+    for demand in sorted {
+        let path = crate::gocompat::clean(&demand.location.path);
+        match result.last_mut() {
+            Some(group) if group.path == path => group.demands.push(demand),
+            _ => result.push(DemandInputGroup {
+                path,
+                demands: vec![demand],
+            }),
+        }
+    }
+    result
+}
+
+/// Go's `assertRetainedMatchesFreshMaterialization`: drives one retained
+/// incremental session through an edit script and byte-compares every
+/// generation's wire table against a fresh session that first sees the same
+/// overlays in one update (a whole-batch materialization with nothing
+/// retained). A missing fixture is a failure, never a skip.
+fn assert_retained_matches_fresh_materialization(name: &str, edit: &str, other: &str) {
+    let ctx = Context::new();
+    let root = testdata(name);
+    let config = root.join("tsconfig.json").to_string_lossy().into_owned();
+    let edit_path = root.join(edit).to_string_lossy().into_owned();
+    let other_path = root.join(other).to_string_lossy().into_owned();
+    let original = std::fs::read(&edit_path).unwrap();
+    let other_original = std::fs::read(&other_path).unwrap();
+    let shifted = |bytes: &[u8]| [b"// retained-closure edit\n".as_slice(), bytes].concat();
+    // The edit script: shift bytes in one leaf, revert it, edit another file.
+    let script = [
+        FileChange {
+            path: edit_path.clone(),
+            source: shifted(&original),
+            deleted: false,
+            version: 1,
+        },
+        FileChange {
+            path: edit_path.clone(),
+            source: original.clone(),
+            deleted: false,
+            version: 2,
+        },
+        FileChange {
+            path: other_path.clone(),
+            source: shifted(&other_original),
+            deleted: false,
+            version: 3,
+        },
+    ];
+    let without_other = |demands: Vec<EntityDemand>| -> Vec<EntityDemand> {
+        demands
+            .into_iter()
+            .filter(|demand| crate::gocompat::clean(&demand.location.path) != other_path)
+            .collect()
+    };
+
+    let mut incremental = open_closure(&config);
+    let demands = symbol_demands(&mut incremental);
+    incremental
+        .demand_table_for_groups(&ctx, 1, &groups(&demands), &paths(&demands))
+        .unwrap();
+    let mut generation = 1;
+    let (mut retained_seen, mut async_cache_seen, mut async_facts_exist) = (false, false, false);
+    for (step, change) in script.iter().enumerate() {
+        incremental
+            .update(&ctx, std::slice::from_ref(change))
+            .unwrap();
+        generation += 1;
+        let mut demands = symbol_demands(&mut incremental);
+        // Exercise both removal and restoration of a complete per-file demand
+        // run: the grouped API must not retain rows from the removed run.
+        if step == 1 {
+            demands = without_other(demands);
+        }
+        let table = incremental
+            .demand_table_for_groups(
+                &ctx,
+                generation,
+                &groups(&demands),
+                &[edit_path.clone(), other_path.clone()],
+            )
+            .unwrap();
+        let retention = incremental.stats().retention;
+        retained_seen |= retention.retained_files > 0;
+        // A retained async group with no async functions still counts, so
+        // require a retained generation whose table carries async facts.
+        if table
+            .files
+            .iter()
+            .any(|file| !file.async_functions.is_empty())
+        {
+            async_facts_exist = true;
+            async_cache_seen |= retention.retained_async_files > 0;
+        }
+
+        let mut fresh = open_closure(&config);
+        for replay in &script[..=step] {
+            fresh.update(&ctx, std::slice::from_ref(replay)).unwrap();
+        }
+        let mut fresh_demands = symbol_demands(&mut fresh);
+        if step == 1 {
+            fresh_demands = without_other(fresh_demands);
+        }
+        let fresh_table = fresh
+            .demand_table_for_groups(&ctx, generation, &canonical_groups(&fresh_demands), &[])
+            .unwrap();
+        assert_eq!(
+            fresh.stats().retention.retained_files,
+            0,
+            "step {step}: the fresh session retained files; the oracle must be a whole-batch run"
+        );
+        assert_full_transitions_identical(
+            "retained materialization",
+            step,
+            &config,
+            &table,
+            &fresh_table,
+        );
+    }
+    assert!(retained_seen, "the edit script never exercised retention");
+    assert!(
+        !async_facts_exist || async_cache_seen,
+        "the fixture has async functions but no retained generation carried them"
+    );
+}
+
+/// `TestRetainedDemandClosureMatchesFreshMaterialization`.
+#[test]
+fn retained_demand_closure_matches_fresh_materialization() {
+    for (name, edit, other) in [
+        ("retained-closure", "source.ts", "unrelated.ts"),
+        ("aliased-import", "source.ts", "unrelated.ts"),
+    ] {
+        assert_retained_matches_fresh_materialization(name, edit, other);
+    }
+}
+
+/// `TestSplitSameLocationDemandsStillMergeIntoOneRow`: a client may emit two
+/// demands for one location without them being adjacent. The producer
+/// canonicalizes each run it is about to resolve rather than trusting the
+/// caller.
+#[test]
+fn split_same_location_demands_still_merge_into_one_row() {
+    let ctx = Context::new();
+    let root = testdata("retained-closure");
+    let config = root.join("tsconfig.json").to_string_lossy().into_owned();
+    let use_path = crate::gocompat::clean(&root.join("use.ts").to_string_lossy());
+    let analyze = |demands: &[EntityDemand]| {
+        let mut closure = open_closure(&config);
+        closure
+            .demand_table_for_groups(&ctx, 1, &groups(demands), &paths(demands))
+            .unwrap()
+    };
+    let mut closure = open_closure(&config);
+    let calls = closure.backend.source_calls(&ctx, &use_path).unwrap();
+    assert!(
+        calls.len() >= 2,
+        "fixture needs at least two calls in use.ts"
+    );
+    // Two demands for one location, asking for different facts, with a demand
+    // for a different location wedged between them.
+    let (target, other) = (calls[0].callee.clone(), calls[1].callee.clone());
+    let first = EntityDemand {
+        location: target.clone(),
+        symbol: true,
+        references: true,
+        ..EntityDemand::default()
+    };
+    let wedge = EntityDemand {
+        location: other,
+        symbol: true,
+        resolved_call: true,
+        ..EntityDemand::default()
+    };
+    let descriptor = EntityDemand {
+        location: target,
+        type_descriptor: true,
+        ..EntityDemand::default()
+    };
+    let split = analyze(&[first.clone(), wedge.clone(), descriptor.clone()]);
+    let adjacent = analyze(&[first, descriptor, wedge]);
+    assert_full_transitions_identical(
+        "table from a split same-location demand run",
+        0,
+        &config,
+        &split,
+        &adjacent,
+    );
 }

@@ -3,9 +3,9 @@
 //! `durable_sweep_test.go`, the reference-space cases of
 //! `compiler_facts_test.go`, and `TestReleaseAnalysisStateRehydratesDurableIdentity`.
 //!
-//! The assertions that need a family S4a leaves unavailable (resolved calls,
-//! callability, runtime domains, runtime identity) are not ported here; the
-//! tests below state what the entity carries instead.
+//! `TestSemanticDemandRunsAlignsResultsAndReportsRetentionEvidence` needs
+//! resolved calls and lives in `resolved_calls`. Runtime identity is still
+//! unported; the tests below state what the entity carries instead.
 
 use super::project_support::{
     BUNDLER_CONFIG, SMALL_CONFIG, Scratch, change, deletion, entities, find, find_from, find_last,
@@ -79,84 +79,6 @@ obj.handler;\n";
 }
 
 #[test]
-fn semantic_demand_runs_align_results_and_report_durability() {
-    let types = "export type Handler = (value: number) => string;";
-    let library = "import type { Handler } from \"./types\";\n\
-export function invoke(callback: Handler): string { return callback(1); }\n";
-    let alpha = "import { invoke } from \"./library\";\n\
-export const alpha = invoke(value => String(value));\n\
-export const alphaAgain = invoke(value => String(value));\n";
-    let beta = "type Calls<T extends string> = { [K in T]: (value: number) => number };\n\
-declare const mapped: Calls<\"run\">;\n\
-export const beta = mapped.run(1);\n";
-    let scratch = Scratch::new(&[
-        ("tsconfig.json", STRICT),
-        ("types.ts", types),
-        ("library.ts", library),
-        ("alpha.ts", alpha),
-        ("beta.ts", beta),
-    ]);
-    let (alpha_path, beta_path) = (scratch.path("alpha.ts"), scratch.path("beta.ts"));
-    let mut project = scratch.open();
-
-    // The Go test demands resolved calls and reads their declarations; the
-    // symbol at the callee carries the same durability evidence (the mapped
-    // type's `run` is synthesized, so it has no declaration to hash).
-    let beta_demands = vec![symbol_demand(find(&beta_path, beta, "run(1)"))];
-    let alpha_demands = vec![
-        symbol_demand(find(&alpha_path, alpha, "invoke(value")),
-        symbol_demand(find_last(&alpha_path, alpha, "invoke(value")),
-    ];
-    let runs = [
-        SemanticDemandRun {
-            path: &beta_path,
-            demands: &beta_demands,
-        },
-        SemanticDemandRun {
-            path: &alpha_path,
-            demands: &alpha_demands,
-        },
-    ];
-    let (suppression, seed) = (HashSet::new(), HashMap::new());
-    let scope = SemanticScope {
-        suppression: &suppression,
-        descriptor_seed: &seed,
-    };
-    let results = project
-        .semantic_demand_runs(&Context::new(), &runs, &scope)
-        .unwrap();
-    assert_eq!(results.len(), runs.len());
-    for (run, result) in runs.iter().zip(&results) {
-        assert_eq!(result.entities.len(), run.demands.len());
-        assert_eq!(result.structural.len(), run.demands.len());
-        for (demand, entity) in run.demands.iter().zip(&result.entities) {
-            assert_eq!(entity.location, demand.location);
-        }
-    }
-    for (index, result) in results.iter().enumerate() {
-        let ids: Vec<&str> = result
-            .structural
-            .iter()
-            .map(|id| &**id)
-            .chain(result.entities.iter().map(|entity| &*entity.symbol))
-            .collect();
-        let want_durable = ids.iter().all(|id| durable_symbol_id(id));
-        assert_eq!(result.durable, want_durable, "result {index}: {ids:?}");
-        if index == 0 {
-            assert!(
-                !want_durable,
-                "the mapped call embedded only durable ids {ids:?}; non-durable coverage is vacuous"
-            );
-        } else {
-            assert!(
-                want_durable,
-                "the source-backed call embedded non-durable ids {ids:?}"
-            );
-        }
-    }
-}
-
-#[test]
 fn semantic_demand_runs_reject_a_cross_file_query_location() {
     let scratch = Scratch::new(&[
         (
@@ -200,8 +122,9 @@ fn semantic_demand_runs_reject_a_cross_file_query_location() {
 /// The families a later slice owns are absent (never a fabricated value),
 /// counted, and the ported ones beside them are answered. S4c ported
 /// `typeDescriptor`, `callability`, `constructability` and
-/// `runtimeValueDomain`; `resolvedCall`, `parameterObjectShape` and
-/// `runtimeIdentity` remain.
+/// `runtimeValueDomain`; S4d ported `resolvedCall` (and with it
+/// `parameterObjectShape` and `callResultDomain`); `runtimeIdentity` and the
+/// runtime binding kind remain.
 #[test]
 fn unported_families_are_absent_counted_and_never_fabricated() {
     let source = "declare function factory(): any;\nexport const result = factory();\n";
@@ -241,16 +164,19 @@ fn unported_families_are_absent_counted_and_never_fabricated() {
         assert!(entity.callability.is_some() && entity.constructability.is_some());
         assert!(entity.runtime_value_domain.is_some());
         assert!(entity.type_descriptor.is_some());
-        assert!(entity.resolved_call.is_none() && entity.runtime_identity.is_empty());
-        assert!(entity.call_result_domain.is_none());
+        assert!(entity.resolved_call.is_some());
+        assert!(entity.runtime_identity.is_empty());
         assert_eq!(entity.reference_space, Some(ReferenceSpace::Value));
     }
-    for family in ["resolvedCall", "runtimeIdentity", "runtimeBindingKind"] {
+    for family in ["runtimeIdentity", "runtimeBindingKind"] {
         assert_eq!(project.unavailable.count(family), 2, "{family}");
     }
-    // Only the span that is exactly a call needs the call resolver.
-    assert_eq!(project.unavailable.count("callResultDomain"), 1);
+    // Only the span that is exactly a call has a call result domain.
+    assert!(facts[0].call_result_domain.is_none());
+    assert!(facts[1].call_result_domain.is_some());
     for family in [
+        "resolvedCall",
+        "callResultDomain",
         "callability",
         "constructability",
         "runtimeValueDomain",

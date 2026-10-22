@@ -15,6 +15,7 @@ mod project_references;
 mod project_support;
 mod protocol;
 mod regression;
+mod resolved_calls;
 mod semantic_demand;
 mod session;
 mod session_demands;

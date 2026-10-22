@@ -8,8 +8,8 @@
 //! Not ported here, with the reason: the halves of the Function-family test
 //! that ask the compiler for `isTypeSubtypeOf` and `isFunctionObjectType`
 //! (both `pub(crate)` in tsrs and outside the two exported wrappers the fork
-//! adds); `TestDemandedCallResultDomainUsesExactCallSpans` and the parameter
-//! callability case (they need resolved calls, plan item 4).
+//! adds). `TestDemandedCallResultDomainUsesExactCallSpans` and the resolved-call
+//! parameter callability case are in `resolved_calls`.
 
 use super::project_support::{Scratch, entities, find, find_last, loc};
 use crate::closure::{DemandClosure, DemandInputGroup};

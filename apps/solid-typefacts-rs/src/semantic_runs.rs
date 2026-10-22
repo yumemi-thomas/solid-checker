@@ -10,17 +10,16 @@
 //! claim), `structuralAccessor`, `referenceSpace`, `typeDescriptor`,
 //! `callability` (with `untypedCallable`), `constructability`,
 //! `runtimeValueDomain`, `primitiveValueDomain` and
-//! `primitiveLiteralCandidates` (see `type_facts`). Not ported yet:
-//! `resolvedCall`, `parameterObjectShape` and `callResultDomain` (they need
-//! the call resolver, whose validity check `callResultDomain` shares),
-//! `constantValue`, `arrayShape`, `tupleShape`, `libraryTypes`,
-//! `runtimeIdentity` and the runtime binding kind. For a demanded entity
-//! they are reported unavailable the one way the wire has: the
-//! field is absent (`None`, the empty string, or the all-zero primitive
-//! domain). The client reads an absent field as "no fact here" -- the same
-//! row the Go producer writes when a span carries no expression to classify
-//! -- never as a negative proof, so the result is uncertifiable, never a
-//! guess. Each such omission is counted in [`Unavailable`].
+//! `primitiveLiteralCandidates` (see `type_facts`), and `resolvedCall` with the
+//! `parameterObjectShape` of its parameters and `callResultDomain` (see
+//! `resolved_calls`). Not ported yet: `constantValue`, `arrayShape`,
+//! `tupleShape`, `libraryTypes`, `runtimeIdentity` and the runtime binding
+//! kind. For a demanded entity they are reported unavailable the one way the
+//! wire has: the field is absent (`None`, the empty string, or the all-zero
+//! primitive domain). The client reads an absent field as "no fact here" -- the
+//! same row the Go producer writes when a span carries no expression to
+//! classify -- never as a negative proof, so the result is uncertifiable, never
+//! a guess. Each such omission is counted in [`Unavailable`].
 
 use crate::backend::BackendError;
 use crate::context::Context;
@@ -32,6 +31,7 @@ use crate::model::{
 };
 use crate::nodes::{NodeCursor, jsx_tag_name_at, symbol_span_covers};
 use crate::references::ReferenceIndex;
+use crate::resolved_calls::{CallCaches, CallDemand, CallRun};
 use crate::type_facts::{
     DescriptorMemo, callability_of_type, constructability_of_type,
     primitive_literal_candidates_of_type, primitive_value_domain_of_type,
@@ -43,7 +43,9 @@ use tsrs_ast::{Node, SourceFile, Symbol};
 use tsrs_checker::types::Type;
 use tsrs_core::P;
 use typefacts::v3::EntityDemand;
-use typefacts::{ReferenceSpace, SymbolClaim, TypeDescriptor};
+use typefacts::{
+    Location, ParameterFact, ReferenceSpace, ResolvedDeclaration, SymbolClaim, TypeDescriptor,
+};
 
 /// How many demanded facts were left absent because their family is not
 /// ported, by family name (the wire field's name).
@@ -63,11 +65,11 @@ impl Unavailable {
 }
 
 /// Go: `semanticEvidence`: built alongside facts so retained-state ownership
-/// does not require a second walk through every nested descriptor.
-struct Evidence {
+/// does not require a second walk through every nested call and descriptor.
+pub struct Evidence {
     path: String,
     dependencies: Vec<String>,
-    durable: bool,
+    pub(crate) durable: bool,
 }
 
 impl Evidence {
@@ -79,22 +81,46 @@ impl Evidence {
         }
     }
 
-    fn symbol(&mut self, id: &str) {
+    pub(crate) fn symbol(&mut self, id: &str) {
         if !durable_symbol_id(id) {
             self.durable = false;
         }
     }
 
-    fn descriptor(&mut self, descriptor: Option<&TypeDescriptor>) {
+    pub(crate) fn dependency(&mut self, location: &Location) {
+        let path: &str = &location.path;
+        if !path.is_empty() && path != self.path {
+            self.dependencies.push(path.to_owned());
+        }
+    }
+
+    pub(crate) fn descriptor(&mut self, descriptor: Option<&TypeDescriptor>) {
         let Some(descriptor) = descriptor else {
             return;
         };
         for declaration in descriptor.alias_declarations.iter() {
-            let path: &str = &declaration.location.path;
-            if !path.is_empty() && path != self.path {
-                self.dependencies.push(path.to_owned());
-            }
+            self.dependency(&declaration.location);
         }
+    }
+
+    pub(crate) fn declaration(&mut self, declaration: Option<&ResolvedDeclaration>) {
+        let Some(declaration) = declaration else {
+            return;
+        };
+        self.symbol(&declaration.symbol);
+        self.dependency(&declaration.location);
+        for owner in declaration.owners.iter() {
+            self.symbol(&owner.symbol);
+            self.dependency(&owner.location);
+        }
+    }
+
+    pub(crate) fn parameter(&mut self, parameter: &ParameterFact) {
+        self.symbol(&parameter.symbol);
+        if let Some(declaration) = &parameter.declaration {
+            self.dependency(&declaration.location);
+        }
+        self.descriptor(parameter.type_descriptor.as_ref());
     }
 
     fn finish(mut self) -> (Vec<String>, bool) {
@@ -124,12 +150,11 @@ fn wants_beyond_symbol(demand: &EntityDemand) -> bool {
         || demand.runtime_identity
 }
 
-/// Names every demanded family this slice cannot answer. `callResultDomain`
-/// is counted by [`run`], which knows whether a call node exists.
+/// Names every demanded family this slice cannot answer. (`resolvedCall`,
+/// `parameterObjectShape` and `callResultDomain` are answered by
+/// `resolved_calls`; the object shape rides on a resolved call's parameters.)
 fn note_unported(demand: &EntityDemand, unavailable: &mut Unavailable) {
-    let families: [(bool, &'static str); 8] = [
-        (demand.resolved_call, "resolvedCall"),
-        (demand.parameter_object_shape, "parameterObjectShape"),
+    let families: [(bool, &'static str); 6] = [
         (demand.constant_value, "constantValue"),
         (demand.array_shape, "arrayShape"),
         (demand.tuple_shape, "tupleShape"),
@@ -249,6 +274,7 @@ pub fn run(
     // per call here, so no type address outlives its checker).
     let mut batch_descriptors: HashMap<SymbolId, Arc<TypeDescriptor>> = HashMap::new();
     let mut memo = DescriptorMemo::default();
+    let mut caches = CallCaches::default();
     let suppressed =
         |symbol: &SymbolId| batch_structural.contains(symbol) || scope.suppression.contains(symbol);
 
@@ -261,6 +287,7 @@ pub fn run(
             continue;
         };
         let mut query_cursor = NodeCursor::new(Some(file));
+        let mut call_demands: Vec<CallDemand> = Vec::new();
         for (index, demand) in run.demands.iter().enumerate() {
             check(ctx)?;
             let entity = &mut results[run_index].entities[index];
@@ -379,12 +406,44 @@ pub fn run(
                 }
             }
             if demand.call_result_domain
-                && query_cursor.exact_call_like_at(query.0, query.1).is_some()
+                && let Some(call_node) = query_cursor.exact_call_like_at(query.0, query.1)
             {
-                // Its validity guard is the call resolver's (resolved calls).
-                unavailable.note("callResultDomain");
+                let domain = CallRun {
+                    ctx,
+                    env: &mut *env,
+                    references: &mut *references,
+                    caches: &mut caches,
+                    memo: &mut memo,
+                    file,
+                    evidence: &mut evidence[run_index],
+                }
+                .call_result_domain(call_node)?;
+                entity.call_result_domain = Some(domain);
             }
             note_unported(demand, unavailable);
+            if demand.resolved_call {
+                // Call lookup is anchored at the first token and walks outward;
+                // callers may demand a statement-sized range including a
+                // trailing semicolon. Type/value domains above instead
+                // classify the complete demanded expression range.
+                call_demands.push(CallDemand {
+                    entity_index: index,
+                    node: query_cursor.resolved_call_like_at(query.0, query.1),
+                    object_shape: demand.parameter_object_shape,
+                });
+            }
+        }
+        if !call_demands.is_empty() {
+            CallRun {
+                ctx,
+                env: &mut *env,
+                references: &mut *references,
+                caches: &mut caches,
+                memo: &mut memo,
+                file,
+                evidence: &mut evidence[run_index],
+            }
+            .resolve(&call_demands, &mut results[run_index].entities)?;
         }
         let (dependencies, durable) =
             std::mem::replace(&mut evidence[run_index], Evidence::new(run.path)).finish();

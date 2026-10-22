@@ -18,7 +18,7 @@ use tsrs_checker::types::{LiteralValue, SignatureKind, Type, TypeExt, TypeFlags}
 use tsrs_compiler::Checker;
 use tsrs_core::P;
 use typefacts::{
-    Callability, Constructability, PrimitiveLiteralCandidate, PrimitiveLiteralKind,
+    ArrayShape, Callability, Constructability, PrimitiveLiteralCandidate, PrimitiveLiteralKind,
     PrimitiveValueDomain, RuntimeValueDomain, TypeDescriptor,
 };
 
@@ -33,7 +33,7 @@ const MAX_PRIMITIVE_LITERAL_CANDIDATES: usize = 32;
 
 /// Go: `declarationModule`: the name of the first enclosing module
 /// declaration of any declaration of `symbol`, or empty.
-fn declaration_module(symbol: P<Symbol>) -> String {
+pub(crate) fn declaration_module(symbol: P<Symbol>) -> String {
     for declaration in symbol.declarations() {
         let mut node = Some(*declaration);
         while let Some(current) = node {
@@ -563,4 +563,35 @@ pub fn primitive_literal_candidates_of_type(
     });
     candidates.dedup();
     candidates
+}
+
+/// Go: `openArrayShapeFlags`: the flags that leave an array/tuple claim
+/// unprovable in either direction.
+const OPEN_ARRAY_SHAPE: TypeFlags = OPEN.union(TypeFlags::Instantiable);
+
+/// Go: `arrayShapeOfType`.
+pub fn array_shape_of_type(checker: &mut Checker, value: P<Type>) -> ArrayShape {
+    if value.flags().intersects(OPEN_ARRAY_SHAPE) {
+        return ArrayShape::Unknown;
+    }
+    let constituents = value.distributed();
+    if constituents.is_empty() {
+        return ArrayShape::Unknown;
+    }
+    let (mut array, mut not_array) = (false, false);
+    for constituent in constituents {
+        if constituent.flags().intersects(OPEN_ARRAY_SHAPE) {
+            return ArrayShape::Unknown;
+        }
+        if checker.is_array_or_tuple_type(constituent) {
+            array = true;
+        } else {
+            not_array = true;
+        }
+    }
+    match (array, not_array) {
+        (true, true) => ArrayShape::Mixed,
+        (true, false) => ArrayShape::Array,
+        _ => ArrayShape::NotArray,
+    }
 }
