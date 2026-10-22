@@ -7,11 +7,6 @@
   },
   "projects": [
     {
-      "app": "a-worse-ereader",
-      "root": "a-worse-ereader",
-      "project": "tsconfig.json"
-    },
-    {
       "app": "ai-memory-ui",
       "root": "ai-memory-ui",
       "project": "tsconfig.app.json"
@@ -20,16 +15,6 @@
       "app": "app-game",
       "root": "app-game",
       "project": "apps/web/tsconfig.json"
-    },
-    {
-      "app": "beacon-web",
-      "root": "beacon-web",
-      "project": "apps/web/tsconfig.json"
-    },
-    {
-      "app": "civil",
-      "root": "civil",
-      "project": "tsconfig.json"
     },
     {
       "app": "compass-ui",
@@ -42,19 +27,9 @@
       "project": "dashiboard-ui/tsconfig.json"
     },
     {
-      "app": "derp-media-server",
-      "root": "derp-media-server",
-      "project": "tsconfig.json"
-    },
-    {
       "app": "donegeon-client",
       "root": "donegeon-client",
       "project": "web/apps/client/tsconfig.json"
-    },
-    {
-      "app": "en-passant",
-      "root": "en-passant",
-      "project": "tsconfig.json"
     },
     {
       "app": "error-menu-web",
@@ -70,11 +45,6 @@
       "app": "expenses-app",
       "root": "expenses-app",
       "project": "tsconfig.json"
-    },
-    {
-      "app": "finds-team",
-      "root": "finds-team",
-      "project": "frontend/tsconfig.json"
     },
     {
       "app": "helge-dev",
@@ -105,16 +75,6 @@
       "app": "jar-hell-web",
       "root": "jar-hell-web",
       "project": "web/tsconfig.json"
-    },
-    {
-      "app": "jibe-run",
-      "root": "jibe-run",
-      "project": "apps/jibe-run/tsconfig.json"
-    },
-    {
-      "app": "kobalte-docs",
-      "root": "kobalte-docs",
-      "project": "apps/docs/tsconfig.json"
     },
     {
       "app": "kui",
@@ -177,11 +137,6 @@
       "project": "console/tsconfig.json"
     },
     {
-      "app": "openbot",
-      "root": "openbot",
-      "project": "tsconfig.web.json"
-    },
-    {
       "app": "oscartbeaumont-website",
       "root": "oscartbeaumont-website",
       "project": "tsconfig.app.json"
@@ -194,26 +149,6 @@
     {
       "app": "probus-hk",
       "root": "probus-hk",
-      "project": "tsconfig.json"
-    },
-    {
-      "app": "queue-management-ui",
-      "root": "queue-management-ui",
-      "project": "ui/tsconfig.json"
-    },
-    {
-      "app": "raybend-website",
-      "root": "raybend-website",
-      "project": "website/tsconfig.json"
-    },
-    {
-      "app": "readingroom",
-      "root": "readingroom",
-      "project": "frontend/tsconfig.json"
-    },
-    {
-      "app": "sefer",
-      "root": "sefer",
       "project": "tsconfig.json"
     },
     {
@@ -232,11 +167,6 @@
       "project": "tsconfig.json"
     },
     {
-      "app": "solid-validation-site",
-      "root": "solid-validation-site",
-      "project": "website/versions/v2/tsconfig.json"
-    },
-    {
       "app": "spookysoftware-www",
       "root": "spookysoftware-www",
       "project": "domains/www/tsconfig.json"
@@ -251,5 +181,24 @@
       "root": "viviana-ui-web",
       "project": "apps/web/tsconfig.json"
     }
-  ]
+  ],
+  "excluded": {
+    "reason": "depends directly on solid-js 1.x or a Solid-1-only package (owner decision, 2026-10-22); directories moved to solid-checker-rc17-corpus/removed-solid1/",
+    "apps": [
+      "a-worse-ereader",
+      "beacon-web",
+      "civil",
+      "derp-media-server",
+      "en-passant",
+      "finds-team",
+      "jibe-run",
+      "kobalte-docs",
+      "openbot",
+      "queue-management-ui",
+      "raybend-website",
+      "readingroom",
+      "sefer",
+      "solid-validation-site"
+    ]
+  }
 }
