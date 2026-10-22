@@ -10,6 +10,7 @@ import { readFileSync } from "node:fs";
 // Bun's node:wasi lacks `initialize`, and this is the runtime the shipped host
 // runs both reactors on, here over the real file system.
 import { WASI } from "../../packages/wasm/vendor/wasm-util/lib/mjs/wasi/index.mjs";
+import { boundaryImports } from "../../packages/wasm/owned-boundary.mjs";
 
 const decoder = new TextDecoder();
 
@@ -18,7 +19,15 @@ export async function loadReactor(wasm, { preopens = { "/": "/" }, env = {} } = 
   const bytes = typeof wasm === "string" ? readFileSync(wasm) : wasm;
   const module = await WebAssembly.compile(bytes);
   const wasi = new WASI({ version: "preview1", args: [], env, preopens, fs: nodeFs });
-  const instance = await WebAssembly.instantiate(module, wasi.getImportObject());
+  // The shipped host's boundary: WASI arguments arrive as signed i32, so a
+  // reactor whose memory passes 2 GiB hands the raw runtime negative
+  // addresses ("Offset is outside the bounds of the DataView"). The boundary
+  // normalizes them to u32 and range-checks them, as owned-worker-core does.
+  let memory;
+  const strings = { args: [], env: Object.entries(env).map(([key, value]) => `${key}=${value}`) };
+  const preview1 = boundaryImports(module, wasi.getImportObject().wasi_snapshot_preview1, () => memory, strings);
+  const instance = await WebAssembly.instantiate(module, { wasi_snapshot_preview1: preview1 });
+  memory = instance.exports.memory;
   wasi.initialize(instance);
   const exports = instance.exports;
   const call = (operation, input, ...rest) => {
