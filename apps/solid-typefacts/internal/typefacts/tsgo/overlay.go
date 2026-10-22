@@ -1,7 +1,6 @@
 package tsgo
 
 import (
-	"errors"
 	"io/fs"
 	"path/filepath"
 	"sort"
@@ -9,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/microsoft/typescript-go/shim/vfs"
+	"github.com/microsoft/TypeScript/tsc/shim/vfs"
 )
 
 type overlayFS struct {
@@ -164,62 +163,6 @@ func (o *overlayFS) Stat(path string) vfs.FileInfo {
 	return o.base.Stat(path)
 }
 
-func (o *overlayFS) WalkDir(root string, walkFn vfs.WalkDirFunc) error {
-	o.mu.RLock()
-	files := make(map[string]string, len(o.files))
-	deleted := make(map[string]struct{}, len(o.deleted))
-	for path, source := range o.files {
-		files[path] = source
-	}
-	for path := range o.deleted {
-		deleted[path] = struct{}{}
-	}
-	o.mu.RUnlock()
-
-	visited := make(map[string]struct{})
-	err := o.base.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
-		path = cleanOverlayPath(path)
-		if _, removed := deleted[path]; removed {
-			return nil
-		}
-		visited[path] = struct{}{}
-		return walkFn(path, entry, err)
-	})
-	if err != nil {
-		return err
-	}
-
-	entries := make(map[string]fs.DirEntry)
-	root = cleanOverlayPath(root)
-	for path, source := range files {
-		if !isDescendant(path, root) {
-			continue
-		}
-		entries[path] = overlayDirEntry{name: filepath.Base(path), info: overlayFileInfo{name: filepath.Base(path), size: int64(len(source))}}
-		for directory := filepath.Dir(path); isDescendant(directory, root); directory = filepath.Dir(directory) {
-			if _, seen := visited[directory]; !seen {
-				entries[directory] = overlayDirEntry{name: filepath.Base(directory), directory: true, info: overlayFileInfo{name: filepath.Base(directory), directory: true}}
-			}
-		}
-	}
-	paths := make([]string, 0, len(entries))
-	for path := range entries {
-		if _, seen := visited[path]; !seen {
-			paths = append(paths, path)
-		}
-	}
-	sort.Strings(paths)
-	for _, path := range paths {
-		if err := walkFn(path, entries[path], nil); err != nil {
-			if errors.Is(err, fs.SkipDir) && entries[path].IsDir() {
-				continue
-			}
-			return err
-		}
-	}
-	return nil
-}
-
 func (o *overlayFS) Realpath(path string) string {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
@@ -268,14 +211,3 @@ func (i overlayFileInfo) Mode() fs.FileMode {
 func (i overlayFileInfo) ModTime() time.Time { return time.Time{} }
 func (i overlayFileInfo) IsDir() bool        { return i.directory }
 func (i overlayFileInfo) Sys() any           { return nil }
-
-type overlayDirEntry struct {
-	name      string
-	directory bool
-	info      overlayFileInfo
-}
-
-func (e overlayDirEntry) Name() string               { return e.name }
-func (e overlayDirEntry) IsDir() bool                { return e.directory }
-func (e overlayDirEntry) Type() fs.FileMode          { return e.info.Mode() }
-func (e overlayDirEntry) Info() (fs.FileInfo, error) { return e.info, nil }

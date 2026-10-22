@@ -1,15 +1,15 @@
-// Package checker re-exports the slice of typescript-go's internal checker
+// Package checker re-exports the slice of TypeScript's tsc internal checker
 // package that this repository uses — nothing more. Declarations are
 // copied from oxc-project/tsgolint's generated shims (MIT); the module
-// path claims the typescript-go prefix so the internal imports resolve.
+// path claims the TypeScript/tsc prefix so the internal imports resolve.
 // Regenerate by hand when a compiler bump moves an identifier: the
 // compiler reports alias breaks, and the go:linkname signatures below
 // must be re-verified against the target revision by eye.
 package checker
 
-import ast "github.com/microsoft/typescript-go/internal/ast"
-import checker "github.com/microsoft/typescript-go/internal/checker"
-import jsnum "github.com/microsoft/typescript-go/internal/jsnum"
+import ast "github.com/microsoft/TypeScript/tsc/internal/ast"
+import checker "github.com/microsoft/TypeScript/tsc/internal/checker"
+import jsnum "github.com/microsoft/TypeScript/tsc/internal/jsnum"
 import "math"
 import "sync"
 import "unsafe"
@@ -18,7 +18,7 @@ const CheckModeNormal = checker.CheckModeNormal
 
 type Checker = checker.Checker
 
-//go:linkname Checker_getResolvedSignature github.com/microsoft/typescript-go/internal/checker.(*Checker).getResolvedSignature
+//go:linkname Checker_getResolvedSignature github.com/microsoft/TypeScript/tsc/internal/checker.(*Checker).getResolvedSignature
 func Checker_getResolvedSignature(recv *checker.Checker, node *ast.Node, candidatesOutArray *[]*checker.Signature, checkMode checker.CheckMode) *checker.Signature
 
 // GetShorthandAssignmentValueSymbol resolves the *variable* a shorthand
@@ -27,13 +27,13 @@ func Checker_getResolvedSignature(recv *checker.Checker, node *ast.Node, candida
 // literal's property symbol there instead, so a write scan that used it alone
 // called such a binding unwritten.
 //
-//go:linkname Checker_GetShorthandAssignmentValueSymbol github.com/microsoft/typescript-go/internal/checker.(*Checker).GetShorthandAssignmentValueSymbol
+//go:linkname Checker_GetShorthandAssignmentValueSymbol github.com/microsoft/TypeScript/tsc/internal/checker.(*Checker).GetShorthandAssignmentValueSymbol
 func Checker_GetShorthandAssignmentValueSymbol(recv *checker.Checker, location *ast.Node) *ast.Symbol
 
-//go:linkname Checker_getBaseTypes github.com/microsoft/typescript-go/internal/checker.(*Checker).getBaseTypes
+//go:linkname Checker_getBaseTypes github.com/microsoft/TypeScript/tsc/internal/checker.(*Checker).getBaseTypes
 func Checker_getBaseTypes(recv *checker.Checker, t *checker.Type) []*checker.Type
 
-//go:linkname Checker_getReturnTypeOfSignature github.com/microsoft/typescript-go/internal/checker.(*Checker).getReturnTypeOfSignature
+//go:linkname Checker_getReturnTypeOfSignature github.com/microsoft/TypeScript/tsc/internal/checker.(*Checker).getReturnTypeOfSignature
 func Checker_getReturnTypeOfSignature(recv *checker.Checker, sig *checker.Signature) *checker.Type
 
 // A signature's type predicate, and the kind field the checker keeps
@@ -41,7 +41,7 @@ func Checker_getReturnTypeOfSignature(recv *checker.Checker, sig *checker.Signat
 // `extra_TypePredicate`; its layout must match `TypePredicate` in
 // internal/checker/types.go at the pinned revision, field for field.
 //
-//go:linkname Checker_getTypePredicateOfSignature github.com/microsoft/typescript-go/internal/checker.(*Checker).getTypePredicateOfSignature
+//go:linkname Checker_getTypePredicateOfSignature github.com/microsoft/TypeScript/tsc/internal/checker.(*Checker).getTypePredicateOfSignature
 func Checker_getTypePredicateOfSignature(recv *checker.Checker, sig *checker.Signature) *checker.TypePredicate
 
 type TypePredicate = checker.TypePredicate
@@ -61,13 +61,13 @@ type TypePredicateKind = checker.TypePredicateKind
 const TypePredicateKindAssertsIdentifier = checker.TypePredicateKindAssertsIdentifier
 const TypePredicateKindAssertsThis = checker.TypePredicateKindAssertsThis
 
-//go:linkname Checker_getTypeAtPosition github.com/microsoft/typescript-go/internal/checker.(*Checker).getTypeAtPosition
+//go:linkname Checker_getTypeAtPosition github.com/microsoft/TypeScript/tsc/internal/checker.(*Checker).getTypeAtPosition
 func Checker_getTypeAtPosition(recv *checker.Checker, signature *checker.Signature, pos int) *checker.Type
 
-//go:linkname Checker_getBaseConstraintOfType github.com/microsoft/typescript-go/internal/checker.(*Checker).getBaseConstraintOfType
+//go:linkname Checker_getBaseConstraintOfType github.com/microsoft/TypeScript/tsc/internal/checker.(*Checker).getBaseConstraintOfType
 func Checker_getBaseConstraintOfType(recv *checker.Checker, t *checker.Type) *checker.Type
 
-//go:linkname Checker_getAwaitedType github.com/microsoft/typescript-go/internal/checker.(*Checker).getAwaitedType
+//go:linkname Checker_getAwaitedType github.com/microsoft/TypeScript/tsc/internal/checker.(*Checker).getAwaitedType
 func Checker_getAwaitedType(recv *checker.Checker, t *checker.Type) *checker.Type
 
 type IterationUse = checker.IterationUse
@@ -83,7 +83,7 @@ const (
 // name inspection this covers aliases, extensions, structural implementations,
 // and unions using the same relation that validates async generators.
 //
-//go:linkname Checker_getIterationTypeOfIterable github.com/microsoft/typescript-go/internal/checker.(*Checker).getIterationTypeOfIterable
+//go:linkname Checker_getIterationTypeOfIterable github.com/microsoft/TypeScript/tsc/internal/checker.(*Checker).getIterationTypeOfIterable
 func Checker_getIterationTypeOfIterable(recv *checker.Checker, use checker.IterationUse, typeKind checker.IterationTypeKind, inputType *checker.Type, errorNode *ast.Node) *checker.Type
 
 // Checker_getPropertyNameForKnownSymbolName answers the property-key string
@@ -97,13 +97,13 @@ func Checker_getIterationTypeOfIterable(recv *checker.Checker, use checker.Itera
 // compiler's own key. The compiler's own iterable resolver calls it exactly this
 // way (checker.getIterationTypesOfIterableSlow).
 //
-//go:linkname Checker_getPropertyNameForKnownSymbolName github.com/microsoft/typescript-go/internal/checker.(*Checker).getPropertyNameForKnownSymbolName
+//go:linkname Checker_getPropertyNameForKnownSymbolName github.com/microsoft/TypeScript/tsc/internal/checker.(*Checker).getPropertyNameForKnownSymbolName
 func Checker_getPropertyNameForKnownSymbolName(recv *checker.Checker, symbolName string) string
 
-//go:linkname Checker_isTypeIdenticalTo github.com/microsoft/typescript-go/internal/checker.(*Checker).isTypeIdenticalTo
+//go:linkname Checker_isTypeIdenticalTo github.com/microsoft/TypeScript/tsc/internal/checker.(*Checker).isTypeIdenticalTo
 func Checker_isTypeIdenticalTo(recv *checker.Checker, source *checker.Type, target *checker.Type) bool
 
-//go:linkname Checker_isContextSensitive github.com/microsoft/typescript-go/internal/checker.(*Checker).isContextSensitive
+//go:linkname Checker_isContextSensitive github.com/microsoft/TypeScript/tsc/internal/checker.(*Checker).isContextSensitive
 func Checker_isContextSensitive(recv *checker.Checker, node *ast.Node) bool
 
 // Checker_isArrayOrTupleType is the compiler's own array/tuple predicate: a
@@ -115,7 +115,7 @@ func Checker_isContextSensitive(recv *checker.Checker, node *ast.Node) bool
 // choice. Type aliases are transparent to it, which is the point: an aliased
 // tuple answers the same as the tuple it names.
 //
-//go:linkname Checker_isArrayOrTupleType github.com/microsoft/typescript-go/internal/checker.(*Checker).isArrayOrTupleType
+//go:linkname Checker_isArrayOrTupleType github.com/microsoft/TypeScript/tsc/internal/checker.(*Checker).isArrayOrTupleType
 func Checker_isArrayOrTupleType(recv *checker.Checker, t *checker.Type) bool
 
 // IsTupleType is the compiler's tuple predicate: a reference whose target
@@ -124,13 +124,13 @@ func Checker_isArrayOrTupleType(recv *checker.Checker, t *checker.Type) bool
 // type with fixed, individually-typed element slots from one with only a number
 // index signature.
 //
-//go:linkname IsTupleType github.com/microsoft/typescript-go/internal/checker.isTupleType
+//go:linkname IsTupleType github.com/microsoft/TypeScript/tsc/internal/checker.isTupleType
 func IsTupleType(t *checker.Type) bool
 
 // Checker_getTypeArguments returns a type reference's arguments; for a tuple
 // reference those are its element types, in order.
 //
-//go:linkname Checker_getTypeArguments github.com/microsoft/typescript-go/internal/checker.(*Checker).getTypeArguments
+//go:linkname Checker_getTypeArguments github.com/microsoft/TypeScript/tsc/internal/checker.(*Checker).getTypeArguments
 func Checker_getTypeArguments(recv *checker.Checker, t *checker.Type) []*checker.Type
 
 type TupleType = checker.TupleType
@@ -157,7 +157,7 @@ const ElementFlagsNonRequired = checker.ElementFlagsNonRequired
 // why callability is derived from Checker_isUntypedFunctionCall instead and this
 // identifier only pins conformance in tests.
 //
-//go:linkname Checker_isFunctionObjectType github.com/microsoft/typescript-go/internal/checker.(*Checker).isFunctionObjectType
+//go:linkname Checker_isFunctionObjectType github.com/microsoft/TypeScript/tsc/internal/checker.(*Checker).isFunctionObjectType
 func Checker_isFunctionObjectType(recv *checker.Checker, t *checker.Type) bool
 
 // Checker_isTypeSubtypeOf is the compiler's subtype relation. It exists here to
@@ -166,7 +166,7 @@ func Checker_isFunctionObjectType(recv *checker.Checker, t *checker.Type) bool
 // Function type, and a test that asserts which types satisfy it needs to ask
 // the relation directly rather than infer it.
 //
-//go:linkname Checker_isTypeSubtypeOf github.com/microsoft/typescript-go/internal/checker.(*Checker).isTypeSubtypeOf
+//go:linkname Checker_isTypeSubtypeOf github.com/microsoft/TypeScript/tsc/internal/checker.(*Checker).isTypeSubtypeOf
 func Checker_isTypeSubtypeOf(recv *checker.Checker, source *checker.Type, target *checker.Type) bool
 
 // Checker_isUntypedFunctionCall is the compiler's TS 1.0 §4.12 rule for whether
@@ -179,7 +179,7 @@ func Checker_isTypeSubtypeOf(recv *checker.Checker, source *checker.Type, target
 // second argument, as every compiler call site does; the two signature counts
 // are the caller's already-computed ones.
 //
-//go:linkname Checker_isUntypedFunctionCall github.com/microsoft/typescript-go/internal/checker.(*Checker).isUntypedFunctionCall
+//go:linkname Checker_isUntypedFunctionCall github.com/microsoft/TypeScript/tsc/internal/checker.(*Checker).isUntypedFunctionCall
 func Checker_isUntypedFunctionCall(recv *checker.Checker, funcType *checker.Type, apparentFuncType *checker.Type, numCallSignatures int, numConstructSignatures int) bool
 
 // Checker_getReducedApparentType is the type GetSignaturesOfType already looks
@@ -187,7 +187,7 @@ func Checker_isUntypedFunctionCall(recv *checker.Checker, funcType *checker.Type
 // here so the untyped-call rule above is asked with the same apparent type the
 // compiler's own call sites pass it, rather than with the declared type.
 //
-//go:linkname Checker_getReducedApparentType github.com/microsoft/typescript-go/internal/checker.(*Checker).getReducedApparentType
+//go:linkname Checker_getReducedApparentType github.com/microsoft/TypeScript/tsc/internal/checker.(*Checker).getReducedApparentType
 func Checker_getReducedApparentType(recv *checker.Checker, t *checker.Type) *checker.Type
 
 // Checker_getGlobalType resolves a global type by name and type-parameter
@@ -202,10 +202,10 @@ func Checker_getReducedApparentType(recv *checker.Checker, t *checker.Type) *che
 // reportErrors false: a project whose lib omits one must leave the fact open,
 // not emit a compiler diagnostic.
 //
-//go:linkname Checker_getGlobalType github.com/microsoft/typescript-go/internal/checker.(*Checker).getGlobalType
+//go:linkname Checker_getGlobalType github.com/microsoft/TypeScript/tsc/internal/checker.(*Checker).getGlobalType
 func Checker_getGlobalType(recv *checker.Checker, name string, arity int, reportErrors bool) *checker.Type
 
-//go:linkname NewChecker github.com/microsoft/typescript-go/internal/checker.NewChecker
+//go:linkname NewChecker github.com/microsoft/TypeScript/tsc/internal/checker.NewChecker
 func NewChecker(program checker.Program, tracer *checker.Tracer) (*checker.Checker, *sync.Mutex)
 
 const SignatureKindCall = checker.SignatureKindCall

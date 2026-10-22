@@ -58,7 +58,19 @@ span.
 ## Native integration pins
 
 - tsgolint: `c3269c01a0c894a31330e1b4c3bd4edc6eb7694b`
-- typescript-go: `v0.0.0-20260724234109-8d29e62f3585`
+- TypeScript (Go implementation, `github.com/microsoft/TypeScript/tsc`):
+  `v0.0.0-20260929230140-b85298b6a81f`, commit
+  `b85298b6a81f772d080b0455de0ca9d744cd6fd6` (TypeScript 7.1.0-dev), the commit
+  tsrs ports. The Go port left `microsoft/typescript-go` (closed; last commit
+  2026-08-20) for the `tsc/` module of `microsoft/TypeScript`; the module path
+  and every shim module path changed with it. It requires Go 1.27 (`go 1.27`
+  in every go.mod; built and tested with go1.27.3). Targets that set
+  `GOTOOLCHAIN=local` (the WASM builds) need Go 1.27 installed.
+- A cold module cache fetches this module directly from GitHub
+  (`GOPROXY=direct`): proxy.golang.org times out on this commit's subdirectory
+  module every time, though it serves `@latest`. `go.sum` records the hash, so
+  the pin stays reproducible; the default proxy list falls back to direct on
+  its own.
 
 All unstable shim modules are replaced from the same tsgolint pseudo-version in
 the root `go.mod`. No `go:linkname` or native compiler type is allowed outside

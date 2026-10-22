@@ -1,11 +1,10 @@
-module github.com/microsoft/typescript-go/shim/bundled
+module github.com/microsoft/TypeScript/tsc/shim/bundled
 
-go 1.26
+go 1.27
 
-require github.com/microsoft/typescript-go v0.0.0-20260724234109-8d29e62f3585
+require github.com/microsoft/TypeScript/tsc v0.0.0-20260929230140-b85298b6a81f
 
 require (
-	github.com/go-json-experiment/json v0.0.0-20260623181947-01eb4420fa68 // indirect
-	golang.org/x/sync v0.21.0 // indirect
-	golang.org/x/sys v0.46.0 // indirect
+	golang.org/x/sync v0.23.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
 )

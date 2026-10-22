@@ -18,15 +18,15 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/bundled"
-	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/microsoft/typescript-go/shim/compiler"
-	"github.com/microsoft/typescript-go/shim/core"
-	"github.com/microsoft/typescript-go/shim/scanner"
-	"github.com/microsoft/typescript-go/shim/tsoptions"
-	"github.com/microsoft/typescript-go/shim/vfs"
-	"github.com/microsoft/typescript-go/shim/vfs/osvfs"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/bundled"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/compiler"
+	"github.com/microsoft/TypeScript/tsc/shim/core"
+	"github.com/microsoft/TypeScript/tsc/shim/scanner"
+	"github.com/microsoft/TypeScript/tsc/shim/tsoptions"
+	"github.com/microsoft/TypeScript/tsc/shim/vfs"
+	"github.com/microsoft/TypeScript/tsc/shim/vfs/osvfs"
 
 	"github.com/yumemi-thomas/solid-checker/apps/solid-typefacts/internal/typefacts"
 )
@@ -213,8 +213,9 @@ func typeScriptPathDir(fileName string) string {
 }
 
 // singleCheckerPool serves this adapter's one retained checker (ADR 0004).
-// UpdateProgram inherits it through program options, so incremental updates
-// construct one checker instead of the default pool's four. The pool and the
+// UpdateProgram is handed it explicitly (the compiler no longer inherits it
+// from the old program), so incremental updates construct one checker
+// instead of the default pool's four. The pool and the
 // project mutex are one decision: the non-exclusive file-affine lease below is
 // safe only because every entry point is already serialized.
 type singleCheckerPool struct {
@@ -308,7 +309,7 @@ func (p *project) ReleaseAnalysisState() {
 
 func buildProgram(ctx context.Context, configPath string, fs vfs.FS) (*compiler.Program, *checker.Checker, func(), error) {
 	cwd := typeScriptPathDir(configPath)
-	host := compiler.NewCompilerHost(cwd, fs, bundled.LibPath(), nil, nil)
+	host := compiler.NewCompilerHost(cwd, fs, bundled.LibPath(), nil, nil, nil)
 	config, diagnostics := tsoptions.GetParsedCommandLineOfConfigFile(configPath, &core.CompilerOptions{}, nil, host, nil)
 	if len(diagnostics) != 0 {
 		return nil, nil, nil, fmt.Errorf("parse tsconfig: %s", formatDiagnostics(diagnostics))
@@ -345,8 +346,8 @@ func updateProgram(ctx context.Context, oldProgram *compiler.Program, configPath
 	if oldFile == nil {
 		return buildProgram(ctx, configPath, fs)
 	}
-	host := compiler.NewCompilerHost(typeScriptPathDir(configPath), fs, bundled.LibPath(), nil, nil)
-	program, _, _ := oldProgram.UpdateProgram(oldFile.Path(), host, nil)
+	host := compiler.NewCompilerHost(typeScriptPathDir(configPath), fs, bundled.LibPath(), nil, nil, nil)
+	program, _, _ := oldProgram.UpdateProgram(oldFile.Path(), host, newSingleCheckerPool, nil)
 	if program == nil {
 		return nil, nil, nil, errors.New("update TypeScript program")
 	}
@@ -800,7 +801,7 @@ func declarationShapeFor(
 	}
 	result := program.Emit(ctx, compiler.EmitOptions{
 		TargetSourceFiles: []*ast.SourceFile{sourceFile},
-		EmitOnly:          compiler.EmitOnlyForcedDts,
+		EmitOnly:          compiler.EmitOnlyBuilderSignature,
 		WriteFile: func(_ string, text string, data *compiler.WriteFileData) error {
 			if data != nil && (len(data.Diagnostics) != 0 || data.SkippedDtsWrite) {
 				writeDiagnostics = true
