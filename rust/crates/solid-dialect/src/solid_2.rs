@@ -826,6 +826,7 @@ impl Dialect for Solid2 {
     /// | `2.0.0-rc.4` | `1.171.22` |
     /// | `2.0.0-rc.6` | `1.171.22` |
     /// | `2.0.0-rc.8` | `1.171.22` |
+    /// | `2.0.0-rc.9` | `1.171.22` |
     ///
     /// What was read: every factory (`createFileRoute`, `createRoute`,
     /// `createRootRoute`, `createRootRouteWithContext`, `createLazyRoute`,
@@ -849,6 +850,15 @@ impl Dialect for Solid2 {
     /// compiled output differs on `esm`/`cjs` (a `mergeProps` dropped), and
     /// the new `flightData` module reads a server-function response's
     /// headers. None reads one of the four keys.
+    ///
+    /// rc.9 was audited the same way against rc.8, with the same router-core:
+    /// the route-option reads are byte-identical on `dist/source`; changed are
+    /// `RouterProvider`, `Transitioner`, `router` and `useBlocker` (observe
+    /// navigation attribution, through the new `observe` module, which reads
+    /// a matched route's `fullPath` and params), `ClientOnly`, `awaited`,
+    /// `registryTransfer`, `useMatch`, and on `esm`/`cjs` the compiled
+    /// `Asset`, `link` and `CatchBoundary` (`$$click` to `_$$click`). None
+    /// reads one of the four keys.
     fn audited_route_components(&self, version: &str) -> Option<crate::AuditedRouteRelease> {
         releases::AUDITED_ROUTE_RELEASES
             .iter()

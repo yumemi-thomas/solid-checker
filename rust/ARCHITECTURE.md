@@ -180,9 +180,10 @@ Two cases join ADR 0331's census, where a function is a proven component when
 every reference to it is accounted for:
 
 - **Audited TanStack routers (ADR 0334).** The rc.8 release was checked by an
-  `npm pack` diff against rc.6: every route-option read is byte-identical, the
-  changed files read none, and both load the same `@tanstack/router-core`
-  (`1.171.22`). `route_install_roots` and `route_replacement_recorded`
+  `npm pack` diff against rc.6, and rc.9 against rc.8: every route-option read
+  is byte-identical, the changed files read none (rc.9's new `observe` module
+  reads a matched route's `fullPath` and params), and all three load the same
+  `@tanstack/router-core` (`1.171.22`). `route_install_roots` and `route_replacement_recorded`
   (`rust/crates/solid-facts-backend/src/installed_bytes.rs`) read the installed
   bytes of the router and of the router-core it loads, from the router's real
   directory. A `createRouter` key-read veto covers its four default components,

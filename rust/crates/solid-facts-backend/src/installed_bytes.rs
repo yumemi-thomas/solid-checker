@@ -471,6 +471,25 @@ mod tests {
         assert_eq!(package_digest(&core).as_deref(), Some(audited.core_digest));
     }
 
+    /// ADR 0334: the rc.9 fixture's router and the router-core beside it hash
+    /// to the digests recorded for `2.0.0-rc.9`.
+    #[test]
+    fn the_published_rc9_tanstack_router_hashes_to_its_audited_digests() {
+        let audited = crate::dialect::default_dialect()
+            .vocabulary
+            .audited_route_components("2.0.0-rc.9")
+            .expect("audited release");
+        let router = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../fixtures/reactive-ir/route-components/variants/rc9")
+            .join("node_modules/@tanstack/solid-router");
+        assert_eq!(
+            package_digest(&router).as_deref(),
+            Some(audited.router_digest)
+        );
+        let core = route_core_root(&router).expect("router-core beside the router");
+        assert_eq!(package_digest(&core).as_deref(), Some(audited.core_digest));
+    }
+
     #[test]
     fn a_plain_registry_spec_names_no_protocol_or_path() {
         for plain in ["2.0.0-next.26", "^2.0.0", "~2", ">=2.0.0 <3", "next", "*"] {

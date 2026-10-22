@@ -262,6 +262,7 @@ fn only_audited_tanstack_releases_render_route_components() {
         "2.0.0-rc.4",
         "2.0.0-rc.6",
         "2.0.0-rc.8",
+        "2.0.0-rc.9",
     ] {
         let release = two.audited_route_components(version).expect(version);
         assert_eq!(release.version, version);
