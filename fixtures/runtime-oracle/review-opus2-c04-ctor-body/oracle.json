@@ -7,12 +7,5 @@
       "text": "ran",
       "id": "runtime-observation-0"
     }
-  ],
-  "open": [
-    {
-      "code": "STRICT_READ_UNTRACKED",
-      "site": "App.tsx:12",
-      "reason": "A constructor read when the class is instantiated in the component body; the constructor is a method the read classification does not place (pre-existing miss)."
-    }
   ]
 }

@@ -15,8 +15,6 @@ Strict read in a setup body (`strict-read-untracked`, SC1001):
 - `r6-b6-classmethodopaque` (App.tsx:13): an opaque consumer invokes a class method during setup.
 - `r9-b3-childrenreadinbody` (App.tsx:14): the accessor returned by `children()` is called in the component body.
 - `r9-d1-mixmemoslotreadinbody` (App.tsx:7): a helper builds a memo from a callback and reads `m()` in the helper body.
-- `review-opus2-c04-ctor-body` (App.tsx:12): a constructor read, class instantiated in the body.
-- `review-opus3-g06-yield-star-spread-body` (App.tsx:13): a read in a generator reached through `yield*` and spread in the body. Delegation is not followed.
 - `precision-ref-callback-read` (App.tsx:4): a read in an intrinsic `ref` callback runs untracked in the apply phase; the read rule places nothing in the `DirectiveApply` role.
 
 - `@solid-primitives/utils` helpers over a getter, beyond `access(getter)` and `accessWith(getter)` (ADR 0338): `accessArray([getter])`, `withAccess(getter, fn)`, and `access` reached through another project helper's call hop are undecided, so they stay silent or uncertifiable. An alias (`const alias = count`), a function literal (`access(() => count())`) or a props value is arity-unknown and uncertifiable. A getter passed to a helper that reads its parameter in a hoisted function it calls is silent (fixture `package-access-helper`, `MissedHoistedCallee`).
@@ -124,6 +122,7 @@ Known false-positive shapes left open (fire today, wanted gone):
 ## 4. Open questions and live approximations
 
 - ESLint adapter: native analyzes the file on disk, while the adapter maps byte offsets onto ESLint's in-memory text. An unsaved buffer, or a later `--fix` pass, places findings wrongly.
+- `feedback run` with an application `vite.config` on `@solidjs/vite-plugin` next.51+ refuses unless `performanceTracks` and `diagnostics` are off: their module scripts run before the collector. The collector default turns both off.
 - WASM adapter: the request carries no package files, so every package import keeps an open requirement (SC9005, uncertifiable). Package source analysis exists only in the native check.
 - Retained daemon: a tsconfig whose `extends` names a package with an `exports` map is never reused: TypeScript's resolution is not reproduced (`host_config.rs`). Performance only.
 - Premises, not defects: standard runtime configuration (ADR 0266), standard hydration host (ADR 0268), member stability (ADR 0273), package integrity (ADR 0300), audited router bytes (ADR 0324, 0334, 0335). Residuals: computed or reflective route-option keys (ADR 0334); a bundle-time patch by a Vite plugin or a `vite.config`-only alias (ADR 0324); callables on `Object.prototype` (ADR 0335); a caller that deletes or redefines a getter of its `this` when invoked as `props.onX()` (ADR 0337). Unvetoed: `useAction` and a config `preload` pass a project `function` the router context as `this` (ADR 0324, 0335).

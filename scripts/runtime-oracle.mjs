@@ -178,7 +178,7 @@ const codeRules = {
   FLUSH_IN_TRACKED_QUEUE_CALLBACK: ["leaf-owner-forbidden-call"],
   DYNAMIC_STATIC_PROMISE: ["static-dynamic-async-source"],
 };
-// Dev-build errors that are thrown with no diagnostic code (rc.13
+// Dev-build errors that are thrown with no diagnostic code (rc.13 and rc.17
 // `@solidjs/signals/dist/dev.js`, `dev-shared.js`; `@solidjs/web/dist/web.dev.js`),
 // named here by their message so the uncaught error, which the feedback run
 // maps to its throwing site (`runtime-exception` observations), is classified
@@ -193,6 +193,8 @@ const thrownCodes = [
   // `getContext` checks the owner first (rc.13 `dev-shared.js`), whatever the default.
   [/^Context can only be accessed under a reactive root/, "NO_OWNER_CONTEXT"],
   [/^Context must either be created with a default value/, "CONTEXT_NOT_FOUND"],
+  // rc.17 names the context (`contextNotFoundMessage`, `dev-shared.js:74-82`).
+  [/^Context(?: "[^"]*")? (?:has no provider above this read|was provided with `undefined`)/, "CONTEXT_NOT_FOUND"],
 ];
 // Withholdings that cover any rule at their site.
 const withholdingRules = ["reactive-dispatch-unresolved"];

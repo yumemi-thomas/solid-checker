@@ -154,7 +154,11 @@ async function toolingAt(root) {
 export async function loadFeedbackConfiguration(tools, projectRoot, record, options = {}, logger) {
   const loaded = await tools.loadConfigFromFile({ command: "serve", mode: "development" }, options.config, options.root ?? projectRoot, "silent", logger);
   assert(!options.config || loaded, "Explicit Vite config could not be loaded");
-  if (!loaded) return { config: { publicDir: false }, plugins: [await tools.solid({ hot: false })],
+  // `@solidjs/vite-plugin` 3.0.0-next.51 auto-enables dev instrumentation that
+  // injects module scripts, one ahead of every entry; the collector default
+  // opts out so the bootstrap stays first (an application config is as written).
+  if (!loaded) return { config: { publicDir: false },
+    plugins: [await tools.solid({ hot: false, performanceTracks: false, diagnostics: false })],
     root: options.root ?? projectRoot, configuration: { kind: "collector-default", path: null, root: options.root ?? projectRoot } };
   const dependencies = [...new Set([loaded.path, ...loaded.dependencies])];
   for (const path of dependencies) record(path);
