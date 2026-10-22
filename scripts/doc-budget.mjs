@@ -17,22 +17,28 @@ import { fileURLToPath } from "node:url";
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-/** Byte ceilings, about 1.5x the size at the 2026-10-19 cut. */
+/**
+ * Byte ceilings. Set at about 1.5x the size at the 2026-10-19 cut, then raised
+ * on 2026-10-23 after the live files reached the ceiling and every slice had to
+ * shave unrelated bytes to land: the gate stops regrowth, it does not ration
+ * current decisions and open items.
+ */
 export const FILE_BUDGETS = {
   "AGENTS.md": 8_000,
   "CLAUDE.md": 1_000,
-  "docs/open-work.md": 25_000,
-  "docs/decisions.md": 100_000,
+  "docs/open-work.md": 32_000,
+  "docs/decisions.md": 125_000,
 };
 
 export const GROUP_BUDGETS = [
-  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 600_000 },
+  { name: "docs/", test: (path) => path.startsWith("docs/"), bytes: 700_000 },
   {
     name: "fixture READMEs",
     test: (path) => path.startsWith("fixtures/") && path.endsWith("/README.md"),
-    // Raised from 250 KB for the context-read fixtures (ADR 0352): the group was
-    // 249.8 KB before they landed, and each case README is a claim the reader needs.
-    bytes: 254_000,
+    // Raised from 250 KB for the context-read fixtures (ADR 0352), then to 300 KB
+    // on 2026-10-23: each case README is a claim the reader needs, and the group
+    // sat within 1 KB of its ceiling.
+    bytes: 300_000,
   },
   { name: "skills", test: (path) => path.startsWith(".claude/skills/"), bytes: 25_000 },
 ];
