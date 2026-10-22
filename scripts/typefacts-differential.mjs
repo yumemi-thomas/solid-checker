@@ -15,6 +15,7 @@
 //   bun scripts/typefacts-differential.mjs compare DIR [--report FILE] [--examples N]
 //        [--allow-list FILE] [--allow-unavailable] [--jobs N]
 //   replay also takes --canonicalize-requests (diagnostic: send canonical CBOR key order)
+//   and --no-evidence (skip the declarations pass that proves library-only durable ids)
 //   bun scripts/typefacts-differential.mjs run     DIR [same options]
 //
 // Exit status of compare/run: 0 when every cell is equal or allow-listed (and,
@@ -68,7 +69,7 @@ export function parseArguments(argv) {
     }
     if (argument.startsWith("--")) {
       const name = argument.slice(2);
-      if (["allow-unavailable", "reuse", "quiet", "canonicalize-requests"].includes(name)) options[name] = true;
+      if (["allow-unavailable", "reuse", "quiet", "canonicalize-requests", "no-evidence"].includes(name)) options[name] = true;
       else {
         options[name] = argv[index + 1];
         if (options[name] === undefined) throw new Error(`${argument} needs a value`);
@@ -195,10 +196,39 @@ export function replayArguments(argv, rust, session, { hasConfigCopy = existsSyn
   return [rust, ...args];
 }
 
+/**
+ * The evidence pass for the Go producer: the same recorded requests replayed
+ * against it, only to collect its own answer to "declare these ids". Its
+ * responses are discarded (the recording is already the Go answer).
+ */
+async function goEvidence(session, { tool, meta }) {
+  const argv = readJson(join(session, "argv.json"));
+  writeFileSync(join(session, "argv-go.json"), JSON.stringify(replayArguments(argv, argv[0], session)));
+  await capture(
+    tool,
+    [
+      "replay",
+      join(session, "requests.bin"),
+      join(session, "responses.bin"),
+      join(session, "argv-go.json"),
+      join(session, "go-replay-responses.bin")
+    ],
+    {
+      cwd: meta.cwd ?? ROOT,
+      env: {
+        ...process.env,
+        SOLID_TYPEFACTS_TIMINGS: "",
+        TYPEFACTS_REPLAY_EVIDENCE: join(session, "go-evidence.json")
+      }
+    }
+  );
+}
+
 async function replayOne(session, { rust, tool, options }) {
   const argv = readJson(join(session, "argv.json"));
   writeFileSync(join(session, "argv-rust.json"), JSON.stringify(replayArguments(argv, rust, session)));
   const meta = existsSync(join(session, "meta.json")) ? readJson(join(session, "meta.json")) : {};
+  const evidence = !options["no-evidence"];
   const run = await capture(
     tool,
     [
@@ -213,10 +243,12 @@ async function replayOne(session, { rust, tool, options }) {
       env: {
         ...process.env,
         SOLID_TYPEFACTS_TIMINGS: "",
+        ...(evidence ? { TYPEFACTS_REPLAY_EVIDENCE: join(session, "rust-evidence.json") } : {}),
         ...(options["canonicalize-requests"] ? { TYPEFACTS_REPLAY_CANONICALIZE: "1" } : {})
       }
     }
   );
+  if (evidence) await goEvidence(session, { tool, meta });
   let report;
   try {
     report = JSON.parse(run.stdout.toString());
@@ -255,6 +287,16 @@ async function decode(tool, requests, responses) {
   return JSON.parse(run.stdout.toString());
 }
 
+/** The symbol rows of an evidence file; none when the pass did not run or failed. */
+function evidenceRows(path) {
+  try {
+    const rows = readJson(path).rows;
+    return Array.isArray(rows) ? rows : [];
+  } catch {
+    return [];
+  }
+}
+
 /** Compares one recorded session; never throws (a failure is a `transport` result). */
 export async function compareSession(session, tool) {
   const project = projectOf(session);
@@ -277,7 +319,10 @@ export async function compareSession(session, tool) {
   });
   let go;
   try {
-    go = normalizeTranscript(await decode(tool, requests, join(session, "responses.bin")));
+    go = normalizeTranscript(
+      await decode(tool, requests, join(session, "responses.bin")),
+      evidenceRows(join(session, "go-evidence.json"))
+    );
   } catch (error) {
     return failure(`cannot decode the Go transcript: ${error.message}`);
   }
@@ -285,7 +330,10 @@ export async function compareSession(session, tool) {
   if (!existsSync(rustPath)) return failure("no rust-responses.bin (run replay first)");
   let rust;
   try {
-    rust = normalizeTranscript(await decode(tool, requests, rustPath));
+    rust = normalizeTranscript(
+      await decode(tool, requests, rustPath),
+      evidenceRows(join(session, "rust-evidence.json"))
+    );
   } catch (error) {
     return failure(`cannot decode the Rust transcript: ${error.message}`);
   }

@@ -10,6 +10,25 @@
 //! The replay rewrites only `stateToken`: a producer's token is its own text,
 //! so each recorded token is mapped to the token this producer returned for the
 //! same exchange. Everything else is sent as recorded bytes.
+//!
+//! A symbol id belongs to the producer that minted it: generation-scoped ids
+//! (`symbol:<generation>:<n>`) follow its visit order, and durable ids of
+//! library symbols hash declaration offsets of its TypeScript snapshot. A
+//! recorded `symbols` request that names one would ask the replaying producer
+//! about some other symbol, or none. Like a state token, such an id is
+//! translated: it is replaced by the id the replaying producer gave the entity
+//! at the same source location (the one the recorded producer gave it, in the
+//! preceding analyze tables), when that correspondence is unambiguous; any
+//! other id is sent as recorded. The entity tables are still compared as they
+//! came, so a symbol that differs is reported there.
+//!
+//! With `TYPEFACTS_REPLAY_EVIDENCE=<file>` the replay also asks the producer,
+//! just before the recorded `close`, for the declarations of every durable
+//! symbol id its own tables mentioned (a `symbols` request that is not part of
+//! the recorded stream and is not written to the response stream). The rows go
+//! to `<file>`. Durable ids hash declaration offsets, so the harness needs a
+//! producer's own declarations to prove an id library-only; the recorded
+//! streams rarely carry them.
 
 use std::collections::{HashMap, HashSet};
 use std::io::{Read, Write};
@@ -18,8 +37,10 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 use serde_json::json;
-use typefacts::transcript::{decode_request, decode_response, split_frames};
-use typefacts::v3::Operation;
+use typefacts::transcript::{
+    IdMap, Tables, decode_request, decode_response, split_frames, symbol_table_rows,
+};
+use typefacts::v3::{Operation, SymbolQuery};
 use typefacts::{encode_sidecar_request, read_frame, write_frame};
 
 fn main() {
@@ -66,11 +87,15 @@ fn replay(requests: &str, go_responses: &str, argv: &str, output: &str) -> Resul
     let canonicalize = std::env::var_os("TYPEFACTS_REPLAY_CANONICALIZE").is_some();
     let request_frames = split_frames(&request_bytes)?;
     let go_frames = split_frames(&go_bytes)?;
-    let go_answered: HashMap<u64, String> = go_frames
+    let mut go_responses: HashMap<u64, typefacts::v3::Response> = go_frames
         .iter()
         .skip(1)
-        .map(|frame| decode_response(frame).map(|r| (r.request_id, r.state_token)))
+        .map(|frame| decode_response(frame).map(|r| (r.request_id, r)))
         .collect::<Result<_, _>>()?;
+    let go_answered: HashMap<u64, String> = go_responses
+        .iter()
+        .map(|(id, response)| (*id, response.state_token.clone()))
+        .collect();
 
     let mut child = Command::new(program)
         .args(args)
@@ -109,6 +134,17 @@ fn replay(requests: &str, go_responses: &str, argv: &str, output: &str) -> Resul
 
     let mut tokens: HashMap<String, String> = HashMap::new();
     let mut unmapped: HashSet<String> = HashSet::new();
+    let evidence_path = std::env::var_os("TYPEFACTS_REPLAY_EVIDENCE");
+    let mut evidence = Evidence::default();
+    let mut go_tables = Tables::default();
+    let mut id_map = IdMap::default();
+    let mut rewritten_ids = 0_u64;
+    let largest_request_id = request_frames
+        .iter()
+        .filter_map(|frame| decode_request(frame).ok())
+        .map(|request| request.request_id)
+        .max()
+        .unwrap_or(0);
     for frame in &request_frames {
         if stopped.is_some() {
             break;
@@ -118,9 +154,32 @@ fn replay(requests: &str, go_responses: &str, argv: &str, output: &str) -> Resul
             skipped_cancels += 1;
             continue;
         }
+        if request.operation == Operation::Close
+            && evidence_path.is_some()
+            && !evidence.asked
+            && stopped.is_none()
+        {
+            evidence.ask(
+                &request,
+                largest_request_id + 1_000_000,
+                &mut stdin,
+                &receiver,
+                timeout,
+            );
+        }
         let mut payload = frame.to_vec();
         if canonicalize {
             payload = typefacts::encode(&request).map_err(|e| e.to_string())?;
+        }
+        let translated = id_map.translate(&mut request);
+        if translated > 0 {
+            rewritten_ids += translated;
+            payload = if canonicalize {
+                typefacts::encode(&request)
+            } else {
+                encode_sidecar_request(&request)
+            }
+            .map_err(|e| e.to_string())?;
         }
         if !request.state_token.is_empty() {
             match tokens.get(&request.state_token) {
@@ -163,6 +222,13 @@ fn replay(requests: &str, go_responses: &str, argv: &str, output: &str) -> Resul
                 if !go_token.is_empty() && !response.state_token.is_empty() {
                     tokens.insert(go_token.clone(), response.state_token.clone());
                 }
+                evidence.observe(request.operation, &response);
+                if let Some(recorded) = go_responses.remove(&request.request_id) {
+                    go_tables.observe(request.operation, &recorded);
+                    if request.operation == Operation::Analyze && response.ok && recorded.ok {
+                        id_map.reconcile(&go_tables, &evidence.tables);
+                    }
+                }
                 captured.push(bytes);
                 answered += 1;
             }
@@ -201,6 +267,11 @@ fn replay(requests: &str, go_responses: &str, argv: &str, output: &str) -> Resul
         write_frame(&mut stream, payload).map_err(|e| e.to_string())?;
     }
     std::fs::write(output, &stream).map_err(|error| format!("{output}: {error}"))?;
+    if let Some(path) = &evidence_path {
+        let rendered = serde_json::to_vec(&evidence.render()).map_err(|e| e.to_string())?;
+        std::fs::write(path, rendered)
+            .map_err(|error| format!("{}: {error}", path.to_string_lossy()))?;
+    }
     let report = json!({
         "requests": request_frames.len(),
         "sent": sent,
@@ -208,10 +279,95 @@ fn replay(requests: &str, go_responses: &str, argv: &str, output: &str) -> Resul
         "skippedCancels": skipped_cancels,
         "canonicalized": canonicalize,
         "unmappedStateTokens": unmapped.len(),
+        "rewrittenSymbolIds": rewritten_ids,
         "exitCode": exit_code,
         "stopped": stopped,
         "notes": notes,
     });
     println!("{report}");
     Ok(())
+}
+
+/// The durable ids a producer's own analyze tables mentioned, and what it said
+/// about them when asked.
+#[derive(Default)]
+struct Evidence {
+    tables: Tables,
+    asked: bool,
+    answer: Option<serde_json::Value>,
+}
+
+impl Evidence {
+    fn observe(&mut self, operation: Operation, response: &typefacts::v3::Response) {
+        self.tables.observe(operation, response);
+    }
+
+    /// Sends one `symbols` request for every id collected, in place of the
+    /// recorded `close` (which the caller still sends afterwards).
+    fn ask(
+        &mut self,
+        close: &typefacts::v3::Request,
+        request_id: u64,
+        stdin: &mut std::process::ChildStdin,
+        receiver: &mpsc::Receiver<Result<Vec<u8>, String>>,
+        timeout: Duration,
+    ) {
+        self.asked = true;
+        if self.tables.token.is_empty() || self.tables.ids.is_empty() {
+            self.answer = Some(json!({ "requested": 0, "rows": [], "note": "no analyze table" }));
+            return;
+        }
+        let mut request = close.clone();
+        request.operation = Operation::Symbols;
+        request.request_id = request_id;
+        request.state_token.clone_from(&self.tables.token);
+        request.symbol_queries = self
+            .tables
+            .ids
+            .iter()
+            .map(|id| SymbolQuery {
+                id: id.as_str().into(),
+                references: false,
+                references_only: false,
+            })
+            .collect();
+        let outcome = encode_sidecar_request(&request)
+            .map_err(|error| error.to_string())
+            .and_then(|payload| write_frame(stdin, &payload).map_err(|error| error.to_string()))
+            .and_then(|()| {
+                receiver
+                    .recv_timeout(timeout)
+                    .map_err(|_| "timed out".to_owned())?
+            })
+            .and_then(|bytes| decode_response(&bytes));
+        self.answer = Some(match outcome {
+            Ok(response) => {
+                let rows = if response.table_transition.is_empty() {
+                    Ok(json!(response.symbol_evidence))
+                } else {
+                    symbol_table_rows(&response)
+                };
+                match rows {
+                    Ok(rows) => json!({
+                        "requested": self.tables.ids.len(),
+                        "ok": response.ok,
+                        "error": response.error.as_ref().map(|e| json!({"code": e.code, "message": e.message})),
+                        "rows": rows,
+                    }),
+                    Err(message) => {
+                        json!({ "requested": self.tables.ids.len(), "ok": false, "error": { "code": "evidence-decode", "message": message }, "rows": [] })
+                    }
+                }
+            }
+            Err(message) => {
+                json!({ "requested": self.tables.ids.len(), "ok": false, "error": { "code": "evidence", "message": message }, "rows": [] })
+            }
+        });
+    }
+
+    fn render(&self) -> serde_json::Value {
+        self.answer
+            .clone()
+            .unwrap_or_else(|| json!({ "requested": 0, "rows": [], "note": "no close request" }))
+    }
 }

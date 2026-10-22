@@ -54,9 +54,24 @@ release checker for a corpus (the debug one is about 19x slower).
 
 `replay DIR` sends each session's recorded request frames to the Rust producer
 (same argv, same working directory) and stores `rust-responses.bin` and
-`replay.json`. Only `stateToken` is rewritten: each Go token is mapped to the
-token the Rust producer returned for the same exchange. Cancel frames are not
-replayed. `compare DIR` decodes both streams, normalises, diffs and writes the
+`replay.json`. Two things are rewritten, because each names something one
+producer minted: `stateToken` (each Go token is mapped to the token the Rust
+producer returned for the same exchange) and the ids in a `symbols` request. A
+symbol id belongs to the producer that issued it: `symbol:<generation>:<n>`
+follows its visit order, and the durable id of a library symbol hashes offsets
+in its TypeScript snapshot's lib text. Such an id is replaced by the id the
+replaying producer gave the entity at the same source location in the preceding
+analyze tables (`rewrittenSymbolIds` in `replay.json`), unless two locations
+disagree about it, and an id no entity carries is sent as recorded. The tables
+themselves are compared as they came. Cancel frames are not replayed.
+
+Unless `--no-evidence` is given, each producer is also asked, just before the
+recorded `close`, for the declarations of every durable id its own tables
+mention (`rust-evidence.json`, and `go-evidence.json` from a second replay
+against the Go producer; the extra request is not part of any compared
+stream). The recorded streams almost never carry declarations for the symbols
+their entities name, and `compare` needs them to prove a durable id
+library-only (below). `compare DIR` decodes both streams, normalises, diffs and writes the
 report; `run DIR` does both.
 
 `--canonicalize-requests` re-encodes every request in canonical CBOR key order.
@@ -67,8 +82,9 @@ without the flag every `modules` exchange reports `rust-error`.
 ## What is compared
 
 Cells are `(family, column, key)`: response fields (`response`, `affected`,
-`sources`, `modules`, `moduleImports`, `symbolEvidence`, ...) and the retained
-table after each analyze (`table.sources`, `table.files`, `table.entities` keyed
+`sources`, `modules`, `moduleImports`, `symbolEvidence`, ...; a `symbols`
+answer packs its rows as a standalone symbol table, which the decoder unpacks
+into `symbolEvidence`) and the retained table after each analyze (`table.sources`, `table.files`, `table.entities` keyed
 by span, `table.symbols` keyed by id). Row order is irrelevant; array order
 inside a column is not.
 
@@ -86,7 +102,14 @@ Normalisation, in `normalizeTranscript`:
 - Default-library modules, symbols and declarations are dropped (which lib files
   exist and where their declarations sit follows each producer's TypeScript). A
   symbol id whose declarations are all in lib becomes `symbol:~lib:<name>`, so an
-  entity pointing at it still compares.
+  entity pointing at it still compares. Durable ids hash declaration offsets and
+  the lib text differs between the producers' TypeScript snapshots, so `JSON`
+  has a different `symbol:h:` id in each; the proof that an id is library-only is
+  a symbol row for it with every declaration in lib, from the transcript's own
+  symbol rows or from that producer's evidence file. An id with no such proof is
+  left alone: a durable id that differs without proof is a difference. A
+  well-known symbol's counter suffix (`__@hasInstance@73`) is dropped from the
+  name.
 - Non-durable `symbol:<gen>:<n>` ids are renamed from content (first
   declaration, else first use), one mapping per transcript. Durable
   `symbol:h:...` ids compare exactly.

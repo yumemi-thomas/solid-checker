@@ -14,6 +14,7 @@ import {
   diffTranscripts,
   failureReason,
   globMatches,
+  libSymbolName,
   normalizeTranscript,
   parseAllowList,
   summarize,
@@ -123,6 +124,74 @@ test("an entity that references a library symbol compares by its name", () => {
       )
     );
   const results = diffTranscripts(side("symbol:h:go"), side("symbol:h:rust"));
+  assert.deepEqual(categories(results), { equal: results.length });
+});
+
+// A durable id hashes declaration offsets, and the producers' library text
+// differs, so JSON has a different id in each. The evidence pass supplies the
+// producer's own declarations for such ids.
+const libEvidence = (id, name = "JSON", path = "bundled:///libs/lib.es5.d.ts") => ({
+  id,
+  declarations: [{ name, kind: "variable", location: loc(1, 2, path) }]
+});
+const jsonEntity = (id) => table({ entities: [{ location: loc(3, 7), symbol: id }] });
+
+test("a library symbol's durable id compares by name once its own evidence proves it library-only", () => {
+  const go = normalizeTranscript(transcript(analyze(jsonEntity("symbol:h:e876"))), [libEvidence("symbol:h:e876")]);
+  const rust = normalizeTranscript(transcript(analyze(jsonEntity("symbol:h:9823"))), [libEvidence("symbol:h:9823")]);
+  assert.equal(go.exchanges[0].response.table.entities[0].symbol, "symbol:~lib:JSON");
+  const results = diffTranscripts(go, rust);
+  assert.deepEqual(categories(results), { equal: results.length });
+});
+
+test("a durable id without proof stays as it is, so the difference is reported", () => {
+  const go = normalizeTranscript(transcript(analyze(jsonEntity("symbol:h:e876"))), [libEvidence("symbol:h:e876")]);
+  // Rust has no evidence for its id (the pass failed or found nothing).
+  for (const evidence of [[], [{ id: "symbol:h:9823" }], [{ id: "symbol:h:other", declarations: [] }]]) {
+    const rust = normalizeTranscript(transcript(analyze(jsonEntity("symbol:h:9823"))), evidence);
+    assert.equal(rust.exchanges[0].response.table.entities[0].symbol, "symbol:h:9823");
+    const different = diffTranscripts(go, rust).filter((result) => result.category === "value-differs");
+    assert.equal(different.length, 1);
+    assert.equal(different[0].column, "symbol");
+  }
+});
+
+test("evidence that shows a project declaration does not make an id library-only", () => {
+  const mixed = {
+    id: "symbol:h:9823",
+    declarations: [
+      { name: "JSON", kind: "variable", location: loc(1, 2, "bundled:/libs/lib.es5.d.ts") },
+      { name: "JSON", kind: "variable", location: loc(8, 12, "/p/augment.d.ts") }
+    ]
+  };
+  const rust = normalizeTranscript(transcript(analyze(jsonEntity("symbol:h:9823"))), [mixed]);
+  assert.equal(rust.exchanges[0].response.table.entities[0].symbol, "symbol:h:9823");
+  const user = libEvidence("symbol:h:9823", "JSON", "/p/json.ts");
+  assert.equal(
+    normalizeTranscript(transcript(analyze(jsonEntity("symbol:h:9823"))), [user]).exchanges[0].response.table.entities[0].symbol,
+    "symbol:h:9823"
+  );
+});
+
+test("evidence rows prove ids but are never added to the transcript", () => {
+  const normalized = normalizeTranscript(transcript(analyze(jsonEntity("symbol:h:9823"))), [libEvidence("symbol:h:9823")]);
+  assert.deepEqual(normalized.exchanges[0].response.table.symbols, []);
+});
+
+test("a library symbol answered by a symbols request keeps only its project declarations", () => {
+  const response = (rows) => ({ ok: true, generation: 1, __op: "symbols", symbolEvidence: rows });
+  const libOnly = normalizeTranscript(transcript(response([libEvidence("symbol:h:e876")])));
+  assert.deepEqual(libOnly.exchanges[0].response.symbolEvidence, []);
+});
+
+test("a well-known symbol's counter suffix is not part of its library name", () => {
+  assert.equal(libSymbolName("__@hasInstance@73"), "__@hasInstance");
+  assert.equal(libSymbolName("__@hasInstance@71"), "__@hasInstance");
+  assert.equal(libSymbolName("JSON"), "JSON");
+  assert.equal(libSymbolName("a@1"), "a@1");
+  const go = normalizeTranscript(transcript(analyze(jsonEntity("symbol:h:a"))), [libEvidence("symbol:h:a", "__@hasInstance@73")]);
+  const rust = normalizeTranscript(transcript(analyze(jsonEntity("symbol:h:b"))), [libEvidence("symbol:h:b", "__@hasInstance@71")]);
+  const results = diffTranscripts(go, rust);
   assert.deepEqual(categories(results), { equal: results.length });
 });
 

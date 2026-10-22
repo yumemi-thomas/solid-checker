@@ -9,7 +9,7 @@
 //! never re-implements the wire format. It lives behind the `transcript`
 //! feature: the checker does not link it.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -122,6 +122,17 @@ impl StreamDecoder {
                 symbol_rows(&response.symbol_evidence),
             );
         }
+        // A `symbols` answer packs its rows as a standalone symbol table.
+        if operation == Operation::Symbols && response.ok && !response.table_transition.is_empty() {
+            match symbol_table_rows(response) {
+                Ok(rows) => {
+                    out.insert("symbolEvidence".into(), rows);
+                }
+                Err(message) => {
+                    out.insert("decodeError".into(), json!(message));
+                }
+            }
+        }
         if !response.reference_evidence.is_empty() {
             out.insert(
                 "referenceEvidence".into(),
@@ -190,18 +201,38 @@ impl StreamDecoder {
     }
 }
 
+fn symbol_rows_of(table: &FactTable) -> Vec<Value> {
+    table
+        .symbols()
+        .map(|symbol| {
+            json!({
+                "id": symbol.id(),
+                "aliasTarget": symbol.alias_target(),
+                "declarations": to_json(&symbol.declarations()),
+                "references": symbol.references().map(to_json).collect::<Vec<_>>(),
+            })
+        })
+        .collect()
+}
+
+/// The rows of a `symbols` answer: a full transition holding only symbols.
+pub fn symbol_table_rows(response: &Response) -> Result<Value, String> {
+    let transition = v3::decode_table_transition(&response.table_transition)?;
+    if transition.mode != TransitionMode::Full {
+        return Err("symbol evidence transition is not a full table".into());
+    }
+    Ok(Value::Array(symbol_rows_of(&FactTable::materialize_full(
+        transition,
+    ))))
+}
+
 fn table_json(table: &FactTable) -> Value {
     json!({
         "schema": table.schema(),
         "sources": table.sources().map(to_json).collect::<Vec<_>>(),
         "entities": table.entities().map(to_json).collect::<Vec<_>>(),
         "files": table.files().map(to_json).collect::<Vec<_>>(),
-        "symbols": table.symbols().map(|symbol| json!({
-            "id": symbol.id(),
-            "aliasTarget": symbol.alias_target(),
-            "declarations": to_json(&symbol.declarations()),
-            "references": symbol.references().map(to_json).collect::<Vec<_>>(),
-        })).collect::<Vec<_>>(),
+        "symbols": symbol_rows_of(table),
     })
 }
 
@@ -257,6 +288,122 @@ pub fn decode_transcript(requests: &[u8], responses: &[u8]) -> Result<Value, Str
         "handshake": to_json(&handshake),
         "exchanges": exchanges,
     }))
+}
+
+/// One producer's retained table, as the client would hold it, reduced to
+/// what the replay needs: the symbol of each entity by source location, every
+/// durable id mentioned, and the token the next request must carry.
+#[derive(Default)]
+pub struct Tables {
+    decoder: StreamDecoder,
+    pub entities: HashMap<String, String>,
+    pub ids: BTreeSet<String>,
+    pub token: String,
+}
+
+impl Tables {
+    pub fn observe(&mut self, operation: Operation, response: &Response) {
+        let rendered = self.decoder.decode(operation, response);
+        if operation == Operation::Analyze && response.ok {
+            if let Some(table) = rendered.get("table") {
+                collect_ids(table, &mut self.ids);
+                self.entities = entity_map(table);
+            }
+            self.token.clone_from(&response.state_token);
+        }
+    }
+}
+
+/// The symbol of each entity row that has one, by `path:start-end`.
+fn entity_map(table: &Value) -> HashMap<String, String> {
+    table
+        .get("entities")
+        .and_then(Value::as_array)
+        .map(|rows| rows.iter().filter_map(entity_symbol).collect())
+        .unwrap_or_default()
+}
+
+/// `(path:start-end, symbol)` of an entity row that has a symbol.
+fn entity_symbol(row: &Value) -> Option<(String, String)> {
+    let location = row.get("location")?;
+    let symbol = row.get("symbol")?.as_str()?;
+    Some((
+        format!(
+            "{}:{}-{}",
+            location.get("path")?.as_str()?,
+            location.get("startByte")?,
+            location.get("endByte")?
+        ),
+        symbol.to_owned(),
+    ))
+}
+
+/// A recorded symbol id and the replaying producer's id for the entity at the
+/// same location. An id with two candidates is not translated.
+#[derive(Default)]
+pub struct IdMap {
+    map: HashMap<String, String>,
+    ambiguous: HashSet<String>,
+}
+
+impl IdMap {
+    pub fn reconcile(&mut self, recorded: &Tables, replayed: &Tables) {
+        for (location, recorded_id) in &recorded.entities {
+            if !recorded_id.starts_with("symbol:") || self.ambiguous.contains(recorded_id) {
+                continue;
+            }
+            let Some(replayed_id) = replayed.entities.get(location) else {
+                continue;
+            };
+            match self.map.get(recorded_id) {
+                Some(known) if known != replayed_id => {
+                    self.map.remove(recorded_id);
+                    self.ambiguous.insert(recorded_id.clone());
+                }
+                Some(_) => {}
+                None => {
+                    self.map.insert(recorded_id.clone(), replayed_id.clone());
+                }
+            }
+        }
+    }
+
+    /// Rewrites the generation-scoped ids of `request`'s symbol queries.
+    pub fn translate(&self, request: &mut Request) -> u64 {
+        let mut changed = 0;
+        for query in &mut request.symbol_queries {
+            if let Some(replayed) = self.map.get(query.id.as_ref())
+                && replayed.as_str() != query.id.as_ref()
+            {
+                query.id = replayed.as_str().into();
+                changed += 1;
+            }
+        }
+        changed
+    }
+}
+
+/// Every `symbol:h:` id (24 hex digits) inside `text`.
+pub fn durable_ids(text: &str, into: &mut BTreeSet<String>) {
+    const MARK: &str = "symbol:h:";
+    let mut rest = text;
+    while let Some(at) = rest.find(MARK) {
+        let tail = &rest[at + MARK.len()..];
+        let digits = tail.bytes().take_while(u8::is_ascii_hexdigit).count();
+        if digits >= 24 {
+            into.insert(format!("{MARK}{}", &tail[..24]));
+        }
+        rest = &rest[at + MARK.len()..];
+    }
+}
+
+pub fn collect_ids(value: &Value, into: &mut BTreeSet<String>) {
+    match value {
+        Value::String(text) => durable_ids(text, into),
+        Value::Array(items) => items.iter().for_each(|item| collect_ids(item, into)),
+        Value::Object(map) => map.values().for_each(|item| collect_ids(item, into)),
+        _ => {}
+    }
 }
 
 #[cfg(test)]
@@ -346,5 +493,144 @@ mod tests {
                 .unwrap()
                 .contains("retained table")
         );
+    }
+
+    fn analyzed(symbol_of: &[(&str, u64, &str)]) -> Value {
+        json!({
+            "entities": symbol_of
+                .iter()
+                .map(|(path, start, symbol)| json!({
+                    "location": {"path": path, "startByte": start, "endByte": start + 1},
+                    "symbol": symbol,
+                }))
+                .collect::<Vec<_>>()
+        })
+    }
+
+    fn tables(rows: &[(&str, u64, &str)]) -> Tables {
+        Tables {
+            entities: entity_map(&analyzed(rows)),
+            ..Tables::default()
+        }
+    }
+
+    #[test]
+    fn durable_ids_are_found_inside_text_and_short_ones_are_ignored() {
+        let mut ids = BTreeSet::new();
+        durable_ids(
+            "x symbol:h:0123456789abcdef01234567 and symbol:h:abc and symbol:3:4 \
+             symbol:h:fedcba9876543210fedcba98tail",
+            &mut ids,
+        );
+        assert_eq!(
+            ids.into_iter().collect::<Vec<_>>(),
+            vec![
+                "symbol:h:0123456789abcdef01234567".to_owned(),
+                "symbol:h:fedcba9876543210fedcba98".to_owned(),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_recorded_id_is_translated_to_the_replayed_ids_for_the_same_location() {
+        let recorded = tables(&[
+            ("/p/a.ts", 1, "symbol:1:12"),
+            ("/p/a.ts", 5, "symbol:h:aaaaaaaaaaaaaaaaaaaaaaaa"),
+        ]);
+        let replayed = tables(&[
+            ("/p/a.ts", 1, "symbol:1:6"),
+            ("/p/a.ts", 5, "symbol:h:bbbbbbbbbbbbbbbbbbbbbbbb"),
+        ]);
+        let mut map = IdMap::default();
+        map.reconcile(&recorded, &replayed);
+        let mut request: Request = serde_json::from_value(json!({
+            "schema": 1, "operation": "symbols", "projectId": "p", "requestId": 4, "generation": 1,
+            "symbolQueries": [
+                {"id": "symbol:1:12"},
+                {"id": "symbol:h:aaaaaaaaaaaaaaaaaaaaaaaa"},
+                {"id": "symbol:h:cccccccccccccccccccccccc"},
+            ]
+        }))
+        .unwrap();
+        assert_eq!(map.translate(&mut request), 2);
+        let ids: Vec<&str> = request
+            .symbol_queries
+            .iter()
+            .map(|q| q.id.as_ref())
+            .collect();
+        // An id nobody can place is sent as recorded.
+        assert_eq!(
+            ids,
+            [
+                "symbol:1:6",
+                "symbol:h:bbbbbbbbbbbbbbbbbbbbbbbb",
+                "symbol:h:cccccccccccccccccccccccc"
+            ]
+        );
+    }
+
+    #[test]
+    fn an_id_with_two_candidates_is_not_translated_and_stays_that_way() {
+        let recorded = tables(&[("/p/a.ts", 1, "symbol:1:12"), ("/p/a.ts", 9, "symbol:1:12")]);
+        let mut map = IdMap::default();
+        map.reconcile(
+            &recorded,
+            &tables(&[("/p/a.ts", 1, "symbol:1:6"), ("/p/a.ts", 9, "symbol:1:7")]),
+        );
+        // A later, agreeing table does not resurrect it.
+        map.reconcile(
+            &recorded,
+            &tables(&[("/p/a.ts", 1, "symbol:1:6"), ("/p/a.ts", 9, "symbol:1:6")]),
+        );
+        let mut request: Request = serde_json::from_value(json!({
+            "schema": 1, "operation": "symbols", "projectId": "p", "requestId": 4, "generation": 1,
+            "symbolQueries": [{"id": "symbol:1:12"}]
+        }))
+        .unwrap();
+        assert_eq!(map.translate(&mut request), 0);
+        assert_eq!(request.symbol_queries[0].id.as_ref(), "symbol:1:12");
+    }
+
+    #[test]
+    fn a_symbols_answer_decodes_its_packed_rows() {
+        use crate::producer::{ProducerTable, TransitionEncoder, TransitionInput};
+        let mut table = ProducerTable::new(1, "p");
+        table.symbols = vec![SymbolFact {
+            id: "symbol:h:0123456789abcdef01234567".into(),
+            alias_target: "".into(),
+            declarations: vec![crate::Declaration {
+                name: "JSON".into(),
+                kind: "variable".into(),
+                location: crate::Location {
+                    path: "bundled:/libs/lib.es5.d.ts".into(),
+                    start_byte: 3,
+                    end_byte: 7,
+                },
+            }]
+            .into(),
+            references: Vec::new().into(),
+        }];
+        let packed = TransitionEncoder::default()
+            .encode(TransitionInput {
+                project_id: "p",
+                base_state_token: "",
+                base: None,
+                target: &table,
+                sparse: false,
+            })
+            .unwrap();
+        let response: Response = serde_json::from_value(json!({
+            "schema": 1, "requestId": 4, "projectId": "p", "generation": 1, "ok": true
+        }))
+        .unwrap();
+        let response = Response {
+            table_transition: packed.bytes,
+            ..response
+        };
+        let rendered = StreamDecoder::default().decode(Operation::Symbols, &response);
+        let rows = rendered["symbolEvidence"].as_array().unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0]["id"], "symbol:h:0123456789abcdef01234567");
+        assert_eq!(rows[0]["declarations"][0]["name"], "JSON");
     }
 }

@@ -2,13 +2,13 @@
 //! symbol facts, over the tsrs project: `jsx_symbols`, `global_scope`,
 //! `non_durable` and the compiler-backed `incremental_tsgo_adversarial` cases.
 //!
-//! The Go tests build their demands with `SourceBindings`/`SourceCalls`
-//! (S4 item 7). [`symbol_demands`] stands in for them: a symbol demand with
-//! references for every declared name and a symbol demand (some structural)
-//! for every callee, found by a plain token scan of the same sources. Both
-//! sides of every comparison use the same helper, so parity is still between
-//! an incremental closure and a fresh one. Resolved-call, runtime and async
-//! demands are left out because those families are unavailable in S4a.
+//! [`symbol_demands`] is Go's `realisticDemands` over `Source{Bindings,Calls}`:
+//! a symbol demand (with references and structural-accessor flags on a fixed
+//! rotation) for every call-initialized binding name, and a symbol demand for
+//! every callee with the type-descriptor and async flags on a rotation.
+//! Resolved-call and runtime-value-domain demands are left out because those
+//! families are not ported yet; both sides of every comparison use the same
+//! helper, so parity is still between an incremental closure and a fresh one.
 
 use super::project_support::{Scratch, loc};
 use crate::closure::{DemandClosure, DemandInputGroup};
@@ -32,68 +32,44 @@ fn open(config: &str) -> Project {
     Project::open(&Context::new(), config, None, None).unwrap()
 }
 
-fn is_ident(byte: u8) -> bool {
-    byte == b'_' || byte == b'$' || byte.is_ascii_alphanumeric()
-}
-
-/// Declared names (after a declaring keyword) and callees (before `(`).
-type Spans = Vec<(usize, usize)>;
-
-fn scan_names(source: &str) -> (Spans, Spans) {
-    const DECLARING: [&str; 5] = ["const", "let", "var", "function", "class"];
-    const NOT_CALLEES: [&str; 8] = [
-        "function", "if", "for", "while", "switch", "catch", "return", "await",
-    ];
-    let bytes = source.as_bytes();
-    let (mut bindings, mut callees) = (Vec::new(), Vec::new());
-    let mut index = 0;
-    let mut previous = "";
-    while index < bytes.len() {
-        if !(bytes[index].is_ascii_alphabetic() || bytes[index] == b'_' || bytes[index] == b'$') {
-            index += 1;
-            continue;
-        }
-        let start = index;
-        while index < bytes.len() && is_ident(bytes[index]) {
-            index += 1;
-        }
-        let word = &source[start..index];
-        if DECLARING.contains(&previous) {
-            bindings.push((start, index));
-        } else if bytes.get(index) == Some(&b'(')
-            && !NOT_CALLEES.contains(&word)
-            && !DECLARING.contains(&word)
-            && start
-                .checked_sub(1)
-                .is_none_or(|before| bytes[before] != b'.')
-        {
-            callees.push((start, index));
-        }
-        previous = word;
-    }
-    (bindings, callees)
-}
-
-/// The stand-in for Go's `realisticDemands`.
+/// Go's `realisticDemands`.
 fn symbol_demands(closure: &mut DemandClosure) -> Vec<EntityDemand> {
+    let ctx = Context::new();
     let mut demands = Vec::new();
-    for source in closure.source_files(&Context::new()).unwrap() {
-        let text = String::from_utf8(source.source).unwrap();
-        let (bindings, callees) = scan_names(&text);
-        for (index, (start, end)) in bindings.into_iter().enumerate() {
-            demands.push(EntityDemand {
-                location: loc(&source.path, start, end),
-                symbol: true,
-                references: index % 3 == 0,
-                structural_accessor: index % 7 == 0,
-                ..EntityDemand::default()
-            });
+    for source in closure.source_files(&ctx).unwrap() {
+        let path = crate::gocompat::clean(&source.path);
+        for (index, binding) in closure
+            .backend
+            .source_bindings(&ctx, &path)
+            .unwrap()
+            .into_iter()
+            .enumerate()
+        {
+            for name in binding.names {
+                if name.path.is_empty() || name.end_byte <= name.start_byte {
+                    continue;
+                }
+                demands.push(EntityDemand {
+                    location: name,
+                    symbol: true,
+                    references: index % 3 == 0,
+                    structural_accessor: index % 7 == 0,
+                    ..EntityDemand::default()
+                });
+            }
         }
-        for (index, (start, end)) in callees.into_iter().enumerate() {
+        for (index, call) in closure
+            .backend
+            .source_calls(&ctx, &path)
+            .unwrap()
+            .into_iter()
+            .enumerate()
+        {
             demands.push(EntityDemand {
-                location: loc(&source.path, start, end),
+                location: call.callee,
                 symbol: true,
                 type_descriptor: index % 2 == 0,
+                r#async: index % 5 == 0,
                 ..EntityDemand::default()
             });
         }
@@ -439,6 +415,10 @@ fn global_scope_edit_fails_closed_and_keeps_parity() {
 }
 
 // ---- non_durable_integration_test.go ----------------------------------------
+
+fn is_ident(byte: u8) -> bool {
+    byte == b'_' || byte.is_ascii_alphanumeric()
+}
 
 /// A symbol at every property name after a dot, plus every binding name: the
 /// mapped-type accesses resolve to synthesized symbols, which is what makes

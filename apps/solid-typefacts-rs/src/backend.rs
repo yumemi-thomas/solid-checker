@@ -29,8 +29,8 @@ use std::sync::Arc;
 use typefacts::producer::source_digest;
 use typefacts::v3::{FileChange, ModuleGraphRequest, SourceFile, SymbolQuery};
 use typefacts::{
-    AsyncFunctionFact, Declaration, Location, ModuleFact, ModuleImportFact, SourceDigest,
-    SymbolFact,
+    AsyncFunctionFact, Declaration, Location, ModuleFact, ModuleImportFact, SourceBinding,
+    SourceCall, SourceDigest, SourceFunction, SymbolFact,
 };
 
 /// A backend failure. The session picks the wire code from the operation
@@ -58,6 +58,9 @@ impl From<String> for BackendError {
 /// as the complete list, is the defect an attested closure exists to remove.
 pub const ERR_MODULE_GRAPH_UNAVAILABLE: &str =
     "type facts backend reports no resolved module graph";
+
+/// What a backend without the optional `Source*` capabilities answers.
+pub const ERR_SOURCE_FACTS_UNAVAILABLE: &str = "type facts backend has no source facts";
 
 /// The result of applying an `update`'s file changes (Go: `AffectedSet`).
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -142,6 +145,46 @@ pub trait ClosureBackend {
         ctx: &Context,
         locations: &[Location],
     ) -> Result<Vec<AsyncFunctionFact>, BackendError>;
+
+    /// The call expressions of one file in source order, each with its
+    /// alias-resolved target (Go: the optional `CallDiscoverer`). Not every
+    /// backend has them: the default says so rather than answer empty.
+    fn source_calls(
+        &mut self,
+        _ctx: &Context,
+        _path: &str,
+    ) -> Result<Vec<SourceCall>, BackendError> {
+        Err(BackendError(ERR_SOURCE_FACTS_UNAVAILABLE.to_owned()))
+    }
+
+    /// Variables initialized directly by a resolved call (Go:
+    /// `BindingDiscoverer`).
+    fn source_bindings(
+        &mut self,
+        _ctx: &Context,
+        _path: &str,
+    ) -> Result<Vec<SourceBinding>, BackendError> {
+        Err(BackendError(ERR_SOURCE_FACTS_UNAVAILABLE.to_owned()))
+    }
+
+    /// Named block-bodied functions (Go: `FunctionDiscoverer`).
+    fn source_functions(
+        &mut self,
+        _ctx: &Context,
+        _path: &str,
+    ) -> Result<Vec<SourceFunction>, BackendError> {
+        Err(BackendError(ERR_SOURCE_FACTS_UNAVAILABLE.to_owned()))
+    }
+
+    /// Every async function and local alias of one file (Go:
+    /// `AsyncFunctionDiscoverer`).
+    fn source_async_functions(
+        &mut self,
+        _ctx: &Context,
+        _path: &str,
+    ) -> Result<Vec<AsyncFunctionFact>, BackendError> {
+        Err(BackendError(ERR_SOURCE_FACTS_UNAVAILABLE.to_owned()))
+    }
 
     /// Reference lists keyed by the requested id; an absent key means the
     /// same as an empty list (Go: `ReferencesBatch`).

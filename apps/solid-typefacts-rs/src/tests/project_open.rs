@@ -144,7 +144,7 @@ fn a_closed_project_refuses_every_operation_and_a_second_close() {
 }
 
 #[test]
-fn only_the_async_family_is_still_unavailable_not_empty() {
+fn the_fact_families_answer_or_fail_never_empty() {
     use crate::model::SemanticScope;
     let scratch = Scratch::new(&[
         ("tsconfig.json", SMALL_CONFIG),
@@ -165,7 +165,7 @@ fn only_the_async_family_is_still_unavailable_not_empty() {
                 .async_functions_at(&ctx, &[typefacts::Location::default()])
                 .unwrap_err()
         )
-        .contains("async_functions_at")
+        .starts_with("not found: source file")
     );
     // The symbol families answer: an unknown id is "not found", which is
     // `None` or an id-only row, never an error and never a made-up fact.

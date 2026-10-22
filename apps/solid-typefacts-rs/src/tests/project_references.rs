@@ -2,13 +2,11 @@
 //! `tsgo/project_memo_test.go` and the `SymbolAt`/`ResolveAlias` parts of
 //! `tsgo/project_invalidation_test.go` (deferred from S3).
 //!
-//! The Go tests find a call's target through `SourceCalls`, which belongs to
-//! the `Source*` families (S4 item 7). Here the target is the id of the symbol
-//! at the callee, the same `idFor(canonicalSymbol(GetSymbolAtLocation(callee)))`
-//! `sourceCallFact` computes. The assertions about the source-fact memo itself
-//! stay with that family.
+//! The call target is the `Target` of `Project::source_calls`, as in Go. The
+//! source-fact memo assertions live in `source_facts`, except the departed-file
+//! eviction, which belongs to `TestReferencesDropFileThatLeftProgram`.
 
-use super::project_support::{SMALL_CONFIG, Scratch, change, deletion, find, find_last, loc};
+use super::project_support::{SMALL_CONFIG, Scratch, change, deletion, find, find_last};
 use crate::backend::ClosureBackend;
 use crate::context::Context;
 use crate::model::SymbolId;
@@ -18,19 +16,10 @@ use typefacts::Location;
 
 const A_SOURCE: &str = "import { makeThing } from \"./b\";\n\nexport const value = makeThing();\n";
 
-fn target_of(project: &mut Project, path: &str, source: &str) -> SymbolId {
-    let callee = find(path, source, "makeThing()");
-    let callee = loc(
-        path,
-        callee.start_byte as usize,
-        callee.start_byte as usize + "makeThing".len(),
-    );
-    let id = project.symbol_at(&Context::new(), &callee).unwrap();
-    // `sourceCallFact` canonicalizes: the import alias resolves to the function.
-    project
-        .resolve_alias(&Context::new(), &id)
-        .unwrap()
-        .unwrap_or(id)
+fn target_of(project: &mut Project, path: &str, _source: &str) -> SymbolId {
+    let calls = project.source_calls(&Context::new(), path).unwrap();
+    assert_eq!(calls.len(), 1, "expected one source call in {path}");
+    calls[0].target.clone()
 }
 
 fn references_sorted(locations: &[Location]) -> bool {
@@ -130,6 +119,7 @@ fn reference_index_across_generations() {
     // same edit through an update.
     let mut fresh = scratch.open();
     fresh.update(&ctx, &[change(&b, 1, edited_b)]).unwrap();
+    fresh.source_calls(&ctx, &a).unwrap();
     assert_eq!(
         fresh.references(&ctx, &target).unwrap(),
         recomputed,
@@ -234,14 +224,9 @@ fn references_drop_a_file_that_left_the_program() {
     let (main, dep) = (scratch.path("main.ts"), scratch.path("dep.ts"));
     let ctx = Context::new();
     let mut project = scratch.open();
-    let callee = find(&main, main_source, "helper() +");
-    let callee = loc(
-        &main,
-        callee.start_byte as usize,
-        callee.start_byte as usize + "helper".len(),
-    );
-    let alias = project.symbol_at(&ctx, &callee).unwrap();
-    let target = project.resolve_alias(&ctx, &alias).unwrap().unwrap();
+    let calls = project.source_calls(&ctx, &main).unwrap();
+    assert_eq!(calls.len(), 1, "expected one call in main.ts");
+    let target = calls[0].target.clone();
     let before = project.references(&ctx, &target).unwrap();
     assert!(
         before
@@ -249,6 +234,8 @@ fn references_drop_a_file_that_left_the_program() {
             .any(|location| base(&location.path) == "dep.ts"),
         "a dep.ts reference before the import is removed: {before:?}"
     );
+
+    project.source_calls(&ctx, &dep).unwrap();
 
     // Dropping main's dep import removes dep.ts from the program without
     // putting dep.ts in the affected set.
@@ -265,6 +252,13 @@ fn references_drop_a_file_that_left_the_program() {
     assert!(
         !project.reference_index().files().contains_key(&dep),
         "reference contribution of a departed file survived the update"
+    );
+    // The source-fact memo evicts departed files the same way: dep.ts must
+    // answer like a file the program does not contain, not from the memo.
+    let error = project.source_calls(&ctx, &dep).unwrap_err();
+    assert!(
+        error.0.starts_with("not found"),
+        "expected not-found for source calls of a departed file, got {error}"
     );
     let after = project.references(&ctx, &target).unwrap();
     assert!(

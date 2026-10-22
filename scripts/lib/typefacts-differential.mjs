@@ -85,6 +85,19 @@ const isLibOnlySymbol = (row) =>
   declarationsOf(row).every((declaration) => isLibPath(declaration.location?.path));
 
 /**
+ * A well-known-symbol property name embeds the checker's unique-symbol type
+ * counter (`__@hasInstance@73` in one producer, `...@71` in the other): it
+ * follows type creation order, which differs between the pinned TypeScript
+ * snapshots. Compare the name without it. Project symbols are never renamed.
+ */
+export function libSymbolName(name) {
+  const match = /^(.*@.*)@\d+$/.exec(name ?? "");
+  return match ? match[1] : name;
+}
+
+const libLabel = (row) => `symbol:~lib:${libSymbolName(declarationsOf(row)[0].name)}`;
+
+/**
  * Normalises one decoded transcript (`{handshake, exchanges}`).
  *
  * 1. `bundled:///` -> `bundled:/` everywhere.
@@ -97,8 +110,16 @@ const isLibOnlySymbol = (row) =>
  *    producers' visit order cannot show through. One mapping per transcript.
  * 4. State tokens are opaque text: only their presence is kept. Source-arena
  *    paths and timings are dropped.
+ *
+ * A durable id hashes declaration offsets (`symbol:h:`), and the two producers'
+ * library text differs, so the same library symbol has a different durable id in
+ * each. `evidence` is the producer's own answer to "declare this id" (the
+ * replay's evidence pass: symbol rows, same shape as `symbolEvidence`) and
+ * joins the rows of the transcript itself as proof that an id is library-only.
+ * An id with no proof in either place is left as it is: a durable id that
+ * differs without proof is a difference, not noise.
  */
-export function normalizeTranscript(transcript) {
+export function normalizeTranscript(transcript, evidence = []) {
   const exchanges = transcript.exchanges.map((exchange) => ({
     ...exchange,
     response: exchange.response ? mapStrings(exchange.response, normalizeBundled) : exchange.response
@@ -106,12 +127,17 @@ export function normalizeTranscript(transcript) {
 
   // (2) library symbol ids -> stable names
   const libIds = new Map();
-  for (const { response } of exchanges) {
-    if (!response) continue;
-    for (const row of symbolRows(response)) {
-      if (isLibOnlySymbol(row)) libIds.set(row.id, `symbol:~lib:${declarationsOf(row)[0].name}`);
+  const proofs = (rows) => {
+    for (const row of rows) {
+      if (isLibOnlySymbol(row)) libIds.set(row.id, libLabel(row));
     }
+  };
+  for (const { response } of exchanges) {
+    if (response) proofs(symbolRows(response));
   }
+  // Evidence rows only prove; they are never added to the transcript. Their
+  // declaration paths take the same `bundled:///` spelling as the rest.
+  proofs(mapStrings(evidence, normalizeBundled));
 
   // (3) signatures for the remaining non-durable ids
   const signatures = new Map(); // id -> signature

@@ -18,6 +18,7 @@ mod regression;
 mod semantic_demand;
 mod session;
 mod session_demands;
+mod source_facts;
 mod symbol_facts;
 mod symbol_integration;
 mod symbols;

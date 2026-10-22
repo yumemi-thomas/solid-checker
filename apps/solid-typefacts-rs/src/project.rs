@@ -10,11 +10,9 @@
 //! `references_batch`, `changed_references`, and `semantic_demand_runs` for the
 //! symbol, reference-space and structural-accessor facts) answer from the
 //! identity state (`identity`) and the reference index (`references`) this
-//! module keeps beside the program. `async_functions_at` is still S4 and
-//! answers an error naming the missing slice, never an empty or guessed fact:
-//! an empty answer would claim "no async function here", which is a fact the
-//! backend does not hold. The source-fact memo (`sourceFactsMemo`) arrives
-//! with the `Source*` families.
+//! module keeps beside the program. The `Source*` families, async function
+//! facts and the per-file source-fact memo (`sourceFactsMemo`) are in
+//! `source_facts`; the update path evicts the memo beside the reference index.
 //!
 //! One deliberate difference from Go: Go memoizes source digests by
 //! `*ast.SourceFile` pointer. Here the compiler's nodes are arena handles
@@ -60,7 +58,10 @@ use tsrs_tsoptions::{ParseConfigHost, get_parsed_command_line_of_config_file};
 use tsrs_vfs::{Entries, FS, FileInfo, bundled, osvfs};
 use typefacts::producer::source_digest;
 use typefacts::v3::{FileChange, ModuleGraphRequest, SourceFile, SymbolQuery};
-use typefacts::{AsyncFunctionFact, Declaration, Location, SourceDigest, SymbolFact};
+use typefacts::{
+    AsyncFunctionFact, Declaration, Location, SourceBinding, SourceCall, SourceDigest,
+    SourceFunction, SymbolFact,
+};
 
 /// Go: `ErrClosed`.
 pub const ERR_CLOSED: &str = "type facts project is closed";
@@ -69,13 +70,6 @@ pub const ERR_CLOSED: &str = "type facts project is closed";
 /// updates, so the memory the incremental path cannot return (the edited
 /// files' trees, which share the chain's regions) stays bounded. Plan 3.3.
 pub const REBASE_AFTER_UPDATES: u32 = 64;
-
-/// What the backend answers for a family that arrives in S4.
-fn unavailable(operation: &str) -> BackendError {
-    BackendError(format!(
-        "type facts backend: {operation} is not available in the tsrs backend yet (migration slice S4)"
-    ))
-}
 
 /// The configuration parser keeps a `&'static` host (the module resolver
 /// requires it), so one host per project is leaked, and its file system points
@@ -187,6 +181,8 @@ pub struct Project {
     pub(crate) references: ReferenceIndex,
     /// Demanded facts left absent because their family is not ported yet.
     pub unavailable: Unavailable,
+    /// Per-file `Source*` facts across generations (Go: `sourceFactsMemo`).
+    pub(crate) source_memo: HashMap<String, crate::source_facts::FileFactsMemo>,
 }
 
 impl Project {
@@ -230,6 +226,7 @@ impl Project {
             ids: Identities::new(1),
             references: ReferenceIndex::default(),
             unavailable: Unavailable::default(),
+            source_memo: HashMap::new(),
         };
         // Go: `collectExportedIdentities` seeds the symbol store at open.
         let generation = project.generation.as_ref().expect("just built");
@@ -239,7 +236,7 @@ impl Project {
         Ok(project)
     }
 
-    fn live(&self) -> Result<&Generation, BackendError> {
+    pub(crate) fn live(&self) -> Result<&Generation, BackendError> {
         self.generation
             .as_ref()
             .ok_or_else(|| BackendError(ERR_CLOSED.to_owned()))
@@ -248,7 +245,7 @@ impl Project {
     /// Runs `f` with the generation's checker, identity state and reference
     /// index (Go: `ensureCheckerLocked` under the project lock). Nothing `f`
     /// returns may hold a tsrs handle past this call.
-    fn with_env<R>(
+    pub(crate) fn with_env<R>(
         &mut self,
         f: impl FnOnce(&mut Env<'_>, &mut ReferenceIndex) -> R,
     ) -> Result<R, BackendError> {
@@ -495,6 +492,7 @@ impl ClosureBackend for Project {
         // The identity maps hold handles into the generation about to go.
         self.ids.close();
         self.references.reset();
+        self.source_memo.clear();
         self.generation = None;
         self.graph = ImportGraph::default();
         self.declaration_shapes.clear();
@@ -550,21 +548,41 @@ impl ClosureBackend for Project {
         outcome?
     }
 
-    /// Async facts are S4 item 7. Asked about no locations the answer is
-    /// empty (the closure always asks, even when no demand wants async facts);
-    /// asked about any location it fails rather than claim "no async function
-    /// here", which the backend does not know.
+    /// Go: `AsyncFunctionsAt` (`source_facts`).
     fn async_functions_at(
         &mut self,
         ctx: &Context,
         locations: &[Location],
     ) -> Result<Vec<AsyncFunctionFact>, BackendError> {
-        check(ctx)?;
-        self.live()?;
-        if locations.is_empty() {
-            return Ok(Vec::new());
-        }
-        Err(unavailable("async_functions_at"))
+        self.async_functions_at_locations(ctx, locations)
+    }
+
+    fn source_calls(&mut self, ctx: &Context, path: &str) -> Result<Vec<SourceCall>, BackendError> {
+        Project::source_calls(self, ctx, path)
+    }
+
+    fn source_bindings(
+        &mut self,
+        ctx: &Context,
+        path: &str,
+    ) -> Result<Vec<SourceBinding>, BackendError> {
+        Project::source_bindings(self, ctx, path)
+    }
+
+    fn source_functions(
+        &mut self,
+        ctx: &Context,
+        path: &str,
+    ) -> Result<Vec<SourceFunction>, BackendError> {
+        Project::source_functions(self, ctx, path)
+    }
+
+    fn source_async_functions(
+        &mut self,
+        ctx: &Context,
+        path: &str,
+    ) -> Result<Vec<AsyncFunctionFact>, BackendError> {
+        Project::source_async_functions(self, ctx, path)
     }
 
     /// Go: `ReferencesBatch`: merges the retained per-file fragments once and
@@ -915,6 +933,9 @@ impl Project {
         if incremental {
             let dropped: std::collections::HashSet<&str> =
                 affected.iter().map(String::as_str).collect();
+            self.evict_source_memo(Some(&|path| {
+                !dropped.contains(path) && program.get_source_file(path).is_some()
+            }));
             self.references.invalidate(
                 &affected,
                 &|path| {
@@ -932,6 +953,7 @@ impl Project {
                     .insert(incremental_path.clone(), shape);
             }
         } else {
+            self.evict_source_memo(None);
             self.references.reset();
             self.ids.sweep_durable(program);
             self.declaration_shapes.clear();
@@ -1019,7 +1041,7 @@ fn utf8_boundary(source: &str, offset: usize) -> bool {
 }
 
 /// Go: `validateLocation`. `source` is valid UTF-8 by construction.
-fn validate_location(location: &Location, source: &str) -> Result<(), BackendError> {
+pub(crate) fn validate_location(location: &Location, source: &str) -> Result<(), BackendError> {
     let (start, end) = (location.start_byte, location.end_byte);
     if end < start || end > source.len() as u64 {
         return Err(BackendError(format!(
