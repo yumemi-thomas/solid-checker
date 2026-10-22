@@ -283,9 +283,8 @@ func (p *DemandClosure) Stats() ClosureStats {
 }
 
 // Update applies editor overlays and advances exactly one generation, even when
-// the backend reports no affected source files. Retained contributions survive
-// except for the affected set and the changed files themselves, which are
-// evicted here rather than when next demanded.
+// the backend reports no affected source files. No retained analysis survives
+// the update (ADR 0364).
 func (p *DemandClosure) Update(ctx context.Context, changes []FileChange) (AffectedSet, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -293,6 +292,18 @@ func (p *DemandClosure) Update(ctx context.Context, changes []FileChange) (Affec
 	if err != nil {
 		return affected, err
 	}
+	// ADR 0364: nothing derived from the previous generation's analysis
+	// survives an update. Retained contributions, async facts, the symbol
+	// memo, root sets and the suppression union all embed ids and answers
+	// whose staleness the affected set cannot bound, so the next analyze
+	// recomputes from the new program (which the backend still reuses
+	// incrementally). The affected set is only reported.
+	//
+	// Only the previous table's header survives, as the base the transport
+	// diffs against: every file is recomputed, so the manifest names every
+	// path and the client compares the replacement rows with its own by value
+	// to learn which actually changed.
+	previous := p.table
 	invalidPaths := make(map[string]struct{}, len(affected.Files)+len(changes))
 	for _, path := range affected.Files {
 		invalidPaths[path] = struct{}{}
@@ -300,29 +311,9 @@ func (p *DemandClosure) Update(ctx context.Context, changes []FileChange) (Affec
 	for _, change := range changes {
 		invalidPaths[filepath.Clean(change.Path)] = struct{}{}
 	}
-	for path := range invalidPaths {
-		for len(p.symbolsByPath[path]) != 0 {
-			ids := p.symbolsByPath[path]
-			id := ids[len(ids)-1]
-			if p.invalidatedSymbols == nil {
-				p.invalidatedSymbols = make(map[SymbolID]struct{})
-			}
-			p.invalidatedSymbols[id] = struct{}{}
-			if fact, retained := p.table.canonicalSymbol(id); retained {
-				p.unindexSymbolFact(fact)
-			} else {
-				p.symbolsByPath[path] = ids[:len(ids)-1]
-			}
-			delete(p.symbolReferences, id)
-		}
-	}
-	p.previousTable = p.table
-	p.table = nil
+	p.resetAnalysisStateLocked()
+	p.previousTable = previous
 	p.transportChangedPaths = invalidPaths
-	// Accepted source state invalidates the exact Retained contributions and
-	// their direct dependency users immediately. Analyze-time preparation is
-	// transactional, but an accepted update itself cannot be rolled back.
-	p.retained.invalidate(invalidPaths)
 	// Every accepted protocol update advances exactly one generation, even
 	// when the backend reports no affected source files.
 	p.generation++

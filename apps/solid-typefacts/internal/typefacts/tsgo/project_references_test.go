@@ -127,12 +127,18 @@ func TestReferenceIndexAcrossGenerations(t *testing.T) {
 		}
 	}
 
-	t.Run("unrelated update keeps contributions and answers", func(t *testing.T) {
+	t.Run("unrelated update drops contributions and rebuilds the same answers", func(t *testing.T) {
 		if _, err := opened.Update(ctx, []typefacts.FileChange{{Path: cPath, Version: 1, Source: []byte("export const unrelated = 2;\n")}}); err != nil {
 			t.Fatal(err)
 		}
-		if proj.referenceIndex.files[cleanA] != entryA || proj.referenceIndex.files[cleanB] != entryB {
-			t.Fatal("contributions of unaffected files did not survive an unrelated update")
+		if len(proj.referenceIndex.files) != 0 {
+			t.Fatal("contributions survived an update (ADR 0364)")
+		}
+		if _, err := opened.References(ctx, target); !errors.Is(err, typefacts.ErrNotFound) {
+			t.Fatalf("held ID after update: err = %v, want ErrNotFound", err)
+		}
+		if _, err := discoverer.SourceCalls(ctx, aPath); err != nil {
+			t.Fatal(err)
 		}
 		reused, err := opened.References(ctx, target)
 		if err != nil {
@@ -143,15 +149,15 @@ func TestReferenceIndexAcrossGenerations(t *testing.T) {
 		}
 	})
 
-	t.Run("shape-preserving declaring-file edit retains its importers", func(t *testing.T) {
+	t.Run("shape-preserving declaring-file edit drops every contribution", func(t *testing.T) {
 		if _, err := opened.Update(ctx, []typefacts.FileChange{{Path: bPath, Version: 1, Source: []byte("export function makeThing(): number {\n  return 2;\n}\nexport const local = makeThing();\n")}}); err != nil {
 			t.Fatal(err)
 		}
-		if proj.referenceIndex.files[cleanA] != entryA {
-			t.Fatal("contribution of a.ts did not survive a shape-preserving edit")
+		if len(proj.referenceIndex.files) != 0 {
+			t.Fatal("contributions survived an update (ADR 0364)")
 		}
-		if _, ok := proj.referenceIndex.files[cleanB]; ok {
-			t.Fatal("contribution of b.ts survived its own edit")
+		if _, err := discoverer.SourceCalls(ctx, aPath); err != nil {
+			t.Fatal(err)
 		}
 		recomputed, err := opened.References(ctx, target)
 		if err != nil {
@@ -163,9 +169,6 @@ func TestReferenceIndexAcrossGenerations(t *testing.T) {
 		}
 		if refreshed := proj.referenceIndex.files[cleanB]; refreshed == nil || refreshed == entryB {
 			t.Fatal("contribution of b.ts was not lazily replaced after its own edit")
-		}
-		if proj.referenceIndex.files[filepath.Clean(cPath)] == nil {
-			t.Fatal("expected the unaffected c.ts contribution to be retained")
 		}
 
 		// A fresh project over the same tree must answer the same durable
@@ -203,6 +206,9 @@ func TestReferenceIndexAcrossGenerations(t *testing.T) {
 		}
 		if len(proj.referenceIndex.files) != 0 {
 			t.Fatalf("expected no contributions after a full rebuild, found %d", len(proj.referenceIndex.files))
+		}
+		if _, err := discoverer.SourceCalls(ctx, aPath); err != nil {
+			t.Fatal(err)
 		}
 		rebuilt, err := opened.References(ctx, target)
 		if err != nil {
@@ -342,6 +348,10 @@ func TestReferencesDropFileThatLeftProgram(t *testing.T) {
 	// answer like a file the program does not contain, not from the memo.
 	if _, err := discoverer.SourceCalls(ctx, depPath); !errors.Is(err, typefacts.ErrNotFound) {
 		t.Fatalf("expected ErrNotFound for source calls of a departed file, got %v", err)
+	}
+	// The held ID died with the update; re-mint it from main.ts.
+	if _, err := discoverer.SourceCalls(ctx, mainPath); err != nil {
+		t.Fatal(err)
 	}
 	after, err := opened.References(ctx, target)
 	if err != nil {

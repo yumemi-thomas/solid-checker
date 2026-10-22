@@ -532,3 +532,7 @@ A package function whose same-operation creation calls cover every exit (`if (c)
 <a id="adr-0360"></a>
 ## ADR 0360 — A refused file has no compiler facts
 A compile error (`CompilerProviderError::Refused`) is no failure: the file keeps AST and Type Facts, `ExecutionMap::refused` places no site, a violation located or evidenced in it is uncertifiable, and SC9015 names it. A refused JSX closure file keeps a `*` package off source (SC9005); a named one fails. A missing or untrusted trace is fatal. Owners: `file_execution_map` (`lib.rs`), `walk` (`dependency_sources.rs`), `diagnostics.rs`.
+
+<a id="adr-0364"></a>
+## ADR 0364 — No retained analysis across updates until instantiation-stable ids and recorded dependencies
+Every update discards the Go Type Facts producer's derived state: retained contributions, async facts, the source-fact memo, reference-index entries, symbol and identity maps. The transport names every path, so the client compares replacement rows with its own by value. Only the compiler's incremental program survives. Closes five staleness causes: claim-order ids (a retained answer holding a hash id another symbol later claims), tsconfig changes, a stale type descriptor, reference space going stale when a referencing file is deleted, and runtimeIdentity hashing another file's declaration span with no recorded dependency. Reuse within one generation stays. It returns with instantiation-stable ids and recorded dependencies. Owners: `closure.go` (`Update`), `tsgo/project.go` (`Update`).

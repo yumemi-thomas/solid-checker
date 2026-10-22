@@ -588,6 +588,7 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 	}
 	clear(p.idsBySymbol)
 	clear(p.symbolsByID)
+	clear(p.durableRefs)
 	for symbol, preserved := range currentExports {
 		p.idsBySymbol[symbol] = preserved.id
 		p.symbolsByID[preserved.id] = symbol
@@ -646,38 +647,14 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 	sort.Strings(affected)
 	affectedDuration := time.Since(stageStarted)
 	stageStarted = time.Now()
-	if incremental && incrementalPath != "" {
-		// Source facts and reference contributions of files outside the
-		// affected set survive the generation: their text is unchanged and
-		// every durable identity they reference declares in an unchanged
-		// file (a changed declaring file would have put the referencing
-		// file in the affected set). Files that left the program are
-		// evicted now, not when they are next queried, so an entry cannot
-		// go stale while its file is outside the program and be reused if
-		// the file later re-enters.
-		dropped := make(map[string]struct{}, len(affected))
-		for _, path := range affected {
-			dropped[path] = struct{}{}
-		}
-		retained := func(path string) bool {
-			if _, hit := dropped[path]; hit {
-				return false
-			}
-			return program.GetSourceFile(path) != nil
-		}
-		for key, memo := range p.sourceFactsMemo {
-			if !retained(memo.absPath) {
-				delete(p.sourceFactsMemo, key)
-			}
-		}
-		p.referenceIndex.invalidate(program, affected, retained)
-	} else {
-		// Full rebuilds (deletes, tsconfig changes, multi-file updates) can
-		// change resolution outside the module graph; fail closed.
-		clear(p.sourceFactsMemo)
-		p.referenceIndex.reset()
-		p.sweepDurableIdentities(program)
-	}
+	// ADR 0364: nothing derived from the previous generation's analysis is
+	// reused. Source-fact memo entries and reference-index contributions embed
+	// ids and answers (reference space, runtime identity) whose dependence on
+	// other files the affected set cannot bound, so both are rebuilt lazily
+	// from the new program. The program itself stays incremental.
+	clear(p.sourceFactsMemo)
+	p.referenceIndex.reset()
+	p.sweepDurableIdentities(program)
 	if p.declarationShapes == nil {
 		p.declarationShapes = make(map[string]declarationShape)
 	}

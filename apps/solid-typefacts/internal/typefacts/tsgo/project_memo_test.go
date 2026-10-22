@@ -2,6 +2,7 @@ package tsgo
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -57,7 +58,7 @@ func TestSourceFactsMemoAcrossGenerations(t *testing.T) {
 		t.Fatalf("expected makeThing to declare in b.ts, got %+v", declarations)
 	}
 
-	t.Run("unrelated update keeps the memo and resolves held IDs", func(t *testing.T) {
+	t.Run("unrelated update drops the memo and held IDs", func(t *testing.T) {
 		affected, err := opened.Update(ctx, []typefacts.FileChange{{Path: cPath, Version: 1, Source: []byte("export const unrelated = 2;\n")}})
 		if err != nil {
 			t.Fatal(err)
@@ -67,9 +68,11 @@ func TestSourceFactsMemoAcrossGenerations(t *testing.T) {
 				t.Fatalf("a.ts unexpectedly in affected set %v", affected.Files)
 			}
 		}
-		memo, ok := proj.sourceFactsMemo[aPath]
-		if !ok || !memo.hasCalls {
-			t.Fatal("memo entry for a.ts did not survive an unrelated update")
+		if len(proj.sourceFactsMemo) != 0 {
+			t.Fatal("memo entries survived an update (ADR 0364)")
+		}
+		if _, err := opened.Declarations(ctx, target); !errors.Is(err, typefacts.ErrNotFound) {
+			t.Fatalf("held ID after update: err = %v, want ErrNotFound", err)
 		}
 		reused, err := discoverer.SourceCalls(ctx, aPath)
 		if err != nil {
@@ -78,7 +81,7 @@ func TestSourceFactsMemoAcrossGenerations(t *testing.T) {
 		if !reflect.DeepEqual(reused, calls) {
 			t.Fatalf("memoized calls diverged:\nbefore %+v\nafter  %+v", calls, reused)
 		}
-		// The held ID must re-resolve in the new generation.
+		// The recomputed ID re-resolves in the new generation.
 		redeclared, err := opened.Declarations(ctx, target)
 		if err != nil {
 			t.Fatal(err)
@@ -88,7 +91,7 @@ func TestSourceFactsMemoAcrossGenerations(t *testing.T) {
 		}
 	})
 
-	t.Run("shape-preserving imported body edit retains the importer", func(t *testing.T) {
+	t.Run("shape-preserving imported body edit drops the importer's memo", func(t *testing.T) {
 		affected, err := opened.Update(ctx, []typefacts.FileChange{{Path: bPath, Version: 1, Source: []byte("export function makeThing(): number {\n  return 2;\n}\n")}})
 		if err != nil {
 			t.Fatal(err)
@@ -102,8 +105,8 @@ func TestSourceFactsMemoAcrossGenerations(t *testing.T) {
 		if sawImporter {
 			t.Fatalf("shape-preserving edit unexpectedly affected a.ts: %v", affected.Files)
 		}
-		if _, ok := proj.sourceFactsMemo[aPath]; !ok {
-			t.Fatal("memo entry for a.ts did not survive a shape-preserving edit")
+		if _, ok := proj.sourceFactsMemo[aPath]; ok {
+			t.Fatal("memo entry for a.ts survived an update (ADR 0364)")
 		}
 		reused, err := discoverer.SourceCalls(ctx, aPath)
 		if err != nil {
@@ -154,8 +157,14 @@ func TestSourceFactsMemoAcrossGenerations(t *testing.T) {
 		if len(proj.sourceFactsMemo) != 0 {
 			t.Fatalf("expected an empty memo after a full rebuild, found %d entries", len(proj.sourceFactsMemo))
 		}
+		if _, err := opened.Declarations(ctx, target); !errors.Is(err, typefacts.ErrNotFound) {
+			t.Fatalf("held ID after a full rebuild: err = %v, want ErrNotFound", err)
+		}
+		if _, err := discoverer.SourceCalls(ctx, aPath); err != nil {
+			t.Fatal(err)
+		}
 		if _, err := opened.Declarations(ctx, target); err != nil {
-			t.Fatalf("durable ID failed to re-resolve after a full rebuild: %v", err)
+			t.Fatalf("re-minted ID failed to resolve after a full rebuild: %v", err)
 		}
 	})
 }

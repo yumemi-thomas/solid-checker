@@ -177,8 +177,9 @@ func TestRetainedSparseMaterializationAtScaleMatchesFreshMaterialization(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	if incremental.Stats().Retention.RetainedFiles == 0 {
-		t.Fatal("stable edit did not exercise retained sparse rows")
+	// ADR 0364: nothing is retained across an update.
+	if retained := incremental.Stats().Retention.RetainedFiles; retained != 0 {
+		t.Fatalf("an update retained %d files; retention across updates is off", retained)
 	}
 
 	fresh, freshBackend := open()

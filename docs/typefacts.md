@@ -51,9 +51,14 @@ terminology stay inside the `tsgo` adapter.
 
 Generation-scoped opaque identities include their project generation and must
 be reacquired after every successful `Update`. Declaration-backed durable
-identities may survive updates. Module-visible target symbols use a canonical
-declaring-path/name identity; other durable symbols include their declaration
-span.
+identities are minted again after an update: the producer keeps no analysis
+across one (ADR 0364), so an ID held over an update fails closed with
+not-found until a location scan mints it. Module-visible target symbols use a
+canonical declaring-path/name identity; other durable symbols include their
+declaration span. Within one generation the first symbol to claim a declaration
+takes its hash ID and later ones (instantiations, copies) get counters, so
+answers are reused only inside a generation and never across an update. The
+compiler's incremental program is still reused.
 
 ## Native integration pins
 

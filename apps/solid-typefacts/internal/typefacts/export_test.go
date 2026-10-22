@@ -38,3 +38,10 @@ func SymbolFactsForTest(table *FactTable) []SymbolFact {
 	})
 	return facts
 }
+
+// WireEntitiesForTest returns the table's entity rows in wire order.
+func WireEntitiesForTest(table *FactTable) []EntityFact {
+	rows := make([]EntityFact, 0, table.wireEntityCount())
+	table.rangeWireEntities(func(entity EntityFact) { rows = append(rows, entity) })
+	return rows
+}
