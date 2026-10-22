@@ -36,7 +36,7 @@ function read(command, args, options) {
   return result.stdout.trim();
 }
 
-const rustEnvironment = { ...process.env, RUSTUP_TOOLCHAIN: "1.97", SOLID_CHECKER_BUILD_ID: buildId, TYPEFACTS_BUILD_ID: buildId };
+const rustEnvironment = { ...process.env, RUSTUP_TOOLCHAIN: "1.99.1", SOLID_CHECKER_BUILD_ID: buildId, TYPEFACTS_BUILD_ID: buildId };
 run("cargo", [
   "build", "--manifest-path", join(repositoryRoot, "rust/Cargo.toml"),
   "-p", "solid-checker-wasm", "--target", "wasm32-wasip1",

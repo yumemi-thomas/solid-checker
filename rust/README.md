@@ -122,7 +122,7 @@ multiplicity through cycles.
 
 ```sh
 SOLID_TYPEFACTS_BIN=bin/solid-typefacts \
-cargo +1.97 run --manifest-path rust/Cargo.toml --bin solid-checker-rust -- \
+cargo +1.99.1 run --manifest-path rust/Cargo.toml --bin solid-checker-rust -- \
   --format json --certify \
   --project fixtures/reactive-ir/tracer/tsconfig.json
 ```

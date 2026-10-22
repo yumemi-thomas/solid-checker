@@ -8,6 +8,8 @@ mod daemon_resolution;
 mod idle_memory;
 mod json_output;
 mod snapshot_emission;
+#[cfg(any(target_os = "macos", all(target_os = "linux", target_env = "gnu")))]
+mod unsafe_boundary;
 
 use std::{
     io::{self, IsTerminal, Read, Write},

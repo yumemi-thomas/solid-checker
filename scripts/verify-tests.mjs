@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 export function verificationJobs(runner, env = process.env) {
-  const cargo = ["cargo", "+1.97"];
+  const cargo = ["cargo", "+1.99.1"];
   const common = ["--manifest-path", "rust/Cargo.toml", "--workspace"];
   const profile = env.SOLID_CHECKER_CARGO_PROFILE || "verify";
   return [

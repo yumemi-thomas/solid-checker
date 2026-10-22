@@ -38,7 +38,7 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.97
+      - uses: dtolnay/rust-toolchain@1.99.1
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.0
@@ -93,13 +93,13 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.97
+      - uses: dtolnay/rust-toolchain@1.99.1
         with:
           targets: wasm32-wasip1-threads, wasm32-wasip1
       # The action's targets input covers only the toolchain it installs;
       # the build resolves its toolchain through rust-toolchain.toml, which
       # needs its own copy of the target's std.
-      - run: rustup target add wasm32-wasip1-threads wasm32-wasip1 --toolchain 1.97
+      - run: rustup target add wasm32-wasip1-threads wasm32-wasip1 --toolchain 1.99.1
       # The owned check's producer reactor (packages/wasm/scripts/build-owned.mjs).
       - uses: actions/setup-go@v5
         with:

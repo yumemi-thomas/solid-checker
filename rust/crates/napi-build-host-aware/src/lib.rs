@@ -11,6 +11,7 @@
 //! went with the dialect (ADR 0110), and `solidjs-compiler` needs it for the
 //! same reason — which is why this crate outlived the fork that motivated it.
 //! The `emnapi 1.x` above is the napi runtime's version, not Solid's.
+#![forbid(unsafe_code)]
 
 use std::env;
 

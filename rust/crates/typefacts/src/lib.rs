@@ -14,6 +14,8 @@ use thiserror::Error;
 mod retained_table;
 mod session;
 mod shared_transition_arena;
+#[cfg(target_os = "macos")]
+mod unsafe_boundary;
 pub mod v3;
 
 pub use retained_table::{FactTable, Symbol};

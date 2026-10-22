@@ -1,4 +1,4 @@
-RUST_TOOLCHAIN ?= 1.97
+RUST_TOOLCHAIN ?= 1.99.1
 SOLID_CHECKER_BUILD_ID ?= dev
 # This producer/certification label is not checker implementation identity.
 # Daemon sockets and response handshakes bind the immutable loaded-image build

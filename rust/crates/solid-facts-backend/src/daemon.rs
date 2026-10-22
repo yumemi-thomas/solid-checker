@@ -217,38 +217,9 @@ fn loaded_implementation_identity() -> Result<String, String> {
 
 #[cfg(target_os = "macos")]
 fn loaded_implementation_identity() -> Result<String, String> {
-    // SDK mach-o/dyld.h and loader.h: image zero is the executable; LC_UUID
-    // is its linker-issued build identity, carried in the loaded image.
-    #[repr(C)]
-    struct Header {
-        magic: u32,
-        cpu_type: i32,
-        cpu_subtype: i32,
-        file_type: u32,
-        commands: u32,
-        command_bytes: u32,
-        flags: u32,
-        reserved: u32,
-    }
-    unsafe extern "C" {
-        fn _dyld_get_image_header(index: u32) -> *const Header;
-    }
-    // SAFETY: dyld owns the executable header and its mapped load commands for
-    // the process lifetime. No caller-supplied pointer or file bytes are read.
-    let header =
-        unsafe { _dyld_get_image_header(0).as_ref() }.ok_or("missing loaded executable header")?;
-    if header.magic != 0xfeed_facf || header.command_bytes > 1024 * 1024 || header.commands > 4096 {
-        return Err("unsupported loaded executable header".into());
-    }
-    // SAFETY: a validated native 64-bit Mach-O header's load commands follow
-    // the header in the same dyld mapping; their extent is provided by dyld.
-    let commands = unsafe {
-        std::slice::from_raw_parts(
-            (std::ptr::from_ref(header).cast::<u8>()).add(std::mem::size_of::<Header>()),
-            header.command_bytes as usize,
-        )
-    };
-    macho_build_identity(commands, header.commands)
+    // LC_UUID is the linker-issued build identity carried in the loaded image.
+    let (commands, count) = crate::unsafe_boundary::loaded_executable_load_commands()?;
+    macho_build_identity(commands, count)
         .ok_or_else(|| "missing or ambiguous loaded executable build UUID".into())
 }
 

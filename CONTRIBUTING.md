@@ -8,7 +8,7 @@ compiler owns execution semantics, and TypeScript-Go owns checker facts.
 ## Prerequisites
 
 - Go 1.26 or newer (to build and test the local Type Facts producer)
-- Rust 1.97 with `rustfmt` and `clippy`
+- Rust 1.99.1 with `rustfmt` and `clippy`
 - Bun 1.4.0 (published packages remain compatible with Node.js)
 - `jq`
 

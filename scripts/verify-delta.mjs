@@ -56,7 +56,7 @@ import { certificationEnvironment } from "./lib/certification-environment.mjs";
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-const TOOLCHAIN = "+1.97";
+const TOOLCHAIN = "+1.99.1";
 const MANIFEST = "rust/Cargo.toml";
 const DEBUG_CHECKER = "rust/target/debug/solid-checker-rust";
 const TYPEFACTS = "bin/solid-typefacts";

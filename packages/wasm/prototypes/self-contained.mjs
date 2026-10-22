@@ -64,7 +64,7 @@ buildTypeFactsReactor();
 const checkerBuild = spawnSync(
   "cargo",
   [
-    "+1.97",
+    "+1.99.1",
     "build",
     "--manifest-path", "rust/Cargo.toml",
     "-p", "solid-checker-wasm",

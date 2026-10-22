@@ -1,4 +1,4 @@
-RUST_TOOLCHAIN ?= 1.97
+RUST_TOOLCHAIN ?= 1.99.1
 TYPEFACTS_BUILD_ID ?= dev
 REPOSITORY_ROOT := $(abspath ../..)
 TYPEFACTS_BIN ?= $(REPOSITORY_ROOT)/bin/solid-typefacts

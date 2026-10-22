@@ -16,20 +16,8 @@ static NEXT_ARENA: AtomicU64 = AtomicU64::new(1);
 
 #[cfg(target_os = "macos")]
 fn disable_cache(file: &File) -> Result<(), SessionError> {
-    use std::{ffi::c_int, os::fd::AsRawFd};
-
-    const F_NOCACHE: c_int = 48;
-    unsafe extern "C" {
-        fn fcntl(file_descriptor: c_int, command: c_int, ...) -> c_int;
-    }
-    // SAFETY: F_NOCACHE takes one integer argument and does not retain it.
-    if unsafe { fcntl(file.as_raw_fd(), F_NOCACHE, 1 as c_int) } == -1 {
-        return Err(SessionError::Process(format!(
-            "disable shared transition cache: {}",
-            std::io::Error::last_os_error()
-        )));
-    }
-    Ok(())
+    crate::unsafe_boundary::disable_file_cache(file)
+        .map_err(|error| SessionError::Process(format!("disable shared transition cache: {error}")))
 }
 
 #[cfg(not(target_os = "macos"))]

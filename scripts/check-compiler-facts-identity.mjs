@@ -140,7 +140,7 @@ export function assertIdentityDocuments({
 
 function compilerPackageFromMetadata({ cargoPackage, cargoSourcePrefix }) {
   const metadata = JSON.parse(run("cargo", [
-    "+1.97",
+    "+1.99.1",
     "metadata",
     "--offline",
     "--manifest-path",
