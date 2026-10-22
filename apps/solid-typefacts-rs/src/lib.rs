@@ -17,6 +17,7 @@ pub mod contributions;
 pub mod demands;
 pub mod durable;
 pub mod fake;
+pub mod file_regions;
 pub mod frame;
 pub mod gocompat;
 pub mod identity;

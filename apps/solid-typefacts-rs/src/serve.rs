@@ -213,6 +213,14 @@ fn worker_loop<R, F>(
     };
     for mut job in jobs {
         let mut response = responder.lifecycle(&job.ctx, &job.incoming);
+        // `TSRS_MEM_SPLIT=1`: the thread arenas' size after each request.
+        if tsrs_core::memsplit::enabled() {
+            tsrs_core::memsplit::report(&format!(
+                "after request {} ({:?})",
+                job.incoming.request.request_id,
+                job.incoming.operation()
+            ));
+        }
         if let Some(timings) = response.timings.as_mut() {
             timings.request_decode_ns =
                 u64::try_from(job.request_decode.as_nanos()).unwrap_or(u64::MAX);

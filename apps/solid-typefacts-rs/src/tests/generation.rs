@@ -133,21 +133,59 @@ fn committing_replaces_the_head_and_keeps_the_chain_alive() {
 }
 
 #[test]
+fn a_replaced_file_version_is_freed_and_an_abandoned_one_is_too() {
+    let scratch = Scratch::new(&[
+        ("tsconfig.json", SMALL_CONFIG),
+        ("a.ts", "export const a = 1;\n"),
+        ("b.ts", "export const b = 2;\n"),
+    ]);
+    let a = scratch.path("a.ts");
+    let mut project = scratch.open();
+    let edited = overlay();
+    let host = || compiler_host(&scratch.root.to_string_lossy(), &edited);
+    let generation = project.current_mut_for_test();
+    let base = generation.file_region_count();
+    assert!(base >= 3, "a, b and the default library files: {base}");
+    for round in 0..6 {
+        edited.set(&a, &format!("export const a = {round};\n"));
+        let candidate = generation.prepare_update(&a, host());
+        assert_eq!(candidate.kind(), UpdateKind::Reused);
+        // The candidate's new version is held beside the base one and, from
+        // the second round, the accepted head's.
+        assert_eq!(
+            generation.file_region_count(),
+            base + 1 + usize::from(round > 0),
+            "round {round}"
+        );
+        generation.commit(candidate);
+        // The base file stays (the chain's shared data refers to it) and the
+        // head's version is new; the version the previous head read is gone.
+        assert_eq!(generation.file_region_count(), base + 1, "round {round}");
+    }
+    // An abandoned candidate's version goes at the next sweep.
+    edited.set(&a, "export const a = 99;\n");
+    drop(generation.prepare_update(&a, host()));
+    generation.sweep_dead_files();
+    assert_eq!(generation.file_region_count(), base + 1);
+    assert_eq!(export_names(generation, &a), ["a"]);
+}
+
+#[test]
 fn dropping_a_generation_on_a_foreign_thread_leaks_instead_of_freeing() {
     let scratch = Scratch::new(&[
         ("tsconfig.json", SMALL_CONFIG),
         ("a.ts", "export const a = 1;\n"),
     ]);
-    let (config, host) = {
-        let overlay = overlay();
-        let directory = scratch.root.to_string_lossy().into_owned();
-        let project = scratch.open();
-        let config = project.current().unwrap().command_line();
-        (config, compiler_host(&directory, &overlay))
-    };
+    let overlay = overlay();
+    let directory = scratch.root.to_string_lossy().into_owned();
+    let project = scratch.open();
+    // The project keeps the configuration's region alive past the drop below.
+    let generation = project
+        .current()
+        .unwrap()
+        .rebuilt(compiler_host(&directory, &overlay));
     // tsrs arenas are thread-local: a generation built here must not be freed
     // from another thread. It is leaked, and nothing crashes.
-    let generation = crate::unsafe_boundary::Generation::build(config, host);
     let outcome = std::thread::spawn(move || drop(generation)).join();
     assert!(outcome.is_ok());
 }

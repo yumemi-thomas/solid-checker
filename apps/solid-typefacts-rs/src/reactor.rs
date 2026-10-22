@@ -110,6 +110,9 @@ impl Reactor {
         let incoming =
             decode_request(payload).map_err(|error| format!("decode request: {error}"))?;
         let response = session.lifecycle(&Context::new(), &incoming);
+        if tsrs_core::memsplit::enabled() {
+            tsrs_core::memsplit::report(&format!("after {:?}", incoming.operation()));
+        }
         single_frame(&encode_response(&response)?)
     }
 

@@ -43,7 +43,7 @@ use crate::shape::{
     has_global_or_module_augmentation, preserve_export_identities,
 };
 use crate::trace::SharedTrace;
-use crate::unsafe_boundary::{Generation, UpdateKind};
+use crate::unsafe_boundary::{Generation, HostLease, UpdateKind};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant, SystemTime};
@@ -52,6 +52,7 @@ use tsrs_ast::{
     is_function_declaration, is_variable_declaration,
 };
 use tsrs_compiler::new_compiler_host;
+use tsrs_core::arena::Region;
 use tsrs_core::{CompilerOptions, P};
 use tsrs_scanner::skip_trivia;
 use tsrs_tsoptions::{ParseConfigHost, get_parsed_command_line_of_config_file};
@@ -67,9 +68,12 @@ use typefacts::{
 pub const ERR_CLOSED: &str = "type facts project is closed";
 
 /// A full rebuild replaces the program chain after this many incremental
-/// updates, so the memory the incremental path cannot return (the edited
-/// files' trees, which share the chain's regions) stays bounded. Plan 3.3.
-pub const REBASE_AFTER_UPDATES: u32 = 64;
+/// updates. Since each file version has a region of its own, freed once no head
+/// reads it (`FileRegions`), the incremental path keeps about half a kilobyte
+/// per update (measured: 3,000 updates of a 1,000-file chain, RSS 45 to 47 MiB);
+/// the rebuild is a safety net for whatever that measurement missed, and a
+/// fresh heap. It costs a whole program build, so it is rare. Plan 3.3.
+pub const REBASE_AFTER_UPDATES: u32 = 1024;
 
 /// The configuration parser keeps a `&'static` host (the module resolver
 /// requires it), so one host per project is leaked, and its file system points
@@ -164,9 +168,10 @@ pub struct Project {
     trace: SharedTrace,
     config_path: String,
     fs: Arc<OverlayFs>,
-    config_host: &'static ConfigHost,
-    versions: HashMap<String, u64>,
     generation: Option<Generation>,
+    /// After `generation`: dropped after every configuration parsed through it.
+    config_host: HostLease<ConfigHost>,
+    versions: HashMap<String, u64>,
     update_count: u64,
     graph: ImportGraph,
     /// Diagnostic-free exported contracts of the accepted program generation.
@@ -205,13 +210,13 @@ impl Project {
         if let Some(source) = config_source {
             fs.set(&config_path, source);
         }
-        let config_host: &'static ConfigHost = Box::leak(Box::new(ConfigHost {
+        let config_host = HostLease::new(ConfigHost {
             fs: ConfigFs {
                 current: RwLock::new(Arc::clone(&fs)),
             },
             directory: type_script_path_dir(&config_path),
-        }));
-        let generation = build_program(ctx, &config_path, &fs, config_host)?;
+        });
+        let generation = build_program(ctx, &config_path, &fs, &config_host)?;
         let mut project = Self {
             trace,
             config_path,
@@ -399,25 +404,34 @@ fn build_program(
     ctx: &Context,
     config_path: &str,
     fs: &Arc<OverlayFs>,
-    config_host: &'static ConfigHost,
+    config_host: &HostLease<ConfigHost>,
 ) -> Result<Generation, String> {
     if let Some(reason) = ctx.err() {
         return Err(reason.to_owned());
     }
     let directory = type_script_path_dir(config_path);
+    let config_host = config_host.as_static();
     *config_host
         .fs
         .current
         .write()
         .unwrap_or_else(std::sync::PoisonError::into_inner) = Arc::clone(fs);
     let host = compiler_host(&directory, fs);
-    let (config, diagnostics) = get_parsed_command_line_of_config_file(
-        config_path,
-        Some(&CompilerOptions::default()),
-        None,
-        config_host,
-        None,
-    );
+    // The configuration lives in a region of its own, which the generation
+    // keeps: replacing the generation frees it, and the vectors and strings
+    // it owns, instead of leaving them in the thread arena and the heap.
+    // Declared first, so it outlives everything below that reads it.
+    let config_region = Region::new(256 << 10);
+    let (config, diagnostics) = {
+        let _scope = config_region.enter();
+        get_parsed_command_line_of_config_file(
+            config_path,
+            Some(&CompilerOptions::default()),
+            None,
+            config_host,
+            None,
+        )
+    };
     if !diagnostics.is_empty() {
         return Err(format!(
             "parse tsconfig: {}",
@@ -437,7 +451,11 @@ fn build_program(
             config.errors.len()
         ));
     }
-    Ok(Generation::build(P::new(config), host))
+    let config = {
+        let _scope = config_region.enter();
+        P::new(config)
+    };
+    Ok(Generation::build(config_region, config, host))
 }
 
 pub(crate) fn compiler_host(
@@ -503,6 +521,11 @@ impl ClosureBackend for Project {
         changes: &[FileChange],
     ) -> Result<UpdateOutcome, BackendError> {
         let outcome = self.update_inner(ctx, changes);
+        // An abandoned candidate's new file versions are dead now; after a
+        // commit this finds nothing more.
+        if let Some(generation) = &self.generation {
+            generation.sweep_dead_files();
+        }
         // A candidate build points the configuration host at the candidate
         // overlay; whether it was accepted or abandoned, the host must read
         // the accepted one afterwards.
@@ -821,7 +844,7 @@ impl Project {
             let host = compiler_host(&type_script_path_dir(&self.config_path), &candidate_fs);
             generation.prepare_update(&incremental_path, host)
         } else {
-            build_program(ctx, &self.config_path, &candidate_fs, self.config_host)
+            build_program(ctx, &self.config_path, &candidate_fs, &self.config_host)
                 .map_err(BackendError)?
         };
         let program_duration = stage.elapsed();
@@ -1039,6 +1062,7 @@ impl Project {
     fn point_config_host_at_accepted_overlay(&self) {
         *self
             .config_host
+            .as_static()
             .fs
             .current
             .write()
@@ -1061,7 +1085,7 @@ impl Project {
             return false;
         }
         let host = compiler_host(&type_script_path_dir(&self.config_path), &self.fs);
-        let fresh = Generation::build(generation.command_line(), host);
+        let fresh = generation.rebuilt(host);
         // The identity maps and the generation-scoped reference ids name the
         // chain about to be freed.
         self.ids.release_pointers();

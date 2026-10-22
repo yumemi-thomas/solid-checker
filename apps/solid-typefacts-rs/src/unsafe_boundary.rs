@@ -20,6 +20,12 @@
 //!   the previous head, which shares the previous head's processed-file data);
 //! * the [`ProgramRegions`] the file loader allocated the chain's parsed files
 //!   in (one set per full build, shared by every head reused from it);
+//! * the chain's [`FileRegions`]: every parsed file version has a region of
+//!   its own (parse, bind and the data the file fills lazily), and
+//!   [`Generation::commit`] frees the versions no head reads any more (the
+//!   full build's files stay: the shared processed-file data refers to them);
+//! * the region the parsed configuration lives in, shared by every head and
+//!   chain made from it, so the configuration is freed with the last of them;
 //! * the program's single checker pool (Go: `singleCheckerPool`, ADR 0004),
 //!   whose checker lives in a [`Region`] of its own so disposing it returns
 //!   its memory;
@@ -43,9 +49,10 @@
 //! 4. **Order of disposal** (the order `tsrs_project::memregions` and
 //!    `tsrs_execute::watcher` use): the checker, then its region; then the
 //!    program (`free_program`); then, if this head owns the chain's shared
-//!    data, `SharedProgramData::free`; finally the chain's [`ProgramRegions`]
-//!    when the last `Arc` drops, which is after everything that points into
-//!    them is gone.
+//!    data, `SharedProgramData::free`; then the chain's file regions, the
+//!    loader's [`ProgramRegions`] and the configuration's region, in that
+//!    order (the fields' declaration order), each when its last `Arc` drops,
+//!    which is after everything that points into them is gone.
 //! 5. **Shared data is freed exactly once**, by the head that owns it. A
 //!    head made by [`Generation::prepare_update`] from a reusable previous
 //!    head does not own it until [`Generation::commit`] transfers ownership,
@@ -85,6 +92,53 @@ use tsrs_compiler::{
 use tsrs_core::arena::Region;
 use tsrs_core::{P, Tristate};
 use tsrs_tsoptions::ParsedCommandLine;
+
+use crate::file_regions::{FileRegions, RegionHost};
+
+/// A value the configuration parser borrows for `'static` (its module resolver
+/// requires a `&'static` host), freed with its owner instead of leaked.
+///
+/// The reference [`HostLease::as_static`] returns is `'static` only because the
+/// parser's signature says so. The contract is the module's invariant 1 applied
+/// to it: the parser keeps the reference only while a configuration is parsed
+/// (`ParsedCommandLine` does not retain it), so the owner holds the lease
+/// beside the generations it parsed for and declares it after them, which drops
+/// the lease after every configuration parsed through it.
+pub struct HostLease<T: Send + Sync + 'static> {
+    pointer: NonNull<T>,
+}
+
+// SAFETY: the lease owns a `Box<T>`; `T: Send + Sync` makes moving it between
+// threads and sharing the reference it hands out sound.
+unsafe impl<T: Send + Sync + 'static> Send for HostLease<T> {}
+// SAFETY: as above; `as_static` hands out shared references only.
+unsafe impl<T: Send + Sync + 'static> Sync for HostLease<T> {}
+
+impl<T: Send + Sync + 'static> HostLease<T> {
+    #[must_use]
+    pub fn new(value: T) -> Self {
+        Self {
+            pointer: NonNull::from(Box::leak(Box::new(value))),
+        }
+    }
+
+    /// The value, as the parser wants it. Must not be stored past the lease.
+    #[must_use]
+    pub fn as_static(&self) -> &'static T {
+        // SAFETY: the pointer came from a leaked `Box` and stays valid until
+        // `drop`; the caller's contract (above) is that nothing keeps the
+        // reference past the lease.
+        unsafe { self.pointer.as_ref() }
+    }
+}
+
+impl<T: Send + Sync + 'static> Drop for HostLease<T> {
+    fn drop(&mut self) {
+        // SAFETY: made by `Box::leak` in `new` and freed only here; the owner
+        // dropped every configuration parsed through it first (above).
+        drop(unsafe { Box::from_raw(self.pointer.as_ptr()) });
+    }
+}
 
 /// The program's single checker (Go: `singleCheckerPool`). The checker is
 /// created on first use inside a [`Region`] of its own, so disposing it gives
@@ -270,7 +324,13 @@ pub enum UpdateKind {
 pub struct Generation {
     program: &'static Program,
     slot: Arc<CheckerSlot>,
+    /// The chain's file regions. Declared before `regions`: a file region
+    /// goes before the loader's regions, whose data points at the files.
+    files: Arc<FileRegions>,
     regions: Arc<ProgramRegions>,
+    /// The region the chain's parsed configuration lives in. Last: the
+    /// program and its data read the configuration until they are freed.
+    config: Region,
     owns_shared: bool,
     updates: u32,
     thread: ThreadId,
@@ -294,6 +354,10 @@ fn options_for(
     // every call. Moving to the canonical history is a snapshot-reviewed change
     // for after the Go producer is gone (tsrs `tsrs_core::compat`).
     tsrs_core::compat::set_go_compatible_history(true);
+    // Binding runs in the region of the file it binds (and a file's lazily
+    // filled data goes there too) once files have regions of their own
+    // (`RegionHost`). A process-wide flag, set before any file is parsed.
+    tsrs_compiler::bind_in_file_regions();
     let mut options = ProgramOptions::new(config, host);
     // Parse and bind in parallel but keep exactly one checker (ADR 0004):
     // the external pool is what keeps both properties.
@@ -335,20 +399,41 @@ fn take_slot(cell: &Mutex<Option<Arc<CheckerSlot>>>) -> Arc<CheckerSlot> {
 impl Generation {
     /// Builds a program chain from a parsed configuration and binds it (Go:
     /// `buildProgram` after the configuration parsed, plus `BindSourceFiles`).
-    pub fn build(config: P<ParsedCommandLine>, host: Arc<dyn CompilerHost>) -> Generation {
+    ///
+    /// `config` was parsed, and `config_region` was the allocation target while
+    /// it was (so freeing the generation frees the configuration, and what its
+    /// vectors and strings own, with it).
+    pub fn build(
+        config_region: Region,
+        config: P<ParsedCommandLine>,
+        host: Arc<dyn CompilerHost>,
+    ) -> Generation {
         let regions = Arc::new(ProgramRegions::default());
+        let files = Arc::new(FileRegions::default());
+        let host = RegionHost::wrap(host, &files);
         let (factory, cell) = slot_factory();
         let program = new_program(options_for(config, host, &regions, &factory));
         program.bind_source_files();
+        files.set_base(program.source_files().iter().map(|file| file.addr()));
         Generation {
             program,
             slot: take_slot(&cell),
+            files,
             regions,
+            config: config_region,
             owns_shared: true,
             updates: 0,
             thread: std::thread::current().id(),
             kind: UpdateKind::Rebuilt,
         }
+    }
+
+    /// A fresh program chain from this generation's configuration (the rebase
+    /// policy). The configuration, and its region, are shared with this
+    /// generation, so replacing it frees only the old chain.
+    #[must_use]
+    pub fn rebuilt(&self, host: Arc<dyn CompilerHost>) -> Generation {
+        self.fresh_chain(host)
     }
 
     /// The parsed configuration this program was built from.
@@ -425,7 +510,7 @@ impl Generation {
         let (factory, cell) = slot_factory();
         let (reused, _new_file, _) = self.program.reuse_program(
             old_file.path(),
-            Arc::clone(&host),
+            RegionHost::wrap(Arc::clone(&host), &self.files),
             Some(Arc::clone(&factory)),
             None,
         );
@@ -434,7 +519,9 @@ impl Generation {
             return Generation {
                 program,
                 slot: take_slot(&cell),
+                files: Arc::clone(&self.files),
                 regions: Arc::clone(&self.regions),
+                config: self.config.clone(),
                 owns_shared: false,
                 updates: self.updates + 1,
                 thread: self.thread,
@@ -443,18 +530,29 @@ impl Generation {
         }
         // A fresh chain from the same parsed configuration, in regions of its
         // own, so replacing this head frees the whole old chain.
+        self.fresh_chain(host)
+    }
+
+    /// A new program chain over this generation's configuration, in regions of
+    /// its own.
+    fn fresh_chain(&self, host: Arc<dyn CompilerHost>) -> Generation {
+        let (factory, cell) = slot_factory();
         let regions = Arc::new(ProgramRegions::default());
+        let files = Arc::new(FileRegions::default());
         let program = new_program(options_for(
             self.program.command_line(),
-            host,
+            RegionHost::wrap(host, &files),
             &regions,
             &factory,
         ));
         program.bind_source_files();
+        files.set_base(program.source_files().iter().map(|file| file.addr()));
         Generation {
             program,
             slot: take_slot(&cell),
+            files,
             regions,
+            config: self.config.clone(),
             owns_shared: true,
             updates: 0,
             thread: self.thread,
@@ -474,7 +572,34 @@ impl Generation {
             candidate.owns_shared = true;
             self.owns_shared = false;
             std::mem::swap(self, &mut candidate);
+            // `candidate` is now the previous head: free its program before
+            // the file versions only it read.
+            drop(candidate);
+            self.sweep_dead_files();
         }
+    }
+
+    /// Frees the regions of the file versions that no head reads any more:
+    /// every file of the chain's full build stays (the shared processed-file
+    /// data refers to them), and so does every file of this head. An edited
+    /// file's replaced version, and the files of an abandoned candidate, go.
+    /// Callable at any time on the building thread; nothing may hold a handle
+    /// into a replaced file version (module invariant 1, which the commit
+    /// protocol already requires of the replaced program).
+    pub fn sweep_dead_files(&self) {
+        if std::thread::current().id() != self.thread {
+            return;
+        }
+        let dead = self
+            .files
+            .take_dead(self.program.source_files().iter().map(|file| file.addr()));
+        drop(dead);
+    }
+
+    /// The file regions the chain holds, for tests of the lifecycle.
+    #[must_use]
+    pub fn file_region_count(&self) -> usize {
+        self.files.len()
     }
 }
 
@@ -486,6 +611,7 @@ impl Drop for Generation {
             // and keep the checker slot alive forever.
             std::mem::forget(Arc::clone(&self.slot));
             std::mem::forget(Arc::clone(&self.regions));
+            std::mem::forget(Arc::clone(&self.files));
             return;
         }
         let disposed = self.slot.dispose();

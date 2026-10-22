@@ -13,6 +13,13 @@ use solid_typefacts::project::Project;
 use std::path::PathBuf;
 use typefacts::v3::FileChange;
 
+/// Arena chunks in use (process-wide): what the freed generations, file
+/// versions and configurations must give back. Deterministic, unlike RSS under
+/// the test binary's system allocator.
+fn arena_kib() -> u64 {
+    (tsrs_core::reserve::reserved_in_use() >> 10) as u64
+}
+
 fn rss_kib() -> u64 {
     if let Ok(status) = std::fs::read_to_string("/proc/self/status") {
         for line in status.lines() {
@@ -83,6 +90,7 @@ fn rebuild_and_update_loops_do_not_accumulate() {
 
     // 300 full rebuilds: two files changed at once take the rebuild path.
     let (mut at_30, mut at_300) = (0, 0);
+    let (mut arena_30, mut arena_300) = (0, 0);
     for round in 1..=300_u64 {
         project
             .update(
@@ -109,8 +117,12 @@ fn rebuild_and_update_loops_do_not_accumulate() {
         if round == 30 {
             at_30 = rss_kib();
         }
+        if round == 100 {
+            arena_30 = arena_kib();
+        }
         if round == 300 {
             at_300 = rss_kib();
+            arena_300 = arena_kib();
         }
     }
     eprintln!("rebuilds: start {start} KiB, #30 {at_30} KiB, #300 {at_300} KiB");
@@ -118,6 +130,7 @@ fn rebuild_and_update_loops_do_not_accumulate() {
     // 100 incremental updates (one file each; the rebase policy runs once).
     let before_updates = rss_kib();
     let (mut at_10, mut at_100) = (0, 0);
+    let (mut arena_10, mut arena_100) = (0, 0);
     for round in 1..=100_u64 {
         project
             .update(
@@ -132,17 +145,67 @@ fn rebuild_and_update_loops_do_not_accumulate() {
         project.release_analysis_state();
         if round == 10 {
             at_10 = rss_kib();
+            arena_10 = arena_kib();
         }
         if round == 100 {
             at_100 = rss_kib();
+            arena_100 = arena_kib();
         }
     }
     eprintln!("updates: before {before_updates} KiB, #10 {at_10} KiB, #100 {at_100} KiB");
+
+    // 1,100 edits of a 100 KB file, across the rebase at 1,024: every edited
+    // version's tree, binder output and lazily filled data is freed once no
+    // head reads it. Without that, each edit kept about 1 MiB.
+    let body: String = (0..2000)
+        .map(|n| format!("export function f{n}(x: number): number {{ return x + {n}; }}\n"))
+        .collect();
+    let big = path("c.ts");
+    let (mut arena_a, mut arena_b) = (0, 0);
+    for round in 1..=1100_u64 {
+        project
+            .update(
+                &ctx,
+                &[change(
+                    &big,
+                    5000 + round,
+                    &format!("// edit {round}\n{body}"),
+                )],
+            )
+            .unwrap();
+        project.release_analysis_state();
+        if round == 100 {
+            arena_a = arena_kib();
+        }
+        if round == 1100 {
+            arena_b = arena_kib();
+        }
+    }
+    eprintln!("big edits: #100 {arena_a} KiB, #1100 {arena_b} KiB of arena");
 
     if poisoned() {
         eprintln!("TSRS_ARENA_POISON=1: growth is expected, no RSS bound asserted");
         return;
     }
+    // The arena is exact: file versions, configurations and checkers are
+    // freed with their generation, so 200 rebuilds after the warm-up (the slab cache
+    // and the thread arenas settle by about the 100th) and 90 updates leave it
+    // where it was (measured: 0 KiB; the bound is one slab of slack).
+    assert!(
+        arena_300.saturating_sub(arena_30) <= 1024,
+        "200 rebuilds grew the arena by {} KiB",
+        arena_300.saturating_sub(arena_30)
+    );
+    assert!(
+        arena_100.saturating_sub(arena_10) <= 1024,
+        "90 updates grew the arena by {} KiB",
+        arena_100.saturating_sub(arena_10)
+    );
+    assert!(
+        arena_b.saturating_sub(arena_a) <= 8 * 1024,
+        "1,000 edits of a 100 KB file grew the arena by {} KiB",
+        arena_b.saturating_sub(arena_a)
+    );
     // Without freeing, 270 more rebuilds would add ~2.4 GiB and 90 more updates
     // ~126 MiB. The bounds leave room for allocator noise and the decaying
     // warm-up the spike measured (about 0.05 MiB per rebuild by #250).

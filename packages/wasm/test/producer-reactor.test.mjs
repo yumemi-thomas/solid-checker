@@ -167,11 +167,22 @@ function churn(instance, name, updates) {
 
 test("freeing generations on wasm: updates and rebuilds keep linear memory bounded", () => {
   const updates = 300;
-  // Observed about 190 MiB for the Rust reactor (80 MiB of it the shadow
+  // Observed about 156 MiB for the Rust reactor (80 MiB of it the shadow
   // stack) and 85 MiB for Go; without freeing the Rust one reaches gigabytes.
   const mebibytes = churn(reactor, "memory", updates);
-  assert.ok(mebibytes < 640, `linear memory is ${mebibytes} MiB after ${updates} updates`);
+  assert.ok(mebibytes < 200, `linear memory is ${mebibytes} MiB after ${updates} updates`);
 }, 120_000);
+
+test("the high-water mark is flat: five times the updates add no memory", () => {
+  // Linear memory never shrinks, so a leak per update or per rebuild shows as
+  // growth. Before the Rust reactor freed edited file versions and parsed
+  // configurations it grew about 0.26 MiB per update on this churn.
+  const instance = reactor;
+  churn(instance, "flat-warmup", 300);
+  const warm = instance.exports.memory.buffer.byteLength / 2 ** 20;
+  const after = churn(instance, "flat-long", 1500);
+  assert.ok(after - warm < 12, `linear memory grew from ${warm} to ${after} MiB over 1500 more updates`);
+}, 300_000);
 
 test("freed generations are never read: the same churn with TSRS_ARENA_POISON=1", async () => {
   // The Rust reactor then fills freed arena memory and never reuses it, so a

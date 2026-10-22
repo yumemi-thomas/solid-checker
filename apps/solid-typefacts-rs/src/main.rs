@@ -3,7 +3,15 @@
 
 use std::process::ExitCode;
 
+#[cfg(not(target_arch = "wasm32"))]
+#[global_allocator]
+static GLOBAL: mimalloc_safe::MiMalloc = mimalloc_safe::MiMalloc;
+
 fn main() -> ExitCode {
+    // Linux: restore the arena's transparent huge pages after mimalloc's startup
+    // constructor disables them (tsrs's own binaries do the same).
+    #[cfg(all(target_os = "linux", not(target_arch = "wasm32")))]
+    tsrs_core::allocator::init_mimalloc();
     let args: Vec<String> = std::env::args_os()
         .skip(1)
         .map(|argument| argument.to_string_lossy().into_owned())

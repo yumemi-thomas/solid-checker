@@ -55,7 +55,16 @@ tsrs_checker = { git = "https://github.com/yumemi-thomas/tsrs", rev = "49f534856
 tsrs_compiler = { git = "https://github.com/yumemi-thomas/tsrs", rev = "49f534856809ad8d5a596123f02175ba01675c8d" }
 tsrs_tsoptions = { git = "https://github.com/yumemi-thomas/tsrs", rev = "49f534856809ad8d5a596123f02175ba01675c8d" }
 tsrs_scanner = { git = "https://github.com/yumemi-thomas/tsrs", rev = "49f534856809ad8d5a596123f02175ba01675c8d" }
+tsrs_contentmapper = { git = "https://github.com/yumemi-thomas/tsrs", rev = "49f534856809ad8d5a596123f02175ba01675c8d" }
+tsrs_diagnostics = { git = "https://github.com/yumemi-thomas/tsrs", rev = "49f534856809ad8d5a596123f02175ba01675c8d" }
 tsrs_vfs = { git = "https://github.com/yumemi-thomas/tsrs", rev = "49f534856809ad8d5a596123f02175ba01675c8d" }
+
+# The allocator of tsrs's own binaries, same features: the producer frees whole
+# program chains and checkers, and the system allocator keeps that memory
+# resident (macOS: RSS 1.5 GiB after 200 edits of a 557-file project, against
+# 0.75 GiB here). Native only: wasm32 keeps wasi-libc's allocator.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+mimalloc-safe = { version = "0.1.67", features = ["v3", "no_thp"] }
 
 # Dependencies (the codec now, tsrs later) run optimized even in dev builds:
 # an unoptimized compiler front end is unusably slow. Workspace code stays at
@@ -73,3 +82,12 @@ lto = "fat"
 codegen-units = 1
 strip = "symbols"
 panic = "unwind"
+
+# Inner loop for memory and latency work: release code generation without the
+# fat-LTO relink (about 50 s per change). Allocator and RSS behaviour do not
+# depend on LTO; use `--release` for the numbers that get reported.
+[profile.bench-dev]
+inherits = "release"
+lto = "thin"
+codegen-units = 16
+incremental = true
