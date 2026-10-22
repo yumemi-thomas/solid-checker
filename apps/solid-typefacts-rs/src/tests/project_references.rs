@@ -167,6 +167,114 @@ fn broad_invalidation_keeps_exact_symbol_evidence() {
     assert_eq!(index.changed_symbol_set().len(), FILES);
 }
 
+/// `TestReferenceIndexBroadInvalidationKeepsRetainedReferences`: a broad
+/// invalidation (more than 64 affected files) drops the merged index but keeps
+/// the contributions of unaffected files; the rebuilt index must still answer
+/// with their references, exactly as a fresh open does.
+#[test]
+fn reference_index_broad_invalidation_keeps_retained_references() {
+    let kept_source =
+        "export const shared = 1;\nexport const a = shared;\nexport const b = shared + shared;\n";
+    let importer = "import { hub } from \"./hub\";\nexport const v = hub;\n";
+    let mut files: Vec<(String, &str)> = vec![
+        ("tsconfig.json".to_owned(), SMALL_CONFIG),
+        ("hub.ts".to_owned(), "export const hub = 1;\n"),
+        ("kept.ts".to_owned(), kept_source),
+    ];
+    for index in 0..70 {
+        files.push((format!("imp{index:02}.ts"), importer));
+    }
+    let files: Vec<(&str, &str)> = files.iter().map(|(n, c)| (n.as_str(), *c)).collect();
+    let scratch = Scratch::new(&files);
+    let (hub, kept) = (scratch.path("hub.ts"), scratch.path("kept.ts"));
+    let ctx = Context::new();
+    let mut project = scratch.open();
+
+    let shared = project
+        .symbol_at(&ctx, &find(&kept, kept_source, "shared"))
+        .unwrap();
+    let before = project.references(&ctx, &shared).unwrap();
+    assert_eq!(
+        before.len(),
+        3,
+        "expected 3 references before the update, got {before:?}"
+    );
+
+    // Changing the exported type of hub is not a semantic cutoff, so all 70
+    // importers are affected while kept.ts is not.
+    project
+        .update(&ctx, &[change(&hub, 1, "export const hub = \"s\";\n")])
+        .unwrap();
+    assert!(
+        !project.reference_index().is_merged()
+            && project.reference_index().files().contains_key(&kept),
+        "update did not take the broad retained path"
+    );
+    let after = project.references(&ctx, &shared).unwrap();
+    assert_eq!(after, before, "broad invalidation lost retained references");
+}
+
+/// `TestReferenceIndexAfterReleaseAnswersPrunedSymbol`: ReleaseAnalysisState
+/// prunes merged buckets no retained fact used. A symbol first asked about
+/// after a release must still get its complete references, both directly and
+/// after an incremental update patched the pruned index.
+#[test]
+fn reference_index_after_release_answers_pruned_symbol() {
+    let decl_source = "export const used = 1;\nexport const pruned = 2;\n";
+    let a_source = "import { used, pruned } from \"./decl\";\nexport const a = used + pruned;\n";
+    let b_source = "import { pruned } from \"./decl\";\nexport const b = pruned;\n";
+    let scratch = Scratch::new(&[
+        ("tsconfig.json", SMALL_CONFIG),
+        ("decl.ts", decl_source),
+        ("a.ts", a_source),
+        ("b.ts", b_source),
+    ]);
+    let (decl, a) = (scratch.path("decl.ts"), scratch.path("a.ts"));
+    let ctx = Context::new();
+    let mut project = scratch.open();
+    let used = project
+        .symbol_at(&ctx, &find(&decl, decl_source, "used"))
+        .unwrap();
+    let pruned = project
+        .symbol_at(&ctx, &find(&decl, decl_source, "pruned"))
+        .unwrap();
+    project.references(&ctx, &used).unwrap();
+    let want = project.references(&ctx, &pruned).unwrap();
+    assert!(
+        !want.is_empty(),
+        "expected references to pruned before release"
+    );
+
+    // Only `used` is retained by a fact.
+    project
+        .reference_index_mut_for_test()
+        .set_used_for_test(std::slice::from_ref(&used));
+    project.release_analysis_state_for_test();
+    let got = project.references(&ctx, &pruned).unwrap();
+    assert_eq!(got, want, "pruned symbol after release");
+
+    // Patching after a release must not leave a partial bucket either.
+    project
+        .reference_index_mut_for_test()
+        .set_used_for_test(std::slice::from_ref(&used));
+    project.release_analysis_state_for_test();
+    let edited = format!("{a_source}export const a2 = pruned;\n");
+    project.update(&ctx, &[change(&a, 1, &edited)]).unwrap();
+    let patched = project.references(&ctx, &pruned).unwrap();
+
+    scratch.write_all(&[("a.ts", edited.as_str())]);
+    let mut fresh = scratch.open();
+    let fresh_id = fresh
+        .symbol_at(&ctx, &find(&decl, decl_source, "pruned"))
+        .unwrap();
+    assert_eq!(fresh_id, pruned, "durable id differs");
+    let independent = fresh.references(&ctx, &fresh_id).unwrap();
+    assert!(
+        independent.len() == 3 && patched == independent,
+        "patched pruned index diverged from a fresh open:\nfresh   {independent:?}\npatched {patched:?}"
+    );
+}
+
 /// A durable id whose declaration disappears must fail closed even though
 /// retained contributions may still mention it.
 #[test]

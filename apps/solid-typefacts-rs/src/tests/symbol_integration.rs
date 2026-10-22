@@ -5,9 +5,9 @@
 //! [`symbol_demands`] is Go's `realisticDemands` over `Source{Bindings,Calls}`:
 //! a symbol demand (with references and structural-accessor flags on a fixed
 //! rotation) for every call-initialized binding name, and a symbol demand for
-//! every callee with the type-descriptor and async flags on a rotation.
-//! Resolved-call and runtime-value-domain demands are left out because those
-//! families are not ported yet; both sides of every comparison use the same
+//! every callee with the async flag on a rotation. Resolved-call,
+//! type-descriptor and runtime-value-domain demands are left out until the
+//! resolved-call slice (see the comment at the flag); both sides of every comparison use the same
 //! helper, so parity is still between an incremental closure and a fresh one.
 
 use super::project_support::{Scratch, loc};
@@ -68,7 +68,14 @@ fn symbol_demands(closure: &mut DemandClosure) -> Vec<EntityDemand> {
             demands.push(EntityDemand {
                 location: call.callee,
                 symbol: true,
-                type_descriptor: index % 2 == 0,
+                // Go also demands `resolvedCall` here, and that is what keeps
+                // a retained descriptor honest when a restored file satisfies
+                // an import that was unresolved (the leaf cutoff reports only
+                // the restored file; an unresolved call records no dependency
+                // on it). Go with symbol and descriptor demands alone diverges
+                // from a fresh open at that step too (reported separately), so
+                // the descriptor flag waits for the resolved-call slice.
+                type_descriptor: false,
                 r#async: index % 5 == 0,
                 ..EntityDemand::default()
             });

@@ -6,16 +6,16 @@
 //!
 //! # What is answered, and what is unavailable
 //!
-//! This slice answers the symbol families end to end: `symbol` (with its
-//! covering claim and unresolved claim), `structuralAccessor`,
-//! `referenceSpace`, and a `typeDescriptor` that the batch scope already
-//! holds. The families that need type facts or the call resolver
-//! (`typeDescriptor` not in the scope, `resolvedCall`, `callability`,
-//! `constructability`, `runtimeValueDomain`, `primitiveValueDomain`,
-//! `primitiveLiteralCandidates`, `parameterObjectShape`, `callResultDomain`,
+//! Answered end to end: `symbol` (with its covering claim and unresolved
+//! claim), `structuralAccessor`, `referenceSpace`, `typeDescriptor`,
+//! `callability` (with `untypedCallable`), `constructability`,
+//! `runtimeValueDomain`, `primitiveValueDomain` and
+//! `primitiveLiteralCandidates` (see `type_facts`). Not ported yet:
+//! `resolvedCall`, `parameterObjectShape` and `callResultDomain` (they need
+//! the call resolver, whose validity check `callResultDomain` shares),
 //! `constantValue`, `arrayShape`, `tupleShape`, `libraryTypes`,
-//! `runtimeIdentity` and the runtime binding kind) are not ported yet. For a
-//! demanded entity they are reported unavailable the one way the wire has: the
+//! `runtimeIdentity` and the runtime binding kind. For a demanded entity
+//! they are reported unavailable the one way the wire has: the
 //! field is absent (`None`, the empty string, or the all-zero primitive
 //! domain). The client reads an absent field as "no fact here" -- the same
 //! row the Go producer writes when a span carries no expression to classify
@@ -32,8 +32,15 @@ use crate::model::{
 };
 use crate::nodes::{NodeCursor, jsx_tag_name_at, symbol_span_covers};
 use crate::references::ReferenceIndex;
-use std::collections::{BTreeMap, HashSet};
+use crate::type_facts::{
+    DescriptorMemo, callability_of_type, constructability_of_type,
+    primitive_literal_candidates_of_type, primitive_value_domain_of_type,
+    runtime_value_domain_of_type,
+};
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::sync::Arc;
 use tsrs_ast::{Node, SourceFile, Symbol};
+use tsrs_checker::types::Type;
 use tsrs_core::P;
 use typefacts::v3::EntityDemand;
 use typefacts::{ReferenceSpace, SymbolClaim, TypeDescriptor};
@@ -117,21 +124,12 @@ fn wants_beyond_symbol(demand: &EntityDemand) -> bool {
         || demand.runtime_identity
 }
 
-/// Names every demanded family this slice cannot answer, except
-/// `typeDescriptor`, which depends on the scope (see [`run`]).
+/// Names every demanded family this slice cannot answer. `callResultDomain`
+/// is counted by [`run`], which knows whether a call node exists.
 fn note_unported(demand: &EntityDemand, unavailable: &mut Unavailable) {
-    let families: [(bool, &'static str); 14] = [
+    let families: [(bool, &'static str); 8] = [
         (demand.resolved_call, "resolvedCall"),
-        (demand.callability, "callability"),
-        (demand.constructability, "constructability"),
-        (demand.runtime_value_domain, "runtimeValueDomain"),
-        (demand.primitive_value_domain, "primitiveValueDomain"),
-        (
-            demand.primitive_literal_candidates,
-            "primitiveLiteralCandidates",
-        ),
         (demand.parameter_object_shape, "parameterObjectShape"),
-        (demand.call_result_domain, "callResultDomain"),
         (demand.constant_value, "constantValue"),
         (demand.array_shape, "arrayShape"),
         (demand.tuple_shape, "tupleShape"),
@@ -247,6 +245,10 @@ pub fn run(
         symbols.push(run_symbols);
     }
 
+    // Go: `batchDescriptors` and `project.typeDescriptors` (the latter held
+    // per call here, so no type address outlives its checker).
+    let mut batch_descriptors: HashMap<SymbolId, Arc<TypeDescriptor>> = HashMap::new();
+    let mut memo = DescriptorMemo::default();
     let suppressed =
         |symbol: &SymbolId| batch_structural.contains(symbol) || scope.suppression.contains(symbol);
 
@@ -309,20 +311,78 @@ pub fn run(
                 .map_or((location.start_byte, location.end_byte), |query| {
                     (query.start_byte, query.end_byte)
                 });
+            let query_node = query_cursor.covering(query.0, query.1);
+            let mut query_type: Option<P<Type>> = None;
             if demand.type_descriptor
-                && query_cursor.covering(query.0, query.1).is_some()
                 && !suppressed(&entity.symbol)
+                && let Some(node) = query_node
             {
-                // The scope's seed is compiler-independent: a descriptor the
-                // batch already holds answers any entity of that symbol.
-                // Computing one needs the type printer, which is not ported.
-                match scope.descriptor_seed.get(&entity.symbol) {
-                    Some(descriptor) => {
-                        entity.type_descriptor = Some(descriptor.clone());
-                        evidence[run_index].descriptor(Some(descriptor));
+                // A descriptor the batch already holds answers any entity of
+                // that symbol; the scope's seed is compiler-independent.
+                let held = batch_descriptors
+                    .get(&entity.symbol)
+                    .or_else(|| scope.descriptor_seed.get(&entity.symbol))
+                    .cloned();
+                let descriptor = if let Some(descriptor) = held {
+                    descriptor
+                } else {
+                    let value = env.checker.get_type_at_location(node);
+                    query_type = Some(value);
+                    let descriptor = memo.descriptor(env.checker, value);
+                    if !entity.symbol.is_empty() {
+                        batch_descriptors.insert(entity.symbol.clone(), Arc::clone(&descriptor));
                     }
-                    None => unavailable.note("typeDescriptor"),
+                    descriptor
+                };
+                evidence[run_index].descriptor(Some(&descriptor));
+                entity.type_descriptor = Some(descriptor);
+            }
+            if (demand.callability || demand.constructability || demand.runtime_value_domain)
+                && let Some(node) = query_node
+            {
+                let value = match query_type {
+                    Some(value) => value,
+                    None => {
+                        let value = env.checker.get_type_at_location(node);
+                        query_type = Some(value);
+                        value
+                    }
+                };
+                if demand.callability {
+                    entity.callability = Some(callability_of_type(env.checker, value));
                 }
+                if demand.constructability {
+                    entity.constructability = Some(constructability_of_type(env.checker, value));
+                }
+                if demand.runtime_value_domain {
+                    entity.runtime_value_domain =
+                        Some(runtime_value_domain_of_type(env.checker, value));
+                }
+            }
+            if (demand.primitive_value_domain || demand.primitive_literal_candidates)
+                && let Some(node) = query_cursor.exact_expression_at(query.0, query.1)
+            {
+                // The query node's type is reused only when it is the
+                // same node (Go: `primitiveNode != queryNode`).
+                let value = match query_type {
+                    Some(value) if query_node == Some(node) => value,
+                    _ => env.checker.get_type_at_location(node),
+                };
+                if demand.primitive_value_domain {
+                    entity.primitive_value_domain =
+                        primitive_value_domain_of_type(env.checker, value);
+                }
+                if demand.primitive_literal_candidates {
+                    entity.primitive_literal_candidates = Some(Arc::new(
+                        primitive_literal_candidates_of_type(env.checker, value),
+                    ));
+                }
+            }
+            if demand.call_result_domain
+                && query_cursor.exact_call_like_at(query.0, query.1).is_some()
+            {
+                // Its validity guard is the call resolver's (resolved calls).
+                unavailable.note("callResultDomain");
             }
             note_unported(demand, unavailable);
         }

@@ -299,6 +299,28 @@ impl Project {
         })?
     }
 
+    /// Go: `DescribeTypeAt` (the optional `TypeDescriber` capability): the
+    /// descriptor of the type at the node at the first byte of `location`.
+    pub fn describe_type_at(
+        &mut self,
+        ctx: &Context,
+        location: &Location,
+    ) -> Result<typefacts::TypeDescriptor, BackendError> {
+        check(ctx)?;
+        self.with_env(|env, _| {
+            let absolute_path = absolute(&location.path)
+                .map_err(|error| BackendError(format!("resolve source path: {error}")))?;
+            let file = env
+                .program
+                .get_source_file(&absolute_path)
+                .ok_or_else(|| BackendError(format!("not found: source file {absolute_path}")))?;
+            validate_location(location, file.text())?;
+            let node = node_at(file, to_u32(location.start_byte)?);
+            let value = env.checker.get_type_at_location(node);
+            Ok(crate::type_facts::type_descriptor_for(env.checker, value))
+        })?
+    }
+
     /// Go: `References`: the canonical symbol's reference locations in
     /// (path, start byte) order. An id whose declaration no longer
     /// re-resolves fails closed, before any retained index entry could answer
@@ -313,8 +335,7 @@ impl Project {
             let canonical = env.canonical_symbol(target);
             let canonical = env.id_for(canonical);
             references.ensure(env);
-            references.mark_used(&canonical);
-            Ok(references.locations(&canonical))
+            Ok(references.query(env, &canonical))
         })?
     }
 
@@ -347,6 +368,11 @@ impl Project {
     #[cfg(test)]
     pub(crate) fn current_mut_for_test(&mut self) -> &mut Generation {
         self.generation.as_mut().expect("open")
+    }
+
+    #[cfg(test)]
+    pub(crate) fn reference_index_mut_for_test(&mut self) -> &mut ReferenceIndex {
+        &mut self.references
     }
 
     #[cfg(test)]
@@ -602,8 +628,7 @@ impl ClosureBackend for Project {
                 };
                 let canonical = env.canonical_symbol(target);
                 let canonical = env.id_for(canonical);
-                references.mark_used(&canonical);
-                result.insert(id.clone(), references.locations(&canonical));
+                result.insert(id.clone(), references.query(env, &canonical));
             }
             result
         })
@@ -676,8 +701,7 @@ impl SymbolEvidence for Project {
                 if query.references {
                     let canonical = env.canonical_symbol(symbol);
                     let canonical = env.id_for(canonical);
-                    references.mark_used(&canonical);
-                    fact.references = references.locations(&canonical).into();
+                    fact.references = references.query(env, &canonical).into();
                 }
                 facts.push(fact);
             }
@@ -1070,7 +1094,13 @@ fn declaration_kind(node: tsrs_core::P<Node>) -> &'static str {
     }
 }
 
-fn wire_symbol_name(name: &str) -> String {
+/// Go: `wireSymbolName`. Go marks an internal symbol name with a leading
+/// `0xFE` byte and spells it `__x` at the wire seam; tsrs's marker is U+007F,
+/// which is valid UTF-8 and would reach the wire unnoticed. Every symbol name
+/// the producer writes (declaration names in both evidence sections and the
+/// symbol table, and the required-property names of parameter object shapes
+/// once resolved calls are ported) must go through this.
+pub(crate) fn wire_symbol_name(name: &str) -> String {
     match name.strip_prefix('\u{7f}') {
         Some(rest) => format!("__{rest}"),
         None => name.to_owned(),
@@ -1078,7 +1108,7 @@ fn wire_symbol_name(name: &str) -> String {
 }
 
 /// Go: `declarationsForSymbol`.
-fn declarations_for_symbol(symbol: tsrs_core::P<tsrs_ast::Symbol>) -> Vec<Declaration> {
+pub(crate) fn declarations_for_symbol(symbol: tsrs_core::P<tsrs_ast::Symbol>) -> Vec<Declaration> {
     let mut declarations = Vec::with_capacity(symbol.declarations().len());
     for node in symbol.declarations() {
         let Some(file) = get_source_file_of_node(*node) else {

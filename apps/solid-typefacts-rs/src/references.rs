@@ -52,6 +52,10 @@ pub struct FileReferences {
     pub refs: Vec<Group>,
     spaces: Vec<(SymbolId, u8)>,
     pub durable: bool,
+    /// The spans were moved into a merged index and cleared. Such an entry
+    /// still carries exact symbol evidence but cannot rebuild a dropped
+    /// index; `build` rescans it.
+    merged: bool,
     /// Which scan produced this entry; tests use it to tell a retained
     /// contribution from a replaced one (Go compares the pointers).
     pub serial: u64,
@@ -67,6 +71,11 @@ pub struct ReferenceIndex {
     /// `ReleaseAnalysisState` prunes every other merged bucket; per-file
     /// symbol evidence remains sufficient for exact invalidation.
     used: HashSet<SymbolId>,
+    /// `Some` once `release_analysis_state` pruned merged buckets: the only
+    /// buckets still known whole. A bucket absent from it may be missing or
+    /// hold just the rows an incremental refresh added, so a query for it
+    /// rebuilds the merged index first.
+    complete: Option<HashSet<SymbolId>>,
     /// Affected files removed from an already-materialized merged index. They
     /// are rescanned lazily at the established reference closure point so
     /// symbol counter minting retains its order.
@@ -216,6 +225,7 @@ impl ReferenceIndex {
         self.files.clear();
         self.paths.clear();
         self.used.clear();
+        self.complete = None;
     }
 
     /// The reference half of the rebase policy: the program is a different
@@ -248,12 +258,21 @@ impl ReferenceIndex {
         self.paths.clear();
         self.refresh_paths.clear();
         self.used.clear();
+        self.complete = None;
     }
 
     /// Go: `releaseAnalysisState`.
     pub fn release_analysis_state(&mut self) {
+        let mut pruned = false;
         if let Some(merged) = &mut self.merged {
+            let before = merged.len();
             merged.retain(|id, _| self.used.contains(id));
+            pruned = merged.len() != before;
+        }
+        if pruned || self.complete.is_some() {
+            // Buckets kept before this release but unused since are pruned
+            // now, so only the ids used since the last release remain whole.
+            self.complete = Some(self.used.clone());
         }
         self.used.clear();
         // Reference-space rows are cheap to rebuild from the compact per-file
@@ -267,6 +286,7 @@ impl ReferenceIndex {
         if self.merged.is_none() {
             self.merged = Some(self.build(env));
             self.refresh_paths.clear();
+            self.complete = None;
             return;
         }
         if self.refresh_paths.is_empty() {
@@ -309,6 +329,7 @@ impl ReferenceIndex {
                     });
                 }
             }
+            entry.merged = true;
         }
         if let Some(merged) = &mut self.merged {
             for id in touched {
@@ -335,14 +356,24 @@ impl ReferenceIndex {
             }
             let path = crate::gocompat::clean(file.file_name());
             paths.push(path.clone());
-            if !self.files.contains_key(&path) {
-                let entry = self.scan(env, *file);
-                if self.delta_exact {
-                    for group in &entry.refs {
-                        self.changed_symbols.insert(group.id.clone());
+            match self.files.get(&path) {
+                None => {
+                    let entry = self.scan(env, *file);
+                    if self.delta_exact {
+                        for group in &entry.refs {
+                            self.changed_symbols.insert(group.id.clone());
+                        }
                     }
+                    self.files.insert(path, entry);
                 }
-                self.files.insert(path, entry);
+                Some(prior) if prior.merged => {
+                    // Retained across a broad invalidation: its text and
+                    // durable identities are unchanged, so this is not a
+                    // changed symbol.
+                    let entry = self.scan(env, *file);
+                    self.files.insert(path, entry);
+                }
+                Some(_) => {}
             }
         }
         paths.sort();
@@ -362,6 +393,7 @@ impl ReferenceIndex {
                     });
                 }
             }
+            entry.merged = true;
             for (id, bits) in &entry.spaces {
                 *spaces.entry(id.clone()).or_default() |= *bits;
             }
@@ -387,8 +419,26 @@ impl ReferenceIndex {
             .collect()
     }
 
+    /// Go: `query`: completes the bucket for `id`, marks it used, and returns
+    /// its locations. The merged index must already be ensured.
+    pub fn query(&mut self, env: &mut Env<'_>, id: &SymbolId) -> Vec<Location> {
+        if self
+            .complete
+            .as_ref()
+            .is_some_and(|complete| !complete.contains(id))
+        {
+            // Pruned by `release_analysis_state`; retained contributions
+            // rescan into a complete index.
+            self.merged = Some(self.build(env));
+            self.refresh_paths.clear();
+            self.complete = None;
+        }
+        self.mark_used(id);
+        self.locations(id)
+    }
+
     /// Go: `markUsed`.
-    pub fn mark_used(&mut self, id: &SymbolId) {
+    fn mark_used(&mut self, id: &SymbolId) {
         self.used.insert(id.clone());
     }
 
@@ -506,6 +556,7 @@ impl ReferenceIndex {
             refs,
             spaces,
             durable: scan.durable,
+            merged: false,
             serial: self.next_serial,
         }
     }
@@ -515,6 +566,11 @@ impl ReferenceIndex {
 impl ReferenceIndex {
     /// Test seam for the broad-invalidation case, which Go builds by filling
     /// the struct directly.
+    /// Go sets `referenceIndex.used` directly.
+    pub(crate) fn set_used_for_test(&mut self, ids: &[SymbolId]) {
+        self.used = ids.iter().cloned().collect();
+    }
+
     pub(crate) fn insert_for_test(&mut self, path: &str, id: &str, durable: bool) {
         let id: SymbolId = id.into();
         let path_index = u32::try_from(self.paths.len()).unwrap();
@@ -529,6 +585,7 @@ impl ReferenceIndex {
                 }],
                 spaces: Vec::new(),
                 durable,
+                merged: false,
                 serial: self.next_serial,
             },
         );

@@ -22,6 +22,7 @@ mod source_facts;
 mod symbol_facts;
 mod symbol_integration;
 mod symbols;
+mod type_facts;
 
 use crate::context::Context;
 use crate::fake::FakeBackend;

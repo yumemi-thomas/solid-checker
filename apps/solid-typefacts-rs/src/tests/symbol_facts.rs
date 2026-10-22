@@ -197,9 +197,11 @@ fn semantic_demand_runs_reject_a_cross_file_query_location() {
     );
 }
 
-/// What S4a answers for the cases `semantic_runs_test.go` classifies with
-/// callability and runtime domains: the demanded families are absent (never a
-/// fabricated value), counted, and the symbol is still resolved.
+/// The families a later slice owns are absent (never a fabricated value),
+/// counted, and the ported ones beside them are answered. S4c ported
+/// `typeDescriptor`, `callability`, `constructability` and
+/// `runtimeValueDomain`; `resolvedCall`, `parameterObjectShape` and
+/// `runtimeIdentity` remain.
 #[test]
 fn unported_families_are_absent_counted_and_never_fabricated() {
     let source = "declare function factory(): any;\nexport const result = factory();\n";
@@ -223,6 +225,7 @@ fn unported_families_are_absent_counted_and_never_fabricated() {
         reference_space: true,
         type_descriptor: true,
         runtime_identity: true,
+        call_result_domain: true,
         ..EntityDemand::default()
     };
     let facts = entities(
@@ -235,22 +238,27 @@ fn unported_families_are_absent_counted_and_never_fabricated() {
     );
     for entity in &facts {
         assert!(!entity.symbol.is_empty());
-        assert!(entity.callability.is_none() && entity.constructability.is_none());
-        assert!(entity.runtime_value_domain.is_none() && entity.resolved_call.is_none());
-        assert!(entity.type_descriptor.is_none() && entity.runtime_identity.is_empty());
+        assert!(entity.callability.is_some() && entity.constructability.is_some());
+        assert!(entity.runtime_value_domain.is_some());
+        assert!(entity.type_descriptor.is_some());
+        assert!(entity.resolved_call.is_none() && entity.runtime_identity.is_empty());
+        assert!(entity.call_result_domain.is_none());
         assert_eq!(entity.reference_space, Some(ReferenceSpace::Value));
     }
+    for family in ["resolvedCall", "runtimeIdentity", "runtimeBindingKind"] {
+        assert_eq!(project.unavailable.count(family), 2, "{family}");
+    }
+    // Only the span that is exactly a call needs the call resolver.
+    assert_eq!(project.unavailable.count("callResultDomain"), 1);
     for family in [
         "callability",
         "constructability",
         "runtimeValueDomain",
-        "resolvedCall",
         "typeDescriptor",
-        "runtimeIdentity",
+        "referenceSpace",
     ] {
-        assert_eq!(project.unavailable.count(family), 2, "{family}");
+        assert_eq!(project.unavailable.count(family), 0, "{family}");
     }
-    assert_eq!(project.unavailable.count("referenceSpace"), 0);
 }
 
 /// The scope's descriptor seed is compiler-independent, so a seeded
@@ -582,4 +590,60 @@ fn cursor_selects_exact_and_outermost_call_nodes() {
     // Covering: the smallest node containing the range.
     assert_eq!(cursor.covering(start, outer_end), Some(outer));
     assert!(cursor.exact_expression_at(start, start).is_none());
+}
+
+/// `TestAnalyzeEvidenceEscapesInternalSymbolNames` and the object-shape half
+/// of Go's `wireSymbolName` fix. Go spells an internal symbol name `__x`
+/// (from its `0xFE` prefix); tsrs marks it with U+007F, which is valid UTF-8
+/// and would otherwise reach the wire unnoticed. Every name the producer
+/// hands the closure (the source of both the plain-CBOR `symbolEvidence` and
+/// `referenceEvidence` sections and of the packed symbol rows) goes through
+/// `declarations_for_symbol`, so the evidence of an unnamed class expression
+/// (`__class`) carries Go's spelling.
+#[test]
+fn symbol_evidence_spells_internal_names_like_go() {
+    let source = "export const Anonymous = class {};\n";
+    let scratch = Scratch::new(&[("tsconfig.json", SMALL_CONFIG), ("a.ts", source)]);
+    let path = scratch.path("a.ts");
+    let ctx = Context::new();
+    let mut project = scratch.open();
+    // The checker has no symbol *at* the expression; its declared symbol is
+    // the unnamed class's `__class`.
+    let start = find(&path, source, "class").start_byte;
+    let id = project
+        .with_env(|env, _| {
+            let file = env.program.get_source_file(&path).unwrap();
+            let node = crate::nodes::node_at(file, u32::try_from(start).unwrap());
+            env.id_for(node.symbol().expect("class expression symbol"))
+        })
+        .unwrap();
+    let query = typefacts::v3::SymbolQuery {
+        id: id.clone(),
+        references: false,
+        references_only: false,
+    };
+    let facts =
+        crate::backend::SymbolEvidence::symbol_evidence(&mut project, &ctx, &[query]).unwrap();
+    assert_eq!(facts.len(), 1);
+    let names: Vec<&str> = facts[0]
+        .declarations
+        .iter()
+        .map(|declaration| &*declaration.name)
+        .collect();
+    assert_eq!(names, ["__class"], "evidence declarations: {facts:?}");
+    assert!(
+        names.iter().all(|name| !name.contains('\u{7f}')),
+        "tsrs's internal-name marker reached the wire"
+    );
+}
+
+#[test]
+fn wire_symbol_name_only_rewrites_the_internal_prefix() {
+    use crate::project::wire_symbol_name;
+    assert_eq!(wire_symbol_name("\u{7f}index"), "__index");
+    assert_eq!(wire_symbol_name("\u{7f}call"), "__call");
+    assert_eq!(wire_symbol_name("\u{7f}"), "__");
+    assert_eq!(wire_symbol_name("plain"), "plain");
+    assert_eq!(wire_symbol_name("__index"), "__index");
+    assert_eq!(wire_symbol_name("a\u{7f}b"), "a\u{7f}b");
 }
