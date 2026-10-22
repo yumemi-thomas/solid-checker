@@ -145,6 +145,81 @@
     "digest": "fdff61326a05f0df7721c22be48814a7e97d8fbed9af9b9d15b97779664391e7"
   },
   {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.51",
+    "digest": "1160803c0383f9e1fda629fc0661e39d9de5153af16598590dbeb59545988a22"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.51",
+    "digest": "137132f6bf55982e6d8595e80b7fc5cd116fcf6179ae30627db745b55c1b30f8"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.51",
+    "digest": "1537afad5d444caa17f0ad743bd00027d609719ad60cadc6ced9eac0232b6399"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.51",
+    "digest": "26105bfb0d87fe1901751fe4ab491ec6330c389f9f8b3235099a9c4b70725047"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.51",
+    "digest": "2685555b05ada11b067176d369208d26e39d05b307676274d1353544ca6527d3"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.51",
+    "digest": "55e170c35d34ddf61336da64f95f485e87273fae80222d86dffe1448dba269c3"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.51",
+    "digest": "64d5fea6e8c4232074639f66b84b1e9f42f7b9fbc02e46bf11fbe9e77713d1cb"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.51",
+    "digest": "72509b3e21cdd3e62c4d9f9219c348be73b034343122b9850d54565d1588bb8e"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.51",
+    "digest": "9cc96d32ddf5d33c0d0d873b56896644a03aac5246ba532dd36f6cbcffa97665"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.51",
+    "digest": "ac6f0a23f747c75a2eeacc136ba0a6852079443d5c0f8bbfd7cb1a2f6fcec7c3"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.51",
+    "digest": "b28e951032d0ead3acba4924ea05e8c490fa84f11a2e973124f340490b1569a4"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.51",
+    "digest": "b5af4ac74b93c83aa7c6e38f6c59f592d46389485c1f64f4dc13c69956e551de"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.51",
+    "digest": "e930db5537e266641eb7c9a26382222c834f8ca24d660fe56f6aaec2572d4f7a"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.51",
+    "digest": "edf1d0b780b38b07fbe3dac6bbed62680aa53b2d52d78a6641e41b8390fef33b"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
+    "version": "3.0.0-next.51",
+    "digest": "fd734a7315cee7f14e2bb0709ceb7a1b7bb81db86c1ae67d9f129435ef7ea39c"
+  },
+  {
     "name": "@tailwindcss/vite",
     "version": "4.3.0",
     "digest": "b3ce4d652ef02e7b01a7854830a58a9b00bd9279297cd0bca91efbb8660ad466"
