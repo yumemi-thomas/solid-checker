@@ -481,6 +481,16 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 	overlayDuration := time.Since(stageStarted)
 
 	oldProgram := p.program
+	if incremental && incrementalPath != "" && oldProgram.GetSourceFile(incrementalPath) == nil {
+		// A file entering the program (a restored deletion, a new file) can
+		// satisfy an import that was unresolved when retained answers were
+		// computed. An unresolved specifier records no import edge, so the
+		// reverse-dependency walk and the leaf cutoff cannot see that
+		// importer. Take the full-rebuild path, whose affected set unions the
+		// new program's edges (which now include the resolved import).
+		incremental = false
+		incrementalPath = ""
+	}
 	var oldShape declarationShape
 	var oldShapeOK bool
 	oldShapeCached := false
