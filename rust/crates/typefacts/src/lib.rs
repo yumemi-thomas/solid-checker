@@ -671,6 +671,31 @@ impl TupleShape {
     }
 }
 
+#[cfg(feature = "producer")]
+impl TupleShape {
+    /// The producer's constructor (Go: the `TupleShape` literal): element zero's
+    /// callability is always stated, `Unknown` when the tuple has no slot.
+    ///
+    /// # Errors
+    ///
+    /// A fixed length or exact length that does not fit the compact form.
+    pub fn for_producer(
+        fixed_length: u32,
+        has_rest: bool,
+        element_zero: Callability,
+        element_zero_min_parameters: u32,
+        exact_length: Option<u32>,
+    ) -> Result<Self, String> {
+        Self::try_new(
+            fixed_length,
+            has_rest,
+            Some(element_zero),
+            element_zero_min_parameters,
+            exact_length,
+        )
+    }
+}
+
 impl Default for TupleShape {
     fn default() -> Self {
         Self::try_new(0, false, None, 0, None).expect("empty tuple shape is representable")

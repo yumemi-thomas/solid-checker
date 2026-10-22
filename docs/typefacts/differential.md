@@ -134,3 +134,38 @@ writes every snapshot's state (`unchanged`, `moved`, `checker-failed`) with the
 findings added and removed. The wrapper also checks `git status` of
 `fixtures/findings-snapshots` before and after. Output:
 `rust/target/differential/e2e/{coverage-moved,summary}.json`.
+
+## Producer-level differentials (cargo tests, Go binary beside the Rust one)
+
+Under `apps/solid-typefacts-rs/tests/`, each drives both producers through the
+client `Session` and diffs decoded rows. `TSRS_DIFF_ALL=1` runs every
+`fixtures/**/tsconfig.json` (default: a deterministic subset).
+
+- `families_differential`: every family demanded at every word, dotted chain
+  and literal span, cold, after a span-shifting update and after the restore.
+  Entity rows must be equal after renaming non-durable ids and dropping the
+  unique-symbol counter of well-known symbol names. `TSRS_DIFF_PROJECT=<tsconfig>`
+  probes one project, `TSRS_DIFF_FILES=a,b` limits the demanded files.
+- `delete_restore_differential`: a dependency deleted and restored, each family
+  alone and all together (Go 3991f6919); the restored analysis must equal the
+  cold one on each producer.
+- `families_corpus`: no demanded family is counted unavailable on the fixtures
+  and each family is answered somewhere (the precondition for the switch).
+
+`TYPEFACTS_DIFF_CLIP=<n>` widens the report's cell clip (default 400 bytes).
+
+## Cells no port can equal
+
+Go itself differs between two runs on these (a Go-vs-Go replay of the same
+session reports the same cells), so they are not port defects:
+
+- the durable id of an ES private-name member (`#add`): the binder spells the
+  symbol name with the class symbol's id (`GetSymbolNameForPrivateIdentifier`),
+  a global counter handed out while files bind in parallel;
+- the member order of a union of route-handler result types on `sensor-sim`
+  (`Hono<...>` texts): two Go runs print different orders; the cause in Go is
+  not isolated.
+
+The Rust producer runs tsrs in Go-compatible check history
+(`tsrs_core::compat`): tsrs's canonical default would print a normalized
+object-literal union's properties in a different order than Go does.

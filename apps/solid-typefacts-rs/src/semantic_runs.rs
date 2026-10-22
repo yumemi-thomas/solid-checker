@@ -6,22 +6,26 @@
 //!
 //! # What is answered, and what is unavailable
 //!
-//! Answered end to end: `symbol` (with its covering claim and unresolved
-//! claim), `structuralAccessor`, `referenceSpace`, `typeDescriptor`,
+//! Every demand family is answered: `symbol` (with its covering claim and
+//! unresolved claim), `structuralAccessor`, `referenceSpace`, `typeDescriptor`,
 //! `callability` (with `untypedCallable`), `constructability`,
-//! `runtimeValueDomain`, `primitiveValueDomain` and
-//! `primitiveLiteralCandidates` (see `type_facts`), and `resolvedCall` with the
+//! `runtimeValueDomain`, `primitiveValueDomain`, `primitiveLiteralCandidates`
+//! and `arrayShape`/`tupleShape`/`libraryTypes` (see `type_facts`),
+//! `constantValue` (see `constants`), `runtimeIdentity` and the runtime
+//! binding kind (see `runtime_facts`), and `resolvedCall` with the
 //! `parameterObjectShape` of its parameters and `callResultDomain` (see
-//! `resolved_calls`). Not ported yet: `constantValue`, `arrayShape`,
-//! `tupleShape`, `libraryTypes`, `runtimeIdentity` and the runtime binding
-//! kind. For a demanded entity they are reported unavailable the one way the
-//! wire has: the field is absent (`None`, the empty string, or the all-zero
-//! primitive domain). The client reads an absent field as "no fact here" -- the
-//! same row the Go producer writes when a span carries no expression to
-//! classify -- never as a negative proof, so the result is uncertifiable, never
-//! a guess. Each such omission is counted in [`Unavailable`].
+//! `resolved_calls`).
+//!
+//! A family that is not ported would be listed in [`UNPORTED`] and reported
+//! unavailable the one way the wire has: the field is absent (`None`, the
+//! empty string, or the all-zero primitive domain). The client reads an absent
+//! field as "no fact here", never as a negative proof, so the result is
+//! uncertifiable, never a guess. Each such omission is counted in
+//! [`Unavailable`]; the list is empty and a test keeps it, and the counter,
+//! at zero (the precondition for making this producer the default).
 
 use crate::backend::BackendError;
+use crate::constants::constant_value_at;
 use crate::context::Context;
 use crate::gocompat::{absolute, quote};
 use crate::identity::Env;
@@ -32,14 +36,15 @@ use crate::model::{
 use crate::nodes::{NodeCursor, jsx_tag_name_at, symbol_span_covers};
 use crate::references::ReferenceIndex;
 use crate::resolved_calls::{CallCaches, CallDemand, CallRun};
+use crate::runtime_facts::{runtime_binding_kind, runtime_identity};
 use crate::type_facts::{
-    DescriptorMemo, callability_of_type, constructability_of_type,
-    primitive_literal_candidates_of_type, primitive_value_domain_of_type,
-    runtime_value_domain_of_type,
+    DescriptorMemo, array_shape_at, callability_of_type, constructability_of_type,
+    library_types_at, primitive_literal_candidates_of_type, primitive_value_domain_of_type,
+    runtime_value_domain_of_type, tuple_shape_at,
 };
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
-use tsrs_ast::{Node, SourceFile, Symbol};
+use tsrs_ast::{Node, SourceFile, Symbol, is_identifier};
 use tsrs_checker::types::Type;
 use tsrs_core::P;
 use typefacts::v3::EntityDemand;
@@ -53,7 +58,7 @@ use typefacts::{
 pub struct Unavailable(pub BTreeMap<&'static str, u64>);
 
 impl Unavailable {
-    fn note(&mut self, family: &'static str) {
+    pub fn note(&mut self, family: &'static str) {
         *self.0.entry(family).or_default() += 1;
     }
 
@@ -150,23 +155,15 @@ fn wants_beyond_symbol(demand: &EntityDemand) -> bool {
         || demand.runtime_identity
 }
 
-/// Names every demanded family this slice cannot answer. (`resolvedCall`,
-/// `parameterObjectShape` and `callResultDomain` are answered by
-/// `resolved_calls`; the object shape rides on a resolved call's parameters.)
+/// A family and the demand flag that asks for it, for families this producer
+/// has no port of. Empty: every family is answered.
+type Unported = (fn(&EntityDemand) -> bool, &'static str);
+pub const UNPORTED: &[Unported] = &[];
+
+/// Counts every demanded family that [`UNPORTED`] names.
 fn note_unported(demand: &EntityDemand, unavailable: &mut Unavailable) {
-    let families: [(bool, &'static str); 6] = [
-        (demand.constant_value, "constantValue"),
-        (demand.array_shape, "arrayShape"),
-        (demand.tuple_shape, "tupleShape"),
-        (demand.library_types, "libraryTypes"),
-        (demand.runtime_identity, "runtimeIdentity"),
-        (
-            demand.runtime_identity && demand.callability && demand.constructability,
-            "runtimeBindingKind",
-        ),
-    ];
-    for (demanded, family) in families {
-        if demanded {
+    for (demanded, family) in UNPORTED {
+        if demanded(demand) {
             unavailable.note(family);
         }
     }
@@ -331,6 +328,12 @@ pub fn run(
                     entity.reference_space = Some(references.space_for(env, &id));
                 }
             }
+            if demand.runtime_identity
+                && let Some(symbol) = result_symbol
+            {
+                let identity = runtime_identity(env, symbol);
+                entity.runtime_identity = identity.as_str().into();
+            }
 
             let query = demand
                 .query_location
@@ -386,6 +389,23 @@ pub fn run(
                         Some(runtime_value_domain_of_type(env.checker, value));
                 }
             }
+            if demand.runtime_identity && demand.callability && demand.constructability {
+                let mut binding_node = query_cursor.exact_expression_at(query.0, query.1);
+                if binding_node.is_none()
+                    && demand.query_location.is_none()
+                    && let Some(node) = result_node
+                    && is_identifier(node)
+                {
+                    // Export/import specifiers are exact identifier demands but
+                    // are not expression nodes in the TypeScript AST. The
+                    // already located result node has the same demanded
+                    // boundaries and exact symbol.
+                    binding_node = Some(node);
+                }
+                if let Some(node) = binding_node {
+                    entity.runtime_binding_kind = runtime_binding_kind(env, node);
+                }
+            }
             if (demand.primitive_value_domain || demand.primitive_literal_candidates)
                 && let Some(node) = query_cursor.exact_expression_at(query.0, query.1)
             {
@@ -419,6 +439,39 @@ pub fn run(
                 }
                 .call_result_domain(call_node)?;
                 entity.call_result_domain = Some(domain);
+            }
+            if demand.constant_value
+                && let Some(node) = query_cursor.exact_expression_at(query.0, query.1)
+            {
+                entity.constant_value = constant_value_at(env, node, &mut evidence[run_index]);
+            }
+            if demand.array_shape
+                && let Some(node) = query_cursor.exact_expression_at(query.0, query.1)
+            {
+                entity.array_shape = Some(array_shape_at(
+                    env.checker,
+                    &mut memo,
+                    &mut evidence[run_index],
+                    node,
+                ));
+            }
+            if demand.tuple_shape
+                && let Some(node) = query_cursor.exact_expression_at(query.0, query.1)
+            {
+                entity.tuple_shape =
+                    tuple_shape_at(env.checker, &mut memo, &mut evidence[run_index], node);
+            }
+            if demand.library_types
+                && let Some(node) = query_cursor.exact_expression_at(query.0, query.1)
+            {
+                entity.library_types = library_types_at(
+                    env.checker,
+                    env.program,
+                    &mut memo,
+                    &mut evidence[run_index],
+                    node,
+                )
+                .map(Arc::new);
             }
             note_unported(demand, unavailable);
             if demand.resolved_call {

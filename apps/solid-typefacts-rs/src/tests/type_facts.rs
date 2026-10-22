@@ -791,3 +791,52 @@ fn range_entities_projects_a_real_retained_answer() {
         demand.location
     );
 }
+
+/// The property order of a normalized object-literal union follows the first
+/// literal that mentioned each name across the program (typescript-go's
+/// `undefinedProperties` cache is keyed by name), so the printed text depends on
+/// check history. The producer keeps Go's history: `cols?` takes the declaration
+/// of the first `cols` in the file and sorts before `nodes`. (tsrs's canonical
+/// default would print `nodes` first.)
+#[test]
+fn normalized_object_literal_union_text_follows_gos_check_history() {
+    let source = "export const a = [{ groups: 'g' }, { cols: 'TEMP' }];\n\
+export const b = [{ nodes: 'r' }, { cols: 'TEMP' }];\n\
+export const c = [{ cols: 'x' }, { nodes: 'r' }];\n";
+    let scratch = Scratch::new(&[("tsconfig.json", STRICT_BUNDLER), ("a.ts", source)]);
+    let path = scratch.path("a.ts");
+    let mut project = scratch.open();
+    let cases = [
+        (
+            "a",
+            "({ groups: string; cols?: undefined; } | { groups?: undefined; cols: string; })[]",
+        ),
+        (
+            "b",
+            "({ cols?: undefined; nodes: string; } | { nodes?: undefined; cols: string; })[]",
+        ),
+        (
+            "c",
+            "({ nodes?: undefined; cols: string; } | { cols?: undefined; nodes: string; })[]",
+        ),
+    ];
+    let demands: Vec<EntityDemand> = cases
+        .iter()
+        .map(|(name, _)| EntityDemand {
+            location: find(&path, source, &format!("const {name}")),
+            ..EntityDemand::default()
+        })
+        .map(|mut demand| {
+            // The binding name, after `const `.
+            demand.location.start_byte += "const ".len() as u64;
+            demand.location.end_byte = demand.location.start_byte + 1;
+            demand.type_descriptor = true;
+            demand
+        })
+        .collect();
+    let facts = entities(&mut project, &path, &demands);
+    for ((name, want), fact) in cases.iter().zip(&facts) {
+        let got = fact.type_descriptor.as_ref().map(|d| &*d.text);
+        assert_eq!(got, Some(*want), "{name}");
+    }
+}

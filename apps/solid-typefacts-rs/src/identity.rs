@@ -33,6 +33,7 @@ use crate::gocompat::clean;
 use crate::model::SymbolId;
 use crate::nodes::node_at;
 use crate::shape::{ExportedSymbol, exported_symbols_with};
+use crate::unsafe_boundary::CheckerLease;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tsrs_ast::{SourceFile, Symbol, SymbolFlags, is_external_module};
@@ -70,12 +71,16 @@ pub struct Identities {
     /// bundled-lib names, so durable re-resolution of lib-declared symbols
     /// falls back to this index.
     files_by_name: Option<HashMap<String, P<SourceFile>>>,
+    /// Go: `runtimePaths`. Filesystem-resolved declaration paths for one
+    /// generation (symlinks followed), dropped with the other path caches on
+    /// release and on every accepted update.
+    runtime_paths: HashMap<String, String>,
 }
 
 /// What an identity question needs: the checker and program of the generation
 /// the symbols come from, and the identity state.
 pub struct Env<'a> {
-    pub checker: &'a mut Checker,
+    pub checker: &'a mut CheckerLease,
     pub program: &'static Program,
     pub ids: &'a mut Identities,
 }
@@ -118,6 +123,7 @@ impl Identities {
         self.symbols_by_id.clear();
         self.exported = None;
         self.files_by_name = None;
+        self.runtime_paths.clear();
         self.next_symbol = 0;
     }
 
@@ -172,6 +178,7 @@ impl Identities {
         self.ids_by_symbol.clear();
         self.symbols_by_id.clear();
         self.files_by_name = None;
+        self.runtime_paths.clear();
         self.next_symbol = 0;
         match (incremental_path, current) {
             (Some(path), Some(current)) => {
@@ -299,6 +306,20 @@ impl Env<'_> {
         self.ids.ids_by_symbol.insert(key, Arc::clone(&id));
         self.ids.symbols_by_id.insert(Arc::clone(&id), symbol);
         id
+    }
+
+    /// Go: `runtimePath`: `path` with symlinks resolved, or `path` itself when
+    /// it does not resolve (a virtual or overlay-only file).
+    pub fn runtime_path(&mut self, path: &str) -> String {
+        if let Some(resolved) = self.ids.runtime_paths.get(path) {
+            return resolved.clone();
+        }
+        let resolved = std::fs::canonicalize(path)
+            .map_or_else(|_| path.to_owned(), |real| clean(&real.to_string_lossy()));
+        self.ids
+            .runtime_paths
+            .insert(path.to_owned(), resolved.clone());
+        resolved
     }
 
     /// Go: `symbolFor`: resolves `id` in the current generation, lazily

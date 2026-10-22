@@ -11,15 +11,18 @@
 //! "cycling" and answers unknown), keyed by type address.
 
 use crate::project::declarations_for_symbol;
+use crate::semantic_runs::Evidence;
+use std::collections::BTreeSet;
 use std::collections::HashSet;
 use std::sync::Arc;
-use tsrs_ast::{Symbol, is_module_declaration};
-use tsrs_checker::types::{LiteralValue, SignatureKind, Type, TypeExt, TypeFlags};
+use tsrs_ast::{Node, Symbol, get_source_file_of_node, is_module_declaration};
+use tsrs_checker::types::{ElementFlags, LiteralValue, SignatureKind, Type, TypeExt, TypeFlags};
 use tsrs_compiler::Checker;
+use tsrs_compiler::Program;
 use tsrs_core::P;
 use typefacts::{
     ArrayShape, Callability, Constructability, PrimitiveLiteralCandidate, PrimitiveLiteralKind,
-    PrimitiveValueDomain, RuntimeValueDomain, TypeDescriptor,
+    PrimitiveValueDomain, RuntimeValueDomain, TupleShape, TypeDescriptor,
 };
 
 /// Go: `TypeFlagsAny|Unknown|Never|IncludesError`.
@@ -593,5 +596,231 @@ pub fn array_shape_of_type(checker: &mut Checker, value: P<Type>) -> ArrayShape 
         (true, true) => ArrayShape::Mixed,
         (true, false) => ArrayShape::Array,
         _ => ArrayShape::NotArray,
+    }
+}
+
+/// Go: `arrayShapeAtLocked`: the type of exactly the demanded expression. The
+/// classification can turn on a type declared in another file (an imported
+/// tuple alias), so the descriptor's alias declarations are recorded as
+/// dependencies.
+pub fn array_shape_at(
+    checker: &mut Checker,
+    memo: &mut DescriptorMemo,
+    evidence: &mut Evidence,
+    node: P<Node>,
+) -> ArrayShape {
+    let value = checker.get_type_at_location(node);
+    evidence.descriptor(Some(&memo.descriptor(checker, value)));
+    array_shape_of_type(checker, value)
+}
+
+/// One tuple's shape before it is packed (Go: `typefacts.TupleShape`).
+#[derive(Clone, Copy)]
+struct Tuple {
+    fixed_length: u32,
+    has_rest: bool,
+    element_zero: Callability,
+    element_zero_minimum_parameters: u32,
+    exact_length: Option<u32>,
+}
+
+/// Go: `tupleShapeAtLocked`: the tuple at exactly the demanded expression, or
+/// `None` when that type does not resolve to one. A union answers when every
+/// constituent that can hold a value is a tuple; the result is their
+/// conservative meet. Nullish constituents carry no structure and are skipped.
+pub fn tuple_shape_at(
+    checker: &mut Checker,
+    memo: &mut DescriptorMemo,
+    evidence: &mut Evidence,
+    node: P<Node>,
+) -> Option<TupleShape> {
+    let value = checker.get_type_at_location(node);
+    if value.flags().intersects(OPEN_ARRAY_SHAPE) {
+        return None;
+    }
+    let mut merged: Option<Tuple> = None;
+    for constituent in value.distributed() {
+        if constituent.flags().intersects(OPEN_ARRAY_SHAPE) {
+            return None;
+        }
+        if constituent
+            .flags()
+            .intersects(TypeFlags::Undefined | TypeFlags::Null | TypeFlags::Void)
+        {
+            continue;
+        }
+        let shape = tuple_shape_of_type(checker, constituent)?;
+        merged = Some(match merged {
+            None => shape,
+            Some(current) => meet_tuple_shapes(current, shape),
+        });
+    }
+    let merged = merged?;
+    evidence.descriptor(Some(&memo.descriptor(checker, value)));
+    TupleShape::for_producer(
+        merged.fixed_length,
+        merged.has_rest,
+        merged.element_zero,
+        merged.element_zero_minimum_parameters,
+        merged.exact_length,
+    )
+    .ok()
+}
+
+/// Go: `tupleShapeOfType`: one non-union type, or `None` when it is not a tuple.
+fn tuple_shape_of_type(checker: &mut Checker, value: P<Type>) -> Option<Tuple> {
+    if !value.is_tuple_type() {
+        return None;
+    }
+    let target = value.target_tuple_type();
+    let fixed_length = u32::try_from(target.fixed_length()).ok()?;
+    let mut shape = Tuple {
+        fixed_length,
+        has_rest: false,
+        element_zero: Callability::Unknown,
+        element_zero_minimum_parameters: 0,
+        exact_length: Some(fixed_length),
+    };
+    for flags in target.element_flags() {
+        if flags.intersects(ElementFlags::NonRequired) {
+            shape.exact_length = None;
+        }
+        if flags.intersects(ElementFlags::Variable) {
+            shape.has_rest = true;
+        }
+    }
+    let elements = checker.get_type_arguments(value);
+    if shape.fixed_length > 0
+        && let Some(first) = elements.first()
+    {
+        shape.element_zero = callability_of_type(checker, *first);
+        shape.element_zero_minimum_parameters = minimum_parameter_count(checker, *first);
+    }
+    Some(shape)
+}
+
+/// Go: `meetTupleShapes`: keeps only what both shapes guarantee.
+fn meet_tuple_shapes(left: Tuple, right: Tuple) -> Tuple {
+    let callable_in_either_sense =
+        |value: Callability| matches!(value, Callability::Callable | Callability::UntypedCallable);
+    let element_zero = if left.element_zero == right.element_zero {
+        left.element_zero
+    } else if left.element_zero == Callability::Unknown
+        || right.element_zero == Callability::Unknown
+    {
+        Callability::Unknown
+    } else if callable_in_either_sense(left.element_zero)
+        && callable_in_either_sense(right.element_zero)
+    {
+        // Mirrors `callability_of_type`'s own union rung: the meet can promise
+        // only the weaker of the two.
+        Callability::UntypedCallable
+    } else {
+        Callability::Mixed
+    };
+    Tuple {
+        fixed_length: left.fixed_length.min(right.fixed_length),
+        has_rest: left.has_rest && right.has_rest,
+        element_zero,
+        element_zero_minimum_parameters: left
+            .element_zero_minimum_parameters
+            .max(right.element_zero_minimum_parameters),
+        exact_length: match (left.exact_length, right.exact_length) {
+            (Some(a), Some(b)) if a == b => Some(a),
+            _ => None,
+        },
+    }
+}
+
+/// Go: `minimumParameterCount`: the fewest arguments any call signature of
+/// `value` requires; zero when it has none.
+fn minimum_parameter_count(checker: &mut Checker, value: P<Type>) -> u32 {
+    let mut minimum: Option<usize> = None;
+    for signature in checker.get_signatures_of_type_exported(value, SignatureKind::Call) {
+        let count = signature.min_argument_count();
+        minimum = Some(minimum.map_or(count, |current| current.min(count)));
+    }
+    u32::try_from(minimum.unwrap_or(0)).unwrap_or(u32::MAX)
+}
+
+/// Go: `libraryTypesAtLocked`: the standard-library types the type at exactly
+/// the demanded expression is built from, at its top level (the type, its union
+/// and intersection constituents, and one array-element unwrap). Names are
+/// sorted and deduplicated; only declarations in default-library files count.
+pub fn library_types_at(
+    checker: &mut Checker,
+    program: &Program,
+    memo: &mut DescriptorMemo,
+    evidence: &mut Evidence,
+    node: P<Node>,
+) -> Option<Vec<Arc<str>>> {
+    let value = checker.get_type_at_location(node);
+    let mut names: BTreeSet<String> = BTreeSet::new();
+    for constituent in value.distributed() {
+        collect_library_types(checker, program, constituent, &mut names, true);
+    }
+    if names.is_empty() {
+        return None;
+    }
+    evidence.descriptor(Some(&memo.descriptor(checker, value)));
+    Some(names.into_iter().map(Arc::from).collect())
+}
+
+/// Go: `collectLibraryTypesLocked`.
+fn collect_library_types(
+    checker: &mut Checker,
+    program: &Program,
+    value: P<Type>,
+    names: &mut BTreeSet<String>,
+    descend: bool,
+) {
+    if value.flags().intersects(TypeFlags::Intersection) {
+        for member in value.types() {
+            collect_library_types(checker, program, *member, names, descend);
+        }
+        return;
+    }
+    if let Some(name) = library_type_name(program, value) {
+        names.insert(name);
+    }
+    if !descend {
+        return;
+    }
+    if checker.is_array_or_tuple_type(value) {
+        for element in checker.get_type_arguments(value) {
+            for constituent in element.distributed() {
+                collect_library_types(checker, program, constituent, names, false);
+            }
+        }
+    }
+}
+
+/// Go: `libraryTypeNameLocked`: the declared name when a declaration lives in a
+/// default-library file. Anonymous object and function types answer `None`.
+fn library_type_name(program: &Program, value: P<Type>) -> Option<String> {
+    let symbol = value.symbol()?;
+    for declaration in symbol.declarations() {
+        let Some(file) = get_source_file_of_node(*declaration) else {
+            continue;
+        };
+        if program.is_source_file_default_library(file.path()) {
+            return Some(library_symbol_name(symbol.name()));
+        }
+    }
+    None
+}
+
+/// The name Go puts on the wire for a library symbol. An internal name (an
+/// anonymous type literal, `__type`) starts with Go's `0xFE` marker, which Go
+/// writes as a raw byte and every client decoder reads back as U+FFFD; tsrs
+/// spells the marker U+007F. A Rust `String` cannot hold the raw byte, so the
+/// name is spelled as the client decodes it, which keeps the two producers
+/// indistinguishable on the wire. (The fact is junk either way, no consumer
+/// asks for such a name, and the comparison with the Go producer is exact. When
+/// the Go producer is deleted the right fix is to skip internal names.)
+pub(crate) fn library_symbol_name(name: &str) -> String {
+    match name.strip_prefix('\u{7f}') {
+        Some(rest) => format!("\u{fffd}{rest}"),
+        None => name.to_owned(),
     }
 }

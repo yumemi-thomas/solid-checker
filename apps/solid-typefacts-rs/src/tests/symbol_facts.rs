@@ -119,14 +119,14 @@ fn semantic_demand_runs_reject_a_cross_file_query_location() {
     );
 }
 
-/// The families a later slice owns are absent (never a fabricated value),
-/// counted, and the ported ones beside them are answered. S4c ported
-/// `typeDescriptor`, `callability`, `constructability` and
-/// `runtimeValueDomain`; S4d ported `resolvedCall` (and with it
-/// `parameterObjectShape` and `callResultDomain`); `runtimeIdentity` and the
-/// runtime binding kind remain.
+/// Every family beside the ones S4a-S4d ported is answered too (S4e ported
+/// constants, array/tuple shapes, library types, runtime identity and the
+/// runtime binding kind), and nothing is counted unavailable: the S7 switch
+/// precondition. `UNPORTED` stays empty; a family added there would be absent,
+/// counted, and fail this test.
 #[test]
-fn unported_families_are_absent_counted_and_never_fabricated() {
+fn every_demanded_family_is_answered_and_none_is_counted_unavailable() {
+    assert!(crate::semantic_runs::UNPORTED.is_empty());
     let source = "declare function factory(): any;\nexport const result = factory();\n";
     let scratch = Scratch::new(&[
         (
@@ -165,26 +165,24 @@ fn unported_families_are_absent_counted_and_never_fabricated() {
         assert!(entity.runtime_value_domain.is_some());
         assert!(entity.type_descriptor.is_some());
         assert!(entity.resolved_call.is_some());
-        assert!(entity.runtime_identity.is_empty());
+        assert!(entity.runtime_identity.starts_with("runtime:h:"));
         assert_eq!(entity.reference_space, Some(ReferenceSpace::Value));
     }
-    for family in ["runtimeIdentity", "runtimeBindingKind"] {
-        assert_eq!(project.unavailable.count(family), 2, "{family}");
-    }
+    // Only the span that is exactly an identifier has a binding kind: the
+    // declared function is a callable binding with no write.
+    assert_eq!(
+        facts[0].runtime_binding_kind,
+        Some(typefacts::RuntimeBindingKind::Callable)
+    );
+    assert!(facts[1].runtime_binding_kind.is_none());
+    assert!(
+        project.unavailable.0.is_empty(),
+        "{:?}",
+        project.unavailable
+    );
     // Only the span that is exactly a call has a call result domain.
     assert!(facts[0].call_result_domain.is_none());
     assert!(facts[1].call_result_domain.is_some());
-    for family in [
-        "resolvedCall",
-        "callResultDomain",
-        "callability",
-        "constructability",
-        "runtimeValueDomain",
-        "typeDescriptor",
-        "referenceSpace",
-    ] {
-        assert_eq!(project.unavailable.count(family), 0, "{family}");
-    }
 }
 
 /// The scope's descriptor seed is compiler-independent, so a seeded

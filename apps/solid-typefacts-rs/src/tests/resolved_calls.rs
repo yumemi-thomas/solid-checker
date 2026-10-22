@@ -1573,7 +1573,6 @@ fn project_update_rechecks_the_resolved_return_type() {
 /// compiler's own verdict.
 #[test]
 fn call_resolution_diagnostic_codes_match_the_compiler() {
-    use crate::unsafe_boundary::semantic_diagnostics;
     let exact = r#"{"compilerOptions":{"strict":true,"exactOptionalPropertyTypes":true,"module":"esnext","target":"esnext"},"include":["*.ts"]}"#;
     let loose = r#"{"compilerOptions":{"strict":false,"module":"esnext","target":"esnext"},"include":["*.ts"]}"#;
     let cases: [(i32, &str, &str, &str); 15] = [
@@ -1672,8 +1671,7 @@ fn call_resolution_diagnostic_codes_match_the_compiler() {
         let generation = project.current().unwrap();
         let program = generation.program();
         let file = program.get_source_file(&path).unwrap();
-        let reported =
-            generation.with_checker(|checker| semantic_diagnostics(program, checker, file));
+        let reported = generation.semantic_diagnostics(file);
         let start = source.find(call).unwrap() as u32;
         let end = start + call.len() as u32;
         assert!(

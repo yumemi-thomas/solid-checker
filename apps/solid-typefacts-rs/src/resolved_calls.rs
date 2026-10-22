@@ -13,7 +13,7 @@
 //! assignability. Nullable, union, context-sensitive, explicit-generic,
 //! construct and declaration-less calls take the diagnostic path: the file's
 //! semantic diagnostics, restricted to the call-resolution codes, decide
-//! whether a call-like node failed (`unsafe_boundary::semantic_diagnostics`,
+//! whether a call-like node failed (`CheckerLease::semantic_diagnostics`,
 //! one checker, so there is one report per file).
 //!
 //! # Ownership
@@ -40,7 +40,6 @@ use crate::type_facts::{
     DescriptorMemo, array_shape_of_type, callability_of_type, declaration_module,
     runtime_value_domain_of_type, unknown_runtime_value_domain,
 };
-use crate::unsafe_boundary::semantic_diagnostics;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tsrs_ast::{
@@ -678,7 +677,7 @@ impl CallRun<'_, '_> {
     fn call_diagnostics(&mut self) -> Result<&HashSet<usize>, BackendError> {
         let file = self.file;
         if !self.caches.diagnostics.contains_key(&file.addr()) {
-            let diagnostics = semantic_diagnostics(self.env.program, self.env.checker, file);
+            let diagnostics = self.env.checker.semantic_diagnostics(file);
             check(self.ctx)?;
             let mut index: HashSet<usize> = HashSet::new();
             for diagnostic in diagnostics {

@@ -603,6 +603,14 @@ fn assert_alternating_script_matches_fresh(
     files: &[(&str, &str)],
     script: impl FnOnce(&Scratch, &dyn Fn(&str) -> Vec<u8>) -> Vec<FileChange>,
 ) {
+    assert_alternating_script_matches_fresh_with(files, script, symbol_demands);
+}
+
+fn assert_alternating_script_matches_fresh_with(
+    files: &[(&str, &str)],
+    script: impl FnOnce(&Scratch, &dyn Fn(&str) -> Vec<u8>) -> Vec<FileChange>,
+    symbol_demands: fn(&mut DemandClosure) -> Vec<EntityDemand>,
+) {
     let ctx = Context::new();
     let scratch = Scratch::new(files);
     let config = scratch.config();
@@ -774,6 +782,133 @@ fn deletion_restoration_and_config_alternation_match_fresh() {
             change("dependency.ts", 4, Some(originals("dependency.ts"))),
         ]
     });
+}
+
+/// Go's `familyDemands`: symbol plus exactly one fact family at every binding
+/// name and call callee, so no other family's recorded dependencies can mask a
+/// stale answer.
+fn family_demands(closure: &mut DemandClosure, mark: fn(&mut EntityDemand)) -> Vec<EntityDemand> {
+    let ctx = Context::new();
+    let mut demands = Vec::new();
+    let mut add = |location: Location| {
+        let mut demand = EntityDemand {
+            location,
+            symbol: true,
+            ..EntityDemand::default()
+        };
+        mark(&mut demand);
+        demands.push(demand);
+    };
+    for source in closure.source_files(&ctx).unwrap() {
+        let path = crate::gocompat::clean(&source.path);
+        for binding in closure.backend.source_bindings(&ctx, &path).unwrap() {
+            for name in binding.names {
+                if !name.path.is_empty() && name.end_byte > name.start_byte {
+                    add(name);
+                }
+            }
+        }
+        for call in closure.backend.source_calls(&ctx, &path).unwrap() {
+            add(call.callee);
+        }
+    }
+    demands
+}
+
+/// Every demand family one at a time, as Go's
+/// `TestDeletionRestorationSingleFamilyDemandsMatchFresh` names them.
+#[allow(clippy::type_complexity)]
+const FAMILIES: [(&str, fn(&mut EntityDemand)); 16] = [
+    ("typeDescriptor", |d| d.type_descriptor = true),
+    ("callability", |d| d.callability = true),
+    ("constructability", |d| d.constructability = true),
+    ("runtimeValueDomain", |d| d.runtime_value_domain = true),
+    ("primitiveValueDomain", |d| d.primitive_value_domain = true),
+    ("callResultDomain", |d| d.call_result_domain = true),
+    ("constantValue", |d| d.constant_value = true),
+    ("arrayShape", |d| d.array_shape = true),
+    ("tupleShape", |d| d.tuple_shape = true),
+    ("parameterObjectShape", |d| d.parameter_object_shape = true),
+    ("runtimeIdentity", |d| d.runtime_identity = true),
+    ("referenceSpace", |d| d.reference_space = true),
+    ("references", |d| d.references = true),
+    ("async", |d| d.r#async = true),
+    ("structuralAccessor", |d| d.structural_accessor = true),
+    ("libraryTypes", |d| d.library_types = true),
+];
+
+fn single_family_files() -> [(&'static str, &'static str); 4] {
+    [
+        ("tsconfig.json", STRICT_CONFIG),
+        (
+            "dependency.ts",
+            "export function value(): number { return 1; }\nexport class Thing { n = 1 }\nexport const list = [1, 2];\nexport const pair: [number, string] = [1, \"a\"];\nexport const konst = 3;\n",
+        ),
+        (
+            "consumer.ts",
+            "import { value, Thing, list, pair, konst } from \"./dependency\";\nexport const result = value();\nexport const made = new Thing();\nexport const l = list;\nexport const p = pair;\nexport const k = konst;\nexport const f = value;\n",
+        ),
+        (
+            "unrelated.ts",
+            "export function alone(): number { return 1; }\nexport const local = alone();\n",
+        ),
+    ]
+}
+
+fn delete_and_restore_dependency(
+    scratch: &Scratch,
+    originals: &dyn Fn(&str) -> Vec<u8>,
+) -> Vec<FileChange> {
+    vec![
+        FileChange {
+            path: scratch.path("dependency.ts"),
+            deleted: true,
+            source: Vec::new(),
+            version: 1,
+        },
+        FileChange {
+            path: scratch.path("dependency.ts"),
+            deleted: false,
+            source: originals("dependency.ts"),
+            version: 2,
+        },
+    ]
+}
+
+/// Which families (by name) a deletion and restoration serves stale, each
+/// demanded alone. Empty after the fix.
+fn stale_single_families() -> Vec<&'static str> {
+    FAMILIES
+        .iter()
+        .filter(|(_, mark)| {
+            // The `mark` function cannot be captured by `fn(&mut DemandClosure)`,
+            // so each family runs through a thread-local selection.
+            MARK.with(|slot| slot.set(Some(*mark)));
+            let outcome = std::panic::catch_unwind(|| {
+                assert_alternating_script_matches_fresh_with(
+                    &single_family_files(),
+                    delete_and_restore_dependency,
+                    |closure| family_demands(closure, MARK.with(|slot| slot.get().unwrap())),
+                );
+            });
+            outcome.is_err()
+        })
+        .map(|(name, _)| *name)
+        .collect()
+}
+
+thread_local! {
+    static MARK: std::cell::Cell<Option<fn(&mut EntityDemand)>> = const { std::cell::Cell::new(None) };
+}
+
+/// Go's `TestDeletionRestorationSingleFamilyDemandsMatchFresh`: a file that
+/// re-enters the program satisfies an import that was unresolved when the
+/// importer's answers were computed. Without the full-rebuild path for an
+/// update that brings a file into the program, seven families were served stale.
+#[test]
+fn deletion_restoration_single_family_demands_match_fresh() {
+    let stale = stale_single_families();
+    assert!(stale.is_empty(), "families served stale: {stale:?}");
 }
 
 // ---- semantic_retained_integration_test.go / suppression_delta_integration_test.go

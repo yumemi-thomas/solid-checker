@@ -151,3 +151,70 @@ fn dropping_a_generation_on_a_foreign_thread_leaks_instead_of_freeing() {
     let outcome = std::thread::spawn(move || drop(generation)).join();
     assert!(outcome.is_ok());
 }
+
+fn scratch_with_a_call() -> Scratch {
+    Scratch::new(&[
+        ("tsconfig.json", SMALL_CONFIG),
+        (
+            "a.ts",
+            "declare function f(a: number): void;\nf(\"x\");\nexport const one = 1;\n",
+        ),
+    ])
+}
+
+/// Module invariant 7: a tsrs entry point that acquires the checker while a
+/// lease is held would alias `&mut Checker`; the pool refuses.
+#[test]
+#[should_panic(expected = "unsafe_boundary invariant 7")]
+fn a_program_call_that_acquires_the_checker_under_a_lease_is_refused() {
+    let scratch = scratch_with_a_call();
+    let a = scratch.path("a.ts");
+    let project = scratch.open();
+    let generation = project.current().unwrap();
+    let program = generation.program();
+    let file = program.get_source_file(&a).unwrap();
+    generation.with_checker(|_checker| {
+        let _ = program.get_semantic_diagnostics(&Context::default(), Some(file));
+    });
+}
+
+#[test]
+#[should_panic(expected = "unsafe_boundary invariant 7")]
+fn a_second_lease_is_refused() {
+    let scratch = scratch_with_a_call();
+    let project = scratch.open();
+    let generation = project.current().unwrap();
+    generation.with_checker(|_outer| generation.with_checker(|_inner| ()));
+}
+
+/// The sanctioned way: the lease is released around the call and reacquired,
+/// and handles taken before the suspension stay valid after it.
+#[test]
+fn a_suspended_lease_reports_diagnostics_and_keeps_earlier_handles_valid() {
+    let scratch = scratch_with_a_call();
+    let a = scratch.path("a.ts");
+    let project = scratch.open();
+    let generation = project.current().unwrap();
+    let program = generation.program();
+    let file = program.get_source_file(&a).unwrap();
+    let (before, after, diagnostics) = generation.with_checker(|checker| {
+        let at = u32::try_from(file.text().find("\"x\"").unwrap()).unwrap();
+        let call = crate::nodes::node_at(file, at);
+        let before = checker.get_type_at_location(call);
+        let before_flags = before.flags();
+        let diagnostics = checker.semantic_diagnostics(file);
+        // The same type object, read through the reacquired lease.
+        let again = checker.get_type_at_location(call);
+        (
+            before_flags,
+            (again.flags(), again.addr() == before.addr()),
+            diagnostics,
+        )
+    });
+    assert_eq!(before, after.0);
+    assert!(after.1, "the checker is the same one across the suspension");
+    assert!(
+        diagnostics.iter().any(|d| d.code == 2345),
+        "{diagnostics:?}"
+    );
+}

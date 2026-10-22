@@ -767,9 +767,25 @@ impl Project {
             });
         }
         let overlay_duration = stage.elapsed();
-        let incremental = incremental && !incremental_path.is_empty();
+        let mut incremental = incremental && !incremental_path.is_empty();
 
         let generation = self.live()?;
+        if incremental
+            && generation
+                .program()
+                .get_source_file(&incremental_path)
+                .is_none()
+        {
+            // A file entering the program (a restored deletion, a new file) can
+            // satisfy an import that was unresolved when retained answers were
+            // computed. An unresolved specifier records no import edge, so the
+            // reverse-dependency walk and the leaf cutoff cannot see that
+            // importer. Take the full-rebuild path, whose affected set unions
+            // the new program's edges (which now include the resolved import).
+            // Go: the same guard in `project.Update` (3991f6919).
+            incremental = false;
+            incremental_path.clear();
+        }
         let no_importers = incremental
             && self
                 .graph

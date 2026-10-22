@@ -62,6 +62,22 @@ impl DurableRef {
         hashed_symbol_id(&Sha256::digest(&input))
     }
 
+    /// Go: `durableSymbolRef.runtimeID`: the same digest as [`Self::id`] over
+    /// the filesystem-resolved declaration path, spelled `runtime:h:`.
+    #[must_use]
+    pub fn runtime_id(&self, path: &str) -> String {
+        let mut input = Vec::with_capacity(path.len() + self.name.len() + 32);
+        input.extend_from_slice(path.as_bytes());
+        input.push(0);
+        input.extend_from_slice(self.start_byte.to_string().as_bytes());
+        input.push(0);
+        input.extend_from_slice(self.end_byte.to_string().as_bytes());
+        input.push(0);
+        input.extend_from_slice(&name_bytes(&self.name));
+        let id = hashed_symbol_id(&Sha256::digest(&input));
+        format!("runtime:h:{}", &id["symbol:h:".len()..])
+    }
+
     /// Go: `durableSymbolRef.exportedID`: `sha256("export" 0 path 0 name)`,
     /// span-insensitive, so a module-visible symbol keeps it across edits that
     /// only move its declaration.
@@ -81,6 +97,12 @@ impl DurableRef {
 pub fn durable_ref_for(symbol: P<Symbol>) -> Option<DurableRef> {
     let declaration = *symbol.declarations().first()?;
     durable_ref_for_declaration(symbol, declaration)
+}
+
+/// Go: `durableRuntimeRefFor`: the symbol's value declaration.
+#[must_use]
+pub fn durable_runtime_ref_for(symbol: P<Symbol>) -> Option<DurableRef> {
+    durable_ref_for_declaration(symbol, symbol.value_declaration()?)
 }
 
 /// Go: `durableRefForDeclaration`.

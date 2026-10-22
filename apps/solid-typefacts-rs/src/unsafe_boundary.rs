@@ -52,17 +52,21 @@
 //!    so an update that is abandoned frees only its own program.
 //! 6. Diagnostics point into checker regions; callers copy `code/pos/end`
 //!    before the checker is released.
-//! 7. **One sanctioned nested acquisition: [`semantic_diagnostics`].** The
-//!    call-validity fallback needs a file's semantic diagnostics in the middle
-//!    of a run that already holds the checker through [`Generation::with_checker`]
-//!    (Go does the same: `Program.GetSemanticDiagnostics` asks the single pool
-//!    for the checker its caller holds). tsrs offers no entry point that takes
-//!    the caller's checker, so the pool hands out a second handle to the same
-//!    checker. The caller's `&mut Checker` is not used while that call runs
-//!    (the function takes `&mut Checker` to prove the caller holds the lease
-//!    and to make the suspension a borrow the caller cannot use around it),
-//!    the second handle is dropped before the function returns, and the pool's
-//!    region lock is re-entrant. Nothing else may take a second handle.
+//! 7. **No tsrs entry point that acquires a checker may run while a lease
+//!    is held.** `Program::get_semantic_diagnostics`,
+//!    `get_type_checker_for_file_exclusive` and every other program-level call
+//!    that reaches the pool acquires the checker exclusively; a second
+//!    acquisition would hand out a second `&mut Checker` to the same checker.
+//!    The pool therefore **panics** on an acquisition while a lease is
+//!    outstanding (all builds: the alternative is aliased `&mut`). A caller
+//!    that holds a [`CheckerLease`] and needs such a call (the call-validity
+//!    fallback needs a file's semantic diagnostics) uses
+//!    [`CheckerLease::semantic_diagnostics`], which releases the lease, makes
+//!    the call and reacquires. `P<T>` handles taken before the suspension stay
+//!    valid: the checker and its region belong to the slot, not to the lease.
+//!    While suspended the lease cannot be dereferenced (it panics), and the
+//!    borrow checker already forbids any `&mut Checker` derived from it from
+//!    living across the call.
 //!
 //! Violations of 2 and 3 degrade to a leak. Violations of 1 and 6 cannot be
 //! detected here; the S3 suite runs under `TSRS_ARENA_POISON=1` so a read of
@@ -136,6 +140,13 @@ struct SlotPool(Arc<CheckerSlot>);
 impl CheckerPool for SlotPool {
     fn get_checker(&self, _ctx: &Context, _file: Option<P<SourceFile>>) -> CheckerHandle {
         let slot = &self.0;
+        // Module invariant 7: exclusive acquisition. A second handle would be a
+        // second `&mut Checker` to the one checker.
+        assert!(
+            slot.outstanding() == 0,
+            "a tsrs entry point acquired the checker while a lease was held \
+             (unsafe_boundary invariant 7)"
+        );
         let mut guard = slot
             .held
             .lock()
@@ -185,17 +196,7 @@ pub struct RawDiagnostic {
     pub end: Option<u32>,
 }
 
-/// The semantic diagnostics of `file`, as the compiler reports them for the
-/// program's single checker (Go: `Program.GetSemanticDiagnostics`). `checker`
-/// is the lease the caller holds; see invariant 7 for why a second handle to
-/// it exists for the duration of this call.
-pub fn semantic_diagnostics(
-    program: &'static Program,
-    checker: &mut Checker,
-    file: P<SourceFile>,
-) -> Vec<RawDiagnostic> {
-    // The caller's lease is suspended, not used, until this returns.
-    let _suspended = checker;
+fn diagnostics_of(program: &'static Program, file: P<SourceFile>) -> Vec<RawDiagnostic> {
     program
         .get_semantic_diagnostics(&Context::default(), Some(file))
         .into_iter()
@@ -205,6 +206,51 @@ pub fn semantic_diagnostics(
             end: diagnostic.end(),
         })
         .collect()
+}
+
+/// The program's checker, leased to the caller (module invariants 2 and 7).
+/// Dereferences to the [`Checker`]; the lease can be suspended around a tsrs
+/// call that acquires the checker itself.
+pub struct CheckerLease {
+    program: &'static Program,
+    /// `None` only while [`CheckerLease::semantic_diagnostics`] runs.
+    handle: Option<CheckerHandle>,
+}
+
+impl CheckerLease {
+    fn acquire(program: &'static Program) -> Self {
+        Self {
+            program,
+            handle: Some(program.get_type_checker(&Context::default())),
+        }
+    }
+
+    /// The semantic diagnostics of `file`, as the compiler reports them for the
+    /// program's single checker (Go: `Program.GetSemanticDiagnostics`). The
+    /// lease is released for the call and reacquired after it (module
+    /// invariant 7); the checker is the same one, so types and symbols taken
+    /// before stay valid.
+    pub fn semantic_diagnostics(&mut self, file: P<SourceFile>) -> Vec<RawDiagnostic> {
+        drop(self.handle.take());
+        let diagnostics = diagnostics_of(self.program, file);
+        self.handle = Some(self.program.get_type_checker(&Context::default()));
+        diagnostics
+    }
+}
+
+impl std::ops::Deref for CheckerLease {
+    type Target = Checker;
+    fn deref(&self) -> &Checker {
+        self.handle.as_deref().expect("the lease is not suspended")
+    }
+}
+
+impl std::ops::DerefMut for CheckerLease {
+    fn deref_mut(&mut self) -> &mut Checker {
+        self.handle
+            .as_deref_mut()
+            .expect("the lease is not suspended")
+    }
 }
 
 /// How a head relates to the previous one when [`Generation::prepare_update`]
@@ -237,6 +283,17 @@ fn options_for(
     regions: &Arc<ProgramRegions>,
     factory: &CreateCheckerPool,
 ) -> ProgramOptions {
+    // The producer answers what the Go producer answers, byte for byte, and a
+    // few checker caches let the printed text depend on what the checker saw
+    // first (`undefinedProperties` is keyed by name across the whole program, so
+    // the property order of a normalized object-literal union follows the first
+    // literal that mentioned the name). tsrs's default makes those caches a
+    // function of the program alone; this keeps typescript-go's history, which
+    // is what every recorded fact and snapshot was produced with. A process-wide
+    // flag that has to be set before any checker exists, and the same value on
+    // every call. Moving to the canonical history is a snapshot-reviewed change
+    // for after the Go producer is gone (tsrs `tsrs_core::compat`).
+    tsrs_core::compat::set_go_compatible_history(true);
     let mut options = ProgramOptions::new(config, host);
     // Parse and bind in parallel but keep exactly one checker (ADR 0004):
     // the external pool is what keeps both properties.
@@ -322,9 +379,16 @@ impl Generation {
 
     /// Runs `f` with the program's checker, creating it on first use. The
     /// lease ends when `f` returns (module invariant 2).
-    pub fn with_checker<R>(&self, f: impl FnOnce(&mut Checker) -> R) -> R {
-        let mut handle = self.program.get_type_checker(&Context::default());
-        f(&mut handle)
+    pub fn with_checker<R>(&self, f: impl FnOnce(&mut CheckerLease) -> R) -> R {
+        let mut lease = CheckerLease::acquire(self.program);
+        f(&mut lease)
+    }
+
+    /// The semantic diagnostics of `file` with no lease held (module
+    /// invariant 7; the pool panics if one is).
+    #[must_use]
+    pub fn semantic_diagnostics(&self, file: P<SourceFile>) -> Vec<RawDiagnostic> {
+        diagnostics_of(self.program, file)
     }
 
     /// Drops the checker and everything it allocated (Go:

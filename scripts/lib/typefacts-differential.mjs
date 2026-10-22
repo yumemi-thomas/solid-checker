@@ -513,7 +513,7 @@ export function applyAllowList(results, entries) {
 
 // --- report ----------------------------------------------------------------
 
-const clip = (value, limit = 400) => {
+const clip = (value, limit = Number(process.env.TYPEFACTS_DIFF_CLIP) || 400) => {
   if (value === undefined) return undefined;
   const text = typeof value === "string" ? value : canonical(value);
   return text.length > limit ? `${text.slice(0, limit)}...` : text;
