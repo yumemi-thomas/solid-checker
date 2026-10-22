@@ -52,16 +52,6 @@
       "fixes": 0
     },
     {
-      "rule": "unaudited-solid-release",
-      "code": "SC9014",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/route-components/variants/rc9/node_modules/solid-js/package.json",
-      "start": 0,
-      "end": 0,
-      "fixes": 0
-    },
-    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
