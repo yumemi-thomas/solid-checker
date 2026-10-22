@@ -30,13 +30,27 @@ name = "solid-typefacts-fake"
 path = "src/bin/solid-typefacts-fake.rs"
 
 [lints.rust]
-unsafe_code = "forbid"
+# Denied, not forbidden: the one `unsafe_boundary` module allows it narrowly
+# (tsrs frees memory through unsafe calls; see src/unsafe_boundary.rs).
+unsafe_code = "deny"
 
 [dependencies]
 # Protocol constants, request/response types and the deterministic CBOR codec
 # come from the client crate, so a producer/client mismatch fails to compile.
 typefacts = { path = "../../rust/crates/typefacts", features = ["producer"] }
 ciborium = "0.2"
+sha2 = "0.10"
+
+# The compiler: tsrs at the solid-checker fork. Upstream oxc-project/tsrs@467182f
+# (TypeScript b85298b6a81f, 7.1.0-dev) plus one marked commit exporting
+# is_untyped_function_call and get_reduced_apparent_type. Never another rev.
+tsrs_core = { git = "https://github.com/yumemi-thomas/tsrs", rev = "49f534856809ad8d5a596123f02175ba01675c8d" }
+tsrs_ast = { git = "https://github.com/yumemi-thomas/tsrs", rev = "49f534856809ad8d5a596123f02175ba01675c8d" }
+tsrs_checker = { git = "https://github.com/yumemi-thomas/tsrs", rev = "49f534856809ad8d5a596123f02175ba01675c8d" }
+tsrs_compiler = { git = "https://github.com/yumemi-thomas/tsrs", rev = "49f534856809ad8d5a596123f02175ba01675c8d" }
+tsrs_tsoptions = { git = "https://github.com/yumemi-thomas/tsrs", rev = "49f534856809ad8d5a596123f02175ba01675c8d" }
+tsrs_scanner = { git = "https://github.com/yumemi-thomas/tsrs", rev = "49f534856809ad8d5a596123f02175ba01675c8d" }
+tsrs_vfs = { git = "https://github.com/yumemi-thomas/tsrs", rev = "49f534856809ad8d5a596123f02175ba01675c8d" }
 
 # Dependencies (the codec now, tsrs later) run optimized even in dev builds:
 # an unoptimized compiler front end is unusably slow. Workspace code stays at

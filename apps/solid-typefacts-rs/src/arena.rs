@@ -10,7 +10,7 @@
 //! commit: a reader that sees another request's id, or none, ignores the file.
 //!
 //! macOS gets `F_NOCACHE` through `typefacts::producer`, the client crate's one
-//! `unsafe` boundary, because this crate forbids `unsafe`.
+//! `unsafe` boundary; this crate's own `unsafe` lives in `unsafe_boundary` alone.
 
 use crate::gocompat::io_message;
 use std::fs::{File, OpenOptions};

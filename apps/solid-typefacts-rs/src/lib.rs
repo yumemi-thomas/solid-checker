@@ -14,16 +14,23 @@ pub mod closure;
 pub mod context;
 pub mod contributions;
 pub mod demands;
+pub mod durable;
 pub mod fake;
 pub mod frame;
 pub mod gocompat;
+pub mod import_graph;
 pub mod model;
+pub mod module_graph;
+pub mod overlay;
+pub mod project;
 pub mod retained;
 pub mod run;
 pub mod serve;
 pub mod session;
+pub mod shape;
 pub mod symbols;
 pub mod trace;
+pub mod unsafe_boundary;
 pub mod wire;
 
 #[cfg(test)]

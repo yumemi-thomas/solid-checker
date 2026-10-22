@@ -6,7 +6,7 @@
 
 use crate::arena::{self, TransitionArena};
 use crate::args::{self, SCHEMA_VERSION_V1};
-use crate::backend::{OpenBackend, stub_opener};
+use crate::backend::OpenBackend;
 use crate::context::Context;
 use crate::frame::write_frame;
 use crate::gocompat::{absolute, path_error};
@@ -18,14 +18,15 @@ use std::io::{BufWriter, Read, Write};
 use std::time::Instant;
 use typefacts::v3::{Operation, Response};
 
-/// Runs the producer on the process's stdin and stdout with the S1 backend.
+/// Runs the producer on the process's stdin and stdout over the tsrs backend.
 pub fn run_stdio(args: &[String]) -> Result<(), String> {
+    let trace = trace::from_environment();
     run(
         args,
         std::io::BufReader::new(std::io::stdin()),
         std::io::stdout(),
-        stub_opener(),
-        trace::from_environment(),
+        crate::project::opener(trace.clone()),
+        trace,
         &CrashMarkers::from_environment(),
     )
 }

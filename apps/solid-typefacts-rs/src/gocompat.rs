@@ -91,6 +91,16 @@ pub fn clean(path: &str) -> String {
     }
 }
 
+/// `path.Dir` / `filepath.Dir` for Unix-style paths: everything up to the last
+/// separator, cleaned; `.` when there is none.
+#[must_use]
+pub fn dir(path: &str) -> String {
+    match path.rfind('/') {
+        None => ".".to_owned(),
+        Some(index) => clean(&path[..=index]),
+    }
+}
+
 /// `filepath.Abs` (which also cleans).
 pub fn absolute(path: &str) -> Result<String, String> {
     if Path::new(path).has_root() {
@@ -122,6 +132,21 @@ mod tests {
             ("/a/b/", "/a/b"),
         ] {
             assert_eq!(clean(input), want, "{input:?}");
+        }
+    }
+
+    #[test]
+    fn dir_matches_go() {
+        for (input, want) in [
+            ("", "."),
+            ("/", "/"),
+            ("c.ts", "."),
+            ("/a/b/c.ts", "/a/b"),
+            ("/c.ts", "/"),
+            ("a/b/", "a/b"),
+            ("bundled:///libs/lib.d.ts", "bundled:/libs"),
+        ] {
+            assert_eq!(dir(input), want, "{input:?}");
         }
     }
 

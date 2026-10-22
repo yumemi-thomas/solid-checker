@@ -2,7 +2,8 @@
 //! or `SOLID_TYPEFACTS_GO_BIN`). Without a Go binary these tests print a
 //! notice and pass vacuously; `make build-typefacts` provides it.
 //!
-//! * Startup: handshake bytes, flag/startup error text, exit codes.
+//! * Startup: handshake bytes, flag/startup error text, exit codes, including
+//!   the project-open failures (the tsrs backend must reproduce Go's texts).
 //! * Lifecycle: the compiler-free request/response sequence, driven through a
 //!   live Go process on a tiny project and through the Rust `Session` on a
 //!   fake backend; every response must be identical bytes.
@@ -132,10 +133,88 @@ fn startup_failures_match_go() {
     let _ = std::fs::remove_dir_all(&directory);
 }
 
-/// With a project the Rust stub cannot open, the handshake still precedes the
-/// failure and equals Go's, which opens the same project successfully.
+/// Open failures after the handshake: both producers must report the same
+/// text and exit code for configurations that cannot be opened (the tsrs
+/// backend reproduces Go's `parse tsconfig: ...` forms).
 #[test]
-fn handshake_is_identical_and_precedes_open() {
+fn open_failures_match_go() {
+    let Some(go) = go_binary() else { return };
+    let rust = rust_binary();
+    let cases: &[(&str, &str)] = &[
+        ("invalid-json", "{ not json"),
+        ("empty-object", "{}"),
+        ("no-inputs", r#"{"include":["nothing/*.ts"]}"#),
+        ("empty-files", r#"{"files":[]}"#),
+        ("missing-file", r#"{"files":["missing.ts"]}"#),
+        (
+            "missing-extends",
+            r#"{"extends":"./missing.json","files":["a.ts"]}"#,
+        ),
+        (
+            "bad-module",
+            r#"{"compilerOptions":{"module":"bogus"},"files":["a.ts"]}"#,
+        ),
+        (
+            "unknown-option",
+            r#"{"compilerOptions":{"nope":true},"files":["a.ts"]}"#,
+        ),
+        (
+            "missing-reference",
+            r#"{"files":["a.ts"],"references":[{"path":"./missing"}]}"#,
+        ),
+        ("trailing-comma", r#"{"files":["a.ts",],}"#),
+    ];
+    for (name, config) in cases {
+        let directory = scratch(&format!("open-{name}"));
+        std::fs::write(directory.join("tsconfig.json"), config).unwrap();
+        std::fs::write(directory.join("a.ts"), "export const a = 1;\n").unwrap();
+        let project = directory
+            .join("tsconfig.json")
+            .to_string_lossy()
+            .into_owned();
+        let args = ["-project", project.as_str()];
+        let (go_out, rust_out) = (
+            run(&go, &args, &directory, b""),
+            run(&rust, &args, &directory, b""),
+        );
+        assert_eq!(go_out.stdout, rust_out.stdout, "{name}: stdout");
+        assert_eq!(go_out.stderr, rust_out.stderr, "{name}: stderr");
+        assert_eq!(go_out.code, rust_out.code, "{name}: exit code");
+        // The same bytes through `-project-config` at a path that does not
+        // exist on disk.
+        let logical = directory
+            .join("virtual/tsconfig.json")
+            .to_string_lossy()
+            .into_owned();
+        let bytes = directory.join("config.bytes");
+        std::fs::write(&bytes, config).unwrap();
+        let bytes = bytes.to_string_lossy().into_owned();
+        let args = [
+            "-project",
+            logical.as_str(),
+            "-project-config",
+            bytes.as_str(),
+        ];
+        let (go_out, rust_out) = (
+            run(&go, &args, &directory, b""),
+            run(&rust, &args, &directory, b""),
+        );
+        assert_eq!(
+            go_out.stderr, rust_out.stderr,
+            "{name}: project-config stderr"
+        );
+        assert_eq!(
+            go_out.code, rust_out.code,
+            "{name}: project-config exit code"
+        );
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+}
+
+/// Opening a real project and reaching EOF: the handshake equals Go's byte for
+/// byte, nothing else is written, and the process exits cleanly.
+#[test]
+fn handshake_is_identical_and_the_idle_process_exits_cleanly() {
     let Some(go) = go_binary() else { return };
     let directory = scratch("handshake");
     std::fs::write(
@@ -158,11 +237,8 @@ fn handshake_is_identical_and_precedes_open() {
         "Go handshake payload is 108 bytes"
     );
     assert_eq!(rust_out.stdout, go_out.stdout, "handshake bytes");
-    assert_eq!(rust_out.code, Some(1));
-    assert_eq!(
-        rust_out.stderr,
-        "solid-typefacts: open TS-Go project: no compiler backend in this build (solid-typefacts-rs stub, migration slice S1)\n"
-    );
+    assert_eq!(rust_out.code, Some(0), "{}", rust_out.stderr);
+    assert_eq!(rust_out.stderr, go_out.stderr);
     let _ = std::fs::remove_dir_all(&directory);
 }
 

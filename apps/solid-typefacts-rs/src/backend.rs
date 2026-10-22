@@ -251,20 +251,3 @@ pub fn validate_canonical_source_files(files: &[SourceFile]) -> Result<(), Backe
 /// when the client passed `-project-config`, the bytes of that file.
 pub type OpenBackend =
     Box<dyn FnOnce(&Context, &str, Option<&str>) -> Result<Box<dyn Backend>, String> + Send>;
-
-/// S1's opener. There is no compiler yet, so no project can be served. It
-/// reproduces the one failure Go reports without a compiler (a tsconfig that
-/// cannot be read, TS5083) and otherwise says the compiler is missing.
-pub fn stub_opener() -> OpenBackend {
-    Box::new(|_ctx, project_id, config_source| {
-        if config_source.is_none() && std::fs::metadata(project_id).is_err() {
-            return Err(format!(
-                "parse tsconfig: TS5083: Cannot read file '{project_id}'."
-            ));
-        }
-        Err(
-            "no compiler backend in this build (solid-typefacts-rs stub, migration slice S1)"
-                .to_owned(),
-        )
-    })
-}
