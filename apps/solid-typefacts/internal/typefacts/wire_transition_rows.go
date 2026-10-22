@@ -477,7 +477,7 @@ func writeWireTransitionParameter(
 	if tableSchema >= TypeFactsTableSchemaVersionV17 && parameter.ObjectShape != nil {
 		w.u64(uint64(len(parameter.ObjectShape.RequiredProperties)))
 		for _, property := range parameter.ObjectShape.RequiredProperties {
-			w.text(property.Name)
+			w.text(wireSymbolName(property.Name))
 			code, err := wireTransitionConstructionWitnessCode(property.Witness)
 			if err != nil {
 				return fmt.Errorf("argument mapping %d parameter property %q: %w", mappingIndex, property.Name, err)
