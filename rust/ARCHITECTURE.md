@@ -194,7 +194,8 @@ every reference to it is accounted for:
   (`data/action.js:232-235` next.41), and Root calls `props.preload(...)` on
   props holding `routerState` (`components.jsx:13`). `router_context_as_this`
   (`router_params.rs`) withholds both premises unless every `useAction`
-  argument is an arrow or the router's own action wrapper, and
+  argument is an arrow or the router's own action wrapper (a `const`, local
+  or directly imported, needs every program reference safe), and
   `history_not_stock` unless a config `preload` is an arrow.
 
 - **Audited TanStack routers (ADR 0334).** The rc.8 release was checked by an
