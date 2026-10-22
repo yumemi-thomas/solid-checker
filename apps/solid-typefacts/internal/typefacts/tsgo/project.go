@@ -1221,8 +1221,7 @@ func (p *project) SymbolEvidence(
 		}
 		if query.References {
 			canonical := p.idFor(p.canonicalSymbol(symbol))
-			p.referenceIndex.markUsed(canonical)
-			fact.References = p.referenceIndex.locations(canonical)
+			fact.References = p.referenceIndex.query(p, canonical)
 		}
 		facts[index] = fact
 	}
