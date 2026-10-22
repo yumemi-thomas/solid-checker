@@ -16,6 +16,8 @@ pub mod producer;
 mod retained_table;
 mod session;
 mod shared_transition_arena;
+#[cfg(feature = "transcript")]
+pub mod transcript;
 #[cfg(target_os = "macos")]
 mod unsafe_boundary;
 pub mod v3;

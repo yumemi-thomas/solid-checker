@@ -362,3 +362,17 @@ test("the caveats name the input classes the basis cannot see at all", () => {
     assert.ok(text.includes(named), `the caveats must name ${named}`);
   }
 });
+
+test("the differential harness's own files select its tests; its neighbours stay unmapped", () => {
+  const plan = planFor(["scripts/typefacts-differential.mjs", "rust/crates/typefacts/src/transcript.rs"]);
+  assert.equal(plan.full, false);
+  assert.ok(plan.checks.includes("differential-harness"));
+  assert.ok(!plan.checks.includes("coverage"));
+  for (const path of [
+    "scripts/typefacts-transcript-proxy.mjs",
+    "rust/crates/typefacts/src/lib.rs",
+    "rust/crates/typefacts/Cargo.toml",
+  ]) {
+    assert.equal(planFor([path]).full, true, `${path} must fail closed`);
+  }
+});
