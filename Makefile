@@ -16,7 +16,7 @@ CARGO_TEST_RUNNER ?= test
 PROBE_NODE ?= $(shell node -e 'process.stdout.write(require("fs").realpathSync(process.execPath))')
 export SOLID_CHECKER_PROBE_NODE = $(PROBE_NODE)
 
-.PHONY: build build-typefacts build-typefacts-rs test-typefacts-rs build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit wasm-parity clean clean-verify
+.PHONY: build build-typefacts build-typefacts-rs build-typefacts-transcript typefacts-differential typefacts-e2e test-typefacts-rs build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit wasm-parity clean clean-verify
 
 build: build-rust
 
@@ -42,6 +42,30 @@ test-typefacts-rs: build-typefacts
 	cargo +$(RUST_TOOLCHAIN) fmt --manifest-path apps/solid-typefacts-rs/Cargo.toml -- --check
 	TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) clippy --manifest-path apps/solid-typefacts-rs/Cargo.toml --all-targets -- -D warnings
 	TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) test --manifest-path apps/solid-typefacts-rs/Cargo.toml
+
+# Differential harness for the two producers (migration slice S5; see
+# docs/typefacts-differential.md). The transcript tool decodes and replays
+# recorded protocol streams with the Rust client's own decoder; it lives behind
+# the typefacts crate's `transcript` feature, which the checker never enables.
+#   make typefacts-differential                      record `coverage` against Go, replay on Rust, diff
+#   make typefacts-differential GATE=ownership-gate  any of coverage, ownership-gate, tsc-oracle-gate,
+#                                                    obligation-audit (corpus-sweep: record by hand)
+#   make typefacts-differential DIFFERENTIAL_ARGS=--allow-unavailable
+#   make typefacts-e2e                               `coverage` on the Rust producer, compare-only
+GATE ?= coverage
+TYPEFACTS_TRANSCRIPTS ?= $(CURDIR)/rust/target/differential/transcripts
+DIFFERENTIAL_ARGS ?=
+build-typefacts-transcript:
+	TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) build --manifest-path $(RUST_MANIFEST) \
+	  -p typefacts --features transcript --bin typefacts-transcript
+
+typefacts-differential: build-typefacts build-typefacts-rs build-typefacts-transcript build-checker-debug
+	rm -rf "$(TYPEFACTS_TRANSCRIPTS)/$(GATE)"
+	$(BUN) scripts/typefacts-differential.mjs record --gate $(GATE) --out "$(TYPEFACTS_TRANSCRIPTS)"
+	$(BUN) scripts/typefacts-differential.mjs run "$(TYPEFACTS_TRANSCRIPTS)/$(GATE)" $(DIFFERENTIAL_ARGS)
+
+typefacts-e2e: build-typefacts-rs build-checker-debug
+	$(BUN) scripts/typefacts-differential.mjs e2e
 
 build-rust: build-typefacts
 	mkdir -p bin

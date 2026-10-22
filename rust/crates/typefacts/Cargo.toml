@@ -17,18 +17,27 @@ workspace = true
 # crate's own tests, so `cargo test --workspace` and `clippy --all-targets`
 # cover the encoder without a feature flag.
 producer = []
+# Recorded-transcript decoding and replay for the Type Facts differential
+# harness (scripts/typefacts-differential.mjs). Never linked by the checker.
+transcript = ["dep:serde_json"]
+
+[[bin]]
+name = "typefacts-transcript"
+path = "src/bin/typefacts-transcript.rs"
+required-features = ["transcript"]
 
 [[bench]]
 name = "retained_session"
 harness = false
 
 [dev-dependencies]
-typefacts = { path = ".", features = ["producer"] }
+typefacts = { path = ".", features = ["producer", "transcript"] }
 
 [dependencies]
 ciborium.workspace = true
 serde.workspace = true
 serde_bytes.workspace = true
+serde_json = { workspace = true, optional = true }
 sha2.workspace = true
 thiserror.workspace = true
 

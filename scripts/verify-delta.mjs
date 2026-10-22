@@ -154,6 +154,18 @@ export const CHECKS = {
       ["cargo", TOOLCHAIN, "test", "--manifest-path", TYPEFACTS_RS_MANIFEST],
     ],
   },
+  "differential-harness": {
+    why:
+      "the Type Facts differential harness (recorded Go transcripts replayed on the Rust producer) " +
+      "is test tooling: its JS normalisation and diff logic, and the transcript decoder it shells out to",
+    commands: [
+      [
+        "bun", "packages/cli/node_modules/vitest/vitest.mjs", "run",
+        "--config", "packages/cli/vitest.config.mjs", "scripts/typefacts-differential.test.mjs",
+      ],
+      ["cargo", TOOLCHAIN, "test", "--manifest-path", MANIFEST, "-p", "typefacts", "--lib", "transcript"],
+    ],
+  },
   // The universal handoff set, appended to every plan.
   "fmt-check": {
     command: ["cargo", TOOLCHAIN, "fmt", "--manifest-path", MANIFEST, "--all", "--", "--check"],
@@ -234,6 +246,21 @@ export const ROWS = [
     owner: "the Rust Type Facts producer (separate workspace; not yet the default)",
     checks: ["typefacts-rs"],
   },
+  // The differential harness's own files, one exact path each. Neighbours
+  // (scripts/coverage.mjs, the proxy, the Makefile, the typefacts crate's
+  // manifest and lib.rs) stay unmapped on purpose: they feed other answers too.
+  ...[
+    "scripts/typefacts-differential.mjs",
+    "scripts/typefacts-differential.test.mjs",
+    "scripts/lib/typefacts-differential.mjs",
+    "scripts/typefacts-differential-allowlist.json",
+    "rust/crates/typefacts/src/transcript.rs",
+    "rust/crates/typefacts/src/bin/typefacts-transcript.rs",
+  ].map((prefix) => ({
+    prefix,
+    owner: "the Type Facts differential harness (test tooling; not read by the checker)",
+    checks: ["differential-harness"],
+  })),
   { prefix: "packages/cli/", owner: "packages/cli", checks: ["bun-test-cli"] },
   { prefix: "packages/wasm/", owner: "packages/wasm", checks: ["bun-test-wasm", "wasm-parity"] },
   // Prose that no build, test, or gate reads: the universal set only. Only
@@ -243,6 +270,7 @@ export const ROWS = [
   ...[
     "docs/adr/",
     "docs/typefacts/adr/",
+    "docs/typefacts/differential.md",
     "docs/precision-backlog.md",
     "docs/decisions.md",
     "docs/open-work.md",
@@ -304,6 +332,7 @@ export function planFor(paths) {
     ...["coverage", "ownership-gate"].filter((id) => selected.has(id)),
     // Separate workspace; its differential tests read the Go producer built above.
     ...["typefacts-rs"].filter((id) => selected.has(id)),
+    ...["differential-harness"].filter((id) => selected.has(id)),
     // Before the WASM package's own tests: its Make target builds the package
     // (owned artifacts included) that those tests load on a fresh tree.
     ...["wasm-parity"].filter((id) => selected.has(id)),
