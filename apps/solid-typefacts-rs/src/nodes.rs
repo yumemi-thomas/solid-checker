@@ -81,17 +81,28 @@ fn token_start(file: P<SourceFile>, node: P<Node>) -> Option<u32> {
     Some(skip_trivia(file.text(), node.pos().source_offset()?))
 }
 
+/// A top-level statement with its source offsets: (pos, end, node).
+type Statement = (u32, u32, P<Node>);
+
 /// Go: `semanticNodeCursor`. Demands in a run arrive in position order and
 /// often repeat a start byte, so the last answer is remembered.
 pub struct NodeCursor {
     file: Option<P<SourceFile>>,
     last: Option<(u32, Option<P<Node>>)>,
+    /// The file's top-level statements with their source offsets, built on the
+    /// first covering query; `Some(None)` when they are not usable (see
+    /// [`NodeCursor::top_level`]).
+    top: Option<Option<Vec<Statement>>>,
 }
 
 impl NodeCursor {
     #[must_use]
     pub fn new(file: Option<P<SourceFile>>) -> Self {
-        Self { file, last: None }
+        Self {
+            file,
+            last: None,
+            top: None,
+        }
     }
 
     /// Go: `at`. `None` for a missing file or a position past `u32`.
@@ -117,11 +128,51 @@ impl NodeCursor {
             return self.at(start);
         }
         let file = self.file?;
-        deepest_node_covering(
-            file.as_node(),
-            u32::try_from(start).ok()?,
-            u32::try_from(end).ok()?,
-        )
+        let (start, end) = (u32::try_from(start).ok()?, u32::try_from(end).ok()?);
+        let root = file.as_node();
+        if let Some(statements) = self.top_level(file) {
+            // `deepest_node_covering(root, ..)` descends into the first child
+            // that holds the range. Statement ends never decrease here, so
+            // every statement before the first one ending at or after `end`
+            // cannot hold it, and that statement is the first candidate.
+            // Anything else (no statement holds it, a position outside the
+            // root) takes the full walk.
+            let (root_pos, root_end) = (root.pos().source_offset()?, root.end().source_offset()?);
+            if root_pos <= start && end <= root_end {
+                let index =
+                    statements.partition_point(|(_, statement_end, _)| *statement_end < end);
+                if let Some((statement_pos, _, statement)) = statements.get(index)
+                    && *statement_pos <= start
+                {
+                    return deepest_node_covering(*statement, start, end).or(Some(root));
+                }
+            }
+        }
+        deepest_node_covering(root, start, end)
+    }
+
+    /// The top-level statements of `file` as (pos, end, node), when every one
+    /// has a source position and their ends are non-decreasing (always true of
+    /// a parsed file; checked rather than assumed). Built once per cursor.
+    fn top_level(&mut self, file: P<SourceFile>) -> Option<&[Statement]> {
+        self.top
+            .get_or_insert_with(|| {
+                let mut statements = Vec::with_capacity(file.as_node().statements().len());
+                let mut previous_end = 0;
+                for statement in file.as_node().statements() {
+                    let (pos, end) = (
+                        statement.pos().source_offset()?,
+                        statement.end().source_offset()?,
+                    );
+                    if end < previous_end {
+                        return None;
+                    }
+                    previous_end = end;
+                    statements.push((pos, end, *statement));
+                }
+                Some(statements)
+            })
+            .as_deref()
     }
 
     /// Go: `exactCallLikeAt`: the call-like expression reached from `start`

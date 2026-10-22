@@ -63,8 +63,53 @@ pub fn path_error(operation: &str, path: &str, error: &std::io::Error) -> String
 }
 
 /// `filepath.Clean` for Unix-style paths.
+///
+/// Nearly every path the producer cleans already is clean (program file names,
+/// demand locations), so a single scan answers those with one copy instead of
+/// the split/collect/join of the general case.
 #[must_use]
 pub fn clean(path: &str) -> String {
+    if is_clean(path) {
+        return path.to_owned();
+    }
+    clean_general(path)
+}
+
+/// [`clean`] without a copy when `path` already is clean.
+#[must_use]
+pub fn clean_cow(path: &str) -> std::borrow::Cow<'_, str> {
+    if is_clean(path) {
+        std::borrow::Cow::Borrowed(path)
+    } else {
+        std::borrow::Cow::Owned(clean_general(path))
+    }
+}
+
+/// Whether `filepath.Clean(path) == path`: `.` and `/`, or no empty element
+/// other than the leading root, no `.` element, no trailing separator, and
+/// `..` only as leading elements of a relative path.
+fn is_clean(path: &str) -> bool {
+    if path == "/" || path == "." {
+        return true;
+    }
+    let rooted = path.starts_with('/');
+    let body = path.strip_prefix('/').unwrap_or(path);
+    if body.is_empty() {
+        return false;
+    }
+    let mut leading = !rooted;
+    for element in body.split('/') {
+        match element {
+            "" | "." => return false,
+            ".." if leading => {}
+            ".." => return false,
+            _ => leading = false,
+        }
+    }
+    true
+}
+
+fn clean_general(path: &str) -> String {
     if path.is_empty() {
         return ".".to_owned();
     }
@@ -132,6 +177,79 @@ mod tests {
             ("/a/b/", "/a/b"),
         ] {
             assert_eq!(clean(input), want, "{input:?}");
+        }
+    }
+
+    #[test]
+    fn clean_fast_path_agrees_with_the_general_algorithm() {
+        let inputs = [
+            "",
+            "/",
+            "//",
+            ".",
+            "..",
+            "/.",
+            "/..",
+            "a",
+            "/a",
+            "a/",
+            "/a/",
+            "a//b",
+            "a/./b",
+            "a/../b",
+            "/a/b/c.ts",
+            "./a",
+            "../a",
+            "a/b/..",
+            "a/.b",
+            "a/..b",
+            "a/b..",
+            ".hidden",
+            "/.hidden/x",
+            "bundled:///libs/lib.d.ts",
+            "/a//",
+            "///a",
+            "a b/c d",
+            "/a/b/./",
+            "/a/b/../c",
+            "c:/x/y",
+            "/ü/é",
+            "../..",
+            "../../a",
+            "../a/..",
+            "a/../..",
+            "/../a",
+            "..a/..",
+            "../.b",
+        ];
+        for input in inputs {
+            assert_eq!(clean(input), clean_general(input), "{input:?}");
+            assert_eq!(is_clean(input), clean_general(input) == input, "{input:?}");
+        }
+    }
+
+    #[test]
+    fn clean_fast_path_agrees_on_every_short_element_sequence() {
+        const ELEMENTS: [&str; 5] = ["", ".", "..", "a", "..b"];
+        let mut paths = vec![String::new()];
+        let mut frontier = vec![Vec::<&str>::new()];
+        for _ in 0..5 {
+            let mut next = Vec::new();
+            for sequence in &frontier {
+                for element in ELEMENTS {
+                    let mut longer = sequence.clone();
+                    longer.push(element);
+                    paths.push(longer.join("/"));
+                    next.push(longer);
+                }
+            }
+            frontier = next;
+        }
+        assert!(paths.len() > 3_000);
+        for path in paths {
+            assert_eq!(clean(&path), clean_general(&path), "{path:?}");
+            assert_eq!(&*clean_cow(&path), clean_general(&path), "{path:?}");
+            assert_eq!(is_clean(&path), clean_general(&path) == path, "{path:?}");
         }
     }
 

@@ -3,7 +3,9 @@
 //! (`TestReferenceSpaceAndCanonicalRuntimeIdentity`,
 //! `TestReferenceSpaceClassifiesQualifiedTypeNames`).
 
-use super::project_support::{Scratch, entities, find, find_last};
+use super::project_support::{Scratch, change, entities, find, find_last};
+use crate::backend::ClosureBackend;
+use crate::context::Context;
 use typefacts::v3::EntityDemand;
 use typefacts::{ReferenceSpace, RuntimeBindingKind};
 
@@ -321,4 +323,188 @@ fn reference_space_classifies_qualified_type_names() {
     for ((name, want), fact) in cases.iter().zip(&facts) {
         assert_eq!(fact.reference_space, Some(*want), "{name} referenceSpace");
     }
+}
+
+/// The write index answers every binding from one walk of its declaring file;
+/// the reference answers each from its own walk. They must agree on every write
+/// form Go counts (`=`, `||=`/`&&=`/`??=`, arithmetic compound, `++`/`--`
+/// prefix and postfix, destructuring, `for-in`/`for-of` targets, parenthesized
+/// targets, writes in nested closures) and on what it ignores (a shadowing
+/// binding's writes, property writes, `delete`, writes in other files).
+#[test]
+fn write_index_agrees_with_the_per_binding_walk_on_every_write_form() {
+    use crate::nodes::node_at;
+    use crate::runtime_facts::{runtime_binding_kind, runtime_binding_kind_reference};
+    let source = "export var Plain = {};\n\
+export let Reassigned = {}; Reassigned = () => {};\n\
+export let Compound = () => {}; Compound += 1;\n\
+export let Increment = () => {}; Increment++;\n\
+export let Decrement = () => {}; --Decrement;\n\
+export let LogicalOr = {}; LogicalOr ||= () => {};\n\
+export let LogicalAnd = () => {}; LogicalAnd &&= {};\n\
+export let Coalesce = {}; Coalesce ??= () => {};\n\
+export let Destructured = () => {}; ({ Destructured } = globalThis.o);\n\
+export let ArrayTarget = () => {}; [ArrayTarget] = globalThis.a;\n\
+export let Renamed = () => {}; ({ key: Renamed } = globalThis.o);\n\
+export let ForOfTarget = () => {}; for (ForOfTarget of globalThis.xs) {}\n\
+export let ForInTarget = () => {}; for (ForInTarget in globalThis.o) {}\n\
+export let ForOfArray = () => {}; for ([ForOfArray] of globalThis.xs) {}\n\
+export let Deleted = {}; delete Deleted.x;\n\
+export let Prop = {}; Prop.callback = () => {};\n\
+export let Shadowed = {}; function shadow(Shadowed) { Shadowed = () => {}; }\n\
+export let Nested = {}; function nested() { Nested = () => {}; }\n\
+export let Arrow = {}; const arrow = () => { Arrow = 1; };\n\
+export let Chain = {}; let other; other = Chain = () => {};\n\
+export let Same = () => {}; Same = function () {};\n\
+export let Cycle1 = 0; export let Cycle2 = 0; Cycle1 = Cycle2; Cycle2 = Cycle1;\n\
+export let SelfRef = {}; SelfRef = SelfRef;\n\
+export let Many = {}; Many = 1; Many = () => {}; Many = \"s\";\n\
+export let Paren = {}; (Paren) = () => {};\n\
+export let Exponent = 2; Exponent **= 2; Exponent >>>= 1;\n\
+export let Comma = {}; Comma = (0, () => {});\n\
+export let Alias = Reassigned; export let AliasOfOpen = Destructured;\n\
+export function Fn() {} Fn = 1;\n\
+export class Cls {}\n\
+export const Konst = () => {};\n";
+    let other = "export let Plain = () => {}; export let Reassigned = {}; Plain = {};\n";
+    let scratch = Scratch::new(&[
+        ("tsconfig.json", ALLOW_JS),
+        ("artifact.js", source),
+        ("other.js", other),
+    ]);
+    let path = scratch.path("artifact.js");
+    let other_path = scratch.path("other.js");
+    let names: Vec<&str> = source
+        .lines()
+        .flat_map(|line| line.split("export ").skip(1))
+        .filter_map(|part| {
+            part.strip_prefix("var ")
+                .or_else(|| part.strip_prefix("let "))
+                .or_else(|| part.strip_prefix("const "))
+                .or_else(|| part.strip_prefix("function "))
+                .or_else(|| part.strip_prefix("class "))
+        })
+        .map(|rest| rest.split(|c: char| !c.is_alphanumeric()).next().unwrap())
+        .collect();
+    assert!(names.len() >= 30, "{names:?}");
+    let mut locations: Vec<(String, String, typefacts::Location)> = names
+        .iter()
+        .map(|name| ((*name).to_owned(), path.clone(), find(&path, source, name)))
+        .collect();
+    for name in ["Plain", "Reassigned"] {
+        locations.push((
+            format!("other.{name}"),
+            other_path.clone(),
+            find(&other_path, other, name),
+        ));
+    }
+    let mut project = scratch.open();
+    // Index first (it is built on the first binding), reference second, then
+    // both again in the opposite order: neither may depend on the other's
+    // checker side effects.
+    let answers = project
+        .with_env(|env, _| {
+            let mut answers = Vec::new();
+            for round in 0..2 {
+                for (name, file_path, location) in &locations {
+                    let file = env.program.get_source_file(file_path).unwrap();
+                    let node = node_at(file, u32::try_from(location.start_byte).unwrap());
+                    let (indexed, walked) = if round == 0 {
+                        let indexed = runtime_binding_kind(env, node);
+                        (indexed, runtime_binding_kind_reference(env, node))
+                    } else {
+                        let walked = runtime_binding_kind_reference(env, node);
+                        (runtime_binding_kind(env, node), walked)
+                    };
+                    assert_eq!(indexed, walked, "{name}, round {round}");
+                    answers.push((name.clone(), indexed));
+                }
+            }
+            answers
+        })
+        .unwrap();
+    let kind = |name: &str| answers.iter().find(|(n, _)| n == name).unwrap().1;
+    use RuntimeBindingKind::{Callable, Mixed, NonCallable, Open};
+    for (name, want) in [
+        ("Plain", NonCallable),
+        ("Reassigned", Mixed),
+        ("Compound", Mixed),
+        ("Increment", Mixed),
+        ("Decrement", Mixed),
+        ("LogicalOr", Mixed),
+        ("LogicalAnd", Mixed),
+        ("Coalesce", Mixed),
+        // A shorthand target names the property it declares, so `get_symbol_at_location`
+        // answers the property symbol and the write is not counted (as in Go).
+        ("Destructured", Callable),
+        ("ArrayTarget", Open),
+        ("Renamed", Open),
+        ("ForOfTarget", Open),
+        ("ForInTarget", Open),
+        ("ForOfArray", Open),
+        ("Deleted", NonCallable),
+        ("Prop", NonCallable),
+        ("Shadowed", NonCallable),
+        ("Nested", Mixed),
+        ("Arrow", NonCallable),
+        ("Same", Callable),
+        ("Fn", Mixed),
+        ("Cls", Callable),
+        ("other.Plain", Mixed),
+        ("other.Reassigned", NonCallable),
+    ] {
+        assert_eq!(kind(name), Some(want), "{name}");
+    }
+}
+
+/// The write index is generation state: an edit that adds, moves or removes a
+/// write must be answered from a fresh index, never the previous generation's
+/// (a freed tsrs address is reused, so a stale index would answer for the wrong
+/// symbol or node).
+#[test]
+fn write_index_does_not_survive_an_update() {
+    let plain = "export let Value = {};\nexport let Other = {};\n";
+    let written = "export let Other = {};\nexport let Value = {};\nValue = () => {};\n";
+    let moved =
+        "// moved\n\nexport let Value = () => {};\nOther = () => {}; export let Other = {};\n";
+    let scratch = Scratch::new(&[("tsconfig.json", ALLOW_JS), ("artifact.js", plain)]);
+    let path = scratch.path("artifact.js");
+    let mut project = scratch.open();
+    let kind = |project: &mut crate::project::Project, source: &str, name: &str| {
+        let demand = binding_demand(find(&path, source, name));
+        entities(project, &path, &[demand])[0].runtime_binding_kind
+    };
+    assert_eq!(
+        kind(&mut project, plain, "Value"),
+        Some(RuntimeBindingKind::NonCallable)
+    );
+    project
+        .update(&Context::new(), &[change(&path, 1, written)])
+        .unwrap();
+    assert_eq!(
+        kind(&mut project, written, "Value"),
+        Some(RuntimeBindingKind::Mixed)
+    );
+    assert_eq!(
+        kind(&mut project, written, "Other"),
+        Some(RuntimeBindingKind::NonCallable)
+    );
+    project
+        .update(&Context::new(), &[change(&path, 2, moved)])
+        .unwrap();
+    assert_eq!(
+        kind(&mut project, moved, "Value"),
+        Some(RuntimeBindingKind::Callable)
+    );
+    assert_eq!(
+        kind(&mut project, moved, "Other"),
+        Some(RuntimeBindingKind::Mixed)
+    );
+    project
+        .update(&Context::new(), &[change(&path, 3, plain)])
+        .unwrap();
+    assert_eq!(
+        kind(&mut project, plain, "Value"),
+        Some(RuntimeBindingKind::NonCallable)
+    );
 }

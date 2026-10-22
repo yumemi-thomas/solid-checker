@@ -12,11 +12,12 @@
 
 use crate::durable::durable_runtime_ref_for;
 use crate::gocompat::clean;
-use crate::identity::Env;
+use crate::identity::{Env, WriteIndex, WriteSite};
 use crate::type_facts::{callability_of_type, constructability_of_type};
 use std::collections::HashSet;
+use std::rc::Rc;
 use tsrs_ast::{
-    Kind, Node, Symbol, SymbolFlags, get_assignment_target, get_source_file_of_node,
+    Kind, Node, SourceFile, Symbol, SymbolFlags, get_assignment_target, get_source_file_of_node,
     is_array_literal_expression, is_arrow_function, is_as_expression, is_binary_expression,
     is_block, is_call_expression, is_class_declaration, is_class_expression,
     is_conditional_expression, is_enum_declaration, is_function_declaration,
@@ -101,11 +102,35 @@ pub fn runtime_identity(env: &mut Env<'_>, symbol: P<Symbol>) -> String {
 
 /// Go: `runtimeBindingKindLocked`, mapped to the wire value (`None` is absent).
 pub fn runtime_binding_kind(env: &mut Env<'_>, node: P<Node>) -> Option<RuntimeBindingKind> {
-    Kinds { env }.binding_kind(node).wire()
+    Kinds {
+        env,
+        #[cfg(test)]
+        reference_walk: false,
+    }
+    .binding_kind(node)
+    .wire()
+}
+
+/// The pre-index algorithm, kept for the equivalence tests: every binding
+/// walks its whole declaring file (see `Kinds::visit_writes`).
+#[cfg(test)]
+pub(crate) fn runtime_binding_kind_reference(
+    env: &mut Env<'_>,
+    node: P<Node>,
+) -> Option<RuntimeBindingKind> {
+    Kinds {
+        env,
+        reference_walk: true,
+    }
+    .binding_kind(node)
+    .wire()
 }
 
 struct Kinds<'a, 'e> {
     env: &'a mut Env<'e>,
+    /// Test seam: answer from a per-binding file walk instead of the index.
+    #[cfg(test)]
+    reference_walk: bool,
 }
 
 type Seen = HashSet<usize>;
@@ -179,11 +204,31 @@ impl Kinds<'_, '_> {
         };
 
         // A module-scope exported binding cannot be reassigned from another
-        // source file. Scan its complete declaring file, including nested
-        // closures, because any such closure may execute after import. Symbol
-        // equality, not spelling, distinguishes shadowed identifiers.
-        for statement in source_file.as_node().statements() {
-            self.visit_writes(*statement, symbol, &mut kind, seen);
+        // source file. Every write in its complete declaring file counts,
+        // including nested closures, because any such closure may execute
+        // after import. Symbol equality, not spelling, distinguishes shadowed
+        // identifiers. The file is walked once per generation (`write_index`)
+        // and every binding of it reads its own writes from that index.
+        #[cfg(test)]
+        if self.reference_walk {
+            for statement in source_file.as_node().statements() {
+                self.visit_writes(*statement, symbol, &mut kind, seen);
+            }
+            if kind == Kind3::Absent {
+                return Kind3::Open;
+            }
+            return kind;
+        }
+        let index = self.write_index(source_file);
+        if let Some(sites) = index.get(&symbol.addr()) {
+            for site in sites {
+                let write = match site {
+                    WriteSite::Value(right) => self.expression_kind(Some(*right), seen),
+                    WriteSite::NonCallable => Kind3::NonCallable,
+                    WriteSite::Open => Kind3::Open,
+                };
+                kind = merge(kind, write);
+            }
         }
         if kind == Kind3::Absent {
             return Kind3::Open;
@@ -191,8 +236,66 @@ impl Kinds<'_, '_> {
         kind
     }
 
-    /// The `visit` closure of Go's `runtimeSymbolKindLocked`: folds every
-    /// direct write to `symbol` under `node` into `kind`.
+    /// The write index of `file` for this generation, built on first use.
+    fn write_index(&mut self, file: P<SourceFile>) -> Rc<WriteIndex> {
+        if let Some(index) = self.env.ids.write_indexes.get(&file.addr()) {
+            return Rc::clone(index);
+        }
+        let mut index = WriteIndex::new();
+        for statement in file.as_node().statements() {
+            self.collect_writes(*statement, &mut index);
+        }
+        let index = Rc::new(index);
+        self.env
+            .ids
+            .write_indexes
+            .insert(file.addr(), Rc::clone(&index));
+        index
+    }
+
+    /// The `visit` closure of Go's `runtimeSymbolKindLocked`, run once for
+    /// every symbol: records each direct write to a symbol under `node`, in
+    /// `ForEachChild` order, keyed by the identifier's canonical symbol.
+    fn collect_writes(&mut self, node: P<Node>, index: &mut WriteIndex) {
+        if is_identifier(node)
+            && let Some(found) = self.env.checker.get_symbol_at_location_exported(node)
+        {
+            let candidate = self.env.canonical_symbol(found);
+            if let Some(target) = get_assignment_target(node) {
+                let mut write = WriteSite::Open;
+                if is_binary_expression(target) {
+                    let binary = target.as_binary_expression();
+                    if is_identifier(binary.left()) && binary.left().addr() == node.addr() {
+                        let operator = binary.operator_token().kind();
+                        write = if operator == Kind::EqualsToken
+                            || is_logical_or_coalescing_assignment_operator(operator)
+                        {
+                            WriteSite::Value(binary.right())
+                        } else {
+                            // Arithmetic/bitwise/update assignment always
+                            // writes a primitive, even when its operands were
+                            // any.
+                            WriteSite::NonCallable
+                        };
+                    }
+                } else if is_prefix_unary_expression(target) || is_postfix_unary_expression(target)
+                {
+                    write = WriteSite::NonCallable;
+                }
+                index.entry(candidate.addr()).or_default().push(write);
+            }
+        }
+        // `ForEachChild` visits children in order; the callback never stops it.
+        node.for_each_child(&mut |child| {
+            self.collect_writes(child, index);
+            false
+        });
+    }
+
+    /// The `visit` closure of Go's `runtimeSymbolKindLocked` as it was ported
+    /// before the write index: folds every direct write to `symbol` under
+    /// `node` into `kind`, walking the file once per binding.
+    #[cfg(test)]
     fn visit_writes(
         &mut self,
         node: P<Node>,
@@ -219,9 +322,6 @@ impl Kinds<'_, '_> {
                         {
                             self.expression_kind(Some(binary.right()), seen)
                         } else {
-                            // Arithmetic/bitwise/update assignment always
-                            // writes a primitive, even when its operands were
-                            // any.
                             Kind3::NonCallable
                         };
                     }
@@ -232,7 +332,6 @@ impl Kinds<'_, '_> {
                 *kind = merge(*kind, write);
             }
         }
-        // `ForEachChild` visits children in order; the callback never stops it.
         node.for_each_child(&mut |child| {
             self.visit_writes(child, symbol, kind, seen);
             false

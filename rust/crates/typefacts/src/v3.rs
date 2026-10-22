@@ -645,69 +645,76 @@ pub struct SourceFile {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ServerTimings {
     #[serde(default, skip_serializing_if = "is_zero")]
-    pub request_decode_ns: u64,
-    pub analyze_ns: u64,
+    pub sort_ns: u64,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub r#async_ns: u64,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub demand_ns: u64,
+    pub analyze_ns: u64,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub assembly_ns: u64,
-    #[serde(default, skip_serializing_if = "is_zero")]
-    pub sort_ns: u64,
-    #[serde(default, skip_serializing_if = "is_zero")]
-    pub close_symbols_ns: u64,
     #[serde(default, skip_serializing_if = "is_false")]
     pub materialized: bool,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub retained_files: u64,
     #[serde(default, skip_serializing_if = "is_zero")]
-    pub recomputed_files: u64,
+    pub close_symbols_ns: u64,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub non_durable_files: u64,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub recomputed_files: u64,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub request_decode_ns: u64,
 }
 
+/// Fields are declared in core deterministic key order (shorter encoded key
+/// first, then bytewise), as are those of every type a response carries
+/// (`ServerTimings`, `SymbolFact`, `Declaration`, `ModuleFact`,
+/// `ModuleImportFact`, `PackageIdentity`), so [`crate::encode_direct`] needs no
+/// canonicalizing pass. Keep new fields in that order; a misplaced one is not
+/// wrong on the wire, only slow (the encoder falls back), and the producer's
+/// `direct_response_encoding_takes_the_direct_path` test names it.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Response {
-    pub schema: u64,
-    pub request_id: u64,
-    pub project_id: String,
-    pub generation: u64,
     pub ok: bool,
-    #[serde(default, skip_serializing_if = "Vec::is_empty", with = "serde_bytes")]
-    pub table_transition: Vec<u8>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub symbol_evidence: Vec<SymbolFact>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub reference_evidence: Vec<SymbolFact>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub changed_reference_symbols: Vec<Arc<str>>,
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub reference_changes_exact: bool,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub state_token: String,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub affected: Vec<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub sources: Vec<SourceFile>,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub source_arena: String,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub source_lengths: Vec<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub timings: Option<ServerTimings>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<Error>,
-    /// A `Modules` answer. The three fields are the flattened module graph;
-    /// the protocol keeps response payloads flat, as `sources` and
-    /// `symbol_evidence` already are.
+    pub schema: u64,
+    /// A `Modules` answer is `modules`, `module_imports` and
+    /// `unknown_import_paths`: the flattened module graph (the protocol keeps
+    /// response payloads flat, as `sources` and `symbol_evidence` already are).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub modules: Vec<ModuleFact>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sources: Vec<SourceFile>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timings: Option<ServerTimings>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub affected: Vec<String>,
+    pub project_id: String,
+    pub request_id: u64,
+    pub generation: u64,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub state_token: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub source_arena: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub module_imports: Vec<ModuleImportFact>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_lengths: Vec<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub symbol_evidence: Vec<SymbolFact>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty", with = "serde_bytes")]
+    pub table_transition: Vec<u8>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reference_evidence: Vec<SymbolFact>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub unknown_import_paths: Vec<Arc<str>>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub reference_changes_exact: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub changed_reference_symbols: Vec<Arc<str>>,
     #[serde(skip)]
     pub client_decode_ns: u64,
     #[serde(skip)]

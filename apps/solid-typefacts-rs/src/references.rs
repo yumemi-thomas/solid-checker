@@ -473,7 +473,153 @@ impl ReferenceIndex {
     }
 
     /// Go: `scan`: resolves every non-declaration identifier in one file.
+    ///
+    /// A symbol's two identities (`id_for` of the symbol and of its canonical
+    /// symbol) and their buckets are resolved the first time the file names
+    /// the symbol; later identifiers of the same symbol add their span through
+    /// the symbol's slots, without hashing identity strings again. The first
+    /// sight of each symbol makes exactly the `id_for` calls the identifier
+    /// would, in the same order, so counter-minted ids come out unchanged.
     fn scan(&mut self, env: &mut Env<'_>, file: P<SourceFile>) -> FileReferences {
+        struct Group {
+            id: SymbolId,
+            spans: Vec<Span>,
+            /// A span arrived before an earlier-starting one.
+            unordered: bool,
+        }
+
+        #[derive(Default)]
+        struct Scan {
+            /// Symbol address to (space slot, group slot).
+            slots: HashMap<usize, (usize, usize)>,
+            spaces: Vec<(SymbolId, u8)>,
+            space_slots: HashMap<SymbolId, usize>,
+            groups: Vec<Group>,
+            group_slots: HashMap<SymbolId, usize>,
+            durable: bool,
+        }
+
+        fn slot_of<T>(
+            slots: &mut HashMap<SymbolId, usize>,
+            items: &mut Vec<T>,
+            id: &SymbolId,
+            item: impl FnOnce() -> T,
+        ) -> usize {
+            *slots.entry(id.clone()).or_insert_with(|| {
+                items.push(item());
+                items.len() - 1
+            })
+        }
+
+        fn visit(env: &mut Env<'_>, text: &str, node: P<Node>, scan: &mut Scan) {
+            if is_identifier(node) {
+                let symbol = if !is_declaration_name_or_import_property_name(node) {
+                    env.checker.get_symbol_at_location_exported(node)
+                } else if let Some(parent) = node.parent()
+                    && is_shorthand_property_assignment(parent)
+                    && parent.name() == Some(node)
+                {
+                    // `{ value }` names the property it declares and reads the
+                    // value binding at once. The name is a declaration name,
+                    // so without this the read of `value` is in no reference
+                    // list, and a census of its references misses the object
+                    // holding it.
+                    env.checker
+                        .get_shorthand_assignment_value_symbol(Some(parent))
+                } else {
+                    None
+                };
+                if let Some(symbol) = symbol {
+                    let (space_slot, group_slot) = match scan.slots.get(&symbol.addr()) {
+                        Some(slots) => *slots,
+                        None => {
+                            let reference_id = env.id_for(symbol);
+                            let canonical = env.canonical_symbol(symbol);
+                            let id = env.id_for(canonical);
+                            if !durable_symbol_id(&id) || !durable_symbol_id(&reference_id) {
+                                scan.durable = false;
+                            }
+                            let space_slot = slot_of(
+                                &mut scan.space_slots,
+                                &mut scan.spaces,
+                                &reference_id,
+                                || (reference_id.clone(), 0),
+                            );
+                            let group_slot =
+                                slot_of(&mut scan.group_slots, &mut scan.groups, &id, || Group {
+                                    id: id.clone(),
+                                    spans: Vec::new(),
+                                    unordered: false,
+                                });
+                            scan.slots.insert(symbol.addr(), (space_slot, group_slot));
+                            (space_slot, group_slot)
+                        }
+                    };
+                    let start = skip_trivia(text, node.pos().source_offset().unwrap_or(0));
+                    let end = node.end().source_offset().unwrap_or(start);
+                    let group = &mut scan.groups[group_slot];
+                    // Parsed children normally arrive in source order.
+                    // Preserve the ordering contract without sorting every
+                    // bucket, but detect and repair any non-lexical compiler
+                    // traversal defensively.
+                    if group.spans.last().is_some_and(|last| last.start > start) {
+                        group.unordered = true;
+                    }
+                    group.spans.push(Span { start, end });
+                    scan.spaces[space_slot].1 |= if is_type_space_reference(node) { 2 } else { 1 };
+                }
+            }
+            node.for_each_child(&mut |child| {
+                visit(env, text, child, scan);
+                false
+            });
+        }
+
+        let mut scan = Scan {
+            durable: true,
+            ..Scan::default()
+        };
+        let text = file.text();
+        file.as_node().for_each_child(&mut |child| {
+            visit(env, text, child, &mut scan);
+            false
+        });
+        let mut refs: Vec<crate::references::Group> = scan
+            .groups
+            .into_iter()
+            .map(|mut group| {
+                if group.unordered {
+                    group.spans.sort_by_key(|span| span.start);
+                }
+                crate::references::Group {
+                    id: group.id,
+                    spans: group.spans,
+                }
+            })
+            .collect();
+        refs.sort_by(|left, right| left.id.cmp(&right.id));
+        let mut spaces = scan.spaces;
+        spaces.sort_by(|left, right| left.0.cmp(&right.0));
+        self.next_serial += 1;
+        FileReferences {
+            refs,
+            spaces,
+            durable: scan.durable,
+            merged: false,
+            serial: self.next_serial,
+        }
+    }
+}
+
+#[cfg(test)]
+impl ReferenceIndex {
+    /// The scan as ported, one identity lookup per identifier; the equivalence
+    /// test compares [`ReferenceIndex::scan`] against it.
+    pub(crate) fn scan_reference(
+        &mut self,
+        env: &mut Env<'_>,
+        file: P<SourceFile>,
+    ) -> FileReferences {
         struct Scan {
             references: HashMap<SymbolId, Vec<Span>>,
             spaces: HashMap<SymbolId, u8>,
@@ -559,6 +705,29 @@ impl ReferenceIndex {
             merged: false,
             serial: self.next_serial,
         }
+    }
+
+    /// Everything but the serial: the same groups, spans, spaces and
+    /// durability.
+    pub(crate) fn same_content(left: &FileReferences, right: &FileReferences) -> bool {
+        left.durable == right.durable
+            && left.spaces == right.spaces
+            && left.refs.len() == right.refs.len()
+            && left
+                .refs
+                .iter()
+                .zip(&right.refs)
+                .all(|(a, b)| a.id == b.id && a.spans == b.spans)
+    }
+
+    pub(crate) fn scan_pair_for_test(
+        &mut self,
+        env: &mut Env<'_>,
+        file: P<SourceFile>,
+    ) -> (FileReferences, FileReferences) {
+        let fast = self.scan(env, file);
+        let reference = self.scan_reference(env, file);
+        (fast, reference)
     }
 }
 

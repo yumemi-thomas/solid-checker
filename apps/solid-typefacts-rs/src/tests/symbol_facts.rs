@@ -516,6 +516,98 @@ fn cursor_selects_exact_and_outermost_call_nodes() {
     assert!(cursor.exact_expression_at(start, start).is_none());
 }
 
+/// `covering` answers the first top-level statement that holds the range by
+/// binary search; the answer must be the full root walk's for every range:
+/// every node's own span, every sub-range of a dense file (statement
+/// boundaries, trivia between statements, the end of file, empty and reversed
+/// ranges, ranges no statement holds).
+#[test]
+fn cursor_covering_equals_the_full_walk_for_every_range() {
+    use crate::nodes::{NodeCursor, deepest_node_covering};
+    let source = "// header\n\nimport { a } from \"./a\";\n/* between */ export const x = a;\n\nfunction f() { return { y: [1, 2, 3], z() { return 1; } }; }\nclass C { m() { f(); } }\n;;\nexport default C\n";
+    let scratch = Scratch::new(&[
+        ("tsconfig.json", STRICT),
+        ("run.ts", source),
+        ("a.ts", "export const a = 1;\n"),
+    ]);
+    let path = scratch.path("run.ts");
+    let project = scratch.open();
+    let file = project
+        .current()
+        .unwrap()
+        .program()
+        .get_source_file(&path)
+        .unwrap();
+    let mut cursor = NodeCursor::new(Some(file));
+    let length = source.len() as u64;
+    let mut checked = 0_u32;
+    for start in 0..=length + 1 {
+        for end in start + 1..=length + 2 {
+            let want = deepest_node_covering(
+                file.as_node(),
+                u32::try_from(start).unwrap(),
+                u32::try_from(end).unwrap(),
+            );
+            assert_eq!(cursor.covering(start, end), want, "[{start}, {end})");
+            checked += 1;
+        }
+    }
+    assert!(checked > 5_000);
+    // A fresh cursor must agree too (no state carried from the first one).
+    let mut fresh = NodeCursor::new(Some(file));
+    let start = source.find("return { y").unwrap() as u64;
+    assert_eq!(
+        fresh.covering(start, start + 6),
+        deepest_node_covering(
+            file.as_node(),
+            u32::try_from(start).unwrap(),
+            u32::try_from(start + 6).unwrap()
+        )
+    );
+}
+
+/// The reference scan resolves each symbol's identities once per file; the
+/// ported per-identifier scan resolves them at every identifier. They must
+/// build the same groups, spans, spaces and durability, including aliases
+/// (two symbols, one canonical id), shorthand properties, type-space and
+/// value-space uses of one name, qualified names, namespace imports, merged
+/// declarations and a symbol with generation-scoped (counter) ids.
+#[test]
+fn reference_scan_equals_the_per_identifier_scan() {
+    let lib = "export const value = 1;\nexport type Shape = { v: number };\nexport namespace NS { export const inner = 2; export type T = string; }\nexport default function main() {}\n";
+    let source = "import main, { value, value as again, type Shape, NS } from \"./lib\";\nimport * as lib from \"./lib\";\nexport { value as reexported } from \"./lib\";\nconst local = value + again + lib.value;\nconst obj = { value, local, key: again };\nlet shape: Shape = { v: lib.value };\nlet nested: NS.T = \"x\"; const inner = NS.inner;\ntype Q = typeof lib.value; type S2 = lib.Shape;\nfunction merged() {} namespace merged { export const m = 1; }\ninterface Both { a: number } const Both = { a: 1 }; type UseBoth = Both; const useBoth = Both;\nmain(); merged(); merged.m; new.target; this;\nfunction shadow(value: number) { return { value }; }\nexport default local;\n";
+    let scratch = Scratch::new(&[
+        ("tsconfig.json", STRICT),
+        ("lib.ts", lib),
+        ("run.ts", source),
+    ]);
+    let path = scratch.path("run.ts");
+    let lib_path = scratch.path("lib.ts");
+    let mut project = scratch.open();
+    let mut compared = 0;
+    project
+        .with_env(|env, references| {
+            for file_path in [&path, &lib_path] {
+                let file = env.program.get_source_file(file_path).unwrap();
+                let (fast, reference) = references.scan_pair_for_test(env, file);
+                assert!(
+                    crate::references::ReferenceIndex::same_content(&fast, &reference),
+                    "{file_path}: {fast:?} != {reference:?}"
+                );
+                if *file_path == path {
+                    assert!(fast.refs.len() > 8, "{file_path}: {}", fast.refs.len());
+                }
+                compared += fast
+                    .refs
+                    .iter()
+                    .map(|group| group.spans.len())
+                    .sum::<usize>();
+            }
+        })
+        .unwrap();
+    assert!(compared > 20, "{compared}");
+}
+
 /// `TestAnalyzeEvidenceEscapesInternalSymbolNames` and the object-shape half
 /// of Go's `wireSymbolName` fix. Go spells an internal symbol name `__x`
 /// (from its `0xFE` prefix); tsrs marks it with U+007F, which is valid UTF-8

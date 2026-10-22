@@ -3,6 +3,7 @@
 //! `stringTableV3`).
 
 use std::collections::HashMap;
+use std::hash::{BuildHasherDefault, Hasher};
 use std::io;
 use std::sync::Arc;
 
@@ -14,9 +15,46 @@ use crate::v3::{push_uvarint, rows};
 /// `streamedWireTransitionChunk`). Chunk boundaries never change the bytes.
 pub(super) const STREAMED_CHUNK: usize = 64 << 10;
 
+/// A multiply-rotate string hasher (the FxHash family) for the dictionary.
+/// Indexes are assigned in first-occurrence order, so the hash function never
+/// reaches the bytes; SipHash's DoS resistance buys nothing for strings the
+/// producer itself minted, and its cost showed in the transition encoder.
+#[derive(Default)]
+pub(super) struct FastHasher(u64);
+
+impl FastHasher {
+    const SEED: u64 = 0xf135_7aea_2e62_a9c5;
+
+    fn add(&mut self, word: u64) {
+        self.0 = (self.0.rotate_left(5) ^ word).wrapping_mul(Self::SEED);
+    }
+}
+
+impl Hasher for FastHasher {
+    fn write(&mut self, bytes: &[u8]) {
+        let (chunks, rest) = bytes.as_chunks::<8>();
+        for chunk in chunks {
+            self.add(u64::from_le_bytes(*chunk));
+        }
+        if !rest.is_empty() {
+            let mut word = [0_u8; 8];
+            word[..rest.len()].copy_from_slice(rest);
+            self.add(u64::from_le_bytes(word) ^ ((rest.len() as u64) << 56));
+        }
+    }
+
+    fn write_u8(&mut self, byte: u8) {
+        self.add(u64::from(byte));
+    }
+
+    fn finish(&self) -> u64 {
+        self.0.rotate_left(26)
+    }
+}
+
 /// Interns strings in first-occurrence order; index 0 is the empty string.
 pub(super) struct Dictionary {
-    indexes: HashMap<Arc<str>, u64>,
+    indexes: HashMap<Arc<str>, u64, BuildHasherDefault<FastHasher>>,
     values: Vec<Arc<str>>,
 }
 
@@ -24,7 +62,7 @@ impl Dictionary {
     pub(super) fn new() -> Self {
         let empty: Arc<str> = Arc::from("");
         Self {
-            indexes: HashMap::from([(empty.clone(), 0)]),
+            indexes: HashMap::from_iter([(empty.clone(), 0)]),
             values: vec![empty],
         }
     }

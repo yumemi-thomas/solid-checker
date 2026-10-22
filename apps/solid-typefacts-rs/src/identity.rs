@@ -35,8 +35,9 @@ use crate::nodes::node_at;
 use crate::shape::{ExportedSymbol, exported_symbols_with};
 use crate::unsafe_boundary::CheckerLease;
 use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 use std::sync::Arc;
-use tsrs_ast::{SourceFile, Symbol, SymbolFlags, is_external_module};
+use tsrs_ast::{Node, SourceFile, Symbol, SymbolFlags, is_external_module};
 use tsrs_compiler::{Checker, Program};
 use tsrs_core::P;
 
@@ -51,6 +52,22 @@ pub struct Preserved {
 /// Go's `declarationExportIdentities`/`currentExports`: a symbol of the
 /// accepted candidate generation and the identity its export slot keeps.
 pub type CurrentExports = Vec<(P<Symbol>, Preserved)>;
+
+/// One direct write to a symbol (Go: the cases of `runtimeSymbolKindLocked`'s
+/// `visit`). `Value` is evaluated lazily, under the evaluation's own cycle
+/// guard, so the index holds no kinds.
+#[derive(Clone, Copy)]
+pub enum WriteSite {
+    /// `x = value`, `x ||= value`, ...: the kind of `value`.
+    Value(P<Node>),
+    /// Arithmetic/bitwise compound assignment and `++`/`--`.
+    NonCallable,
+    /// Any other direct write (destructuring, `for-in/of` target, ...).
+    Open,
+}
+
+/// Canonical symbol address to its writes in one file, in source order.
+pub type WriteIndex = HashMap<usize, Vec<WriteSite>>;
 
 #[derive(Default)]
 pub struct Identities {
@@ -75,6 +92,10 @@ pub struct Identities {
     /// generation (symlinks followed), dropped with the other path caches on
     /// release and on every accepted update.
     runtime_paths: HashMap<String, String>,
+    /// Write sites per declaring file (by file address), built on first use by
+    /// `runtime_facts`. Holds node and symbol addresses: generation-scoped like
+    /// `ids_by_symbol`, cleared at every point that clears it.
+    pub(crate) write_indexes: HashMap<usize, Rc<WriteIndex>>,
 }
 
 /// What an identity question needs: the checker and program of the generation
@@ -124,6 +145,7 @@ impl Identities {
         self.exported = None;
         self.files_by_name = None;
         self.runtime_paths.clear();
+        self.write_indexes.clear();
         self.next_symbol = 0;
     }
 
@@ -179,6 +201,7 @@ impl Identities {
         self.symbols_by_id.clear();
         self.files_by_name = None;
         self.runtime_paths.clear();
+        self.write_indexes.clear();
         self.next_symbol = 0;
         match (incremental_path, current) {
             (Some(path), Some(current)) => {

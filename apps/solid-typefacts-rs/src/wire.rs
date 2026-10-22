@@ -122,7 +122,7 @@ pub fn decode_request(payload: &[u8]) -> Result<Incoming, String> {
 
 /// Encodes one response payload, with Go's wording for the size limit.
 pub fn encode_response(response: &Response) -> Result<Vec<u8>, String> {
-    typefacts::encode(response).map_err(|error| {
+    typefacts::encode_direct(response).map_err(|error| {
         let inner = match error {
             TypeFactsError::MessageLimit { actual, limit } => {
                 format!("encoded message is {actual} bytes, limit is {limit}")
@@ -243,6 +243,187 @@ mod tests {
         ]))
         .unwrap();
         assert_eq!(known.operation(), Some(Operation::Modules));
+    }
+}
+
+#[cfg(test)]
+mod encode_tests {
+    use super::*;
+    use crate::model::blank_symbol;
+    use std::sync::Arc;
+    use typefacts::v3::{ServerTimings, SourceFile};
+    use typefacts::{
+        Declaration, Location, ModuleFact, ModuleFormat, ModuleImportFact, ModuleResolution,
+        PackageIdentity, ProjectReferenceMapping, ResolverPackageId, SymbolFact,
+    };
+
+    fn location(path: &str, start: u64, end: u64) -> Location {
+        Location {
+            path: path.into(),
+            start_byte: start,
+            end_byte: end,
+        }
+    }
+
+    fn populated_modules(response: &mut Response) {
+        response.modules = vec![
+            ModuleFact {
+                path: "/p/a.ts".into(),
+                declaration_file: true,
+                format: ModuleFormat::Esm,
+                project_reference: Some(ProjectReferenceMapping {
+                    source: "/p/a.ts".into(),
+                    output_dts: "/p/out/a.d.ts".into(),
+                }),
+                redirect_targets: Arc::from(vec![Arc::<str>::from("/q/a.ts")]),
+            },
+            ModuleFact {
+                path: "/p/b.ts".into(),
+                declaration_file: false,
+                format: ModuleFormat::Unknown,
+                project_reference: None,
+                redirect_targets: Arc::from(Vec::new()),
+            },
+        ];
+        response.module_imports = vec![ModuleImportFact {
+            specifier: location("/p/a.ts", 4, 9),
+            text: "./b".into(),
+            resolution: ModuleResolution::NodeModules,
+            resolved_path: "/p/b.ts".into(),
+            included_path: "/p/c.ts".into(),
+            symlink_path: "/link/b.ts".into(),
+            extension: ".ts".into(),
+            ts_extension: true,
+            paths_pattern: "@/*".into(),
+            package: Some(PackageIdentity {
+                manifest_path: "/p/package.json".into(),
+                name: "p".into(),
+                version: "1.0.0".into(),
+            }),
+            resolver_package: Some(ResolverPackageId {
+                name: "p".into(),
+                subpath: "index.d.ts".into(),
+                version: "1.0.0".into(),
+                peer_dependencies: "+react@19".into(),
+            }),
+        }];
+        response.symbol_evidence = vec![SymbolFact {
+            id: "sym:a".into(),
+            alias_target: "sym:b".into(),
+            declarations: Arc::from(vec![Declaration {
+                name: "a".into(),
+                kind: "variable".into(),
+                location: location("/p/a.ts", 1, 2),
+            }]),
+            references: Arc::from(vec![location("/p/a.ts", 5, 6)]),
+        }];
+    }
+
+    /// `Response` and the types it carries declare their fields in core
+    /// deterministic key order, so the raw serialization already is the
+    /// canonical encoding and `encode_direct` never falls back.
+    #[test]
+    fn direct_response_encoding_takes_the_direct_path() {
+        let mut response = blank_response(1, 7, "/p/tsconfig.json", 3);
+        response.ok = true;
+        response.table_transition = vec![1, 2, 3];
+        response.changed_reference_symbols = vec!["x".into()];
+        response.reference_changes_exact = true;
+        response.state_token = "t".to_owned();
+        response.affected = vec!["/p/a.ts".to_owned()];
+        response.sources = vec![SourceFile {
+            path: "/p/a.ts".to_owned(),
+            local: true,
+            source: b"x".to_vec(),
+        }];
+        response.source_arena = "a".to_owned();
+        response.source_lengths = vec![1];
+        response.timings = Some(ServerTimings {
+            request_decode_ns: 1,
+            analyze_ns: 2,
+            async_ns: 3,
+            demand_ns: 4,
+            assembly_ns: 5,
+            sort_ns: 6,
+            close_symbols_ns: 7,
+            materialized: true,
+            retained_files: 8,
+            recomputed_files: 9,
+            non_durable_files: 10,
+        });
+        response.error = Some(WireError {
+            code: "c".to_owned(),
+            message: "m".to_owned(),
+        });
+        response.unknown_import_paths = vec!["/p/x".into()];
+        response.reference_evidence = vec![blank_symbol("r".into())];
+        populated_modules(&mut response);
+        let mut raw = Vec::new();
+        ciborium::into_writer(&response, &mut raw).unwrap();
+        assert_eq!(raw, typefacts::encode(&response).unwrap());
+    }
+
+    #[test]
+    fn direct_response_encoding_equals_the_canonicalizing_encoder() {
+        let mut response = blank_response(1, 7, "/p/tsconfig.json", 3);
+        response.ok = true;
+        response.table_transition = (0..70_000_u32).map(|n| (n % 251) as u8).collect();
+        populated_modules(&mut response);
+        response.symbol_evidence.push(blank_symbol("b".into()));
+        response.reference_evidence = vec![blank_symbol("c".into())];
+        response.changed_reference_symbols = vec!["x".into(), "yy".into()];
+        response.reference_changes_exact = true;
+        response.state_token = "token".to_owned();
+        response.affected = vec!["/p/a.ts".to_owned()];
+        response.sources = vec![SourceFile {
+            path: "/p/a.ts".to_owned(),
+            local: true,
+            source: b"let a = 1;".to_vec(),
+        }];
+        response.source_arena = "arena".to_owned();
+        response.source_lengths =
+            vec![0, 23, 24, 255, 256, 65_535, 65_536, u64::from(u32::MAX) + 1];
+        response.timings = Some(ServerTimings {
+            analyze_ns: 5,
+            materialized: true,
+            retained_files: 300,
+            ..ServerTimings::default()
+        });
+        response.unknown_import_paths = vec!["/p/missing".into()];
+        let variants = [
+            blank_response(1, 0, "", 0),
+            response.clone(),
+            error_response(blank_response(2, 9, "/p", 1), "invalid-request", "bad"),
+            Response {
+                error: Some(WireError {
+                    code: "c".to_owned(),
+                    message: "m".repeat(300),
+                }),
+                ..response
+            },
+        ];
+        for variant in &variants {
+            assert_eq!(
+                typefacts::encode_direct(variant).unwrap(),
+                typefacts::encode(variant).unwrap()
+            );
+            assert_eq!(
+                encode_response(variant).unwrap(),
+                typefacts::encode(variant).unwrap()
+            );
+        }
+    }
+
+    #[test]
+    fn direct_encoding_falls_back_when_declaration_order_is_not_canonical() {
+        let unsorted = Value::Map(vec![
+            (Value::Text("bb".to_owned()), Value::Integer(1.into())),
+            (Value::Text("a".to_owned()), Value::Integer(2.into())),
+            (Value::Text("ab".to_owned()), Value::Bool(true)),
+        ]);
+        let direct = typefacts::encode_direct(&unsorted).unwrap();
+        assert_eq!(direct, typefacts::encode(&unsorted).unwrap());
+        assert!(typefacts::decode::<Value>(&direct).is_ok());
     }
 }
 

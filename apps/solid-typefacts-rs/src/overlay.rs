@@ -6,7 +6,7 @@
 //! candidate program from the clone, so a failed update leaves the previous
 //! overlay untouched.
 
-use crate::gocompat::{clean, dir};
+use crate::gocompat::{clean, clean_cow, dir};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, RwLock};
 use std::time::SystemTime;
@@ -98,15 +98,44 @@ pub fn clean_overlay_path(path: &str) -> String {
     }
 }
 
+/// The first path element of `target` below `base`, and whether anything
+/// follows it, when `target` is strictly inside `base`: the answer
+/// `filepath.Rel(base, target)` gives for cleaned paths of the same rootedness,
+/// read as "a relative path that is not `.` and does not start with `..`",
+/// without building the relative path. Both arguments are cleaned first.
+fn inside<'t>(base: &str, target: &'t str) -> Option<(&'t str, bool)> {
+    if base.starts_with('/') != target.starts_with('/') {
+        return None;
+    }
+    let mut base_parts = base
+        .split('/')
+        .filter(|part| !part.is_empty() && *part != ".");
+    let mut target_parts = target
+        .split('/')
+        .filter(|part| !part.is_empty() && *part != ".");
+    loop {
+        match (base_parts.next(), target_parts.next()) {
+            (Some(left), Some(right)) if left == right => {}
+            // `target` ends first or leaves `base`: `.`, `..` or `../x`.
+            (Some(_), _) | (None, None) => return None,
+            (None, Some(first)) => {
+                return (first != "..").then(|| (first, target_parts.next().is_some()));
+            }
+        }
+    }
+}
+
 /// Go: `isDescendant`: `path` is strictly inside `directory`.
+#[cfg(test)]
 fn is_descendant(path: &str, directory: &str) -> bool {
-    relative(directory, path)
-        .is_some_and(|relative| relative != "." && relative != ".." && !relative.starts_with("../"))
+    inside(&clean_cow(directory), &clean_cow(path)).is_some()
 }
 
 /// `filepath.Rel` for the cleaned absolute or cleaned relative paths the
 /// overlay holds; `None` where Go returns an error (mixed absolute and
-/// relative).
+/// relative). The overlay itself now answers through [`inside`]; this is the
+/// literal port its tests compare against.
+#[cfg(test)]
 fn relative(base: &str, target: &str) -> Option<String> {
     let base = clean(base);
     let target = clean(target);
@@ -210,10 +239,11 @@ impl FS for OverlayFs {
             return true;
         }
         let directory = clean_overlay_path(path);
+        let directory = clean_cow(&directory);
         self.read()
             .files
             .keys()
-            .any(|file| is_descendant(file, &directory))
+            .any(|file| inside(&directory, &clean_cow(file)).is_some())
     }
 
     fn get_accessible_entries(&self, path: &str) -> Entries {
@@ -228,18 +258,15 @@ impl FS for OverlayFs {
                     files.remove(base_of(file));
                 }
             }
+            let base = clean_cow(&directory);
             for file in state.files.keys() {
-                let Some(relative) = relative(&directory, file) else {
-                    continue;
-                };
-                if relative == "." || relative == ".." || relative.starts_with("../") {
-                    continue;
-                }
-                match relative.split_once('/') {
-                    None => {
-                        files.insert(relative);
+                let file = clean_cow(file);
+                match inside(&base, &file) {
+                    None => {}
+                    Some((name, false)) => {
+                        files.insert(name.to_owned());
                     }
-                    Some((first, _)) => {
+                    Some((first, true)) => {
                         directories.insert(first.to_owned());
                     }
                 }
@@ -356,6 +383,74 @@ mod tests {
         OverlayFs::new(Arc::new(Base {
             files: vec![("/p/a.ts", "a"), ("/p/sub/b.ts", "b"), ("/p/gone.ts", "g")],
         }))
+    }
+
+    /// The allocation-free containment test equals the literal `filepath.Rel`
+    /// port on every pair: absolute and relative, `.`/`..` leaders, equal
+    /// paths, siblings sharing a prefix, a parent, the root, unclean spellings
+    /// and URL-like names.
+    #[test]
+    fn inside_equals_the_filepath_rel_port() {
+        let paths = [
+            "",
+            ".",
+            "..",
+            "../..",
+            "../a",
+            "../a/b",
+            "a",
+            "a/b",
+            "a/b/c",
+            "ab",
+            "ab/c",
+            "/",
+            "/a",
+            "/a/",
+            "/a/b",
+            "/a/b/c",
+            "/ab",
+            "/ab/c",
+            "//a",
+            "/a//b",
+            "/a/./b",
+            "/a/b/../c",
+            "/a/../..",
+            "bundled:///libs/x.d.ts",
+            "bundled:/libs",
+            "/p/new/deep/c.ts",
+            "/p/new",
+            "/p",
+            "/p/sub/b.ts",
+            "a/..",
+            "./a",
+            "../../a/b",
+        ];
+        let mut inside_count = 0;
+        for base in paths {
+            for target in paths {
+                let want = relative(base, target).filter(|relative| {
+                    relative != "." && relative != ".." && !relative.starts_with("../")
+                });
+                let (cleaned_base, cleaned_target) = (clean(base), clean(target));
+                let got = inside(&cleaned_base, &cleaned_target);
+                assert_eq!(
+                    got.map(|(first, nested)| (first.to_owned(), nested)),
+                    want.as_ref()
+                        .map(|relative| match relative.split_once('/') {
+                            None => (relative.clone(), false),
+                            Some((first, _)) => (first.to_owned(), true),
+                        }),
+                    "{base:?} / {target:?}"
+                );
+                assert_eq!(
+                    is_descendant(target, base),
+                    want.is_some(),
+                    "{base:?} / {target:?}"
+                );
+                inside_count += usize::from(want.is_some());
+            }
+        }
+        assert!(inside_count > 40, "{inside_count}");
     }
 
     #[test]
