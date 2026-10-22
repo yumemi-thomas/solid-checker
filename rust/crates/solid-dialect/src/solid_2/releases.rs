@@ -753,6 +753,8 @@ struct KnownGap {
     /// The vocabularies that model what the gap names, which it is then not
     /// open for. `None`: open for every vocabulary.
     closed_by: Option<fn(Solid2) -> bool>,
+    /// [`GapScope::server_rendering_only`].
+    server_rendering_only: bool,
 }
 
 /// The rc.17 review: `dynamicComponent` and `dispatchAsInteraction` are
@@ -776,6 +778,7 @@ const KNOWN_GAPS: &[KnownGap] = &[
         review: RC1_RC8_REVIEW,
         exports: None,
         closed_by: None,
+        server_rendering_only: false,
     },
     KnownGap {
         package: WEB,
@@ -786,6 +789,7 @@ const KNOWN_GAPS: &[KnownGap] = &[
         review: RC1_RC8_REVIEW,
         exports: None,
         closed_by: None,
+        server_rendering_only: false,
     },
     // The rc.1-rc.8 review § 0.2: rc.7 and rc.8 are "reviewed with one gap".
     KnownGap {
@@ -797,6 +801,7 @@ const KNOWN_GAPS: &[KnownGap] = &[
         review: RC1_RC8_REVIEW,
         exports: None,
         closed_by: None,
+        server_rendering_only: false,
     },
     // The rc.9 review § 4.
     KnownGap {
@@ -820,6 +825,7 @@ const KNOWN_GAPS: &[KnownGap] = &[
             "$DEVCOMP",
         ]),
         closed_by: None,
+        server_rendering_only: false,
     },
     // The rc.17 review: new root exports that take callbacks.
     KnownGap {
@@ -831,6 +837,7 @@ const KNOWN_GAPS: &[KnownGap] = &[
         review: RC17_REVIEW,
         exports: Some(&["createDeferred", "lazyModule", "onHydrationEnd"]),
         closed_by: None,
+        server_rendering_only: false,
     },
     // `setLinkClaim(handler)`: the client builds ignore the handler
     // (`dist/web.dev.js:534`, `web.js:389`, `web.observe.js:400`); the server
@@ -843,10 +850,16 @@ const KNOWN_GAPS: &[KnownGap] = &[
         from: 17,
         through: 17,
         gap: "exports setLinkClaim, whose handler the server build calls while serializing \
-              links and the client build ignores, so code inside one is not classified",
+              links and the client build ignores, so code inside one is not classified unless \
+              the project declares client-only rendering",
         review: RC17_REVIEW,
         exports: Some(&["setLinkClaim"]),
         closed_by: None,
+        // The server build stores the handler only on a live render context
+        // (`currentRenderContext()`, `dist/server.js:4126-4130`), and only
+        // `ssrLinkClaim`, during server rendering, calls it; the client builds
+        // never do (probed). Under declared CSR no render context exists.
+        server_rendering_only: true,
     },
     // Modelled on the rc.17 triple (`Solid2::rc17_callback_exports`); a mixed
     // installation keeps them unread.
@@ -859,6 +872,7 @@ const KNOWN_GAPS: &[KnownGap] = &[
         review: RC17_REVIEW,
         exports: Some(&["dynamicComponent"]),
         closed_by: Some(models_rc17_callback_exports),
+        server_rendering_only: false,
     },
     KnownGap {
         package: WEB,
@@ -870,6 +884,7 @@ const KNOWN_GAPS: &[KnownGap] = &[
         review: RC17_REVIEW,
         exports: Some(&["dispatchAsInteraction", "dynamicComponent"]),
         closed_by: Some(models_rc17_callback_exports),
+        server_rendering_only: false,
     },
 ];
 
@@ -1070,6 +1085,7 @@ fn gaps_for(solid_js: Release<'_>, signals: Release<'_>, web: Release<'_>) -> Ve
                         scope: known.exports.map(|exports| GapScope {
                             specifier: package,
                             exports,
+                            server_rendering_only: known.server_rendering_only,
                         }),
                     }),
             ),

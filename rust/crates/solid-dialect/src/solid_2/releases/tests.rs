@@ -1079,6 +1079,16 @@ fn rc17_callback_exports_are_modelled_only_on_the_rc17_triple() {
             (SOLID_JS, "onHydrationEnd"),
         ]
     );
+    // Only `setLinkClaim`'s handler is server-rendering-only (`dist/server.js:3508-3512`);
+    // declared CSR closes that gap and no other.
+    for gap in &gaps {
+        let scope = gap.scope.expect("every rc.17 gap is scoped");
+        assert_eq!(
+            scope.server_rendering_only,
+            scope.exports == ["setLinkClaim"],
+            "{gap:?}"
+        );
+    }
     for gap in &gaps {
         for name in ["dynamicComponent", "dispatchAsInteraction"] {
             assert!(!gap.gap.contains(name), "{gap:?}");

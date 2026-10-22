@@ -75,7 +75,7 @@ With no explicit program boundary, the nearest `package.json` decides: `"private
 
 <a id="adr-0194"></a>
 ## ADR 0194 — The audited Solid 2 release is rc.17
-`AUDITED_INSTALLATION` names `solid-js`, `@solidjs/signals` and `@solidjs/web` at `2.0.0-rc.17` (`Solid2::AUDITED` is `RC17`): rc.13's answers but `on`+uppercase spread listeners, an unguarded `createOptimistic` setter, `latest` absorbing a pending read, a deferrable `hydrate`, and `dynamic`'s static form from `solid-js`. `READ_RELEASES` is rc.0-rc.9, rc.13, rc.17; others get conservative answers under `SC9014`, older read ones the older-release notice. On the rc.17 triple `dynamicComponent` takes `dynamic`'s forms and `dispatchAsInteraction` runs `fn` inline in the caller's owner; other new callback exports, `setLinkClaim` among them, are import-scoped gaps. Owner: rust/crates/solid-dialect/src/solid_2/releases.rs; review in docs/release-audits/.
+`AUDITED_INSTALLATION` names `solid-js`, `@solidjs/signals` and `@solidjs/web` at `2.0.0-rc.17` (`Solid2::AUDITED` is `RC17`): rc.13's answers but `on`+uppercase spread listeners, an unguarded `createOptimistic` setter, `latest` absorbing a pending read, a deferrable `hydrate`, and `dynamic`'s static form from `solid-js`. `READ_RELEASES` is rc.0-rc.9, rc.13, rc.17; others get conservative answers under `SC9014`, older read ones the older-release notice. On the rc.17 triple `dynamicComponent` takes `dynamic`'s forms and `dispatchAsInteraction` runs `fn` inline in the caller's owner; other new callback exports are import-scoped gaps, `setLinkClaim`'s closed by declared CSR. Owner: rust/crates/solid-dialect/src/solid_2/releases.rs; review in docs/release-audits/.
 
 <a id="adr-0195"></a>
 ## ADR 0195 — A source tracked before the await is a dependency

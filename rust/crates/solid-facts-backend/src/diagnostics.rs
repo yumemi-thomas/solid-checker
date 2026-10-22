@@ -348,8 +348,13 @@ impl DiagnosticSession {
         // Scoped to this generation's facts: a gap about named exports is due
         // only where the project reaches one (`release_scope`), so the answer
         // moves with the sources as well as the install.
+        // A gap only server rendering can reach is not due under declared CSR.
+        let client_only_rendering = matches!(
+            rule_options.runtime.rendering,
+            Some(solid_reactive_ir::RuntimeRendering::Csr)
+        );
         let release_notice = dialect::release_notice(self.dialect, project)
-            .and_then(|notice| notice.scoped_to(facts));
+            .and_then(|notice| notice.scoped_to(facts, client_only_rendering));
         let router_params = solid_reactive_ir::router_params::router_params_status(
             facts,
             self.dialect.vocabulary,
