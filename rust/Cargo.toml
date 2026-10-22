@@ -35,7 +35,7 @@ rustc-hash = "2.1.3"
 # opened for this fork; compiler behavior fixes remain outside this branch.
 # The producer carries `SEMANTIC_TRACE_VERSION = 3`; the adapter has an
 # independent literal and const assertion so an incompatible pin cannot build.
-solidjs-compiler = { git = "https://github.com/yumemi-thomas/solid", rev = "6c1983c264394c892aafb5277f8afc125376101b", default-features = false }
+solidjs-compiler = { git = "https://github.com/yumemi-thomas/solid", rev = "9f5fff59c2abc4465058d96080771c82dfd91990", default-features = false }
 # Moved from `3296ec8` for the signature-less `Function`-supertype answer
 # (producer ADR 0021): wire table schema 15, handshake protocol still 2.
 # `Callability::UntypedCallable` is positive runtime-function evidence without

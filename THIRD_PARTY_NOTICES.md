@@ -8,8 +8,8 @@ whose original notices remain applicable.
 - Upstream: https://github.com/solidjs/solid
 - Upstream base: `5b1b777648a89b6e207e8bb78514d5c03420e08b`
 - Consumed semantic-only fork: https://github.com/yumemi-thomas/solid
-- Semantic implementation revision: `8148b1530f97d3117fab00cf2f862b5a244c1369`
-- Pinned distribution revision: `6c1983c264394c892aafb5277f8afc125376101b`
+- Semantic implementation revision: `a4983a7130daa210bfc00f079dce57939fe14502`
+- Pinned distribution revision: `9f5fff59c2abc4465058d96080771c82dfd91990`
 - Fork branch: `solid-checker/compiler-facts-rc17`
 - License: MIT
 

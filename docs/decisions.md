@@ -83,7 +83,7 @@ SC1002 (`reactive-read-after-await`) skips an after-`await` accessor call when t
 
 <a id="adr-0196"></a>
 ## ADR 0196 — The compiler follows Solid rc.17
-Fork commit, adapter revision literals, compiler-facts identity and identity document move together; the facts API is linear commits on `next`. Pin: distribution `6c1983c2`, upstream `5b1b7776` (rc.17), implementation `8148b153`; trace 3, protocol 2. Only `on` + uppercase lowers as a listener (`Dialect::compiler_lowers_event_attribute`). Universal/Dynamic, TSRX, `sourceNames.locations` traces refuse. Owner: rust/dialects/solid-v2/compiler/src/lib.rs.
+Fork commit, adapter revision literals, compiler-facts identity and identity document move together; the facts API is linear commits on `next`. Pin: distribution `9f5fff59`, upstream `5b1b7776` (rc.17), implementation `a4983a71`; trace 3, protocol 2. Only `on` + uppercase lowers as a listener (`Dialect::compiler_lowers_event_attribute`). Universal/Dynamic, TSRX, `sourceNames.locations` traces refuse. Owner: rust/dialects/solid-v2/compiler/src/lib.rs.
 
 <a id="adr-0199"></a>
 ## ADR 0199 — A callback prop forwarded to an event runs on dispatch
