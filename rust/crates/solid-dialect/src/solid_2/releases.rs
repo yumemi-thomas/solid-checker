@@ -101,17 +101,23 @@ const WEB: &str = "@solidjs/web";
 /// ADR 0324: the `@solidjs/router` releases audited for route parameters, by
 /// exact `package.json` version. Not a release owner: the router decides no
 /// vocabulary answer, only the value domain of `useParams()` members.
-pub(super) const AUDITED_ROUTER_RELEASES: &[&str] = &["2.0.0-next.26"];
+pub(super) const AUDITED_ROUTER_RELEASES: &[&str] = &["2.0.0-next.26", "2.0.0-next.41"];
 
 /// ADR 0324: the digest of the installed bytes of each audited router release
 /// (`scripts/router-digest.mjs`: the manifest fields `name`, `version`,
 /// `main`, `module`, `exports`, `type` and every file under `dist/`), by
 /// version, computed from the registry install the audit read. The release
 /// string is a claim a patch, a fork or an override keeps; the digest is not.
-pub(super) const AUDITED_ROUTER_DIGESTS: &[(&str, &str)] = &[(
-    "2.0.0-next.26",
-    "e67af5395e06b46fba92846736c3efa5f2076281e05e864dda248d96689204d6",
-)];
+pub(super) const AUDITED_ROUTER_DIGESTS: &[(&str, &str)] = &[
+    (
+        "2.0.0-next.26",
+        "e67af5395e06b46fba92846736c3efa5f2076281e05e864dda248d96689204d6",
+    ),
+    (
+        "2.0.0-next.41",
+        "cec5859950cb6ea4fc790a8709c325408d76051b8f2956a1e03bd4574dfefcef",
+    ),
+];
 
 /// ADR 0335: the `@solidjs/router` releases audited for route definitions
 /// (`createRouter({ routes })`), with the digest of each one's registry
@@ -128,6 +134,10 @@ pub(super) const AUDITED_ROUTE_CONFIG_DIGESTS: &[(&str, &str)] = &[
     (
         "2.0.0-next.26",
         "e67af5395e06b46fba92846736c3efa5f2076281e05e864dda248d96689204d6",
+    ),
+    (
+        "2.0.0-next.41",
+        "cec5859950cb6ea4fc790a8709c325408d76051b8f2956a1e03bd4574dfefcef",
     ),
 ];
 

@@ -53,7 +53,7 @@ fn a_router_release_moved_between_audited_and_unaudited_is_resolved_again() {
         let source = fs::read_to_string(directory.join("App.tsx")).unwrap();
         let manifest = directory.join("node_modules/@solidjs/router/package.json");
         let audited = fs::read_to_string(&manifest).unwrap();
-        let unaudited = audited.replace("2.0.0-next.26", "2.0.0-next.18");
+        let unaudited = audited.replace("2.0.0-next.41", "2.0.0-next.18");
         assert_ne!(audited, unaudited);
         // The accessor form's `props.clusterId` (the first `fetchThing`
         // argument) is the settled site.

@@ -473,6 +473,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/router-params-linked-dependency/node_modules/**
 !fixtures/reactive-ir/router-params-pnp/node_modules/
 !fixtures/reactive-ir/router-params-pnp/node_modules/**
+!fixtures/reactive-ir/router-params-links/node_modules/
+!fixtures/reactive-ir/router-params-links/node_modules/**
 !fixtures/reactive-ir/imported-const-primitives/node_modules/
 !fixtures/reactive-ir/imported-const-primitives/node_modules/**
 !fixtures/reactive-ir/imported-const-commonjs/node_modules/

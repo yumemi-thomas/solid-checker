@@ -1,0 +1,45 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "package-behavior-unavailable",
+      "code": "SC9005",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-config/variants/links/Routes.tsx",
+      "start": 41,
+      "end": 88,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/route-config/variants/links/Routes.tsx",
+      "start": 466,
+      "end": 473,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/route-config/variants/links/Routes.tsx",
+      "start": 568,
+      "end": 575,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/route-config/variants/links/Routes.tsx",
+      "start": 661,
+      "end": 668,
+      "fixes": 0
+    }
+  ]
+}

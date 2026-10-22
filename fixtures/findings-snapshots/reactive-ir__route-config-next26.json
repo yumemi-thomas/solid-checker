@@ -1,0 +1,45 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "package-behavior-unavailable",
+      "code": "SC9005",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-config/variants/next26/Routes.tsx",
+      "start": 41,
+      "end": 88,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/route-config/variants/next26/Routes.tsx",
+      "start": 388,
+      "end": 395,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/route-config/variants/next26/Routes.tsx",
+      "start": 490,
+      "end": 497,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/route-config/variants/next26/Routes.tsx",
+      "start": 583,
+      "end": 590,
+      "fixes": 0
+    }
+  ]
+}

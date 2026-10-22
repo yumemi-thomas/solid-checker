@@ -209,9 +209,11 @@ fn the_execution_words_are_stated_by_this_dialect_not_by_shared_code() {
 fn only_the_audited_router_release_hands_out_url_strings() {
     let two: &dyn Dialect = &Solid2::RC9;
     assert!(two.router_params_are_url_strings("2.0.0-next.26"));
+    assert!(two.router_params_are_url_strings("2.0.0-next.41"));
     for version in [
         "2.0.0-next.18",
         "2.0.0-next.27",
+        "2.0.0-next.40",
         "2.0.0",
         "0.15.3",
         "2.0.0-next.26-rc",
@@ -219,7 +221,10 @@ fn only_the_audited_router_release_hands_out_url_strings() {
     ] {
         assert!(!two.router_params_are_url_strings(version), "{version}");
     }
-    assert_eq!(two.audited_router_releases(), &["2.0.0-next.26"]);
+    assert_eq!(
+        two.audited_router_releases(),
+        &["2.0.0-next.26", "2.0.0-next.41"]
+    );
     // Every audited release has exactly one digest, and no other has.
     for version in two.audited_router_releases() {
         assert!(two.audited_router_digest(version).is_some_and(|digest| {
@@ -230,20 +235,27 @@ fn only_the_audited_router_release_hands_out_url_strings() {
 }
 
 /// ADR 0335: route definitions are audited by exact version, each with a
-/// digest; next.26's equals ADR 0324's (the same registry bytes).
+/// digest; next.26's and next.41's equal ADR 0324's (the same registry bytes).
 #[test]
 fn only_audited_router_releases_render_route_definitions() {
     let two: &dyn Dialect = &Solid2::RC9;
-    for version in ["2.0.0-next.16", "2.0.0-next.18", "2.0.0-next.26"] {
+    for version in [
+        "2.0.0-next.16",
+        "2.0.0-next.18",
+        "2.0.0-next.26",
+        "2.0.0-next.41",
+    ] {
         assert!(
             two.audited_route_config_digest(version).is_some(),
             "{version}"
         );
     }
-    assert_eq!(
-        two.audited_route_config_digest("2.0.0-next.26"),
-        two.audited_router_digest("2.0.0-next.26")
-    );
+    for version in ["2.0.0-next.26", "2.0.0-next.41"] {
+        assert_eq!(
+            two.audited_route_config_digest(version),
+            two.audited_router_digest(version)
+        );
+    }
     for version in ["2.0.0-next.21", "2.0.0-next.17", "0.15.3", "2.0.0", ""] {
         assert_eq!(two.audited_route_config_digest(version), None, "{version}");
     }

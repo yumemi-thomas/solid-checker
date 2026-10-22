@@ -42,7 +42,8 @@ const REPLACEMENT_SPELLINGS: [&str; 5] = [
 
 /// The histories the audited package exports (`routers/index.js`). Each
 /// returns a fresh integration whose `utils` the package itself writes
-/// (`routers/history.js:91,131,178`: `go`, `renderPath`, `parsePath`,
+/// (`routers/history.js:91,131,178` next.26, `:87,127,174` next.41: `go`,
+/// `renderPath`, `parsePath`,
 /// `beforeLeave`) and none of which is `paramsWrapper`.
 pub(crate) const STOCK_HISTORIES: [&str; 3] = ["browserHistory", "hashHistory", "memoryHistory"];
 
@@ -64,6 +65,11 @@ const NAMESPACE_MEMBERS: [&str; 12] = [
     "usePreloadRoute",
     "int",
 ];
+
+/// The `createRouter` option the router calls with its whole context
+/// (`createRouter({ links })`, from `2.0.0-next.41`): a config naming it
+/// withholds both router premises (ADR 0324, 0335).
+pub(crate) const LINKS_KEY: &str = "links";
 
 /// A history's members the project may call without being able to install
 /// `utils` on it: `get` reads the location and `set` writes one.
@@ -334,8 +340,9 @@ pub(crate) fn runtime_agrees(
 ///
 /// The router builds its params object from `utils.paramsWrapper` of the
 /// integration `createRouter` takes from `config.history` (`factory.jsx:141`,
-/// `index.js:1306`). The premise therefore holds only when **every** router
-/// creation in the program names no history, or a stock one called directly
+/// `index.js:1306` next.26; `:255`, `:1595` next.41). The premise therefore
+/// holds only when **every** router creation in the program names no
+/// history, or a stock one called directly
 /// and never given a `utils` afterwards. Anything else -- a config that is not
 /// a closed literal, a history of another origin, a history passed on, a
 /// router reached through a re-export, a namespace member, a dynamic load --
@@ -409,6 +416,16 @@ fn history_not_stock(facts: &ProjectFacts) -> Option<&'static str> {
                 }) else {
                     return Some("a router creation whose config is not a closed literal");
                 };
+                // `2.0.0-next.41` calls `config.links(router, basePath)` with the
+                // whole router context (`claims.js:42-44`), whose `wrapParams` a
+                // computed key could replace. Refused on every release.
+                if config
+                    .literal_members
+                    .iter()
+                    .any(|member| member.key.as_str() == LINKS_KEY)
+                {
+                    return Some("a router config with `links`");
+                }
                 let Some(history) = config
                     .literal_members
                     .iter()

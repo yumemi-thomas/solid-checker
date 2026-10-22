@@ -770,6 +770,7 @@ impl Dialect for Solid2 {
     /// | release | `dist/index.js` sha256 | `routing.js` | `utils.js` |
     /// | --- | --- | --- | --- |
     /// | `2.0.0-next.26` | `b657bc8d…baa35` | `639f16fd…153ea` | `562b280a…7e2a` |
+    /// | `2.0.0-next.41` | `23d0fe1c…36de2` | `a07c96fa…f2042` | `7ae70266…19db0` |
     ///
     /// What was read: `createMatcher` assigns `match.params[key] = locSegment`
     /// (a segment of `location.split("/")`) and a splat's remainder string
@@ -780,7 +781,16 @@ impl Dialect for Solid2 {
     /// `utils.paramsWrapper` replaces it (`index.js:1306`; `routing.js:725-728`,
     /// `954`), a Proxy whose `get` is a memo of `fn()[property]`
     /// (`index.js:113`; `utils.js:124-`). The declared type is
-    /// `Record<string, string | undefined>` (`types.d.ts:27`). Versions
+    /// `Record<string, string | undefined>` (`types.d.ts:27`). next.41 passes
+    /// each segment and the splat remainder through `decodeParam`, a
+    /// `decodeURIComponent` that keeps a malformed escape raw (a string
+    /// either way; `index.js:142,151,162`; `utils.js:140,150,161`);
+    /// `mergeParams` `index.js:1340`, `routing.js:470`; `useParams`
+    /// `index.js:1013`, `routing.js:167` (its argument unread); the wrapper
+    /// `index.js:1595`, `routing.js:682-685`, `869`; the Proxy `index.js:177`,
+    /// `utils.js:183`; `types.d.ts:41`. It also calls `config.links(router,
+    /// basePath)` with the whole router context (`claims.js:42-44`), so a
+    /// config naming `links` withholds the premise on every release. Versions
     /// before `2.0.0-next.26` (`next.16` to `next.19` in the corpus, and
     /// `0.15.3`) were not read and are not claimed.
     fn router_params_are_url_strings(&self, version: &str) -> bool {
@@ -798,17 +808,25 @@ impl Dialect for Solid2 {
     }
 
     /// ADR 0335. The audited `@solidjs/router` releases for route
-    /// definitions: `2.0.0-next.16`, `next.18` and `next.26`, each read on
+    /// definitions: `2.0.0-next.16`, `next.18`, `next.26` and `next.41`, each read on
     /// `dist/` (the `solid` condition's `index.jsx` and its modules, and the
     /// `dist/index.js` bundle). `createRoutes` copies a definition's
     /// `component` into the route record (`routing.js:328-332` next.16,
-    /// `363-367` next.18, `381-385` next.26); its only render is
-    /// `createComponent(component, …)` in the outlet (`routing.js:810-811`,
-    /// `882-883`, `968-969`); `preloadRoute` and `createRouteContext` read
-    /// `component.preload` only. `createBranches` recurses into `children`
+    /// `363-367` next.18, `381-385` next.26, `370-376` next.41); its only
+    /// render is `createComponent(component, …)` in the outlet
+    /// (`routing.js:810-811`, `882-883`, `968-969`, `902`); `preloadRoute`
+    /// and `createRouteContext` read `component.preload` only, and from
+    /// next.41 the unexported `SERVER_ROUTE` brand (`serverRouteShared.js`),
+    /// which only `serverRouteComponent` values carry and whose `render` and
+    /// `call` never call the component. next.41's new exports (`pendingLinks`,
+    /// the preload strategies, `useInRouter`, `formAction`,
+    /// `serverRouteComponent`) hand out no record, and `keysFor` returns
+    /// strings. `createBranches` recurses into `children`
     /// arrays the same way. Nothing else reads `component`, and nothing calls
     /// it. Project code can reach it as a value (`useRouteMatches()()[i].route`,
-    /// `instance.routes`), which the premise's key-read veto closes.
+    /// `instance.routes`), which the premise's key-read veto closes. next.41
+    /// calls `config.links(router, basePath)` with the router context and its
+    /// matches, so a config naming `links` withholds the premise.
     fn audited_route_config_digest(&self, version: &str) -> Option<&'static str> {
         releases::AUDITED_ROUTE_CONFIG_DIGESTS
             .iter()

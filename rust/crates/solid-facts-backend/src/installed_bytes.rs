@@ -408,7 +408,7 @@ mod tests {
         let published = package_digest(&fixture("router-params-stock-history"));
         assert_eq!(published.as_deref(), audited);
         assert_eq!(
-            package_digest(&fixture("router-params")),
+            package_digest(&fixture("router-params-replaced-wrapper")),
             published,
             "the same bytes in another fixture"
         );
@@ -420,6 +420,22 @@ mod tests {
             package_digest(&fixture("router-params-no-such-fixture")),
             None
         );
+    }
+
+    /// ADR 0324, 0335: the `router-params` and `route-config` fixtures ship the
+    /// published `2.0.0-next.41`, which hashes to its recorded digest.
+    #[test]
+    fn the_published_next41_router_hashes_to_its_audited_digest() {
+        let vocabulary = crate::dialect::default_dialect().vocabulary;
+        let audited = vocabulary.audited_router_digest("2.0.0-next.41");
+        assert!(audited.is_some());
+        assert_eq!(
+            vocabulary.audited_route_config_digest("2.0.0-next.41"),
+            audited
+        );
+        for name in ["router-params", "route-config", "router-params-links"] {
+            assert_eq!(package_digest(&fixture(name)).as_deref(), audited, "{name}");
+        }
     }
 
     /// ADR 0334: the fixture's TanStack router and the router-core Node loads

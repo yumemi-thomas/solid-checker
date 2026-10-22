@@ -176,8 +176,18 @@ ones it uses.
 
 ### Component census
 
-Two cases join ADR 0331's census, where a function is a proven component when
+Three cases join ADR 0331's census, where a function is a proven component when
 every reference to it is accounted for:
+
+- **Audited `@solidjs/router` (ADR 0335, and ADR 0324's params).** next.41 was
+  read on its own bytes against next.26's evidence (`Solid2` doc comments cite
+  both): params are still decoded strings, histories and `wrapParams` as
+  before, definitions copied into records, rendered by `createComponent` and
+  read only for `preload` and the unexported `SERVER_ROUTE` brand; its new
+  exports hand out no record. It adds `createRouter({ links })`, called with
+  the router context during setup (`claims.js:42-44`), so `names_links`
+  (`route_components.rs`) and `history_not_stock` (`router_params.rs`) refuse
+  any config naming `links`, on every release.
 
 - **Audited TanStack routers (ADR 0334).** The rc.8 release was checked by an
   `npm pack` diff against rc.6, and rc.9 against rc.8: every route-option read
