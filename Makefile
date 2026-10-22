@@ -16,7 +16,7 @@ CARGO_TEST_RUNNER ?= test
 PROBE_NODE ?= $(shell node -e 'process.stdout.write(require("fs").realpathSync(process.execPath))')
 export SOLID_CHECKER_PROBE_NODE = $(PROBE_NODE)
 
-.PHONY: build build-typefacts build-typefacts-rs build-typefacts-transcript typefacts-differential typefacts-e2e test-typefacts-rs build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit wasm-parity clean clean-verify
+.PHONY: build build-typefacts build-typefacts-rs build-typefacts-transcript typefacts-differential typefacts-e2e test-typefacts-rs build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-package-rs build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit wasm-parity clean clean-verify
 
 build: build-rust
 
@@ -41,6 +41,7 @@ build-typefacts-rs:
 test-typefacts-rs: build-typefacts
 	cargo +$(RUST_TOOLCHAIN) fmt --manifest-path apps/solid-typefacts-rs/Cargo.toml -- --check
 	TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) clippy --manifest-path apps/solid-typefacts-rs/Cargo.toml --all-targets -- -D warnings
+	TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) clippy --manifest-path apps/solid-typefacts-rs/Cargo.toml --target wasm32-wasip1 --features reactor --lib -- -D warnings
 	TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) test --manifest-path apps/solid-typefacts-rs/Cargo.toml
 
 # Differential harness for the two producers (migration slice S5; see
@@ -93,6 +94,13 @@ package: build-typefacts
 # Cargo builds run one after the other, with the native build's pins.
 build-wasm-package: build-typefacts
 	SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" $(BUN) run --cwd packages/wasm build
+
+# The same package with the Rust producer reactor (migration slice S6) in place
+# of the Go one. Any WASM target takes it the same way:
+#   make wasm-parity SOLID_TYPEFACTS_REACTOR=rust
+# and the packages/wasm tests run on whichever producer owned/ holds.
+build-wasm-package-rs: build-typefacts
+	SOLID_TYPEFACTS_REACTOR=rust SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" $(BUN) run --cwd packages/wasm build
 
 # The WASM parity gate's path-semantics control guests (S3a): a Rust program
 # making raw WASI path calls, and a Go program making os calls. Neither is part

@@ -314,6 +314,9 @@ impl Env<'_> {
         if let Some(resolved) = self.ids.runtime_paths.get(path) {
             return resolved.clone();
         }
+        // wasm32-wasip1 resolves links the same way: std's `canonicalize` is
+        // wasi-libc's `realpath` over `path_readlink` there (pinned by the
+        // symlinked-root case in packages/wasm/test/producer-reactor.test.mjs).
         let resolved = std::fs::canonicalize(path)
             .map_or_else(|_| path.to_owned(), |real| clean(&real.to_string_lossy()));
         self.ids

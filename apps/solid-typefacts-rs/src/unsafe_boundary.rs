@@ -505,3 +505,101 @@ impl Drop for Generation {
         }
     }
 }
+
+/// The wasm32-wasip1 reactor's exports: the Go reactor's ABI
+/// (`apps/solid-typefacts/reactor_wasip1.go`), byte for byte, over
+/// [`crate::reactor::Abi`]. The host loads the module with
+/// `wasi.initialize(instance)` and never calls a `main`.
+///
+/// The only `unsafe` here is the `unsafe(no_mangle)` attribute edition 2024
+/// requires on an exported symbol; the bodies are safe. The state lives in a
+/// thread-local because tsrs state is thread-local and wasm32-wasip1 runs
+/// everything on its one thread.
+#[cfg(all(feature = "reactor", target_arch = "wasm32"))]
+mod reactor_exports {
+    use crate::reactor::{Abi, open_project};
+    use std::cell::RefCell;
+
+    thread_local! {
+        static ABI: RefCell<Abi> = RefCell::new(Abi::new(open_project));
+    }
+
+    fn with<R>(operation: impl FnOnce(&mut Abi) -> R) -> R {
+        // A re-entrant call would be a second exchange on the same reactor;
+        // the host never makes one (it cannot call back into a running
+        // export), and a RefCell panic here aborts the module.
+        ABI.with(|abi| operation(&mut abi.borrow_mut()))
+    }
+
+    // SAFETY: the export names are unique in the module; this is the only
+    // place that defines them.
+    #[unsafe(no_mangle)]
+    pub extern "C" fn allocate_input(size: u32) -> u32 {
+        with(|abi| abi.allocate_input(size))
+    }
+
+    // SAFETY: as above.
+    #[unsafe(no_mangle)]
+    pub extern "C" fn output_pointer() -> u32 {
+        with(|abi| abi.output_pointer())
+    }
+
+    // SAFETY: as above.
+    #[unsafe(no_mangle)]
+    pub extern "C" fn output_length() -> u32 {
+        with(|abi| abi.output_length())
+    }
+
+    // SAFETY: as above.
+    #[unsafe(no_mangle)]
+    pub extern "C" fn typefacts_handshake() -> u32 {
+        with(Abi::handshake)
+    }
+
+    // SAFETY: as above.
+    #[unsafe(no_mangle)]
+    pub extern "C" fn typefacts_open() -> u32 {
+        with(Abi::open)
+    }
+
+    // SAFETY: as above.
+    #[unsafe(no_mangle)]
+    pub extern "C" fn typefacts_lifecycle(handle: u32) -> u32 {
+        with(|abi| abi.lifecycle(handle))
+    }
+
+    // SAFETY: as above.
+    #[unsafe(no_mangle)]
+    pub extern "C" fn typefacts_close(handle: u32) -> u32 {
+        with(|abi| abi.close(handle))
+    }
+}
+
+/// `fd_filestat_set_times` is the one WASI import tsrs's file system pulls in
+/// that the owned boundary does not cover (`owned-boundary.mjs`): wasi-libc
+/// declares it as `__imported_wasi_snapshot_preview1_fd_filestat_set_times`,
+/// and std's `File::set_times` reaches it from tsrs's `chtimes`. `chtimes`
+/// serves build-status files of `tsc --build`; this producer never reaches it,
+/// and a read-only owned mount refuses a write anyway. The module is linked
+/// with `--wrap` on that symbol (packages/wasm/scripts/build-owned.mjs), so the
+/// reference binds to the function below and the module declares no import the
+/// boundary would refuse. It answers `ENOTSUP`, the honest answer for a file
+/// system whose times cannot be set.
+#[cfg(all(feature = "reactor", target_arch = "wasm32"))]
+mod wasi_import_stubs {
+    const ENOTSUP: i32 = 58;
+
+    // SAFETY: the name is the `__wrap_` spelling the linker binds the
+    // reference to; nothing else defines it, and the signature is preview1's
+    // `(fd, atim, mtim, fst_flags) -> errno`.
+    #[allow(dead_code)]
+    #[unsafe(no_mangle)]
+    extern "C" fn __wrap___imported_wasi_snapshot_preview1_fd_filestat_set_times(
+        _fd: i32,
+        _atim: i64,
+        _mtim: i64,
+        _flags: i32,
+    ) -> i32 {
+        ENOTSUP
+    }
+}

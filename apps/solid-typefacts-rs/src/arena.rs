@@ -128,6 +128,15 @@ fn write_at(file: &File, bytes: &[u8], offset: u64) -> io::Result<()> {
     std::os::unix::fs::FileExt::write_all_at(file, bytes, offset)
 }
 
+/// WASI has no stable positional write; the reactor never opens an arena, so
+/// this seek-and-write only keeps the module compiling.
+#[cfg(target_os = "wasi")]
+fn write_at(mut file: &File, bytes: &[u8], offset: u64) -> io::Result<()> {
+    use std::io::{Seek, SeekFrom, Write};
+    file.seek(SeekFrom::Start(offset))?;
+    file.write_all(bytes)
+}
+
 #[cfg(windows)]
 fn write_at(file: &File, mut bytes: &[u8], mut offset: u64) -> io::Result<()> {
     while !bytes.is_empty() {

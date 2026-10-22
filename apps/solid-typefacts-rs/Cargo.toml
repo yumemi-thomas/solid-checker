@@ -34,6 +34,11 @@ path = "src/bin/solid-typefacts-fake.rs"
 # (tsrs frees memory through unsafe calls; see src/unsafe_boundary.rs).
 unsafe_code = "deny"
 
+[features]
+# The wasm32-wasip1 reactor exports (src/unsafe_boundary.rs, `reactor_exports`).
+# Build the module with `scripts/build-typefacts-reactor.sh`.
+reactor = []
+
 [dependencies]
 # Protocol constants, request/response types and the deterministic CBOR codec
 # come from the client crate, so a producer/client mismatch fails to compile.

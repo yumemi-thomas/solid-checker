@@ -26,6 +26,7 @@ pub mod module_graph;
 pub mod nodes;
 pub mod overlay;
 pub mod project;
+pub mod reactor;
 pub mod references;
 pub mod resolved_calls;
 pub mod retained;
