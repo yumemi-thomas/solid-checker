@@ -1471,6 +1471,15 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether the resolved web runtime delegates `event`: its handler is kept
+    /// on the node and run from a container listener, so a dispatch on a
+    /// descendant and one that bubbles reach handlers the program does not
+    /// show. The default says every type is delegated (and so every
+    /// synchronous dispatch is unsupported), which only withholds proofs.
+    fn event_type_is_delegated(&self, _event: &str) -> bool {
+        true
+    }
+
     /// Whether a statically known string/number in a native `on*` JSX
     /// position is emitted as an attribute instead of installed as a listener.
     /// Solid 1.x's compiler makes that node/value distinction; the shared

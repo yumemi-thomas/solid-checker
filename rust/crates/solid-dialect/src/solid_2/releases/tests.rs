@@ -1021,6 +1021,24 @@ fn spread_event_keys_require_web_rc13() {
     assert_eq!(Solid2::CONSERVATIVE.spread_key_is_event("onClick"), None);
 }
 
+/// ADR 0361: `DelegatedEvents` is a per-release answer; a web release whose
+/// source was not read delegates every type.
+#[test]
+fn delegated_event_types_follow_the_read_web_release() {
+    for web in [Release::Read(13), Release::Read(RC17)] {
+        let read = vocabulary_for(Release::Read(RC17), Release::Read(RC17), web);
+        for event in ["click", "keydown", "pointerup", "touchstart", "beforeinput"] {
+            assert!(read.event_type_is_delegated(event), "{event}");
+        }
+        for event in ["scroll", "ping", "change", "focus", "mouseenter", "toggle"] {
+            assert!(!read.event_type_is_delegated(event), "{event}");
+        }
+    }
+    let unread = vocabulary_for(Release::Read(RC17), Release::Read(RC17), Release::Read(9));
+    assert!(unread.event_type_is_delegated("scroll"));
+    assert!(Solid2::CONSERVATIVE.event_type_is_delegated("scroll"));
+}
+
 /// The rc.17 review: `on` + an uppercase letter is a spread listener on web
 /// rc.17, `createOptimistic`'s setter is unguarded and `latest` absorbs a
 /// pending read on signals rc.17, `hydrate` may defer `code` on web rc.17,

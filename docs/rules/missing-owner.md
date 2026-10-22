@@ -77,8 +77,27 @@ proofs are not implemented.
 JSX event placement alone does not prove an ownerless invocation. With a
 visible call selecting the standard-library `EventTarget.dispatchEvent` or
 `HTMLElement.click` declaration, handlers may run on their caller's owned stack
-(ADR 0356). Event-owner proofs then remain uncertifiable across the program,
-including forwarded callbacks. No target-specific dispatch edge is guessed.
+(ADR 0356). A dispatch is joined to its handlers only when it is an
+`EventTarget.dispatchEvent` of an inline non-bubbling, non-composed
+`new Event(T)`/`new CustomEvent(T, init)` with a literal `T` the web release
+does not delegate, on a function-local `const` that is one intrinsic element
+read only through members (ADR 0361). Then only that element's `T` handlers,
+and the handlers of its exact spreads, stay uncertifiable; every other handler
+keeps its ownerless proof. Any other dispatch (`click()`, a bubbling or
+delegated event, a parameter, `ref` or escaping receiver, an element with an
+unresolved spread) keeps event-owner proofs uncertifiable across the program,
+as does a handler no element names (a forwarded prop, a literal nested in a
+handler, a helper flow) while any dispatch exists. So does a dispatch the
+analysis cannot see as a supported call: any other ADR 0329 member that fires
+an event synchronously (`checkValidity()`, `focus()`, `requestSubmit()`, a
+cast `(b as HTMLButtonElement).click()`), a member call on an `any` or
+unresolved receiver spelled like one of them (an exactly resolved project
+method of that spelling is no dispatch), and `dispatchEvent`, `click` or
+`focus` taken as a value (`Reflect.apply(EventTarget.prototype.dispatchEvent,
+…)`, `el.dispatchEvent.call(…)`). No unsupported dispatch edge is guessed.
+An object handler (`onScroll={{ handleEvent, capture: true }}`) can be a
+capture listener and is not a proof site: it is neither joined nor proven
+unowned, and the delivery reasoning above depends on that.
 
 Exact event members (including tuple slot zero) and intrinsic spreads join the
 owner graph through the immutable object-literal census (ADR 0358). On web

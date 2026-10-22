@@ -1,0 +1,3 @@
+{
+  "note": "Precision probe 2026-10-23 (ADR 0361): a supported scroll dispatch on a local intrinsic element reaches only that element's scroll handler. The unrelated click handler runs from the harness with no owner, so its onCleanup is a proven SC4001 violation (NO_OWNER_CLEANUP). Before ADR 0361 any dispatch made every handler uncertifiable. The harness's own events are sent from driver.ts, which is not in the checked program. Counterparts: review-r7-sync-scroll and review-r7-sync-child-scroll, where the handler is reached."
+}
