@@ -7,12 +7,12 @@ import { createEffect, getOwner, runWithOwner } from "solid-js";
 // An absent (null) handler installs no listener: no SC1007.
 export function AbsentHandler() {
   const absent = null;
-  return <button on-foo={absent ?? absent}>x</button>;
+  return <button onFoo-bar={absent ?? absent}>x</button>;
 }
 
 export function AbsentConditionalHandler() {
   const absent = null;
-  return <button on-foo={absent === absent ? absent : absent}>x</button>;
+  return <button onFoo-bar={absent === absent ? absent : absent}>x</button>;
 }
 
 // The component's own owner keeps the effect owned: no SC4001.
@@ -24,7 +24,7 @@ export function ReusedOwner() {
 // Positive controls: the same rules are live in this project.
 export function NumberHandler() {
   const count = 1;
-  return <button on-foo={count}>x</button>;
+  return <button onFoo-bar={count}>x</button>;
 }
 
 export function NullOwner() {

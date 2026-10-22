@@ -31,13 +31,14 @@ rc.9's.
 
 | release, per package | result |
 | --- | --- |
-| `2.0.0-rc.13` (the audited release) | analyzed with rc.9's answers, which the rc.13 review measured to hold on rc.13's bytes, no notice |
+| `2.0.0-rc.17` (the audited release) | analyzed with rc.13's answers except spread listeners (`on` + uppercase), the unguarded `createOptimistic` setter, `latest` absorbing a pending read and `hydrate` possibly deferring `code` (the rc.17 review); a notice only where the project reaches `setLinkClaim`, a new callback-taking export, unless `--rendering csr` is declared (only server rendering runs its handler); its other new callback exports (`createDeferred`, `dynamicComponent`, `dispatchAsInteraction`, `lazyModule`, `onHydrationEnd`) are modelled on the rc.17 triple and named only on a mixed install |
+| `2.0.0-rc.13` | analyzed with rc.13's answers, **this notice**: older than the audited release |
 | `2.0.0-rc.9` | analyzed with rc.9's answers, **this notice**: older than the audited release, and the `solid-js` re-export gap where the project reaches one of its five names (below) |
-| `rc.0`-`rc.3`, which behave as rc.3 on every premise the dialect cites | analyzed with rc.3's answers, **this notice**: older than the audited release, so new rules and precision work are measured on rc.13 only |
+| `rc.0`-`rc.3`, which behave as rc.3 on every premise the dialect cites | analyzed with rc.3's answers, **this notice**: older than the audited release, so new rules and precision work are measured on rc.17 only |
 | `rc.4`-`rc.6` | analyzed, **this notice**: older than the audited release, and `solid-js` re-exports `registerPatch`, `registerRowOps` and `registerSlotPatch`, and `@solidjs/web` exports `installListDriver` and `driveList`, callback-taking exports the vocabulary neither models nor excludes |
 | `rc.7`, `rc.8` | analyzed with rc.9's store answer (a root write type-checks), and on rc.8 rc.9's `FLUSH_IN_ACTION` answer, **this notice**: older than the audited release, and no negative row is granted for their `@solidjs/signals` |
 | `2.0.0-experimental.x` of `solid-js` | refused with [unsupported-solid-runtime](unsupported-solid-runtime.md) |
-| any other version (`rc.10`-`rc.12`, `rc.14` and later, betas, `2.0.0`, an inexact spelling) | analyzed with the conservative answers below, **this notice** naming the package as not compared |
+| any other version (`rc.10`-`rc.12`, `rc.14`-`rc.16`, `rc.18` and later, betas, `2.0.0`, an inexact spelling) | analyzed with the conservative answers below, **this notice** naming the package as not compared |
 | `@solidjs/signals` does not resolve | the conservative answers, **this notice** |
 | `@solidjs/web` does not resolve | no notice: nothing can import `dynamic`, the one answer it owns |
 

@@ -467,7 +467,6 @@ fn each_dialect_knows_its_own_reactive_source_factories() {
     for primitive in [
         Primitive::CreateResource,
         Primitive::CreateMutable,
-        Primitive::CreateDeferred,
         Primitive::CreateSelector,
     ] {
         assert!(
@@ -477,8 +476,12 @@ fn each_dialect_knows_its_own_reactive_source_factories() {
     }
 
     // Returns nothing, so it is not a source however reactive it is.
-    // 2.0-only factories.
-    for primitive in [Primitive::CreateProjection, Primitive::CreateOptimistic] {
+    // 2.0-only factories, and rc.17's `createDeferred` (a memo).
+    for primitive in [
+        Primitive::CreateProjection,
+        Primitive::CreateOptimistic,
+        Primitive::CreateDeferred,
+    ] {
         assert!(two.creates_reactive_source(primitive));
     }
 }

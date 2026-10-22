@@ -97,18 +97,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/handler-placement-open/App.tsx",
-      "start": 2123,
-      "end": 2141,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/handler-placement-open/App.tsx",
-      "start": 2521,
-      "end": 2539,
+      "start": 2603,
+      "end": 2621,
       "fixes": 0
     },
     {
@@ -117,8 +107,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/handler-placement-open/App.tsx",
-      "start": 2929,
-      "end": 2937,
+      "start": 3011,
+      "end": 3019,
       "fixes": 0
     },
     {
@@ -127,8 +117,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/handler-placement-open/App.tsx",
-      "start": 3190,
-      "end": 3212,
+      "start": 3272,
+      "end": 3294,
       "fixes": 0
     },
     {
@@ -137,8 +127,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/handler-placement-open/App.tsx",
-      "start": 3316,
-      "end": 3334,
+      "start": 3398,
+      "end": 3416,
       "fixes": 0
     },
     {
@@ -147,8 +137,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/handler-placement-open/App.tsx",
-      "start": 3317,
-      "end": 3330,
+      "start": 3399,
+      "end": 3412,
       "fixes": 0
     }
   ]

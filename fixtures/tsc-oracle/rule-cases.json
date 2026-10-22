@@ -860,8 +860,8 @@
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
-      "why": "The Solid 2 project has the same TypeScript JSX exemption and native on-prefixed listener lowering. A numeric runtime value is proven not to be either a function or an array-backed bound handler.",
-      "code": "const handler = 1;\nexport const Case = () => <button on-event={handler}>save</button>;\n"
+      "why": "The Solid 2 project has the same TypeScript JSX exemption for hyphenated names, and the compiler lowers `on` + an uppercase letter as a listener. A numeric runtime value is proven not to be either a function or an array-backed bound handler.",
+      "code": "const handler = 1;\nexport const Case = () => <button onCustom-event={handler}>save</button>;\n"
     },
     {
       "rule": "reactive-handler-frozen",
@@ -870,7 +870,7 @@
       "checker": "reports",
       "checkerKind": "uncertifiable",
       "why": "The native listener position is unchecked by TypeScript and its union can be callable or non-callable. Reporting a violation would guess, while silence would certify it, so Solid 2 retains the same explicit obligation.",
-      "code": "declare const handler: (() => void) | number;\nexport const Case = () => <button on-event={handler}>save</button>;\n"
+      "code": "declare const handler: (() => void) | number;\nexport const Case = () => <button onCustom-event={handler}>save</button>;\n"
     },
     {
       "rule": "reactive-handler-frozen",
@@ -878,7 +878,15 @@
       "expect": "silent",
       "checker": "silent",
       "why": "Solid 2 likewise certifies a directly callable handler on the unchecked custom event spelling; only invalid or unresolved runtime shapes are reported.",
-      "code": "const handler = () => {};\nexport const Case = () => <button on-event={handler}>save</button>;\n"
+      "code": "const handler = () => {};\nexport const Case = () => <button onCustom-event={handler}>save</button>;\n"
+    },
+    {
+      "rule": "reactive-handler-frozen",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "silent",
+      "why": "The rc.17 compiler lowers only `on` + an uppercase letter as a listener, so `on-event` is a plain attribute and a number there is no handler at all.",
+      "code": "const handler = 1;\nexport const Case = () => <button on-event={handler}>save</button>;\n"
     },
     {
       "rule": "prefer-for",
@@ -1007,6 +1015,15 @@
       "programBoundary": "closed",
       "why": "ADR 0349: `useContext<T>(context: Context<T>): T` and a default-less `createContext<T>()` type-check in a component body, so TypeScript has no complaint. The read throws ContextNotFoundError because no provider exists in the closed program, a fact about the whole program that tsc cannot see.",
       "code": "import { createContext, useContext } from \"solid-js\";\nconst Ctx = createContext<number>();\nexport function Panel() {\n  const value = useContext(Ctx);\n  return <i>{value}</i>;\n}\n"
+    },
+    {
+      "rule": "compiler-refused-source",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "reports",
+      "checkerKind": "uncertifiable",
+      "why": "TypeScript accepts a <p> nested in a <p>; the pinned rc.17 compiler refuses the malformed HTML, so the file has no compiler facts and the checker can only name it as unanalyzed (SC9015), never claim a defect in it.",
+      "code": "export const Case = () => <p><p>nested</p></p>;\n"
     }
   ]
 }

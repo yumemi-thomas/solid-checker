@@ -25,9 +25,14 @@ pub enum Primitive {
     /// Solid 2.0 makes the context itself the provider.
     CreateContext,
 
+    /// `createDeferred(fn, options?)`: 1.x's deferred memo, and from
+    /// `solid-js@2.0.0-rc.17` 2.0's (from `@solidjs/signals`),
+    /// `accessor(computed(prev => … fn(prev) …))`, a memo whose refetches,
+    /// after its first answer, do not hold its readers.
+    CreateDeferred,
+
     // 1.x only
     CreateComputed,
-    CreateDeferred,
     CreateSelector,
     CreateResource,
     Batch,
@@ -104,6 +109,22 @@ pub enum Primitive {
     /// `new Promise` + `createRoot` + user-`effect` shape as
     /// [`Primitive::Resolve`], resolving on the first truthy value.
     Until,
+    /// `dynamicComponent(source, options?)`, new in `solid-js@2.0.0-rc.17`
+    /// (and re-exported by `@solidjs/web`): `solid-js`'s `dynamicCore` with no
+    /// tag arm, the core `@solidjs/web`'s `dynamic` forwards to with one. A
+    /// name only: [`Dialect::call_form`] maps every call to one of
+    /// [`Primitive::Dynamic`]'s forms, whose source semantics it shares.
+    DynamicComponent,
+    /// `dispatchAsInteraction(event, fn)`, new in `@solidjs/web@2.0.0-rc.17`:
+    /// `fn()` inline, inside the attribution engine's interaction frame in
+    /// dev and observe builds.
+    DispatchAsInteraction,
+    /// `lazyModule(fn, moduleUrl?)`, new in `solid-js@2.0.0-rc.17`: `fn` runs
+    /// once, when the returned function (or its `preload`) is first called.
+    LazyModule,
+    /// `onHydrationEnd(callback)`, exported from `solid-js@2.0.0-rc.17`: the
+    /// callback runs from a microtask, or from the drain at hydration's end.
+    OnHydrationEnd,
 
     // Control flow — component tags
     For,

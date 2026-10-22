@@ -8,12 +8,18 @@ import ts from "typescript";
 // `getObserver` is byte-identical to RC.9's; its `read` adds the post-await
 // read check, the derived-override guard and an earlier strict-read warning,
 // and its `untrack` counts its depth. Neither changes the parameter, the
-// returns, or the body the instrumentation wraps.
+// returns, or the body the instrumentation wraps. RC.17 keeps `read(el)` with
+// ten returns (a `latest`/`isPending` read now leaves through
+// `return verdict(el, c)`), `untrack(fn, label)` gains an external hook inside
+// the wrapped body, and `getObserver` no longer answers `PENDING_OWNER`; the
+// collector never relied on that sentinel.
 export const readerProfiles = {
   "2.0.0-rc.9": { sha256: "sha256:70b88ba97dcb1107878ccc161cd00651b3cff09d7e17aee5443f1cbf9689463e",
     observer: [130767, 130897], reader: [262883, 271299], untrack: [242109, 242584] },
   "2.0.0-rc.13": { sha256: "sha256:c19016529420dcc5d028f6084c6d3fb0633835ea8558cd4dc1b34809a661d074",
-    observer: [156682, 156812], reader: [301718, 311816], untrack: [277947, 278538] }
+    observer: [156682, 156812], reader: [301718, 311816], untrack: [277947, 278538] },
+  "2.0.0-rc.17": { sha256: "sha256:93e01d4ef6ba1ec02daeeb6c378ff8f7baa2ca6ccfc1eff8a2f8f3c767ed0572",
+    observer: [60078, 60140], reader: [238087, 248114], untrack: [230810, 231214] }
 };
 export function instrumentFeedbackReads(text, path, runtimeSpecifier) {
   const sha256 = `sha256:${createHash("sha256").update(text).digest("hex")}`;

@@ -1,0 +1,3 @@
+{
+  "note": "rc.17 dispatchAsInteraction(event, fn): fn() runs inline in the caller's owner and listener; a body write throws REACTIVE_WRITE_IN_OWNED_SCOPE and a body read warns STRICT_READ_UNTRACKED as the bare forms do; controls: a write in an event handler, a read in a memo compute"
+}

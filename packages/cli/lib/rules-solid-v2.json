@@ -35,6 +35,7 @@
     { "code": "SC9005", "name": "package-behavior-unavailable", "severity": "error", "uncertifiable": true, "defaultEnabled": true, "presets": [] },
     { "code": "SC9013", "name": "unsupported-solid-runtime", "severity": "error", "uncertifiable": true, "defaultEnabled": true, "presets": [] },
     { "code": "SC9014", "name": "unaudited-solid-release", "severity": "warning", "uncertifiable": true, "defaultEnabled": true, "presets": [] },
+    { "code": "SC9015", "name": "compiler-refused-source", "severity": "warning", "uncertifiable": true, "defaultEnabled": true, "presets": [] },
     { "code": "SC8003", "name": "jsx-no-duplicate-props", "severity": "error", "uncertifiable": false, "defaultEnabled": true, "presets": [] },
     { "code": "SC8014", "name": "prefer-for", "severity": "error", "uncertifiable": false, "defaultEnabled": true, "presets": ["preferences"] },
     { "code": "SC8015", "name": "prefer-show", "severity": "warning", "uncertifiable": false, "defaultEnabled": true, "presets": ["preferences"] }

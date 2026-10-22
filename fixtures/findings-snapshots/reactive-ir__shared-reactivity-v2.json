@@ -22,6 +22,26 @@
       "fixes": 0
     },
     {
+      "rule": "no-direct-mutation",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
+      "start": 1658,
+      "end": 1668,
+      "fixes": 0
+    },
+    {
+      "rule": "no-direct-mutation",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
+      "start": 2767,
+      "end": 2777,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -37,8 +57,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
-      "start": 3934,
-      "end": 3947,
+      "start": 4009,
+      "end": 4022,
       "fixes": 0
     },
     {
@@ -47,8 +67,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
-      "start": 3990,
-      "end": 4011,
+      "start": 4071,
+      "end": 4092,
       "fixes": 0
     },
     {
@@ -57,8 +77,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
-      "start": 4413,
-      "end": 4425,
+      "start": 4558,
+      "end": 4570,
       "fixes": 0
     },
     {
@@ -67,8 +87,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
-      "start": 4413,
-      "end": 4425,
+      "start": 4558,
+      "end": 4570,
       "fixes": 0
     },
     {
@@ -77,8 +97,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
-      "start": 4769,
-      "end": 4778,
+      "start": 4914,
+      "end": 4923,
       "fixes": 0
     },
     {
@@ -87,18 +107,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
-      "start": 5569,
-      "end": 5579,
-      "fixes": 0
-    },
-    {
-      "rule": "unaudited-solid-release",
-      "code": "SC9014",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/shared-reactivity-v2/node_modules/solid-js/package.json",
-      "start": 0,
-      "end": 0,
+      "start": 5714,
+      "end": 5724,
       "fixes": 0
     }
   ]

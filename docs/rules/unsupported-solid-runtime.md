@@ -77,7 +77,7 @@ the defect, and the checker asserts nothing about it.
 
 Upgrade the project to Solid 2.0, or pin a checker release that still carries
 the 1.x dialect. For `2.0.0-experimental.x`, move to a Solid 2.0 release
-candidate; `2.0.0-rc.13` is the audited one. [ADR 0110](../decisions.md#adr-0110) records
+candidate; `2.0.0-rc.17` is the audited one. [ADR 0110](../decisions.md#adr-0110) records
 why this build carries one dialect, and `docs/rule-catalog-migration.md` maps
 the 1.x rule names onto their 2.0 identities for a project migrating its
 suppressions.

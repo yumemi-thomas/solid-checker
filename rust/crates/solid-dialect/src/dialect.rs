@@ -147,11 +147,20 @@ pub trait Dialect: Sync {
     }
 
     /// Every release variant [`Dialect::review_installation`] can answer
-    /// with, other than the language's own vocabulary. Listed so a variant
-    /// can be found again by its [`Dialect::variant_key`] alone, which is what
-    /// a daemon forwarding the selection it hashed has.
+    /// with, other than the language's own vocabulary: an enumeration for
+    /// tests and audits. A variant is found again by its key with
+    /// [`Dialect::variant_by_key`], which builds nothing.
     fn variants(&self) -> &'static [&'static dyn Dialect] {
         &[]
+    }
+
+    /// The variant whose [`Dialect::variant_key`] is `key`, decoded from the
+    /// key itself rather than looked up among [`Dialect::variants`], so
+    /// resolving an id builds no table of every variant. `None` for a key no
+    /// variant of this language spells.
+    fn variant_by_key(&self, key: &str) -> Option<&'static dyn Dialect> {
+        let _ = key;
+        None
     }
 
     /// The vocabulary a project is analyzed under when no installation of
@@ -453,15 +462,17 @@ pub trait Dialect: Sync {
         false
     }
 
-    /// Whether the callback at `argument` runs during the call, directly
+    /// Whether the callback at `argument`, whenever it runs, runs directly
     /// under a **root** owner the call creates for it, so that the ambient
     /// owner a write guard reads there is that root.
     ///
-    /// A root is a children-capable owner, so a write guard that exempts only
-    /// children-forbidden leaves rejects a write there. Nothing about the
-    /// callback's *reads* follows from this: a root body is untracked. The
-    /// default claims nothing, which leaves such a write to the ordinary
-    /// callback classification.
+    /// *When* it runs is [`Dialect::callback_executions`]'s answer, not this
+    /// one's: rc.17's `hydrate` may run `code` after it returns, under the
+    /// root, and states no execution. A root is a children-capable owner, so a
+    /// write guard that exempts only children-forbidden leaves rejects a write
+    /// there. Nothing about the callback's *reads* follows from this: a root
+    /// body is untracked. The default claims nothing, which leaves such a
+    /// write to the ordinary callback classification.
     fn callback_runs_in_created_root(&self, primitive: Primitive, argument: usize) -> bool {
         let _ = (primitive, argument);
         false
@@ -1444,6 +1455,20 @@ pub trait Dialect: Sync {
     /// provider, so there is no member to name.
     fn context_provider_member(&self) -> Option<&'static str> {
         None
+    }
+
+    /// Whether the setter `createOptimistic` returns meets the owned-scope
+    /// write guard. The default claims no guard, which only withholds writes.
+    fn optimistic_signal_setter_guarded(&self) -> bool {
+        false
+    }
+
+    /// Whether the pinned compiler lowers an un-namespaced attribute of this
+    /// name on an intrinsic element as an event listener. A name it does not
+    /// lower is a plain attribute, never a listener. The default claims no
+    /// listener, which only withholds handler findings.
+    fn compiler_lowers_event_attribute(&self, _name: &str) -> bool {
+        false
     }
 
     /// Whether a statically known string/number in a native `on*` JSX

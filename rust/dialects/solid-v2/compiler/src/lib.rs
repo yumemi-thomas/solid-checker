@@ -26,21 +26,21 @@ const READS_TRACE_VERSION: u32 = 3;
 
 /// Consumer-owned provenance literals. These deliberately do not reuse the
 /// producer constants: otherwise a typo in the producer could certify itself.
-const EXPECTED_COMPILER_UPSTREAM_REVISION: &str = "5efaf260becb32293f2bcb4d32f8be72be6de674";
-const EXPECTED_COMPILER_IMPLEMENTATION_REVISION: &str = "c04c48779812d3d87166da3741c625748458c62f";
-pub const COMPILER_DISTRIBUTION_REVISION: &str = "3ad4bbec37ae30f325a803cdb4271a71c86a2a2d";
+const EXPECTED_COMPILER_UPSTREAM_REVISION: &str = "5b1b777648a89b6e207e8bb78514d5c03420e08b";
+const EXPECTED_COMPILER_IMPLEMENTATION_REVISION: &str = "a4983a7130daa210bfc00f079dce57939fe14502";
+pub const COMPILER_DISTRIBUTION_REVISION: &str = "9f5fff59c2abc4465058d96080771c82dfd91990";
 
 /// Stable cache identity for the exact semantic producer this adapter reads.
 /// Keep this synchronized with the pinned compiler revision and trace
 /// implementation when either changes.
 pub const COMPILER_FACTS_IDENTITY: &str =
-    "solid-v2:trace3:c04c48779812d3d87166da3741c625748458c62f";
+    "solid-v2:trace3:a4983a7130daa210bfc00f079dce57939fe14502";
 
 /// Digest of the exact Git-owned semantic compiler source identity consumed by
 /// this adapter. The independent identity gate recomputes this value from the
 /// upstream, implementation, distribution, trace, and protocol pins.
 pub const COMPILER_SOURCE_MANIFEST_SHA256: &str =
-    "sha256:35f4874f646f9482d0549fdf052f0d37bd02ec47b5c024d5732b6d9796423a9a";
+    "sha256:b5dbbed3d12508b88fae544f1f4c41cc6e70bdda4e6e7ecca28434fd4fe85fdf";
 
 /// A pin move that changes the producer's schema version fails the build here
 /// instead of silently making the runtime refusal below unreachable again. The
@@ -104,8 +104,11 @@ fn analyze_traced(
 ) -> Result<MaterializedCompilation, CompilerProviderError> {
     use solidjs_compiler::compile;
 
+    // ADR 0360: the compiler declining the source is a refusal of this file,
+    // not a producer failure. The trace-off replay and every identity check
+    // below stay `Native` (fatal): they mean the pinned producer misbehaved.
     let traced = compile(&request.source, &compile_options(request, true)?)
-        .map_err(|error| CompilerProviderError::Native(format!("{}: {error}", request.path)))?;
+        .map_err(|error| CompilerProviderError::Refused(format!("{}: {error}", request.path)))?;
     let trace = traced
         .semantic_trace
         .ok_or(CompilerProviderError::MissingExecutionMap)?;

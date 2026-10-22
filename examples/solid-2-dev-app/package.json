@@ -13,8 +13,8 @@
     "lint:failing": "bun run lint -- src/cases/*.tsx src/showcase/*.tsx src/BadAsync.tsx"
   },
   "dependencies": {
-    "@solidjs/web": "2.0.0-rc.0",
-    "solid-js": "2.0.0-rc.0"
+    "@solidjs/web": "2.0.0-rc.17",
+    "solid-js": "2.0.0-rc.17"
   },
   "devDependencies": {
     "oxlint": "1.67.0",

@@ -242,3 +242,20 @@ fn component_child_creation_keeps_its_deferred_body_projection() {
     );
     assert!(facts.untracked_regions.is_empty());
 }
+
+/// ADR 0360: a refused map validates, says it is withheld, keeps the message,
+/// round-trips through JSON, and cannot claim a complete census.
+#[test]
+fn a_refused_map_is_withheld_and_claims_no_census() {
+    let source = "const view = <p><p /></p>;";
+    let map = ExecutionMap::refused(SourceHash::of(source), "App.tsx: malformed (1:14)");
+    map.validate(source).expect("a refused map is a valid map");
+    assert!(map.withheld());
+    assert_eq!(map.refusal(), Some("App.tsx: malformed (1:14)"));
+    assert!(!ExecutionMap::inert(SourceHash::of(source)).withheld());
+    let decoded = ExecutionMap::from_json(&serde_json::to_string(&map).unwrap(), source).unwrap();
+    assert_eq!(decoded, map);
+    let mut complete = map;
+    complete.semantic_model.source_operations_complete = true;
+    assert!(complete.validate(source).is_err());
+}

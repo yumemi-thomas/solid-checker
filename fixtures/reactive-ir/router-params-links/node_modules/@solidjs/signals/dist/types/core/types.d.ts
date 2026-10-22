@@ -1,0 +1,231 @@
+import type { NOT_PENDING } from "./constants.js";
+import type { OptimisticLane } from "./lanes.js";
+import type { IQueue, Transition } from "./scheduler.js";
+export interface Disposable {
+    (): void;
+}
+export interface Link {
+    _dep: Signal<unknown> | Computed<unknown>;
+    _sub: Computed<unknown>;
+    _nextDep: Link | null;
+    _prevSub: Link | null;
+    _nextSub: Link | null;
+    /**
+     * `_sub._depGen` at the time this link was created or last revalidated
+     * in-order. A link stamped with the subscriber's current pass generation is
+     * inside the validated `[deps.._depsTail]` prefix — an O(1) replacement for
+     * scanning the dep list to answer membership (see `link()`).
+     */
+    _gen: number;
+    _pendingObserver?: boolean;
+}
+export interface NodeOptions<T> {
+    id?: string;
+    name?: string;
+    transparent?: boolean;
+    equals?: ((prev: T, next: T) => boolean) | false;
+    ownedWrite?: boolean;
+    /** Exclude this signal from snapshot capture (internal — not part of public API) */
+    _noSnapshot?: boolean;
+    /** Extra CONFIG_* bits OR'd into the node's config at creation (internal —
+     * not part of public API). Used by resolve()/until() for
+     * CONFIG_DIRECT_COMMIT / CONFIG_AUTHORITATIVE_READ, keeping the per-flag
+     * option arms out of the core creation path. */
+    _extraConfig?: number;
+    /** Observe tiers: framework plumbing — no name, no owner-path segment, no
+     * attribution records of its own; its children stay observed (internal —
+     * not part of public API; see CONFIG_PLUMBING). */
+    _plumbing?: boolean;
+    unobserved?: () => void;
+    lazy?: boolean;
+    sync?: boolean;
+    /**
+     * Commit #0. When present (checked with `in`, so an explicit `undefined`
+     * counts), the node is born committed with this value instead of
+     * STATUS_UNINITIALIZED: reads serve it everywhere, nothing suspends to
+     * Loading boundaries, transitions are never held, and the window is
+     * verdict-quiet (`isPending` stays false — commit #0 answers the question
+     * by declaration; first-load affordances live in the value itself). After
+     * the first real answer lands, normal refetch/pending semantics apply.
+     */
+    loadingValue?: T;
+}
+/**
+ * Cold node extension (stage-3 §12): optional machinery that most nodes
+ * never touch lives one hop away so the CORE node literal stays under V8's
+ * in-object property boundary (~39 fields measured: past it, every literal
+ * allocation spills to an out-of-object backing store and creation cost
+ * roughly quadruples — the create0to1 cliff). Allocated lazily by `ext()`
+ * on first installer write; ONE shape shared by signals and computeds so
+ * `_x` access stays monomorphic. Presence bits on `_config`
+ * (CONFIG_OPTIMISTIC / HAS_COMPANIONS / HAS_LANE / HAS_SNAPSHOT) remain the
+ * hot-path gates — a bit says "consult _x", never the reverse.
+ */
+export interface NodeExtension {
+    _overrideValue: unknown | typeof NOT_PENDING;
+    /**
+     * The transaction that owns the active override (stamped at optimistic
+     * write, cleared at settle). Ownership must live on the node: a lane's
+     * _transition is a scheduling affinity that a shared subscriber can merge
+     * across transactions (#2912) — following it would let one action's settle
+     * revert another action's live override. Node-level sibling of the store
+     * layer's STORE_OPTIMISTIC_OWNERS stamps (#2899). `null` = ambient write.
+     */
+    _overrideOwner: Transition | null | undefined;
+    /** `clock` at the active override's write. A sync recompute in the same
+     * tick derives from inputs that predate the override and does not
+     * supersede it (A18 supersession ordering, #3331). */
+    _overrideTime: number;
+    /** A28: the staged value the last flush left on a HELD node that has since
+     * been rewritten (latest() keeps answering with it); NOT_PENDING otherwise. */
+    _flushedStaged: unknown;
+    /** Provenance of the active override's write: the scheduler's `origin` (the
+     * asking action's invocation sequence; 0 = mainline). An arriving answer
+     * whose flight an older action issued asked a question the override has
+     * since changed: it holds to commit instead of superseding (A18
+     * supersession provenance, #3331). */
+    _overrideStamp: number;
+    _optimisticLane: OptimisticLane | undefined;
+    _pendingSignal: Signal<boolean> | undefined;
+    _latestValueComputed: Computed<any> | undefined;
+    _parentSource: Signal<any> | Computed<any> | undefined;
+    /**
+     * Live `affects()` marks on this node (refcount). Non-zero is declared
+     * motion — see affects(); the count is the mark's only graph state.
+     */
+    _affectsCount: number;
+    _inFlight: PromiseLike<any> | AsyncIterable<any> | null;
+    /** Cancellation for the CURRENT iterator flight (#3122): closes the
+     * iterator (`it.return()`), idempotent. Fired at the sites that release
+     * `_inFlight` so a superseded stream stops at supersede time — its owner
+     * cleanup registration may ride the zombie-disposal channel, which a held
+     * transition defers until the SUPERSEDING flight settles. Null for plain
+     * promise flights (no cancellation hook exists). */
+    _flightTeardown: (() => void) | null;
+    _error: unknown;
+    _blocked: boolean | undefined;
+    _pendingSources: Set<Computed<any>> | undefined;
+    _notifyStatus: ((status?: number, error?: any) => void) | undefined;
+    /** Question-scoped re-ask classification of the current pending window
+     * (see the former Computed._x?._reask doc): set by recompute from
+     * REACTIVE_REASK, cleared on landing; meaningless while not pending. */
+    _reask: boolean;
+    _child: FirewallSignal<any> | null;
+    _unobserved: (() => void) | undefined;
+    _snapshotValue: any;
+    /** Zombie staging (staged disposal): a recompute of an owner that HAS
+     * children/disposal parks them here until the flush commits (or a
+     * transition reverts). Childless nodes — the common case — never write
+     * these. */
+    _pendingDisposal: Disposable | Disposable[] | null;
+    _pendingFirstChild: Owner | null;
+    /** #3038: the firewall children that actually carry isPending()/latest()
+     * companions. The post-recompute companion snap iterates THIS set —
+     * O(companions asked for) — never the full `_child` chain (one entry per
+     * materialized leaf). Populated at companion creation; entries live as
+     * long as their companions (which are permanent once created). */
+    _companionChildren: Set<FirewallSignal<any>> | undefined;
+}
+export interface RawSignal<T> {
+    _subs: Link | null;
+    _subsTail: Link | null;
+    _value: T;
+    /**
+     * Observe-tier label (`name` option, or the node kind: `signal`,
+     * `computed`, `effect`…). A slot in the observe/dev literals — never a
+     * post-construction write — and absent from the prod literals entirely.
+     */
+    _name?: string;
+    /**
+     * Observe-tier: the owner in scope when a user-facing signal was created
+     * (`registerGraph`), so diagnostics about the signal get an owner path.
+     * A slot in the observe/dev `signal()` literal; absent from prod.
+     */
+    _owner?: Owner | null;
+    _equals: false | ((a: T, b: T) => boolean);
+    _config: number;
+    _time: number;
+    /** IN CORE, not the extension (stage-3 §12c): consulted on EVERY write
+     * (setSignal's transition-init check) and on recompute scheduling — the
+     * per-write extension chase measurably taxed propagation chains. */
+    _transition: Transition | null;
+    /** Notify-epoch stamp of the last subscriber walk (§12d). A re-write to an
+     * already-staged node whose stamp still equals the global epoch skips the
+     * whole walk — marking is idempotent, and the epoch bumps on every
+     * recompute and new subscriber edge (either can invalidate the skip). */
+    _notifiedAt: number;
+    _pendingValue: T | typeof NOT_PENDING;
+    /** Cold extension — see NodeExtension. */
+    _x: NodeExtension | null;
+}
+export interface FirewallSignal<T> extends RawSignal<T> {
+    _firewall: Computed<any>;
+    /** Doubly-linked child chain on the firewall's extension (`_x._child` is
+     * the head): released leaves unlink in O(1) (#3351). */
+    _nextChild: FirewallSignal<unknown> | null;
+    _prevChild: FirewallSignal<unknown> | null;
+}
+export type Signal<T> = RawSignal<T> | FirewallSignal<T>;
+export interface Owner {
+    id?: string;
+    _config: number;
+    _snapshotScope?: boolean;
+    /** Effect-returned cleanup; managed across reruns, invoked at true disposal */
+    _cleanup?: () => void;
+    _disposal: Disposable | Disposable[] | null;
+    _parent: Owner | null;
+    _context: Record<symbol | string, unknown>;
+    _childCount: number;
+    _queue: IQueue;
+    _firstChild: Owner | null;
+    _nextSibling: Owner | null;
+    _prevSibling: Owner | null;
+    /** Cold extension — see NodeExtension (owners use the zombie-pair slots). */
+    _x: NodeExtension | null;
+    /**
+     * Observe-tier label: the `name` option, the node kind (`computed`,
+     * `effect`…), or the component label the rendering layer writes on a root
+     * (`<App>`). A slot in the observe/dev literals; absent from prod.
+     */
+    _name?: string;
+}
+export interface Computed<T> extends RawSignal<T>, Owner {
+    _deps: Link | null;
+    _depsTail: Link | null;
+    /** Recompute-pass counter; bumped when dep revalidation starts. */
+    _depGen: number;
+    _flags: number;
+    _statusFlags: number;
+    _height: number;
+    _nextHeap: Computed<any> | undefined;
+    _prevHeap: Computed<any>;
+    _fn: (prev?: T) => T;
+    /**
+     * Clock tick at which REACTIVE_MANUAL_WRITE was last applied
+     * (`suppressComputedRecompute`). Lets `refresh()` distinguish a same-tick
+     * manual write (which wins over the refresh, #2692) from a mask carried
+     * across ticks by a transaction (which an explicit refresh lifts, #3026).
+     * Only meaningful while REACTIVE_MANUAL_WRITE is set.
+     */
+    _manualWriteTime?: number;
+    /**
+     * True while a `loadingValue` node's first real answer hasn't landed: the
+     * node was born committed (commit #0 = the loading value) and `handleAsync`
+     * serves that committed value instead of throwing NotReadyError, so first
+     * flights never suspend readers, trip boundaries, or hold transitions.
+     * The window is verdict-quiet: `isPending` stays false, because commit #0
+     * answers the question by declaration (first-load affordances belong to
+     * the value channel). Cleared by the first value landing on any path (sync
+     * return, sync-resolved promise, first iterator yield, async settle); a
+     * real error leaves it set — errors answer reads but don't enter the value
+     * lineage, so a retry serves the loading value again. Once cleared, normal
+     * pending/refetch semantics apply forever. (Stays in CORE: written
+     * unconditionally by recompute and every commit.)
+     */
+    _loading: boolean;
+}
+export interface Root extends Owner {
+    _root: true;
+    _parentComputed: Computed<any> | null;
+    dispose(self?: boolean): void;
+}

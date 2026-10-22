@@ -344,7 +344,7 @@ fn discover_reachability_file(
                 }
             }
             // A same-file function passed *by name* where the call runs it
-            // inline, under the caller's owner (`untrack`, `flush`) or under a
+            // inline under the caller's owner (`untrack`, `flush`), or under a
             // root it creates (`createRoot`): `createRoot(init)` runs `init`
             // exactly as `createRoot(() => …)` runs its arrow. Resolved by the
             // argument's symbol against each function's own binding, so an
@@ -353,15 +353,17 @@ fn discover_reachability_file(
             // scope rules judge at the call (`named_callback_write_role`).
             if let Some(primitive) = primitive {
                 for (index, argument) in call.arguments.iter().enumerate() {
-                    if argument.value != solid_facts::ast::ArgumentValueKind::Identifier
-                        || !(lookup
+                    // A root body is reached whenever it runs, inline or not
+                    // (rc.17 `hydrate`'s `code` may run after the call).
+                    let reached = lookup
+                        .dialect
+                        .callback_runs_in_created_root(primitive, index)
+                        || (lookup
                             .dialect
-                            .callback_runs_in_created_root(primitive, index)
-                            || lookup
-                                .dialect
-                                .callback_preserves_owner_write_context(primitive))
-                        || callback_execution_at_call(file, call, primitive, index, lookup)
-                            != Some(solid_dialect::Execution::Inline)
+                            .callback_preserves_owner_write_context(primitive)
+                            && callback_execution_at_call(file, call, primitive, index, lookup)
+                                == Some(solid_dialect::Execution::Inline));
+                    if argument.value != solid_facts::ast::ArgumentValueKind::Identifier || !reached
                     {
                         continue;
                     }

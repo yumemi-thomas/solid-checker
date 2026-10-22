@@ -2,16 +2,6 @@
   "status": "uncertifiable",
   "findings": [
     {
-      "rule": "unaudited-solid-release",
-      "code": "SC9014",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/route-config/node_modules/solid-js/package.json",
-      "start": 0,
-      "end": 0,
-      "fixes": 0
-    },
-    {
       "rule": "package-behavior-unavailable",
       "code": "SC9005",
       "kind": "uncertifiable",

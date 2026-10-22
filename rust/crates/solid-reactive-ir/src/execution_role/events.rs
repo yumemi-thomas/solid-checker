@@ -649,7 +649,8 @@ pub(super) fn spread_reaches_only_events(
     visiting: &mut HashSet<(String, Span, String)>,
 ) -> bool {
     if intrinsic_element(file, element) {
-        return prop.starts_with("on") && !prop.contains(':');
+        // The runtime's spread decides (ADR 0358); unaudited proves nothing.
+        return lookup.dialect.spread_key_is_event(prop) == Some(true);
     }
     component_prop_reaches_only_events(file, element, prop, views, lookup, visiting)
 }
@@ -671,8 +672,7 @@ pub(super) fn component_prop_reaches_only_events(
     // prop's value on this element is proven a string literal.
     if let Some(tag) = lookup.intrinsic_tag_prop(file, element.name.span) {
         return prop != tag
-            && prop.starts_with("on")
-            && !prop.contains(':')
+            && lookup.dialect.spread_key_is_event(prop) == Some(true)
             && element_prop_is_string(file, element, tag, views);
     }
     if let Some((next_file, next_function)) =

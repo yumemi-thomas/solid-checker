@@ -47,7 +47,9 @@ callback written inside it that runs with no owner on every run -- a
 inside a `createRoot` callback is the same proven violation it is inside a
 component, and an `onSettled` there is out-of-band. A root created inside such
 a callback, or a compiled JSX child, which the render effect the compiler
-generates for it owns, answers for what it contains.
+generates for it owns, answers for what it contains. On rc.17 dev a root,
+memo or effect created directly in an effect apply throws
+`PRIMITIVE_IN_EFFECT_CALLBACK` before it runs; no rule claims that throw yet.
 
 A callback handed directly to a host scheduler that runs it from a task or
 microtask queue -- `setTimeout`, `setInterval`, `queueMicrotask`,
@@ -79,9 +81,10 @@ visible call selecting the standard-library `EventTarget.dispatchEvent` or
 including forwarded callbacks. No target-specific dispatch edge is guessed.
 
 Exact event members (including tuple slot zero) and intrinsic spreads join the
-owner graph through the immutable object-literal census (ADR 0358). On audited
-web rc.13, spread keys beginning with `on` and containing no colon install
-listeners, including lowercase keys. Unknown holders, getters, generators and
+owner graph through the immutable object-literal census (ADR 0358). On web
+rc.13, spread keys beginning with `on` and containing no colon install
+listeners, including lowercase keys; on the audited rc.17 only `on` followed by
+an uppercase letter does, and `onclick` is an attribute. Unknown holders, getters, generators and
 unaudited web spread keys retain internal obligations. These placements obey
 the synchronous-dispatch veto above; no unresolved target proves a violation.
 

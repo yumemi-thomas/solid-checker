@@ -1447,6 +1447,20 @@ impl LocalAccessContext<'_, '_> {
             {
                 write_execution = ExecutionRole::UntrackedCallback;
             }
+            // The same for a signal setter where `createOptimistic`'s setter
+            // meets no owned-scope guard (rc.17's `optimisticWrite`): only a
+            // setter proven to be `createSignal`'s is reported.
+            if write_execution.reports_disallowed_write()
+                && *source_kind == ReactiveSourceKind::Accessor
+                && !self.lookup.dialect.optimistic_signal_setter_guarded()
+                && self
+                    .source_primitives
+                    .get(symbol)
+                    .and_then(|primitive| self.lookup.dialect.primitive(primitive))
+                    != Some(solid_dialect::Primitive::CreateSignal)
+            {
+                write_execution = ExecutionRole::UntrackedCallback;
+            }
             for _ in 0..multiplicity {
                 result.writes.push(Arc::new(ReactiveWrite {
                     setter: name.to_string().into(),

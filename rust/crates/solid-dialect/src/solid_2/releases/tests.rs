@@ -156,8 +156,8 @@ fn every_reviewed_triple_answers_as_the_reviews_measured() {
             true,
             2,
         ),
-        // The audited release: rc.9's answers (the rc.13 review § 0), no
-        // gap.
+        // rc.9's answers (the rc.13 review § 0), older than the audited
+        // release.
         (
             "2.0.0-rc.13",
             StoreRootTyping::Mutable,
@@ -166,7 +166,19 @@ fn every_reviewed_triple_answers_as_the_reviews_measured() {
             DynamicOptions::StaticForm,
             StoreSetterRootGuard::Guarded,
             true,
-            0,
+            1,
+        ),
+        // The audited release: these answers are rc.13's (the rc.17
+        // review); its one gap is scoped to `setLinkClaim`.
+        (
+            "2.0.0-rc.17",
+            StoreRootTyping::Mutable,
+            true,
+            true,
+            DynamicOptions::StaticForm,
+            StoreSetterRootGuard::Guarded,
+            true,
+            1,
         ),
     ];
     for (
@@ -206,6 +218,10 @@ fn every_reviewed_triple_answers_as_the_reviews_measured() {
     assert_eq!(analyzed(&same("2.0.0-rc.9")).0.index(), Solid2::RC9.index());
     assert_eq!(
         analyzed(&same("2.0.0-rc.13")).0.index(),
+        Solid2::RC13.index()
+    );
+    assert_eq!(
+        analyzed(&same("2.0.0-rc.17")).0.index(),
         Solid2::AUDITED.index()
     );
     // rc.10 and rc.11 were published and never read: the conservative
@@ -528,7 +544,12 @@ fn the_optimistic_store_setter_guard_follows_the_resolved_signals() {
     assert!(!rc0.optimistic_store_setter_guarded());
     assert!(rc0.store_setter_guard_exempts_roots());
     assert_eq!(rc0.store_setter_roots, StoreSetterRootGuard::Exempt);
-    assert_eq!(rc0.key(), Some("optimistic-store-setter-unguarded"));
+    assert_eq!(
+        rc0.key(),
+        Some(
+            "optimistic-store-setter-unguarded+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline"
+        )
+    );
     assert!(Solid2::RC3.optimistic_store_setter_guarded());
     assert!(Solid2::RC9.optimistic_store_setter_guarded());
     // Rows rc.1-rc.3 still share rc.3's vocabulary.
@@ -605,7 +626,16 @@ fn an_unknown_or_missing_owner_takes_the_conservative_answers() {
     // the rc.3 pair beside it keeps its reviewed answers and only the
     // older-release gap.
     let (vocabulary, gaps) = analyzed(&triple(Some("2.0.0-rc.3"), Some("2.0.0-rc.3"), None));
-    assert_eq!(vocabulary.index(), Solid2::RC3.index());
+    // Only the web-owned `hydrate` answer differs from rc.3's: nothing
+    // imports it, and the unresolved owner keeps the conservative one.
+    assert_eq!(
+        vocabulary.index(),
+        Solid2 {
+            hydrate_code_inline: false,
+            ..Solid2::RC3
+        }
+        .index()
+    );
     assert_eq!(gaps.len(), 1, "{gaps:?}");
     assert!(
         gaps[0].gap.contains("older than the audited release"),
@@ -680,12 +710,26 @@ fn every_variant_has_its_own_key() {
             vocabulary.key()
         );
         assert_eq!(vocabulary.key().is_none(), index == 0);
+        // The key decodes back to the same interned vocabulary.
+        if let Some(key) = vocabulary.key() {
+            let decoded = Solid2::of_key(key).expect("every key decodes");
+            assert!(std::ptr::eq(decoded, vocabulary), "{key}");
+        }
+    }
+    for malformed in [
+        "",
+        "until+until",
+        "omit-predicate+store-root-mutable",
+        "nope",
+        "until+",
+    ] {
+        assert!(Solid2::of_key(malformed).is_none(), "{malformed:?}");
     }
     assert_eq!(OTHER_VARIANTS.len(), Solid2::VARIANT_COUNT - 1);
     assert_eq!(
         Solid2::RC9.key(),
         Some(
-            "store-root-mutable+omit-predicate+until+flush-in-action+flush-in-effect-callback+dynamic-static+store-setter-guards-roots"
+            "store-root-mutable+omit-predicate+until+flush-in-action+flush-in-effect-callback+dynamic-static+store-setter-guards-roots+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline"
         )
     );
 }
@@ -755,7 +799,12 @@ fn the_conservative_answers_do_not_depend_on_the_audited_release() {
     // installation whose signals nobody read does not, so its id carries that
     // answer (ADR 0341).
     assert_eq!(conservative.key(), None);
-    assert_eq!(Solid2::RC3.key(), Some("flush-in-effect-callback"));
+    assert_eq!(
+        Solid2::RC3.key(),
+        Some(
+            "flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline"
+        )
+    );
     assert!(Solid2::RC9.key().is_some());
 }
 
@@ -857,7 +906,26 @@ fn the_trait_answers_from_the_variant() {
     }
     for gated in super::super::RELEASE_GATED_NAMES {
         assert_eq!(Solid2::RC3.primitive(gated), None, "{gated}");
-        assert!(Solid2::RC9.primitive(gated).is_some(), "{gated}");
+        assert!(Solid2::RC17.primitive(gated).is_some(), "{gated}");
+    }
+    assert!(Solid2::RC9.primitive("until").is_some());
+    // New in rc.17 (the rc.17 review): no earlier vocabulary has them.
+    for name in [
+        "dynamicComponent",
+        "dispatchAsInteraction",
+        "createDeferred",
+        "lazyModule",
+        "onHydrationEnd",
+    ] {
+        for vocabulary in [Solid2::RC9, Solid2::RC13] {
+            assert_eq!(vocabulary.primitive(name), None, "{name}");
+            assert!(
+                vocabulary
+                    .export_modules(name, crate::ExportPosition::Value)
+                    .is_empty(),
+                "{name}"
+            );
+        }
     }
     let expected = Solid2::RC9.interned() as *const Solid2;
     for vocabulary in &VARIANTS {
@@ -924,6 +992,7 @@ fn only_the_rc9_re_export_gap_is_scoped_to_the_names_it_loses() {
 fn every_review_names_a_document_that_exists() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     for document in [
+        RC17_REVIEW,
         RC13_REVIEW,
         RC9_REVIEW,
         RC1_RC8_REVIEW,
@@ -950,4 +1019,149 @@ fn spread_event_keys_require_web_rc13() {
     let older_web = vocabulary_for(Release::Read(13), Release::Read(13), Release::Read(9));
     assert_eq!(older_web.spread_key_is_event("onClick"), None);
     assert_eq!(Solid2::CONSERVATIVE.spread_key_is_event("onClick"), None);
+}
+
+/// The rc.17 review: `on` + an uppercase letter is a spread listener on web
+/// rc.17, `createOptimistic`'s setter is unguarded and `latest` absorbs a
+/// pending read on signals rc.17, `hydrate` may defer `code` on web rc.17,
+/// and `dynamic`'s static form needs `solid-js` rc.17 under web rc.17.
+#[test]
+fn rc17_answers_follow_their_owners() {
+    let audited = analyzed(&same("2.0.0-rc.17")).0;
+    for key in ["onClick", "onPointerDown"] {
+        assert_eq!(audited.spread_key_is_event(key), Some(true), "{key}");
+    }
+    for key in ["onclick", "on", "on-foo", "on:click", "title"] {
+        assert_eq!(audited.spread_key_is_event(key), Some(false), "{key}");
+    }
+    assert!(!audited.optimistic_signal_setter_guarded());
+    assert!(Solid2::RC13.optimistic_signal_setter_guarded());
+    assert!(audited.callback_handles_pending_accessor_read(Primitive::Latest, 0));
+    assert!(!Solid2::RC13.callback_handles_pending_accessor_read(Primitive::Latest, 0));
+    assert!(audited.callback_handles_pending_accessor_read(Primitive::IsPending, 0));
+    assert!(audited.callback_executions(Primitive::Hydrate).is_empty());
+    assert!(
+        !Solid2::RC13
+            .callback_executions(Primitive::Hydrate)
+            .is_empty()
+    );
+    assert!(!audited.callback_executions(Primitive::Render).is_empty());
+    assert!(audited.callback_runs_in_created_root(Primitive::Hydrate, 0));
+    assert!(audited.lazy_renders_component && audited.store_strict_keys_audited);
+    assert_eq!(audited.dynamic_options, DynamicOptions::StaticForm);
+    assert_eq!(
+        vocabulary_for(Release::Read(13), Release::Read(13), Release::Read(17)).dynamic_options,
+        DynamicOptions::Unread
+    );
+    // An unread signals claims neither guard nor rejection.
+    let unread = analyzed(&same("2.0.0-rc.16")).0;
+    assert!(!unread.optimistic_signal_setter_guarded());
+    assert!(unread.callback_handles_pending_accessor_read(Primitive::Latest, 0));
+}
+
+/// The rc.17 review's new callback-taking exports: `dynamicComponent`,
+/// `dispatchAsInteraction`, `createDeferred`, `lazyModule` and
+/// `onHydrationEnd` are modelled on the rc.17 triple, and stay a scoped gap
+/// on any other installation that has them; `setLinkClaim` stays a gap
+/// everywhere.
+#[test]
+fn rc17_callback_exports_are_modelled_only_on_the_rc17_triple() {
+    let (audited, gaps) = analyzed(&same("2.0.0-rc.17"));
+    assert!(audited.rc17_callback_exports);
+    let scoped = |gaps: &[InstallationGap]| {
+        let mut names = gaps
+            .iter()
+            .filter_map(|gap| gap.scope.map(|scope| (scope.specifier, scope.exports)))
+            .flat_map(|(specifier, exports)| exports.iter().map(move |name| (specifier, *name)))
+            .collect::<Vec<_>>();
+        names.sort_unstable();
+        names
+    };
+    assert_eq!(scoped(&gaps), [(WEB, "setLinkClaim")]);
+    // Only `setLinkClaim`'s handler is server-rendering-only (`dist/server.js:3508-3512`);
+    // declared CSR closes that gap and no other.
+    for gap in &gaps {
+        let scope = gap.scope.expect("every rc.17 gap is scoped");
+        assert_eq!(
+            scope.server_rendering_only,
+            scope.exports == ["setLinkClaim"],
+            "{gap:?}"
+        );
+    }
+    for gap in &gaps {
+        for name in [
+            "dynamicComponent",
+            "dispatchAsInteraction",
+            "createDeferred",
+            "lazyModule",
+            "onHydrationEnd",
+        ] {
+            assert!(!gap.gap.contains(name), "{gap:?}");
+        }
+    }
+    // A mixed rc.17 installation keeps both unread and names them.
+    for installed in [
+        triple(
+            Some("2.0.0-rc.17"),
+            Some("2.0.0-rc.13"),
+            Some("2.0.0-rc.17"),
+        ),
+        triple(
+            Some("2.0.0-rc.17"),
+            Some("2.0.0-rc.17"),
+            Some("2.0.0-rc.13"),
+        ),
+    ] {
+        let (vocabulary, gaps) = analyzed(&installed);
+        assert!(!vocabulary.rc17_callback_exports, "{installed:?}");
+        assert_eq!(vocabulary.primitive("dynamicComponent"), None);
+        assert_eq!(vocabulary.primitive("dispatchAsInteraction"), None);
+        for name in [
+            "createDeferred",
+            "dynamicComponent",
+            "lazyModule",
+            "onHydrationEnd",
+        ] {
+            assert_eq!(vocabulary.primitive(name), None, "{name}");
+            assert!(
+                scoped(&gaps).contains(&(SOLID_JS, name)),
+                "{installed:?} {name}"
+            );
+        }
+    }
+    let (_, gaps) = analyzed(&triple(
+        Some("2.0.0-rc.17"),
+        Some("2.0.0-rc.13"),
+        Some("2.0.0-rc.17"),
+    ));
+    assert!(scoped(&gaps).contains(&(WEB, "dispatchAsInteraction")));
+    assert!(scoped(&gaps).contains(&(WEB, "dynamicComponent")));
+    // Both names resolve, from the modules that export them.
+    assert_eq!(
+        audited.primitive("dynamicComponent"),
+        Some(Primitive::DynamicComponent)
+    );
+    assert_eq!(
+        audited.export_modules("dynamicComponent", crate::ExportPosition::Value),
+        ["solid-js", "@solidjs/web"]
+    );
+    assert_eq!(
+        audited.export_modules("dispatchAsInteraction", crate::ExportPosition::Value),
+        ["@solidjs/web"]
+    );
+    for (name, primitive) in [
+        ("createDeferred", Primitive::CreateDeferred),
+        ("lazyModule", Primitive::LazyModule),
+        ("onHydrationEnd", Primitive::OnHydrationEnd),
+    ] {
+        assert_eq!(audited.primitive(name), Some(primitive), "{name}");
+        assert_eq!(audited.name_of(primitive), Some(name));
+        assert_eq!(Solid2::RC13.name_of(primitive), None);
+        assert_eq!(
+            audited.export_modules(name, crate::ExportPosition::Value),
+            ["solid-js"],
+            "{name}"
+        );
+    }
+    assert_eq!(audited.primitive("setLinkClaim"), None);
 }

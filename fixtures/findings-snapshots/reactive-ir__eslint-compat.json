@@ -7,28 +7,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 2482,
-      "end": 2498,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-handler-frozen",
-      "code": "SC1007",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 3924,
-      "end": 3928,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-handler-frozen",
-      "code": "SC1007",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 3938,
-      "end": 3942,
+      "start": 2117,
+      "end": 2133,
       "fixes": 0
     },
     {
@@ -37,8 +17,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 4872,
-      "end": 4900,
+      "start": 4507,
+      "end": 4535,
       "fixes": 0
     },
     {
@@ -47,8 +27,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 4990,
-      "end": 5027,
+      "start": 4625,
+      "end": 4662,
       "fixes": 0
     },
     {
@@ -57,38 +37,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 7203,
-      "end": 7207,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-handler-frozen",
-      "code": "SC1007",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 8645,
-      "end": 8647,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-handler-frozen",
-      "code": "SC1007",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 8657,
-      "end": 8659,
-      "fixes": 0
-    },
-    {
-      "rule": "unaudited-solid-release",
-      "code": "SC9014",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/eslint-compat/node_modules/solid-js/package.json",
-      "start": 0,
-      "end": 0,
+      "start": 6838,
+      "end": 6842,
       "fixes": 0
     }
   ]

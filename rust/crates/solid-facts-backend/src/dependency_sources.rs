@@ -48,6 +48,10 @@ const SOLID_VITE_PLUGINS: &[&str] = &["@solidjs/vite-plugin", "vite-plugin-solid
 const SOLID_VITE_FRAMEWORKS: &[&str] = &["@solidjs/start"];
 const MAX_CLOSURE_FILES: usize = 4000;
 
+/// The dialect compiler's refusal message for one closure file, `None` when
+/// it accepts it (ADR 0360).
+pub type CompilerRefusal<'a> = &'a dyn Fn(&Path, &str) -> Option<String>;
+
 /// Review round 1 of ADR 0297: the manifest of the Solid Vite plugin that
 /// establishes this module's resolver premise for `project` (a tsconfig).
 /// That is the nearest `node_modules/<plugin>/package.json` above the
@@ -347,6 +351,7 @@ pub fn prepare_program(
     program_modules: &[PathBuf],
     excluded: &BTreeSet<String>,
     ecosystem_scopes: &[&str],
+    refusal: CompilerRefusal<'_>,
     notes: &mut SelectionNotes,
 ) -> Result<Option<PreparedDependencyProgram>, String> {
     // Configured sources omit declaration files, and an ambient `declare
@@ -423,6 +428,7 @@ pub fn prepare_program(
             excluded,
             ecosystem_scopes,
             &mut unredirected,
+            refusal,
             notes,
         )?
     } else {
@@ -442,6 +448,7 @@ pub fn prepare_program(
             &specifiers.into_iter().collect::<Vec<_>>(),
             host,
             &mut unredirected,
+            refusal,
             notes,
         )?
     };
@@ -467,6 +474,7 @@ pub fn prepare(
     specifiers: &[String],
     host: &Host,
     unredirected: &mut UnsupportedBindings,
+    refusal: CompilerRefusal<'_>,
     notes: &mut SelectionNotes,
 ) -> Result<Option<DependencySelection>, String> {
     let mut roots = Vec::new();
@@ -511,6 +519,7 @@ pub fn prepare(
             &mut resolutions,
             &mut Vec::new(),
             unredirected,
+            refusal,
         )
         .map_err(|(_, reason)| format!("--dependency-source {specifier:?}: {reason}"))?;
         package_names.insert(name);
@@ -541,15 +550,18 @@ pub fn prepare(
 /// mode, an unknown package whose behavior is an obligation. A package that
 /// cannot be analyzed (an
 /// `exports` form this does not read, a `browser` map, an entry or relative
-/// import that is not a source file, an oversized closure) is skipped with a
-/// note and stays off source: nothing of it enters the program, and its
-/// other copies are judged on their own.
+/// import that is not a source file, an oversized closure, a closure file the
+/// dialect compiler refuses) is skipped with a note and stays off source:
+/// nothing of it enters the program, and its other copies are judged on their
+/// own.
+#[allow(clippy::too_many_arguments)]
 pub fn prepare_all(
     requests: Vec<(PathBuf, String)>,
     host: &Host,
     excluded: &BTreeSet<String>,
     ecosystem_scopes: &[&str],
     unredirected: &mut UnsupportedBindings,
+    refusal: CompilerRefusal<'_>,
     notes: &mut SelectionNotes,
 ) -> Result<Option<DependencySelection>, String> {
     unredirected
@@ -650,6 +662,7 @@ pub fn prepare_all(
                 &mut closure_resolutions,
                 &mut bare,
                 unredirected,
+                refusal,
             ) {
                 Ok(()) => {
                     files.extend(closure);
@@ -1278,6 +1291,11 @@ fn select(entry: &Ordered, host: &Host, depth: usize, star: Option<&str>) -> Opt
 /// Every file `entry` reaches through relative static imports and
 /// re-exports, inside `root`, the bare runtime imports of those files into
 /// `bare`, and their unsupported runtime bindings into `unredirected`.
+///
+/// A closure file holding JSX that the dialect compiler refuses (`refusal`)
+/// makes the closure unavailable (ADR 0360), like one that cannot be parsed:
+/// the package keeps its SC9005 obligations instead of entering the program
+/// with a file that has no compiler facts.
 fn walk(
     root: &Path,
     entry: &Path,
@@ -1285,6 +1303,7 @@ fn walk(
     resolutions: &mut BTreeSet<ImportResolution>,
     bare: &mut Vec<(PathBuf, String)>,
     unredirected: &mut UnsupportedBindings,
+    refusal: CompilerRefusal<'_>,
 ) -> Result<(), (UnanalyzableReason, String)> {
     let unavailable = |reason: String| (UnanalyzableReason::ClosureUnavailable, reason);
     let mut queue = VecDeque::from([entry.to_path_buf()]);
@@ -1302,6 +1321,13 @@ fn walk(
             .map_err(|error| unavailable(format!("{}: {error}", file.display())))?;
         let facts = solid_facts::ast::extract(file.to_string_lossy().into_owned(), &source)
             .map_err(|error| unavailable(format!("{}: {error}", file.display())))?;
+        if (!facts.jsx_elements.is_empty() || !facts.jsx_fragments.is_empty())
+            && let Some(message) = refusal(&file, &source)
+        {
+            // The first line names the refusal; a note is one line.
+            let first = message.lines().next().unwrap_or(&message).trim_end();
+            return Err(unavailable(format!("the Solid compiler refused {first}")));
+        }
         bare.extend(
             runtime_bare_imports(&facts)
                 .into_iter()

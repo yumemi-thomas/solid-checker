@@ -80,9 +80,10 @@ Every distinct vocabulary other than the language's own is a release variant,
 `dialect::RELEASE_VARIANTS`: the same catalog under an id of its own,
 `solid-v2@<variant key>` (for the rc.9 triple
 `solid-v2@store-root-mutable+omit-predicate+until+flush-in-action+flush-in-effect-callback+dynamic-static+store-setter-guards-roots`),
-so caches and daemon sockets never mix two. The registry is built from
-`Dialect::variants`, and shared code never classifies a release or names what a
-package owns. See `solid-dialect/src/solid_2/releases.rs`.
+so caches and daemon sockets never mix two. A variant is registered when first
+reached, and an id decodes back through `Dialect::variant_by_key`, so no table
+of every variant is built; shared code never classifies a release or names what
+a package owns. See `solid-dialect/src/solid_2/releases.rs`.
 
 **Compiler.** `solid_facts::compiler::CompilerFactsProvider` is the checker's
 whole view of a Solid JSX compiler: `AnalysisRequest` in, validated
@@ -176,13 +177,32 @@ ones it uses.
 
 ### Component census
 
-Two cases join ADR 0331's census, where a function is a proven component when
+Three cases join ADR 0331's census, where a function is a proven component when
 every reference to it is accounted for:
 
+- **Audited `@solidjs/router` (ADR 0335, and ADR 0324's params).** next.41 was
+  read on its own bytes against next.26's evidence (`Solid2` doc comments cite
+  both): params are still decoded strings, histories and `wrapParams` as
+  before, definitions copied into records, rendered by `createComponent` and
+  read only for `preload` and the unexported `SERVER_ROUTE` brand; its new
+  exports hand out no record. It adds `createRouter({ links })`, called with
+  the router context during setup (`claims.js:42-44`), so `names_links`
+  (`route_components.rs`) and `history_not_stock` (`router_params.rs`) refuse
+  any config naming `links`, on every release. Two older paths also hand a
+  project callable the context as `this`, in all four releases:
+  `useAction(action)` runs `action.apply({ r: useRouter() }, args)`
+  (`data/action.js:232-235` next.41), and Root calls `props.preload(...)` on
+  props holding `routerState` (`components.jsx:13`). `router_context_as_this`
+  (`router_params.rs`) withholds both premises unless every `useAction`
+  argument is an arrow or the router's own action wrapper (a `const`, local
+  or directly imported, needs every program reference safe), and
+  `history_not_stock` unless a config `preload` is an arrow.
+
 - **Audited TanStack routers (ADR 0334).** The rc.8 release was checked by an
-  `npm pack` diff against rc.6: every route-option read is byte-identical, the
-  changed files read none, and both load the same `@tanstack/router-core`
-  (`1.171.22`). `route_install_roots` and `route_replacement_recorded`
+  `npm pack` diff against rc.6, and rc.9 against rc.8: every route-option read
+  is byte-identical, the changed files read none (rc.9's new `observe` module
+  reads a matched route's `fullPath` and params), and all three load the same
+  `@tanstack/router-core` (`1.171.22`). `route_install_roots` and `route_replacement_recorded`
   (`rust/crates/solid-facts-backend/src/installed_bytes.rs`) read the installed
   bytes of the router and of the router-core it loads, from the router's real
   directory. A `createRouter` key-read veto covers its four default components,

@@ -1,13 +1,18 @@
 # Phase 4 completion report: compiler execution facts
 
-RC.13 adoption (2026-10-05, ADR 0196): the checker pins upstream
-`5efaf260becb32293f2bcb4d32f8be72be6de674`, implementation
-`c04c48779812d3d87166da3741c625748458c62f` and distribution
-`3ad4bbec37ae30f325a803cdb4271a71c86a2a2d`, published as
-`yumemi-thomas/solid:solid-checker/compiler-facts-rc13`. The candidate was
-prepared and validated on 2026-10-03
-(`../phase22/2026-10-03-rc13-compiler-facts-rebase.md`). The historical prose
-below describes the earlier rc.3-era pin.
+RC.17 adoption (2026-10-22, ADR 0196): the facts API was re-applied as two
+linear commits on upstream `next` at the published `solid-js@2.0.0-rc.17`
+release. The checker pins upstream
+`5b1b777648a89b6e207e8bb78514d5c03420e08b`, implementation
+`a4983a7130daa210bfc00f079dce57939fe14502` and distribution
+`9f5fff59c2abc4465058d96080771c82dfd91990`, published as
+`yumemi-thomas/solid:solid-checker/compiler-facts-rc17`. rc.17 removed
+server components (recorded as an explicit `false`), narrowed event names to
+`on` plus an uppercase letter, and evaluates calling spread-element SSR refs
+once (now ref-factory facts); evaluated SSR template refs are ref-factory facts,
+refs in dropped templates are elided, and every SSR ref factory inherits its
+caller's tracking; `sourceNames.locations` is refused for tracing.
+The historical prose below describes the earlier rc.3-era pin.
 
 Date: 2026-08-27
 
@@ -22,10 +27,10 @@ request was opened against upstream Solid.
 
 | Role | Identity |
 | --- | --- |
-| Official upstream base | `solidjs/solid@5efaf260becb32293f2bcb4d32f8be72be6de674` |
-| Fork branch | `yumemi-thomas/solid:solid-checker/compiler-facts-rc13` |
-| Semantic implementation | `c04c48779812d3d87166da3741c625748458c62f` |
-| Identity-only distribution commit | `3ad4bbec37ae30f325a803cdb4271a71c86a2a2d` |
+| Official upstream base | `solidjs/solid@5b1b777648a89b6e207e8bb78514d5c03420e08b` |
+| Fork branch | `yumemi-thomas/solid:solid-checker/compiler-facts-rc17` |
+| Semantic implementation | `a4983a7130daa210bfc00f079dce57939fe14502` |
+| Identity-only distribution commit | `9f5fff59c2abc4465058d96080771c82dfd91990` |
 | Solid 2 trace | version 3 |
 | Checker compiler-facts | protocol 2 |
 | Solid 1 producer | `yumemi-thomas/solid-1x-compiler@ca3bbfae7d1e00e28ef73f9af58bdb46e248b512`, trace 2 |

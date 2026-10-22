@@ -59,11 +59,6 @@ pub(super) fn flow_safe_role(role: ExecutionRole) -> bool {
     )
 }
 
-/// An un-namespaced `on…` key: the runtime attaches it as an event listener.
-pub(super) fn flow_event_key(key: &str) -> bool {
-    key.len() > 2 && key.starts_with("on") && !key.contains(':')
-}
-
 /// The innermost object literal whose own property key is at `key`.
 pub(super) fn innermost_object_literal(
     file: &solid_facts::FileFacts,

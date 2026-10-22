@@ -1156,3 +1156,78 @@ fn reuses_ast_and_compiler_facts_by_source_identity() {
         }
     );
 }
+
+/// Refuses `refused.tsx` the way a compile error does, fails `broken.tsx` the
+/// way an untrusted trace does, and answers every other file.
+struct RefusingCompiler;
+impl CompilerFactsProvider for RefusingCompiler {
+    fn analyze(
+        &mut self,
+        request: &AnalysisRequest,
+    ) -> Result<ExecutionMap, CompilerProviderError> {
+        match request.path.as_str() {
+            "src/refused.tsx" => Err(CompilerProviderError::Refused(format!(
+                "{}: The HTML provided is malformed (1:20)",
+                request.path
+            ))),
+            "src/broken.tsx" => Err(CompilerProviderError::Native(
+                "semantic identity disagrees with the pinned producer".into(),
+            )),
+            _ => Compiler.analyze(request),
+        }
+    }
+}
+
+/// ADR 0360: a refusal withholds that file's compiler facts and keeps the
+/// rest; any other compiler error still fails the build.
+#[test]
+fn a_refused_file_is_kept_without_compiler_facts_and_other_errors_stay_fatal() {
+    let file = |path: &str, source: &str| SourceFile {
+        path: path.into(),
+        source: source.into(),
+        compiler_options: CompilerOptions::default(),
+    };
+    let types = |paths: &[(&str, &str)]| Types {
+        project_id: "project".into(),
+        generation: 1,
+        source: SourceDigest {
+            path: paths[0].0.into(),
+            sha256: typefacts::SourceHash::of(paths[0].1),
+        },
+    };
+    let refused = ("src/refused.tsx", "export const view = <p><p /></p>;");
+    let facts = build_project_cached(
+        dialect::default_dialect(),
+        "project",
+        1,
+        vec![file(refused.0, refused.1)],
+        &mut RefusingCompiler,
+        &mut types(&[refused]),
+        &mut FactsCache::default(),
+    )
+    .expect("a refusal is not fatal");
+    let execution = &facts.files[0].compiler;
+    assert!(execution.withheld());
+    assert_eq!(
+        execution.refusal(),
+        Some("src/refused.tsx: The HTML provided is malformed (1:20)")
+    );
+    assert!(!execution.semantic_model.source_operations_complete);
+    assert!(!facts.files[0].ast.jsx_elements.is_empty());
+
+    let broken = ("src/broken.tsx", "export const view = <p />;");
+    let error = build_project_cached(
+        dialect::default_dialect(),
+        "project",
+        1,
+        vec![file(broken.0, broken.1)],
+        &mut RefusingCompiler,
+        &mut types(&[broken]),
+        &mut FactsCache::default(),
+    )
+    .expect_err("an untrusted trace stays fatal");
+    assert!(
+        matches!(error, BackendError::NativeCompiler(_)),
+        "unexpected error variant: {error:?}"
+    );
+}

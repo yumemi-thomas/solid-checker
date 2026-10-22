@@ -5,18 +5,26 @@ import { hydrate, render } from "@solidjs/web";
 const [count, setCount] = createSignal(0);
 const [done, setDone] = createSignal(false);
 
-// `render` calls its code inside the root it creates (@solidjs/web rc.13
-// dist/web.dev.js:488-495): a setter directly in the code callback is SC2001.
+// `render` calls its code inside the root it creates (@solidjs/web rc.17
+// dist/web.dev.js:551-558): a setter directly in the code callback is SC2001.
 render(() => {
   setCount(1);
   return document.createElement("span");
 }, document.createElement("div"));
 
-// `hydrate` reaches that `render` on every path (dist/web.dev.js:1521-1620).
+// rc.17's `hydrate` may run `code` after it returns (dist/web.dev.js:1631-1645),
+// but every path ends in that `render` (:1626-1735): SC2001 whenever it runs.
 hydrate(() => {
   setCount(2);
   return document.createElement("span");
 }, document.createElement("div"));
+
+// The same for a function passed by name.
+function hydrateCode() {
+  setCount(7);
+  return document.createElement("span");
+}
+hydrate(hydrateCode, document.createElement("div"));
 
 // A helper only the code callback calls runs under the same root.
 function writeCount() {

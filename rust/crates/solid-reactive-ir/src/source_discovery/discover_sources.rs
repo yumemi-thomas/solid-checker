@@ -794,11 +794,17 @@ fn resolve_setter_action_aliases(ctx: &StageContext<'_>, tables: &mut SourceTabl
         facts, entities, ..
     } = *ctx;
     let SourceTables {
-        setters, actions, ..
+        setters,
+        actions,
+        source_primitives,
+        ..
     } = tables;
     loop {
         let mut setter_aliases = Vec::new();
         let mut action_aliases = Vec::new();
+        // An alias of a setter was made by the same primitive, which an
+        // owned-scope guard can depend on (`optimistic_*_setter_guarded`).
+        let mut primitive_aliases = Vec::new();
         for file in &facts.files {
             for binding in &file.ast.bindings {
                 let Some(source_symbol) =
@@ -824,6 +830,11 @@ fn resolve_setter_action_aliases(ctx: &StageContext<'_>, tables: &mut SourceTabl
                     if let Some((_, source, owned_write, source_kind)) = &setter
                         && !setters.contains_key(symbol)
                     {
+                        if binding.immutable
+                            && let Some(primitive) = source_primitives.get(source_symbol)
+                        {
+                            primitive_aliases.push((symbol.clone(), primitive.clone()));
+                        }
                         setter_aliases.push((
                             symbol.clone(),
                             (
@@ -853,6 +864,9 @@ fn resolve_setter_action_aliases(ctx: &StageContext<'_>, tables: &mut SourceTabl
         }
         setters.extend(setter_aliases);
         actions.extend(action_aliases);
+        for (symbol, primitive) in primitive_aliases {
+            source_primitives.entry(symbol).or_insert(primitive);
+        }
     }
 }
 

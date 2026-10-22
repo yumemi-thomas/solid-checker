@@ -37,6 +37,16 @@ export function Counter() {
   setOptimistic(1);
   setOptimisticState(draft => { draft.value = 1; });
   setInternal(1);
+  // rc.17's `createOptimistic` setter queues a guess and meets no owned-scope
+  // guard, so neither it nor a `const` alias of it is reported. A `const`
+  // alias of a `createSignal` setter keeps its primitive and is reported; a
+  // `let` alias could be reassigned, so it is not claimed.
+  const optimisticAlias = setOptimistic;
+  optimisticAlias(2);
+  const countAlias = setCount;
+  countAlias(11);
+  let reassignable = setCount;
+  reassignable(12);
   createMemo(() => setCount(2));
 	createMemo(() => setAliased(2));
 	Solid.createMemo(() => setNamespaced(2));

@@ -104,6 +104,13 @@ pub enum CompilerProviderError {
     MissingExecutionMap,
     #[error("native Solid compiler facts error: {0}")]
     Native(String),
+    /// The compiler declined this source under these options (its parse or
+    /// transform returned an error), as opposed to a producer that ran and
+    /// answered something this checker cannot trust. The backend records it
+    /// as [`ExecutionMap::refused`] and keeps analyzing the other files
+    /// (ADR 0360); every other variant stays fatal.
+    #[error("the Solid compiler refused the source: {0}")]
+    Refused(String),
     #[error("compiler facts error: {0}")]
     Facts(#[from] CompilerFactsError),
 }
@@ -211,6 +218,11 @@ pub struct JsxOperation {
 pub struct CompilerSemanticModel {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub producer: Option<CompilerProducerIdentity>,
+    /// The compiler's message when it refused the source
+    /// ([`ExecutionMap::refused`]). The model is then empty *and unknown*: no
+    /// census ran, so an absent region, role or operation says nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refusal: Option<String>,
     pub source_operations_complete: bool,
     pub generated_operations_complete: bool,
     pub operations: Vec<CompilerOperation>,
@@ -581,6 +593,7 @@ impl ExecutionMap {
             })
             .collect::<Vec<_>>();
         let semantic_model = CompilerSemanticModel {
+            refusal: None,
             producer: Some(CompilerProducerIdentity {
                 dialect: input.producer.dialect,
                 trace_version: input.producer.trace_version,
@@ -620,6 +633,7 @@ impl ExecutionMap {
             source_hash,
             semantic_model: CompilerSemanticModel {
                 producer: None,
+                refusal: None,
                 source_operations_complete: true,
                 generated_operations_complete: true,
                 operations: Vec::new(),
@@ -632,6 +646,32 @@ impl ExecutionMap {
             callback_roles: Vec::new(),
             jsx_operations: Vec::new(),
         }
+    }
+
+    /// The map of a file the compiler refused (ADR 0360): no producer, no
+    /// operations, both census flags false, and the compiler's message.
+    /// Unlike [`Self::inert`] (a JSON module, proven to hold no JSX), its
+    /// emptiness is no fact: consumers ask [`Self::withheld`] and treat every
+    /// site of the file as one no fact places.
+    #[must_use]
+    pub fn refused(source_hash: SourceHash, message: impl Into<String>) -> Self {
+        let mut map = Self::inert(source_hash);
+        map.semantic_model.refusal = Some(message.into());
+        map.semantic_model.source_operations_complete = false;
+        map.semantic_model.generated_operations_complete = false;
+        map
+    }
+
+    /// Whether the compiler refused this file, so it carries no compiler facts.
+    #[must_use]
+    pub fn withheld(&self) -> bool {
+        self.semantic_model.refusal.is_some()
+    }
+
+    /// The compiler's refusal message, when [`Self::withheld`].
+    #[must_use]
+    pub fn refusal(&self) -> Option<&str> {
+        self.semantic_model.refusal.as_deref()
     }
 
     pub fn from_json(encoded: &str, source: &str) -> Result<Self, CompilerFactsError> {
@@ -1003,6 +1043,15 @@ fn validate_semantic_model(
     model: &CompilerSemanticModel,
     source_len: usize,
 ) -> Result<(), CompilerFactsError> {
+    if model.refusal.is_some()
+        && (model.producer.is_some()
+            || model.source_operations_complete
+            || model.generated_operations_complete)
+    {
+        return Err(CompilerFactsError::ProducerIdentity(
+            "a refused source carries no producer identity and no complete census".into(),
+        ));
+    }
     if model.producer.is_none() {
         if !model.operations.is_empty() || !model.generated_operations.is_empty() {
             return Err(CompilerFactsError::ProducerIdentity(
