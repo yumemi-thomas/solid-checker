@@ -153,13 +153,14 @@ pub struct Solid2 {
     /// so no inline execution is stated there, though its root still is
     /// (`render_creates_root`); read releases through rc.13 keep `true`.
     hydrate_code_inline: bool,
-    /// From all three packages: whether `dynamicComponent` and
-    /// `dispatchAsInteraction` are exports, modelled as read on rc.17
-    /// ([`Solid2::call_form`], [`Solid2::callback_owners`]). Both are new in
-    /// rc.17; `true` only when `solid-js`, `@solidjs/signals` and
-    /// `@solidjs/web` all resolve to it, since `dynamicComponent` is
-    /// `solid-js`'s and `dispatchAsInteraction`'s dev build calls signals'
-    /// `withInteraction`.
+    /// From all three packages: whether rc.17's callback-taking exports
+    /// `dynamicComponent`, `dispatchAsInteraction`, `createDeferred`,
+    /// `lazyModule` and `onHydrationEnd` are exports, modelled as read on rc.17
+    /// ([`Solid2::call_form`], [`Solid2::callback_owners`]). `true` only when
+    /// `solid-js`, `@solidjs/signals` and `@solidjs/web` all resolve to it:
+    /// `dispatchAsInteraction`'s dev build calls signals' `withInteraction`,
+    /// `solid-js`'s client `createDeferred` is signals', and the hydration drain
+    /// `onHydrationEnd` waits for is reached from web's `hydrate`.
     rc17_callback_exports: bool,
 }
 
@@ -236,6 +237,13 @@ const TABLE: &[(&str, Primitive)] = &[
     ("children", Primitive::Children),
     ("clientOnly", Primitive::ClientOnly),
     ("createContext", Primitive::CreateContext),
+    // New in `solid-js@2.0.0-rc.17`, gated like `until` (`Solid2::exports`):
+    // the client builds wrap `@solidjs/signals`' `createDeferred` exactly as
+    // `createMemo` is wrapped for hydration (`dist/solid.dev.js:975-976`,
+    // `solid.js:932-933`, `solid.observe.js:949-950`); the server builds
+    // alias it, `const createDeferred = createMemo;` (`dist/server.js:2035`,
+    // `server.dev.js:2205`, `server.observe.js:2135`).
+    ("createDeferred", Primitive::CreateDeferred),
     ("createEffect", Primitive::CreateEffect),
     ("createErrorBoundary", Primitive::CreateErrorBoundary),
     ("createLoadingBoundary", Primitive::CreateLoadingBoundary),
@@ -272,12 +280,20 @@ const TABLE: &[(&str, Primitive)] = &[
     ("isPending", Primitive::IsPending),
     ("latest", Primitive::Latest),
     ("lazy", Primitive::Lazy),
+    // New in `solid-js@2.0.0-rc.17` (`dist/solid.dev.js:1408`, `solid.js:1347`,
+    // `solid.observe.js:1381`, `server.js:2268`, `server.dev.js:2474`,
+    // `server.observe.js:2373`); gated like `until`.
+    ("lazyModule", Primitive::LazyModule),
     ("Loading", Primitive::Loading),
     ("mapArray", Primitive::MapArray),
     ("Match", Primitive::Match),
     ("merge", Primitive::Merge),
     ("omit", Primitive::Omit),
     ("onCleanup", Primitive::OnCleanup),
+    // Exported from `solid-js@2.0.0-rc.17` (`dist/solid.dev.js:385`,
+    // `solid.js:345`, `solid.observe.js:362`, `server.js:2731`,
+    // `server.dev.js:3065`, `server.observe.js:2904`); gated like `until`.
+    ("onHydrationEnd", Primitive::OnHydrationEnd),
     ("onSettled", Primitive::OnSettled),
     ("reconcile", Primitive::Reconcile),
     ("refresh", Primitive::Refresh),
@@ -312,8 +328,14 @@ pub(crate) fn names() -> Vec<&'static str> {
 
 /// The [`TABLE`] names only some installations export (`Solid2::exports`).
 #[cfg(test)]
-pub(crate) const RELEASE_GATED_NAMES: &[&str] =
-    &["until", "dynamicComponent", "dispatchAsInteraction"];
+pub(crate) const RELEASE_GATED_NAMES: &[&str] = &[
+    "until",
+    "dynamicComponent",
+    "dispatchAsInteraction",
+    "createDeferred",
+    "lazyModule",
+    "onHydrationEnd",
+];
 
 impl Dialect for Solid2 {
     fn compiler_lowers_event_attribute(&self, name: &str) -> bool {
@@ -529,6 +551,7 @@ impl Dialect for Solid2 {
             // repeat(count, mapFn) and mapArray(list, mapFn) both map at 1.
             Primitive::RepeatMap | Primitive::MapArray => &[1],
             Primitive::CreateMemo
+            | Primitive::CreateDeferred
             | Primitive::CreateTrackedEffect
             | Primitive::CreateSignal
             | Primitive::CreateStore
@@ -536,6 +559,9 @@ impl Dialect for Solid2 {
             | Primitive::CreateOptimistic
             | Primitive::CreateOptimisticStore
             | Primitive::Dynamic
+            // rc.17: `lazyModule(fn, moduleUrl?)`, `onHydrationEnd(callback)`.
+            | Primitive::LazyModule
+            | Primitive::OnHydrationEnd
             // Both `dynamic` call forms keep the source at 0; the form
             // changes how it runs, not where it sits.
             | Primitive::DynamicStatic
@@ -611,6 +637,12 @@ impl Dialect for Solid2 {
                 // root, and the caller has no observer for it to subscribe.
                 | Primitive::Until
                 | Primitive::Lazy
+                // rc.17's `lazyModule` calls `fn` only from the returned
+                // `load`, and `onHydrationEnd` only from a microtask or the
+                // hydration drain; neither runs it during the call
+                // (`callback_executions`).
+                | Primitive::LazyModule
+                | Primitive::OnHydrationEnd
                 // dynamic(source, { static: true }) is
                 // `staticDynamic(untrack(source))`: the signals `untrack`,
                 // which clears the listener around the call.
@@ -1090,6 +1122,17 @@ impl Dialect for Solid2 {
         match primitive {
             Primitive::CreateRoot
             | Primitive::CreateMemo
+            // `createDeferred` is `accessor(computed(prev => { node =
+            // getOwner(); …; r = fn(prev); … }, options))`
+            // (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:8897-8909`,
+            // `dist/prod/deferred.js:127-138`, `dist/observe/deferred.js:129-140`):
+            // `fn` runs as the compute of the node it creates. Probed beside
+            // `createMemo` on the dev, observe and prod client builds and both
+            // server builds (where it is `createMemo`): `getOwner()` inside is
+            // a new owner whose parent is the caller's, a `createEffect` there
+            // raises no `NO_OWNER_EFFECT`, and an `onCleanup` there runs when
+            // the enclosing root is disposed.
+            | Primitive::CreateDeferred
             | Primitive::CreateSignal
             | Primitive::CreateStore
             | Primitive::CreateProjection
@@ -1113,6 +1156,43 @@ impl Dialect for Solid2 {
             Primitive::CreateRevealOrder => &[(0, CallbackOwner::Creates)],
             // The loader is invoked from the wrapper component body.
             Primitive::Lazy => &[(0, CallbackOwner::Inherits)],
+            // `lazyModule(fn)` returns `read = load`, and `load` is `if (p)
+            // return p; const cur = p = fn(); …` (`solid-js@2.0.0-rc.17`
+            // `dist/solid.dev.js:1408-1431`, `solid.js:1347-1368`,
+            // `server.js:2268-2272`), so `fn` runs on the stack of whoever
+            // first calls the result or its `preload`, and nothing is set up
+            // around it. Owned like `lazy`'s loader, at those invocations
+            // (`callback_requires_return_invocation`); both cache the first
+            // promise, so only the first invocation runs it. Probed on the
+            // dev, observe and prod client builds and both server builds: not
+            // run at the call; run once, at the first call of the result, with
+            // that caller's `getOwner()` and `getObserver()` (a client memo
+            // calling it re-ran on a write to a signal `fn` read, on that
+            // first run only); in dev a module-scope call left a
+            // `createEffect` in `fn` raising `NO_OWNER_EFFECT` and a call in a
+            // root body made a write in `fn` throw
+            // `REACTIVE_WRITE_IN_OWNED_SCOPE`. The server's `peek` also calls
+            // `load` (`dist/server.js:2284-2289`), the client's never does; no
+            // invocation site counts `peek`.
+            Primitive::LazyModule => &[(0, CallbackOwner::Inherits)],
+            // `onHydrationEnd(callback)` is `queueMicrotask(callback)` unless a
+            // hydration is in progress, and then a push drained by
+            // `drainHydrationCallbacks` (`solid-js@2.0.0-rc.17`
+            // `dist/solid.dev.js:385-404`, `solid.js:345-364`); the server
+            // builds only `queueMicrotask(callback)` (`dist/server.js:2731-2733`).
+            // The drain runs where hydration ends, which `hydrate`'s own
+            // `finally { sharedConfig.hydrating = false; }` reaches
+            // (`@solidjs/web@2.0.0-rc.17` `dist/web.dev.js:1732-1735`), on
+            // its caller's stack. Probed on the dev, observe and prod client
+            // builds: registered outside a hydration (module scope, a root, a
+            // memo compute, a rendered component) `getOwner()` in the callback
+            // is `null`, `onCleanup` raises `NO_OWNER_CLEANUP`, `createEffect`
+            // `NO_OWNER_EFFECT` (dev) and a write is legal; registered in a
+            // component `hydrate` renders, it ran before `hydrate` returned,
+            // with no owner when `hydrate` was called at module scope and with
+            // the enclosing root as owner (a write threw) when it was called
+            // in a `createRoot` body. The server builds: `null` everywhere.
+            Primitive::OnHydrationEnd => &[(0, CallbackOwner::Conditional)],
             // Both boundaries own the scope their body runs in, and render
             // their fallback under it.
             Primitive::CreateErrorBoundary | Primitive::CreateLoadingBoundary => {
@@ -1279,7 +1359,11 @@ impl Dialect for Solid2 {
         match (primitive, slot) {
             (Primitive::CreateSignal, ResultSlot::TupleItem(0)) => Some(ReactiveRole::Accessor),
             (Primitive::CreateSignal, ResultSlot::TupleItem(1)) => Some(ReactiveRole::Setter),
-            (Primitive::CreateMemo, ResultSlot::Whole) => Some(ReactiveRole::Accessor),
+            // `createDeferred` returns `accessor(computed(…))`, as `createMemo`
+            // does (`accessor_getter_length`).
+            (Primitive::CreateMemo | Primitive::CreateDeferred, ResultSlot::Whole) => {
+                Some(ReactiveRole::Accessor)
+            }
             _ => None,
         }
     }
@@ -1304,7 +1388,10 @@ impl Dialect for Solid2 {
             (
                 Primitive::CreateSignal | Primitive::CreateOptimistic,
                 ResultSlot::TupleItem(0)
-            ) | (Primitive::CreateMemo, ResultSlot::Whole)
+            ) | (
+                Primitive::CreateMemo | Primitive::CreateDeferred,
+                ResultSlot::Whole
+            )
         )
         .then_some(0)
     }
@@ -1327,6 +1414,13 @@ impl Dialect for Solid2 {
     /// way, it ran once during the call (the effect function is queued), and a
     /// write in it is caught and logged by the effect rather than thrown. Only
     /// the two-argument call is stated, so no options argument is in play.
+    ///
+    /// rc.17's `createDeferred(fn)` is `accessor(computed(wrapper, undefined))`
+    /// whose wrapper calls `fn(prev)` before anything can suspend it
+    /// (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:8897-8909`). Probed beside
+    /// `createMemo` on the dev, observe and prod client builds: `fn` ran once
+    /// at the call, did not with `{ lazy: true }`, and a write in it threw
+    /// `REACTIVE_WRITE_IN_OWNED_SCOPE` (dev) when the accessor was read.
     fn eager_owned_computation_slot(
         &self,
         primitive: Primitive,
@@ -1335,7 +1429,8 @@ impl Dialect for Solid2 {
     ) -> bool {
         matches!(
             (primitive, argument, argument_count),
-            (Primitive::CreateMemo, 0, 1) | (Primitive::CreateEffect, 0, 2)
+            (Primitive::CreateMemo | Primitive::CreateDeferred, 0, 1)
+                | (Primitive::CreateEffect, 0, 2)
         )
     }
 
@@ -1350,6 +1445,7 @@ impl Dialect for Solid2 {
     fn options_argument(&self, primitive: Primitive) -> Option<usize> {
         match primitive {
             Primitive::CreateMemo
+            | Primitive::CreateDeferred
             | Primitive::CreateSignal
             | Primitive::CreateOptimistic
             | Primitive::CreateTrackedEffect => Some(1),
@@ -1403,7 +1499,10 @@ impl Dialect for Solid2 {
         // The public MemoOptions excludes lazy, but JS and an assertion can
         // still pass it to computed(compute, options). No option object is
         // proved by an argument-count-only question.
-        if primitive == Primitive::CreateMemo && argument == 0 && argument_count > 1 {
+        if matches!(primitive, Primitive::CreateMemo | Primitive::CreateDeferred)
+            && argument == 0
+            && argument_count > 1
+        {
             return Some(Trigger::ComputationDemand);
         }
         if self.synchronous_callback_slot(primitive, argument, argument_count) {
@@ -1411,7 +1510,10 @@ impl Dialect for Solid2 {
         }
         match (primitive, argument) {
             (
-                Primitive::CreateMemo | Primitive::CreateEffect | Primitive::CreateRenderEffect,
+                Primitive::CreateMemo
+                | Primitive::CreateDeferred
+                | Primitive::CreateEffect
+                | Primitive::CreateRenderEffect,
                 0,
             ) if self.tracked_callback_timing(primitive, argument, argument_count)
                 == Some(TrackedCallbackTiming::DuringCall) =>
@@ -1520,6 +1622,10 @@ impl Dialect for Solid2 {
     fn callback_executions(&self, primitive: Primitive) -> &'static [(usize, Execution)] {
         match primitive {
             Primitive::CreateMemo
+            // rc.17: a memo's compute (`callback_owners`). Probed: a signal
+            // `fn` reads re-ran it on a write, and `getObserver()` inside is
+            // the node `getOwner()` is.
+            | Primitive::CreateDeferred
             | Primitive::CreateProjection
             | Primitive::CreateTrackedEffect
             | Primitive::CreateSignal
@@ -1560,6 +1666,11 @@ impl Dialect for Solid2 {
             // caller (who has no observer, or the call throws).
             | Primitive::Until
             | Primitive::Lazy
+            // Not run during the call (`callback_owners`): `lazyModule`'s `fn`
+            // from the returned `load`, as `lazy`'s loader; `onHydrationEnd`'s
+            // callback from a microtask or the hydration drain.
+            | Primitive::LazyModule
+            | Primitive::OnHydrationEnd
             | Primitive::Action
             | Primitive::ClientOnly => &[(0, Execution::Deferred)],
             Primitive::CreateRoot
@@ -1670,6 +1781,7 @@ impl Dialect for Solid2 {
             }
             (
                 Primitive::CreateMemo
+                | Primitive::CreateDeferred
                 | Primitive::CreateTrackedEffect
                 | Primitive::CreateSignal
                 | Primitive::CreateStore
@@ -1679,11 +1791,18 @@ impl Dialect for Solid2 {
                 | Primitive::Dynamic,
                 0,
             ) => Some(Execution::Tracked),
+            // `onHydrationEnd` queues its callback or pushes it for the drain,
+            // and returns (`solid-js@2.0.0-rc.17` `dist/solid.dev.js:385-392`,
+            // `dist/server.js:2731-2733`): probed, it never ran before the call
+            // returned. `lazyModule` has no word, as `lazy` has none: its `fn`
+            // runs when the result is called, which may be during the very
+            // call that receives it.
             (
                 Primitive::OnSettled
                 | Primitive::Action
                 | Primitive::CreateReaction
-                | Primitive::OnCleanup,
+                | Primitive::OnCleanup
+                | Primitive::OnHydrationEnd,
                 0,
             ) => Some(Execution::Deferred),
             // The static `dynamic` form is `untrack(source)` at the call
@@ -1729,6 +1848,7 @@ impl Dialect for Solid2 {
         }
         match primitive {
             Primitive::CreateMemo
+            | Primitive::CreateDeferred
             | Primitive::CreateSignal
             | Primitive::CreateOptimistic
             | Primitive::CreateProjection
@@ -1797,8 +1917,14 @@ impl Dialect for Solid2 {
     /// tracker is called, `lazy`'s loader waits for the wrapper component to
     /// render, and `mapArray(list, mapFn)`/`repeat(count, mapFn)` pull both
     /// their source and their map function through the returned accessor.
+    /// rc.17's `lazyModule(fn)` is `lazy`'s loader without the component:
+    /// `fn` runs only from the returned `load` (`callback_owners`).
     fn callback_requires_return_invocation(&self, primitive: Primitive, argument: usize) -> bool {
-        (argument == 0 && matches!(primitive, Primitive::CreateReaction | Primitive::Lazy))
+        (argument == 0
+            && matches!(
+                primitive,
+                Primitive::CreateReaction | Primitive::Lazy | Primitive::LazyModule
+            ))
             || (argument <= 1 && primitive == Primitive::MapArray)
             || (argument == 1 && primitive == Primitive::RepeatMap)
     }
@@ -1855,6 +1981,7 @@ impl Dialect for Solid2 {
             Primitive::OnCleanup
             | Primitive::Flush
             | Primitive::CreateMemo
+            | Primitive::CreateDeferred
             | Primitive::CreateEffect
             | Primitive::CreateRenderEffect
             | Primitive::CreateReaction
@@ -1919,6 +2046,7 @@ impl Dialect for Solid2 {
             primitive,
             Primitive::CreateSignal
                 | Primitive::CreateMemo
+                | Primitive::CreateDeferred
                 | Primitive::CreateStore
                 | Primitive::CreateProjection
                 | Primitive::CreateOptimistic
@@ -2265,6 +2393,7 @@ impl Dialect for Solid2 {
             primitive,
             Primitive::CreateSignal
                 | Primitive::CreateMemo
+                | Primitive::CreateDeferred
                 | Primitive::CreateStore
                 | Primitive::CreateProjection
                 | Primitive::CreateOptimistic
@@ -2291,8 +2420,14 @@ impl Dialect for Solid2 {
     /// resolves.
     fn export_modules(&self, name: &str, position: crate::ExportPosition) -> Vec<&'static str> {
         if (name == "until" && !self.until)
-            || (matches!(name, "dynamicComponent" | "dispatchAsInteraction")
-                && !self.rc17_callback_exports)
+            || (matches!(
+                name,
+                "dynamicComponent"
+                    | "dispatchAsInteraction"
+                    | "createDeferred"
+                    | "lazyModule"
+                    | "onHydrationEnd"
+            ) && !self.rc17_callback_exports)
         {
             return Vec::new();
         }
@@ -2366,6 +2501,7 @@ const NAMESPACE_SOLID_JS: &[&str] = &[
     "affects",
     "children",
     "createContext",
+    "createDeferred",
     "createEffect",
     "createErrorBoundary",
     "createLoadingBoundary",
@@ -2388,10 +2524,12 @@ const NAMESPACE_SOLID_JS: &[&str] = &[
     "isPending",
     "latest",
     "lazy",
+    "lazyModule",
     "mapArray",
     "merge",
     "omit",
     "onCleanup",
+    "onHydrationEnd",
     "onSettled",
     "reconcile",
     "refresh",

@@ -169,7 +169,7 @@ fn every_reviewed_triple_answers_as_the_reviews_measured() {
             1,
         ),
         // The audited release: these answers are rc.13's (the rc.17
-        // review); its two gaps are scoped to the new callback exports.
+        // review); its one gap is scoped to `setLinkClaim`.
         (
             "2.0.0-rc.17",
             StoreRootTyping::Mutable,
@@ -178,7 +178,7 @@ fn every_reviewed_triple_answers_as_the_reviews_measured() {
             DynamicOptions::StaticForm,
             StoreSetterRootGuard::Guarded,
             true,
-            2,
+            1,
         ),
     ];
     for (
@@ -910,7 +910,13 @@ fn the_trait_answers_from_the_variant() {
     }
     assert!(Solid2::RC9.primitive("until").is_some());
     // New in rc.17 (the rc.17 review): no earlier vocabulary has them.
-    for name in ["dynamicComponent", "dispatchAsInteraction"] {
+    for name in [
+        "dynamicComponent",
+        "dispatchAsInteraction",
+        "createDeferred",
+        "lazyModule",
+        "onHydrationEnd",
+    ] {
         for vocabulary in [Solid2::RC9, Solid2::RC13] {
             assert_eq!(vocabulary.primitive(name), None, "{name}");
             assert!(
@@ -1053,10 +1059,11 @@ fn rc17_answers_follow_their_owners() {
     assert!(unread.callback_handles_pending_accessor_read(Primitive::Latest, 0));
 }
 
-/// The rc.17 review's new callback-taking exports: `dynamicComponent` and
-/// `dispatchAsInteraction` are modelled on the rc.17 triple, and stay a
-/// scoped gap on any other installation that has them; `setLinkClaim` stays
-/// a gap everywhere.
+/// The rc.17 review's new callback-taking exports: `dynamicComponent`,
+/// `dispatchAsInteraction`, `createDeferred`, `lazyModule` and
+/// `onHydrationEnd` are modelled on the rc.17 triple, and stay a scoped gap
+/// on any other installation that has them; `setLinkClaim` stays a gap
+/// everywhere.
 #[test]
 fn rc17_callback_exports_are_modelled_only_on_the_rc17_triple() {
     let (audited, gaps) = analyzed(&same("2.0.0-rc.17"));
@@ -1070,15 +1077,7 @@ fn rc17_callback_exports_are_modelled_only_on_the_rc17_triple() {
         names.sort_unstable();
         names
     };
-    assert_eq!(
-        scoped(&gaps),
-        [
-            (WEB, "setLinkClaim"),
-            (SOLID_JS, "createDeferred"),
-            (SOLID_JS, "lazyModule"),
-            (SOLID_JS, "onHydrationEnd"),
-        ]
-    );
+    assert_eq!(scoped(&gaps), [(WEB, "setLinkClaim")]);
     // Only `setLinkClaim`'s handler is server-rendering-only (`dist/server.js:3508-3512`);
     // declared CSR closes that gap and no other.
     for gap in &gaps {
@@ -1090,7 +1089,13 @@ fn rc17_callback_exports_are_modelled_only_on_the_rc17_triple() {
         );
     }
     for gap in &gaps {
-        for name in ["dynamicComponent", "dispatchAsInteraction"] {
+        for name in [
+            "dynamicComponent",
+            "dispatchAsInteraction",
+            "createDeferred",
+            "lazyModule",
+            "onHydrationEnd",
+        ] {
             assert!(!gap.gap.contains(name), "{gap:?}");
         }
     }
@@ -1111,10 +1116,18 @@ fn rc17_callback_exports_are_modelled_only_on_the_rc17_triple() {
         assert!(!vocabulary.rc17_callback_exports, "{installed:?}");
         assert_eq!(vocabulary.primitive("dynamicComponent"), None);
         assert_eq!(vocabulary.primitive("dispatchAsInteraction"), None);
-        assert!(
-            scoped(&gaps).contains(&(SOLID_JS, "dynamicComponent")),
-            "{installed:?}"
-        );
+        for name in [
+            "createDeferred",
+            "dynamicComponent",
+            "lazyModule",
+            "onHydrationEnd",
+        ] {
+            assert_eq!(vocabulary.primitive(name), None, "{name}");
+            assert!(
+                scoped(&gaps).contains(&(SOLID_JS, name)),
+                "{installed:?} {name}"
+            );
+        }
     }
     let (_, gaps) = analyzed(&triple(
         Some("2.0.0-rc.17"),
@@ -1136,5 +1149,19 @@ fn rc17_callback_exports_are_modelled_only_on_the_rc17_triple() {
         audited.export_modules("dispatchAsInteraction", crate::ExportPosition::Value),
         ["@solidjs/web"]
     );
+    for (name, primitive) in [
+        ("createDeferred", Primitive::CreateDeferred),
+        ("lazyModule", Primitive::LazyModule),
+        ("onHydrationEnd", Primitive::OnHydrationEnd),
+    ] {
+        assert_eq!(audited.primitive(name), Some(primitive), "{name}");
+        assert_eq!(audited.name_of(primitive), Some(name));
+        assert_eq!(Solid2::RC13.name_of(primitive), None);
+        assert_eq!(
+            audited.export_modules(name, crate::ExportPosition::Value),
+            ["solid-js"],
+            "{name}"
+        );
+    }
     assert_eq!(audited.primitive("setLinkClaim"), None);
 }

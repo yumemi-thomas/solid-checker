@@ -158,7 +158,7 @@ The zero-parameter compute is still called with the draft (`fn(shadow ?? s)`, `:
 
 | export | where | what it does | gap |
 | --- | --- | --- | --- |
-| `createDeferred(fn, options?)` | `dist/dev.js:8852`; root of signals and solid-js | wraps `computed(prev => …)`, so `fn` is an eager tracked compute like `createMemo` | neither modelled nor excluded, like rc.4's `registerPatch` gap: add a KNOWN_GAP or model it |
+| `createDeferred(fn, options?)` | `dist/dev.js:8852`; root of signals and solid-js | wraps `computed(prev => …)`, so `fn` is an eager tracked compute like `createMemo` | modelled (addendum) with `createMemo`'s answers on the rc.17 triple; probed identical (solid-js A20) |
 | `setWriteHook(hook)` | `dev-shared.js:5596-5598` | runs `hook` on every later `setSignal` / store setter | internal (`solid-js/internal`); classify as excluded |
 | `setReadWatch(watch)` | `dev.js:1782-1784`, sets `DEV.hooks.onRead` | runs `watch` on every `read` | internal (`solid-js/internal`); classify as excluded |
 | `markRaw(value)` | `dev.js:2241` | no callback | none |

@@ -17,7 +17,7 @@
 //! | N6: does `flush` in an effect's apply report `FLUSH_IN_EFFECT_CALLBACK`? | `@solidjs/signals` (`dist/dev.js` before rc.8, `dist/dev-shared.js` from it; from rc.1) | the installed `solid-js` |
 //! | N5: does an optimistic-store setter meet the owned-scope write guard? | `@solidjs/signals` (`devGuardStoreSetterWrite`, from rc.1) | the installed `solid-js` |
 //! | ADR 0292: does `lazy` render its loaded `default` through `createComponent`? | `solid-js` (`lazy`, rc.13 of the read releases) | the installed `solid-js` |
-//! | ADR 0194: are `dynamicComponent` and `dispatchAsInteraction` exports? | `solid-js` (`dynamicCore`), `@solidjs/web` and `@solidjs/signals` (`withInteraction`), all rc.17 | each from its own |
+//! | ADR 0194: are rc.17's `dynamicComponent`, `dispatchAsInteraction`, `createDeferred`, `lazyModule` and `onHydrationEnd` exports? | `solid-js`, `@solidjs/web` and `@solidjs/signals` (`withInteraction`, `createDeferred`), all rc.17 | each from its own |
 //!
 //! Every `solid-js@2.0.0-rc.N` depends on `@solidjs/signals: ^2.0.0-rc.N`, a
 //! range, so a fresh install of the audited `solid-js@2.0.0-rc.3` resolves
@@ -40,7 +40,7 @@
 //! | rc.8 | `Mutable` | as rc.7 | absent | present | exempt | present | as rc.7 |
 //! | rc.9 | `Mutable` | `static` selects `staticDynamic(untrack(source))` | present | present | guarded | present | `@solidjs/signals`: negative rows for five creates answers only; `solid-js`: re-exports its declarations do not declare |
 //! | rc.13 | as rc.9 | as rc.9 | as rc.9 | as rc.9 | as rc.9 | as rc.9 | none: audited (the rc.13 review, 2026-10-05). Its archives carry the rc.9 rows re-read on its bytes, 47 of 48 (ADR 0197) |
-//! | rc.17 | as rc.9 | as rc.9, from `solid-js`'s `dynamicCore` | as rc.9 | as rc.9 | as rc.9 | as rc.9 | `solid-js`: `createDeferred`, `lazyModule`, `onHydrationEnd`; `@solidjs/web`: `setLinkClaim` (callback-taking, neither modelled nor excluded); `dynamicComponent` and `dispatchAsInteraction` too unless all three packages are rc.17 |
+//! | rc.17 | as rc.9 | as rc.9, from `solid-js`'s `dynamicCore` | as rc.9 | as rc.9 | as rc.9 | as rc.9 | `@solidjs/web`: `setLinkClaim` (callback-taking, neither modelled nor excluded); `solid-js`'s `createDeferred`, `dynamicComponent`, `lazyModule`, `onHydrationEnd` and web's `dispatchAsInteraction`, `dynamicComponent` too unless all three packages are rc.17 |
 //! | anything else (rc.10-rc.12, rc.14+, betas, `2.0.0`, an inexact spelling) | `Readonly` (see below) | not modelled | absent | not modelled | exempt (see below) | not modelled | the release is named as not compared |
 //! | not resolved | `Readonly` (see below) | as rc.3 (nothing can import `dynamic`) | absent | not modelled | exempt (see below) | not modelled | named for `@solidjs/signals`; none for `@solidjs/web` |
 //!
@@ -433,7 +433,8 @@ impl Solid2 {
     /// rc.17 (the 2026-10-22 review): spread listeners need `on` + an
     /// uppercase letter, `createOptimistic`'s setter meets no owned-scope
     /// guard, `latest(fn)` absorbs a pending read, and `hydrate` may defer
-    /// `code`. It exports `dynamicComponent` and `dispatchAsInteraction`.
+    /// `code`. It exports `dynamicComponent`, `dispatchAsInteraction`,
+    /// `createDeferred`, `lazyModule` and `onHydrationEnd`.
     /// Every other answer is rc.13's, re-measured on rc.17's bytes.
     pub const RC17: Self = Self {
         spread_event_keys: SpreadEventKeys::OnUppercase,
@@ -600,7 +601,7 @@ impl Solid2 {
                 "optimistic-setter-guarded" => vocabulary.optimistic_signal_setter_guarded = true,
                 "latest-rejects-pending" => vocabulary.latest_rejects_pending_read = true,
                 "hydrate-inline" => vocabulary.hydrate_code_inline = true,
-                "dynamic-component-dispatch" => vocabulary.rc17_callback_exports = true,
+                "rc17-callback-exports" => vocabulary.rc17_callback_exports = true,
                 _ => return None,
             }
         }
@@ -609,15 +610,16 @@ impl Solid2 {
     }
 
     /// Whether this installation exports `primitive` at all. `until`, and
-    /// rc.17's `dynamicComponent` and `dispatchAsInteraction`, depend on the
-    /// release; every other `TABLE` row is exported by every release the
-    /// reviews read.
+    /// rc.17's callback-taking exports, depend on the release; every other
+    /// `TABLE` row is exported by every release the reviews read.
     pub(super) fn exports(self, primitive: Primitive) -> bool {
         match primitive {
             Primitive::Until => self.until,
-            Primitive::DynamicComponent | Primitive::DispatchAsInteraction => {
-                self.rc17_callback_exports
-            }
+            Primitive::DynamicComponent
+            | Primitive::DispatchAsInteraction
+            | Primitive::CreateDeferred
+            | Primitive::LazyModule
+            | Primitive::OnHydrationEnd => self.rc17_callback_exports,
             _ => true,
         }
     }
@@ -694,7 +696,7 @@ fn variant_key(vocabulary: Solid2) -> Option<String> {
         tokens.push("hydrate-inline");
     }
     if vocabulary.rc17_callback_exports {
-        tokens.push("dynamic-component-dispatch");
+        tokens.push("rc17-callback-exports");
     }
     (!tokens.is_empty()).then(|| tokens.join("+"))
 }
@@ -757,8 +759,8 @@ struct KnownGap {
     server_rendering_only: bool,
 }
 
-/// The rc.17 review: `dynamicComponent` and `dispatchAsInteraction` are
-/// modelled only when all three packages are rc.17.
+/// The rc.17 review: its callback-taking exports other than `setLinkClaim`
+/// are modelled only when all three packages are rc.17.
 fn models_rc17_callback_exports(vocabulary: Solid2) -> bool {
     vocabulary.rc17_callback_exports
 }
@@ -827,18 +829,6 @@ const KNOWN_GAPS: &[KnownGap] = &[
         closed_by: None,
         server_rendering_only: false,
     },
-    // The rc.17 review: new root exports that take callbacks.
-    KnownGap {
-        package: SOLID_JS,
-        from: 17,
-        through: 17,
-        gap: "exports createDeferred, lazyModule and onHydrationEnd, which take callbacks this \
-              vocabulary neither models nor excludes, so code inside one is not classified",
-        review: RC17_REVIEW,
-        exports: Some(&["createDeferred", "lazyModule", "onHydrationEnd"]),
-        closed_by: None,
-        server_rendering_only: false,
-    },
     // `setLinkClaim(handler)`: the client builds ignore the handler
     // (`dist/web.dev.js:534`, `web.js:389`, `web.observe.js:400`); the server
     // builds store it on the render context (`dist/server.js:4125-4133`) and
@@ -867,10 +857,16 @@ const KNOWN_GAPS: &[KnownGap] = &[
         package: SOLID_JS,
         from: 17,
         through: 17,
-        gap: "exports dynamicComponent, which this vocabulary models only when @solidjs/signals \
-              and @solidjs/web are rc.17 too, so code inside one is not classified",
+        gap: "exports createDeferred, dynamicComponent, lazyModule and onHydrationEnd, which \
+              this vocabulary models only when @solidjs/signals and @solidjs/web are rc.17 too, \
+              so code inside one is not classified",
         review: RC17_REVIEW,
-        exports: Some(&["dynamicComponent"]),
+        exports: Some(&[
+            "createDeferred",
+            "dynamicComponent",
+            "lazyModule",
+            "onHydrationEnd",
+        ]),
         closed_by: Some(models_rc17_callback_exports),
         server_rendering_only: false,
     },
@@ -982,7 +978,10 @@ fn vocabulary_for(solid_js: Release<'_>, signals: Release<'_>, web: Release<'_>)
         // (`dist/solid.dev.js:1545`), which `@solidjs/web` re-exports
         // (`dist/web.dev.js:2`); `dispatchAsInteraction` is web's, and its dev
         // and observe builds call signals' `withInteraction`
-        // (`dist/dev-shared.js:335-347`). Read on the rc.17 triple only.
+        // (`dist/dev-shared.js:335-347`); `solid-js`'s client
+        // `createDeferred` wraps signals' (`dist/solid.dev.js:975-976`), and
+        // `onHydrationEnd`'s drain is reached from web's `hydrate`
+        // (`dist/web.dev.js:1732-1735`). Read on the rc.17 triple only.
         rc17_callback_exports: matches!(
             (solid_js, signals, web),
             (

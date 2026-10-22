@@ -101,6 +101,12 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/rc17-dispatch-as-interaction/node_modules/**
 !fixtures/reactive-ir/rc17-callback-exports-mixed/node_modules/
 !fixtures/reactive-ir/rc17-callback-exports-mixed/node_modules/**
+!fixtures/reactive-ir/rc17-create-deferred/node_modules/
+!fixtures/reactive-ir/rc17-create-deferred/node_modules/**
+!fixtures/reactive-ir/rc17-lazy-module/node_modules/
+!fixtures/reactive-ir/rc17-lazy-module/node_modules/**
+!fixtures/reactive-ir/rc17-on-hydration-end/node_modules/
+!fixtures/reactive-ir/rc17-on-hydration-end/node_modules/**
 !fixtures/reactive-ir/rc17-set-link-claim-csr/node_modules/
 !fixtures/reactive-ir/rc17-set-link-claim-csr/node_modules/**
 !fixtures/reactive-ir/rc17-set-link-claim-ssr/node_modules/

@@ -37,12 +37,14 @@ rc.17 becomes the audited triple, with rc.13's answers except:
   execution is stated; the root claim holds.
 - **`dynamic`'s static form** (web W3): now `solid-js`'s `dynamicCore`; under
   web rc.17 it is modelled only with `solid-js` rc.17.
-- **New callback-taking exports** (`createDeferred`, `lazyModule`,
-  `onHydrationEnd`; web `setLinkClaim`): neither modelled nor excluded, so an
-  import-scoped gap names them. Addendum: `dynamicComponent` (`dynamic`'s
-  call forms) and `dispatchAsInteraction` (`fn` inline, caller's owner and
-  listener) are modelled on the rc.17 triple, measured [M] (solid-js A19,
-  web B.2); a mixed install keeps them in the gap.
+- **New callback-taking exports** (web `setLinkClaim`): neither modelled nor
+  excluded, so an import-scoped gap names it. Addendum: `dynamicComponent`
+  (`dynamic`'s call forms), `dispatchAsInteraction` (`fn` inline, caller's
+  owner and listener), `createDeferred` (`createMemo`'s answers),
+  `lazyModule` (`fn` at the result's first call, invoker's owner, like
+  `lazy`'s loader) and `onHydrationEnd` (deferred, owner conditional) are
+  modelled on the rc.17 triple, measured [M] (solid-js A19-A22, web B.2,
+  signals C7); a mixed install keeps them in the gap.
 
 Recorded, not modelled: the new dev throw `PRIMITIVE_IN_EFFECT_CALLBACK`
 (signals C3), writes allowed during disposal (C4), the removed derived-store

@@ -1,9 +1,17 @@
 // solid-js and @solidjs/web rc.17 over @solidjs/signals rc.13: no review read
 // this combination, and `dispatchAsInteraction`'s dev build calls a signals
-// `withInteraction` rc.13 was not read for, so neither rc.17 export is
-// modelled. The same calls `rc17-dispatch-as-interaction` and
-// `rc17-dynamic-component` prove there state nothing here.
-import { createEffect, createSignal, dynamicComponent } from "solid-js";
+// `withInteraction` (and `solid-js`'s client `createDeferred` a signals
+// `createDeferred`) rc.13 was not read for, so no rc.17 callback export is
+// modelled. The same calls the `rc17-*` fixtures prove there state nothing
+// here.
+import {
+  createDeferred,
+  createEffect,
+  createSignal,
+  dynamicComponent,
+  lazyModule,
+  onHydrationEnd,
+} from "solid-js";
 import { dispatchAsInteraction } from "@solidjs/web";
 
 const [count, setCount] = createSignal(0);
@@ -21,3 +29,18 @@ export const StaticEffect = dynamicComponent(() => {
   createEffect(() => count(), () => {});
   return Plain;
 }, { static: true });
+
+// Not claimed: a write inside an unmodelled `createDeferred` compute.
+export function DeferredWrite() {
+  createDeferred(() => setCount(2));
+  return null;
+}
+
+// Not claimed: an effect `lazyModule`'s loader creates when invoked at module
+// scope, and one in an `onHydrationEnd` callback.
+const load = lazyModule(() => {
+  createEffect(() => count(), () => {});
+  return Promise.resolve({});
+});
+load();
+onHydrationEnd(() => createEffect(() => count(), () => {}));

@@ -7,8 +7,18 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/rc17-callback-exports-mixed/App.tsx",
-      "start": 707,
-      "end": 718,
+      "start": 803,
+      "end": 814,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc17-callback-exports-mixed/App.tsx",
+      "start": 1158,
+      "end": 1169,
       "fixes": 0
     },
     {

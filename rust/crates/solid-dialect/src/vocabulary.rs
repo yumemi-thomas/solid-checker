@@ -25,9 +25,14 @@ pub enum Primitive {
     /// Solid 2.0 makes the context itself the provider.
     CreateContext,
 
+    /// `createDeferred(fn, options?)`: 1.x's deferred memo, and from
+    /// `solid-js@2.0.0-rc.17` 2.0's (from `@solidjs/signals`),
+    /// `accessor(computed(prev => … fn(prev) …))`, a memo whose refetches,
+    /// after its first answer, do not hold its readers.
+    CreateDeferred,
+
     // 1.x only
     CreateComputed,
-    CreateDeferred,
     CreateSelector,
     CreateResource,
     Batch,
@@ -114,6 +119,12 @@ pub enum Primitive {
     /// `fn()` inline, inside the attribution engine's interaction frame in
     /// dev and observe builds.
     DispatchAsInteraction,
+    /// `lazyModule(fn, moduleUrl?)`, new in `solid-js@2.0.0-rc.17`: `fn` runs
+    /// once, when the returned function (or its `preload`) is first called.
+    LazyModule,
+    /// `onHydrationEnd(callback)`, exported from `solid-js@2.0.0-rc.17`: the
+    /// callback runs from a microtask, or from the drain at hydration's end.
+    OnHydrationEnd,
 
     // Control flow — component tags
     For,
