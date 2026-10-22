@@ -17,6 +17,7 @@
 //! | N6: does `flush` in an effect's apply report `FLUSH_IN_EFFECT_CALLBACK`? | `@solidjs/signals` (`dist/dev.js` before rc.8, `dist/dev-shared.js` from it; from rc.1) | the installed `solid-js` |
 //! | N5: does an optimistic-store setter meet the owned-scope write guard? | `@solidjs/signals` (`devGuardStoreSetterWrite`, from rc.1) | the installed `solid-js` |
 //! | ADR 0292: does `lazy` render its loaded `default` through `createComponent`? | `solid-js` (`lazy`, rc.13 of the read releases) | the installed `solid-js` |
+//! | ADR 0194: are `dynamicComponent` and `dispatchAsInteraction` exports? | `solid-js` (`dynamicCore`), `@solidjs/web` and `@solidjs/signals` (`withInteraction`), all rc.17 | each from its own |
 //!
 //! Every `solid-js@2.0.0-rc.N` depends on `@solidjs/signals: ^2.0.0-rc.N`, a
 //! range, so a fresh install of the audited `solid-js@2.0.0-rc.3` resolves
@@ -39,6 +40,7 @@
 //! | rc.8 | `Mutable` | as rc.7 | absent | present | exempt | present | as rc.7 |
 //! | rc.9 | `Mutable` | `static` selects `staticDynamic(untrack(source))` | present | present | guarded | present | `@solidjs/signals`: negative rows for five creates answers only; `solid-js`: re-exports its declarations do not declare |
 //! | rc.13 | as rc.9 | as rc.9 | as rc.9 | as rc.9 | as rc.9 | as rc.9 | none: audited (the rc.13 review, 2026-10-05). Its archives carry the rc.9 rows re-read on its bytes, 47 of 48 (ADR 0197) |
+//! | rc.17 | as rc.9 | as rc.9, from `solid-js`'s `dynamicCore` | as rc.9 | as rc.9 | as rc.9 | as rc.9 | `solid-js`: `createDeferred`, `lazyModule`, `onHydrationEnd`; `@solidjs/web`: `setLinkClaim` (callback-taking, neither modelled nor excluded); `dynamicComponent` and `dispatchAsInteraction` too unless all three packages are rc.17 |
 //! | anything else (rc.10-rc.12, rc.14+, betas, `2.0.0`, an inexact spelling) | `Readonly` (see below) | not modelled | absent | not modelled | exempt (see below) | not modelled | the release is named as not compared |
 //! | not resolved | `Readonly` (see below) | as rc.3 (nothing can import `dynamic`) | absent | not modelled | exempt (see below) | not modelled | named for `@solidjs/signals`; none for `@solidjs/web` |
 //!
@@ -378,6 +380,7 @@ impl Solid2 {
         optimistic_signal_setter_guarded: true,
         latest_rejects_pending_read: true,
         hydrate_code_inline: true,
+        rc17_callback_exports: false,
     };
 
     /// The vocabulary of the audited triple, [`AUDITED_INSTALLATION`]: what
@@ -411,6 +414,7 @@ impl Solid2 {
         optimistic_signal_setter_guarded: true,
         latest_rejects_pending_read: true,
         hydrate_code_inline: true,
+        rc17_callback_exports: false,
     };
 
     /// rc.13 adds one audited strict store-key premise; older reviews
@@ -428,9 +432,11 @@ impl Solid2 {
     /// rc.17 (the 2026-10-22 review): spread listeners need `on` + an
     /// uppercase letter, `createOptimistic`'s setter meets no owned-scope
     /// guard, `latest(fn)` absorbs a pending read, and `hydrate` may defer
-    /// `code`. Every other answer is rc.13's, re-measured on rc.17's bytes.
+    /// `code`. It exports `dynamicComponent` and `dispatchAsInteraction`.
+    /// Every other answer is rc.13's, re-measured on rc.17's bytes.
     pub const RC17: Self = Self {
         spread_event_keys: SpreadEventKeys::OnUppercase,
+        rc17_callback_exports: true,
         optimistic_signal_setter_guarded: false,
         latest_rejects_pending_read: false,
         hydrate_code_inline: false,
@@ -440,7 +446,7 @@ impl Solid2 {
     /// How many distinct vocabularies the answers above combine into: every
     /// combination is reachable, because the three owners install
     /// independently.
-    const VARIANT_COUNT: usize = 2 * 2 * 2 * 3 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 3 * 2 * 2 * 2;
+    const VARIANT_COUNT: usize = 2 * 2 * 2 * 3 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 3 * 2 * 2 * 2 * 2;
 
     /// The vocabulary at one mixed-radix index, [`Solid2::CONSERVATIVE`] at
     /// `0`: digit `0` of every answer is its conservative one. A new
@@ -460,6 +466,7 @@ impl Solid2 {
             optimistic_signal_setter_guarded: (index / 9216) % 2 == 1,
             latest_rejects_pending_read: (index / 18432) % 2 == 1,
             hydrate_code_inline: (index / 36864) % 2 == 1,
+            rc17_callback_exports: (index / 73728) % 2 == 1,
             store_root: if index % 2 == 1 {
                 StoreRootTyping::Mutable
             } else {
@@ -537,6 +544,7 @@ impl Solid2 {
                     0
                 })
             + 36864 * (if self.hydrate_code_inline { 1 } else { 0 })
+            + 73728 * (if self.rc17_callback_exports { 1 } else { 0 })
     }
 
     /// The one `'static` value per vocabulary, which is what an analysis holds.
@@ -548,11 +556,18 @@ impl Solid2 {
         KEYS[self.index()].as_deref()
     }
 
-    /// Whether this installation exports `primitive` at all. Only `until`
-    /// depends on the release; every other `TABLE` row is exported by
-    /// every release the reviews read.
+    /// Whether this installation exports `primitive` at all. `until`, and
+    /// rc.17's `dynamicComponent` and `dispatchAsInteraction`, depend on the
+    /// release; every other `TABLE` row is exported by every release the
+    /// reviews read.
     pub(super) fn exports(self, primitive: Primitive) -> bool {
-        primitive != Primitive::Until || self.until
+        match primitive {
+            Primitive::Until => self.until,
+            Primitive::DynamicComponent | Primitive::DispatchAsInteraction => {
+                self.rc17_callback_exports
+            }
+            _ => true,
+        }
     }
 }
 
@@ -626,6 +641,9 @@ fn variant_key(vocabulary: Solid2) -> Option<String> {
     if vocabulary.hydrate_code_inline {
         tokens.push("hydrate-inline");
     }
+    if vocabulary.rc17_callback_exports {
+        tokens.push("dynamic-component-dispatch");
+    }
     (!tokens.is_empty()).then(|| tokens.join("+"))
 }
 
@@ -682,6 +700,15 @@ struct KnownGap {
     /// project that reaches one of these exports of the owner's root entry, or
     /// whose use of it the facts cannot bound ([`GapScope`]).
     exports: Option<&'static [&'static str]>,
+    /// The vocabularies that model what the gap names, which it is then not
+    /// open for. `None`: open for every vocabulary.
+    closed_by: Option<fn(Solid2) -> bool>,
+}
+
+/// The rc.17 review: `dynamicComponent` and `dispatchAsInteraction` are
+/// modelled only when all three packages are rc.17.
+fn models_rc17_callback_exports(vocabulary: Solid2) -> bool {
+    vocabulary.rc17_callback_exports
 }
 
 /// Every open gap a review measured, by owner and release. A gap leaves this
@@ -698,6 +725,7 @@ const KNOWN_GAPS: &[KnownGap] = &[
               classified",
         review: RC1_RC8_REVIEW,
         exports: None,
+        closed_by: None,
     },
     KnownGap {
         package: WEB,
@@ -707,6 +735,7 @@ const KNOWN_GAPS: &[KnownGap] = &[
               neither models nor excludes, so code inside one is not classified",
         review: RC1_RC8_REVIEW,
         exports: None,
+        closed_by: None,
     },
     // The rc.1-rc.8 review § 0.2: rc.7 and rc.8 are "reviewed with one gap".
     KnownGap {
@@ -717,6 +746,7 @@ const KNOWN_GAPS: &[KnownGap] = &[
               than on the audited release",
         review: RC1_RC8_REVIEW,
         exports: None,
+        closed_by: None,
     },
     // The rc.9 review § 4.
     KnownGap {
@@ -739,32 +769,57 @@ const KNOWN_GAPS: &[KnownGap] = &[
             "sharedConfig",
             "$DEVCOMP",
         ]),
+        closed_by: None,
     },
     // The rc.17 review: new root exports that take callbacks.
     KnownGap {
         package: SOLID_JS,
         from: 17,
         through: 17,
-        gap: "exports createDeferred, dynamicComponent, lazyModule and onHydrationEnd, which take \
-              callbacks this vocabulary neither models nor excludes, so code inside one is not \
-              classified",
+        gap: "exports createDeferred, lazyModule and onHydrationEnd, which take callbacks this \
+              vocabulary neither models nor excludes, so code inside one is not classified",
         review: RC17_REVIEW,
-        exports: Some(&[
-            "createDeferred",
-            "dynamicComponent",
-            "lazyModule",
-            "onHydrationEnd",
-        ]),
+        exports: Some(&["createDeferred", "lazyModule", "onHydrationEnd"]),
+        closed_by: None,
+    },
+    // `setLinkClaim(handler)`: the client builds ignore the handler
+    // (`dist/web.dev.js:534`, `web.js:389`, `web.observe.js:400`); the server
+    // builds store it on the render context (`dist/server.js:4125-4133`) and
+    // `ssrLinkClaim` calls it while serializing an element with `href`
+    // (`:3508-3512`), under whatever owner and listener that serialization
+    // runs in. No answer is true of both targets, and none is per target.
+    KnownGap {
+        package: WEB,
+        from: 17,
+        through: 17,
+        gap: "exports setLinkClaim, whose handler the server build calls while serializing \
+              links and the client build ignores, so code inside one is not classified",
+        review: RC17_REVIEW,
+        exports: Some(&["setLinkClaim"]),
+        closed_by: None,
+    },
+    // Modelled on the rc.17 triple (`Solid2::rc17_callback_exports`); a mixed
+    // installation keeps them unread.
+    KnownGap {
+        package: SOLID_JS,
+        from: 17,
+        through: 17,
+        gap: "exports dynamicComponent, which this vocabulary models only when @solidjs/signals \
+              and @solidjs/web are rc.17 too, so code inside one is not classified",
+        review: RC17_REVIEW,
+        exports: Some(&["dynamicComponent"]),
+        closed_by: Some(models_rc17_callback_exports),
     },
     KnownGap {
         package: WEB,
         from: 17,
         through: 17,
-        gap: "exports dispatchAsInteraction, dynamicComponent and setLinkClaim, which take \
-              callbacks this vocabulary neither models nor excludes, so code inside one is not \
+        gap: "exports dispatchAsInteraction and dynamicComponent, which this vocabulary models \
+              only when solid-js and @solidjs/signals are rc.17 too, so code inside one is not \
               classified",
         review: RC17_REVIEW,
-        exports: Some(&["dispatchAsInteraction", "dynamicComponent", "setLinkClaim"]),
+        exports: Some(&["dispatchAsInteraction", "dynamicComponent"]),
+        closed_by: Some(models_rc17_callback_exports),
     },
 ];
 
@@ -858,6 +913,19 @@ fn vocabulary_for(solid_js: Release<'_>, signals: Release<'_>, web: Release<'_>)
         optimistic_signal_setter_guarded: matches!(signals, Release::Read(n) if n < RC17),
         latest_rejects_pending_read: matches!(signals, Release::Read(n) if n < RC17),
         hydrate_code_inline: matches!(web, Release::Read(n) if n < RC17),
+        // `dynamicComponent` is `solid-js`'s `dynamicCore` with no tag arm
+        // (`dist/solid.dev.js:1545`), which `@solidjs/web` re-exports
+        // (`dist/web.dev.js:2`); `dispatchAsInteraction` is web's, and its dev
+        // and observe builds call signals' `withInteraction`
+        // (`dist/dev-shared.js:335-347`). Read on the rc.17 triple only.
+        rc17_callback_exports: matches!(
+            (solid_js, signals, web),
+            (
+                Release::Read(RC17),
+                Release::Read(RC17),
+                Release::Read(RC17)
+            )
+        ),
         // B1. An unread or unresolved signals keeps `Readonly` (module docs).
         store_root: match signals {
             Release::Read(number) if number >= 7 => StoreRootTyping::Mutable,
@@ -934,6 +1002,7 @@ fn vocabulary_for(solid_js: Release<'_>, signals: Release<'_>, web: Release<'_>)
 
 /// Every gap in what the reviews know about one resolved triple.
 fn gaps_for(solid_js: Release<'_>, signals: Release<'_>, web: Release<'_>) -> Vec<InstallationGap> {
+    let vocabulary = vocabulary_for(solid_js, signals, web);
     let mut gaps = Vec::new();
     for (package, release) in [(SOLID_JS, solid_js), (SIGNALS, signals), (WEB, web)] {
         match release {
@@ -941,7 +1010,9 @@ fn gaps_for(solid_js: Release<'_>, signals: Release<'_>, web: Release<'_>) -> Ve
                 KNOWN_GAPS
                     .iter()
                     .filter(|known| {
-                        known.package == package && (known.from..=known.through).contains(&number)
+                        known.package == package
+                            && (known.from..=known.through).contains(&number)
+                            && !known.closed_by.is_some_and(|closed| closed(vocabulary))
                     })
                     .map(|known| InstallationGap {
                         gap: format!("{package}@{} {}", release.spelled(), known.gap),

@@ -403,7 +403,9 @@ fn the_vocabulary_is_pinned_by_name() {
             "createStore",
             "createTrackedEffect",
             "deep",
+            "dispatchAsInteraction",
             "dynamic",
+            "dynamicComponent",
             "Errored",
             "flush",
             "For",
@@ -716,4 +718,102 @@ fn only_callback_bearing_primitives_report_positions() {
     assert!(Solid2.callback_positions(Primitive::Loading).is_empty());
     // `children(fn)` takes its thunk at 0 (ADR 0323).
     assert_eq!(Solid2.callback_positions(Primitive::Children), &[0]);
+}
+
+/// `dynamicComponent` is `dynamicCore` with no tag arm (`solid-js@2.0.0-rc.17`
+/// `dist/solid.dev.js:1545`): `dynamic`'s forms, decided from the call alone,
+/// whatever web's `dynamic` answers; a third argument (the tag arm) states
+/// nothing.
+#[test]
+fn dynamic_component_calls_take_dynamics_forms() {
+    use crate::OptionLiteral;
+    let form = |vocabulary: Solid2, third: OptionLiteral, literal: OptionLiteral| {
+        vocabulary.call_form(
+            Primitive::DynamicComponent,
+            &|argument, key| match argument {
+                1 => {
+                    assert_eq!(key, "static");
+                    literal
+                }
+                2 => third,
+                _ => panic!("argument {argument} is not asked"),
+            },
+        )
+    };
+    // Web's own `dynamic` answer does not decide `dynamicComponent`'s.
+    for vocabulary in [
+        Solid2::RC17,
+        Solid2 {
+            dynamic_options: releases::DynamicOptions::Unread,
+            ..Solid2::RC17
+        },
+    ] {
+        let absent = OptionLiteral::Absent;
+        assert_eq!(form(vocabulary, absent, absent), Primitive::Dynamic);
+        assert_eq!(
+            form(vocabulary, absent, OptionLiteral::False),
+            Primitive::Dynamic
+        );
+        assert_eq!(
+            form(vocabulary, absent, OptionLiteral::True),
+            Primitive::DynamicStatic
+        );
+        assert_eq!(
+            form(vocabulary, absent, OptionLiteral::Unknown),
+            Primitive::DynamicUnknownForm
+        );
+        for third in [
+            OptionLiteral::Unknown,
+            OptionLiteral::True,
+            OptionLiteral::False,
+        ] {
+            assert_eq!(
+                form(vocabulary, third, absent),
+                Primitive::DynamicUnknownForm
+            );
+        }
+    }
+    assert_eq!(
+        Solid2::RC17.name_of(Primitive::DynamicComponent),
+        Some("dynamicComponent")
+    );
+    assert_eq!(Solid2::RC13.name_of(Primitive::DynamicComponent), None);
+    // A name only: no row answers for it before its call form is taken.
+    let two: &dyn Dialect = &Solid2::RC17;
+    assert!(
+        two.callback_executions(Primitive::DynamicComponent)
+            .is_empty()
+    );
+    assert!(two.callback_owners(Primitive::DynamicComponent).is_empty());
+}
+
+/// `dispatchAsInteraction(event, fn)` runs `fn()` inline, once, under the
+/// caller's owner and listener (`@solidjs/web@2.0.0-rc.17`
+/// `dist/web.js:484`, `dist/web.dev.js:653-660`): `flush(fn)`'s attribution
+/// without its scheduler.
+#[test]
+fn dispatch_as_interaction_runs_its_callback_in_place() {
+    let two: &dyn Dialect = &Solid2::RC17;
+    let primitive = Primitive::DispatchAsInteraction;
+    assert_eq!(two.callback_positions(primitive), &[1]);
+    assert_eq!(
+        two.callback_execution_at(primitive, 1, 2),
+        Some(Execution::Inline)
+    );
+    assert_eq!(two.callback_execution_at(primitive, 0, 2), None);
+    assert_eq!(
+        two.callback_execution_word_at(primitive, 1, 2),
+        Some(Execution::Inline)
+    );
+    assert_eq!(
+        two.callback_owner_at(primitive, 1, 2),
+        Some(CallbackOwner::Inherits)
+    );
+    assert!(!two.runs_callback_deferred(primitive));
+    assert!(two.callback_preserves_owner_write_context(primitive));
+    assert!(!two.callback_inherits_calling_window(primitive, 1));
+    assert!(!two.reports_untracked_reads_at(primitive, 1, 2));
+    assert!(!two.throws_inside_action_step(primitive));
+    assert!(!two.warns_inside_effect_phase(primitive));
+    assert_eq!(two.owner_requirement_role(primitive), None);
 }

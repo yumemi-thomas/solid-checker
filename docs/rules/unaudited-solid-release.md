@@ -31,7 +31,7 @@ rc.9's.
 
 | release, per package | result |
 | --- | --- |
-| `2.0.0-rc.17` (the audited release) | analyzed with rc.13's answers except spread listeners (`on` + uppercase), the unguarded `createOptimistic` setter, `latest` absorbing a pending read and `hydrate` possibly deferring `code` (the rc.17 review); a notice only where the project reaches one of its new callback-taking exports |
+| `2.0.0-rc.17` (the audited release) | analyzed with rc.13's answers except spread listeners (`on` + uppercase), the unguarded `createOptimistic` setter, `latest` absorbing a pending read and `hydrate` possibly deferring `code` (the rc.17 review); a notice only where the project reaches one of its new callback-taking exports (`createDeferred`, `lazyModule`, `onHydrationEnd`, `setLinkClaim`; `dynamicComponent` and `dispatchAsInteraction` are modelled on the rc.17 triple and named only on a mixed install) |
 | `2.0.0-rc.13` | analyzed with rc.13's answers, **this notice**: older than the audited release |
 | `2.0.0-rc.9` | analyzed with rc.9's answers, **this notice**: older than the audited release, and the `solid-js` re-export gap where the project reaches one of its five names (below) |
 | `rc.0`-`rc.3`, which behave as rc.3 on every premise the dialect cites | analyzed with rc.3's answers, **this notice**: older than the audited release, so new rules and precision work are measured on rc.17 only |

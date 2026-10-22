@@ -104,6 +104,16 @@ pub enum Primitive {
     /// `new Promise` + `createRoot` + user-`effect` shape as
     /// [`Primitive::Resolve`], resolving on the first truthy value.
     Until,
+    /// `dynamicComponent(source, options?)`, new in `solid-js@2.0.0-rc.17`
+    /// (and re-exported by `@solidjs/web`): `solid-js`'s `dynamicCore` with no
+    /// tag arm, the core `@solidjs/web`'s `dynamic` forwards to with one. A
+    /// name only: [`Dialect::call_form`] maps every call to one of
+    /// [`Primitive::Dynamic`]'s forms, whose source semantics it shares.
+    DynamicComponent,
+    /// `dispatchAsInteraction(event, fn)`, new in `@solidjs/web@2.0.0-rc.17`:
+    /// `fn()` inline, inside the attribution engine's interaction frame in
+    /// dev and observe builds.
+    DispatchAsInteraction,
 
     // Control flow — component tags
     For,

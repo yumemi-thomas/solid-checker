@@ -31,7 +31,7 @@ Shared code asks the `Dialect` vocabulary rather than hardcoding primitive lists
 
 <a id="adr-0127"></a>
 ## ADR 0127 — Audited, defaulted and conservative vocabularies are separate
-`Solid2::AUDITED` (the audited triple), `Solid2::DEFAULTED` (a project with no resolved `solid-js`) and `Solid2::CONSERVATIVE` (an owner that did not resolve, answered by each field's `#[default]`) coincide today but are kept apart, so moving the audited release changes only `AUDITED_INSTALLATION` and the vocabulary `AUDITED` names. A release the reviews did not read gets the conservative answers plus the `SC9014` notice; older read releases keep their answers and the notice that they are older than the audited release. Superseded in its release number by ADR 0194. Owners: rust/crates/solid-dialect/src/solid_2/releases.rs, rust/crates/solid-facts-backend/src/{dialect,release_scope}.rs.
+`Solid2::AUDITED` (the audited triple), `Solid2::DEFAULTED` (a project with no resolved `solid-js`) and `Solid2::CONSERVATIVE` (an owner that did not resolve, answered by each field's `#[default]`) coincide today but are kept apart, so moving the audited release changes only `AUDITED_INSTALLATION` and the vocabulary `AUDITED` names. Which release gets which answers, and its notice, is ADR 0194. Owners: rust/crates/solid-dialect/src/solid_2/releases.rs, rust/crates/solid-facts-backend/src/{dialect,release_scope}.rs.
 
 <a id="adr-0132"></a>
 ## ADR 0132 — A relative edge inside one installed package is no package boundary
@@ -75,7 +75,7 @@ With no explicit program boundary, the nearest `package.json` decides: `"private
 
 <a id="adr-0194"></a>
 ## ADR 0194 — The audited Solid 2 release is rc.17
-`AUDITED_INSTALLATION` names `solid-js`, `@solidjs/signals` and `@solidjs/web` at `2.0.0-rc.17` (`Solid2::AUDITED` is `RC17`): rc.13's answers but `on`+uppercase spread listeners, an unguarded `createOptimistic` setter, `latest` absorbing a pending read, a deferrable `hydrate`, and `dynamic`'s static form from `solid-js`. `READ_RELEASES` is rc.0-rc.9, rc.13, rc.17; others get conservative answers under `SC9014`, older read ones the older-release notice. New callback exports are import-scoped gaps. Owner: rust/crates/solid-dialect/src/solid_2/releases.rs; review in docs/release-audits/.
+`AUDITED_INSTALLATION` names `solid-js`, `@solidjs/signals` and `@solidjs/web` at `2.0.0-rc.17` (`Solid2::AUDITED` is `RC17`): rc.13's answers but `on`+uppercase spread listeners, an unguarded `createOptimistic` setter, `latest` absorbing a pending read, a deferrable `hydrate`, and `dynamic`'s static form from `solid-js`. `READ_RELEASES` is rc.0-rc.9, rc.13, rc.17; others get conservative answers under `SC9014`, older read ones the older-release notice. On the rc.17 triple `dynamicComponent` takes `dynamic`'s forms and `dispatchAsInteraction` runs `fn` inline in the caller's owner; other new callback exports, `setLinkClaim` among them, are import-scoped gaps. Owner: rust/crates/solid-dialect/src/solid_2/releases.rs; review in docs/release-audits/.
 
 <a id="adr-0195"></a>
 ## ADR 0195 — A source tracked before the await is a dependency

@@ -248,7 +248,8 @@ impl StaticApiContext<'_> {
                 });
             }
             // SC2007: a promise-valued source for rc.9's static `dynamic`
-            // form. `DynamicStatic` is only ever the dialect's answer where
+            // form, and rc.17's `dynamicComponent`, whose static form is the
+            // same `staticDynamic` (`solid-js` `dist/solid.dev.js:1530`). `DynamicStatic` is only ever the dialect's answer where
             // the resolved `@solidjs/web` has the form (`call_form`), so no
             // other release reaches this arm. Every build calls the source
             // once, untracked, before `dynamic` returns; the dev builds then
@@ -266,10 +267,10 @@ impl StaticApiContext<'_> {
                     id: "SC2007".into(),
                     rule: "static-dynamic-async-source".into(),
                     message: format!(
-                        "dynamic() is called with {{ static: true }} and a source that {proof}; the static form calls the source once and renders what it returns synchronously, so the dev builds throw \"dynamic(): a static source must resolve synchronously, not to a promise\" here and the production builds render nothing"
+                        "{primitive}() is called with {{ static: true }} and a source that {proof}; the static form calls the source once and renders what it returns synchronously, so the dev builds throw \"dynamic(): a static source must resolve synchronously, not to a promise\" here and the production builds render nothing"
                     ),
                     hint: format!(
-                        "Drop static: true so dynamic() settles the source in its memo (and render it under a <{}> boundary), or resolve the component before calling dynamic() and pass a synchronous source.",
+                        "Drop static: true so {primitive}() settles the source in its memo (and render it under a <{}> boundary), or resolve the component before calling {primitive}() and pass a synchronous source.",
                         dialect.boundary_name(solid_dialect::Boundary::Async)
                     ),
                     location: location(file.path.shared(), call.callee),

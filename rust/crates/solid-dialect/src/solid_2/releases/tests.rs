@@ -892,7 +892,20 @@ fn the_trait_answers_from_the_variant() {
     }
     for gated in super::super::RELEASE_GATED_NAMES {
         assert_eq!(Solid2::RC3.primitive(gated), None, "{gated}");
-        assert!(Solid2::RC9.primitive(gated).is_some(), "{gated}");
+        assert!(Solid2::RC17.primitive(gated).is_some(), "{gated}");
+    }
+    assert!(Solid2::RC9.primitive("until").is_some());
+    // New in rc.17 (the rc.17 review): no earlier vocabulary has them.
+    for name in ["dynamicComponent", "dispatchAsInteraction"] {
+        for vocabulary in [Solid2::RC9, Solid2::RC13] {
+            assert_eq!(vocabulary.primitive(name), None, "{name}");
+            assert!(
+                vocabulary
+                    .export_modules(name, crate::ExportPosition::Value)
+                    .is_empty(),
+                "{name}"
+            );
+        }
     }
     let expected = Solid2::RC9.interned() as *const Solid2;
     for vocabulary in &VARIANTS {
@@ -1024,4 +1037,80 @@ fn rc17_answers_follow_their_owners() {
     let unread = analyzed(&same("2.0.0-rc.16")).0;
     assert!(!unread.optimistic_signal_setter_guarded());
     assert!(unread.callback_handles_pending_accessor_read(Primitive::Latest, 0));
+}
+
+/// The rc.17 review's new callback-taking exports: `dynamicComponent` and
+/// `dispatchAsInteraction` are modelled on the rc.17 triple, and stay a
+/// scoped gap on any other installation that has them; `setLinkClaim` stays
+/// a gap everywhere.
+#[test]
+fn rc17_callback_exports_are_modelled_only_on_the_rc17_triple() {
+    let (audited, gaps) = analyzed(&same("2.0.0-rc.17"));
+    assert!(audited.rc17_callback_exports);
+    let scoped = |gaps: &[InstallationGap]| {
+        let mut names = gaps
+            .iter()
+            .filter_map(|gap| gap.scope.map(|scope| (scope.specifier, scope.exports)))
+            .flat_map(|(specifier, exports)| exports.iter().map(move |name| (specifier, *name)))
+            .collect::<Vec<_>>();
+        names.sort_unstable();
+        names
+    };
+    assert_eq!(
+        scoped(&gaps),
+        [
+            (WEB, "setLinkClaim"),
+            (SOLID_JS, "createDeferred"),
+            (SOLID_JS, "lazyModule"),
+            (SOLID_JS, "onHydrationEnd"),
+        ]
+    );
+    for gap in &gaps {
+        for name in ["dynamicComponent", "dispatchAsInteraction"] {
+            assert!(!gap.gap.contains(name), "{gap:?}");
+        }
+    }
+    // A mixed rc.17 installation keeps both unread and names them.
+    for installed in [
+        triple(
+            Some("2.0.0-rc.17"),
+            Some("2.0.0-rc.13"),
+            Some("2.0.0-rc.17"),
+        ),
+        triple(
+            Some("2.0.0-rc.17"),
+            Some("2.0.0-rc.17"),
+            Some("2.0.0-rc.13"),
+        ),
+    ] {
+        let (vocabulary, gaps) = analyzed(&installed);
+        assert!(!vocabulary.rc17_callback_exports, "{installed:?}");
+        assert_eq!(vocabulary.primitive("dynamicComponent"), None);
+        assert_eq!(vocabulary.primitive("dispatchAsInteraction"), None);
+        assert!(
+            scoped(&gaps).contains(&(SOLID_JS, "dynamicComponent")),
+            "{installed:?}"
+        );
+    }
+    let (_, gaps) = analyzed(&triple(
+        Some("2.0.0-rc.17"),
+        Some("2.0.0-rc.13"),
+        Some("2.0.0-rc.17"),
+    ));
+    assert!(scoped(&gaps).contains(&(WEB, "dispatchAsInteraction")));
+    assert!(scoped(&gaps).contains(&(WEB, "dynamicComponent")));
+    // Both names resolve, from the modules that export them.
+    assert_eq!(
+        audited.primitive("dynamicComponent"),
+        Some(Primitive::DynamicComponent)
+    );
+    assert_eq!(
+        audited.export_modules("dynamicComponent", crate::ExportPosition::Value),
+        ["solid-js", "@solidjs/web"]
+    );
+    assert_eq!(
+        audited.export_modules("dispatchAsInteraction", crate::ExportPosition::Value),
+        ["@solidjs/web"]
+    );
+    assert_eq!(audited.primitive("setLinkClaim"), None);
 }

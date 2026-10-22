@@ -152,6 +152,59 @@ pub struct Solid2 {
     /// so no inline execution is stated there; read releases through rc.13
     /// keep `true`.
     hydrate_code_inline: bool,
+    /// From all three packages: whether `dynamicComponent` and
+    /// `dispatchAsInteraction` are exports, modelled as read on rc.17
+    /// ([`Solid2::call_form`], [`Solid2::callback_owners`]). Both are new in
+    /// rc.17; `true` only when `solid-js`, `@solidjs/signals` and
+    /// `@solidjs/web` all resolve to it, since `dynamicComponent` is
+    /// `solid-js`'s and `dispatchAsInteraction`'s dev build calls signals'
+    /// `withInteraction`.
+    rc17_callback_exports: bool,
+}
+
+impl Solid2 {
+    /// [`Primitive::DynamicComponent`]'s form for one call. `dynamicComponent`
+    /// is `dynamicCore(source, options, tagArm)` itself (`solid-js@2.0.0-rc.17`
+    /// `dist/solid.dev.js:1444`, `:1545`; `solid.js:1382`, `:1476`;
+    /// `solid.observe.js:1417`, `:1511`; `server.js:2374`, `:2436`), the core
+    /// rc.17's `dynamic` forwards to (`@solidjs/web` `dist/web.dev.js:2466-2467`),
+    /// so its first two arguments select what `dynamic`'s do: `if
+    /// (options?.static) return staticDynamic(untrack(source), tagArm);`
+    /// (`dist/solid.dev.js:1445`; `if (options?.static) {` in
+    /// `dist/server.js:2375`). What it lacks is `dynamic`'s tag arm, so a
+    /// string source renders nothing (`case "string": return tagArm ?
+    /// tagArm(component, props) : undefined;`, `:1524`; `staticDynamic` ends
+    /// `return () => undefined;`, `:1542-1543`) where `dynamic` creates the
+    /// element. No form's answer is about what the returned component renders,
+    /// and [`Dialect::intrinsic_tag_renderers`] names only the `Dynamic` tag,
+    /// so the forms are `dynamic`'s. Probed on the dev, observe and prod client
+    /// builds beside `dynamic`: the default source ran 0 times at the call, once
+    /// at render under an owner that is not the caller's, and again on a write;
+    /// the static source ran once at the call under the caller's owner, never
+    /// again, and threw `REACTIVE_WRITE_IN_OWNED_SCOPE` (dev) on a write in a
+    /// root; a static thenable threw in dev and rendered `undefined` in prod;
+    /// a string rendered nothing. A third argument is the tag arm, which the
+    /// runtime calls with each string source (probed); the typings declare two
+    /// parameters, and a call passing one states nothing.
+    fn dynamic_component_form(
+        &self,
+        option: &dyn Fn(usize, &str) -> crate::OptionLiteral,
+    ) -> Primitive {
+        use crate::OptionLiteral;
+        // Unreachable through `primitive`, which names it only where it is
+        // exported; the bare name answers nothing.
+        if !self.rc17_callback_exports {
+            return Primitive::DynamicComponent;
+        }
+        if option(2, "") != OptionLiteral::Absent {
+            return Primitive::DynamicUnknownForm;
+        }
+        match option(1, "static") {
+            OptionLiteral::Absent | OptionLiteral::False => Primitive::Dynamic,
+            OptionLiteral::True => Primitive::DynamicStatic,
+            OptionLiteral::Unknown => Primitive::DynamicUnknownForm,
+        }
+    }
 }
 
 /// The Solid 2 language's own vocabulary, [`Solid2::CONSERVATIVE`], spelled
@@ -198,7 +251,16 @@ const TABLE: &[(&str, Primitive)] = &[
     ("createStore", Primitive::CreateStore),
     ("createTrackedEffect", Primitive::CreateTrackedEffect),
     ("deep", Primitive::Deep),
+    // New in `@solidjs/web@2.0.0-rc.17` (`dist/web.dev.js:653`, `web.js:484`,
+    // `web.observe.js:510`, `server.js:4423`, `server.dev.js:4766`,
+    // `server.observe.js:4578`); gated like `until` (`Solid2::exports`).
+    ("dispatchAsInteraction", Primitive::DispatchAsInteraction),
     ("dynamic", Primitive::Dynamic),
+    // New in `solid-js@2.0.0-rc.17`: `const dynamicComponent = dynamicCore;`
+    // (`dist/solid.dev.js:1545`, `solid.js:1476`, `solid.observe.js:1511`,
+    // `server.js:2436`, `server.dev.js:2658`, `server.observe.js:2550`),
+    // re-exported unchanged by every `@solidjs/web` build (`dist/web.dev.js:2`).
+    ("dynamicComponent", Primitive::DynamicComponent),
     ("Errored", Primitive::Errored),
     ("flush", Primitive::Flush),
     ("For", Primitive::For),
@@ -249,7 +311,8 @@ pub(crate) fn names() -> Vec<&'static str> {
 
 /// The [`TABLE`] names only some installations export (`Solid2::exports`).
 #[cfg(test)]
-pub(crate) const RELEASE_GATED_NAMES: &[&str] = &["until"];
+pub(crate) const RELEASE_GATED_NAMES: &[&str] =
+    &["until", "dynamicComponent", "dispatchAsInteraction"];
 
 impl Dialect for Solid2 {
     fn compiler_lowers_event_attribute(&self, name: &str) -> bool {
@@ -429,6 +492,9 @@ impl Dialect for Solid2 {
         option: &dyn Fn(usize, &str) -> crate::OptionLiteral,
     ) -> Primitive {
         use crate::OptionLiteral;
+        if primitive == Primitive::DynamicComponent {
+            return self.dynamic_component_form(option);
+        }
         if primitive != Primitive::Dynamic {
             return primitive;
         }
@@ -450,9 +516,11 @@ impl Dialect for Solid2 {
         match primitive {
             // createEffect/createRenderEffect take (compute, apply);
             // runWithOwner takes (owner, fn).
-            Primitive::CreateEffect | Primitive::CreateRenderEffect | Primitive::RunWithOwner => {
-                &[1]
-            }
+            // dispatchAsInteraction(event, fn).
+            Primitive::CreateEffect
+            | Primitive::CreateRenderEffect
+            | Primitive::RunWithOwner
+            | Primitive::DispatchAsInteraction => &[1],
             // createErrorBoundary(fn, fallback) and createLoadingBoundary(fn,
             // fallback): argument 0 is the tracked body, argument 1 renders
             // when it throws or suspends.
@@ -584,10 +652,27 @@ impl Dialect for Solid2 {
     /// `flush(fn)` throws `REACTIVE_WRITE_IN_OWNED_SCOPE` in a memo compute,
     /// a component body and a `createRoot` body, inline or passed by name,
     /// while the same call at module scope succeeds.
+    ///
+    /// `dispatchAsInteraction(event, fn)` is `return fn();` in the production
+    /// and server builds (`@solidjs/web@2.0.0-rc.17` `dist/web.js:484`,
+    /// `dist/server.js:4423`) and `OBSERVE.attribution.withInteraction({…},
+    /// fn)` in dev and observe (`dist/web.dev.js:653-660`,
+    /// `dist/web.observe.js:510-517`), which is `fn()` with no engine and
+    /// `interactionStart(ref)`, `fn()`, `interactionEnd(returned)` with one
+    /// (`@solidjs/signals@2.0.0-rc.17` `dist/dev-shared.js:335-347`; the
+    /// engine's hooks, `dist/dev.attribution.js:199-220`, only push and pop
+    /// its own interaction frame). Probed on the dev build, with and without
+    /// the attribution engine enabled: `getOwner()` inside is the caller's, a
+    /// signal setter inside throws `REACTIVE_WRITE_IN_OWNED_SCOPE` in a
+    /// `createRoot` body and a memo compute exactly as the bare write does,
+    /// and the same call outside any owner succeeds.
     fn callback_preserves_owner_write_context(&self, primitive: Primitive) -> bool {
         matches!(
             primitive,
-            Primitive::Untrack | Primitive::DynamicStatic | Primitive::Flush
+            Primitive::Untrack
+                | Primitive::DynamicStatic
+                | Primitive::Flush
+                | Primitive::DispatchAsInteraction
         )
     }
 
@@ -1072,6 +1157,11 @@ impl Dialect for Solid2 {
             Primitive::Flush | Primitive::Untrack | Primitive::Latest | Primitive::IsPending => {
                 &[(0, CallbackOwner::Inherits)]
             }
+            // `fn()` at the call, every build (see
+            // `callback_preserves_owner_write_context`): probed, `getOwner()`
+            // inside is the caller's in a root, a memo compute and at module
+            // scope (`null`), dev, observe and prod.
+            Primitive::DispatchAsInteraction => &[(1, CallbackOwner::Inherits)],
             // Both mount entry points wrap the application callback in the
             // root owner they create (`render` is `createRoot` plus insert).
             Primitive::Render | Primitive::Hydrate => &[(0, CallbackOwner::Creates)],
@@ -1474,6 +1564,12 @@ impl Dialect for Solid2 {
             | Primitive::Latest
             | Primitive::IsPending => &[(0, Execution::Inline)],
             Primitive::RunWithOwner => &[(1, Execution::Inline)],
+            // `dispatchAsInteraction(event, fn)` returns `fn()`'s value, once,
+            // before it returns, and touches neither the owner nor the listener
+            // (probed on dev, observe and prod: a memo whose compute reads a
+            // signal only inside it re-runs when the signal is written, and
+            // `getObserver()` inside is the memo's).
+            Primitive::DispatchAsInteraction => &[(1, Execution::Inline)],
             // `render(() => <App/>, el)` and `hydrate` invoke the code
             // callback once, immediately, under the root they create.
             // Source: `solidjs-web.json`'s callback rows, the same shape 1.x
@@ -1593,7 +1689,9 @@ impl Dialect for Solid2 {
                 | Primitive::DynamicStatic,
                 0,
             )
-            | (Primitive::RunWithOwner, 1) => Some(Execution::Inline),
+            | (Primitive::RunWithOwner | Primitive::DispatchAsInteraction, 1) => {
+                Some(Execution::Inline)
+            }
             // Deliberately unanswered, so a forwarded parameter opens the
             // unknown-callback sentinel:
             //
@@ -2183,7 +2281,10 @@ impl Dialect for Solid2 {
     /// the shape allows it — reports both, and importing it from either
     /// resolves.
     fn export_modules(&self, name: &str, position: crate::ExportPosition) -> Vec<&'static str> {
-        if name == "until" && !self.until {
+        if (name == "until" && !self.until)
+            || (matches!(name, "dynamicComponent" | "dispatchAsInteraction")
+                && !self.rc17_callback_exports)
+        {
             return Vec::new();
         }
         let mut found = crate::exports::modules(
@@ -2272,6 +2373,7 @@ const NAMESPACE_SOLID_JS: &[&str] = &[
     "createStore",
     "createTrackedEffect",
     "deep",
+    "dynamicComponent",
     "flush",
     "getOwner",
     "isPending",
@@ -2305,7 +2407,9 @@ const NAMESPACE_SOLIDJS_WEB: &[&str] = &[
     "Show",
     "Switch",
     "clientOnly",
+    "dispatchAsInteraction",
     "dynamic",
+    "dynamicComponent",
     "getOwner",
     "httpHeader",
     "httpStatus",
