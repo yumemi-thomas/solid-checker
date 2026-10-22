@@ -27,14 +27,14 @@ Only an exact, unwritten binding whose references are all calls or arguments of 
 
 ## Package bytes
 
-`node_modules/@solid-primitives/utils` is the published `@solid-primitives/utils@7.0.0-next.4`, copied unchanged: `package.json`, `LICENSE`, `dist/index.js`, `dist/index.d.ts`, `dist/types.js`, `dist/types.d.ts`. Integrity (from the `pnpm-lock.yaml` of the corpus app it was copied from): `sha512-9KyRe6eu4hdhxxGOyS9vAa2s/T8FZ1sMJtk3UuV3W1Gi0f4if+o1n7S1M6l/MMjn8+m3+I3VB1KzFa9gNDkDsg==`. SHA-256 of the files as copied:
+`node_modules/@solid-primitives/utils` is the published `@solid-primitives/utils@7.0.0-next.7`, copied unchanged: `package.json`, `LICENSE`, `dist/index.js`, `dist/index.d.ts`, `dist/types.js`, `dist/types.d.ts`. Integrity: `sha512-t1ZYgNililGfuHBJ34iT/m3b75MxNOSyjmPrm2MVhNnUM76hBziULCteA6YQ0laIb6THBv8gRvssHK2BxMYw3Q==`. `access` and `accessWith` are next.4's bytes. SHA-256 of the files as copied:
 
 ```
-59dd297c1ff4a90620cd3f27aa9b0a650404e8178513d6501af5ec1c3f8370f8  dist/index.js
+206bace61b53891f9649564492471cd26518202b1a306f2c169973e3ac47b1d2  dist/index.js
 f6ffec2694503edf41efb59dc9a4adcb62bff71074d1210ee94201b1026b6644  dist/types.js
-c464f6ae1e837bbfc3103b2c59cc920de983e147e676329893308bc962165193  dist/index.d.ts
-0fd2aeeaa012dac436b3bc4e0b3248667094de1f947a6f79fcadc9ff0640bf53  dist/types.d.ts
-f72b16817e60816623cea5d22869fd641ec3bdb07728bb4b0cc4a511ecc8af0b  package.json
+e7cc6afd3aa8ad55e58414a8cc5c7c1afc6928820ad024a6672be53e1551f761  dist/index.d.ts
+5082aca07cb7b28ff15a81f35244faf941e4fc53e335322b2befe5e9d079530b  dist/types.d.ts
+82982ef3dc4b3222539fcaa6f5b5619400da74144dcce1556caa63e361d30d53  package.json
 492f24f38fcfb6a0b2d550c47fb26164124df40ec0a95c079d43e19d54137d70  LICENSE
 ```
 

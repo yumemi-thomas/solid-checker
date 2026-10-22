@@ -181,7 +181,7 @@
     {
       "id": "utils-access-argument-read",
       "package": "@solid-primitives/utils",
-      "version": "7.0.0-next.4",
+      "version": "7.0.0-next.7",
       "entrypoint": ".",
       "export": "access",
       "class": "argumentRead",
@@ -198,7 +198,7 @@
     {
       "id": "utils-createMicrotask-module-scope",
       "package": "@solid-primitives/utils",
-      "version": "7.0.0-next.4",
+      "version": "7.0.0-next.7",
       "entrypoint": ".",
       "export": "createMicrotask",
       "class": "owner",
@@ -214,7 +214,7 @@
     {
       "id": "utils-createHydratableSignal-top-level-read",
       "package": "@solid-primitives/utils",
-      "version": "7.0.0-next.4",
+      "version": "7.0.0-next.7",
       "entrypoint": ".",
       "export": "createHydratableSignal",
       "class": "returnedAccessor",
