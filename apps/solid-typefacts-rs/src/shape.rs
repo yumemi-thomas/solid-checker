@@ -15,10 +15,10 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tsrs_ast::{
-    Node, SourceFile, SymbolFlags, is_external_module, is_external_module_augmentation,
+    Node, SourceFile, Symbol, SymbolFlags, is_external_module, is_external_module_augmentation,
     is_global_scope_augmentation,
 };
-use tsrs_compiler::{Context, EmitOnly, EmitOptions, Program, WriteFileData};
+use tsrs_compiler::{Checker, Context, EmitOnly, EmitOptions, Program, WriteFileData};
 use tsrs_core::P;
 
 /// One external export slot of a module.
@@ -59,36 +59,67 @@ pub fn has_global_or_module_augmentation(file: P<SourceFile>) -> bool {
     found
 }
 
-/// Go: `exportedDurableSymbols`. `None` when any export has no durable
-/// identity or two share a name.
-pub fn exported_durable_symbols(
-    generation: &Generation,
+/// A module export and the canonical target symbol it names, valid only
+/// while the checker that produced it is.
+pub struct ExportedSymbol {
+    pub export: DeclarationExport,
+    pub symbol: P<Symbol>,
+}
+
+/// Go: `exportedDurableSymbols`, over a checker the caller already holds.
+/// `None` when any export has no durable identity or two share a name.
+pub fn exported_symbols_with(
+    checker: &mut Checker,
     file: P<SourceFile>,
-) -> Option<Vec<DeclarationExport>> {
+) -> Option<Vec<ExportedSymbol>> {
     let module_symbol = file.symbol()?;
-    let mut exports = generation.with_checker(|checker| {
-        let mut exports = Vec::new();
-        for module_export in checker.get_exports_of_module_exported(module_symbol) {
-            let name = module_export.name().to_owned();
-            let mut symbol = module_export;
-            if symbol.flags().intersects(SymbolFlags::Alias) {
-                symbol = checker.get_aliased_symbol(symbol);
-            }
-            let reference = durable_ref_for(symbol)?;
-            exports.push(DeclarationExport {
+    let mut exports = Vec::new();
+    for module_export in checker.get_exports_of_module_exported(module_symbol) {
+        let name = module_export.name().to_owned();
+        let mut symbol = module_export;
+        if symbol.flags().intersects(SymbolFlags::Alias) {
+            symbol = checker.get_aliased_symbol(symbol);
+        }
+        let reference = durable_ref_for(symbol)?;
+        exports.push(ExportedSymbol {
+            export: DeclarationExport {
                 name,
                 id: reference.exported_id(),
                 reference,
                 symbol_key: symbol.addr(),
-            });
-        }
-        Some(exports)
-    })?;
-    exports.sort_by(|left, right| left.name.cmp(&right.name));
-    if exports.windows(2).any(|pair| pair[0].name == pair[1].name) {
+            },
+            symbol,
+        });
+    }
+    exports.sort_by(|left, right| left.export.name.cmp(&right.export.name));
+    if exports
+        .windows(2)
+        .any(|pair| pair[0].export.name == pair[1].export.name)
+    {
         return None;
     }
     Some(exports)
+}
+
+/// [`exported_symbols_with`] over the generation's own checker.
+pub fn exported_symbols(
+    generation: &Generation,
+    file: P<SourceFile>,
+) -> Option<Vec<ExportedSymbol>> {
+    generation.with_checker(|checker| exported_symbols_with(checker, file))
+}
+
+/// Go: `exportedDurableSymbols`, keeping only the pointer-free part.
+pub fn exported_durable_symbols(
+    generation: &Generation,
+    file: P<SourceFile>,
+) -> Option<Vec<DeclarationExport>> {
+    Some(
+        exported_symbols(generation, file)?
+            .into_iter()
+            .map(|exported| exported.export)
+            .collect(),
+    )
 }
 
 /// Go: `resolvedImportPaths`. `None` when any import is unresolved.
@@ -108,6 +139,16 @@ pub fn resolved_import_paths(program: &Program, file: P<SourceFile>) -> Option<V
 /// diagnostic, a second output, an export without durable identity, or an
 /// unresolved import.
 pub fn declaration_shape_for(generation: &Generation, path: &str) -> Option<DeclarationShape> {
+    declaration_shape_with_symbols_for(generation, path).map(|(shape, _)| shape)
+}
+
+/// [`declaration_shape_for`], also returning the live canonical symbol of each
+/// export slot, index-aligned with `shape.exports`. The symbols are valid for
+/// `generation` only; the shape itself holds none.
+pub fn declaration_shape_with_symbols_for(
+    generation: &Generation,
+    path: &str,
+) -> Option<(DeclarationShape, Vec<P<Symbol>>)> {
     let program = generation.program();
     let file = program.get_source_file(path)?;
     if !is_external_module(file) || has_global_or_module_augmentation(file) {
@@ -153,13 +194,18 @@ pub fn declaration_shape_for(generation: &Generation, path: &str) -> Option<Decl
         return None;
     }
 
-    let exports = exported_durable_symbols(generation, file)?;
+    let exported = exported_symbols(generation, file)?;
     let imports = resolved_import_paths(program, file)?;
-    Some(DeclarationShape {
-        signature: Sha256::digest(declaration_text.as_bytes()).into(),
-        exports,
-        imports,
-    })
+    let symbols = exported.iter().map(|entry| entry.symbol).collect();
+    let exports = exported.into_iter().map(|entry| entry.export).collect();
+    Some((
+        DeclarationShape {
+            signature: Sha256::digest(declaration_text.as_bytes()).into(),
+            exports,
+            imports,
+        },
+        symbols,
+    ))
 }
 
 /// Go: `preserveExportIdentities`, reduced to its decision. It proves two

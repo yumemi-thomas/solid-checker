@@ -31,6 +31,22 @@ fn hashed_symbol_id(digest: &[u8]) -> String {
     id
 }
 
+/// The bytes Go hashes for a symbol name. Go marks an internal symbol name with
+/// a leading `0xFE` byte, which cannot live in a Rust `str`; tsrs spells it
+/// U+007F (`InternalSymbolNamePrefix`). Durable ids persist, so the hash must
+/// see Go's byte.
+fn name_bytes(name: &str) -> Vec<u8> {
+    match name.strip_prefix('\u{7f}') {
+        Some(rest) => {
+            let mut bytes = Vec::with_capacity(rest.len() + 1);
+            bytes.push(0xFE);
+            bytes.extend_from_slice(rest.as_bytes());
+            bytes
+        }
+        None => name.as_bytes().to_vec(),
+    }
+}
+
 impl DurableRef {
     /// Go: `durableSymbolRef.id`: `sha256(path 0 start 0 end 0 name)`.
     #[must_use]
@@ -42,7 +58,7 @@ impl DurableRef {
         input.push(0);
         input.extend_from_slice(self.end_byte.to_string().as_bytes());
         input.push(0);
-        input.extend_from_slice(self.name.as_bytes());
+        input.extend_from_slice(&name_bytes(&self.name));
         hashed_symbol_id(&Sha256::digest(&input))
     }
 
@@ -55,7 +71,7 @@ impl DurableRef {
         input.extend_from_slice(b"export\0");
         input.extend_from_slice(self.path.as_bytes());
         input.push(0);
-        input.extend_from_slice(self.name.as_bytes());
+        input.extend_from_slice(&name_bytes(&self.name));
         hashed_symbol_id(&Sha256::digest(&input))
     }
 }
@@ -78,4 +94,61 @@ pub fn durable_ref_for_declaration(symbol: P<Symbol>, node: P<Node>) -> Option<D
         end_byte: name_node.end().source_offset()?,
         name: symbol.name().to_owned(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Go hashes an internal name with its leading 0xFE byte.
+    #[test]
+    fn internal_names_hash_with_gos_marker_byte() {
+        let reference = DurableRef {
+            path: "/p/a.ts".into(),
+            start_byte: 3,
+            end_byte: 9,
+            name: "\u{7f}index".into(),
+        };
+        let mut input = b"/p/a.ts\x003\x009\x00".to_vec();
+        input.extend_from_slice(b"\xFEindex");
+        assert_eq!(reference.id(), hashed_symbol_id(&Sha256::digest(&input)));
+    }
+
+    /// `TestDurableIDRenderingMatchesHistoricalForm`.
+    #[test]
+    fn id_rendering_matches_the_historical_form() {
+        let refs = [
+            ("/p/src/mod.ts", 0, 1, "x"),
+            ("/p/src/mod.ts", 1234, 987_654_321, "longSymbolName"),
+            ("", 0, 0, ""),
+            ("/p/\u{65e5}\u{672c}\u{8a9e}.ts", 7, 42, "\u{540d}\u{524d}"),
+            ("/p/a.ts", 10, 20, "with\0nul"),
+        ];
+        for (path, start, end, name) in refs {
+            let reference = DurableRef {
+                path: path.into(),
+                start_byte: start,
+                end_byte: end,
+                name: name.into(),
+            };
+            let historical = Sha256::digest(format!("{path}\0{start}\0{end}\0{name}").as_bytes());
+            let want = format!(
+                "symbol:h:{}",
+                historical[..12]
+                    .iter()
+                    .map(|b| format!("{b:02x}"))
+                    .collect::<String>()
+            );
+            assert_eq!(reference.id(), want);
+            let exported = Sha256::digest(format!("export\0{path}\0{name}").as_bytes());
+            let want = format!(
+                "symbol:h:{}",
+                exported[..12]
+                    .iter()
+                    .map(|b| format!("{b:02x}"))
+                    .collect::<String>()
+            );
+            assert_eq!(reference.exported_id(), want);
+        }
+    }
 }

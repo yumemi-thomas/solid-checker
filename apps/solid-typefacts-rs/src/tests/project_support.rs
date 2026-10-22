@@ -98,3 +98,63 @@ pub(crate) fn relative(root: &Path, path: &str) -> Option<String> {
         .ok()
         .map(|rest| rest.to_string_lossy().replace('\\', "/"))
 }
+
+use crate::backend::ClosureBackend;
+use crate::model::{SemanticDemandRun, SemanticScope};
+use typefacts::v3::EntityDemand;
+use typefacts::{EntityFact, Location};
+
+pub(crate) fn loc(path: &str, start: usize, end: usize) -> Location {
+    Location {
+        path: path.into(),
+        start_byte: start as u64,
+        end_byte: end as u64,
+    }
+}
+
+/// The location of the first `needle` in `source`, at or after `from`.
+pub(crate) fn find_from(path: &str, source: &str, needle: &str, from: usize) -> Location {
+    let start = from
+        + source[from..]
+            .find(needle)
+            .unwrap_or_else(|| panic!("{needle:?} not found in {path}"));
+    loc(path, start, start + needle.len())
+}
+
+pub(crate) fn find(path: &str, source: &str, needle: &str) -> Location {
+    find_from(path, source, needle, 0)
+}
+
+/// The location of the last `needle` in `source` (Go's `strings.LastIndex`).
+pub(crate) fn find_last(path: &str, source: &str, needle: &str) -> Location {
+    let start = source
+        .rfind(needle)
+        .unwrap_or_else(|| panic!("{needle:?} not found in {path}"));
+    loc(path, start, start + needle.len())
+}
+
+pub(crate) fn symbol_demand(location: Location) -> EntityDemand {
+    EntityDemand {
+        location,
+        symbol: true,
+        ..EntityDemand::default()
+    }
+}
+
+/// Go's `SemanticEntities` for demands of one file: one run, empty scope.
+pub(crate) fn entities(
+    project: &mut crate::project::Project,
+    path: &str,
+    demands: &[EntityDemand],
+) -> Vec<EntityFact> {
+    let (suppression, seed) = (Default::default(), Default::default());
+    let scope = SemanticScope {
+        suppression: &suppression,
+        descriptor_seed: &seed,
+    };
+    let run = SemanticDemandRun { path, demands };
+    let mut results = project
+        .semantic_demand_runs(&Context::new(), &[run], &scope)
+        .unwrap();
+    results.remove(0).entities
+}

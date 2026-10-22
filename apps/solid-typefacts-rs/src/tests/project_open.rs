@@ -144,7 +144,7 @@ fn a_closed_project_refuses_every_operation_and_a_second_close() {
 }
 
 #[test]
-fn the_symbol_families_are_unavailable_not_empty() {
+fn only_the_async_family_is_still_unavailable_not_empty() {
     use crate::model::SemanticScope;
     let scratch = Scratch::new(&[
         ("tsconfig.json", SMALL_CONFIG),
@@ -158,22 +158,38 @@ fn the_symbol_families_are_unavailable_not_empty() {
         suppression: &suppression,
         descriptor_seed: &seed,
     };
-    assert!(name(project.resolve_alias(&ctx, "symbol:h:x").unwrap_err()).contains("resolve_alias"));
-    assert!(name(project.declarations(&ctx, "symbol:h:x").unwrap_err()).contains("declarations"));
+    assert!(project.async_functions_at(&ctx, &[]).unwrap().is_empty());
     assert!(
-        name(project.async_functions_at(&ctx, &[]).unwrap_err()).contains("async_functions_at")
+        name(
+            project
+                .async_functions_at(&ctx, &[typefacts::Location::default()])
+                .unwrap_err()
+        )
+        .contains("async_functions_at")
     );
-    assert!(name(project.references_batch(&ctx, &[]).unwrap_err()).contains("references_batch"));
-    assert!(name(project.changed_references(&ctx).unwrap_err()).contains("changed_references"));
+    // The symbol families answer: an unknown id is "not found", which is
+    // `None` or an id-only row, never an error and never a made-up fact.
+    assert_eq!(project.resolve_alias(&ctx, "symbol:h:x").unwrap(), None);
+    assert_eq!(project.declarations(&ctx, "symbol:h:x").unwrap(), None);
+    assert!(project.references_batch(&ctx, &[]).unwrap().is_empty());
+    assert_eq!(
+        project.changed_references(&ctx).unwrap(),
+        (Vec::new(), false)
+    );
     assert!(
-        name(project.semantic_demand_runs(&ctx, &[], &scope).unwrap_err())
-            .contains("semantic_demand_runs")
+        project
+            .semantic_demand_runs(&ctx, &[], &scope)
+            .unwrap()
+            .is_empty()
     );
-    // The default composition of `symbol_evidence` therefore fails too.
     let query = typefacts::v3::SymbolQuery {
         id: "symbol:h:x".into(),
-        references: false,
+        references: true,
         references_only: false,
     };
-    assert!(crate::backend::SymbolEvidence::symbol_evidence(&mut project, &ctx, &[query]).is_err());
+    let facts =
+        crate::backend::SymbolEvidence::symbol_evidence(&mut project, &ctx, &[query]).unwrap();
+    assert_eq!(facts.len(), 1);
+    assert_eq!(&*facts[0].id, "symbol:h:x");
+    assert!(facts[0].alias_target.is_empty() && facts[0].declarations.is_empty());
 }

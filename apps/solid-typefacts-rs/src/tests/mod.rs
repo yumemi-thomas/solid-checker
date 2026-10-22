@@ -11,12 +11,15 @@ mod materialize;
 mod module_graph;
 mod project_invalidation;
 mod project_open;
+mod project_references;
 mod project_support;
 mod protocol;
 mod regression;
 mod semantic_demand;
 mod session;
 mod session_demands;
+mod symbol_facts;
+mod symbol_integration;
 mod symbols;
 
 use crate::context::Context;

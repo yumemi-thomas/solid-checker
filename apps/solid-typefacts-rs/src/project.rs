@@ -6,15 +6,15 @@
 //! `modules` graph, and transactional `update` with the affected set, the
 //! retained import graph and the declaration-shape cutoff.
 //!
-//! The fact families (`semantic_demand_runs`, `async_functions_at`,
-//! `references_batch`, `changed_references`, `resolve_alias`, `declarations`
-//! and so the default `symbol_evidence`) are S4. Until then they answer an
-//! error naming the missing slice, never an empty or guessed fact: an empty
-//! `resolve_alias` would claim "this symbol has no alias", which is a fact the
-//! backend does not hold. The retained stores that exist only to serve those
-//! families (`exportedIdentities`, `idsBySymbol`, `sourceFactsMemo`,
-//! `durableRefs`, `referenceIndex`, `sweepDurableIdentities`) are S4's; the
-//! seams they hook into are marked `S4:` below.
+//! The symbol families (S4a: `resolve_alias`, `declarations`, `symbol_evidence`,
+//! `references_batch`, `changed_references`, and `semantic_demand_runs` for the
+//! symbol, reference-space and structural-accessor facts) answer from the
+//! identity state (`identity`) and the reference index (`references`) this
+//! module keeps beside the program. `async_functions_at` is still S4 and
+//! answers an error naming the missing slice, never an empty or guessed fact:
+//! an empty answer would claim "no async function here", which is a fact the
+//! backend does not hold. The source-fact memo (`sourceFactsMemo`) arrives
+//! with the `Source*` families.
 //!
 //! One deliberate difference from Go: Go memoizes source digests by
 //! `*ast.SourceFile` pointer. Here the compiler's nodes are arena handles
@@ -28,14 +28,20 @@ use crate::backend::{
 };
 use crate::context::Context;
 use crate::gocompat::{absolute, clean};
+use crate::identity::{CurrentExports, Env, Identities, Preserved};
 use crate::import_graph::{
     ImportGraph, affected_from_reverse_deps, every_source_path, global_scope_change,
 };
-use crate::model::{SemanticDemandRun, SemanticDemandRunResult, SemanticScope, SymbolId};
+use crate::model::{
+    SemanticDemandRun, SemanticDemandRunResult, SemanticScope, SymbolId, blank_symbol,
+};
 use crate::module_graph::{normalize_type_script_path, type_script_path_dir};
+use crate::nodes::node_at;
 use crate::overlay::OverlayFs;
+use crate::references::ReferenceIndex;
+use crate::semantic_runs::Unavailable;
 use crate::shape::{
-    DeclarationShape, declaration_shape_for, exported_durable_symbols,
+    DeclarationShape, declaration_shape_for, declaration_shape_with_symbols_for, exported_symbols,
     has_global_or_module_augmentation, preserve_export_identities,
 };
 use crate::trace::SharedTrace;
@@ -43,14 +49,18 @@ use crate::unsafe_boundary::{Generation, UpdateKind};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant, SystemTime};
-use tsrs_ast::is_external_module;
+use tsrs_ast::{
+    Node, SymbolFlags, get_source_file_of_node, is_class_declaration, is_external_module,
+    is_function_declaration, is_variable_declaration,
+};
 use tsrs_compiler::new_compiler_host;
 use tsrs_core::{CompilerOptions, P};
+use tsrs_scanner::skip_trivia;
 use tsrs_tsoptions::{ParseConfigHost, get_parsed_command_line_of_config_file};
 use tsrs_vfs::{Entries, FS, FileInfo, bundled, osvfs};
 use typefacts::producer::source_digest;
-use typefacts::v3::{FileChange, ModuleGraphRequest, SourceFile};
-use typefacts::{AsyncFunctionFact, Declaration, Location, SourceDigest};
+use typefacts::v3::{FileChange, ModuleGraphRequest, SourceFile, SymbolQuery};
+use typefacts::{AsyncFunctionFact, Declaration, Location, SourceDigest, SymbolFact};
 
 /// Go: `ErrClosed`.
 pub const ERR_CLOSED: &str = "type facts project is closed";
@@ -170,6 +180,13 @@ pub struct Project {
     /// affected files are evicted and broad rebuilds clear the cache.
     declaration_shapes: HashMap<String, DeclarationShape>,
     pub last_update: UpdateMetrics,
+    /// Symbol identity (Go: `idsBySymbol`, `symbolsByID`, `durableRefs`,
+    /// `exportedIdentities`).
+    pub(crate) ids: Identities,
+    /// The reference index (Go: `referenceIndex`).
+    pub(crate) references: ReferenceIndex,
+    /// Demanded facts left absent because their family is not ported yet.
+    pub unavailable: Unavailable,
 }
 
 impl Project {
@@ -210,10 +227,15 @@ impl Project {
             graph: ImportGraph::default(),
             declaration_shapes: HashMap::new(),
             last_update: UpdateMetrics::default(),
+            ids: Identities::new(1),
+            references: ReferenceIndex::default(),
+            unavailable: Unavailable::default(),
         };
-        // S4: `collectExportedIdentities` seeds the symbol store here.
-        project.graph =
-            ImportGraph::rebuild(project.generation.as_ref().expect("just built").program());
+        // Go: `collectExportedIdentities` seeds the symbol store at open.
+        let generation = project.generation.as_ref().expect("just built");
+        let program = generation.program();
+        generation.with_checker(|checker| project.ids.seed_exported(program, checker));
+        project.graph = ImportGraph::rebuild(program);
         Ok(project)
     }
 
@@ -221,6 +243,94 @@ impl Project {
         self.generation
             .as_ref()
             .ok_or_else(|| BackendError(ERR_CLOSED.to_owned()))
+    }
+
+    /// Runs `f` with the generation's checker, identity state and reference
+    /// index (Go: `ensureCheckerLocked` under the project lock). Nothing `f`
+    /// returns may hold a tsrs handle past this call.
+    fn with_env<R>(
+        &mut self,
+        f: impl FnOnce(&mut Env<'_>, &mut ReferenceIndex) -> R,
+    ) -> Result<R, BackendError> {
+        let generation = self
+            .generation
+            .as_ref()
+            .ok_or_else(|| BackendError(ERR_CLOSED.to_owned()))?;
+        let program = generation.program();
+        let (ids, references) = (&mut self.ids, &mut self.references);
+        Ok(generation.with_checker(|checker| {
+            f(
+                &mut Env {
+                    checker,
+                    program,
+                    ids,
+                },
+                references,
+            )
+        }))
+    }
+
+    /// Go: `SymbolAt`: the symbol at the first byte of `location`.
+    pub fn symbol_at(
+        &mut self,
+        ctx: &Context,
+        location: &Location,
+    ) -> Result<SymbolId, BackendError> {
+        check(ctx)?;
+        self.with_env(|env, _| {
+            let absolute_path = absolute(&location.path)
+                .map_err(|error| BackendError(format!("resolve source path: {error}")))?;
+            let file = env
+                .program
+                .get_source_file(&absolute_path)
+                .ok_or_else(|| BackendError(format!("not found: source file {absolute_path}")))?;
+            validate_location(location, file.text())?;
+            let node = node_at(file, to_u32(location.start_byte)?);
+            let symbol = env
+                .checker
+                .get_symbol_at_location_exported(node)
+                .ok_or_else(|| {
+                    BackendError(format!(
+                        "not found: symbol at byte {} (node kind {:?}, range {}:{})",
+                        location.start_byte,
+                        node.kind(),
+                        node.pos().source_offset().map_or(-1, i64::from),
+                        node.end().source_offset().map_or(-1, i64::from),
+                    ))
+                })?;
+            Ok(env.id_for(symbol))
+        })?
+    }
+
+    /// Go: `References`: the canonical symbol's reference locations in
+    /// (path, start byte) order. An id whose declaration no longer
+    /// re-resolves fails closed, before any retained index entry could answer
+    /// for it.
+    pub fn references(&mut self, ctx: &Context, id: &str) -> Result<Vec<Location>, BackendError> {
+        check(ctx)?;
+        let id: SymbolId = id.into();
+        self.with_env(|env, references| {
+            let target = env
+                .symbol_for(&id)
+                .ok_or_else(|| BackendError(format!("not found: symbol {id}")))?;
+            let canonical = env.canonical_symbol(target);
+            let canonical = env.id_for(canonical);
+            references.ensure(env);
+            references.mark_used(&canonical);
+            Ok(references.locations(&canonical))
+        })?
+    }
+
+    /// The identity state, for tests.
+    #[must_use]
+    pub fn identities(&self) -> &Identities {
+        &self.ids
+    }
+
+    /// The reference index, for tests.
+    #[must_use]
+    pub fn reference_index(&self) -> &ReferenceIndex {
+        &self.references
     }
 
     /// The accepted program generation's number: 1 after open, +1 per
@@ -382,64 +492,181 @@ impl ClosureBackend for Project {
         if self.generation.is_none() {
             return Err(BackendError(ERR_CLOSED.to_owned()));
         }
+        // The identity maps hold handles into the generation about to go.
+        self.ids.close();
+        self.references.reset();
         self.generation = None;
         self.graph = ImportGraph::default();
         self.declaration_shapes.clear();
         Ok(())
     }
 
-    fn resolve_alias(&mut self, _: &Context, _: &str) -> Result<Option<SymbolId>, BackendError> {
-        Err(unavailable("resolve_alias"))
+    /// Go: `ResolveAlias`. A symbol that is unknown, is not an alias, or has
+    /// no target all answer `ErrNotFound`, which is `None` here.
+    fn resolve_alias(&mut self, ctx: &Context, id: &str) -> Result<Option<SymbolId>, BackendError> {
+        check(ctx)?;
+        let id: SymbolId = id.into();
+        self.with_env(|env, _| {
+            let symbol = env.symbol_for(&id)?;
+            if !symbol.flags().intersects(SymbolFlags::Alias) {
+                return None;
+            }
+            let original = env.checker.get_aliased_symbol(symbol);
+            Some(env.id_for(original))
+        })
     }
 
+    /// Go: `Declarations`. No declarations is `ErrNotFound`, like an unknown
+    /// symbol.
     fn declarations(
         &mut self,
-        _: &Context,
-        _: &str,
+        ctx: &Context,
+        id: &str,
     ) -> Result<Option<Vec<Declaration>>, BackendError> {
-        Err(unavailable("declarations"))
+        check(ctx)?;
+        let id: SymbolId = id.into();
+        self.with_env(|env, _| {
+            let symbol = env.symbol_for(&id)?;
+            let declarations = declarations_for_symbol(symbol);
+            (!declarations.is_empty()).then_some(declarations)
+        })
     }
 
+    /// Go: `SemanticDemandRuns`.
     fn semantic_demand_runs(
         &mut self,
-        _: &Context,
-        _: &[SemanticDemandRun<'_>],
-        _: &SemanticScope<'_>,
+        ctx: &Context,
+        runs: &[SemanticDemandRun<'_>],
+        scope: &SemanticScope<'_>,
     ) -> Result<Vec<SemanticDemandRunResult>, BackendError> {
-        Err(unavailable("semantic_demand_runs"))
+        check(ctx)?;
+        let mut unavailable = std::mem::take(&mut self.unavailable);
+        let outcome = self.with_env(|env, references| {
+            crate::semantic_runs::run(ctx, env, references, runs, scope, &mut unavailable)
+        });
+        for (family, count) in unavailable.0 {
+            *self.unavailable.0.entry(family).or_default() += count;
+        }
+        outcome?
     }
 
+    /// Async facts are S4 item 7. Asked about no locations the answer is
+    /// empty (the closure always asks, even when no demand wants async facts);
+    /// asked about any location it fails rather than claim "no async function
+    /// here", which the backend does not know.
     fn async_functions_at(
         &mut self,
-        _: &Context,
-        _: &[Location],
+        ctx: &Context,
+        locations: &[Location],
     ) -> Result<Vec<AsyncFunctionFact>, BackendError> {
+        check(ctx)?;
+        self.live()?;
+        if locations.is_empty() {
+            return Ok(Vec::new());
+        }
         Err(unavailable("async_functions_at"))
     }
 
+    /// Go: `ReferencesBatch`: merges the retained per-file fragments once and
+    /// amortizes durable-id lookup, alias canonicalization and allocation.
     fn references_batch(
         &mut self,
-        _: &Context,
-        _: &[SymbolId],
+        ctx: &Context,
+        ids: &[SymbolId],
     ) -> Result<HashMap<SymbolId, Vec<Location>>, BackendError> {
-        Err(unavailable("references_batch"))
+        check(ctx)?;
+        self.with_env(|env, references| {
+            references.ensure(env);
+            let mut result = HashMap::with_capacity(ids.len());
+            for id in ids {
+                let Some(target) = env.symbol_for(id) else {
+                    continue;
+                };
+                let canonical = env.canonical_symbol(target);
+                let canonical = env.id_for(canonical);
+                references.mark_used(&canonical);
+                result.insert(id.clone(), references.locations(&canonical));
+            }
+            result
+        })
     }
 
-    fn changed_references(&mut self, _: &Context) -> Result<(Vec<SymbolId>, bool), BackendError> {
-        Err(unavailable("changed_references"))
+    /// Go: `ChangedReferences`: exposes the reference index's
+    /// generation-stable invalidation set. It never consumes the delta, so
+    /// cancelled analyses and retries in the same generation observe the same
+    /// answer.
+    fn changed_references(&mut self, ctx: &Context) -> Result<(Vec<SymbolId>, bool), BackendError> {
+        check(ctx)?;
+        self.with_env(|env, references| {
+            references.ensure(env);
+            match references.changed() {
+                Some(ids) => (ids, true),
+                None => (Vec::new(), false),
+            }
+        })
     }
 
-    /// Go: `ReleaseAnalysisState`. S3 holds no checker-owned maps; the checker
-    /// itself goes, and the next shape computation recreates it. (S4 clears
-    /// `idsBySymbol`, `symbolsByID` and the other pointer-keyed caches here.)
+    /// Go: `ReleaseAnalysisState`: drops checker-expanded query state once its
+    /// immutable facts have transferred into the closure. Pointer-keyed
+    /// identity maps must go with the checker: retaining them both pins
+    /// checker memory and prevents a recreated equivalent symbol from
+    /// reclaiming its durable id. Durable declaration refs and compact
+    /// reference contributions are pointer-free and remain the rehydration
+    /// boundary.
     fn release_analysis_state(&mut self) {
-        if let Some(generation) = &mut self.generation {
-            generation.release_checker();
+        let Some(generation) = &mut self.generation else {
+            return;
+        };
+        if !generation.has_checker() {
+            return;
         }
+        self.ids.release_pointers();
+        self.references.release_analysis_state();
+        generation.release_checker();
     }
 }
 
-impl SymbolEvidence for Project {}
+impl SymbolEvidence for Project {
+    /// Go: `SymbolEvidence`: resolves a complete closure worklist batch under
+    /// one checker lease. A missing or stale identity returns an id-only row,
+    /// matching the historical closure's independent `ErrNotFound` handling.
+    fn symbol_evidence(
+        &mut self,
+        ctx: &Context,
+        queries: &[SymbolQuery],
+    ) -> Result<Vec<SymbolFact>, BackendError> {
+        check(ctx)?;
+        self.with_env(|env, references| {
+            if queries.iter().any(|query| query.references) {
+                references.ensure(env);
+            }
+            let mut facts = Vec::with_capacity(queries.len());
+            for query in queries {
+                check(ctx)?;
+                let mut fact = blank_symbol(query.id.clone());
+                let Some(symbol) = env.symbol_for(&query.id) else {
+                    facts.push(fact);
+                    continue;
+                };
+                if !query.references_only {
+                    if symbol.flags().intersects(SymbolFlags::Alias) {
+                        let original = env.checker.get_aliased_symbol(symbol);
+                        fact.alias_target = env.id_for(original);
+                    }
+                    fact.declarations = declarations_for_symbol(symbol).into();
+                }
+                if query.references {
+                    let canonical = env.canonical_symbol(symbol);
+                    let canonical = env.id_for(canonical);
+                    references.mark_used(&canonical);
+                    fact.references = references.locations(&canonical).into();
+                }
+                facts.push(fact);
+            }
+            Ok(facts)
+        })?
+    }
+}
 
 impl ModuleGraph for Project {
     fn module_graph(
@@ -543,22 +770,56 @@ impl Project {
 
         let mut semantic_cutoff = false;
         let mut leaf_cutoff = false;
+        // Go: `currentExports`, the candidate's canonical export symbols with
+        // the identity each export slot keeps; `None` is `!currentExportsKnown`.
+        let mut current_exports: Option<CurrentExports> = None;
         let stage = Instant::now();
         if no_importers
             && let Some(file) = candidate.program().get_source_file(&incremental_path)
             && is_external_module(file)
             && !has_global_or_module_augmentation(file)
-            && exported_durable_symbols(&candidate, file).is_some()
+            && let Some(exports) = exported_symbols(&candidate, file)
         {
-            // S4: `currentExports` re-keys the symbol maps here.
+            current_exports = Some(
+                exports
+                    .into_iter()
+                    .map(|exported| {
+                        (
+                            exported.symbol,
+                            Preserved {
+                                id: exported.export.id.as_str().into(),
+                                reference: exported.export.reference,
+                            },
+                        )
+                    })
+                    .collect(),
+            );
             semantic_cutoff = true;
             leaf_cutoff = true;
         }
         let mut new_shape: Option<DeclarationShape> = None;
         if let Some(old) = &old_shape {
-            new_shape = declaration_shape_for(&candidate, &incremental_path);
-            if let Some(new) = &new_shape {
-                semantic_cutoff = preserve_export_identities(old, new);
+            if let Some((shape, symbols)) =
+                declaration_shape_with_symbols_for(&candidate, &incremental_path)
+            {
+                semantic_cutoff = preserve_export_identities(old, &shape);
+                current_exports = Some(
+                    shape
+                        .exports
+                        .iter()
+                        .zip(symbols)
+                        .map(|(export, symbol)| {
+                            (
+                                symbol,
+                                Preserved {
+                                    id: export.id.as_str().into(),
+                                    reference: export.reference.clone(),
+                                },
+                            )
+                        })
+                        .collect(),
+                );
+                new_shape = Some(shape);
             }
             // A cancelled update drops the candidate, which frees only what it
             // allocated; the accepted generation is untouched.
@@ -584,7 +845,22 @@ impl Project {
         self.fs = candidate_fs;
         self.versions = candidate_versions;
         self.update_count += 1;
-        let program = self.generation.as_ref().expect("just committed").program();
+        let generation_number = self.update_count + 1;
+        let accepted = self.generation.as_ref().expect("just committed");
+        let program = accepted.program();
+        // The identity maps held handles into the replaced generation; they
+        // restart from the candidate's own symbols (Go: the `currentExports`
+        // re-keying) before anything can read them.
+        let ids = &mut self.ids;
+        accepted.with_checker(|checker| {
+            ids.after_update(
+                generation_number,
+                program,
+                checker,
+                incremental.then_some(incremental_path.as_str()),
+                current_exports,
+            );
+        });
 
         // The retained graph must advance on every accepted update, even ones
         // whose affected set is decided without a walk, or a later generation
@@ -625,11 +901,29 @@ impl Project {
         let affected_duration = stage.elapsed();
 
         let stage = Instant::now();
-        // S4: an incremental update keeps source facts and reference
-        // contributions of files outside the affected set; a full rebuild
-        // clears them and sweeps durable identities of files that left the
-        // program.
+        // An incremental update keeps reference contributions (and, with the
+        // `Source*` families, source facts) of files outside the affected set:
+        // their text is unchanged and every durable identity they reference
+        // declares in an unchanged file (a changed declaring file would have
+        // put the referencing file in the affected set). Files that left the
+        // program are evicted now, not when they are next queried, so an entry
+        // cannot go stale while its file is outside the program and be reused
+        // if the file later re-enters. A full rebuild (deletes, tsconfig
+        // changes, multi-file updates) can change resolution outside the
+        // module graph: it fails closed and sweeps the durable identities of
+        // files that left the program.
         if incremental {
+            let dropped: std::collections::HashSet<&str> =
+                affected.iter().map(String::as_str).collect();
+            self.references.invalidate(
+                &affected,
+                &|path| {
+                    program
+                        .get_source_file(path)
+                        .is_some_and(|file| !file.is_declaration_file())
+                },
+                &|path| !dropped.contains(path) && program.get_source_file(path).is_some(),
+            );
             for path in &affected {
                 self.declaration_shapes.remove(&clean(path));
             }
@@ -638,6 +932,8 @@ impl Project {
                     .insert(incremental_path.clone(), shape);
             }
         } else {
+            self.references.reset();
+            self.ids.sweep_durable(program);
             self.declaration_shapes.clear();
         }
         let invalidation_duration = stage.elapsed();
@@ -704,9 +1000,88 @@ impl Project {
         }
         let host = compiler_host(&type_script_path_dir(&self.config_path), &self.fs);
         let fresh = Generation::build(generation.command_line(), host);
+        // The identity maps and the generation-scoped reference ids name the
+        // chain about to be freed.
+        self.ids.release_pointers();
+        self.references.rebase();
         generation.commit(fresh);
         true
     }
+}
+
+fn to_u32(value: u64) -> Result<u32, BackendError> {
+    u32::try_from(value)
+        .map_err(|_| BackendError(format!("source byte offset {value} is out of range")))
+}
+
+fn utf8_boundary(source: &str, offset: usize) -> bool {
+    offset == 0 || offset == source.len() || source.is_char_boundary(offset)
+}
+
+/// Go: `validateLocation`. `source` is valid UTF-8 by construction.
+fn validate_location(location: &Location, source: &str) -> Result<(), BackendError> {
+    let (start, end) = (location.start_byte, location.end_byte);
+    if end < start || end > source.len() as u64 {
+        return Err(BackendError(format!(
+            "source byte range [{start},{end}) is outside [0,{})",
+            source.len()
+        )));
+    }
+    if !utf8_boundary(source, start as usize) || !utf8_boundary(source, end as usize) {
+        return Err(BackendError(format!(
+            "source byte range [{start},{end}) does not fall on UTF-8 boundaries"
+        )));
+    }
+    Ok(())
+}
+
+/// Go: `declarationKind`.
+fn declaration_kind(node: tsrs_core::P<Node>) -> &'static str {
+    if is_variable_declaration(node) {
+        "variable"
+    } else if is_function_declaration(node) {
+        "function"
+    } else if is_class_declaration(node) {
+        "class"
+    } else {
+        "declaration"
+    }
+}
+
+fn wire_symbol_name(name: &str) -> String {
+    match name.strip_prefix('\u{7f}') {
+        Some(rest) => format!("__{rest}"),
+        None => name.to_owned(),
+    }
+}
+
+/// Go: `declarationsForSymbol`.
+fn declarations_for_symbol(symbol: tsrs_core::P<tsrs_ast::Symbol>) -> Vec<Declaration> {
+    let mut declarations = Vec::with_capacity(symbol.declarations().len());
+    for node in symbol.declarations() {
+        let Some(file) = get_source_file_of_node(*node) else {
+            continue;
+        };
+        let name_node = node.name().unwrap_or(*node);
+        let (Some(pos), Some(end)) = (
+            name_node.pos().source_offset(),
+            name_node.end().source_offset(),
+        ) else {
+            continue;
+        };
+        declarations.push(Declaration {
+            // Go's codec spells the internal-name marker `__` at the wire seam
+            // (`wireSymbolName`); tsrs's marker is U+007F, so spell it here.
+            name: wire_symbol_name(symbol.name()).into(),
+            kind: declaration_kind(*node).into(),
+            location: Location {
+                path: clean(file.file_name()).into(),
+                start_byte: u64::from(skip_trivia(file.text(), pos)),
+                end_byte: u64::from(end),
+            },
+        });
+    }
+    declarations
 }
 
 fn check(ctx: &Context) -> Result<(), BackendError> {

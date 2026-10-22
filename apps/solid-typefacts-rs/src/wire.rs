@@ -52,16 +52,27 @@ fn codec_error(error: &TypeFactsError) -> String {
 
 /// Decodes one request payload. Missing fields take Go's zero values (and are
 /// then refused by validation); unknown fields and wrong types are decode
-/// errors, as in Go. Input must be deterministic CBOR, which Go does not
-/// require but every client sends.
+/// errors, as in Go.
+///
+/// Go does not require deterministic CBOR, and the client does not always send
+/// it: `EntityDemand`'s fields are declared in an order that is canonical for
+/// most flag sets but not all (`structuralAccessor` precedes `callability`,
+/// `referenceSpace`, ...), and the sidecar encoder serializes the struct as
+/// declared. A request that is well-formed CBOR but not in core deterministic
+/// key order is therefore accepted, as Go accepts it; only undecodable input
+/// is an error.
 pub fn decode_request(payload: &[u8]) -> Result<Incoming, String> {
-    if let Ok(request) = typefacts::decode::<Request>(payload) {
+    if let Ok(request) = typefacts::decode::<Request>(payload)
+        .or_else(|_| typefacts::decode_trusted::<Request>(payload))
+    {
         return Ok(Incoming {
             request,
             bad_operation: None,
         });
     }
-    let mut value: Value = typefacts::decode(payload).map_err(|error| codec_error(&error))?;
+    let mut value: Value = typefacts::decode(payload)
+        .or_else(|_| typefacts::decode_trusted(payload))
+        .map_err(|error| codec_error(&error))?;
     let Value::Map(entries) = &mut value else {
         return Err(codec_error(&TypeFactsError::Codec(
             "request is not a map".to_owned(),
@@ -232,5 +243,63 @@ mod tests {
         ]))
         .unwrap();
         assert_eq!(known.operation(), Some(Operation::Modules));
+    }
+}
+
+#[cfg(test)]
+mod order_tests {
+    use super::*;
+    use ciborium::Value;
+
+    fn text(value: &str) -> Value {
+        Value::Text(value.to_owned())
+    }
+
+    /// A `modules` request as the checker encodes it: `moduleGraph` keys in
+    /// struct order (`imports`, `importPaths`, `packages`), not length-first.
+    pub(crate) fn checker_modules_request() -> Vec<u8> {
+        let graph = Value::Map(vec![
+            (text("imports"), Value::Bool(true)),
+            (text("importPaths"), Value::Array(vec![text("/p/a.ts")])),
+            (text("packages"), Value::Bool(true)),
+        ]);
+        let request = Value::Map(vec![
+            (text("schema"), Value::Integer(1.into())),
+            (text("operation"), text("modules")),
+            (text("projectId"), text("/p/tsconfig.json")),
+            (text("requestId"), Value::Integer(2.into())),
+            (text("generation"), Value::Integer(1.into())),
+            (text("moduleGraph"), graph),
+        ]);
+        let mut bytes = Vec::new();
+        ciborium::into_writer(&request, &mut bytes).unwrap();
+        bytes
+    }
+
+    #[test]
+    fn non_canonical_key_order_decodes_like_go() {
+        let payload = checker_modules_request();
+        assert!(
+            typefacts::decode::<Value>(&payload).is_err(),
+            "fixture must be non-canonical"
+        );
+        let incoming = decode_request(&payload).unwrap();
+        assert_eq!(incoming.operation(), Some(Operation::Modules));
+        let graph = incoming.request.module_graph.unwrap();
+        assert!(graph.imports && graph.packages);
+        assert_eq!(graph.import_paths, ["/p/a.ts"]);
+    }
+
+    #[test]
+    fn unknown_operation_with_non_canonical_order_is_still_marked() {
+        let request = Value::Map(vec![
+            (text("schema"), Value::Integer(1.into())),
+            (text("operation"), text("frobnicate")),
+            (text("projectId"), text("/p")),
+        ]);
+        let mut bytes = Vec::new();
+        ciborium::into_writer(&request, &mut bytes).unwrap();
+        let incoming = decode_request(&bytes).unwrap();
+        assert_eq!(incoming.bad_operation.as_deref(), Some("frobnicate"));
     }
 }

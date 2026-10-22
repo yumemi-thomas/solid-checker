@@ -33,7 +33,8 @@ fn the_checker_is_lazy_disposable_and_recreated_on_demand() {
     let m = scratch.path("m.ts");
     let mut project = scratch.open();
     let generation = project.current().unwrap();
-    assert!(!generation.has_checker(), "opening needs no checker");
+    // Go's `OpenProject` creates the checker to seed the exported identities.
+    assert!(generation.has_checker(), "opening seeds export identities");
     assert_eq!(export_names(generation, &m), ["one", "two"]);
     assert!(generation.has_checker());
     // `with_checker` did not leave a lease behind.
