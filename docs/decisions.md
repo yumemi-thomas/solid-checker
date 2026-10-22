@@ -511,16 +511,20 @@ A read possibly after its own async function's await is uncertifiable; the skipp
 
 <a id="adr-0355"></a>
 ## ADR 0355 — Root allocation does not prove a directive leak
-A `createRoot` in ref apply owns its work, may be empty, and may be disposed. SC6001 withholds its leak claim as an uncertifiable lifetime obligation in direct and returned callbacks; direct unowned computations retain their proof. No root is certified safe by this change. The dialect identifies root-creating calls. Owners: `directives.rs`; mechanics: `docs/rules/primitive-in-directive-application.md`; fixtures `directive-owned-subscopes/RootLifetime.tsx`, oracle `root-directive-disposal`.
+A `createRoot` in ref apply owns its work, may be empty, and may be disposed. SC6001 withholds its leak claim as an uncertifiable lifetime obligation in direct and returned callbacks; direct unowned computations retain their proof. The dialect identifies root-creating calls. Owners: `directives.rs`; mechanics: `docs/rules/primitive-in-directive-application.md`.
 
 <a id="adr-0356"></a>
 ## ADR 0356 — Synchronous dispatch withholds event-owner proofs
-Standard-library `EventTarget.dispatchEvent`/`HTMLElement.click` calls withhold event owner/execution proofs: delivery may inherit an owned caller stack. Until targets are joined, the veto covers all event callbacks, including forwarded literals, and enters the cross-file digest. Project homonyms do not select it. Owners: `indexes/event_delivery.rs`, `owners/`, `execution_role/`; mechanics: `docs/rules/missing-owner.md`.
+Standard-library `EventTarget.dispatchEvent`/`HTMLElement.click` calls withhold event owner/execution proofs: delivery may inherit an owned caller stack. Until targets are joined, the veto covers all event callbacks, including forwarded literals, and enters the cross-file digest. Owners: `indexes/event_delivery.rs`, `owners/`, `execution_role/`; mechanics: `docs/rules/missing-owner.md`.
 
 <a id="adr-0357"></a>
 ## ADR 0357 — Possible suspension retains both owner contexts
-Possible suspension keeps the original and unowned contexts: SC4001 is an obligation. It follows ordinary calls and owner-preserving callbacks, invalidates lexical-root shortcuts, and never seeds dormant functions. Definite continuations retain their proof; fresh roots own their callbacks. Argument-specific take/skip proofs remain open. Owners: `owners/{owner_context,missing_owners,owner_discovery}.rs`; mechanics: `docs/rules/missing-owner.md`; fixtures `leaf-scope-skippable-await`, oracle `cleanup-possible-await`.
+Possible suspension keeps the original and unowned contexts: SC4001 is an obligation. It follows ordinary calls and owner-preserving callbacks, invalidates lexical-root shortcuts, and never seeds dormant functions. Definite continuations retain their proof; fresh roots own their callbacks. Owners: `owners/{owner_context,missing_owners,owner_discovery}.rs`; mechanics: `docs/rules/missing-owner.md`.
 
 <a id="adr-0358"></a>
 ## ADR 0358 — Exact handler holders enter the owner graph
 Event members/tuples and intrinsic spreads resolve through the immutable receiver census. Web rc.13 alone enables non-namespaced `on` spread keys, including lowercase. Getters, generators and unknown holders retain obligations; synchronous dispatch withholds unowned proof. Remote targets enter the retained digest. Owners: `object_members/handlers.rs`, `owners/`; mechanics: `docs/rules/missing-owner.md`.
+
+<a id="adr-0359"></a>
+## ADR 0359 — Alternative owner creations are proven jointly
+A package function whose same-operation creation calls cover every exit (`if (c) createEffect(…); else createRenderEffect(…);`) requires an owner. Early returns, try, loops, async, `never` and member callees stay uncertifiable. Owner: `owners/missing_owners.rs`.

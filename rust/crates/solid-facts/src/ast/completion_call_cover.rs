@@ -26,7 +26,15 @@ pub fn completion_call_cover(
     candidates: &[Span],
     unreachable_returns: &[Span],
 ) -> Option<bool> {
-    completion_cover(path, source, body, candidates, unreachable_returns, false)
+    completion_cover(
+        path,
+        source,
+        body,
+        candidates,
+        unreachable_returns,
+        false,
+        false,
+    )
 }
 
 /// Whether every normal completion of this synchronous block body exits at
@@ -41,7 +49,22 @@ pub fn completion_return_cover(
     body: Span,
     candidates: &[Span],
 ) -> Option<bool> {
-    completion_cover(path, source, body, candidates, &[], true)
+    completion_cover(path, source, body, candidates, &[], true, false)
+}
+
+/// Whether every explicit exit, including a catchable throw, has already
+/// executed a candidate call. This stricter cover is suitable for transporting
+/// a dependency owner requirement to its caller. Async/generator bodies and
+/// unsupported control remain unproven; implicit call exceptions keep the
+/// ordinary dispatch premise of the individual completion facts.
+#[must_use]
+pub fn completion_call_cover_including_throws(
+    path: &Path,
+    source: &str,
+    body: Span,
+    candidates: &[Span],
+) -> Option<bool> {
+    completion_cover(path, source, body, candidates, &[], false, true)
 }
 
 fn completion_cover(
@@ -51,6 +74,7 @@ fn completion_cover(
     candidates: &[Span],
     unreachable_returns: &[Span],
     return_sites: bool,
+    throws_exit: bool,
 ) -> Option<bool> {
     if source.len() > 4 * 1024 * 1024 || candidates.is_empty() {
         return None;
@@ -91,6 +115,7 @@ fn completion_cover(
         returns: 0,
         budget: 4096,
         return_sites,
+        throws_exit,
     };
     let fallthrough = walk.statements(&bound.statements, 1, 0)?;
     // Bit 1: an uncovered completion. Bit 2: a covered completion.
@@ -115,6 +140,7 @@ pub(super) fn statements_return_cover(
         returns: 0,
         budget: 4096,
         return_sites: true,
+        throws_exit: false,
     };
     let fallthrough = walk.statements(statements, 1, 0)?;
     Some((fallthrough | walk.returns) == 2)
@@ -130,6 +156,7 @@ struct Cover {
     returns: u8,
     budget: usize,
     return_sites: bool,
+    throws_exit: bool,
 }
 
 impl Cover {
@@ -201,7 +228,12 @@ impl Cover {
                 self.returns |= if hit { 2 } else { paths };
                 Some(0)
             }
-            Statement::ThrowStatement(_) => Some(0),
+            Statement::ThrowStatement(_) => {
+                if self.throws_exit {
+                    self.returns |= paths;
+                }
+                Some(0)
+            }
             Statement::ExpressionStatement(expression) => {
                 let hit = self.candidate(&expression.expression);
                 Some(if hit { 2 } else { paths })
@@ -218,6 +250,7 @@ impl Cover {
                 });
                 Some(if hit { 2 } else { paths })
             }
+            Statement::ClassDeclaration(_) if self.throws_exit => None,
             Statement::FunctionDeclaration(_)
             | Statement::ClassDeclaration(_)
             | Statement::EmptyStatement(_) => Some(paths),

@@ -713,18 +713,66 @@ pub(crate) fn attribute_dependency_requirements(
         // that lead there, whether one of them is on the function's
         // every-completion path, and whether every hop below it is.
         let mut best = HashMap::<usize, (Vec<Span>, bool, bool)>::default();
+        let per_site = operation_site.is_some_and(|site| {
+            crate::interproc::site_on_every_completion(lookup, owner_file, nodes[owner].span, site)
+        });
+        // Joint seed: the operation's sites here may be alternatives that
+        // together cover every normal completion (`if (c) createEffect(…);
+        // else createRenderEffect(…);`), though none of them does alone. The
+        // sites are the calls written directly in this function whose exact
+        // callee is a reportable requirement of this file, not through a
+        // dependency, with the same operation and uncertainty. The function's
+        // own site must be one, no `never` call may precede one (as for a single
+        // site), and the cover must hold on every explicit exit.
+        let owner_function = owner_file.ast.function_at(nodes[owner].span);
+        let sibling_callees = requirements
+            .iter()
+            .filter(|sibling| {
+                sibling.report
+                    && sibling.through_dependency.is_none()
+                    && sibling.operation == requirement.operation
+                    && sibling.uncertain == requirement.uncertain
+                    && sibling.location.path == requirement.location.path
+            })
+            .map(|sibling| (sibling.location.start_byte, sibling.location.end_byte))
+            .collect::<HashSet<_>>();
+        let sites = owner_file
+            .ast
+            .calls
+            .iter()
+            .filter(|call| {
+                !per_site
+                    && sibling_callees
+                        .contains(&(u64::from(call.callee.start), u64::from(call.callee.end)))
+                    && owner_function.is_some_and(|function| {
+                        written_directly_in(&owner_file.ast, function, call.span)
+                    })
+            })
+            .map(|call| call.span)
+            .collect::<Vec<_>>();
+        let joint = !per_site
+            && sites.len() > 1
+            && operation_site.is_some_and(|site| sites.contains(&site))
+            && owner_function.is_some_and(|function| {
+                sites
+                    .iter()
+                    .all(|&site| !lookup.never_returning_call_before(owner_file, function, site))
+            })
+            && solid_facts::ast::completion_call_cover_including_throws(
+                std::path::Path::new(owner_file.path.as_str()),
+                &owner_file.source,
+                nodes[owner].body,
+                &sites,
+            ) == Some(true);
         best.insert(
             owner,
             (
-                vec![operation_site.unwrap_or(span)],
-                operation_site.is_some_and(|site| {
-                    crate::interproc::site_on_every_completion(
-                        lookup,
-                        owner_file,
-                        nodes[owner].span,
-                        site,
-                    )
-                }),
+                if joint {
+                    sites
+                } else {
+                    vec![operation_site.unwrap_or(span)]
+                },
+                per_site || joint,
                 true,
             ),
         );
