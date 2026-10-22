@@ -398,3 +398,148 @@ func TestShorthandPropertyIsAReferenceOfItsValue(t *testing.T) {
 		}
 	}
 }
+
+// A broad invalidation (more than 64 affected files) drops the merged index
+// but keeps contributions of unaffected files; the rebuilt index must still
+// answer with their references, exactly as a fresh open does.
+func TestReferenceIndexBroadInvalidationKeepsRetainedReferences(t *testing.T) {
+	dir := t.TempDir()
+	write := writeProject(t, dir)
+	write("tsconfig.json", `{"compilerOptions":{"module":"esnext","moduleResolution":"bundler","target":"esnext"},"include":["*.ts"]}`)
+	hubPath := write("hub.ts", "export const hub = 1;\n")
+	for i := 0; i < 70; i++ {
+		write(fmt.Sprintf("imp%02d.ts", i), "import { hub } from \"./hub\";\nexport const v = hub;\n")
+	}
+	keptPath := write("kept.ts", "export const shared = 1;\nexport const a = shared;\nexport const b = shared + shared;\n")
+
+	ctx := context.Background()
+	opened, err := OpenProject(ctx, filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	proj := opened.(*project)
+
+	keptSource := "export const shared = 1;\nexport const a = shared;\nexport const b = shared + shared;\n"
+	start := strings.Index(keptSource, "shared")
+	shared, err := opened.SymbolAt(ctx, typefacts.Location{Path: keptPath, StartByte: start, EndByte: start + len("shared")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := opened.References(ctx, shared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(before) != 3 {
+		t.Fatalf("expected 3 references before the update, got %+v", before)
+	}
+
+	// Changing the exported type of hub is not a semantic cutoff, so all 70
+	// importers are affected while kept.ts is not.
+	if _, err := opened.Update(ctx, []typefacts.FileChange{{Path: hubPath, Version: 1, Source: []byte("export const hub = \"s\";\n")}}); err != nil {
+		t.Fatal(err)
+	}
+	if proj.referenceIndex.merged != nil || proj.referenceIndex.files[filepath.Clean(keptPath)] == nil {
+		t.Skip("update did not take the broad retained path")
+	}
+	after, err := opened.References(ctx, shared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(after, before) {
+		t.Fatalf("broad invalidation lost retained references:\nbefore %+v\nafter  %+v", before, after)
+	}
+}
+
+// ReleaseAnalysisState prunes merged buckets no retained fact used. A symbol
+// first asked about after a release must still get its complete references,
+// both directly and after an incremental update patched the pruned index.
+func TestReferenceIndexAfterReleaseAnswersPrunedSymbol(t *testing.T) {
+	dir := t.TempDir()
+	write := writeProject(t, dir)
+	write("tsconfig.json", `{"compilerOptions":{"module":"esnext","moduleResolution":"bundler","target":"esnext"},"include":["*.ts"]}`)
+	declSource := "export const used = 1;\nexport const pruned = 2;\n"
+	declPath := write("decl.ts", declSource)
+	aSource := "import { used, pruned } from \"./decl\";\nexport const a = used + pruned;\n"
+	aPath := write("a.ts", aSource)
+	write("b.ts", "import { pruned } from \"./decl\";\nexport const b = pruned;\n")
+
+	ctx := context.Background()
+	opened, err := OpenProject(ctx, filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	proj := opened.(*project)
+	at := func(path, source, name string) typefacts.SymbolID {
+		start := strings.Index(source, name)
+		id, err := opened.SymbolAt(ctx, typefacts.Location{Path: path, StartByte: start, EndByte: start + len(name)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	usedID := at(declPath, declSource, "used")
+	prunedID := at(declPath, declSource, "pruned")
+	if _, err := opened.References(ctx, usedID); err != nil {
+		t.Fatal(err)
+	}
+	want, err := opened.References(ctx, prunedID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(want) == 0 {
+		t.Fatal("expected references to pruned before release")
+	}
+	// Only `used` is retained by a fact.
+	proj.referenceIndex.used = map[typefacts.SymbolID]struct{}{}
+	proj.referenceIndex.markUsed(usedID)
+	proj.ReleaseAnalysisState()
+
+	got, err := opened.References(ctx, prunedID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("pruned symbol after release:\nwant %+v\ngot  %+v", want, got)
+	}
+
+	// Patching after a release must not leave a partial bucket either.
+	proj.referenceIndex.used = map[typefacts.SymbolID]struct{}{}
+	proj.referenceIndex.markUsed(usedID)
+	proj.ReleaseAnalysisState()
+	if _, err := opened.Update(ctx, []typefacts.FileChange{{Path: aPath, Version: 1, Source: []byte(aSource + "export const a2 = pruned;\n")}}); err != nil {
+		t.Fatal(err)
+	}
+	patched, err := opened.References(ctx, prunedID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	write("a.ts", aSource+"export const a2 = pruned;\n")
+	fresh, err := OpenProject(ctx, filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fresh.Close()
+	freshID := at2(t, fresh, ctx, declPath, declSource, "pruned")
+	if freshID != prunedID {
+		t.Fatalf("durable id differs: %s vs %s", freshID, prunedID)
+	}
+	independent, err := fresh.References(ctx, freshID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(independent) != 3 || !reflect.DeepEqual(patched, independent) {
+		t.Fatalf("patched pruned index diverged from a fresh open:\nfresh   %+v\npatched %+v", independent, patched)
+	}
+}
+
+func at2(t *testing.T, p typefacts.Project, ctx context.Context, path, source, name string) typefacts.SymbolID {
+	t.Helper()
+	start := strings.Index(source, name)
+	id, err := p.SymbolAt(ctx, typefacts.Location{Path: path, StartByte: start, EndByte: start + len(name)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}

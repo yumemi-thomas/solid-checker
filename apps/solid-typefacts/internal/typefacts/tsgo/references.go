@@ -24,6 +24,11 @@ type referenceIndex struct {
 	// retained fact. ReleaseAnalysisState prunes every other merged bucket;
 	// per-file symbol evidence remains sufficient for exact invalidation.
 	used map[typefacts.SymbolID]struct{}
+	// complete is non-nil once ReleaseAnalysisState pruned merged buckets: it
+	// names the only buckets still known whole. A bucket absent from it may be
+	// missing or hold just the rows an incremental refresh added, so a query
+	// for it rebuilds the merged index first.
+	complete map[typefacts.SymbolID]struct{}
 	// refreshPaths are affected files removed from an already-materialized
 	// merged index. They are rescanned lazily at the established reference
 	// closure point so symbol counter minting retains its order.
@@ -111,6 +116,7 @@ func (r *referenceIndex) reset() {
 	r.files = nil
 	r.paths = nil
 	r.used = nil
+	r.complete = nil
 }
 
 func (p *project) References(ctx context.Context, id typefacts.SymbolID) ([]typefacts.Location, error) {
@@ -134,8 +140,7 @@ func (p *project) References(ctx context.Context, id typefacts.SymbolID) ([]type
 	canonical := p.idFor(p.canonicalSymbol(target))
 
 	p.referenceIndex.ensure(p)
-	p.referenceIndex.markUsed(canonical)
-	return p.referenceIndex.locations(canonical), nil
+	return p.referenceIndex.query(p, canonical), nil
 }
 
 // ReferencesBatch is the closure-oriented counterpart of References. TS-Go's
@@ -162,8 +167,7 @@ func (p *project) ReferencesBatch(ctx context.Context, ids []typefacts.SymbolID)
 			continue
 		}
 		canonical := p.idFor(p.canonicalSymbol(target))
-		p.referenceIndex.markUsed(canonical)
-		result[id] = p.referenceIndex.locations(canonical)
+		result[id] = p.referenceIndex.query(p, canonical)
 	}
 	return result, nil
 }
@@ -199,6 +203,7 @@ func (r *referenceIndex) ensure(p *project) {
 	if r.merged == nil {
 		r.merged = r.build(p)
 		r.refreshPaths = nil
+		r.complete = nil
 		return
 	}
 	if len(r.refreshPaths) == 0 {
@@ -241,6 +246,7 @@ func (r *referenceIndex) ensure(p *project) {
 			r.merged[group.id] = references
 			group.spans = nil
 		}
+		entry.merged = true
 	}
 	for id := range touched {
 		references := r.merged[id]
@@ -266,6 +272,10 @@ type fileReferences struct {
 	refs    []fileReferenceGroup
 	spaces  []fileReferenceSpace
 	durable bool
+	// merged reports that the spans were moved into a merged index and
+	// cleared. Such an entry still carries exact symbol evidence but cannot
+	// rebuild a dropped index; build rescans it.
+	merged bool
 }
 
 // Per-file contributions deliberately omit the file path: referenceIndex.files
@@ -311,7 +321,7 @@ func (r *referenceIndex) build(p *project) map[typefacts.SymbolID][]indexedRefer
 		}
 		path := filepath.Clean(sourceFile.FileName())
 		paths = append(paths, path)
-		if _, ok := r.files[path]; !ok {
+		if prior, ok := r.files[path]; !ok {
 			entry := r.scan(p, path, sourceFile)
 			r.files[path] = entry
 			if r.deltaExact {
@@ -319,6 +329,10 @@ func (r *referenceIndex) build(p *project) map[typefacts.SymbolID][]indexedRefer
 					r.changedSymbols[group.id] = struct{}{}
 				}
 			}
+		} else if prior.merged {
+			// Retained across a broad invalidation: its text and durable
+			// identities are unchanged, so this is not a changed symbol.
+			r.files[path] = r.scan(p, path, sourceFile)
 		}
 	}
 	sort.Strings(paths)
@@ -339,6 +353,7 @@ func (r *referenceIndex) build(p *project) map[typefacts.SymbolID][]indexedRefer
 			references[group.id] = indexed
 			group.spans = nil
 		}
+		r.files[path].merged = true
 		for _, space := range r.files[path].spaces {
 			spaces[space.id] |= space.bits
 		}
@@ -363,6 +378,22 @@ func (r *referenceIndex) locations(id typefacts.SymbolID) []typefacts.Location {
 	return locations
 }
 
+// query completes the bucket for id, marks it used, and returns its locations.
+// The merged index must already be ensured.
+func (r *referenceIndex) query(p *project, id typefacts.SymbolID) []typefacts.Location {
+	if r.complete != nil {
+		if _, whole := r.complete[id]; !whole {
+			// Pruned by ReleaseAnalysisState; retained contributions rescan
+			// into a complete index.
+			r.merged = r.build(p)
+			r.refreshPaths = nil
+			r.complete = nil
+		}
+	}
+	r.markUsed(id)
+	return r.locations(id)
+}
+
 func (r *referenceIndex) markUsed(id typefacts.SymbolID) {
 	if r.used == nil {
 		r.used = make(map[typefacts.SymbolID]struct{})
@@ -371,9 +402,19 @@ func (r *referenceIndex) markUsed(id typefacts.SymbolID) {
 }
 
 func (r *referenceIndex) releaseAnalysisState() {
+	pruned := false
 	for id := range r.merged {
 		if _, retained := r.used[id]; !retained {
 			delete(r.merged, id)
+			pruned = true
+		}
+	}
+	if pruned || r.complete != nil {
+		// Buckets kept before this release but unused since are pruned now,
+		// so only the ids used since the last release remain whole.
+		r.complete = make(map[typefacts.SymbolID]struct{}, len(r.used))
+		for id := range r.used {
+			r.complete[id] = struct{}{}
 		}
 	}
 	clear(r.used)

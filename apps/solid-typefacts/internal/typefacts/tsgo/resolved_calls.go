@@ -468,8 +468,7 @@ func (p *project) defaultLibraryBinding(callee *ast.Node, target *ast.Symbol, ev
 	}
 	p.referenceIndex.ensure(p)
 	id := p.idFor(target)
-	p.referenceIndex.markUsed(id)
-	for _, reference := range p.referenceIndex.locations(id) {
+	for _, reference := range p.referenceIndex.query(p, id) {
 		source := p.program.GetSourceFile(reference.Path)
 		if source == nil {
 			return nil
