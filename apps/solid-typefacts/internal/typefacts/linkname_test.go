@@ -16,13 +16,13 @@ import (
 // requires the shim declaration to match it parameter for parameter.
 
 var linknameDirective = regexp.MustCompile(
-	`^//go:linkname (\S+) github\.com/microsoft/typescript-go/internal/([a-z/]+)\.(.+)$`)
+	`^//go:linkname (\S+) github\.com/microsoft/TypeScript/tsc/internal/([a-z/]+)\.(.+)$`)
 
 var methodTarget = regexp.MustCompile(`^\(\*(\w+)\)\.(\w+)$`)
 
 func TestLinknameSignaturesMatchThePinnedCompiler(t *testing.T) {
 	output, err := exec.Command("go", "list", "-m", "-f", "{{.Dir}}",
-		"github.com/microsoft/typescript-go").Output()
+		"github.com/microsoft/TypeScript/tsc").Output()
 	if err != nil {
 		t.Fatalf("locate the pinned typescript-go source: %v", err)
 	}

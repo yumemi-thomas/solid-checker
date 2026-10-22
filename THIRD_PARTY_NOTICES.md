@@ -55,8 +55,9 @@ move together here; their original MIT license remains at
 ## tsgolint and TypeScript-Go
 
 - tsgolint revision: `c3269c01a0c894a31330e1b4c3bd4edc6eb7694b`
-- TypeScript-Go revision: `8d29e62f3585` (pseudo-version
-  `v0.0.0-20260724234109-8d29e62f3585`)
+- TypeScript (Go implementation, `github.com/microsoft/TypeScript/tsc`)
+  revision: `b85298b6a81f` (pseudo-version
+  `v0.0.0-20260929230140-b85298b6a81f`)
 - Resolution: root `go.mod`, `go.sum`, and all nine shim modules
 - Licenses: MIT
 

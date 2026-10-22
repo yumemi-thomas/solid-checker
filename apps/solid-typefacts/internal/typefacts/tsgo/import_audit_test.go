@@ -10,15 +10,15 @@ import (
 
 func TestTypeFactsImportsOnlyReviewedTypeScriptShims(t *testing.T) {
 	allowed := map[string]bool{
-		"github.com/microsoft/typescript-go/shim/ast":       true,
-		"github.com/microsoft/typescript-go/shim/bundled":   true,
-		"github.com/microsoft/typescript-go/shim/checker":   true,
-		"github.com/microsoft/typescript-go/shim/compiler":  true,
-		"github.com/microsoft/typescript-go/shim/core":      true,
-		"github.com/microsoft/typescript-go/shim/scanner":   true,
-		"github.com/microsoft/typescript-go/shim/tsoptions": true,
-		"github.com/microsoft/typescript-go/shim/vfs":       true,
-		"github.com/microsoft/typescript-go/shim/vfs/osvfs": true,
+		"github.com/microsoft/TypeScript/tsc/shim/ast":       true,
+		"github.com/microsoft/TypeScript/tsc/shim/bundled":   true,
+		"github.com/microsoft/TypeScript/tsc/shim/checker":   true,
+		"github.com/microsoft/TypeScript/tsc/shim/compiler":  true,
+		"github.com/microsoft/TypeScript/tsc/shim/core":      true,
+		"github.com/microsoft/TypeScript/tsc/shim/scanner":   true,
+		"github.com/microsoft/TypeScript/tsc/shim/tsoptions": true,
+		"github.com/microsoft/TypeScript/tsc/shim/vfs":       true,
+		"github.com/microsoft/TypeScript/tsc/shim/vfs/osvfs": true,
 	}
 	packages, err := parser.ParseDir(token.NewFileSet(), ".", nil, parser.ImportsOnly)
 	if err != nil {
@@ -31,7 +31,7 @@ func TestTypeFactsImportsOnlyReviewedTypeScriptShims(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if strings.Contains(path, "typescript-go") && !allowed[path] {
+				if strings.Contains(path, "microsoft/TypeScript/tsc") && !allowed[path] {
 					t.Errorf("%s imports unreviewed TypeScript package %q", filename, path)
 				}
 				if strings.Contains(path, "tsgolint") {

@@ -1,13 +1,13 @@
-// Package core re-exports the slice of typescript-go's internal core
+// Package core re-exports the slice of TypeScript's tsc internal core
 // package that this repository uses — nothing more. Declarations are
 // copied from oxc-project/tsgolint's generated shims (MIT); the module
-// path claims the typescript-go prefix so the internal imports resolve.
+// path claims the TypeScript/tsc prefix so the internal imports resolve.
 // Regenerate by hand when a compiler bump moves an identifier: the
 // compiler reports alias breaks, and the go:linkname signatures below
 // must be re-verified against the target revision by eye.
 package core
 
-import core "github.com/microsoft/typescript-go/internal/core"
+import core "github.com/microsoft/TypeScript/tsc/internal/core"
 import _ "unsafe"
 
 type CompilerOptions = core.CompilerOptions
@@ -27,5 +27,5 @@ const ModuleKindPreserve = core.ModuleKindPreserve
 // exact/star classification and its Matches predicate.
 type Pattern = core.Pattern
 
-//go:linkname TryParsePattern github.com/microsoft/typescript-go/internal/core.TryParsePattern
+//go:linkname TryParsePattern github.com/microsoft/TypeScript/tsc/internal/core.TryParsePattern
 func TryParsePattern(pattern string) core.Pattern
