@@ -710,6 +710,20 @@ fn every_variant_has_its_own_key() {
             vocabulary.key()
         );
         assert_eq!(vocabulary.key().is_none(), index == 0);
+        // The key decodes back to the same interned vocabulary.
+        if let Some(key) = vocabulary.key() {
+            let decoded = Solid2::of_key(key).expect("every key decodes");
+            assert!(std::ptr::eq(decoded, vocabulary), "{key}");
+        }
+    }
+    for malformed in [
+        "",
+        "until+until",
+        "omit-predicate+store-root-mutable",
+        "nope",
+        "until+",
+    ] {
+        assert!(Solid2::of_key(malformed).is_none(), "{malformed:?}");
     }
     assert_eq!(OTHER_VARIANTS.len(), Solid2::VARIANT_COUNT - 1);
     assert_eq!(

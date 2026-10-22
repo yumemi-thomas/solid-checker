@@ -88,7 +88,8 @@
 //! Matching is exact on the trimmed string. A range (`^2.0.0-rc.3`) or build
 //! metadata (`2.0.0-rc.3+local`) is not the release that was read.
 
-use std::sync::LazyLock;
+use std::collections::HashMap;
+use std::sync::{LazyLock, Mutex, PoisonError};
 
 use super::Solid2;
 use crate::{
@@ -552,8 +553,59 @@ impl Solid2 {
         &VARIANTS[self.index()]
     }
 
+    /// Spelled on first use and kept: only the vocabularies an analysis
+    /// reaches ever spell theirs (one or two per process), not all of them.
     pub(super) fn key(self) -> Option<&'static str> {
-        KEYS[self.index()].as_deref()
+        let index = self.index();
+        if index == 0 {
+            return None;
+        }
+        let mut keys = KEYS.lock().unwrap_or_else(PoisonError::into_inner);
+        Some(keys.entry(index).or_insert_with(|| {
+            variant_key(self)
+                .expect("only the conservative vocabulary has no key")
+                .leak()
+        }))
+    }
+
+    /// The vocabulary a [`variant_key`] spells, decoded token by token, so an
+    /// id parses back to its answers without a table of every key. `None`
+    /// for an unknown token, and for a spelling [`variant_key`] would not
+    /// produce (a repeated or reordered token), so each vocabulary has one
+    /// key and each key one vocabulary.
+    pub(super) fn of_key(key: &str) -> Option<&'static Self> {
+        let mut vocabulary = Self::CONSERVATIVE;
+        for token in key.split('+') {
+            match token {
+                "store-strict-keys-audited" => vocabulary.store_strict_keys_audited = true,
+                "store-root-mutable" => vocabulary.store_root = StoreRootTyping::Mutable,
+                "omit-predicate" => vocabulary.omit_predicate_form = true,
+                "until" => vocabulary.until = true,
+                "flush-in-action" => vocabulary.flush_in_action = true,
+                "flush-in-effect-callback" => vocabulary.flush_in_effect_callback = true,
+                "dynamic-static" => vocabulary.dynamic_options = DynamicOptions::StaticForm,
+                "dynamic-options-unread" => vocabulary.dynamic_options = DynamicOptions::Unread,
+                "store-setter-guards-roots" => {
+                    vocabulary.store_setter_roots = StoreSetterRootGuard::Guarded;
+                }
+                "optimistic-store-setter-unguarded" => {
+                    vocabulary.optimistic_store_setter = OptimisticStoreSetterGuard::Unguarded;
+                }
+                "lazy-renders-component" => vocabulary.lazy_renders_component = true,
+                "render-creates-root" => vocabulary.render_creates_root = true,
+                "spread-event-keys" => vocabulary.spread_event_keys = SpreadEventKeys::AnyOn,
+                "spread-event-keys-uppercase" => {
+                    vocabulary.spread_event_keys = SpreadEventKeys::OnUppercase;
+                }
+                "optimistic-setter-guarded" => vocabulary.optimistic_signal_setter_guarded = true,
+                "latest-rejects-pending" => vocabulary.latest_rejects_pending_read = true,
+                "hydrate-inline" => vocabulary.hydrate_code_inline = true,
+                "dynamic-component-dispatch" => vocabulary.rc17_callback_exports = true,
+                _ => return None,
+            }
+        }
+        let vocabulary = vocabulary.interned();
+        (vocabulary.key() == Some(key)).then_some(vocabulary)
     }
 
     /// Whether this installation exports `primitive` at all. `until`, and
@@ -647,15 +699,13 @@ fn variant_key(vocabulary: Solid2) -> Option<String> {
     (!tokens.is_empty()).then(|| tokens.join("+"))
 }
 
-static KEYS: LazyLock<Vec<Option<String>>> = LazyLock::new(|| {
-    VARIANTS
-        .iter()
-        .map(|vocabulary| variant_key(*vocabulary))
-        .collect()
-});
+/// The keys spelled so far, by vocabulary index ([`Solid2::key`]).
+static KEYS: LazyLock<Mutex<HashMap<usize, &'static str>>> = LazyLock::new(Default::default);
 
 /// Every variant but [`Solid2::CONSERVATIVE`], the language's own vocabulary,
-/// for [`Dialect::variants`].
+/// for [`Dialect::variants`]: an enumeration for tests and audits. Analysis
+/// never builds it; it reaches a variant by its review or by its key
+/// ([`Solid2::of_key`]).
 pub(super) static OTHER_VARIANTS: LazyLock<Vec<&'static dyn Dialect>> = LazyLock::new(|| {
     VARIANTS[1..]
         .iter()

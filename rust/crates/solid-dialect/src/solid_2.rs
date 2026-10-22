@@ -988,6 +988,10 @@ impl Dialect for Solid2 {
         &releases::OTHER_VARIANTS
     }
 
+    fn variant_by_key(&self, key: &str) -> Option<&'static dyn Dialect> {
+        Solid2::of_key(key).map(|vocabulary| vocabulary as &'static dyn Dialect)
+    }
+
     fn defaulted_vocabulary(&self) -> Option<&'static dyn Dialect> {
         Some(Solid2::DEFAULTED.interned())
     }

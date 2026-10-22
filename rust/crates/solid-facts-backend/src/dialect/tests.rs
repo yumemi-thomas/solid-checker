@@ -936,38 +936,43 @@ fn the_pre_beta_experiment_is_refused_with_its_reason() {
 #[cfg(feature = "dialect-v2")]
 #[test]
 fn every_release_variant_is_one_its_language_lists() {
-    assert!(!RELEASE_VARIANTS.is_empty());
-    for variant in RELEASE_VARIANTS.iter() {
-        let language = ALL
-            .iter()
-            .copied()
-            .find(|language| language.vocabulary.version() == variant.vocabulary.version())
-            .expect("a variant belongs to a registered language");
-        let key = variant
-            .vocabulary
-            .variant_key()
-            .expect("a variant names its key");
-        assert_eq!(variant.id, format!("{}@{key}", language.id));
-        assert_eq!(by_id(variant.id).map(|found| found.id), Some(variant.id));
-        assert!(std::ptr::eq(
-            for_vocabulary(language, Some(variant.vocabulary)),
-            variant
-        ));
-        assert!(!ALL.iter().any(|registered| registered.id == variant.id));
-        // The variant is the same catalog; only the vocabulary moves.
-        assert_eq!(variant.rule_count, language.rule_count);
-        assert_eq!(
-            variant.compiler_facts_identity,
-            language.compiler_facts_identity
-        );
+    let mut ids = Vec::new();
+    for language in ALL.iter().copied() {
+        for vocabulary in language.vocabulary.variants() {
+            let variant = for_vocabulary(language, Some(*vocabulary));
+            let key = variant
+                .vocabulary
+                .variant_key()
+                .expect("a variant names its key");
+            assert_eq!(variant.id, format!("{}@{key}", language.id));
+            assert!(std::ptr::eq(
+                variant.vocabulary as *const dyn solid_dialect::Dialect as *const (),
+                *vocabulary as *const dyn solid_dialect::Dialect as *const ()
+            ));
+            assert!(by_id(variant.id).is_some_and(|found| std::ptr::eq(found, variant)));
+            assert!(std::ptr::eq(
+                for_vocabulary(language, Some(*vocabulary)),
+                variant
+            ));
+            assert!(!ALL.iter().any(|registered| registered.id == variant.id));
+            // The variant is the same catalog; only the vocabulary moves.
+            assert_eq!(variant.rule_count, language.rule_count);
+            assert_eq!(
+                variant.compiler_facts_identity,
+                language.compiler_facts_identity
+            );
+            ids.push(variant.id);
+        }
+        // An id whose key no variant spells resolves to nothing.
+        for malformed in ["", "nope", "until+until"] {
+            assert!(by_id(&format!("{}@{malformed}", language.id)).is_none());
+        }
     }
-    let mut ids = RELEASE_VARIANTS
-        .iter()
-        .map(|variant| variant.id)
-        .collect::<Vec<_>>();
+    assert!(!ids.is_empty());
+    let count = ids.len();
     ids.sort_unstable();
     ids.dedup();
-    assert_eq!(ids.len(), RELEASE_VARIANTS.len(), "variant ids are unique");
+    assert_eq!(ids.len(), count, "variant ids are unique");
     // B1, as the dialects detection selects for the rc.3 and rc.9 triples
     // answer it.
     assert!(SOLID_V2.vocabulary.store_root_properties_are_readonly());

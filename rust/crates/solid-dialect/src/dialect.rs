@@ -147,11 +147,20 @@ pub trait Dialect: Sync {
     }
 
     /// Every release variant [`Dialect::review_installation`] can answer
-    /// with, other than the language's own vocabulary. Listed so a variant
-    /// can be found again by its [`Dialect::variant_key`] alone, which is what
-    /// a daemon forwarding the selection it hashed has.
+    /// with, other than the language's own vocabulary: an enumeration for
+    /// tests and audits. A variant is found again by its key with
+    /// [`Dialect::variant_by_key`], which builds nothing.
     fn variants(&self) -> &'static [&'static dyn Dialect] {
         &[]
+    }
+
+    /// The variant whose [`Dialect::variant_key`] is `key`, decoded from the
+    /// key itself rather than looked up among [`Dialect::variants`], so
+    /// resolving an id builds no table of every variant. `None` for a key no
+    /// variant of this language spells.
+    fn variant_by_key(&self, key: &str) -> Option<&'static dyn Dialect> {
+        let _ = key;
+        None
     }
 
     /// The vocabulary a project is analyzed under when no installation of

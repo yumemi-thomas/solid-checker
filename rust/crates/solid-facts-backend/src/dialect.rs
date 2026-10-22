@@ -398,37 +398,32 @@ const _: () = assert!(!ALL.is_empty(), "a build must carry at least one dialect"
 /// The key is spelled from the vocabulary's answers, so moving the audited
 /// release renames no variant.
 ///
-/// Built once from the vocabularies rather than listed here, so a dialect that
-/// adds an answer adds its variants without shared code naming them.
-pub static RELEASE_VARIANTS: std::sync::LazyLock<Vec<Dialect>> = std::sync::LazyLock::new(|| {
-    ALL.iter()
-        .flat_map(|language| {
-            language.vocabulary.variants().iter().map(|vocabulary| {
-                let key = vocabulary
-                    .variant_key()
-                    .expect("every listed variant names how it differs from its language");
-                Dialect {
-                    id: format!("{}@{key}", language.id).leak(),
-                    vocabulary: *vocabulary,
-                    ..**language
-                }
-            })
-        })
-        .collect()
-});
+/// Registered on first use, keyed by id: a process reaches one or two of a
+/// language's variants, and a language can answer with well over a hundred
+/// thousand, so neither an id nor a [`Dialect`] is built for one nobody
+/// reaches. A variant once registered is the same `&'static` for the rest of
+/// the process.
+static RELEASE_VARIANTS: std::sync::LazyLock<
+    std::sync::Mutex<std::collections::HashMap<String, &'static Dialect>>,
+> = std::sync::LazyLock::new(Default::default);
 
 /// Resolves a dialect by its stable id: a registered language, or one of its
-/// [`RELEASE_VARIANTS`].
+/// release variants, whose key is decoded rather than looked up
+/// ([`solid_dialect::Dialect::variant_by_key`]).
 #[must_use]
 pub fn by_id(id: &str) -> Option<&'static Dialect> {
-    ALL.iter()
-        .copied()
-        .chain(RELEASE_VARIANTS.iter())
-        .find(|dialect| dialect.id == id)
+    if let Some(language) = ALL.iter().copied().find(|dialect| dialect.id == id) {
+        return Some(language);
+    }
+    let (language, key) = id.split_once('@')?;
+    let language = ALL.iter().copied().find(|dialect| dialect.id == language)?;
+    let vocabulary = language.vocabulary.variant_by_key(key)?;
+    Some(for_vocabulary(language, Some(vocabulary)))
 }
 
 /// The dialect that analyzes with `vocabulary`, the one `language`'s own
-/// review chose: the language itself, or its [`RELEASE_VARIANTS`] entry.
+/// review chose: the language itself, or its release variant, registered on
+/// first use ([`RELEASE_VARIANTS`]).
 fn for_vocabulary(
     language: &'static Dialect,
     vocabulary: Option<&'static dyn solid_dialect::Dialect>,
@@ -436,13 +431,25 @@ fn for_vocabulary(
     let Some(key) = vocabulary.and_then(|vocabulary| vocabulary.variant_key()) else {
         return language;
     };
-    RELEASE_VARIANTS
-        .iter()
-        .find(|variant| {
-            variant.vocabulary.variant_key() == Some(key)
-                && variant.vocabulary.version() == language.vocabulary.version()
-        })
-        .expect("a language's review answers only with the variants it lists")
+    let vocabulary = language
+        .vocabulary
+        .variant_by_key(key)
+        .filter(|variant| variant.version() == language.vocabulary.version())
+        .expect("a language's review answers only with the variants it lists");
+    let id = format!("{}@{key}", language.id);
+    let mut registry = RELEASE_VARIANTS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some(variant) = registry.get(&id) {
+        return variant;
+    }
+    let variant: &'static Dialect = Box::leak(Box::new(Dialect {
+        id: id.clone().leak(),
+        vocabulary,
+        ..*language
+    }));
+    registry.insert(id, variant);
+    variant
 }
 
 /// The dialect entry points fall back to when a request names none and
