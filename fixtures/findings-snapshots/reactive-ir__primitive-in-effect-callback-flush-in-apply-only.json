@@ -1,0 +1,35 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/variants/flush-in-apply-only/App.ts",
+      "start": 328,
+      "end": 340,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC4005",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/variants/flush-in-apply-only/App.ts",
+      "start": 354,
+      "end": 364,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/variants/flush-in-apply-only/App.ts",
+      "start": 377,
+      "end": 382,
+      "fixes": 0
+    }
+  ]
+}

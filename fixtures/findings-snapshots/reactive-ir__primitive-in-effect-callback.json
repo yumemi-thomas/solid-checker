@@ -1,0 +1,175 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC4005",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.ts",
+      "start": 1166,
+      "end": 1176,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC4005",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.ts",
+      "start": 1215,
+      "end": 1225,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC4005",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.ts",
+      "start": 1335,
+      "end": 1345,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC4005",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.ts",
+      "start": 2308,
+      "end": 2318,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC4005",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.ts",
+      "start": 2416,
+      "end": 2426,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC4005",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.ts",
+      "start": 2545,
+      "end": 2559,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC4005",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.ts",
+      "start": 3050,
+      "end": 3066,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC4005",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.ts",
+      "start": 3229,
+      "end": 3239,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC4005",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.ts",
+      "start": 3316,
+      "end": 3326,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC4005",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.ts",
+      "start": 3588,
+      "end": 3598,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC4005",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.ts",
+      "start": 3870,
+      "end": 3880,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC4005",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.ts",
+      "start": 4085,
+      "end": 4095,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.ts",
+      "start": 4401,
+      "end": 4410,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.ts",
+      "start": 4868,
+      "end": 4880,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.ts",
+      "start": 4939,
+      "end": 4957,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/App.ts",
+      "start": 5016,
+      "end": 5035,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/unresolved.ts",
+      "start": 314,
+      "end": 326,
+      "fixes": 0
+    }
+  ]
+}

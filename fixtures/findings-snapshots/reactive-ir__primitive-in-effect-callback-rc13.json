@@ -1,0 +1,65 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback-rc13/App.ts",
+      "start": 4313,
+      "end": 4322,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback-rc13/App.ts",
+      "start": 4780,
+      "end": 4792,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback-rc13/App.ts",
+      "start": 4851,
+      "end": 4869,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback-rc13/App.ts",
+      "start": 4928,
+      "end": 4947,
+      "fixes": 0
+    },
+    {
+      "rule": "unaudited-solid-release",
+      "code": "SC9014",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback-rc13/node_modules/solid-js/package.json",
+      "start": 0,
+      "end": 0,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback-rc13/unresolved.ts",
+      "start": 314,
+      "end": 326,
+      "fixes": 0
+    }
+  ]
+}

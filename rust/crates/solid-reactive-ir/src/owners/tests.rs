@@ -206,6 +206,25 @@ fn owner_edge_context_transforms_the_source_bits_per_edge_kind() {
         owner_edge_context(OwnerEdgeKind::MayBeUnowned, OWNER_CONTEXT_OWNED),
         OWNER_CONTEXT_UNOWNED
     );
+    // ADR 0362: an apply a flush from an owned scope may drain is owned on
+    // some runs and unowned on others, whatever the creation site proves, and
+    // it leaves a region written around it.
+    for source in [
+        0,
+        OWNER_CONTEXT_OWNED,
+        OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED,
+    ] {
+        let context = owner_edge_context(OwnerEdgeKind::FlushDrained, source);
+        assert_eq!(
+            context,
+            OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LATER_RUN_UNOWNED
+        );
+        assert_eq!(context & OWNER_CONTEXT_PROVEN_UNOWNED, 0);
+        assert_ne!(
+            context & super::owner_context::OWNER_CONTEXT_LEAVES_REGION,
+            0
+        );
+    }
 }
 
 #[test]

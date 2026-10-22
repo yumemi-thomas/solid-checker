@@ -390,6 +390,97 @@ fn the_effect_phase_report_follows_the_resolved_signals() {
     }
 }
 
+/// ADR 0362: `PRIMITIVE_IN_EFFECT_CALLBACK` is rc.17's alone, and read from
+/// `solid-js` and `@solidjs/signals` together. rc.13 and every earlier read
+/// release have no such code, so an unread release states nothing either.
+#[test]
+fn the_effect_phase_throw_is_rc17s_alone() {
+    for (solid_js, signals, throws) in [
+        (Some("2.0.0-rc.17"), Some("2.0.0-rc.17"), true),
+        (Some("2.0.0-rc.13"), Some("2.0.0-rc.13"), false),
+        (Some("2.0.0-rc.9"), Some("2.0.0-rc.9"), false),
+        (Some("2.0.0-rc.3"), Some("2.0.0-rc.3"), false),
+        // One owner read at rc.17 beside another that was not: no review read
+        // the combination.
+        (Some("2.0.0-rc.17"), Some("2.0.0-rc.13"), false),
+        (Some("2.0.0-rc.13"), Some("2.0.0-rc.17"), false),
+        (Some("2.0.0-rc.17"), Some("2.0.0-rc.18"), false),
+        (Some("2.0.0-rc.17"), None, false),
+    ] {
+        let (vocabulary, _) = analyzed(&triple(solid_js, signals, Some("2.0.0-rc.17")));
+        assert_eq!(
+            vocabulary.primitive_in_effect_callback, throws,
+            "{solid_js:?} {signals:?}"
+        );
+        for primitive in [
+            Primitive::CreateRoot,
+            Primitive::CreateMemo,
+            Primitive::CreateDeferred,
+        ] {
+            assert_eq!(
+                vocabulary.throws_inside_effect_phase(primitive),
+                throws,
+                "{primitive:?} {solid_js:?} {signals:?}"
+            );
+        }
+        // The effect constructors reach the same assertion but are SC4001's
+        // `Effect` role; the others are not claimed.
+        for primitive in [
+            Primitive::CreateEffect,
+            Primitive::CreateRenderEffect,
+            Primitive::CreateTrackedEffect,
+            Primitive::CreateSignal,
+            Primitive::OnCleanup,
+            Primitive::RunWithOwner,
+            Primitive::Untrack,
+            Primitive::Flush,
+        ] {
+            assert!(!vocabulary.throws_inside_effect_phase(primitive));
+        }
+    }
+    assert!(Solid2::AUDITED.throws_inside_effect_phase(Primitive::CreateRoot));
+    assert!(!Solid2::RC13.throws_inside_effect_phase(Primitive::CreateRoot));
+    assert!(!Solid2::CONSERVATIVE.throws_inside_effect_phase(Primitive::CreateMemo));
+}
+
+/// ADR 0362: `flush` and the calls proven or taken to reach it on the caller's
+/// stack answer the same in every vocabulary (rc.13 and rc.17 were read, every
+/// other release is taken to reach it conservatively); nothing else does.
+#[test]
+fn flush_reaching_primitives_answer_alike_in_every_vocabulary() {
+    for vocabulary in std::iter::once(&Solid2::CONSERVATIVE).chain(VARIANTS.iter()) {
+        for primitive in [
+            Primitive::Flush,
+            Primitive::Render,
+            Primitive::Hydrate,
+            Primitive::Action,
+        ] {
+            assert!(
+                vocabulary.may_flush_on_callers_stack(primitive),
+                "{primitive:?}"
+            );
+            // The wrapper `action(...)` builds flushes at each invocation.
+            assert_eq!(
+                vocabulary.flush_runs_during_call(primitive),
+                primitive != Primitive::Action,
+                "{primitive:?}"
+            );
+        }
+        for primitive in [
+            Primitive::CreateRoot,
+            Primitive::CreateMemo,
+            Primitive::CreateEffect,
+            Primitive::RunWithOwner,
+            Primitive::Untrack,
+        ] {
+            assert!(
+                !vocabulary.may_flush_on_callers_stack(primitive),
+                "{primitive:?}"
+            );
+        }
+    }
+}
+
 /// ADR 0136: `createComponent` renders its first argument on every
 /// release the reviews read (rc.0-rc.9 all call `Comp` in place), so the
 /// answer is the same in every vocabulary, and no other name renders.

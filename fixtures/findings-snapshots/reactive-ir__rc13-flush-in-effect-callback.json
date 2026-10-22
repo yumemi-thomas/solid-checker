@@ -54,8 +54,8 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
+      "kind": "uncertifiable",
+      "severity": "error",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
       "start": 2498,
       "end": 2516,
@@ -74,8 +74,8 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
+      "kind": "uncertifiable",
+      "severity": "error",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
       "start": 2618,
       "end": 2636,
@@ -104,8 +104,8 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
+      "kind": "uncertifiable",
+      "severity": "error",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
       "start": 2808,
       "end": 2826,

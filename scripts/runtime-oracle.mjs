@@ -175,6 +175,8 @@ const codeRules = {
   UNTIL_IN_REACTIVE_SCOPE: ["until-in-tracked-scope"],
   FLUSH_IN_ACTION: ["flush-in-action"],
   FLUSH_IN_EFFECT_CALLBACK: ["flush-in-effect-callback"],
+  // rc.17: a root, memo or deferred memo created with no owner on a createEffect apply's stack (ADR 0362).
+  PRIMITIVE_IN_EFFECT_CALLBACK: ["primitive-in-effect-callback"],
   FLUSH_IN_TRACKED_QUEUE_CALLBACK: ["leaf-owner-forbidden-call"],
   DYNAMIC_STATIC_PROMISE: ["static-dynamic-async-source"],
 };

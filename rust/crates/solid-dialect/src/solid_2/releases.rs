@@ -15,6 +15,7 @@
 //! | N3: does the dev store-setter guard reject a root owner? | `@solidjs/signals` (`devGuardStoreSetterWrite`, from rc.9) | the installed `solid-js` |
 //! | N4: does `flush` throw `FLUSH_IN_ACTION` inside an action step? | `@solidjs/signals` (`dist/dev-shared.js`, from rc.8) | the installed `solid-js` |
 //! | N6: does `flush` in an effect's apply report `FLUSH_IN_EFFECT_CALLBACK`? | `@solidjs/signals` (`dist/dev.js` before rc.8, `dist/dev-shared.js` from it; from rc.1) | the installed `solid-js` |
+//! | ADR 0362: does a root, memo or deferred memo created with no owner in an effect's apply throw `PRIMITIVE_IN_EFFECT_CALLBACK`? | `@solidjs/signals` (`assertNotInEffectCallback`, rc.17 only; rc.13 has none) and `solid-js`'s wrappers of it | the installed `solid-js`, rc.17 beside rc.17 |
 //! | N5: does an optimistic-store setter meet the owned-scope write guard? | `@solidjs/signals` (`devGuardStoreSetterWrite`, from rc.1) | the installed `solid-js` |
 //! | ADR 0292: does `lazy` render its loaded `default` through `createComponent`? | `solid-js` (`lazy`, rc.13 of the read releases) | the installed `solid-js` |
 //! | ADR 0194: are rc.17's `dynamicComponent`, `dispatchAsInteraction`, `createDeferred`, `lazyModule` and `onHydrationEnd` exports? | `solid-js`, `@solidjs/web` and `@solidjs/signals` (`withInteraction`, `createDeferred`), all rc.17 | each from its own |
@@ -382,6 +383,7 @@ impl Solid2 {
         latest_rejects_pending_read: true,
         hydrate_code_inline: true,
         rc17_callback_exports: false,
+        primitive_in_effect_callback: false,
     };
 
     /// The vocabulary of the audited triple, [`AUDITED_INSTALLATION`]: what
@@ -416,6 +418,7 @@ impl Solid2 {
         latest_rejects_pending_read: true,
         hydrate_code_inline: true,
         rc17_callback_exports: false,
+        primitive_in_effect_callback: false,
     };
 
     /// rc.13 adds one audited strict store-key premise; older reviews
@@ -442,13 +445,14 @@ impl Solid2 {
         optimistic_signal_setter_guarded: false,
         latest_rejects_pending_read: false,
         hydrate_code_inline: false,
+        primitive_in_effect_callback: true,
         ..Self::RC13
     };
 
     /// How many distinct vocabularies the answers above combine into: every
     /// combination is reachable, because the three owners install
     /// independently.
-    const VARIANT_COUNT: usize = 2 * 2 * 2 * 3 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 3 * 2 * 2 * 2 * 2;
+    const VARIANT_COUNT: usize = 2 * 2 * 2 * 3 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 3 * 2 * 2 * 2 * 2 * 2;
 
     /// The vocabulary at one mixed-radix index, [`Solid2::CONSERVATIVE`] at
     /// `0`: digit `0` of every answer is its conservative one. A new
@@ -469,6 +473,7 @@ impl Solid2 {
             latest_rejects_pending_read: (index / 18432) % 2 == 1,
             hydrate_code_inline: (index / 36864) % 2 == 1,
             rc17_callback_exports: (index / 73728) % 2 == 1,
+            primitive_in_effect_callback: (index / 147456) % 2 == 1,
             store_root: if index % 2 == 1 {
                 StoreRootTyping::Mutable
             } else {
@@ -547,6 +552,12 @@ impl Solid2 {
                 })
             + 36864 * (if self.hydrate_code_inline { 1 } else { 0 })
             + 73728 * (if self.rc17_callback_exports { 1 } else { 0 })
+            + 147456
+                * (if self.primitive_in_effect_callback {
+                    1
+                } else {
+                    0
+                })
     }
 
     /// The one `'static` value per vocabulary, which is what an analysis holds.
@@ -602,6 +613,7 @@ impl Solid2 {
                 "latest-rejects-pending" => vocabulary.latest_rejects_pending_read = true,
                 "hydrate-inline" => vocabulary.hydrate_code_inline = true,
                 "rc17-callback-exports" => vocabulary.rc17_callback_exports = true,
+                "primitive-in-effect-callback" => vocabulary.primitive_in_effect_callback = true,
                 _ => return None,
             }
         }
@@ -697,6 +709,9 @@ fn variant_key(vocabulary: Solid2) -> Option<String> {
     }
     if vocabulary.rc17_callback_exports {
         tokens.push("rc17-callback-exports");
+    }
+    if vocabulary.primitive_in_effect_callback {
+        tokens.push("primitive-in-effect-callback");
     }
     (!tokens.is_empty()).then(|| tokens.join("+"))
 }
@@ -989,6 +1004,15 @@ fn vocabulary_for(solid_js: Release<'_>, signals: Release<'_>, web: Release<'_>)
                 Release::Read(RC17),
                 Release::Read(RC17)
             )
+        ),
+        // ADR 0362. `assertNotInEffectCallback` is `@solidjs/signals`'s
+        // (`dist/dev-shared.js:3947-3957`, called at `:1496` and `:4927`), and
+        // `solid-js`'s client wrappers end in signals' `createRoot`,
+        // `createMemo` and `createDeferred` (`dist/solid.dev.js:752-809`,
+        // `:962-988`). rc.13 has no such code; only rc.17's bytes were read.
+        primitive_in_effect_callback: matches!(
+            (solid_js, signals),
+            (Release::Read(RC17), Release::Read(RC17))
         ),
         // B1. An unread or unresolved signals keeps `Readonly` (module docs).
         store_root: match signals {

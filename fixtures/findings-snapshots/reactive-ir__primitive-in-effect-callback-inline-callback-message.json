@@ -1,0 +1,41 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/variants/inline-callback-message/App.ts",
+      "start": 421,
+      "end": 433,
+      "fixes": 0,
+      "message": "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app",
+      "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle."
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC4005",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/variants/inline-callback-message/App.ts",
+      "start": 465,
+      "end": 475,
+      "fixes": 0,
+      "message": "createMemo() is called in an inline callback written in the apply callback of a createEffect; whenever it runs, it runs with no owner inside the effect phase, where the installed @solidjs/signals throws PRIMITIVE_IN_EFFECT_CALLBACK in dev before the computation is created, and the production build creates one that belongs to nobody and is never disposed",
+      "hint": "Create it in the effect's compute function or in the component body, or parent it explicitly: capture the owner (`const owner = getOwner()`) outside the effect and create it inside `runWithOwner(owner, () => …)`."
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/variants/inline-callback-message/App.ts",
+      "start": 491,
+      "end": 503,
+      "fixes": 0,
+      "message": "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app",
+      "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle."
+    }
+  ]
+}

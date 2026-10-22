@@ -1,0 +1,25 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/variants/action-call/App.ts",
+      "start": 534,
+      "end": 546,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC4005",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/variants/action-call/App.ts",
+      "start": 560,
+      "end": 570,
+      "fixes": 0
+    }
+  ]
+}

@@ -243,6 +243,9 @@ pub(crate) const fn owner_edge_context(kind: OwnerEdgeKind, source: u8) -> u8 {
         OwnerEdgeKind::Owned => OWNER_CONTEXT_OWNED,
         OwnerEdgeKind::Unowned => OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED,
         OwnerEdgeKind::Conditional => OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED,
+        OwnerEdgeKind::FlushDrained => {
+            OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LATER_RUN_UNOWNED
+        }
         // Not proven unowned: a later run happens only if the primitive runs
         // the callback again, which needs a change nothing here proves. A
         // source that is itself proven unowned stays proven: then every run,
@@ -586,7 +589,19 @@ pub(crate) fn owner_callback_edges(
         let Some(owner) = callback_owner_at_call(file, call, primitive, argument, lookup) else {
             continue;
         };
-        let kind = callback_owner_edge_kind_at(lookup, primitive, owner);
+        let mut kind = callback_owner_edge_kind_at(lookup, primitive, owner);
+        // ADR 0362: the apply runs with no owner only if the queue is drained
+        // from none. A `flush()` the program may call from an owned scope
+        // drains it under that owner (`runEffect` does not reset the context),
+        // so the apply is owned on some runs: not a proven unowned stack.
+        if kind == OwnerEdgeKind::Unowned
+            && lookup
+                .dialect
+                .callback_runs_in_effect_phase(primitive, argument)
+            && lookup.flush_may_run_applies_owned()
+        {
+            kind = OwnerEdgeKind::FlushDrained;
+        }
         if lookup
             .dialect
             .callback_semantics_at(primitive, argument, call.arguments.len())

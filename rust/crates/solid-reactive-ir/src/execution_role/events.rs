@@ -146,7 +146,12 @@ pub(super) fn rendered_component<'f>(
 /// inline callback in the initializer). The initializer runs when an
 /// instance is constructed, not where the class is written.
 pub(crate) fn inside_instance_field(file: &solid_facts::FileFacts, span: Span) -> bool {
-    file.ast.classes.iter().any(|class| {
+    inside_instance_field_in(&file.ast, span)
+}
+
+/// [`inside_instance_field`] over the syntax facts alone.
+pub(crate) fn inside_instance_field_in(ast: &solid_facts::ast::AstFacts, span: Span) -> bool {
+    ast.classes.iter().any(|class| {
         class.span.contains(span)
             && class.elements.iter().any(|element| {
                 element.kind == solid_facts::ast::ClassElementKind::Field

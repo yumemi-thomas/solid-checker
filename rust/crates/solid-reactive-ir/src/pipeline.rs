@@ -403,7 +403,8 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         dialect,
         rule_options.runtime.program_is_closed(),
     )
-    .with_router_install(rule_options.runtime.router_install.clone());
+    .with_router_install(rule_options.runtime.router_install.clone())
+    .with_package_instances(rule_options.runtime.package_instances.clone());
     // ADR 0347: which exports a namespace import hands out, read once per build.
     semantic_lookup.set_namespace_hand_outs(crate::attribution::namespace_hand_outs(
         &semantic_lookup,

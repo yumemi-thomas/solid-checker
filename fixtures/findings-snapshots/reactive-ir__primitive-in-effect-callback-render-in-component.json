@@ -1,0 +1,15 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC4005",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/variants/render-in-component/App.ts",
+      "start": 454,
+      "end": 464,
+      "fixes": 0
+    }
+  ]
+}

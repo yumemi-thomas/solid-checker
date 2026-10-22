@@ -23,6 +23,7 @@ mod completion;
 mod components;
 mod compound;
 mod event_delivery;
+mod flush_reach;
 mod identity_wrappers;
 pub(crate) use identity_wrappers::identity_wrapped_literal_span;
 mod initialization;
@@ -751,6 +752,9 @@ pub(super) struct SemanticLookup<'a> {
     /// What the backend read of the installed router (ADR 0324). Set by the
     /// pipeline from the runtime environment; empty otherwise.
     router_install: crate::router_params::RouterInstallEvidence,
+    /// Which installed `solid-js` each analyzed file loads at runtime; empty
+    /// unless the pipeline sets it.
+    package_instances: crate::PackageInstanceEvidence,
     ast_indexes: &'a HashMap<solid_facts::core::SourcePath, CachedAstFileIndex>,
     entities: &'a EntitySymbols,
     symbol_names: &'a HashMap<SymbolId, SymbolName>,
@@ -762,6 +766,8 @@ pub(super) struct SemanticLookup<'a> {
     /// The literals whose every invocation is a host event dispatch.
     event_invoked_literals: OnceLock<HashSet<(String, Span)>>,
     synchronous_event_dispatch: OnceLock<bool>,
+    /// ADR 0362: whether a call may run `flush` from an owned scope.
+    flush_may_run_applies_owned: OnceLock<bool>,
     /// ADR 0320: whether some call may copy keys into an existing object.
     objects_assigned_into: OnceLock<bool>,
     router_params: OnceLock<crate::router_params::RouterParamsStatus>,
@@ -925,6 +931,16 @@ impl<'a> SemanticLookup<'a> {
         self
     }
 
+    /// Which installed `solid-js` each file loads; see [`Self::package_instances`].
+    #[must_use]
+    pub(super) fn with_package_instances(
+        mut self,
+        instances: crate::PackageInstanceEvidence,
+    ) -> Self {
+        self.package_instances = instances;
+        self
+    }
+
     /// Records the closed program's namespace census (ADR 0347). The pipeline
     /// sets it once per build, before any owner pass reads it.
     pub(crate) fn set_namespace_hand_outs(&self, hand_outs: crate::attribution::NamespaceHandOuts) {
@@ -972,6 +988,7 @@ impl<'a> SemanticLookup<'a> {
             dialect,
             program_closed,
             router_install: crate::router_params::RouterInstallEvidence::default(),
+            package_instances: crate::PackageInstanceEvidence::default(),
             ast_indexes,
             entities,
             symbol_names,
@@ -980,6 +997,7 @@ impl<'a> SemanticLookup<'a> {
             invocation_flow_answers: OnceLock::new(),
             event_invoked_literals: OnceLock::new(),
             synchronous_event_dispatch: OnceLock::new(),
+            flush_may_run_applies_owned: OnceLock::new(),
             objects_assigned_into: OnceLock::new(),
             router_params: OnceLock::new(),
             route_component_values: OnceLock::new(),
@@ -1431,6 +1449,10 @@ impl<'a> SemanticLookup<'a> {
             }
             hasher.update(b"synchronous-event-dispatch\0");
             hasher.update([u8::from(self.synchronous_event_dispatch_present())]);
+            // ADR 0362: a call anywhere that may run `flush` from an owned
+            // scope moves the apply owner proofs of every other file.
+            hasher.update(b"flush-may-run-applies-owned\0");
+            hasher.update([u8::from(self.flush_may_run_applies_owned())]);
             // ADR 0319: an invocation-flow proof follows a function value
             // through any file of a closed program -- bindings, returns,
             // object members, callee parameters, component props -- so a

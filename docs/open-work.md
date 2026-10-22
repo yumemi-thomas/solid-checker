@@ -31,6 +31,12 @@ Write in an owned scope (`reactive-write-in-owned-scope`, SC2001):
 - A helper with a handler, timer, module-level or exported caller, an alias or an argument use is not claimed, though its call from the effect is a no-op (the claim is universal, ADR 0341). `runtime-oracle/flush-in-effect-callback` lists the exported-helper case as `open`.
 - A `flush` imported through another package's `exports` conditions, an apply passed by name or in a `{ effect }` bundle, and a helper in a callback given to an unmodelled consumer are not claimed.
 
+A root, memo or deferred memo in an effect apply (`primitive-in-effect-callback`, SC4005, rc.17 only; ADR 0362). The runtime throws these; the rule does not claim the open shapes below.
+
+- A `createRenderEffect` apply throws on its later runs only, so it is not claimed; nor are the other primitives that reach `computed` or `createOwner` (`createProjection`, `createStore(fn)`, `createOptimistic(fn)`, `mapArray`, `repeat`), whose argument shapes the rule does not tell apart.
+- A helper with a handler, timer, module-level or exported caller, an alias or an argument use, an apply passed by name or in a `{ effect }` bundle, and a call in a returned cleanup are not claimed, as for SC2008.
+- rc.13 and every unread release are silent: rc.13 has no assertion, so the unowned root runs there, unreported; the SC4001 message for an effect in an apply does not say that rc.17 dev throws.
+
 Async read outside a loading boundary (`async-outside-loading-boundary`, SC5003):
 
 - `r9-b3-childrenasync` (App.tsx:15): an async memo read flows through `children()` into JSX with no `Loading`.
@@ -44,9 +50,10 @@ Missing owner (`missing-owner`, SC4001):
 - `oracle-behaviour-primitive-in-directive` (App.tsx:13): an effect in the apply a named factory returns (`ref={leakingTrack(count)}`) is SC6001 only. The owner walk places only a ref expression's top-level functions (ADR 0345), so a returned closure gets no owner claim; an IIFE returning one is uncertifiable for SC6001.
 - Invoked literals the owner walk misses: an IIFE in an instance field initializer (`ia-module`, App.tsx:17; a generator IIFE iterated by a spread, line 19); an IIFE in an object method or a constructor run by `new`, both reached from a timer (`ib-comp`, App.tsx:54, :58); an effect after an `await` in a loop or conditional, and an IIFE invoked after an `await` in its caller (`ic-await`, App.tsx:35–52, beyond the continuation rule of ADR 0333); and an IIFE called through `.bind(null)()` or a literal run by `Reflect.apply` (`ii1`, App.tsx:61, :65; ADR 0347 models only `.call`/`.apply`, so the runtime's `NO_OWNER_EFFECT` there is a missing finding).
 - `Object.entries(ns)`/`Object.values(ns)` whose values the program calls: the functions reach it unnamed, so their detached callbacks are uncertifiable; telling called from uncalled needs invocation tracking (`owner-namespace-reachable`, `viaObject`).
+- `missing-owner` (SC4001) and `primitive-in-effect-callback` (SC4005), recall lost: an effect created in an inline standard-library callback of an effect apply (`createEffect(v, () => { [1].forEach(() => createEffect(v, () => {})) })`) gets no finding from either rule: `effect_phase` climbs `forEach`, SC4001's owner walk does not, and the dialect hands the effect constructors to SC4001. Pinned as a quiet effect in `primitive-in-effect-callback-inline-callback-message`; the same shape with `createMemo` is reported.
 - `missing-owner` (SC4001), recall lost: an unmodelled callback between leaves (`forEach`, `addEventListener`) misses `NO_OWNER_CLEANUP`; at probe k5 the wrongly coded SC3001 is gone.
 - `missing-owner` (SC4001), recall lost: `onSettled(wrap(() => …))` (`solid2-precision`, `WrappedSettledCleanup`): a bodiless `wrap` is no identity wrapper (ADR 0346), so the cleanup in its literal goes unreported.
-- rc.17, unclaimed: `PRIMITIVE_IN_EFFECT_CALLBACK`; `lazyModule` loader reads/writes; an `onHydrationEnd` write drained by `hydrate` in a root.
+- rc.17, unclaimed: `lazyModule` loader reads/writes; an `onHydrationEnd` write drained by `hydrate` in a root.
 
 Possible owner suspension (ADR 0357): skippable-await cleanups retain SC4001 obligations. Call-argument-specific take/skip proofs are unimplemented; callback delivery outside the model remains open.
 
@@ -87,6 +94,7 @@ Leaf body (`leaf-owner-forbidden-call`, SC3001):
 
 A violation withheld, or turned uncertifiable, to keep zero false positives. Each loses recall on purpose.
 
+- A program that may run `flush` from an owned scope withholds SC4005 and makes SC4001's `createEffect` apply owner uncertain (ADR 0362): a call of `flush`, `render`, `hydrate` or `action(...)`, or a call spelled `flush` with no exact callee, anywhere but a module-level statement or an apply. One program-wide bool: no join of the flush site to the effects it drains, so a project with `render()` in a component, or an `action`, loses SC4005. SC4001's wording for the uncertain apply is the first-run-only one ("owned only on its first run"), loose for this cause; a `render` in an apply is not exempt (only `solid-js` imports are placed).
 - A refused file (ADR 0360) withholds each violation located or evidenced in it, even one its compiler facts cannot change.
 - Instance field initializer: a violation whose primary location is in one is demoted to uncertifiable, whichever rule claimed it (`diagnostics.rs`, `site_in_instance_field`). Static fields and static blocks keep theirs.
 - Code in a component's element children (`<Show>`, `<Loading>`, `<Errored>`, portals, wrappers rendering `props.children`) has no proven placement (`inside_component_element_children`); a read there is an uncertifiable `strict-read-untracked`, even where the runtime warns.

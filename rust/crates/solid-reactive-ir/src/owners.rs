@@ -306,6 +306,12 @@ pub(crate) enum OwnerEdgeKind {
     /// The source's context on the callback's first run, and possibly no
     /// owner on a later one.
     InheritsFirstRun,
+    /// A `createEffect` apply in a program that may call `flush` from an owned
+    /// scope (ADR 0362): whichever owner is current where the queue is drained
+    /// owns it, and a drain from a microtask or event has none. Not a proof of
+    /// either, and it leaves an owner-providing region written around it, since
+    /// the region's owner is current only for a drain it runs.
+    FlushDrained,
     Leaf,
     /// A ref application runs the callback with no owner, which is proven
     /// unowned -- unless the callback is a generator. Calling a generator

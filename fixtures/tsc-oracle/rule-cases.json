@@ -1000,6 +1000,33 @@
       "code": "import { createEffect, createRoot, createSignal, flush } from \"solid-js\";\nexport const dispose = createRoot((dispose) => {\n  const [value] = createSignal(1);\n  createEffect(value, () => {\n    queueMicrotask(() => flush());\n  });\n  return dispose;\n});\n"
     },
     {
+      "rule": "primitive-in-effect-callback",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "reports",
+      "sourceExtension": "ts",
+      "why": "`createRoot<T>(init: ((dispose: () => void) => T) | (() => T), options?)`, `createMemo<T>(compute: ComputeFunction<undefined | NoInfer<T>, T>, options?)` and `EffectFunction` returning `(() => void) | void` are all satisfied by a root and a memo created in a createEffect apply, so the typings accept it. The claim is the runtime's: the apply runs from the flush with no owner, where rc.17's `assertNotInEffectCallback` throws PRIMITIVE_IN_EFFECT_CALLBACK in dev and the production build leaves a computation nobody owns, which no type expresses.",
+      "code": "import { createEffect, createRoot, createSignal } from \"solid-js\";\nexport const dispose = createRoot((dispose) => {\n  const [value] = createSignal(1);\n  createEffect(value, () => {\n    createRoot(() => {});\n  });\n  return dispose;\n});\n"
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "reports",
+      "sourceExtension": "ts",
+      "why": "The memo twin of the root keystone: `createMemo<T>(compute: ComputeFunction<undefined | NoInfer<T>, T>, options?)` accepts a memo created in a createEffect apply, so `tsc` is silent; the runtime refuses it (PRIMITIVE_IN_EFFECT_CALLBACK in rc.17 dev, an ownerless computation in production).",
+      "code": "import { createEffect, createMemo, createRoot, createSignal } from \"solid-js\";\nexport const dispose = createRoot((dispose) => {\n  const [value] = createSignal(1);\n  createEffect(value, () => {\n    createMemo(() => value() + 1);\n  });\n  return dispose;\n});\n"
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "silent",
+      "sourceExtension": "ts",
+      "why": "The negative beside the keystone: `runWithOwner(owner, \u2026)` with an owner captured outside the effect parents the memo explicitly, so nothing is created without an owner and the rule must stay quiet.",
+      "code": "import { createEffect, createMemo, createRoot, createSignal, getOwner, runWithOwner } from \"solid-js\";\nexport const dispose = createRoot((dispose) => {\n  const [value] = createSignal(1);\n  const owner = getOwner();\n  createEffect(value, () => {\n    runWithOwner(owner, () => createMemo(() => value() + 1));\n  });\n  return dispose;\n});\n"
+    },
+    {
       "rule": "missing-owner",
       "dialect": "v2",
       "expect": "silent",
