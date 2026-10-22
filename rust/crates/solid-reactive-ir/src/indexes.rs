@@ -35,6 +35,11 @@ pub(crate) use intrinsics::mentions_word;
 /// among them ([`SemanticLookup::escaped_component_functions`]).
 pub(super) type ComponentSets<'a> = (HashSet<(&'a str, Span)>, HashSet<(&'a str, Span)>);
 
+/// The JSX tags that render each project function, by `(path, span)` of the
+/// function: the file holding the tag and the element.
+pub(super) type JsxTagsByFunction<'a> =
+    HashMap<(&'a str, Span), Vec<(&'a str, &'a solid_facts::ast::JsxElementFact)>>;
+
 /// Whether the reference at `span` is the declaration that introduces a
 /// binding or the import/export surface that forwards it. Neither is a runtime
 /// entry: emission resolves the export surface itself, by name.
@@ -784,6 +789,7 @@ pub(super) struct SemanticLookup<'a> {
     symbols_by_id: OnceLock<HashMap<&'a str, solid_facts::TypeScriptSymbol<'a>>>,
     context_symbols: OnceLock<HashSet<&'a str>>,
     jsx_call_sites: OnceLock<HashMap<(&'a str, Span), CallSiteLoading>>,
+    jsx_tags_by_function: OnceLock<JsxTagsByFunction<'a>>,
     declaration_symbols: OnceLock<DeclarationSymbols<'a>>,
     function_call_sites: OnceLock<HashMap<(&'a str, Span), Vec<FunctionCallSite>>>,
     /// ADR 0339: references to function-valued bindings not proven to follow
@@ -994,6 +1000,7 @@ impl<'a> SemanticLookup<'a> {
             symbols_by_id: OnceLock::new(),
             context_symbols: OnceLock::new(),
             jsx_call_sites: OnceLock::new(),
+            jsx_tags_by_function: OnceLock::new(),
             declaration_symbols: OnceLock::new(),
             function_call_sites: OnceLock::new(),
             initialization: initialization::State::default(),

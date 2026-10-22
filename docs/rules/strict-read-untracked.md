@@ -81,6 +81,13 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   **uncertifiable**, never dropped. A read past the strict-read window (after
   an unconditional `await`) or in several non-reporting roles (ADR 0323) is
   proven silent.
+- **A component's body needs every reference accounted for.** A function a
+  tag renders, or whose type is an exact `Component`, is a component body only
+  when no other reference hands it on (`items().map(Row)`, an alias, a plain
+  call; a type in `typeof Row` is no reference at runtime). A read in one that
+  is also handed on is **uncertifiable**, even when the tag is reachable, since
+  the plain call runs the body in the caller's scope (ADR 0331,
+  `fixtures/reactive-ir/component-identity-escapes`).
 - **A named local handler can forward a callback prop.** A project component
   may invoke a callback prop from a synchronous immutable local arrow bound
   only to intrinsic event attributes or exact component props that themselves

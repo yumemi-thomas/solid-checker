@@ -2,6 +2,39 @@
 
 use super::*;
 
+/// The reference census of one function ([`SemanticLookup::reference_census`]).
+struct ReferenceCensus {
+    /// Some reference is not accounted for.
+    escapes: bool,
+    as_callback: bool,
+    as_component_property: bool,
+}
+
+/// A value written at a prop spelled `component` is analyzed as a component
+/// value, as it always was. It renders as one only where the dialect says the
+/// receiving export renders that prop (`<Dynamic component={…}/>`, ADR 0138),
+/// resolved through its declaration: only that accounts for the reference in
+/// the census; a project component's `component` prop is just a prop.
+fn component_value_operation(candidate: &FileFacts, span: Span) -> bool {
+    candidate.compiler.jsx_operations.iter().any(|operation| {
+        if operation.kind == "component-property" && operation.span.contains(span) {
+            return candidate.ast.jsx_elements.iter().any(|element| {
+                element.attributes.iter().any(|attribute| {
+                    attribute.value.is_some_and(|value| value.contains(span))
+                        && candidate.source_text(attribute.local_name) == Some("component")
+                })
+            });
+        }
+        operation.kind == "component-spread"
+            && operation.span.contains(span)
+            && candidate.ast.object_properties.iter().any(|property| {
+                operation.span.contains(property.span)
+                    && property.value.contains(span)
+                    && candidate.source_text(property.key) == Some("component")
+            })
+    })
+}
+
 impl<'a> SemanticLookup<'a> {
     /// The type descriptor at `span`, falling back to the smallest typed entity
     /// contained in it for legacy consumers that deliberately query a region
@@ -122,12 +155,6 @@ impl<'a> SemanticLookup<'a> {
         file: &FileFacts,
         function: &solid_facts::ast::FunctionFact,
     ) -> ComponentStatus {
-        if self
-            .jsx_call_site_loading(file.path.as_str(), function.span)
-            .any
-        {
-            return ComponentStatus::Proven;
-        }
         // ADR 0334/0335: a function written as an audited router's component
         // value is rendered there, and an anonymous inline value has no other
         // reference (a named function expression has its own name in its
@@ -142,6 +169,23 @@ impl<'a> SemanticLookup<'a> {
             return ComponentStatus::Proven;
         }
         let binding_name = crate::owners::component_binding_name(file, function);
+        // ADR 0331: a tag proves identity only when no other reference
+        // escapes. A function a tag renders and some other reference hands on
+        // (`items().map(Row)`, an alias, a plain call) may also run as a plain
+        // call, whose body runs in the caller's scope; it stays analyzed as a
+        // component and its violations become obligations. An exact Component
+        // type does not change that: it says nothing about how the function
+        // is invoked, and `tsc` accepts `items().map(Row)` for it.
+        if self
+            .jsx_call_site_loading(file.path.as_str(), function.span)
+            .any
+        {
+            return if !self.reference_census(file, function, binding_name).escapes {
+                ComponentStatus::Proven
+            } else {
+                ComponentStatus::Uncertain
+            };
+        }
         let directly_contains_jsx = |span: Span| {
             file.ast.jsx_within(span).any(|element| {
                 crate::owners::containing_ast_function(&file.ast, element.span)
@@ -165,15 +209,18 @@ impl<'a> SemanticLookup<'a> {
         // Every remaining runtime proof below only decides whether a direct
         // JSX return is used as a component value or as an ordinary callback.
         // Without such a return, only an exact compiler-resolved Component
-        // type can still establish component identity. Avoid building the
-        // project-wide reference and call-site indexes for ordinary helpers.
+        // type can still establish component identity, and only when no
+        // other reference escapes. Avoid building the project-wide reference
+        // and call-site indexes for ordinary helpers.
+        let has_component_type = self.project_has_component_type()
+            && self.binding_has_component_type(file, binding_name);
         if !directly_returns_jsx {
-            return if self.project_has_component_type()
-                && self.binding_has_component_type(file, binding_name)
-            {
-                ComponentStatus::Proven
-            } else {
+            return if !has_component_type {
                 ComponentStatus::No
+            } else if self.reference_census(file, function, binding_name).escapes {
+                ComponentStatus::Uncertain
+            } else {
+                ComponentStatus::Proven
             };
         }
         // Component identity is about the function value itself, not anything
@@ -216,68 +263,6 @@ impl<'a> SemanticLookup<'a> {
             .ast
             .arguments_containing(function.span)
             .any(|(call, index)| direct_function_value(file, call.arguments[index].span));
-        let reference_span = |reference: &typefacts::Location| {
-            let candidate = self.file_by_path(reference.path.as_ref())?;
-            let start = u32::try_from(reference.start_byte).ok()?;
-            let end = u32::try_from(reference.end_byte).ok()?;
-            Some((candidate, Span::new(start, end)))
-        };
-        let reference_is_callback_value = |candidate: &FileFacts, span: Span| {
-            candidate.compiler.callback_roles.iter().any(|role| {
-                role.span.contains(span)
-                    && candidate.ast.functions_within(role.span).next().is_none()
-            }) || candidate
-                .ast
-                .arguments_containing(span)
-                .any(|(call, index)| {
-                    candidate
-                        .ast
-                        .functions_within(call.arguments[index].span)
-                        .next()
-                        .is_none()
-                        && self
-                            .primitive_at_call(candidate, call.span)
-                            .map(|primitive| {
-                                self.dialect.callback_semantics_at(
-                                    primitive,
-                                    index,
-                                    call.arguments.len(),
-                                )
-                            })
-                            .is_some_and(|semantics| {
-                                semantics.execution.is_some() || semantics.stores_as_value
-                            })
-                })
-        };
-        // A value written at a prop spelled `component` is analyzed as a
-        // component value, as it always was. It renders as one only where the
-        // dialect says the receiving export renders that prop
-        // (`<Dynamic component={…}/>`, ADR 0138), resolved through its
-        // declaration: only that accounts for the reference in the census
-        // below; a project component's `component` prop is just a prop.
-        let component_value_operation = |candidate: &FileFacts, span: Span| {
-            candidate.compiler.jsx_operations.iter().any(|operation| {
-                if operation.kind == "component-property" && operation.span.contains(span) {
-                    return candidate.ast.jsx_elements.iter().any(|element| {
-                        element.attributes.iter().any(|attribute| {
-                            attribute.value.is_some_and(|value| value.contains(span))
-                                && candidate.source_text(attribute.local_name) == Some("component")
-                        })
-                    });
-                }
-                operation.kind == "component-spread"
-                    && operation.span.contains(span)
-                    && candidate.ast.object_properties.iter().any(|property| {
-                        operation.span.contains(property.span)
-                            && property.value.contains(span)
-                            && candidate.source_text(property.key) == Some("component")
-                    })
-            })
-        };
-        let rendered_by_dialect_prop = |candidate: &FileFacts, span: Span| {
-            self.prop_render_sites_at(candidate.path.as_str(), span)
-                .is_some()
-        };
         let used_as_render_value = file.compiler.jsx_operations.iter().any(|operation| {
             matches!(
                 operation.kind.as_str(),
@@ -286,61 +271,11 @@ impl<'a> SemanticLookup<'a> {
                 && direct_function_value(file, operation.span)
                 && !component_value_operation(file, function.span)
         });
-        let mut referenced_as_callback = false;
-        let mut referenced_as_component_property = false;
-        // Solid runs a function as a component only when `createComponent`
-        // calls it (a tag, a dialect renderer prop, `lazy`); called directly,
-        // its body runs in the caller's scope, tracked inside JSX. A direct JSX
-        // return therefore proves identity only when every reference to the
-        // function is accounted for: its declaration, its module surface, a
-        // dialect callback value, a dialect renderer's prop (ADR 0138), a
-        // dialect loader's `default` (ADR 0292), an audited router's route
-        // option (ADR 0334) or a member of a compound component that only JSX
-        // member tags reach (ADR 0342). Any other use hands it to
-        // code that may call it plainly: `items().map(Row)`, `{ badge: Row }`,
-        // an alias, a router config the analysis does not read. So does a
-        // function with no resolvable binding, a reference in a file not
-        // analyzed, and an object or class method, reached through its object,
-        // whose aliases its name's references do not enumerate
-        // (`renderers.badge()` is absent from them). Each leaves identity
-        // undecided rather than proven.
-        let method =
-            function.name.is_none() && crate::owners::own_method_name(file, function).is_some();
-        let mut reference_escapes = true;
-        if !method
-            && let Some(symbol) = binding_name
-                .and_then(|name| self.entities.at(file.path.as_str(), name.span))
-                .and_then(|symbol| {
-                    self.symbols_by_id
-                        .get_or_init(|| {
-                            self.facts
-                                .typescript
-                                .symbols()
-                                .map(|candidate| (candidate.id(), candidate))
-                                .collect()
-                        })
-                        .get(symbol.as_str())
-                        .copied()
-                })
-        {
-            reference_escapes = false;
-            for reference in symbol.references() {
-                let Some((candidate, span)) = reference_span(reference) else {
-                    reference_escapes = true;
-                    continue;
-                };
-                let callback = reference_is_callback_value(candidate, span);
-                let component_value = component_value_operation(candidate, span);
-                referenced_as_callback |= callback;
-                referenced_as_component_property |= component_value;
-                reference_escapes |= !(callback && !component_value)
-                    && !rendered_by_dialect_prop(candidate, span)
-                    && !reference_is_declaration_or_module_surface(candidate, span)
-                    && !self.lazy_default_value(candidate, function, span)
-                    && !self.route_component_value(candidate.path.as_str(), span)
-                    && !self.compound_value(candidate.path.as_str(), span);
-            }
-        }
+        let ReferenceCensus {
+            escapes: reference_escapes,
+            as_callback: referenced_as_callback,
+            as_component_property: referenced_as_component_property,
+        } = self.reference_census(file, function, binding_name);
         let hoc_bound = binding_name.is_some()
             && crate::owners::function_binding_name(file, function).is_none();
         let directly_called = !self
@@ -355,15 +290,172 @@ impl<'a> SemanticLookup<'a> {
             && (!used_as_any_call_argument || hoc_bound)
             && !used_as_render_value
             && (!referenced_as_callback || referenced_as_component_property);
-        if direct_return_proof && !reference_escapes
-            || self.binding_has_component_type(file, binding_name)
-        {
+        if (direct_return_proof || has_component_type) && !reference_escapes {
             ComponentStatus::Proven
-        } else if direct_return_proof {
+        } else if direct_return_proof || has_component_type {
             ComponentStatus::Uncertain
         } else {
             ComponentStatus::No
         }
+    }
+
+    /// Every reference to the function, sorted into the uses that account
+    /// for it and the ones that do not.
+    ///
+    /// Solid runs a function as a component only when `createComponent`
+    /// calls it (a tag, a dialect renderer prop, `lazy`); called directly,
+    /// its body runs in the caller's scope, tracked inside JSX. Component
+    /// identity is therefore proven only when every reference to the
+    /// function is accounted for: its declaration, its module surface, a JSX
+    /// tag that renders it, a reference inside a type query
+    /// (`ComponentProps<typeof Row>`, erased at runtime), a dialect callback
+    /// value, a dialect renderer's prop (ADR 0138), a dialect loader's
+    /// `default` (ADR 0292), an audited router's route option (ADR 0334) or a
+    /// member of a compound component that only JSX member tags reach
+    /// (ADR 0342). Any other use hands it to
+    /// code that may call it plainly: `items().map(Row)`, `{ badge: Row }`,
+    /// an alias, a router config the analysis does not read. So does a
+    /// function with no resolvable binding, a reference in a file not
+    /// analyzed, and an object or class method, reached through its object,
+    /// whose aliases its name's references do not enumerate
+    /// (`renderers.badge()` is absent from them). Each leaves identity
+    /// undecided rather than proven.
+    fn reference_census(
+        &self,
+        file: &FileFacts,
+        function: &solid_facts::ast::FunctionFact,
+        binding_name: Option<&solid_facts::ast::NamedSpan>,
+    ) -> ReferenceCensus {
+        let mut census = ReferenceCensus {
+            escapes: true,
+            as_callback: false,
+            as_component_property: false,
+        };
+        let method =
+            function.name.is_none() && crate::owners::own_method_name(file, function).is_some();
+        if method {
+            return census;
+        }
+        let Some(symbol) = binding_name
+            .and_then(|name| self.entities.at(file.path.as_str(), name.span))
+            .and_then(|symbol| {
+                self.symbols_by_id
+                    .get_or_init(|| {
+                        self.facts
+                            .typescript
+                            .symbols()
+                            .map(|candidate| (candidate.id(), candidate))
+                            .collect()
+                    })
+                    .get(symbol.as_str())
+                    .copied()
+            })
+        else {
+            return census;
+        };
+        census.escapes = false;
+        for reference in symbol.references() {
+            let Some(candidate) = self.file_by_path(reference.path.as_ref()) else {
+                census.escapes = true;
+                continue;
+            };
+            let (Ok(start), Ok(end)) = (
+                u32::try_from(reference.start_byte),
+                u32::try_from(reference.end_byte),
+            ) else {
+                census.escapes = true;
+                continue;
+            };
+            let span = Span::new(start, end);
+            let callback = self.reference_is_callback_value(candidate, span);
+            let component_value = component_value_operation(candidate, span);
+            census.as_callback |= callback;
+            census.as_component_property |= component_value;
+            census.escapes |= !(callback && !component_value)
+                && !self.rendered_by_dialect_prop(candidate, span)
+                && !reference_is_declaration_or_module_surface(candidate, span)
+                && !candidate
+                    .ast
+                    .type_queries
+                    .iter()
+                    .any(|query| query.contains(span))
+                && !self.jsx_tag_reference(file, function, candidate, span)
+                && !self.lazy_default_value(candidate, function, span)
+                && !self.route_component_value(candidate.path.as_str(), span)
+                && !self.compound_value(candidate.path.as_str(), span);
+        }
+        census
+    }
+
+    /// Whether `span` in `candidate` is a tag name that renders `function`:
+    /// the opening or closing name, or the final property of a dotted one.
+    fn jsx_tag_reference(
+        &self,
+        file: &FileFacts,
+        function: &solid_facts::ast::FunctionFact,
+        candidate: &FileFacts,
+        span: Span,
+    ) -> bool {
+        self.jsx_tags_by_function()
+            .get(&(file.path.as_str(), function.span))
+            .is_some_and(|tags| {
+                tags.iter().any(|(path, element)| {
+                    *path == candidate.path.as_str()
+                        && (element.name.span == span
+                            || element.closing_name == Some(span)
+                            || (element.member_property.is_some()
+                                && (element.member_property == Some(span)
+                                    || element.closing_name.is_some_and(|closing| {
+                                        closing.contains(span) && closing.end == span.end
+                                    }))))
+                })
+            })
+    }
+
+    fn jsx_tags_by_function(&self) -> &JsxTagsByFunction<'a> {
+        self.jsx_tags_by_function.get_or_init(|| {
+            let mut map = JsxTagsByFunction::default();
+            for (_, caller_file, element, target_file, target) in self.jsx_rendered_functions() {
+                map.entry((target_file.path.as_str(), target.span))
+                    .or_default()
+                    .push((caller_file.path.as_str(), element));
+            }
+            map
+        })
+    }
+
+    fn reference_is_callback_value(&self, candidate: &FileFacts, span: Span) -> bool {
+        candidate.compiler.callback_roles.iter().any(|role| {
+            role.span.contains(span) && candidate.ast.functions_within(role.span).next().is_none()
+        }) || candidate
+            .ast
+            .arguments_containing(span)
+            .any(|(call, index)| {
+                candidate
+                    .ast
+                    .functions_within(call.arguments[index].span)
+                    .next()
+                    .is_none()
+                    && self
+                        .primitive_at_call(candidate, call.span)
+                        .map(|primitive| {
+                            self.dialect.callback_semantics_at(
+                                primitive,
+                                index,
+                                call.arguments.len(),
+                            )
+                        })
+                        .is_some_and(|semantics| {
+                            semantics.execution.is_some() || semantics.stores_as_value
+                        })
+            })
+    }
+
+    /// Whether `span` is a value a dialect export renders as a component
+    /// (`<Dynamic component={…}/>`, ADR 0138).
+    fn rendered_by_dialect_prop(&self, candidate: &FileFacts, span: Span) -> bool {
+        self.prop_render_sites_at(candidate.path.as_str(), span)
+            .is_some()
     }
 
     /// Whether the binding's compiler-resolved type is an exact Solid
