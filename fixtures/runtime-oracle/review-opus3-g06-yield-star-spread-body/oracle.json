@@ -7,12 +7,5 @@
       "text": "ran",
       "id": "runtime-observation-0"
     }
-  ],
-  "open": [
-    {
-      "code": "STRICT_READ_UNTRACKED",
-      "site": "App.tsx:13",
-      "reason": "A read in a generator reached through yield* delegation and spread in the body; delegation is not followed (recall, internal)."
-    }
   ]
 }

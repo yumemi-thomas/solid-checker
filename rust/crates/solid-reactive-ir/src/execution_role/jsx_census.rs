@@ -36,7 +36,11 @@ pub(crate) fn missing_jsx_census(
     // callback, an event or ref census entry, module initialization (an
     // AST-proven one-shot context that needs no census at all), a discarded
     // region (the compiler reported on the JSX and said the code is deleted) —
-    // so a census hole cannot be what put the read there.
+    // so a census hole cannot be what put the read there. A file the compiler
+    // refused (ADR 0360) is one hole: no fact decided any role in it.
+    if file.compiler.withheld() {
+        return true;
+    }
     if execution != ExecutionRole::UntrackedRendering {
         return false;
     }
@@ -48,7 +52,9 @@ pub(crate) fn missing_jsx_census(
 /// read, an owner requirement does not carry an [`ExecutionRole`] whose
 /// fallback classification can gate the check.
 pub(crate) fn missing_jsx_census_region(file: &solid_facts::FileFacts, span: Span) -> bool {
-    narrowest_jsx_region_containing(file, span).is_some_and(|region| !census_touches(file, region))
+    file.compiler.withheld()
+        || narrowest_jsx_region_containing(file, span)
+            .is_some_and(|region| !census_touches(file, region))
 }
 
 /// The innermost source-level JSX region containing `span`: an attribute

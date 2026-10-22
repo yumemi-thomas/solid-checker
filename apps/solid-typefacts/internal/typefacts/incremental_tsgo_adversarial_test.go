@@ -37,6 +37,16 @@ func assertTSGoAlternatingScriptMatchesFresh(
 	script func(root string, originals map[string][]byte) []typefacts.FileChange,
 ) {
 	t.Helper()
+	assertTSGoAlternatingScriptMatchesFreshWith(t, files, script, realisticDemands)
+}
+
+func assertTSGoAlternatingScriptMatchesFreshWith(
+	t *testing.T,
+	files map[string]string,
+	script func(root string, originals map[string][]byte) []typefacts.FileChange,
+	realisticDemands func(testing.TB, demandSource, context.Context) []typefacts.EntityDemand,
+) {
+	t.Helper()
 	ctx := context.Background()
 	root, originals := writeAdversarialProject(t, files)
 	projectID := filepath.Join(root, "tsconfig.json")
@@ -185,4 +195,82 @@ func TestDeletionRestorationAndConfigAlternationMatchFresh(t *testing.T) {
 			{Path: filepath.Join(root, "dependency.ts"), Version: 4, Source: originals["dependency.ts"]},
 		}
 	})
+}
+
+// familyDemands demands symbol plus exactly one fact family at every binding
+// name and call callee, so no other family's recorded dependencies can mask a
+// stale answer.
+func familyDemands(mark func(*typefacts.EntityDemand)) func(testing.TB, demandSource, context.Context) []typefacts.EntityDemand {
+	return func(t testing.TB, backend demandSource, ctx context.Context) []typefacts.EntityDemand {
+		t.Helper()
+		sources, err := backend.SourceFiles(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var demands []typefacts.EntityDemand
+		add := func(location typefacts.Location) {
+			demand := typefacts.EntityDemand{Location: location, Symbol: true}
+			mark(&demand)
+			demands = append(demands, demand)
+		}
+		for _, source := range sources {
+			path := filepath.Clean(source.Path)
+			bindings, err := backend.SourceBindings(ctx, path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, binding := range bindings {
+				for _, name := range binding.Names {
+					if name.Path != "" && name.EndByte > name.StartByte {
+						add(name)
+					}
+				}
+			}
+			calls, err := backend.SourceCalls(ctx, path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, call := range calls {
+				add(call.Callee)
+			}
+		}
+		return demands
+	}
+}
+
+func TestDeletionRestorationSingleFamilyDemandsMatchFresh(t *testing.T) {
+	families := map[string]func(*typefacts.EntityDemand){
+		"typeDescriptor":       func(d *typefacts.EntityDemand) { d.TypeDescriptor = true },
+		"callability":          func(d *typefacts.EntityDemand) { d.Callability = true },
+		"constructability":     func(d *typefacts.EntityDemand) { d.Constructability = true },
+		"runtimeValueDomain":   func(d *typefacts.EntityDemand) { d.RuntimeValueDomain = true },
+		"primitiveValueDomain": func(d *typefacts.EntityDemand) { d.PrimitiveValueDomain = true },
+		"callResultDomain":     func(d *typefacts.EntityDemand) { d.CallResultDomain = true },
+		"constantValue":        func(d *typefacts.EntityDemand) { d.ConstantValue = true },
+		"arrayShape":           func(d *typefacts.EntityDemand) { d.ArrayShape = true },
+		"tupleShape":           func(d *typefacts.EntityDemand) { d.TupleShape = true },
+		"parameterObjectShape": func(d *typefacts.EntityDemand) { d.ParameterObjectShape = true },
+		"runtimeIdentity":      func(d *typefacts.EntityDemand) { d.RuntimeIdentity = true },
+		"referenceSpace":       func(d *typefacts.EntityDemand) { d.ReferenceSpace = true },
+		"references":           func(d *typefacts.EntityDemand) { d.References = true },
+		"async":                func(d *typefacts.EntityDemand) { d.Async = true },
+		"structuralAccessor":   func(d *typefacts.EntityDemand) { d.StructuralAccessor = true },
+		"libraryTypes":         func(d *typefacts.EntityDemand) { d.LibraryTypes = true },
+	}
+	files := map[string]string{
+		"tsconfig.json": `{"compilerOptions":{"module":"esnext","moduleResolution":"bundler","target":"esnext","strict":true},"include":["*.ts"]}`,
+		"dependency.ts": "export function value(): number { return 1; }\nexport class Thing { n = 1 }\nexport const list = [1, 2];\nexport const pair: [number, string] = [1, \"a\"];\nexport const konst = 3;\n",
+		"consumer.ts":   "import { value, Thing, list, pair, konst } from \"./dependency\";\nexport const result = value();\nexport const made = new Thing();\nexport const l = list;\nexport const p = pair;\nexport const k = konst;\nexport const f = value;\n",
+		"unrelated.ts":  "export function alone(): number { return 1; }\nexport const local = alone();\n",
+	}
+	for name, mark := range families {
+		t.Run(name, func(t *testing.T) {
+			assertTSGoAlternatingScriptMatchesFreshWith(t, files, func(root string, originals map[string][]byte) []typefacts.FileChange {
+				return []typefacts.FileChange{
+					{Path: filepath.Join(root, "dependency.ts"), Version: 1, Deleted: true},
+					{Path: filepath.Join(root, "dependency.ts"), Version: 2, Source: originals["dependency.ts"]},
+				}
+			}, familyDemands(mark))
+		})
+	}
 }

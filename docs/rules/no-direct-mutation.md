@@ -41,8 +41,9 @@ declared type:
   `TS2540: Cannot assign to 'name' because it is a read-only property`.
   This rule stays silent there, because it never reports what TypeScript
   already reports.
-- From `rc.7` (`rc.7`, `rc.8`, `rc.9`), `Store<T> = T`, so the same write
-  type-checks and nothing else would report it. This rule reports it there.
+- From `rc.7` (`rc.7`-`rc.9`, `rc.13`, `rc.17`), `Store<T> = T`, so the same
+  write type-checks and nothing else would report it. This rule reports it
+  there. rc.17's dev build warns `STORE_WRITE_OUTSIDE_SETTER` on the same write.
 
 The declaration is `@solidjs/signals`'s, which `solid-js` re-exports, and a
 fresh install of `solid-js@2.0.0-rc.3` resolves signals rc.9 today. So the

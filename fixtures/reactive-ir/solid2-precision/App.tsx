@@ -179,12 +179,11 @@ export function ReturnedCallCleanupReturns() {
 // A direct assignment writes without reading the old store value. Compound
 // assignment and update expressions do read it and retain SC1001.
 //
-// SC2003 is silent on all three since 2026-08-17: 2.0's `createStore` returns a
-// shallowly `Readonly` proxy, so a write to one of the *root* record's own
-// properties is TS2540 ("Cannot assign to 'count' because it is a read-only
-// property") and belongs to TypeScript. The SC1001 read claims are unaffected --
-// they are about tracking, not assignability. 1.x's store type is mutable
-// throughout, so `fixtures/reactive-ir/v1-reactivity` keeps all three findings.
+// SC2003 reports all three on the audited rc.17: `@solidjs/signals` declares
+// `Store<T> = T` from rc.7, so the root write type-checks and the runtime drops
+// it. On rc.0-rc.6 (`Store<T> = Readonly<T>`) the same write is TS2540 and the
+// rule stays silent (`store-root-write-rc3`). The SC1001 read claims are about
+// tracking, not assignability.
 export function StoreAssignmentTargets() {
   const [profile] = createStore({ name: "Ada", count: 0 });
   profile.name = "Grace";

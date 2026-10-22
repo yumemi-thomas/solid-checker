@@ -1,7 +1,7 @@
 # Open work
 
-Open items only: known misses, decisions not to build, accepted precision trades, live approximations. A finished slice goes in its commit message.
-A rule `tsc` reports is removed and logged in `fixtures/tsc-oracle/` (README, `rule-cases.json`). Delete an entry here when fixed or reversed.
+Open items only: known misses, decisions not to build, accepted precision trades, live approximations.
+A rule `tsc` reports is removed and logged in `fixtures/tsc-oracle/`. Delete an entry here when fixed or reversed.
 Case ids name directories under `fixtures/runtime-oracle/`; each `oracle.json` `open` list is section 1's executable half (a listed site that stops firing fails as `stale-open`).
 
 ## 1. Known open detections
@@ -15,17 +15,15 @@ Strict read in a setup body (`strict-read-untracked`, SC1001):
 - `r6-b6-classmethodopaque` (App.tsx:13): an opaque consumer invokes a class method during setup.
 - `r9-b3-childrenreadinbody` (App.tsx:14): the accessor returned by `children()` is called in the component body.
 - `r9-d1-mixmemoslotreadinbody` (App.tsx:7): a helper builds a memo from a callback and reads `m()` in the helper body.
-- `review-opus2-c04-ctor-body` (App.tsx:12): a constructor read, class instantiated in the body.
-- `review-opus3-g06-yield-star-spread-body` (App.tsx:13): a read in a generator reached through `yield*` and spread in the body. Delegation is not followed.
 - `precision-ref-callback-read` (App.tsx:4): a read in an intrinsic `ref` callback runs untracked in the apply phase; the read rule places nothing in the `DirectiveApply` role.
 
-- `@solid-primitives/utils` helpers over a getter, beyond `access(getter)` and `accessWith(getter)` (ADR 0338): `accessArray([getter])`, `withAccess(getter, fn)`, and `access` reached through another project helper's call hop are undecided, so they stay silent or uncertifiable (an unproven `access` argument is an obligation). An alias (`const alias = count`), a function literal (`access(() => count())`) or a props value is arity-unknown and uncertifiable. A getter passed to a helper that reads its parameter in a hoisted function it calls is silent (fixture `package-access-helper`, `MissedHoistedCallee`).
+- `@solid-primitives/utils` helpers over a getter, beyond `access(getter)` and `accessWith(getter)` (ADR 0338): `accessArray([getter])`, `withAccess(getter, fn)`, and `access` reached through another project helper's call hop are undecided, so they stay silent or uncertifiable. An alias (`const alias = count`), a function literal (`access(() => count())`) or a props value is arity-unknown and uncertifiable. A getter passed to a helper that reads its parameter in a hoisted function it calls is silent (fixture `package-access-helper`, `MissedHoistedCallee`).
 
 Write in an owned scope (`reactive-write-in-owned-scope`, SC2001):
 
 - A named handler both attached as `onClick` and called directly in the component body hides the write in a helper it calls; the runtime warns at that call.
 - A setter call in a component's default parameter initializer runs in the owned component scope; the write rule places nothing there.
-- SC2001 in `render`'s or `hydrate`'s `code` on `@solidjs/web` other than rc.13: uncertifiable until that release's `render` is read (ADR 0353).
+- SC2001 in `render`/`hydrate` `code` off web rc.13/17: uncertifiable (ADR 0353). Signals rc.17: a typed-only or `let`-aliased setter is unclaimed: `createOptimistic`'s unguarded one shares its type.
 
 `flush` in an effect apply (`flush-in-effect-callback`, SC2008). The runtime reports these; the rule does not claim the open shapes below (ADR 0341). Positions and premises: rule page `flush-in-effect-callback`.
 
@@ -40,14 +38,15 @@ Async read outside a loading boundary (`async-outside-loading-boundary`, SC5003)
 Missing owner (`missing-owner`, SC4001):
 
 - `review-r1-owner-mix` (App.tsx:5, :13): one callback invoked through `runWithOwner` and as an event handler (the owner walk refuses the literal as a whole; same shape `review-r3-owner-double-call`), and a handler returned from `createRoot`, later dispatched with no owner.
-- `review-r5-owner-class-control`, `review-r6-owner-default-control`, `review-r6-owner-jsx-getter-control`: the call sits in a class field, a default parameter or a JSX getter, containers the owner walk refuses. `review-r7-event-array`: the typed `[handler, data]` event tuple is not followed by owner seeding.
+- `review-r5-owner-class-control`, `review-r6-owner-default-control`, `review-r6-owner-jsx-getter-control`: a call in a class field, default parameter or JSX getter, which the owner walk refuses. `review-r7-event-array`: the typed `[handler, data]` event tuple is not followed by owner seeding.
 - `review-opus5-t6-rest-timer-owner` (App.tsx:8): an effect created in a timer inside a `Show` callback. `review-opus2-o15-settled-class-field-new-in-timeout` (App.tsx:5): a class constructed in a timer; the field stays an uncertifiable SC3001.
-- JSX in a `createEffect` apply (no `createRoot`), or in a helper creating a render effect that an apply calls, makes an unowned render effect: the runtime reports `NO_OWNER_EFFECT`, and the owner walk places nothing there (the first `flush-in-effect-callback` oracle case shows it).
-- `oracle-behaviour-primitive-in-directive` (App.tsx:13): an effect in the apply a named factory returns (`ref={leakingTrack(count)}`) is reported as SC6001 only. The owner walk places only a ref expression's top-level functions (ADR 0345), so a closure a call returns gets no owner claim; an IIFE returning one is uncertifiable for SC6001.
-- Invoked literals the owner walk does not place: an IIFE in an instance field initializer (`ia-module`, App.tsx:17; a generator IIFE iterated by a spread, line 19); an IIFE in an object method or a constructor run by `new`, both reached from a timer (`ib-comp`, App.tsx:54, :58); an effect after an `await` in a loop or conditional, and an IIFE invoked after an `await` in its caller (`ic-await`, App.tsx:35–52, beyond the continuation rule of ADR 0333); and an IIFE called through `.bind(null)()` or a literal run by `Reflect.apply` (`ii1`, App.tsx:61, :65; ADR 0347 models only `.call`/`.apply`, so the runtime's `NO_OWNER_EFFECT` there is a missing finding).
-- `Object.entries(ns)` or `Object.values(ns)` whose values the program calls: the functions reach the program unnamed, so their detached callbacks are uncertifiable, not reported. Telling called from uncalled values needs invocation tracking (`fixtures/reactive-ir/owner-namespace-reachable`, `viaObject`, is the uncalled form).
+- JSX in a `createEffect` apply (no `createRoot`), or in a helper creating a render effect an apply calls, makes an unowned render effect: `NO_OWNER_EFFECT`, which the owner walk does not place (oracle `flush-in-effect-callback`).
+- `oracle-behaviour-primitive-in-directive` (App.tsx:13): an effect in the apply a named factory returns (`ref={leakingTrack(count)}`) is SC6001 only. The owner walk places only a ref expression's top-level functions (ADR 0345), so a returned closure gets no owner claim; an IIFE returning one is uncertifiable for SC6001.
+- Invoked literals the owner walk misses: an IIFE in an instance field initializer (`ia-module`, App.tsx:17; a generator IIFE iterated by a spread, line 19); an IIFE in an object method or a constructor run by `new`, both reached from a timer (`ib-comp`, App.tsx:54, :58); an effect after an `await` in a loop or conditional, and an IIFE invoked after an `await` in its caller (`ic-await`, App.tsx:35–52, beyond the continuation rule of ADR 0333); and an IIFE called through `.bind(null)()` or a literal run by `Reflect.apply` (`ii1`, App.tsx:61, :65; ADR 0347 models only `.call`/`.apply`, so the runtime's `NO_OWNER_EFFECT` there is a missing finding).
+- `Object.entries(ns)`/`Object.values(ns)` whose values the program calls: the functions reach it unnamed, so their detached callbacks are uncertifiable; telling called from uncalled needs invocation tracking (`owner-namespace-reachable`, `viaObject`).
 - `missing-owner` (SC4001), recall lost: an unmodelled callback between leaves (`forEach`, `addEventListener`) misses `NO_OWNER_CLEANUP`; at probe k5 the wrongly coded SC3001 is gone.
 - `missing-owner` (SC4001), recall lost: `onSettled(wrap(() => …))` (`solid2-precision`, `WrappedSettledCleanup`): a bodiless `wrap` is no identity wrapper (ADR 0346), so the cleanup in its literal goes unreported.
+- rc.17, unclaimed: `PRIMITIVE_IN_EFFECT_CALLBACK`; `lazyModule` loader reads/writes; an `onHydrationEnd` write drained by `hydrate` in a root.
 
 Possible owner suspension (ADR 0357): skippable-await cleanups retain SC4001 obligations. Call-argument-specific take/skip proofs are unimplemented; callback delivery outside the model remains open.
 
@@ -67,7 +66,7 @@ Other:
 - Synchronous DOM calls that dispatch (`focus`, `blur`, `click`, `dispatchEvent`, form `reset`/`requestSubmit`, popover and dialog toggles) are refused. Not modeled and still trusted: custom-element reactions on tree mutation and attribute writes, and focus loss when a focused element is removed (ADR 0329).
 - An argument of unknown provenance handed to a callee that calls its parameter (`access(value)` over a spread, held alias, `Array.from`, `[get][0]`, `(() => get)()`, a helper's return or a store property) is an SC9012 obligation unless proven not a getter (ADR 0338, `Unproven.tsx`). A member call on a primitive result is uncertifiable even for `.toString()`; a project call's result is not proven a non-getter even when every return is a number (`access(give())`), since its returns are not followed.
 - Patching the array iterator's `next` changes how tuples destructure (`const [value] = createSignal(1)`), which every tuple proof reads as slot order. ADR 0282's veto covers project tuples only, so such a patch is not seen (the access proofs share the premise, ADR 0338).
-- A context-provided value read through a package hook (kui `TopicsRoute.tsx:425`) stays an uncertifiable SC9012. Only the router's own provider is proven; a project provider or an `Object.defineProperty` replacement of the location getter both type-check (ADR 0289, ADR 0312).
+- A context-provided value read through a package hook (kui `TopicsRoute.tsx:425`) stays an uncertifiable SC9012. Only the router's own provider is proven; a project provider or an `Object.defineProperty` replacement of the location getter both type-check (ADR 0289, 0312).
 - `typeof window` in solid-query source blocks the proxy proof unless a Window realm is declared (ADR 0295, 0312).
 
 
@@ -81,12 +80,14 @@ Leaf body (`leaf-owner-forbidden-call`, SC3001):
 - Host-origin proof (DOM objects handed to Solid helpers, `makeEventListener(window, ...)`) needs the premise that project code never installs members on host DOM objects; app-game has 1,232 unknown-key writes. Reopen when a sweep shows a violation hinging on it and the owner states the premise.
 - Anonymous arrows as their own summary owners: they detached captured parameter member calls from the enclosing function and dropped the SC9012 an opaque caller keeps (control: `fixtures/reactive-ir/accessor-provenance/Anonymous.tsx`). Reopen when captured-parameter behavior and callback timing compose across source summaries (Relay's `() => props.environment`).
 - A shared reference/identity layer (`Resolved<T> | Unknown`) is not started. Under ADR 0326 every false positive so far was a proof re-deriving "is this still the same value" (props aliases, `arguments`, `delete`, redeclaration, reassigned tags, views of props). Reopen when a proof needs that answer.
-- Recall fixes for the section 1 oracle sites: zero corpus yield (`useParams()` destructuring: 0 occurrences; every `children()` accessor is read in JSX). Reopen when a real project or report hits one.
+- Recall fixes for the section 1 oracle sites: zero corpus yield (no `useParams()` destructuring; every `children()` accessor is read in JSX). Reopen on a real hit.
+- An inferred browser host keeps rc.17 `setLinkClaim`'s gap: ADR 0270 admits non-Vite scripts (`node server.js` calling `renderToString`).
 - Inferring a `never` exit from a body: a call completes normally unless its signature is `asserts` or returns `never`, and a helper that throws undeclared is outside the model. Treating every helper call in a `try` as unproven would cost recall the owner declined (ADR 0279, option b). Reopen if a producer fact records inferred throws.
 ## 3. Recorded precision trades
 
 A violation withheld, or turned uncertifiable, to keep zero false positives. Each loses recall on purpose.
 
+- A refused file (ADR 0360) withholds each violation located or evidenced in it, even one its compiler facts cannot change.
 - Instance field initializer: a violation whose primary location is in one is demoted to uncertifiable, whichever rule claimed it (`diagnostics.rs`, `site_in_instance_field`). Static fields and static blocks keep theirs.
 - Code in a component's element children (`<Show>`, `<Loading>`, `<Errored>`, portals, wrappers rendering `props.children`) has no proven placement (`inside_component_element_children`); a read there is an uncertifiable `strict-read-untracked`, even where the runtime warns.
 - `reactive-handler-frozen` (SC1007) on an element inside a tracked JSX expression or a component's children is uncertifiable: the listener is replaced when the scope re-runs.
@@ -123,14 +124,15 @@ Known false-positive shapes left open (fire today, wanted gone):
 ## 4. Open questions and live approximations
 
 - ESLint adapter: native analyzes the file on disk, while the adapter maps byte offsets onto ESLint's in-memory text. An unsaved buffer, or a later `--fix` pass, places findings wrongly.
-- WASM adapter: the request carries no package files, so every package import keeps an open requirement (SC9005, uncertifiable). Package source analysis exists only in the native check.
-- Retained daemon: a tsconfig whose `extends` names a package with an `exports` map is never reused, since TypeScript's resolution is not reproduced (`host_config.rs`). Performance only.
+- `feedback run` with an application `vite.config` on `@solidjs/vite-plugin` next.51+ refuses unless `performanceTracks` and `diagnostics` are off: their module scripts run before the collector. The collector default turns both off.
+- WASM adapter: the request carries no package files, so every package import keeps an open SC9005 requirement; package source analysis is native only.
+- Retained daemon: a tsconfig `extends` naming a package with an `exports` map is never reused (TypeScript's resolution is not reproduced, `host_config.rs`); performance only.
 - Premises, not defects: standard runtime configuration (ADR 0266), standard hydration host (ADR 0268), member stability (ADR 0273), package integrity (ADR 0300), audited router bytes (ADR 0324, 0334, 0335). Residuals: computed or reflective route-option keys (ADR 0334); a bundle-time patch by a Vite plugin or a `vite.config`-only alias (ADR 0324); callables on `Object.prototype` (ADR 0335); a caller that deletes or redefines a getter of its `this` when invoked as `props.onX()` (ADR 0337).
 - Standard-library trust does not model getters, `toString`, Proxy on handed objects or thenables (ADR 0318).
-- Route-parameter proofs stop at: `Match` accessors, `useSearchParams`, `useLocation`, `createMemo(() => params.k)`, and constants through barrels or `export *` (ADRs 0324, 0325). Each leaves an uncertifiable SC9012.
-- `execution-map-incomplete` (SC9004) is retired: `uncovered_jsx_expressions()` is empty by construction. A third compiler adapter must prove the same totality in its tests (`rust/dialects/solid-v2/compiler/src/lib.rs`).
+- Route-parameter proofs stop at: `Match` accessors, `useSearchParams`, `useLocation`, `createMemo(() => params.k)`, barrel/`export *` constants, a `useAction` action imported via a barrel or default, re-exported or namespace-reached (ADRs 0324/0325/0335): SC9012.
+- SC9004 (`execution-map-incomplete`) is retired: `uncovered_jsx_expressions()` is empty by construction, as a third adapter must prove in its tests.
 - A mention of a `const`/`let`-bound function not proven to follow its declarator supplies no call site or edge (ADR 0339; a `var` is never credited), so its findings are uncertifiable or absent. Misses by design: a call from a hoisted declaration nested in a function or from a method; a module-level declaration that code above it may call, or that is on or imports a cycle; any call across a cycle. Also withheld: a direct `eval`, an unanalyzed JavaScript module, a non-literal default parameter, a `require` mention other than a direct call. A function declaration written elsewhere (`go = other`) reaches nothing by that name, and a written component or export root is no root. Accepted trade: `(x = late())` withholds the helper even when `late` is declared first.
 - Recall instruments: `scripts/mutants.mjs` seeds fresh locals, inline and intrinsic handlers, signal accessors, reactive props and setup helpers. Known miss: a helper bound by `let` or `var`. Reads through an `omit(props)` view or `const` alias, destructuring and component spreads stay uncertifiable (ADR 0337); async continuations, package callbacks and component-prop handlers are unsampled. The oracle skips patched or aliased packages, CommonJS exports and declaration-only modules (`fixtures/runtime-oracle/README.md`).
-- Static-only oracle rows `r9-e2-storedirectwrite` and `r9-e2-storeviewwrite` are real defects (the store drops the write) with no dev diagnostic; they prove nothing about false positives.
+- Static-only oracle rows `r9-e2-storedirectwrite` and `r9-e2-storeviewwrite` are real defects (the store drops the write) with no dev diagnostic.
 - `inferred-host-*` fixtures pin no finding: package contracts are gone (ADR 0312), so `startClosed()` is opaque. Snapshots show admission (`uncertifiable`) or a decline (`certified`); Rust tests pin the `*-cases.json` inputs. `@solidjs/vite-plugin` admission is unreachable from a fixture; `ssr` grammar is in `host_config/tests.rs`. A finding-bearing admission needs a package declaring an owner requirement, which the checker does not read.
-- `lazy` identity: Solid's `lazy` is recognized from its import binding (`import { lazy } from "solid-js"`, named in the dialect's export table), since typefacts does not name the overloaded declaration. Any other module's `lazy` is not Solid's: its loader's `import()` is an unnamed escape, so that module's exports are uncertifiable.
+- `lazy` identity: Solid's `lazy` is recognized from its import binding (`import { lazy } from "solid-js"`, named in the dialect's export table), as typefacts names no overloaded declaration. Any other module's `lazy` is not Solid's: its loader's `import()` is an unnamed escape, so that module's exports are uncertifiable.

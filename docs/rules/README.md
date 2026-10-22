@@ -66,7 +66,7 @@ Renamed and merged configuration keys, retired identities, and the six merges
 whose disables deliberately do not transfer are listed in the
 [catalog migration note](../rule-catalog-migration.md).
 
-## Solid 2.0 catalog — 33 rules
+## Solid 2.0 catalog — 34 rules
 
 | Code | Rule | Severity | Default |
 | --- | --- | --- | --- |
@@ -103,11 +103,12 @@ whose disables deliberately do not transfer are listed in the
 | SC9012 | [reactive-dispatch-unresolved](reactive-dispatch-unresolved.md) | warning | on |
 | SC9013 | [unsupported-solid-runtime](unsupported-solid-runtime.md) | error | on |
 | SC9014 | [unaudited-solid-release](unaudited-solid-release.md) | warning | on |
+| SC9015 | [compiler-refused-source](compiler-refused-source.md) | warning | on |
 
 `http-response-after-flush`, `package-behavior-unavailable`,
 `reactive-source-uncaptured`, `reactive-dispatch-unresolved`,
-`unsupported-solid-runtime`, and `unaudited-solid-release` can produce
-uncertifiable results. Their pages name
+`unsupported-solid-runtime`, `unaudited-solid-release`, and
+`compiler-refused-source` can produce uncertifiable results. Their pages name
 the missing evidence and remediation.
 
 SC9005 was named `package-contract-incomplete`; that name remains an alias of
@@ -115,10 +116,11 @@ SC9005 was named `package-contract-incomplete`; that name remains an alias of
 unavailable from source. Package contracts and receipts are no longer consumed;
 see [ADR 0312](../decisions.md#adr-0312).
 
-`unsupported-solid-runtime` and `unaudited-solid-release` are the two
-identities here the rules engine never produces. Dialect detection decides
-both. The refusal replaces the analysis and appears **alone** when it appears
-at all (ADR 0110). The notice accompanies the analysis.
+`unsupported-solid-runtime`, `unaudited-solid-release` and
+`compiler-refused-source` are the three identities here the rules engine never
+produces. Dialect detection decides the first two, fact building the third.
+The refusal replaces the analysis and appears **alone** when it appears at all
+(ADR 0110). The notices accompany the analysis.
 
 ## Migrating from eslint-plugin-solid
 

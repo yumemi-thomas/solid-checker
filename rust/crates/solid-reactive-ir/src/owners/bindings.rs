@@ -623,6 +623,12 @@ pub(crate) fn analysis_context(
         // value threaded to the next run as `prev`, so a read in it would be
         // described as living in an "apply callback" that 1.x does not have.
         let phase = primitive.primitive().and_then(|resolved| {
+            // A root body names its root: an anonymous one has no enclosing
+            // label to fall back to. It runs under the root whenever it runs,
+            // so its timing is not asked (rc.17 `hydrate` states none).
+            if dialect.callback_runs_in_created_root(resolved, argument) {
+                return Some("callback");
+            }
             let semantics = dialect.callback_semantics_at(resolved, argument, call.arguments.len());
             semantics.execution.and_then(|execution| match execution {
                 // "compute" only where reads actually subscribe: an
@@ -638,13 +644,6 @@ pub(crate) fn analysis_context(
                     if dialect.apply_callback_argument(resolved) == Some(argument) =>
                 {
                     Some("apply callback")
-                }
-                // A root body names its root: an anonymous one has no
-                // enclosing label to fall back to.
-                solid_dialect::Execution::Inline
-                    if dialect.callback_runs_in_created_root(resolved, argument) =>
-                {
-                    Some("callback")
                 }
                 _ => None,
             })

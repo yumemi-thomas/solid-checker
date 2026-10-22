@@ -34,7 +34,11 @@ function nor a string, so they return `() => undefined`, a component that
 renders nothing (`dist/web.js:2080-2090`, `dist/web.observe.js:2102-2112`,
 `dist/server.js:3729-3733`, `dist/server.observe.js:3817-3821`). A hand-run of
 all six bundles under Node confirmed both outcomes for an async arrow,
-`Promise.resolve`, `new Promise` and a plain thenable.
+`Promise.resolve`, `new Promise` and a plain thenable. From rc.17 the same
+code is `solid-js`'s `dynamicCore`, which `@solidjs/web`'s `dynamic` forwards to
+(`solid-js@2.0.0-rc.17` `dist/solid.dev.js:1445` and `:1530`,
+`dist/server.dev.js:2587-2589`); under web rc.17 the static form is modelled
+only with `solid-js` rc.17.
 
 **TypeScript does not report it.** The published signature is
 

@@ -3,6 +3,8 @@
 //!
 //! Audited against the exact `@solidjs/web@2.0.0-rc.3` published declaration surface.
 //!
+//! The rc.17 review adds the new root exports of `2.0.0-rc.17`.
+//!
 //! Sorted by name so lookup can binary search. A name appears under every
 //! module that exports it — 1.x's `solid-js/web` re-exports nine control-flow
 //! components from `solid-js`, and importing one of them from either module
@@ -91,7 +93,9 @@ pub static VALUES: &[(&str, &[&str])] = &[
     ("decodeResponsePayload", &["@solidjs/web/server-functions", "@solidjs/web/server-functions/client", "@solidjs/web/server-functions/server"]),
     ("delegateEvents", &["@solidjs/web"]),
     ("deserializeStream", &["@solidjs/web/server-functions", "@solidjs/web/server-functions/client"]),
+    ("dispatchAsInteraction", &["@solidjs/web"]),
     ("dynamic", &["@solidjs/web"]),
+    ("dynamicComponent", &["@solidjs/web"]),
     ("dynamicProperty", &["@solidjs/web"]),
     ("effect", &["@solidjs/web"]),
     ("enableRichArguments", &["@solidjs/web/server-functions/rich-args"]),
@@ -123,10 +127,12 @@ pub static VALUES: &[(&str, &[&str])] = &[
     ("getServerFunctionsCodec", &["@solidjs/web/server-functions", "@solidjs/web/server-functions/client"]),
     ("handleServerFunctionRequest", &["@solidjs/web/server-functions", "@solidjs/web/server-functions/server"]),
     ("hasFlashCookie", &["@solidjs/web", "@solidjs/web/server-functions", "@solidjs/web/server-functions/client", "@solidjs/web/server-functions/server"]),
+    ("hasServerLinkState", &["@solidjs/web"]),
     ("httpHeader", &["@solidjs/web"]),
     ("httpStatus", &["@solidjs/web"]),
     ("hydrate", &["@solidjs/web"]),
     ("insert", &["@solidjs/web"]),
+    ("installServerComponentHydration", &["@solidjs/web"]),
     ("installServerComponents", &["@solidjs/web/frames", "@solidjs/web/frames/client"]),
     ("isDev", &["@solidjs/web"]),
     ("isFrameStreamResponse", &["@solidjs/web/frames", "@solidjs/web/frames/client", "@solidjs/web/frames/server"]),
@@ -165,8 +171,10 @@ pub static VALUES: &[(&str, &[&str])] = &[
     ("serverComponentResponse", &["@solidjs/web/frames", "@solidjs/web/frames/server"]),
     ("setAttribute", &["@solidjs/web"]),
     ("setAttributeNS", &["@solidjs/web"]),
+    ("setLinkClaim", &["@solidjs/web"]),
     ("setProperty", &["@solidjs/web"]),
     ("setServerFunctionsDev", &["@solidjs/web/server-functions", "@solidjs/web/server-functions/server"]),
+    ("setStatefulProperty", &["@solidjs/web"]),
     ("setStyleProperty", &["@solidjs/web"]),
     ("spread", &["@solidjs/web"]),
     ("ssr", &["@solidjs/web"]),
@@ -204,6 +212,7 @@ pub static TYPES: &[(&str, &[&str])] = &[
     ("CookieOptions", &["@solidjs/web"]),
     ("DeserializePluginContext", &["@solidjs/web/serialization", "@solidjs/web/serialization/decode"]),
     ("DynamicProps", &["@solidjs/web"]),
+    ("ElementClaimOptions", &["@solidjs/web"]),
     ("ExclusiveAssetDescriptor", &["@solidjs/web"]),
     ("FetchMiddleware", &["@solidjs/web"]),
     ("FlashSubmission", &["@solidjs/web/server-functions", "@solidjs/web/server-functions/server"]),
@@ -220,6 +229,7 @@ pub static TYPES: &[(&str, &[&str])] = &[
     ("JSONSerializeOptions", &["@solidjs/web/serialization"]),
     ("JSONSerializerOptions", &["@solidjs/web/serialization"]),
     ("JSX", &["@solidjs/web", "@solidjs/web/jsx-dev-runtime", "@solidjs/web/jsx-runtime"]),
+    ("LinkClaimHandler", &["@solidjs/web"]),
     ("NoJSHandlerOptions", &["@solidjs/web/server-functions", "@solidjs/web/server-functions/server"]),
     ("PluginData", &["@solidjs/web/serialization", "@solidjs/web/serialization/decode"]),
     ("PluginInfo", &["@solidjs/web/serialization", "@solidjs/web/serialization/decode"]),

@@ -348,8 +348,13 @@ impl DiagnosticSession {
         // Scoped to this generation's facts: a gap about named exports is due
         // only where the project reaches one (`release_scope`), so the answer
         // moves with the sources as well as the install.
+        // A gap only server rendering can reach is not due under declared CSR.
+        let client_only_rendering = matches!(
+            rule_options.runtime.rendering,
+            Some(solid_reactive_ir::RuntimeRendering::Csr)
+        );
         let release_notice = dialect::release_notice(self.dialect, project)
-            .and_then(|notice| notice.scoped_to(facts));
+            .and_then(|notice| notice.scoped_to(facts, client_only_rendering));
         let router_params = solid_reactive_ir::router_params::router_params_status(
             facts,
             self.dialect.vocabulary,
@@ -472,6 +477,46 @@ impl DiagnosticSession {
                 finding.message.push_str(
                     "; this code is in a function that returns JSX but is also handed to code that may call it as a plain function, so whether it runs as a component is not proven",
                 );
+            }
+        }
+        // ADR 0360: a file the compiler refused carries no compiler facts, so
+        // nothing about it is proven, and neither is anything a finding
+        // elsewhere reaches through it. Its sites are unplaced in the IR; a
+        // violation located in it, or whose evidence passes through it, is an
+        // obligation here. Each refused file gets a project-level notice.
+        let refused = facts
+            .files
+            .iter()
+            .filter_map(|file| {
+                file.compiler
+                    .refusal()
+                    .map(|message| (file.path.as_str(), message))
+            })
+            .collect::<Vec<_>>();
+        if !refused.is_empty() {
+            let in_refused = |location: &typefacts::Location| {
+                refused
+                    .iter()
+                    .any(|(path, _)| *path == location.path.as_ref())
+            };
+            for finding in &mut findings {
+                if finding.kind == "violation"
+                    && (in_refused(&finding.primary_location)
+                        || finding.related_locations.iter().any(in_refused)
+                        || finding
+                            .evidence
+                            .iter()
+                            .filter_map(|step| step.location.as_ref())
+                            .any(in_refused))
+                {
+                    finding.kind = "uncertifiable".into();
+                    finding.message.push_str(
+                        "; this depends on a file the Solid compiler refused, which has no compiler facts, so it is not proven",
+                    );
+                }
+            }
+            for (path, message) in &refused {
+                findings.push(compiler_refused_finding(path, message));
             }
         }
         let metrics = analysis_metrics(facts, &program);
@@ -802,6 +847,50 @@ pub fn unaudited_router_finding(
     finding.subject_kind = "project".into();
     finding.evidence = vec![solid_reactive_ir::EvidenceStep {
         message: "this import reaches useParams from the router".into(),
+        location: Some(location),
+    }];
+    finding
+}
+
+/// The `SC9015` notice for a file the dialect compiler refused (ADR 0360). It
+/// is about the file, not a site in it, and states the compiler's own message:
+/// the file has no compiler facts, so the analysis claims nothing about it and
+/// withholds what depends on it. Project-level like SC9014, so a run that
+/// would otherwise look clean shows it and `--certify` fails.
+#[must_use]
+pub fn compiler_refused_finding(path: &str, message: &str) -> Finding {
+    let location = typefacts::Location {
+        path: path.into(),
+        start_byte: 0,
+        end_byte: 0,
+    };
+    let reason = message
+        .strip_prefix(path)
+        .and_then(|rest| rest.strip_prefix(": "))
+        .unwrap_or(message);
+    // The compiler's first line names the refusal; the rest (the malformed
+    // markup, say) goes in the evidence.
+    let summary = reason.lines().next().unwrap_or(reason).trim_end();
+    let metadata = solid_reactive_ir::RuleMetadata {
+        code: dialect::COMPILER_REFUSED_CODE,
+        name: dialect::COMPILER_REFUSED_RULE,
+        severity: "warning",
+        uncertifiable: true,
+        default_enabled: true,
+        presets: &[],
+    };
+    let mut finding = Finding::new(
+        metadata,
+        format!(
+            "the Solid compiler refused {path}: {summary}; the file has no compiler facts, so nothing in it is proven and findings that depend on it are not proven either"
+        ),
+        location.clone(),
+    );
+    finding.hint = "Findings beside this notice that do not depend on the file stand. To have the file analyzed, rewrite the construct the compiler names in a form the pinned Solid 2 compiler accepts.".into();
+    finding.analysis_context = "compiler-facts".into();
+    finding.subject_kind = "project".into();
+    finding.evidence = vec![solid_reactive_ir::EvidenceStep {
+        message: format!("the compiler's message: {reason}"),
         location: Some(location),
     }];
     finding

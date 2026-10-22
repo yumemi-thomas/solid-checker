@@ -1,0 +1,3 @@
+{
+  "note": "SC2007 static-dynamic-async-source: rc.17 dynamicComponent() with an async source and static: true, called from a timer (thrown in dev); control: a synchronous source with the same option"
+}

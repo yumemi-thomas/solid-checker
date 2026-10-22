@@ -22,6 +22,27 @@ fn compile_source(source: &str) -> ExecutionMap {
         .expect("compiler facts")
 }
 
+/// ADR 0360: the compiler declining a source is a refusal, distinct from the
+/// `Native` errors that mean the producer cannot be trusted.
+#[test]
+fn a_compile_error_is_a_refusal_of_the_source() {
+    for source in [
+        "const view = <p attr:data-z={count()}>x</p>;",
+        "const view = <span classList={{ on: true }} />;",
+        "const view = <p><span>{count()}</span><p /></p>;",
+    ] {
+        let request = AnalysisRequest::new("App.tsx", source, CompilerOptions::default());
+        let error = NativeCompilerFacts
+            .analyze(&request)
+            .expect_err("the pinned compiler refuses this source");
+        assert!(
+            matches!(&error, CompilerProviderError::Refused(message)
+                if message.starts_with("App.tsx: ")),
+            "{source}: unexpected error: {error}"
+        );
+    }
+}
+
 #[test]
 fn certification_replay_retains_the_exact_output_and_is_trace_neutral() {
     let request = AnalysisRequest::new(

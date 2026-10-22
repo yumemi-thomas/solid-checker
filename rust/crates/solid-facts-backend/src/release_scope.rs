@@ -702,10 +702,14 @@ impl ReleaseNotice {
     /// The notice as due for the project `facts` describes: `None` when the
     /// project cannot be using the runtime the notice is about
     /// ([`solid_use`]); otherwise every scoped gap the project does not reach
-    /// is dropped, and every one it does reach names what reached it. `None`
+    /// is dropped, and every one it does reach names what reached it. A
+    /// scoped gap whose exports run project code only during server rendering
+    /// ([`GapScope::server_rendering_only`]) is dropped as well when
+    /// `client_only_rendering`: the analysis declares CSR (`--rendering csr`),
+    /// the user's premise that the application never server-renders. `None`
     /// when no gap is left.
     #[must_use]
-    pub fn scoped_to(mut self, facts: &ProjectFacts) -> Option<Self> {
+    pub fn scoped_to(mut self, facts: &ProjectFacts, client_only_rendering: bool) -> Option<Self> {
         let runtime = self
             .releases
             .iter()
@@ -725,6 +729,9 @@ impl ReleaseNotice {
                 gaps.push(gap);
                 continue;
             };
+            if scope.server_rendering_only && client_only_rendering {
+                continue;
+            }
             let sites = scope_sites(
                 &scope,
                 facts

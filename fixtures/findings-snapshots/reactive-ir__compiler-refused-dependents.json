@@ -1,0 +1,75 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/compiler-refused-dependents/App.tsx",
+      "start": 195,
+      "end": 206,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/compiler-refused-dependents/App.tsx",
+      "start": 277,
+      "end": 289,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compiler-refused-dependents/helpers.ts",
+      "start": 411,
+      "end": 422,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/compiler-refused-dependents/helpers.ts",
+      "start": 505,
+      "end": 517,
+      "fixes": 0
+    },
+    {
+      "rule": "compiler-refused-source",
+      "code": "SC9015",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/compiler-refused-dependents/View.tsx",
+      "start": 0,
+      "end": 0,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/compiler-refused-dependents/View.tsx",
+      "start": 382,
+      "end": 393,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/compiler-refused-dependents/View.tsx",
+      "start": 395,
+      "end": 407,
+      "fixes": 0
+    }
+  ]
+}

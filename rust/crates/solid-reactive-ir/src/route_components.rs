@@ -365,8 +365,9 @@ fn router_config_values(
                 continue;
             }
             // The router calls `config.transformUrl(...)` on the config
-            // (`routers/factory.jsx:188`), so the config holds no callable
-            // that could bind `this` to it and its `routes`. A stock history
+            // (`routers/factory.jsx:188` next.26, `:240` next.41), so the
+            // config holds no callable that could bind `this` to it and its
+            // `routes`. A stock history
             // is a fresh integration whose methods bind `this` to itself
             // (ADR 0324).
             let Some(own) = this_free_properties(
@@ -543,7 +544,8 @@ impl RouterLocals {
 /// is that value's, not the definition's.
 ///
 /// The router reads a definition's keys and calls `route.preload(...)` on its
-/// route record (`routers/components.jsx:133`, `server.js:150`), so a getter,
+/// route record (`routers/components.jsx:133`, `server.js:150` next.26;
+/// `:137`, `:155` next.41), so a getter,
 /// a method or a `this`-binding function there receives the definition or a
 /// record holding it. A definition counts, with its subtree, only when it has
 /// no getter or method and every key but `component` holds a non-callable
@@ -748,6 +750,16 @@ fn definitions_exposed(
     let names_router = |module: &str| {
         module == ROUTER_PACKAGE || module.starts_with(concat!("@solidjs/router", "/"))
     };
+    // `useAction(action)` calls `action` with the router context as `this`,
+    // whose `matches()` hold every definition.
+    let audited_file = |file: &FileFacts| {
+        audited
+            .iter()
+            .any(|directory| file.path.as_str().starts_with(directory.as_str()))
+    };
+    if crate::router_params::router_context_as_this(facts, &audited_file).is_some() {
+        return true;
+    }
     for file in unaudited_files(facts, audited) {
         let ast = &*file.ast;
         // Vite's `import.meta.glob` loads modules no load fact names.
@@ -817,6 +829,15 @@ fn definitions_exposed(
                 else {
                     return true;
                 };
+                // `config.links(router, basePath)` receives the router context
+                // and its matches (`claims.js:42-44`, from `2.0.0-next.41`).
+                if call
+                    .arguments
+                    .iter()
+                    .any(|config| names_links(file, config))
+                {
+                    return true;
+                }
                 let Some(name) = ast
                     .bindings
                     .iter()
@@ -845,6 +866,34 @@ fn definitions_exposed(
         }
     }
     false
+}
+
+/// Whether the `createRouter` argument `config` names a `links` key of its
+/// own, by any static spelling (data, getter or method; quoted or not).
+fn names_links(file: &FileFacts, config: &solid_facts::ast::ArgumentFact) -> bool {
+    let ast = &*file.ast;
+    let object = ast.peel_ts_sugar_span(config.span);
+    let inside = |span: Span| object.contains(span) && span != object;
+    config
+        .literal_members
+        .iter()
+        .any(|member| member.key.as_str() == crate::router_params::LINKS_KEY)
+        || ast
+            .object_properties
+            .iter()
+            .filter(|property| inside(property.span))
+            .filter(|property| {
+                !ast.object_properties.iter().any(|outer| {
+                    outer.span != property.span
+                        && inside(outer.span)
+                        && outer.value.contains(property.span)
+                })
+            })
+            .any(|property| {
+                file.source_text(property.key).is_some_and(|key| {
+                    key.trim_matches(['"', '\'', '`', '[', ']']) == crate::router_params::LINKS_KEY
+                })
+            })
 }
 
 /// Whether `span` in `file` is a binding's declaration or module surface, or

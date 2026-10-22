@@ -152,6 +152,27 @@ fn inert_execution_map(source_hash: SourceHash) -> ExecutionMap {
     ExecutionMap::inert(source_hash)
 }
 
+/// The compiler facts of one source file, or, when the dialect compiler
+/// refuses the file, [`ExecutionMap::refused`] (ADR 0360): the file keeps its
+/// syntax and Type Facts, carries no compiler facts, and the analysis of the
+/// rest goes on. Every other compiler error (no trace, a trace this checker
+/// cannot trust) stays fatal.
+fn file_execution_map(
+    compiler: &mut (impl CompilerFactsProvider + ?Sized),
+    request: &AnalysisRequest,
+) -> Result<ExecutionMap, BackendError> {
+    if solid_facts::ast::is_json_module_path(&request.path) {
+        return Ok(inert_execution_map(request.source_hash.clone()));
+    }
+    match compiler.analyze(request) {
+        Ok(execution) => Ok(execution),
+        Err(CompilerProviderError::Refused(message)) => {
+            Ok(ExecutionMap::refused(request.source_hash.clone(), message))
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum BackendError {
     #[error("generation must be non-zero")]
@@ -211,7 +232,9 @@ impl From<CompilerProviderError> for BackendError {
     fn from(error: CompilerProviderError) -> Self {
         match error {
             CompilerProviderError::MissingExecutionMap => Self::MissingExecutionMap,
-            CompilerProviderError::Native(message) => Self::NativeCompiler(message),
+            CompilerProviderError::Native(message) | CompilerProviderError::Refused(message) => {
+                Self::NativeCompiler(message)
+            }
             CompilerProviderError::Facts(source) => Self::Compiler(source),
         }
     }
@@ -1172,11 +1195,7 @@ pub fn build_project_native_measured_with_program_hashes(
                     Arc::clone(&file.source),
                     file.compiler_options.clone(),
                 );
-                let execution = if solid_facts::ast::is_json_module_path(&file.path) {
-                    inert_execution_map(request.source_hash.clone())
-                } else {
-                    compiler.analyze(&request)?
-                };
+                let execution = file_execution_map(compiler.as_mut(), &request)?;
                 execution.validate(&file.source)?;
                 let mut facts =
                     FileFacts::new(generation, Arc::clone(&file.source), ast, execution)?;
@@ -1447,11 +1466,7 @@ fn prepare_native_compiler_parallel(
                     Arc::clone(&file.source),
                     file.compiler_options.clone(),
                 );
-                let execution = if solid_facts::ast::is_json_module_path(&file.path) {
-                    inert_execution_map(request.source_hash.clone())
-                } else {
-                    compiler.analyze(&request)?
-                };
+                let execution = file_execution_map(compiler.as_mut(), &request)?;
                 execution.validate(&file.source)?;
                 Ok((*index, key.clone(), execution))
             })
@@ -1489,11 +1504,7 @@ pub fn build_project_cached(
         let execution = if let Some(cached) = cache.compiler.get(&compiler_key) {
             cached.clone()
         } else {
-            let execution = Arc::new(if solid_facts::ast::is_json_module_path(&file.path) {
-                inert_execution_map(request.source_hash.clone())
-            } else {
-                compiler.analyze(&request)?
-            });
+            let execution = Arc::new(file_execution_map(compiler, &request)?);
             cache.compiler.insert(compiler_key, Arc::clone(&execution));
             execution
         };

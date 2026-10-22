@@ -55,6 +55,10 @@ pub enum Rule {
     /// vocabulary was not audited on. The backend appends it to the analysis
     /// result (`diagnostics.rs`); the rules engine never produces it.
     UnauditedSolidRelease,
+    /// Decided by fact building: the dialect compiler refused a file, so it
+    /// carries no compiler facts (ADR 0360). The backend appends it beside the
+    /// analysis (`diagnostics.rs`); the rules engine never produces it.
+    CompilerRefusedSource,
     JsxNoDuplicateProps,
     PreferFor,
     PreferShow,
@@ -72,7 +76,7 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 33] = [
+    pub const ALL: [Self; 34] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::UncalledAccessor,
@@ -103,6 +107,7 @@ impl Rule {
         Self::PackageBehaviorUnavailable,
         Self::UnsupportedSolidRuntime,
         Self::UnauditedSolidRelease,
+        Self::CompilerRefusedSource,
         Self::JsxNoDuplicateProps,
         Self::PreferFor,
         Self::PreferShow,
@@ -233,6 +238,11 @@ impl Rule {
             // the installed runtime, not the project's source -- but a warning:
             // the analysis ran, and every other finding beside it stands.
             Self::UnauditedSolidRelease => ("SC9014", "unaudited-solid-release", "warning", true),
+            // Uncertifiable: the claim is that one file has no compiler facts,
+            // so nothing about it is proven. A warning like SC9014: the rest of
+            // the project was analyzed, and the findings that do not depend on
+            // the file stand.
+            Self::CompilerRefusedSource => ("SC9015", "compiler-refused-source", "warning", true),
             Self::JsxNoDuplicateProps => ("SC8003", "jsx-no-duplicate-props", "error", false),
             Self::PreferFor => ("SC8014", "prefer-for", "error", false),
             Self::PreferShow => ("SC8015", "prefer-show", "warning", false),

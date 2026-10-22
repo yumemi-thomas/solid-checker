@@ -657,7 +657,13 @@ fn detection_classifies_the_installed_triple() {
     const RC9: Option<&str> = Some("2.0.0-rc.9");
     // (solid-js, signals, web, selected dialect id, notice due)
     let rows = [
-        (RC3, RC3, RC3, "solid-v2@flush-in-effect-callback", true),
+        (
+            RC3,
+            RC3,
+            RC3,
+            "solid-v2@flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline",
+            true,
+        ),
         // rc.0's optimistic-store setter meets no owned-scope guard (N5),
         // its one answer that differs from rc.3's: a reviewed variant, so
         // no notice.
@@ -665,29 +671,35 @@ fn detection_classifies_the_installed_triple() {
             Some("2.0.0-rc.0"),
             Some("2.0.0-rc.0"),
             None,
-            "solid-v2@optimistic-store-setter-unguarded",
+            "solid-v2@optimistic-store-setter-unguarded+optimistic-setter-guarded+latest-rejects-pending",
             true,
         ),
         (
             Some("2.0.0-rc.1"),
             Some("2.0.0-rc.1"),
             Some("2.0.0-rc.1"),
-            "solid-v2@flush-in-effect-callback",
+            "solid-v2@flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline",
             true,
         ),
         (
             Some("2.0.0-rc.2"),
             Some("2.0.0-rc.2"),
             Some("2.0.0-rc.2"),
-            "solid-v2@flush-in-effect-callback",
+            "solid-v2@flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline",
             true,
         ),
-        (RC3, RC3, None, "solid-v2@flush-in-effect-callback", true),
+        (
+            RC3,
+            RC3,
+            None,
+            "solid-v2@flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending",
+            true,
+        ),
         (
             RC9,
             RC9,
             RC9,
-            "solid-v2@store-root-mutable+omit-predicate+until+flush-in-action+flush-in-effect-callback+dynamic-static+store-setter-guards-roots",
+            "solid-v2@store-root-mutable+omit-predicate+until+flush-in-action+flush-in-effect-callback+dynamic-static+store-setter-guards-roots+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline",
             true,
         ),
         // A fresh install of the audited solid-js today (the rc.1-rc.8
@@ -696,34 +708,40 @@ fn detection_classifies_the_installed_triple() {
             RC3,
             RC9,
             RC3,
-            "solid-v2@store-root-mutable+omit-predicate+flush-in-action+flush-in-effect-callback+store-setter-guards-roots",
+            "solid-v2@store-root-mutable+omit-predicate+flush-in-action+flush-in-effect-callback+store-setter-guards-roots+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline",
             true,
         ),
         (
             Some("2.0.0-rc.4"),
             Some("2.0.0-rc.4"),
             Some("2.0.0-rc.4"),
-            "solid-v2@flush-in-effect-callback",
+            "solid-v2@flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline",
             true,
         ),
         (
             Some("2.0.0-rc.6"),
             Some("2.0.0-rc.6"),
             Some("2.0.0-rc.6"),
-            "solid-v2@until+flush-in-effect-callback",
+            "solid-v2@until+flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline",
             true,
         ),
         (
             Some("2.0.0-rc.7"),
             Some("2.0.0-rc.7"),
             Some("2.0.0-rc.7"),
-            "solid-v2@store-root-mutable+until+flush-in-effect-callback",
+            "solid-v2@store-root-mutable+until+flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline",
             true,
         ),
         // No signals beside solid-js: the conservative answers, and the
         // notice.
-        (RC9, None, RC9, "solid-v2@dynamic-static", true),
-        (RC3, None, RC3, "solid-v2", true),
+        (
+            RC9,
+            None,
+            RC9,
+            "solid-v2@dynamic-static+hydrate-inline",
+            true,
+        ),
+        (RC3, None, RC3, "solid-v2@hydrate-inline", true),
         (
             Some("2.0.0-rc.10"),
             Some("2.0.0-rc.10"),
@@ -735,14 +753,14 @@ fn detection_classifies_the_installed_triple() {
             Some("2.0.0-beta.19"),
             RC3,
             RC3,
-            "solid-v2@flush-in-effect-callback",
+            "solid-v2@flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline",
             true,
         ),
         (
             Some("2.0.0"),
             RC3,
             RC3,
-            "solid-v2@flush-in-effect-callback",
+            "solid-v2@flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline",
             true,
         ),
     ];
@@ -810,7 +828,10 @@ fn signals_resolves_from_the_installed_solid_js() {
     else {
         panic!("analyzed");
     };
-    assert_eq!(reviewed.id, "solid-v2@flush-in-effect-callback");
+    assert_eq!(
+        reviewed.id,
+        "solid-v2@flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline"
+    );
     let notice = release_notice(reviewed, &project).expect("rc.3 is older than audited");
     assert_eq!(notice.gaps.len(), 1, "{notice:?}");
     let nested = root.join("node_modules/solid-js/node_modules/@solidjs/signals");
@@ -828,7 +849,7 @@ fn signals_resolves_from_the_installed_solid_js() {
     };
     assert_eq!(
         dialect.id,
-        "solid-v2@store-root-mutable+omit-predicate+flush-in-action+flush-in-effect-callback+store-setter-guards-roots"
+        "solid-v2@store-root-mutable+omit-predicate+flush-in-action+flush-in-effect-callback+store-setter-guards-roots+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline"
     );
     assert_eq!(releases[1].version.as_deref(), Some("2.0.0-rc.9"));
     let nested_manifest = "node_modules/solid-js/node_modules/@solidjs/signals/package.json";
@@ -915,38 +936,43 @@ fn the_pre_beta_experiment_is_refused_with_its_reason() {
 #[cfg(feature = "dialect-v2")]
 #[test]
 fn every_release_variant_is_one_its_language_lists() {
-    assert!(!RELEASE_VARIANTS.is_empty());
-    for variant in RELEASE_VARIANTS.iter() {
-        let language = ALL
-            .iter()
-            .copied()
-            .find(|language| language.vocabulary.version() == variant.vocabulary.version())
-            .expect("a variant belongs to a registered language");
-        let key = variant
-            .vocabulary
-            .variant_key()
-            .expect("a variant names its key");
-        assert_eq!(variant.id, format!("{}@{key}", language.id));
-        assert_eq!(by_id(variant.id).map(|found| found.id), Some(variant.id));
-        assert!(std::ptr::eq(
-            for_vocabulary(language, Some(variant.vocabulary)),
-            variant
-        ));
-        assert!(!ALL.iter().any(|registered| registered.id == variant.id));
-        // The variant is the same catalog; only the vocabulary moves.
-        assert_eq!(variant.rule_count, language.rule_count);
-        assert_eq!(
-            variant.compiler_facts_identity,
-            language.compiler_facts_identity
-        );
+    let mut ids = Vec::new();
+    for language in ALL.iter().copied() {
+        for vocabulary in language.vocabulary.variants() {
+            let variant = for_vocabulary(language, Some(*vocabulary));
+            let key = variant
+                .vocabulary
+                .variant_key()
+                .expect("a variant names its key");
+            assert_eq!(variant.id, format!("{}@{key}", language.id));
+            assert!(std::ptr::eq(
+                variant.vocabulary as *const dyn solid_dialect::Dialect as *const (),
+                *vocabulary as *const dyn solid_dialect::Dialect as *const ()
+            ));
+            assert!(by_id(variant.id).is_some_and(|found| std::ptr::eq(found, variant)));
+            assert!(std::ptr::eq(
+                for_vocabulary(language, Some(*vocabulary)),
+                variant
+            ));
+            assert!(!ALL.iter().any(|registered| registered.id == variant.id));
+            // The variant is the same catalog; only the vocabulary moves.
+            assert_eq!(variant.rule_count, language.rule_count);
+            assert_eq!(
+                variant.compiler_facts_identity,
+                language.compiler_facts_identity
+            );
+            ids.push(variant.id);
+        }
+        // An id whose key no variant spells resolves to nothing.
+        for malformed in ["", "nope", "until+until"] {
+            assert!(by_id(&format!("{}@{malformed}", language.id)).is_none());
+        }
     }
-    let mut ids = RELEASE_VARIANTS
-        .iter()
-        .map(|variant| variant.id)
-        .collect::<Vec<_>>();
+    assert!(!ids.is_empty());
+    let count = ids.len();
     ids.sort_unstable();
     ids.dedup();
-    assert_eq!(ids.len(), RELEASE_VARIANTS.len(), "variant ids are unique");
+    assert_eq!(ids.len(), count, "variant ids are unique");
     // B1, as the dialects detection selects for the rc.3 and rc.9 triples
     // answer it.
     assert!(SOLID_V2.vocabulary.store_root_properties_are_readonly());
@@ -972,6 +998,35 @@ fn every_release_variant_is_one_its_language_lists() {
         default_dialect(),
         for_vocabulary(&SOLID_V2, Some(&solid_dialect::Solid2::DEFAULTED))
     ));
+}
+
+/// ADR 0360: the refused-file notice's identity is the catalog's, and it is a
+/// project-level notice quoting the compiler's first line.
+#[cfg(feature = "dialect-v2")]
+#[test]
+fn the_compiler_refusal_notice_identity_is_the_one_the_catalog_publishes() {
+    let dialect = by_id("solid-v2").expect("the 2.0 dialect is compiled in");
+    let metadata = (dialect.rule_metadata)(COMPILER_REFUSED_RULE)
+        .unwrap_or_else(|| panic!("the 2.0 catalog must declare {COMPILER_REFUSED_RULE}"));
+    assert_eq!(metadata.code, COMPILER_REFUSED_CODE);
+    assert!(metadata.uncertifiable);
+    let finding = crate::diagnostics::compiler_refused_finding(
+        "/app/View.tsx",
+        "/app/View.tsx: The HTML provided is malformed. (3:5)\nUser HTML:\n <p><p></p></p>",
+    );
+    assert_eq!(finding.id, metadata.code);
+    assert_eq!(finding.rule, metadata.name);
+    assert_eq!(finding.severity, metadata.severity);
+    assert_eq!(finding.kind, "uncertifiable");
+    assert_eq!(finding.subject_kind, "project");
+    assert!(
+        finding.message.starts_with(
+            "the Solid compiler refused /app/View.tsx: The HTML provided is malformed. (3:5);"
+        ),
+        "{}",
+        finding.message
+    );
+    assert!(finding.evidence[0].message.contains("User HTML"));
 }
 
 /// The notice's identity is held here and published by the catalog; this
@@ -1006,7 +1061,7 @@ fn the_notice_identity_is_the_one_the_catalog_publishes() {
     // The advice pins all three, and names what it found.
     assert!(
             finding.hint.contains(
-                "pin solid-js, @solidjs/signals and @solidjs/web to 2.0.0-rc.13, the audited release of each"
+                "pin solid-js, @solidjs/signals and @solidjs/web to 2.0.0-rc.17, the audited release of each"
             ) && finding
                 .hint
                 .contains(&format!("this project resolves {found}")),

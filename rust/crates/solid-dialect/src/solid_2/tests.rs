@@ -209,9 +209,11 @@ fn the_execution_words_are_stated_by_this_dialect_not_by_shared_code() {
 fn only_the_audited_router_release_hands_out_url_strings() {
     let two: &dyn Dialect = &Solid2::RC9;
     assert!(two.router_params_are_url_strings("2.0.0-next.26"));
+    assert!(two.router_params_are_url_strings("2.0.0-next.41"));
     for version in [
         "2.0.0-next.18",
         "2.0.0-next.27",
+        "2.0.0-next.40",
         "2.0.0",
         "0.15.3",
         "2.0.0-next.26-rc",
@@ -219,7 +221,10 @@ fn only_the_audited_router_release_hands_out_url_strings() {
     ] {
         assert!(!two.router_params_are_url_strings(version), "{version}");
     }
-    assert_eq!(two.audited_router_releases(), &["2.0.0-next.26"]);
+    assert_eq!(
+        two.audited_router_releases(),
+        &["2.0.0-next.26", "2.0.0-next.41"]
+    );
     // Every audited release has exactly one digest, and no other has.
     for version in two.audited_router_releases() {
         assert!(two.audited_router_digest(version).is_some_and(|digest| {
@@ -230,20 +235,27 @@ fn only_the_audited_router_release_hands_out_url_strings() {
 }
 
 /// ADR 0335: route definitions are audited by exact version, each with a
-/// digest; next.26's equals ADR 0324's (the same registry bytes).
+/// digest; next.26's and next.41's equal ADR 0324's (the same registry bytes).
 #[test]
 fn only_audited_router_releases_render_route_definitions() {
     let two: &dyn Dialect = &Solid2::RC9;
-    for version in ["2.0.0-next.16", "2.0.0-next.18", "2.0.0-next.26"] {
+    for version in [
+        "2.0.0-next.16",
+        "2.0.0-next.18",
+        "2.0.0-next.26",
+        "2.0.0-next.41",
+    ] {
         assert!(
             two.audited_route_config_digest(version).is_some(),
             "{version}"
         );
     }
-    assert_eq!(
-        two.audited_route_config_digest("2.0.0-next.26"),
-        two.audited_router_digest("2.0.0-next.26")
-    );
+    for version in ["2.0.0-next.26", "2.0.0-next.41"] {
+        assert_eq!(
+            two.audited_route_config_digest(version),
+            two.audited_router_digest(version)
+        );
+    }
     for version in ["2.0.0-next.21", "2.0.0-next.17", "0.15.3", "2.0.0", ""] {
         assert_eq!(two.audited_route_config_digest(version), None, "{version}");
     }
@@ -262,6 +274,7 @@ fn only_audited_tanstack_releases_render_route_components() {
         "2.0.0-rc.4",
         "2.0.0-rc.6",
         "2.0.0-rc.8",
+        "2.0.0-rc.9",
     ] {
         let release = two.audited_route_components(version).expect(version);
         assert_eq!(release.version, version);
@@ -374,6 +387,7 @@ fn the_vocabulary_is_pinned_by_name() {
             "children",
             "clientOnly",
             "createContext",
+            "createDeferred",
             "createEffect",
             "createErrorBoundary",
             "createLoadingBoundary",
@@ -390,7 +404,9 @@ fn the_vocabulary_is_pinned_by_name() {
             "createStore",
             "createTrackedEffect",
             "deep",
+            "dispatchAsInteraction",
             "dynamic",
+            "dynamicComponent",
             "Errored",
             "flush",
             "For",
@@ -401,12 +417,14 @@ fn the_vocabulary_is_pinned_by_name() {
             "isPending",
             "latest",
             "lazy",
+            "lazyModule",
             "Loading",
             "mapArray",
             "Match",
             "merge",
             "omit",
             "onCleanup",
+            "onHydrationEnd",
             "onSettled",
             "reconcile",
             "refresh",
@@ -703,4 +721,213 @@ fn only_callback_bearing_primitives_report_positions() {
     assert!(Solid2.callback_positions(Primitive::Loading).is_empty());
     // `children(fn)` takes its thunk at 0 (ADR 0323).
     assert_eq!(Solid2.callback_positions(Primitive::Children), &[0]);
+}
+
+/// `dynamicComponent` is `dynamicCore` with no tag arm (`solid-js@2.0.0-rc.17`
+/// `dist/solid.dev.js:1545`): `dynamic`'s forms, decided from the call alone,
+/// whatever web's `dynamic` answers; a third argument (the tag arm) states
+/// nothing.
+#[test]
+fn dynamic_component_calls_take_dynamics_forms() {
+    use crate::OptionLiteral;
+    let form = |vocabulary: Solid2, third: OptionLiteral, literal: OptionLiteral| {
+        vocabulary.call_form(
+            Primitive::DynamicComponent,
+            &|argument, key| match argument {
+                1 => {
+                    assert_eq!(key, "static");
+                    literal
+                }
+                2 => third,
+                _ => panic!("argument {argument} is not asked"),
+            },
+        )
+    };
+    // Web's own `dynamic` answer does not decide `dynamicComponent`'s.
+    for vocabulary in [
+        Solid2::RC17,
+        Solid2 {
+            dynamic_options: releases::DynamicOptions::Unread,
+            ..Solid2::RC17
+        },
+    ] {
+        let absent = OptionLiteral::Absent;
+        assert_eq!(form(vocabulary, absent, absent), Primitive::Dynamic);
+        assert_eq!(
+            form(vocabulary, absent, OptionLiteral::False),
+            Primitive::Dynamic
+        );
+        assert_eq!(
+            form(vocabulary, absent, OptionLiteral::True),
+            Primitive::DynamicStatic
+        );
+        assert_eq!(
+            form(vocabulary, absent, OptionLiteral::Unknown),
+            Primitive::DynamicUnknownForm
+        );
+        for third in [
+            OptionLiteral::Unknown,
+            OptionLiteral::True,
+            OptionLiteral::False,
+        ] {
+            assert_eq!(
+                form(vocabulary, third, absent),
+                Primitive::DynamicUnknownForm
+            );
+        }
+    }
+    assert_eq!(
+        Solid2::RC17.name_of(Primitive::DynamicComponent),
+        Some("dynamicComponent")
+    );
+    assert_eq!(Solid2::RC13.name_of(Primitive::DynamicComponent), None);
+    // A name only: no row answers for it before its call form is taken.
+    let two: &dyn Dialect = &Solid2::RC17;
+    assert!(
+        two.callback_executions(Primitive::DynamicComponent)
+            .is_empty()
+    );
+    assert!(two.callback_owners(Primitive::DynamicComponent).is_empty());
+}
+
+/// `dispatchAsInteraction(event, fn)` runs `fn()` inline, once, under the
+/// caller's owner and listener (`@solidjs/web@2.0.0-rc.17`
+/// `dist/web.js:484`, `dist/web.dev.js:653-660`): `flush(fn)`'s attribution
+/// without its scheduler.
+#[test]
+fn dispatch_as_interaction_runs_its_callback_in_place() {
+    let two: &dyn Dialect = &Solid2::RC17;
+    let primitive = Primitive::DispatchAsInteraction;
+    assert_eq!(two.callback_positions(primitive), &[1]);
+    assert_eq!(
+        two.callback_execution_at(primitive, 1, 2),
+        Some(Execution::Inline)
+    );
+    assert_eq!(two.callback_execution_at(primitive, 0, 2), None);
+    assert_eq!(
+        two.callback_execution_word_at(primitive, 1, 2),
+        Some(Execution::Inline)
+    );
+    assert_eq!(
+        two.callback_owner_at(primitive, 1, 2),
+        Some(CallbackOwner::Inherits)
+    );
+    assert!(!two.runs_callback_deferred(primitive));
+    assert!(two.callback_preserves_owner_write_context(primitive));
+    assert!(!two.callback_inherits_calling_window(primitive, 1));
+    assert!(!two.reports_untracked_reads_at(primitive, 1, 2));
+    assert!(!two.throws_inside_action_step(primitive));
+    assert!(!two.warns_inside_effect_phase(primitive));
+    assert_eq!(two.owner_requirement_role(primitive), None);
+}
+
+/// rc.17's `createDeferred(fn, options?)` is `accessor(computed(wrapper,
+/// options))` whose wrapper calls `fn(prev)` (`@solidjs/signals@2.0.0-rc.17`
+/// `dist/dev.js:8897-8909`), and the server's is `createMemo`
+/// (`solid-js` `dist/server.js:2035`): every answer about `fn` and the
+/// accessor is `createMemo`'s. What differs (refetches after the first answer
+/// do not hold readers) is no answer this vocabulary gives.
+#[test]
+fn create_deferred_answers_as_create_memo() {
+    let two: &dyn Dialect = &Solid2::RC17;
+    let (deferred, memo) = (Primitive::CreateDeferred, Primitive::CreateMemo);
+    assert_eq!(
+        two.callback_positions(deferred),
+        two.callback_positions(memo)
+    );
+    assert_eq!(two.callback_owners(deferred), two.callback_owners(memo));
+    assert_eq!(
+        two.callback_executions(deferred),
+        two.callback_executions(memo)
+    );
+    assert_eq!(
+        two.runs_callback_deferred(deferred),
+        two.runs_callback_deferred(memo)
+    );
+    assert_eq!(two.options_argument(deferred), two.options_argument(memo));
+    assert_eq!(two.cleanup_rule(deferred), two.cleanup_rule(memo));
+    assert!(two.creates_reactive_source(deferred));
+    assert!(two.creates_directive_owner(deferred));
+    for count in [1, 2] {
+        assert_eq!(
+            two.callback_execution_word_at(deferred, 0, count),
+            two.callback_execution_word_at(memo, 0, count)
+        );
+        assert_eq!(
+            two.tracked_callback_timing(deferred, 0, count),
+            two.tracked_callback_timing(memo, 0, count)
+        );
+        assert_eq!(
+            two.eager_owned_computation_slot(deferred, 0, count),
+            two.eager_owned_computation_slot(memo, 0, count)
+        );
+        assert_eq!(
+            two.browser_callback_trigger(deferred, 0, count),
+            two.browser_callback_trigger(memo, 0, count)
+        );
+    }
+    assert_eq!(
+        two.reactive_result_slot(deferred, ResultSlot::Whole),
+        Some(ReactiveRole::Accessor)
+    );
+    assert_eq!(
+        two.accessor_getter_length(deferred, ResultSlot::Whole),
+        Some(0)
+    );
+    // Not measured for `createDeferred`, so not stated.
+    assert!(!two.supports_sync_option(deferred));
+    assert!(!two.accessor_yields_only_its_compute(deferred));
+}
+
+/// rc.17's `lazyModule(fn)`: `lazy`'s loader without the component. `fn` runs
+/// only from the returned `load`, on its caller's stack (`solid-js@2.0.0-rc.17`
+/// `dist/solid.dev.js:1408-1431`), so it is never during the call, and its
+/// reads are not a reporting slot: they meet the invoker's window.
+#[test]
+fn lazy_module_runs_its_loader_only_from_the_result() {
+    let two: &dyn Dialect = &Solid2::RC17;
+    let primitive = Primitive::LazyModule;
+    assert_eq!(two.callback_positions(primitive), &[0]);
+    assert_eq!(
+        two.callback_execution_at(primitive, 0, 1),
+        Some(Execution::Deferred)
+    );
+    assert_eq!(two.callback_execution_word_at(primitive, 0, 1), None);
+    assert_eq!(
+        two.callback_owner_at(primitive, 0, 1),
+        Some(CallbackOwner::Inherits)
+    );
+    assert!(two.callback_requires_return_invocation(primitive, 0));
+    assert!(two.runs_callback_deferred(primitive));
+    assert!(!two.reports_untracked_reads_at(primitive, 0, 1));
+    assert!(!two.callback_inherits_calling_window(primitive, 0));
+    assert_eq!(two.renders_loaded_default_argument(primitive, 1), None);
+    assert!(!two.creates_reactive_source(primitive));
+}
+
+/// rc.17's `onHydrationEnd(callback)`: a microtask, or the hydration drain on
+/// `hydrate`'s caller's stack (`solid-js@2.0.0-rc.17`
+/// `dist/solid.dev.js:385-404`; `server.js:2731-2733`), so never during the
+/// call and with an owner only when the drain has one.
+#[test]
+fn on_hydration_end_runs_its_callback_later_with_a_conditional_owner() {
+    let two: &dyn Dialect = &Solid2::RC17;
+    let primitive = Primitive::OnHydrationEnd;
+    assert_eq!(two.callback_positions(primitive), &[0]);
+    assert_eq!(
+        two.callback_execution_at(primitive, 0, 1),
+        Some(Execution::Deferred)
+    );
+    assert_eq!(
+        two.callback_execution_word_at(primitive, 0, 1),
+        Some(Execution::Deferred)
+    );
+    assert_eq!(
+        two.callback_owner_at(primitive, 0, 1),
+        Some(CallbackOwner::Conditional)
+    );
+    assert!(two.runs_callback_deferred(primitive));
+    assert!(!two.callback_requires_return_invocation(primitive, 0));
+    assert!(!two.reports_untracked_reads_at(primitive, 0, 1));
+    assert!(!two.callback_preserves_owner_write_context(primitive));
 }

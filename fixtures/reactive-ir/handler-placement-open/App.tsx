@@ -67,7 +67,8 @@ export function Reassigned() {
   return <button onPointerDown={handlers.onPointerDown} />;
 }
 
-// rc.13 installs lowercase on-keys too.
+// rc.13 installs lowercase on-keys too; rc.17 sets `onpointerdown` as an
+// attribute, so no listener and no owner claim.
 export function LowercaseSpread() {
   return <button {...{ title: "lowercase", onpointerdown: () => createRenderEffect(() => "lowercase", () => {}) }} />;
 }

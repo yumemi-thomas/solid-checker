@@ -83,6 +83,47 @@ pub(super) fn audit(
     packages: &mut PackageAudits,
     generation: Option<&BTreeMap<String, String>>,
 ) -> Result<(), String> {
+    let closure = closure(directory, specifier, inputs, packages, generation)?;
+    let pins: Vec<Pin> = serde_json::from_str(include_str!("host-plugin-pins.json"))
+        .map_err(|error| format!("invalid compiled host plugin pins: {error}"))?;
+    if pinned(&pins, &closure) {
+        Ok(())
+    } else {
+        Err(format!(
+            "{}: unaudited installed closure {}@{} sha256:{}",
+            closure.root.display(),
+            closure.name,
+            closure.version,
+            closure.digest
+        ))
+    }
+}
+
+/// One installed plugin closure: the exact identity a pin names, plus the
+/// per-package and edge rows it digests (review evidence, never authority).
+pub(super) struct Closure {
+    pub root: PathBuf,
+    pub name: String,
+    pub version: String,
+    pub digest: String,
+    // Read by the installed-closure review test only.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub rows: BTreeSet<String>,
+}
+
+fn pinned(pins: &[Pin], closure: &Closure) -> bool {
+    pins.iter().any(|pin| {
+        pin.name == closure.name && pin.version == closure.version && pin.digest == closure.digest
+    })
+}
+
+pub(super) fn closure(
+    directory: &Path,
+    specifier: &str,
+    inputs: &mut Vec<PathBuf>,
+    packages: &mut PackageAudits,
+    generation: Option<&BTreeMap<String, String>>,
+) -> Result<Closure, String> {
     let name = match specifier {
         "filesystem-routing/vite" => "filesystem-routing",
         "unocss/vite" => "unocss",
@@ -290,21 +331,17 @@ pub(super) fn audit(
     let digest = format!(
         "{:x}",
         Sha256::digest(
-            serde_json::to_vec(&rows.into_iter().collect::<Vec<_>>())
-                .expect("audit rows serialize")
+            serde_json::to_vec(&rows.iter().collect::<Vec<_>>()).expect("audit rows serialize")
         )
     );
-    let pins: Vec<Pin> = serde_json::from_str(include_str!("host-plugin-pins.json"))
-        .map_err(|error| format!("invalid compiled host plugin pins: {error}"))?;
-    if pins
-        .iter()
-        .any(|pin| pin.name == name && pin.version == version && pin.digest == digest)
-    {
-        Ok(())
-    } else {
-        Err(format!(
-            "{}: unaudited installed closure {name}@{version} sha256:{digest}",
-            root.display()
-        ))
-    }
+    Ok(Closure {
+        root,
+        name: name.to_owned(),
+        version: version.to_owned(),
+        digest,
+        rows,
+    })
 }
+
+#[cfg(test)]
+mod tests;

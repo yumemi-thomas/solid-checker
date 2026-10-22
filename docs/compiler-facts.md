@@ -133,6 +133,16 @@ Therefore:
 This asymmetry is intentional. Shared consumers see one normalized model while
 the older producer cannot certify facts it never emitted.
 
+## Refused sources
+
+A compile error is a refusal of that file (`CompilerProviderError::Refused`),
+not a producer failure (ADR 0360). The backend records
+`ExecutionMap::refused`: no producer, no operations, both completeness flags
+false, and `refusal` holding the compiler's message. Its emptiness is not a
+census: consumers ask `ExecutionMap::withheld` and place no site of the file.
+A trace that is missing, of another version or identity, or that leaves a JSX
+expression unclassified still fails the check.
+
 ## Compatibility projection
 
 Existing IR consumers continue to receive conservative projections:

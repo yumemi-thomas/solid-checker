@@ -138,6 +138,10 @@ fn execution_role_where(
     within: Option<Span>,
     callback_applies: impl Fn(&solid_facts::compiler::CallbackRole) -> bool,
 ) -> ExecutionRole {
+    // ADR 0360: a file the compiler refused has no facts to place anything.
+    if facts.withheld() {
+        return ExecutionRole::Unknown;
+    }
     // Only facts strictly inside `within` place `span`, when given.
     let inside =
         |region: Span| within.is_none_or(|within| within.contains(region) && within != region);

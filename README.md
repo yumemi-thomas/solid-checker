@@ -93,7 +93,7 @@ downloads only the binary matching your platform.
 
 | | Solid 2.0 |
 | --- | --- |
-| Audited runtime | `solid-js@2.0.0-rc.9`, `@solidjs/signals@2.0.0-rc.9` and `@solidjs/web@2.0.0-rc.9` |
+| Audited runtime | `solid-js@2.0.0-rc.17`, `@solidjs/signals@2.0.0-rc.17` and `@solidjs/web@2.0.0-rc.17` |
 | Dialect id | `solid-v2` |
 | Rule names | Unprefixed |
 | Catalog | 32 rules |

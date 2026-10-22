@@ -695,10 +695,11 @@ pub(super) fn named_callback_write_role(
                 continue;
             };
             let execution = callback_execution_at_call(file, call, primitive, index, lookup);
+            // A root body is judged by its owner whenever it runs, so the
+            // root claim needs no stated timing (rc.17 `hydrate`).
             let site = if lookup
                 .dialect
                 .callback_runs_in_created_root(primitive, index)
-                && execution == Some(Execution::Inline)
             {
                 (root_body == RootBodyGuard::Rejects).then_some(ExecutionRole::UntrackedRendering)
             } else if lookup
@@ -745,6 +746,12 @@ pub(super) fn semantic_execution_role_within(
     lookup: &SemanticLookup<'_>,
     classifying: &mut HashSet<(String, Span)>,
 ) -> ExecutionRole {
+    // ADR 0360: no site of a file the compiler refused is placed. Its syntax
+    // is real, but which of its code runs tracked, deferred, on an event or
+    // during rendering is exactly what the missing compiler facts decide.
+    if file.compiler.withheld() {
+        return ExecutionRole::Unknown;
+    }
     let role = semantic_role_before_awaits(
         file,
         span,

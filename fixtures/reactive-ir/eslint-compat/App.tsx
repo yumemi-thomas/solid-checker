@@ -31,14 +31,9 @@ export function Wrong() {
           assignment wins and the first handler is dead — and TypeScript sees
           two distinct, legal properties and says nothing. */}
       <button onClick={() => {}} onclick={() => {}} />
-      {/* SC8003 again: `attr:title` and `title` share the one static template
-          attribute slot, where the first wins. Also distinctly spelled, so
-          also invisible to TypeScript's duplicate checks. (`attr:` resolves
-          through the user-augmentable `JSX.ExplicitAttributes`, empty by
-          default, so a project reaching this markup has declared the name —
-          the documented way to use `attr:`. TypeScript's complaint about an
-          *undeclared* `attr:` name is a different claim from the slot one.) */}
-      <div attr:title="first" title="second" />
+      {/* The `attr:title` + `title` slot pair is gone: Solid 2.0.0-rc.17's
+          compiler rejects `attr:`, `bool:`, `on:`, `oncapture:` and `use:` on
+          intrinsic elements, so no project can build that markup. */}
       {/* SC8003: a spread followed by an attribute. The later attribute
           legitimately wins, so TypeScript reports nothing even though the two
           names are identical — the one identical-name order it leaves alone. */}
@@ -135,26 +130,15 @@ export function Right() {
       <a href="/dismiss">dismiss</a>
       <div>{name()}</div>
       <label class="field" for="name">Name</label>
-      {/* The namespaces Solid's compiler recognises. */}
-      <input
-        prop:value={name()}
-        attr:data-x="1"
-        bool:disabled={true}
-        on:click={() => {}}
-        use:autofocus={true}
-      />
-      {/* Clean under the compiler's own lowering, though upstream folds all
-          of these onto one name and calls them duplicates: `on:click` binds a
-          bubble listener and `oncapture:click` a capture listener (both
-          fire); a delegated `onClick` writes `$$click` while `on:click`
-          attaches a listener (both fire); and `mouseenter` is not delegated,
-          so each occurrence attaches its own listener (both fire). */}
-      <button on:click={() => {}} oncapture:click={() => {}} />
-      <button onClick={() => {}} on:click={() => {}} />
+      {/* `prop:` is the intrinsic namespace rc.17's compiler still accepts. */}
+      <input prop:value={name()} />
+      {/* Clean under the compiler's own lowering, though upstream calls it a
+          duplicate: `mouseenter` is not delegated, so each occurrence
+          attaches its own listener (both fire). */}
       <button onMouseEnter={() => {}} onMouseEnter={() => {}} />
-      {/* `-1` parses as a UnaryExpression, not a NumericLiteral, so the
-          compiler never freezes it into the template: each occurrence
-          attaches its own listener and neither is dead. */}
+      {/* rc.17's compiler lowers only `on` + an uppercase letter as a
+          listener, so `on-foo` is a plain attribute here and neither SC1007
+          nor SC8003 applies. */}
       <div on-foo={-1} on-foo={-2} />
       {/* `-1` and `NaN` are primitive numbers to TypeScript, but neither is a
           StringLiteral/NumericLiteral node that the compiler freezes. */}

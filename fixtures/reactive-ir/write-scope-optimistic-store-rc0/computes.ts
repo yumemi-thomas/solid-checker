@@ -48,10 +48,9 @@ export const signalInMemo = createMemo(() => {
   return 1;
 });
 
-// None on rc.0, and not claimed: a store setter the checker knows only by its
-// type (an alias binding) could be `createOptimisticStore`'s, which is legal
-// here, or `createStore`'s, which throws. The first alias is a correct
-// silence, the second a miss. On rc.1-rc.9 both throw, and both are reported.
+// A `const` alias of a tuple-bound setter keeps its primitive: on rc.0 the
+// `createOptimisticStore` alias is legal here and silent, the `createStore`
+// alias throws and is reported. On rc.1-rc.9 both throw, and both are reported.
 const aliasedOptimistic = setOptimistic;
 const aliasedStore = setState;
 export const aliasedInMemo = createMemo(() => {

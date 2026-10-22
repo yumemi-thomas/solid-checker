@@ -2,16 +2,6 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "unaudited-solid-release",
-      "code": "SC9014",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/read-after-await-reach/node_modules/solid-js/package.json",
-      "start": 0,
-      "end": 0,
-      "fixes": 0
-    },
-    {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "violation",

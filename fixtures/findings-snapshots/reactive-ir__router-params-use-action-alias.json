@@ -1,0 +1,35 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "package-behavior-unavailable",
+      "code": "SC9005",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/router-params/variants/use-action-alias/App.tsx",
+      "start": 33,
+      "end": 101,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/router-params/variants/use-action-alias/App.tsx",
+      "start": 284,
+      "end": 299,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/router-params/variants/use-action-alias/App.tsx",
+      "start": 284,
+      "end": 299,
+      "fixes": 0
+    }
+  ]
+}

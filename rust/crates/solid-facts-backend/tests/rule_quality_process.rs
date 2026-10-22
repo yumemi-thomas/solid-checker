@@ -12,7 +12,9 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
     };
 
     for (rule, count) in [
-        ("reactive-write-in-owned-scope", 11),
+        // rc.17's `createOptimistic` setter meets no owned-scope guard, so
+        // `owned-leaf-extended-invalid.tsx`'s optimistic write is legal there.
+        ("reactive-write-in-owned-scope", 10),
         ("action-called-in-owned-scope", 2),
         // Review round 4: two zero-parameter `Show` children are tracked
         // inserts, not strict-read callbacks.
@@ -91,7 +93,7 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         (
             "owned-leaf-extended-invalid.tsx",
             [
-                ("reactive-write-in-owned-scope", 4),
+                ("reactive-write-in-owned-scope", 3),
                 ("action-called-in-owned-scope", 1),
                 ("leaf-owner-forbidden-call", 2),
             ]

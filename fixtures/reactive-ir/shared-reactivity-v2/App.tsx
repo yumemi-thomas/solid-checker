@@ -87,16 +87,18 @@ export function FactoryHandler() {
 
 declare const maybeUncheckedHandler: (() => void) | number;
 
-// TypeScript does not check hyphenated JSX attribute names. Native `on*`
-// lowering still treats these as handlers, so the number is a violation and
-// the callable/non-callable union is uncertifiable rather than silently safe.
+// TypeScript does not check hyphenated JSX attribute names. The compiler
+// lowers `on` + an uppercase letter as a handler, so the number is a violation
+// and the callable/non-callable union is uncertifiable rather than silently
+// safe. `on-event` is a plain attribute on rc.17, so it is silent.
 export function UncheckedHandlers() {
   const numberHandler = 1;
   return (
     <div>
-      <button on-event={numberHandler}>invalid</button>
-      <button on-maybe={maybeUncheckedHandler}>uncertain</button>
-      <button on-safe={() => {}}>safe</button>
+      <button onCustom-event={numberHandler}>invalid</button>
+      <button onCustom-maybe={maybeUncheckedHandler}>uncertain</button>
+      <button onCustom-safe={() => {}}>safe</button>
+      <button on-event={numberHandler}>attribute</button>
     </div>
   );
 }

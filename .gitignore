@@ -52,6 +52,8 @@ fixtures/upstream-parity/.staging/
 !rust/crates/solid-facts-backend/tests/fixtures/unaudited-release-rc9/node_modules/**
 !rust/crates/solid-facts-backend/tests/fixtures/unaudited-release-rc13/node_modules/
 !rust/crates/solid-facts-backend/tests/fixtures/unaudited-release-rc13/node_modules/**
+!rust/crates/solid-facts-backend/tests/fixtures/unaudited-release-rc17/node_modules/
+!rust/crates/solid-facts-backend/tests/fixtures/unaudited-release-rc17/node_modules/**
 !rust/crates/solid-facts-backend/tests/fixtures/unaudited-release-rc8/node_modules/
 !rust/crates/solid-facts-backend/tests/fixtures/unaudited-release-rc8/node_modules/**
 # Contract integration tests use small, hand-written packages as fixtures.
@@ -93,6 +95,24 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/store-root-write-rc13/node_modules/**
 !fixtures/reactive-ir/rc13-flush-in-effect-callback/node_modules/
 !fixtures/reactive-ir/rc13-flush-in-effect-callback/node_modules/**
+!fixtures/reactive-ir/rc17-dynamic-component/node_modules/
+!fixtures/reactive-ir/rc17-dynamic-component/node_modules/**
+!fixtures/reactive-ir/rc17-dispatch-as-interaction/node_modules/
+!fixtures/reactive-ir/rc17-dispatch-as-interaction/node_modules/**
+!fixtures/reactive-ir/rc17-callback-exports-mixed/node_modules/
+!fixtures/reactive-ir/rc17-callback-exports-mixed/node_modules/**
+!fixtures/reactive-ir/rc17-create-deferred/node_modules/
+!fixtures/reactive-ir/rc17-create-deferred/node_modules/**
+!fixtures/reactive-ir/rc17-lazy-module/node_modules/
+!fixtures/reactive-ir/rc17-lazy-module/node_modules/**
+!fixtures/reactive-ir/rc17-on-hydration-end/node_modules/
+!fixtures/reactive-ir/rc17-on-hydration-end/node_modules/**
+!fixtures/reactive-ir/rc17-set-link-claim-csr/node_modules/
+!fixtures/reactive-ir/rc17-set-link-claim-csr/node_modules/**
+!fixtures/reactive-ir/rc17-set-link-claim-ssr/node_modules/
+!fixtures/reactive-ir/rc17-set-link-claim-ssr/node_modules/**
+!fixtures/reactive-ir/rc17-set-link-claim-unknown/node_modules/
+!fixtures/reactive-ir/rc17-set-link-claim-unknown/node_modules/**
 !fixtures/reactive-ir/rc13-flush-in-effect-copy-barrels/node_modules/
 !fixtures/reactive-ir/rc13-flush-in-effect-copy-barrels/node_modules/**
 !fixtures/reactive-ir/rc13-flush-in-effect-copy-barrels/lib/node_modules/
@@ -287,6 +307,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/inferred-host-alias-divergent/node_modules/**
 !fixtures/reactive-ir/inferred-host-certification-clean/node_modules/
 !fixtures/reactive-ir/inferred-host-certification-clean/node_modules/**
+!fixtures/reactive-ir/inferred-host-set-link-claim/node_modules/
+!fixtures/reactive-ir/inferred-host-set-link-claim/node_modules/**
 !fixtures/reactive-ir/inferred-host-callback-invocation/node_modules/
 !fixtures/reactive-ir/inferred-host-callback-invocation/node_modules/**
 !fixtures/reactive-ir/accessor-provenance/node_modules/
@@ -471,6 +493,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/router-params-linked-dependency/node_modules/**
 !fixtures/reactive-ir/router-params-pnp/node_modules/
 !fixtures/reactive-ir/router-params-pnp/node_modules/**
+!fixtures/reactive-ir/router-params-links/node_modules/
+!fixtures/reactive-ir/router-params-links/node_modules/**
 !fixtures/reactive-ir/imported-const-primitives/node_modules/
 !fixtures/reactive-ir/imported-const-primitives/node_modules/**
 !fixtures/reactive-ir/imported-const-commonjs/node_modules/
@@ -497,3 +521,11 @@ packages/wasm/owned/
 !fixtures/reactive-ir/arrow-bound-helper-workspace-link/node_modules/**
 !fixtures/reactive-ir/context-read-package/node_modules/
 !fixtures/reactive-ir/context-read-package/node_modules/**
+!fixtures/reactive-ir/compiler-refused-file/node_modules/
+!fixtures/reactive-ir/compiler-refused-file/node_modules/**
+!fixtures/reactive-ir/compiler-refused-dependents/node_modules/
+!fixtures/reactive-ir/compiler-refused-dependents/node_modules/**
+!fixtures/reactive-ir/compiler-accepted-dependents/node_modules/
+!fixtures/reactive-ir/compiler-accepted-dependents/node_modules/**
+!fixtures/reactive-ir/dependency-source-compiler-refused/node_modules/
+!fixtures/reactive-ir/dependency-source-compiler-refused/node_modules/**

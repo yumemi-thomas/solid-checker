@@ -224,6 +224,13 @@ pub struct GapScope {
     pub specifier: &'static str,
     /// Export names, exactly as the module's declarations spell them.
     pub exports: &'static [&'static str],
+    /// Whether these exports run project code only while the application
+    /// renders on a server, so an analysis whose rendering is declared
+    /// client-only (`--rendering csr`) has nothing unclassified from them
+    /// and the gap is not due for it. The rendering declaration is the
+    /// user's premise, as it is for every server-rendering answer; an
+    /// undeclared or server rendering keeps the gap.
+    pub server_rendering_only: bool,
 }
 
 /// A release line refused within a modelled major, and why.

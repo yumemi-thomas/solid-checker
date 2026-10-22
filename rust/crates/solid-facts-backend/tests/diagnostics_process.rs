@@ -1577,10 +1577,10 @@ fn solid2_precision_corrections_are_end_to_end() {
         // unresolved callbacks after the await, which no role places and which
         // are uncertifiable (ADR 0332).
         ("strict-read-untracked", 8),
-        // Still four, but not the same four: the 2026-08-17 narrowing traded the
-        // three root-record writes for the nested, cast, and props writes
-        // asserted by span below. A count alone cannot tell those apart.
-        ("no-direct-mutation", 4),
+        // The nested, cast and props writes, plus the three root-record
+        // writes: on the audited rc.17 `Store<T> = T`, so a root write
+        // type-checks and is this checker's (asserted by span below).
+        ("no-direct-mutation", 7),
         ("leaf-owner-forbidden-call", 1),
         // One fewer than before ADR 0345 review D: the wrapper-built callback is
         // no longer named, so its cleanup is not reported; the rest of the
@@ -1617,16 +1617,13 @@ fn solid2_precision_corrections_are_end_to_end() {
         "a plain assignment target is a write, not a read"
     );
 
-    // 2.0's store proxy is shallowly `Readonly`, so a write to a *root*
-    // property is TS2540 and no longer this checker's. The shallowness and the
-    // cast escape hatch are what remain, and each is pinned by span -- the
-    // count above is satisfied by four findings either way, so only these
-    // assertions distinguish the narrowing from a regression that dropped the
-    // wrong three.
+    // From `@solidjs/signals` rc.7 `Store<T> = T`, so a write to a *root*
+    // property type-checks on the audited rc.17 and is this checker's; on
+    // rc.0-rc.6 it is TS2540 (`store-root-write-rc3` pins that silence).
     for root_write in ["profile.name = ", "profile.count += ", "profile.count++"] {
         assert!(
-            !starts("no-direct-mutation").contains(&start_of(root_write)),
-            "a root store property is TS2540, so {root_write:?} is TypeScript's to report"
+            starts("no-direct-mutation").contains(&start_of(root_write)),
+            "a root store property type-checks on rc.17, so {root_write:?} is reported"
         );
     }
     for kept in [

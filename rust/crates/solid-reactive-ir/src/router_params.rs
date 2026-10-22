@@ -17,7 +17,7 @@
 use std::collections::BTreeSet;
 
 use solid_dialect::Dialect;
-use solid_facts::ast::{ImportKind, MemberFact};
+use solid_facts::ast::{ExportKind, ImportKind, MemberFact};
 use solid_facts::core::Span;
 use solid_facts::{FileFacts, ProjectFacts, SpecifierAttestation};
 
@@ -42,7 +42,8 @@ const REPLACEMENT_SPELLINGS: [&str; 5] = [
 
 /// The histories the audited package exports (`routers/index.js`). Each
 /// returns a fresh integration whose `utils` the package itself writes
-/// (`routers/history.js:91,131,178`: `go`, `renderPath`, `parsePath`,
+/// (`routers/history.js:91,131,178` next.26, `:87,127,174` next.41: `go`,
+/// `renderPath`, `parsePath`,
 /// `beforeLeave`) and none of which is `paramsWrapper`.
 pub(crate) const STOCK_HISTORIES: [&str; 3] = ["browserHistory", "hashHistory", "memoryHistory"];
 
@@ -64,6 +65,34 @@ const NAMESPACE_MEMBERS: [&str; 12] = [
     "usePreloadRoute",
     "int",
 ];
+
+/// The `createRouter` option the router calls with its whole context
+/// (`createRouter({ links })`, from `2.0.0-next.41`): a config naming it
+/// withholds both router premises (ADR 0324, 0335).
+pub(crate) const LINKS_KEY: &str = "links";
+
+/// The `createRouter` option every audited release calls as a method of
+/// Root's props, which hold the router context (ADR 0324).
+const PRELOAD_KEY: &str = "preload";
+
+/// The router hook that calls its argument with the router context as
+/// `this`: `useAction(action)` returns `(...args) => action.apply({ r:
+/// useRouter() }, args)` (`dist/data/action.js:137-139` next.16, `:143-145`
+/// next.18 and next.26, `:232-235` next.41).
+const USE_ACTION: &str = "useAction";
+
+/// Router exports whose call returns the router's own action wrapper
+/// (`toAction`: `function (...args) { return invoke.call(this, …) }`, whose
+/// `invoke` keeps `this.r` and calls the project function plainly,
+/// `fn(...variables)`). next.41 adds `formAction`; its `action` is a
+/// deprecation wrapper calling `formAction.apply(this, args)`
+/// (`data/deprecated.js:16`).
+const ACTION_FACTORIES: [&str; 2] = ["action", "formAction"];
+
+/// Router hooks that read an action's members and call nothing on it:
+/// `useSubmissions(fn, filter)` reads `fn.base` (`data/action.js:131`
+/// next.26, `:214` next.41).
+const ACTION_READERS: [&str; 1] = ["useSubmissions"];
 
 /// A history's members the project may call without being able to install
 /// `utils` on it: `get` reads the location and `set` writes one.
@@ -293,6 +322,13 @@ pub fn router_params_status(
     if let Some(reason) = history_not_stock(facts) {
         return RouterParamsStatus::Replaced { spelling: reason };
     }
+    if let Some(reason) = router_context_as_this(facts, &|file| {
+        file.path
+            .as_str()
+            .contains("/node_modules/@solidjs/router/")
+    }) {
+        return RouterParamsStatus::Replaced { spelling: reason };
+    }
     RouterParamsStatus::Applies { version }
 }
 
@@ -334,8 +370,9 @@ pub(crate) fn runtime_agrees(
 ///
 /// The router builds its params object from `utils.paramsWrapper` of the
 /// integration `createRouter` takes from `config.history` (`factory.jsx:141`,
-/// `index.js:1306`). The premise therefore holds only when **every** router
-/// creation in the program names no history, or a stock one called directly
+/// `index.js:1306` next.26; `:255`, `:1595` next.41). The premise therefore
+/// holds only when **every** router creation in the program names no
+/// history, or a stock one called directly
 /// and never given a `utils` afterwards. Anything else -- a config that is not
 /// a closed literal, a history of another origin, a history passed on, a
 /// router reached through a re-export, a namespace member, a dynamic load --
@@ -409,6 +446,27 @@ fn history_not_stock(facts: &ProjectFacts) -> Option<&'static str> {
                 }) else {
                     return Some("a router creation whose config is not a closed literal");
                 };
+                // `2.0.0-next.41` calls `config.links(router, basePath)` with the
+                // whole router context (`claims.js:42-44`), whose `wrapParams` a
+                // computed key could replace. Refused on every release.
+                if config
+                    .literal_members
+                    .iter()
+                    .any(|member| member.key.as_str() == LINKS_KEY)
+                {
+                    return Some("a router config with `links`");
+                }
+                // Every audited release renders `<Root ... preload={config.preload}>`
+                // and calls `props.preload({ params, location, intent })` on Root's
+                // props, which hold `routerState` (next.16 `routers/factory.jsx:125`,
+                // `components.jsx:12`; next.18 and next.26 `:228`, `:12`; next.41
+                // `:295`, `:13`): a non-arrow `preload` receives the router context
+                // as `this`, whose `wrapParams` a computed key could replace.
+                if config.literal_members.iter().any(|member| {
+                    member.key.as_str() == PRELOAD_KEY && !lexical_this(file, member.value)
+                }) {
+                    return Some("a router config `preload` that is not an arrow function");
+                }
                 let Some(history) = config
                     .literal_members
                     .iter()
@@ -460,6 +518,534 @@ fn history_not_stock(facts: &ProjectFacts) -> Option<&'static str> {
         }
     }
     None
+}
+
+/// ADR 0324, 0335: the reason, when some project value may run with the
+/// router context as `this` through `useAction`, which calls
+/// `action.apply({ r: useRouter() }, args)` ([`USE_ACTION`]). `this.r` then
+/// reaches `wrapParams` (ADR 0324) and `matches()`, which hold every route
+/// definition (ADR 0335).
+///
+/// Every reference to the router's `useAction` (an exact named import under
+/// any local name; a namespace member is refused) must be a direct call whose
+/// first argument is proven to keep `this` from project code
+/// ([`action_keeps_this`]): an arrow, or the router's own action wrapper.
+/// Since the router looks `apply` up on the value, a `prototype`,
+/// `__proto__`, `setPrototypeOf` or `getPrototypeOf` spelling, a `__proto__`
+/// key, or a write of a member named `apply` anywhere withholds it as a
+/// tripwire (as ADR 0335's for `Object.prototype`). `skip` names the
+/// router's own files.
+pub(crate) fn router_context_as_this(
+    facts: &ProjectFacts,
+    skip: &dyn Fn(&FileFacts) -> bool,
+) -> Option<&'static str> {
+    let mut called = false;
+    for file in facts.files.iter().filter(|file| !skip(file)) {
+        let ast = &*file.ast;
+        let locals = ActionLocals::of(file);
+        for namespace in &locals.namespaces {
+            for reference in references_to(ast, *namespace) {
+                let member = ast.members.iter().find(|member| member.object == reference);
+                if member.is_none_or(|member| {
+                    ast.computed_members.binary_search(&member.span).is_ok()
+                        || text(file, member.property) == Some(USE_ACTION)
+                }) {
+                    return Some("a router namespace that may reach `useAction`");
+                }
+            }
+        }
+        for local in &locals.use_action {
+            for reference in references_to(ast, *local) {
+                called = true;
+                let Some(call) = ast
+                    .calls
+                    .iter()
+                    .find(|call| call.callee == reference && call.direct_callee && !call.construct)
+                else {
+                    return Some("a `useAction` that is not a direct call");
+                };
+                if !call.arguments.first().is_some_and(|argument| {
+                    !argument.spread && action_keeps_this(facts, skip, file, &locals, argument.span)
+                }) {
+                    return Some("a `useAction` argument that may bind `this`");
+                }
+            }
+        }
+    }
+    if !called {
+        return None;
+    }
+    for file in facts.files.iter().filter(|file| !skip(file)) {
+        let ast = &*file.ast;
+        if ast.members.iter().any(|member| {
+            matches!(
+                text(file, member.property),
+                Some("prototype" | "__proto__" | "setPrototypeOf" | "getPrototypeOf")
+            )
+        }) || ast.object_properties.iter().any(|property| {
+            text(file, property.key).is_some_and(|key| key.trim_matches(['"', '\'']) == "__proto__")
+        }) {
+            return Some("a prototype spelling beside `useAction`");
+        }
+        let targets = ast
+            .assignments
+            .iter()
+            .map(|assignment| assignment.target)
+            .chain(ast.iteration_targets.iter().copied());
+        for target in targets {
+            let target = ast.peel_ts_sugar_span(target);
+            if ast.members.iter().any(|member| {
+                target.contains(member.span)
+                    && (text(file, member.property) == Some("apply")
+                        || ast
+                            .literal_computed_members
+                            .iter()
+                            .any(|literal| literal.span == member.span && literal.key == "apply"))
+            }) {
+                return Some("a write of `apply` beside `useAction`");
+            }
+        }
+    }
+    None
+}
+
+/// The local names a file gives the router exports `useAction` reads.
+struct ActionLocals {
+    use_action: Vec<Span>,
+    factories: Vec<Span>,
+    readers: Vec<Span>,
+    namespaces: Vec<Span>,
+}
+
+impl ActionLocals {
+    fn of(file: &FileFacts) -> Self {
+        let mut locals = Self {
+            use_action: Vec::new(),
+            factories: Vec::new(),
+            readers: Vec::new(),
+            namespaces: Vec::new(),
+        };
+        for import in &file.ast.imports {
+            if import.module.as_str() != ROUTER_PACKAGE || import.type_only {
+                continue;
+            }
+            for binding in import.bindings.iter().filter(|binding| !binding.type_only) {
+                let local = binding.local.span;
+                match (binding.kind, binding.imported.as_deref()) {
+                    (ImportKind::Namespace | ImportKind::Default, _) => {
+                        locals.namespaces.push(local);
+                    }
+                    (_, Some(USE_ACTION)) => locals.use_action.push(local),
+                    (_, Some(name)) if ACTION_FACTORIES.contains(&name) => {
+                        locals.factories.push(local);
+                    }
+                    (_, Some(name)) if ACTION_READERS.contains(&name) => {
+                        locals.readers.push(local);
+                    }
+                    _ => {}
+                }
+            }
+        }
+        locals
+    }
+
+    /// The direct call at `span` of one of `locals`.
+    fn call<'f>(
+        file: &'f FileFacts,
+        span: Span,
+        locals: &[Span],
+    ) -> Option<&'f solid_facts::ast::CallFact> {
+        file.ast.calls.iter().find(|call| {
+            call.span == span
+                && call.direct_callee
+                && !call.construct
+                && declaration_of(file, call.callee)
+                    .is_some_and(|declaration| locals.contains(&declaration))
+        })
+    }
+}
+
+/// Whether `span` is an arrow function, which has no `this` of its own.
+fn arrow_function(file: &FileFacts, span: Span) -> bool {
+    let span = file.ast.peel_ts_sugar_span(span);
+    file.ast.functions.iter().any(|function| {
+        function.span == span && function.kind == solid_facts::ast::FunctionKind::Arrow
+    })
+}
+
+/// The `const` binding (one identifier) the reference at `span` names.
+fn const_binding(file: &FileFacts, span: Span) -> Option<(&solid_facts::ast::BindingFact, Span)> {
+    let declaration = declaration_of(file, file.ast.peel_ts_sugar_span(span))?;
+    file.ast
+        .bindings
+        .iter()
+        .find(|binding| {
+            binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding.immutable
+                && binding.names.iter().any(|name| name.span == declaration)
+        })
+        .map(|binding| (binding, declaration))
+}
+
+/// Whether the value at `span` has a lexical `this`: an arrow, or a `const`
+/// bound to one, which no write can rebind.
+fn lexical_this(file: &FileFacts, span: Span) -> bool {
+    arrow_function(file, span)
+        || const_binding(file, span).is_some_and(|(binding, _)| {
+            binding
+                .initializer
+                .is_some_and(|initializer| arrow_function(file, initializer))
+        })
+}
+
+/// Whether the `useAction` argument at `span` keeps the router context from
+/// project code: an inline arrow, an inline direct call of the router's
+/// [`ACTION_FACTORIES`], or a `const` initialized by one whose every
+/// reference is a [`safe_action_use`]. An unexported `const` in a file with
+/// no direct `eval` is read off the binder; an exported one, or a named
+/// import of one, is followed program-wide ([`exported_action_keeps_this`]).
+/// No project code then holds the value to give it an own `apply`. Anything
+/// else is unproven.
+fn action_keeps_this(
+    facts: &ProjectFacts,
+    skip: &dyn Fn(&FileFacts) -> bool,
+    file: &FileFacts,
+    locals: &ActionLocals,
+    span: Span,
+) -> bool {
+    if own_action(file, locals, span) {
+        return true;
+    }
+    let Some((binding, declaration)) = const_binding(file, span) else {
+        return imported_action(facts, file, span).is_some_and(|(declaring, declaration)| {
+            exported_action_keeps_this(facts, skip, declaring, declaration)
+        });
+    };
+    if exports_local(file, declaration) {
+        return exported_action_keeps_this(facts, skip, file, declaration);
+    }
+    binding
+        .initializer
+        .is_some_and(|initializer| own_action(file, locals, initializer))
+        && !crate::interproc::property_gets::direct_eval_in(file, Span::new(0, u32::MAX))
+        && references_to(&file.ast, declaration)
+            .into_iter()
+            .all(|reference| reference == declaration || safe_action_use(file, locals, reference))
+}
+
+/// An inline arrow or an inline direct call of the router's
+/// [`ACTION_FACTORIES`].
+fn own_action(file: &FileFacts, locals: &ActionLocals, span: Span) -> bool {
+    let span = file.ast.peel_ts_sugar_span(span);
+    arrow_function(file, span) || ActionLocals::call(file, span, &locals.factories).is_some()
+}
+
+/// Whether the module's own export list names the local `declaration`
+/// (`export const save`, `export { save }`, `export default save`).
+fn exports_local(file: &FileFacts, declaration: Span) -> bool {
+    file.ast.exports.iter().any(|export| {
+        export.module.is_none()
+            && export
+                .specifiers
+                .iter()
+                .chain(&export.declarations)
+                .any(|specifier| {
+                    specifier.local.span == declaration
+                        || declaration_of(file, specifier.local.span) == Some(declaration)
+                })
+    })
+}
+
+/// Whether the reference at `reference` hands the action to nothing that can
+/// give it an own `apply`: the first argument of `useAction` or of an
+/// [`ACTION_READERS`] hook, the callee of a call, or the value of an
+/// intrinsic element's unnamespaced attribute (`<form action={save}>`).
+fn safe_action_use(file: &FileFacts, locals: &ActionLocals, reference: Span) -> bool {
+    let ast = &*file.ast;
+    ast.calls.iter().any(|call| {
+        call.direct_callee
+            && !call.construct
+            && call.arguments.first().is_some_and(|argument| {
+                !argument.spread && ast.peel_ts_sugar_span(argument.span) == reference
+            })
+            && declaration_of(file, call.callee).is_some_and(|callee| {
+                locals.use_action.contains(&callee) || locals.readers.contains(&callee)
+            })
+    }) || ast
+        .calls
+        .iter()
+        .any(|call| !call.construct && ast.peel_ts_sugar_span(call.callee) == reference)
+        || ast.jsx_elements.iter().any(|element| {
+            element.member_object.is_none()
+                && text(file, element.name.span)
+                    .is_some_and(|name| name.starts_with(|c: char| c.is_ascii_lowercase()))
+                && element.attributes.iter().any(|attribute| {
+                    // A namespaced attribute (`use:x`) may hand the value to
+                    // project code.
+                    attribute.namespace.is_none()
+                        && attribute
+                            .expression
+                            .is_some_and(|value| ast.peel_ts_sugar_span(value) == reference)
+                })
+        })
+}
+
+/// The declaring file and `const` name span a `useAction` argument names
+/// through a named import, resolved twice and required to agree: the
+/// compiler's attested resolution of the specifier lands on the declaring
+/// module itself (a barrel is not followed), and the import binding's Type
+/// Facts symbol, followed through its aliases, has that one declaration.
+fn imported_action<'f>(
+    facts: &'f ProjectFacts,
+    file: &FileFacts,
+    span: Span,
+) -> Option<(&'f FileFacts, Span)> {
+    let local = declaration_of(file, file.ast.peel_ts_sugar_span(span))?;
+    let import = file.ast.imports.iter().find(|import| {
+        !import.type_only
+            && import.bindings.iter().any(|binding| {
+                binding.local.span == local
+                    && !binding.type_only
+                    && binding.kind == ImportKind::Named
+            })
+    })?;
+    let landed = landing(facts, file, import.span, import.module.as_str())?;
+    let root = canonical_symbol(facts, file.path.as_str(), local)?;
+    let (path, declaration) = sole_declaration(facts, root)?;
+    if path != landed {
+        return None;
+    }
+    let declaring = facts
+        .files
+        .iter()
+        .find(|candidate| candidate.path.as_str() == path)?;
+    const_binding_at(declaring, declaration).map(|_| (declaring, declaration))
+}
+
+/// ADR 0324, 0335: whether an exported `const` action keeps the router
+/// context from project code. It must be initialized by an inline arrow or
+/// router action call, and every analyzed file must be accounted for: each
+/// import of it is a named import whose attested resolution lands on the
+/// declaring module, in a file that does not export it on; no file re-exports
+/// from that module or reaches it as a namespace, default import, dynamic
+/// load or `import =` (an unattested specifier may be it); no file holding it
+/// has a direct `eval`; and every reference, the binder's in each file and
+/// Type Facts' program-wide census of the symbol through every alias, is a
+/// [`safe_action_use`] or the declaring module's own export list.
+///
+/// The program boundary (ADR 0193) is not consulted. An unseen importer in an
+/// open program may pass the action anywhere, which hands out no `this`; it
+/// reaches the router context only by giving the router's own action object
+/// an own `apply`, rewriting an object a selected package creates, which the
+/// package integrity premise (ADR 0300) excludes. An unseen caller of
+/// `useAction` with its own function is outside the program either way.
+fn exported_action_keeps_this(
+    facts: &ProjectFacts,
+    skip: &dyn Fn(&FileFacts) -> bool,
+    declaring: &FileFacts,
+    declaration: Span,
+) -> bool {
+    let Some(binding) = const_binding_at(declaring, declaration) else {
+        return false;
+    };
+    let declaring_locals = ActionLocals::of(declaring);
+    if !binding
+        .initializer
+        .is_some_and(|initializer| own_action(declaring, &declaring_locals, initializer))
+    {
+        return false;
+    }
+    let Some(root) = canonical_symbol(facts, declaring.path.as_str(), declaration) else {
+        return false;
+    };
+    let Some(symbol) = facts.typescript.symbol(root) else {
+        return false;
+    };
+    let module = declaring.path.as_str();
+    // The declaring module's own export list (`export { save }`,
+    // `export { save as other }`): its module surface.
+    let surface = declaring
+        .ast
+        .exports
+        .iter()
+        .filter(|export| export.module.is_none() && export.kind != ExportKind::Default)
+        .flat_map(|export| export.specifiers.iter().chain(&export.declarations))
+        .map(|specifier| specifier.local.span)
+        .collect::<Vec<_>>();
+    for file in facts.files.iter().filter(|file| !skip(file)) {
+        let ast = &*file.ast;
+        if file.source.contains("import.meta.glob") {
+            return false;
+        }
+        // ADR 0339's premise: installed code does not load project modules.
+        let installed = file.path.as_str().contains("/node_modules/");
+        let reaches = |span: Span, specifier: Option<&str>| {
+            !installed
+                && specifier.is_none_or(|specifier| {
+                    landing(facts, file, span, specifier).is_none_or(|path| path == module)
+                })
+        };
+        if ast.exports.iter().any(|export| {
+            !export.type_only
+                && export.module.is_some()
+                && reaches(export.span, export.module.as_deref())
+        }) || ast
+            .module_loads
+            .iter()
+            .any(|load| reaches(load.span, load.specifier.as_deref()))
+            || ast
+                .import_equals
+                .iter()
+                .any(|import| !import.type_only && reaches(import.span, Some(&import.module)))
+            || ast.imports.iter().any(|import| {
+                !import.type_only
+                    && import.bindings.iter().any(|binding| {
+                        !binding.type_only
+                            && matches!(binding.kind, ImportKind::Namespace | ImportKind::Default)
+                    })
+                    && reaches(import.span, Some(import.module.as_str()))
+            })
+        {
+            return false;
+        }
+        let here = std::ptr::eq(file, declaring);
+        let mut names = Vec::new();
+        if here {
+            names.push(declaration);
+        }
+        for import in ast.imports.iter().filter(|import| !import.type_only) {
+            let landed = landing(facts, file, import.span, import.module.as_str());
+            for binding in import.bindings.iter().filter(|binding| !binding.type_only) {
+                match canonical_symbol(facts, file.path.as_str(), binding.local.span) {
+                    Some(symbol) if symbol == root => {}
+                    Some(_) => continue,
+                    // No symbol for a binding that may be the module's: unknown.
+                    None if landed.is_none_or(|path| path == module) => return false,
+                    None => continue,
+                }
+                if binding.kind != ImportKind::Named
+                    || landed != Some(module)
+                    || exports_local(file, binding.local.span)
+                {
+                    return false;
+                }
+                names.push(binding.local.span);
+            }
+        }
+        if names.is_empty() {
+            continue;
+        }
+        if crate::interproc::property_gets::direct_eval_in(file, Span::new(0, u32::MAX)) {
+            return false;
+        }
+        let locals = ActionLocals::of(file);
+        for name in &names {
+            if !references_to(ast, *name).into_iter().all(|reference| {
+                reference == *name
+                    || (here && surface.contains(&reference))
+                    || safe_action_use(file, &locals, reference)
+            }) {
+                return false;
+            }
+        }
+    }
+    // The compiler's census: every identifier any analyzed file resolves to
+    // the symbol, through every alias. The `useAction` argument is one, so an
+    // empty census is one Type Facts did not carry, not an unused action.
+    if symbol.references().next().is_none() {
+        return false;
+    }
+    symbol.references().all(|reference| {
+        let Some(file) = facts
+            .files
+            .iter()
+            .find(|file| file.path.as_str() == reference.path.as_ref())
+        else {
+            return false;
+        };
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(reference.start_byte),
+            u32::try_from(reference.end_byte),
+        ) else {
+            return false;
+        };
+        let span = Span::new(start, end);
+        (std::ptr::eq(file, declaring) && (span == declaration || surface.contains(&span)))
+            || safe_action_use(file, &ActionLocals::of(file), span)
+    })
+}
+
+/// The module path the compiler's attested resolution of `specifier`, written
+/// in the statement at `span`, lands on; `None` when it is unattested.
+fn landing<'f>(
+    facts: &'f ProjectFacts,
+    file: &FileFacts,
+    span: Span,
+    specifier: &str,
+) -> Option<&'f str> {
+    let SpecifierAttestation::Attested(row) =
+        facts
+            .resolved_imports
+            .as_ref()?
+            .specifier(file.path.as_str(), span, specifier)
+    else {
+        return None;
+    };
+    let path = if row.included_path.is_empty() {
+        &row.resolved_path
+    } else {
+        &row.included_path
+    };
+    (!path.is_empty()).then_some(path.as_ref())
+}
+
+/// The Type Facts symbol of the entity at exactly `span`, followed through its
+/// aliases (cycle-safe) to the symbol that declares it.
+fn canonical_symbol<'f>(facts: &'f ProjectFacts, path: &str, span: Span) -> Option<&'f str> {
+    let entity = facts
+        .typescript
+        .entities_for_path(path)
+        .iter()
+        .find(|entity| {
+            entity.location.start_byte == u64::from(span.start)
+                && entity.location.end_byte == u64::from(span.end)
+                && !entity.symbol.is_empty()
+        })?;
+    let mut current: &str = entity.symbol.as_ref();
+    let mut seen = BTreeSet::new();
+    loop {
+        if !seen.insert(current) {
+            return None;
+        }
+        let symbol = facts.typescript.symbol(current)?;
+        if symbol.alias_target().is_empty() {
+            return Some(symbol.id());
+        }
+        current = symbol.alias_target();
+    }
+}
+
+/// The one declaration of `symbol`, as its file path and name span.
+fn sole_declaration<'f>(facts: &'f ProjectFacts, symbol: &str) -> Option<(&'f str, Span)> {
+    let [declaration] = facts.typescript.symbol(symbol)?.declarations() else {
+        return None;
+    };
+    Some((
+        declaration.location.path.as_ref(),
+        Span::new(
+            u32::try_from(declaration.location.start_byte).ok()?,
+            u32::try_from(declaration.location.end_byte).ok()?,
+        ),
+    ))
+}
+
+/// The `const` binding (one identifier) whose name is at `declaration`.
+fn const_binding_at(file: &FileFacts, declaration: Span) -> Option<&solid_facts::ast::BindingFact> {
+    file.ast.bindings.iter().find(|binding| {
+        binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding.immutable
+            && binding.names.iter().any(|name| name.span == declaration)
+    })
 }
 
 fn names_router(specifier: Option<&str>) -> bool {

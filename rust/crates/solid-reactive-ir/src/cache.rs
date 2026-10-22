@@ -653,6 +653,7 @@ fn same_compiler_model_semantics(
         _ => false,
     };
     same_producer_semantics
+        && previous.refusal == current.refusal
         && previous.source_operations_complete == current.source_operations_complete
         && previous.generated_operations_complete == current.generated_operations_complete
         && previous.operations == current.operations

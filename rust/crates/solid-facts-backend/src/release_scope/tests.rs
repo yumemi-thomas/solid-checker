@@ -9,6 +9,7 @@ const SCOPE: GapScope = GapScope {
         "sharedConfig",
         "$DEVCOMP",
     ],
+    server_rendering_only: false,
 };
 
 fn reaches(files: &[(&str, &str)]) -> Vec<Reach> {

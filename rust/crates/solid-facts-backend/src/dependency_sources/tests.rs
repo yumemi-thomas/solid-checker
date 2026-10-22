@@ -203,6 +203,7 @@ fn a_reexporting_package_without_manifest_identity_keeps_its_selection_identity(
         &[],
         &BTreeSet::new(),
         &[],
+        &|_, _| None,
         &mut notes,
     )
     .unwrap();
@@ -232,6 +233,7 @@ fn a_project_installing_none_of_the_packages_is_analyzed_as_usual() {
         &[],
         &BTreeSet::new(),
         &[],
+        &|_, _| None,
         &mut notes,
     )
     .unwrap();
@@ -319,6 +321,7 @@ fn a_linked_workspace_package_is_project_code() {
         &["solid-js".to_owned()].into_iter().collect(),
         &["@solidjs/"],
         &mut super::UnsupportedBindings::default(),
+        &|_, _| None,
         &mut notes,
     )
     .unwrap()
