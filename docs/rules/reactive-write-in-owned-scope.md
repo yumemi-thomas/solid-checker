@@ -47,11 +47,18 @@ value the checker cannot resolve to one declaration, is not judged as a root
 body.
 
 `render(code, el)` and `hydrate(code, el)` run `code` the same way on
-`@solidjs/web` rc.13 (ADR 0353). `render` calls `code()` inside the
-`createRoot` it makes (`dist/web.dev.js:488-495`), and `hydrate` reaches that
-`render` on every path (`:1521-1620`), so a setter directly in `code`, or in a
-helper only `code` calls, is reported as in a `createRoot` body. Only rc.13's
-`@solidjs/web` was read. On every other release a write directly in `code` is
+`@solidjs/web` rc.13 and rc.17 (ADR 0353). `render` calls `code()` inside the
+`createRoot` it makes (rc.17 `dist/web.dev.js:551-558`), and `hydrate` reaches
+that `render` on every path (`:1626-1735`), so a setter directly in `render`'s
+`code`, or in a helper only `code` calls, is reported as in a `createRoot`
+body. rc.17's `hydrate` may run `code` after it returns (a `DOMContentLoaded`
+listener or a microtask, `:1631-1645`), so a write there is uncertifiable on
+rc.17. Only rc.13's and rc.17's `@solidjs/web` were read.
+
+On `@solidjs/signals` rc.17 the setter `createOptimistic` returns is
+`optimisticWrite`, which meets no owned-scope guard (the rc.17 review C1), so
+it is legal in every owned scope there. A signal setter is then reported only
+when it, or a `const` alias of it, is proven to be `createSignal`'s. On every other release a write directly in `code` is
 uncertifiable: whether a root wraps it was not measured, so it is neither
 reported nor legal.
 

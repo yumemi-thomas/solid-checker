@@ -125,8 +125,33 @@ pub struct Solid2 {
     /// every path (`dist/web.dev.js:1521-1620`). No other `@solidjs/web` release
     /// was read for this, so each keeps `false`.
     render_creates_root: bool,
-    /// ADR 0358: rc.13 web assignProp installs un-namespaced `on` keys.
-    spread_event_keys_audited: bool,
+    /// ADR 0358, from `@solidjs/web`: which spread keys `assignProp`
+    /// installs as listeners (`releases::SpreadEventKeys`).
+    spread_event_keys: releases::SpreadEventKeys,
+    /// From `@solidjs/signals`: whether the setter `createOptimistic` returns
+    /// meets the dev owned-scope write guard
+    /// ([`Dialect::optimistic_signal_setter_guarded`]). rc.13 returns
+    /// `setSignal.bind(null, node)`; rc.17 returns `optimisticWrite.bind(null,
+    /// node)` (`dist/dev.js:2423-2432`), which only queues a guess
+    /// (`:294-306`): measured legal in a root body and a memo compute on rc.17,
+    /// `REACTIVE_WRITE_IN_OWNED_SCOPE` on rc.13. `true` on read releases
+    /// through rc.13; rc.17, unread and unresolved keep `false`.
+    optimistic_signal_setter_guarded: bool,
+    /// From `@solidjs/signals`: whether a pending accessor read inside
+    /// `latest(fn)` still throws `PENDING_ASYNC_UNTRACKED_READ` in a dev
+    /// strict-read window. rc.13's `read()` exempts only `isPending`
+    /// (`dist/dev-shared.js:6386`); rc.17 hands every `latest`/`isPending`
+    /// read to `verdictValue` first (`dist/dev-shared.js:5258-5281`,
+    /// `dist/dev.js:1349-1358`), which warns but does not throw (measured).
+    /// `true` on read releases through rc.13; rc.17, unread and unresolved
+    /// keep `false`, which reports nothing.
+    latest_rejects_pending_read: bool,
+    /// From `@solidjs/web`: whether `hydrate` calls `code` before it returns
+    /// on every path. rc.17 defers it behind `DOMContentLoaded` or a
+    /// microtask while the document is loading (`dist/web.dev.js:1631-1645`),
+    /// so no inline execution is stated there; read releases through rc.13
+    /// keep `true`.
+    hydrate_code_inline: bool,
 }
 
 /// The Solid 2 language's own vocabulary, [`Solid2::CONSERVATIVE`], spelled
@@ -235,25 +260,53 @@ impl Dialect for Solid2 {
         bytes.len() > 2 && bytes.starts_with(b"on") && bytes[2].is_ascii_uppercase()
     }
     fn spread_key_is_event(&self, key: &str) -> Option<bool> {
-        self.spread_event_keys_audited
-            .then(|| key.starts_with("on") && !key.contains(':'))
+        match self.spread_event_keys {
+            releases::SpreadEventKeys::Unaudited => None,
+            releases::SpreadEventKeys::AnyOn => Some(key.starts_with("on") && !key.contains(':')),
+            // rc.17 `assignProp`: `!hasNamespace && prop.startsWith("on") &&
+            // (c = prop.charCodeAt(2)) > 64 && c < 91` (`dist/web.dev.js:1943`).
+            releases::SpreadEventKeys::OnUppercase => Some(
+                !key.contains(':')
+                    && key.len() > 2
+                    && key.starts_with("on")
+                    && key.as_bytes()[2].is_ascii_uppercase(),
+            ),
+        }
+    }
+    fn optimistic_signal_setter_guarded(&self) -> bool {
+        self.optimistic_signal_setter_guarded
     }
     fn host_boolean_exports(&self) -> &'static [crate::HostBooleanExport] {
-        &[crate::HostBooleanExport {
-            module: "@solidjs/web",
-            export: "isServer",
-            version: "2.0.0-rc.13",
-            client: false,
-            server: true,
-            runtime_targets: &[
-                "dist/web.js",
-                "dist/web.dev.js",
-                "dist/web.observe.js",
-                "dist/server.js",
-                "dist/server.dev.js",
-                "dist/server.observe.js",
-            ],
-        }]
+        // `const isServer = false;`/`true;` in each target, exported, and an
+        // unchanged `exports["."]`: rc.13, and rc.17 (`web.js:2100`,
+        // `web.dev.js:2412`, `web.observe.js:2151`, `server.js:4432`,
+        // `server.dev.js:4775`, `server.observe.js:4587`).
+        const TARGETS: &[&str] = &[
+            "dist/web.js",
+            "dist/web.dev.js",
+            "dist/web.observe.js",
+            "dist/server.js",
+            "dist/server.dev.js",
+            "dist/server.observe.js",
+        ];
+        &[
+            crate::HostBooleanExport {
+                module: "@solidjs/web",
+                export: "isServer",
+                version: "2.0.0-rc.13",
+                client: false,
+                server: true,
+                runtime_targets: TARGETS,
+            },
+            crate::HostBooleanExport {
+                module: "@solidjs/web",
+                export: "isServer",
+                version: "2.0.0-rc.17",
+                client: false,
+                server: true,
+                runtime_targets: TARGETS,
+            },
+        ]
     }
 
     fn runtime_configuration_api(
@@ -272,8 +325,11 @@ impl Dialect for Solid2 {
     // rc.9 dev-shared.js core read() explicitly excludes pendingCheckActive
     // from the strict pending-read safeguard; verdict.isPending supplies it.
     // Store proxy traps have a different guard, so this is accessor-only.
+    // rc.17 sends `latest` reads to `verdictValue` too (`latest_rejects_pending_read`).
     fn callback_handles_pending_accessor_read(&self, primitive: Primitive, index: usize) -> bool {
-        primitive == Primitive::IsPending && index == 0
+        index == 0
+            && (primitive == Primitive::IsPending
+                || (primitive == Primitive::Latest && !self.latest_rejects_pending_read))
     }
 
     fn version(&self) -> Version {
@@ -1393,8 +1449,10 @@ impl Dialect for Solid2 {
             // `render(() => <App/>, el)` and `hydrate` invoke the code
             // callback once, immediately, under the root they create.
             // Source: `solidjs-web.json`'s callback rows, the same shape 1.x
-            // models for its `solid-js/web` pair.
-            Primitive::Render | Primitive::Hydrate => &[(0, Execution::Inline)],
+            // models for its `solid-js/web` pair. rc.17's `hydrate` may defer
+            // it (`hydrate_code_inline`), so no execution is stated there.
+            Primitive::Render => &[(0, Execution::Inline)],
+            Primitive::Hydrate if self.hydrate_code_inline => &[(0, Execution::Inline)],
             _ => &[],
         }
     }

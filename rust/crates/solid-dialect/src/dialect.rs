@@ -1446,6 +1446,12 @@ pub trait Dialect: Sync {
         None
     }
 
+    /// Whether the setter `createOptimistic` returns meets the owned-scope
+    /// write guard. The default claims no guard, which only withholds writes.
+    fn optimistic_signal_setter_guarded(&self) -> bool {
+        false
+    }
+
     /// Whether the pinned compiler lowers an un-namespaced attribute of this
     /// name on an intrinsic element as an event listener. A name it does not
     /// lower is a plain attribute, never a listener. The default claims no

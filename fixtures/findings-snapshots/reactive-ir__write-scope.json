@@ -87,16 +87,6 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-scope/App.tsx",
-      "start": 1089,
-      "end": 1105,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-write-in-owned-scope",
-      "code": "SC2001",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/write-scope/App.tsx",
       "start": 1109,
       "end": 1158,
       "fixes": 0
@@ -107,8 +97,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-scope/App.tsx",
-      "start": 1197,
-      "end": 1208,
+      "start": 1565,
+      "end": 1579,
       "fixes": 0
     },
     {
@@ -117,8 +107,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-scope/App.tsx",
-      "start": 1229,
-      "end": 1242,
+      "start": 1651,
+      "end": 1662,
       "fixes": 0
     },
     {
@@ -127,8 +117,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-scope/App.tsx",
-      "start": 1269,
-      "end": 1285,
+      "start": 1683,
+      "end": 1696,
       "fixes": 0
     },
     {
@@ -137,8 +127,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-scope/App.tsx",
-      "start": 1330,
-      "end": 1341,
+      "start": 1723,
+      "end": 1739,
       "fixes": 0
     },
     {
@@ -147,8 +137,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-scope/App.tsx",
-      "start": 1584,
-      "end": 1595,
+      "start": 1784,
+      "end": 1795,
       "fixes": 0
     },
     {
@@ -157,8 +147,18 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-scope/App.tsx",
-      "start": 1906,
-      "end": 1917,
+      "start": 2038,
+      "end": 2049,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-scope/App.tsx",
+      "start": 2360,
+      "end": 2371,
       "fixes": 0
     }
   ]

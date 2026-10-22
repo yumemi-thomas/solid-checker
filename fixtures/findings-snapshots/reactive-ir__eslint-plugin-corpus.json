@@ -662,16 +662,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-write-in-owned-scope",
-      "code": "SC2001",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/eslint-plugin-corpus/owned-leaf-extended-invalid.tsx",
-      "start": 290,
-      "end": 306,
-      "fixes": 0
-    },
-    {
       "rule": "action-called-in-owned-scope",
       "code": "SC2002",
       "kind": "violation",

@@ -56,7 +56,7 @@ import { fileURLToPath } from "node:url";
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const options = {
   cases: join(repo, "fixtures/runtime-oracle"),
-  install: resolve(repo, "../solid-checker-rc13-corpus/apps/helge-dev"),
+  install: resolve(repo, "../solid-checker-rc17-corpus/apps/helge-dev"),
   browser: null,
   tooling: null,
   concurrency: "2",

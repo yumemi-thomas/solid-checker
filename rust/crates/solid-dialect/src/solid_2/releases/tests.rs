@@ -156,8 +156,8 @@ fn every_reviewed_triple_answers_as_the_reviews_measured() {
             true,
             2,
         ),
-        // The audited release: rc.9's answers (the rc.13 review § 0), no
-        // gap.
+        // rc.9's answers (the rc.13 review § 0), older than the audited
+        // release.
         (
             "2.0.0-rc.13",
             StoreRootTyping::Mutable,
@@ -166,7 +166,19 @@ fn every_reviewed_triple_answers_as_the_reviews_measured() {
             DynamicOptions::StaticForm,
             StoreSetterRootGuard::Guarded,
             true,
-            0,
+            1,
+        ),
+        // The audited release: these answers are rc.13's (the rc.17
+        // review); its two gaps are scoped to the new callback exports.
+        (
+            "2.0.0-rc.17",
+            StoreRootTyping::Mutable,
+            true,
+            true,
+            DynamicOptions::StaticForm,
+            StoreSetterRootGuard::Guarded,
+            true,
+            2,
         ),
     ];
     for (
@@ -206,6 +218,10 @@ fn every_reviewed_triple_answers_as_the_reviews_measured() {
     assert_eq!(analyzed(&same("2.0.0-rc.9")).0.index(), Solid2::RC9.index());
     assert_eq!(
         analyzed(&same("2.0.0-rc.13")).0.index(),
+        Solid2::RC13.index()
+    );
+    assert_eq!(
+        analyzed(&same("2.0.0-rc.17")).0.index(),
         Solid2::AUDITED.index()
     );
     // rc.10 and rc.11 were published and never read: the conservative
@@ -528,7 +544,12 @@ fn the_optimistic_store_setter_guard_follows_the_resolved_signals() {
     assert!(!rc0.optimistic_store_setter_guarded());
     assert!(rc0.store_setter_guard_exempts_roots());
     assert_eq!(rc0.store_setter_roots, StoreSetterRootGuard::Exempt);
-    assert_eq!(rc0.key(), Some("optimistic-store-setter-unguarded"));
+    assert_eq!(
+        rc0.key(),
+        Some(
+            "optimistic-store-setter-unguarded+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline"
+        )
+    );
     assert!(Solid2::RC3.optimistic_store_setter_guarded());
     assert!(Solid2::RC9.optimistic_store_setter_guarded());
     // Rows rc.1-rc.3 still share rc.3's vocabulary.
@@ -605,7 +626,16 @@ fn an_unknown_or_missing_owner_takes_the_conservative_answers() {
     // the rc.3 pair beside it keeps its reviewed answers and only the
     // older-release gap.
     let (vocabulary, gaps) = analyzed(&triple(Some("2.0.0-rc.3"), Some("2.0.0-rc.3"), None));
-    assert_eq!(vocabulary.index(), Solid2::RC3.index());
+    // Only the web-owned `hydrate` answer differs from rc.3's: nothing
+    // imports it, and the unresolved owner keeps the conservative one.
+    assert_eq!(
+        vocabulary.index(),
+        Solid2 {
+            hydrate_code_inline: false,
+            ..Solid2::RC3
+        }
+        .index()
+    );
     assert_eq!(gaps.len(), 1, "{gaps:?}");
     assert!(
         gaps[0].gap.contains("older than the audited release"),
@@ -685,7 +715,7 @@ fn every_variant_has_its_own_key() {
     assert_eq!(
         Solid2::RC9.key(),
         Some(
-            "store-root-mutable+omit-predicate+until+flush-in-action+flush-in-effect-callback+dynamic-static+store-setter-guards-roots"
+            "store-root-mutable+omit-predicate+until+flush-in-action+flush-in-effect-callback+dynamic-static+store-setter-guards-roots+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline"
         )
     );
 }
@@ -755,7 +785,12 @@ fn the_conservative_answers_do_not_depend_on_the_audited_release() {
     // installation whose signals nobody read does not, so its id carries that
     // answer (ADR 0341).
     assert_eq!(conservative.key(), None);
-    assert_eq!(Solid2::RC3.key(), Some("flush-in-effect-callback"));
+    assert_eq!(
+        Solid2::RC3.key(),
+        Some(
+            "flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline"
+        )
+    );
     assert!(Solid2::RC9.key().is_some());
 }
 
@@ -924,6 +959,7 @@ fn only_the_rc9_re_export_gap_is_scoped_to_the_names_it_loses() {
 fn every_review_names_a_document_that_exists() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     for document in [
+        RC17_REVIEW,
         RC13_REVIEW,
         RC9_REVIEW,
         RC1_RC8_REVIEW,
@@ -950,4 +986,42 @@ fn spread_event_keys_require_web_rc13() {
     let older_web = vocabulary_for(Release::Read(13), Release::Read(13), Release::Read(9));
     assert_eq!(older_web.spread_key_is_event("onClick"), None);
     assert_eq!(Solid2::CONSERVATIVE.spread_key_is_event("onClick"), None);
+}
+
+/// The rc.17 review: `on` + an uppercase letter is a spread listener on web
+/// rc.17, `createOptimistic`'s setter is unguarded and `latest` absorbs a
+/// pending read on signals rc.17, `hydrate` may defer `code` on web rc.17,
+/// and `dynamic`'s static form needs `solid-js` rc.17 under web rc.17.
+#[test]
+fn rc17_answers_follow_their_owners() {
+    let audited = analyzed(&same("2.0.0-rc.17")).0;
+    for key in ["onClick", "onPointerDown"] {
+        assert_eq!(audited.spread_key_is_event(key), Some(true), "{key}");
+    }
+    for key in ["onclick", "on", "on-foo", "on:click", "title"] {
+        assert_eq!(audited.spread_key_is_event(key), Some(false), "{key}");
+    }
+    assert!(!audited.optimistic_signal_setter_guarded());
+    assert!(Solid2::RC13.optimistic_signal_setter_guarded());
+    assert!(audited.callback_handles_pending_accessor_read(Primitive::Latest, 0));
+    assert!(!Solid2::RC13.callback_handles_pending_accessor_read(Primitive::Latest, 0));
+    assert!(audited.callback_handles_pending_accessor_read(Primitive::IsPending, 0));
+    assert!(audited.callback_executions(Primitive::Hydrate).is_empty());
+    assert!(
+        !Solid2::RC13
+            .callback_executions(Primitive::Hydrate)
+            .is_empty()
+    );
+    assert!(!audited.callback_executions(Primitive::Render).is_empty());
+    assert!(audited.callback_runs_in_created_root(Primitive::Hydrate, 0));
+    assert!(audited.lazy_renders_component && audited.store_strict_keys_audited);
+    assert_eq!(audited.dynamic_options, DynamicOptions::StaticForm);
+    assert_eq!(
+        vocabulary_for(Release::Read(13), Release::Read(13), Release::Read(17)).dynamic_options,
+        DynamicOptions::Unread
+    );
+    // An unread signals claims neither guard nor rejection.
+    let unread = analyzed(&same("2.0.0-rc.16")).0;
+    assert!(!unread.optimistic_signal_setter_guarded());
+    assert!(unread.callback_handles_pending_accessor_read(Primitive::Latest, 0));
 }

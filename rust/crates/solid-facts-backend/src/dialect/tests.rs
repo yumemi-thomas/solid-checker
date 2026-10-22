@@ -657,7 +657,13 @@ fn detection_classifies_the_installed_triple() {
     const RC9: Option<&str> = Some("2.0.0-rc.9");
     // (solid-js, signals, web, selected dialect id, notice due)
     let rows = [
-        (RC3, RC3, RC3, "solid-v2@flush-in-effect-callback", true),
+        (
+            RC3,
+            RC3,
+            RC3,
+            "solid-v2@flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline",
+            true,
+        ),
         // rc.0's optimistic-store setter meets no owned-scope guard (N5),
         // its one answer that differs from rc.3's: a reviewed variant, so
         // no notice.
@@ -665,29 +671,35 @@ fn detection_classifies_the_installed_triple() {
             Some("2.0.0-rc.0"),
             Some("2.0.0-rc.0"),
             None,
-            "solid-v2@optimistic-store-setter-unguarded",
+            "solid-v2@optimistic-store-setter-unguarded+optimistic-setter-guarded+latest-rejects-pending",
             true,
         ),
         (
             Some("2.0.0-rc.1"),
             Some("2.0.0-rc.1"),
             Some("2.0.0-rc.1"),
-            "solid-v2@flush-in-effect-callback",
+            "solid-v2@flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline",
             true,
         ),
         (
             Some("2.0.0-rc.2"),
             Some("2.0.0-rc.2"),
             Some("2.0.0-rc.2"),
-            "solid-v2@flush-in-effect-callback",
+            "solid-v2@flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline",
             true,
         ),
-        (RC3, RC3, None, "solid-v2@flush-in-effect-callback", true),
+        (
+            RC3,
+            RC3,
+            None,
+            "solid-v2@flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending",
+            true,
+        ),
         (
             RC9,
             RC9,
             RC9,
-            "solid-v2@store-root-mutable+omit-predicate+until+flush-in-action+flush-in-effect-callback+dynamic-static+store-setter-guards-roots",
+            "solid-v2@store-root-mutable+omit-predicate+until+flush-in-action+flush-in-effect-callback+dynamic-static+store-setter-guards-roots+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline",
             true,
         ),
         // A fresh install of the audited solid-js today (the rc.1-rc.8
@@ -696,34 +708,40 @@ fn detection_classifies_the_installed_triple() {
             RC3,
             RC9,
             RC3,
-            "solid-v2@store-root-mutable+omit-predicate+flush-in-action+flush-in-effect-callback+store-setter-guards-roots",
+            "solid-v2@store-root-mutable+omit-predicate+flush-in-action+flush-in-effect-callback+store-setter-guards-roots+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline",
             true,
         ),
         (
             Some("2.0.0-rc.4"),
             Some("2.0.0-rc.4"),
             Some("2.0.0-rc.4"),
-            "solid-v2@flush-in-effect-callback",
+            "solid-v2@flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline",
             true,
         ),
         (
             Some("2.0.0-rc.6"),
             Some("2.0.0-rc.6"),
             Some("2.0.0-rc.6"),
-            "solid-v2@until+flush-in-effect-callback",
+            "solid-v2@until+flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline",
             true,
         ),
         (
             Some("2.0.0-rc.7"),
             Some("2.0.0-rc.7"),
             Some("2.0.0-rc.7"),
-            "solid-v2@store-root-mutable+until+flush-in-effect-callback",
+            "solid-v2@store-root-mutable+until+flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline",
             true,
         ),
         // No signals beside solid-js: the conservative answers, and the
         // notice.
-        (RC9, None, RC9, "solid-v2@dynamic-static", true),
-        (RC3, None, RC3, "solid-v2", true),
+        (
+            RC9,
+            None,
+            RC9,
+            "solid-v2@dynamic-static+hydrate-inline",
+            true,
+        ),
+        (RC3, None, RC3, "solid-v2@hydrate-inline", true),
         (
             Some("2.0.0-rc.10"),
             Some("2.0.0-rc.10"),
@@ -735,14 +753,14 @@ fn detection_classifies_the_installed_triple() {
             Some("2.0.0-beta.19"),
             RC3,
             RC3,
-            "solid-v2@flush-in-effect-callback",
+            "solid-v2@flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline",
             true,
         ),
         (
             Some("2.0.0"),
             RC3,
             RC3,
-            "solid-v2@flush-in-effect-callback",
+            "solid-v2@flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline",
             true,
         ),
     ];
@@ -810,7 +828,10 @@ fn signals_resolves_from_the_installed_solid_js() {
     else {
         panic!("analyzed");
     };
-    assert_eq!(reviewed.id, "solid-v2@flush-in-effect-callback");
+    assert_eq!(
+        reviewed.id,
+        "solid-v2@flush-in-effect-callback+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline"
+    );
     let notice = release_notice(reviewed, &project).expect("rc.3 is older than audited");
     assert_eq!(notice.gaps.len(), 1, "{notice:?}");
     let nested = root.join("node_modules/solid-js/node_modules/@solidjs/signals");
@@ -828,7 +849,7 @@ fn signals_resolves_from_the_installed_solid_js() {
     };
     assert_eq!(
         dialect.id,
-        "solid-v2@store-root-mutable+omit-predicate+flush-in-action+flush-in-effect-callback+store-setter-guards-roots"
+        "solid-v2@store-root-mutable+omit-predicate+flush-in-action+flush-in-effect-callback+store-setter-guards-roots+optimistic-setter-guarded+latest-rejects-pending+hydrate-inline"
     );
     assert_eq!(releases[1].version.as_deref(), Some("2.0.0-rc.9"));
     let nested_manifest = "node_modules/solid-js/node_modules/@solidjs/signals/package.json";
@@ -1006,7 +1027,7 @@ fn the_notice_identity_is_the_one_the_catalog_publishes() {
     // The advice pins all three, and names what it found.
     assert!(
             finding.hint.contains(
-                "pin solid-js, @solidjs/signals and @solidjs/web to 2.0.0-rc.13, the audited release of each"
+                "pin solid-js, @solidjs/signals and @solidjs/web to 2.0.0-rc.17, the audited release of each"
             ) && finding
                 .hint
                 .contains(&format!("this project resolves {found}")),

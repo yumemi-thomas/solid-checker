@@ -1,0 +1,255 @@
+{
+  "corpus": "solid-checker-rc17-corpus/apps",
+  "configuration": {
+    "runtimeTarget": "browser",
+    "runtimeBuild": "development",
+    "rendering": "csr"
+  },
+  "projects": [
+    {
+      "app": "a-worse-ereader",
+      "root": "a-worse-ereader",
+      "project": "tsconfig.json"
+    },
+    {
+      "app": "ai-memory-ui",
+      "root": "ai-memory-ui",
+      "project": "tsconfig.app.json"
+    },
+    {
+      "app": "app-game",
+      "root": "app-game",
+      "project": "apps/web/tsconfig.json"
+    },
+    {
+      "app": "beacon-web",
+      "root": "beacon-web",
+      "project": "apps/web/tsconfig.json"
+    },
+    {
+      "app": "civil",
+      "root": "civil",
+      "project": "tsconfig.json"
+    },
+    {
+      "app": "compass-ui",
+      "root": "compass-ui",
+      "project": "apps/ui/tsconfig.json"
+    },
+    {
+      "app": "dashiboard-ui",
+      "root": "dashiboard-ui",
+      "project": "dashiboard-ui/tsconfig.json"
+    },
+    {
+      "app": "derp-media-server",
+      "root": "derp-media-server",
+      "project": "tsconfig.json"
+    },
+    {
+      "app": "donegeon-client",
+      "root": "donegeon-client",
+      "project": "web/apps/client/tsconfig.json"
+    },
+    {
+      "app": "en-passant",
+      "root": "en-passant",
+      "project": "tsconfig.json"
+    },
+    {
+      "app": "error-menu-web",
+      "root": "error-menu-web",
+      "project": "web/tsconfig.json"
+    },
+    {
+      "app": "every-deck-of-cards",
+      "root": "every-deck-of-cards",
+      "project": "tsconfig.json"
+    },
+    {
+      "app": "expenses-app",
+      "root": "expenses-app",
+      "project": "tsconfig.json"
+    },
+    {
+      "app": "finds-team",
+      "root": "finds-team",
+      "project": "frontend/tsconfig.json"
+    },
+    {
+      "app": "helge-dev",
+      "root": "helge-dev",
+      "project": "tsconfig.json"
+    },
+    {
+      "app": "hoxxes-briefing",
+      "root": "hoxxes-briefing",
+      "project": "apps/web/tsconfig.app.json"
+    },
+    {
+      "app": "hoxxes-briefing",
+      "root": "hoxxes-briefing",
+      "project": "apps/web/tsconfig.sw.json"
+    },
+    {
+      "app": "inferay",
+      "root": "inferay",
+      "project": "tsconfig.json"
+    },
+    {
+      "app": "jandibat-web",
+      "root": "jandibat-web",
+      "project": "apps/web/tsconfig.json"
+    },
+    {
+      "app": "jar-hell-web",
+      "root": "jar-hell-web",
+      "project": "web/tsconfig.json"
+    },
+    {
+      "app": "jibe-run",
+      "root": "jibe-run",
+      "project": "apps/jibe-run/tsconfig.json"
+    },
+    {
+      "app": "kobalte-docs",
+      "root": "kobalte-docs",
+      "project": "apps/docs/tsconfig.json"
+    },
+    {
+      "app": "kui",
+      "root": "kui",
+      "project": "frontend/packages/api/tsconfig.json"
+    },
+    {
+      "app": "kui",
+      "root": "kui",
+      "project": "frontend/packages/feature-alerts/tsconfig.json"
+    },
+    {
+      "app": "kui",
+      "root": "kui",
+      "project": "frontend/packages/feature-clusters/tsconfig.json"
+    },
+    {
+      "app": "kui",
+      "root": "kui",
+      "project": "frontend/packages/feature-connect/tsconfig.json"
+    },
+    {
+      "app": "kui",
+      "root": "kui",
+      "project": "frontend/packages/feature-consumers/tsconfig.json"
+    },
+    {
+      "app": "kui",
+      "root": "kui",
+      "project": "frontend/packages/feature-ksql/tsconfig.json"
+    },
+    {
+      "app": "kui",
+      "root": "kui",
+      "project": "frontend/packages/feature-messages/tsconfig.json"
+    },
+    {
+      "app": "kui",
+      "root": "kui",
+      "project": "frontend/packages/feature-schemas/tsconfig.json"
+    },
+    {
+      "app": "kui",
+      "root": "kui",
+      "project": "frontend/packages/feature-topics/tsconfig.json"
+    },
+    {
+      "app": "kui",
+      "root": "kui",
+      "project": "frontend/packages/kernel/tsconfig.json"
+    },
+    {
+      "app": "kui",
+      "root": "kui",
+      "project": "frontend/packages/shell/tsconfig.json"
+    },
+    {
+      "app": "lutra-console",
+      "root": "lutra-console",
+      "project": "console/tsconfig.json"
+    },
+    {
+      "app": "openbot",
+      "root": "openbot",
+      "project": "tsconfig.web.json"
+    },
+    {
+      "app": "oscartbeaumont-website",
+      "root": "oscartbeaumont-website",
+      "project": "tsconfig.app.json"
+    },
+    {
+      "app": "pekochan-blog",
+      "root": "pekochan-blog",
+      "project": "tsconfig.json"
+    },
+    {
+      "app": "probus-hk",
+      "root": "probus-hk",
+      "project": "tsconfig.json"
+    },
+    {
+      "app": "queue-management-ui",
+      "root": "queue-management-ui",
+      "project": "ui/tsconfig.json"
+    },
+    {
+      "app": "raybend-website",
+      "root": "raybend-website",
+      "project": "website/tsconfig.json"
+    },
+    {
+      "app": "readingroom",
+      "root": "readingroom",
+      "project": "frontend/tsconfig.json"
+    },
+    {
+      "app": "sefer",
+      "root": "sefer",
+      "project": "tsconfig.json"
+    },
+    {
+      "app": "sensor-sim",
+      "root": "sensor-sim",
+      "project": "packages/frontend/tsconfig.json"
+    },
+    {
+      "app": "skyjtx-website",
+      "root": "skyjtx-website",
+      "project": "apps/skyjt-website/tsconfig.json"
+    },
+    {
+      "app": "solid-groove",
+      "root": "solid-groove",
+      "project": "tsconfig.json"
+    },
+    {
+      "app": "solid-validation-site",
+      "root": "solid-validation-site",
+      "project": "website/versions/v2/tsconfig.json"
+    },
+    {
+      "app": "spookysoftware-www",
+      "root": "spookysoftware-www",
+      "project": "domains/www/tsconfig.json"
+    },
+    {
+      "app": "spotify-desk-thing",
+      "root": "spotify-desk-thing",
+      "project": "tsconfig.json"
+    },
+    {
+      "app": "viviana-ui-web",
+      "root": "viviana-ui-web",
+      "project": "apps/web/tsconfig.json"
+    }
+  ]
+}

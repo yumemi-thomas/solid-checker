@@ -787,7 +787,6 @@ const V2_REMOVED_EXPORTS: &[(&str, &str)] = &[
         "observable",
         "push signal changes to external subscribers with createEffect",
     ),
-    ("createDeferred", "removed; handle deferral outside Solid"),
     (
         "resetErrorBoundaries",
         "no longer needed; error boundaries heal automatically",

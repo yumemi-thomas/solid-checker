@@ -74,8 +74,8 @@ The demand plan also asks for the resolved call of an argumentless method call w
 With no explicit program boundary, the nearest `package.json` decides: `"private": true` is an application (closed); otherwise a manifest publishing `exports`, `main`, `module`, `types`, `typings` or `bin` is a library (open); a manifest publishing nothing is closed; no or unreadable manifest is open. An explicit `--program-boundary`, the ESLint `programBoundary` setting or `.solid-checker/runtime.json` wins. The default is part of the diagnostic identity. Closing removes only the unseen-caller assumption; callers still have to be enumerated exactly. Owner: rust/crates/solid-facts-backend/src/diagnostics.rs (`default_program_boundary`).
 
 <a id="adr-0194"></a>
-## ADR 0194 — The audited Solid 2 release is rc.13
-`AUDITED_INSTALLATION` names `solid-js`, `@solidjs/signals` and `@solidjs/web` at `2.0.0-rc.13`; its vocabulary is rc.9's (`Solid2::AUDITED` is `RC13`). `READ_RELEASES` is the explicit list rc.0-rc.9 and rc.13; rc.10-rc.12 and rc.14+ get conservative answers under `SC9014`, and rc.0-rc.9 get the older-release notice. The dialect owns the `solid-js/internal` subpath, where rc.13 declares `createErrorBoundary`, `createLoadingBoundary`, `createRevealOrder`. The rc.13 negative-row chapter is retired. Owners: rust/crates/solid-dialect/src/solid_2/releases.rs, rust/crates/solid-dialect/src/exports/solid_v2_solid_js.rs.
+## ADR 0194 — The audited Solid 2 release is rc.17
+`AUDITED_INSTALLATION` names `solid-js`, `@solidjs/signals` and `@solidjs/web` at `2.0.0-rc.17` (`Solid2::AUDITED` is `RC17`): rc.13's answers but `on`+uppercase spread listeners, an unguarded `createOptimistic` setter, `latest` absorbing a pending read, a deferrable `hydrate`, and `dynamic`'s static form from `solid-js`. `READ_RELEASES` is rc.0-rc.9, rc.13, rc.17; others get conservative answers under `SC9014`, older read ones the older-release notice. New callback exports are import-scoped gaps. Owner: rust/crates/solid-dialect/src/solid_2/releases.rs; review in docs/release-audits/.
 
 <a id="adr-0195"></a>
 ## ADR 0195 — A source tracked before the await is a dependency
@@ -502,8 +502,8 @@ A member call on an unexported `const` object literal names its function when th
 Without an owner, rc.13 `useContext` throws `NoOwnerError` even with a default (SC4001). Under a proven owner, SC4002 requires a default-less project const and a closed census with no provider or escape. Namespace/module publication withholds that census; package and open contexts stay unproven. Owners: `owners/{context_census,missing_owners,owner_discovery}.rs`; mechanics: `docs/rules/{missing-owner,missing-context-provider}.md`.
 
 <a id="adr-0353"></a>
-## ADR 0353 — Audited rc.13 render callbacks run under a root
-`@solidjs/web@2.0.0-rc.13` calls `render`'s code inside `createRoot` (`dist/web.dev.js:488-495`); `hydrate` reaches it on every path (`:1521-1620`). Direct setters and called helpers therefore violate SC2001. Only the web owner's audited rc.13 enables `render_creates_root`; other releases yield an uncertifiable write placement. Owners: `solid_2.rs` and `execution_role/write_roles.rs`. Mechanics: `docs/rules/reactive-write-in-owned-scope.md`; fixtures `setter-in-render-root` and rc.9 twin; oracle `render-root-write`.
+## ADR 0353 — Audited render callbacks run under a root
+`@solidjs/web` rc.13 and rc.17 call `render`'s code inside `createRoot`; `hydrate` reaches it on every path, though rc.17 may defer it, so no inline execution is stated there. Direct setters and called helpers therefore violate SC2001. Only those web releases enable `render_creates_root`; others yield an uncertifiable write placement. Owners: `solid_2.rs` and `execution_role/write_roles.rs`. Mechanics: `docs/rules/reactive-write-in-owned-scope.md`; fixtures `setter-in-render-root` and rc.9 twin; oracle `render-root-write`.
 
 <a id="adr-0354"></a>
 ## ADR 0354 — Possible suspension withholds strict-read placement
@@ -523,7 +523,7 @@ Possible suspension keeps the original and unowned contexts: SC4001 is an obliga
 
 <a id="adr-0358"></a>
 ## ADR 0358 — Exact handler holders enter the owner graph
-Event members/tuples and intrinsic spreads resolve through the immutable receiver census. Web rc.13 alone enables non-namespaced `on` spread keys, including lowercase. Getters, generators and unknown holders retain obligations; synchronous dispatch withholds unowned proof. Remote targets enter the retained digest. Owners: `object_members/handlers.rs`, `owners/`; mechanics: `docs/rules/missing-owner.md`.
+Event members/tuples and intrinsic spreads resolve through the immutable receiver census. Web rc.13 enables non-namespaced `on` spread keys, lowercase included; rc.17 only `on`+uppercase. Getters, generators and unknown holders retain obligations; synchronous dispatch withholds unowned proof. Remote targets enter the retained digest. Owners: `object_members/handlers.rs`, `owners/`; mechanics: `docs/rules/missing-owner.md`.
 
 <a id="adr-0359"></a>
 ## ADR 0359 — Alternative owner creations are proven jointly

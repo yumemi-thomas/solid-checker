@@ -1,7 +1,7 @@
 # Open work
 
-Open items only: known misses, decisions not to build, accepted precision trades, live approximations. A finished slice goes in its commit message.
-A rule `tsc` reports is removed and logged in `fixtures/tsc-oracle/` (README, `rule-cases.json`). Delete an entry here when fixed or reversed.
+Open items only: known misses, decisions not to build, accepted precision trades, live approximations.
+A rule `tsc` reports is removed and logged in `fixtures/tsc-oracle/`. Delete an entry here when fixed or reversed.
 Case ids name directories under `fixtures/runtime-oracle/`; each `oracle.json` `open` list is section 1's executable half (a listed site that stops firing fails as `stale-open`).
 
 ## 1. Known open detections
@@ -25,7 +25,7 @@ Write in an owned scope (`reactive-write-in-owned-scope`, SC2001):
 
 - A named handler both attached as `onClick` and called directly in the component body hides the write in a helper it calls; the runtime warns at that call.
 - A setter call in a component's default parameter initializer runs in the owned component scope; the write rule places nothing there.
-- SC2001 in `render`'s or `hydrate`'s `code` on `@solidjs/web` other than rc.13: uncertifiable until that release's `render` is read (ADR 0353).
+- SC2001 in `render`/`hydrate` `code` off web rc.13/17 and in rc.17's deferrable `hydrate`: uncertifiable (ADR 0353). Signals rc.17: a typed-only or `let`-aliased setter may be `createOptimistic`'s (unguarded): unclaimed.
 
 `flush` in an effect apply (`flush-in-effect-callback`, SC2008). The runtime reports these; the rule does not claim the open shapes below (ADR 0341). Positions and premises: rule page `flush-in-effect-callback`.
 
@@ -42,12 +42,13 @@ Missing owner (`missing-owner`, SC4001):
 - `review-r1-owner-mix` (App.tsx:5, :13): one callback invoked through `runWithOwner` and as an event handler (the owner walk refuses the literal as a whole; same shape `review-r3-owner-double-call`), and a handler returned from `createRoot`, later dispatched with no owner.
 - `review-r5-owner-class-control`, `review-r6-owner-default-control`, `review-r6-owner-jsx-getter-control`: the call sits in a class field, a default parameter or a JSX getter, containers the owner walk refuses. `review-r7-event-array`: the typed `[handler, data]` event tuple is not followed by owner seeding.
 - `review-opus5-t6-rest-timer-owner` (App.tsx:8): an effect created in a timer inside a `Show` callback. `review-opus2-o15-settled-class-field-new-in-timeout` (App.tsx:5): a class constructed in a timer; the field stays an uncertifiable SC3001.
-- JSX in a `createEffect` apply (no `createRoot`), or in a helper creating a render effect that an apply calls, makes an unowned render effect: the runtime reports `NO_OWNER_EFFECT`, and the owner walk places nothing there (the first `flush-in-effect-callback` oracle case shows it).
-- `oracle-behaviour-primitive-in-directive` (App.tsx:13): an effect in the apply a named factory returns (`ref={leakingTrack(count)}`) is reported as SC6001 only. The owner walk places only a ref expression's top-level functions (ADR 0345), so a closure a call returns gets no owner claim; an IIFE returning one is uncertifiable for SC6001.
+- JSX in a `createEffect` apply (no `createRoot`), or in a helper creating a render effect that an apply calls, makes an unowned render effect: the runtime reports `NO_OWNER_EFFECT`, and the owner walk places nothing there (oracle `flush-in-effect-callback`).
+- `oracle-behaviour-primitive-in-directive` (App.tsx:13): an effect in the apply a named factory returns (`ref={leakingTrack(count)}`) is SC6001 only. The owner walk places only a ref expression's top-level functions (ADR 0345), so a returned closure gets no owner claim; an IIFE returning one is uncertifiable for SC6001.
 - Invoked literals the owner walk does not place: an IIFE in an instance field initializer (`ia-module`, App.tsx:17; a generator IIFE iterated by a spread, line 19); an IIFE in an object method or a constructor run by `new`, both reached from a timer (`ib-comp`, App.tsx:54, :58); an effect after an `await` in a loop or conditional, and an IIFE invoked after an `await` in its caller (`ic-await`, App.tsx:35–52, beyond the continuation rule of ADR 0333); and an IIFE called through `.bind(null)()` or a literal run by `Reflect.apply` (`ii1`, App.tsx:61, :65; ADR 0347 models only `.call`/`.apply`, so the runtime's `NO_OWNER_EFFECT` there is a missing finding).
-- `Object.entries(ns)` or `Object.values(ns)` whose values the program calls: the functions reach the program unnamed, so their detached callbacks are uncertifiable, not reported. Telling called from uncalled values needs invocation tracking (`fixtures/reactive-ir/owner-namespace-reachable`, `viaObject`, is the uncalled form).
+- `Object.entries(ns)`/`Object.values(ns)` whose values the program calls: the functions reach it unnamed, so their detached callbacks are uncertifiable. Telling called from uncalled values needs invocation tracking (`owner-namespace-reachable`, `viaObject`, is the uncalled form).
 - `missing-owner` (SC4001), recall lost: an unmodelled callback between leaves (`forEach`, `addEventListener`) misses `NO_OWNER_CLEANUP`; at probe k5 the wrongly coded SC3001 is gone.
 - `missing-owner` (SC4001), recall lost: `onSettled(wrap(() => …))` (`solid2-precision`, `WrappedSettledCleanup`): a bodiless `wrap` is no identity wrapper (ADR 0346), so the cleanup in its literal goes unreported.
+- rc.17 `PRIMITIVE_IN_EFFECT_CALLBACK` (a primitive made in an effect apply): no rule.
 
 Possible owner suspension (ADR 0357): skippable-await cleanups retain SC4001 obligations. Call-argument-specific take/skip proofs are unimplemented; callback delivery outside the model remains open.
 

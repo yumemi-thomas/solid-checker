@@ -450,7 +450,9 @@ impl<'a> InvocationFlow<'a, '_, '_> {
                 }
                 let name = file.source_text(attribute.name)?;
                 if intrinsic_element(file, element) {
-                    return (path.is_empty() && flow_event_key(name)).then(|| {
+                    return (path.is_empty()
+                        && self.lookup.dialect.compiler_lowers_event_attribute(name))
+                    .then(|| {
                         out.push(Invocation::Role(ExecutionRole::EventCallback));
                     });
                 }

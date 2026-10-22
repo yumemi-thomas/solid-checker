@@ -41,7 +41,10 @@ their wording identifies the open callback context. Exact cross-file and
 namespace helpers that invoke the parameter directly retain the violation.
 
 Native `isPending(() => accessor())` suppresses the strict pending-accessor
-safeguard, so it has no `SC5001` error. This exemption resolves the exact
+safeguard, so it has no `SC5001` error. From `@solidjs/signals` rc.17 so does
+`latest(() => accessor())`: both reads go to `verdictValue` before the throw
+(`dist/dev-shared.js:5258-5281`), which only warns; on rc.13 and older
+`latest` still throws `PENDING_ASYNC_UNTRACKED_READ`. This exemption resolves the exact
 primitive and its direct callback: shadowed functions do not inherit it.
 Subscription findings retain their own facts, and an ordinary `NotReadyError`
 may still propagate as graph suspension. Store proxy reads follow a different

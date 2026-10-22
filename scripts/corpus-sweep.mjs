@@ -2,8 +2,8 @@
 // Corpus sweep: run the checker over every project in a corpus manifest and
 // write one JSON report (findings per project, binary digests, configuration).
 //
-//   node scripts/corpus-sweep.mjs [--manifest scripts/corpus/rc13-manifest.json]
-//     [--apps-root ../solid-checker-rc13-corpus/apps]
+//   node scripts/corpus-sweep.mjs [--manifest scripts/corpus/rc17-manifest.json]
+//     [--apps-root ../solid-checker-rc17-corpus/apps]
 //     [--checker rust/target/release/solid-checker-rust]
 //     [--typefacts bin/solid-typefacts] [--jobs 4] --out <report.json>
 //
@@ -19,8 +19,8 @@ import { fileURLToPath } from "node:url";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const options = {
-  manifest: join(repo, "scripts/corpus/rc13-manifest.json"),
-  "apps-root": resolve(repo, "../solid-checker-rc13-corpus/apps"),
+  manifest: join(repo, "scripts/corpus/rc17-manifest.json"),
+  "apps-root": resolve(repo, "../solid-checker-rc17-corpus/apps"),
   checker: join(repo, "rust/target/release/solid-checker-rust"),
   typefacts: join(repo, "bin/solid-typefacts"),
   jobs: "4",

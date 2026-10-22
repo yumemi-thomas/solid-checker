@@ -1,6 +1,6 @@
 # The `tsc` oracle
 
-AGENTS.md's absolute rule: never report what TypeScript already reports, judged against the library's real published typings. Fixture stubs cannot answer that (a stub looser than the package invents defects: SC3004/SC9002 survived because stubs typed `apply` as `(value: T) => unknown` where `@solidjs/signals` says `EffectFunction = (v, p?) => (() => void) | void`). The oracle installs the packages in `packages.json` at the audited versions (`2.0.0-rc.13` triple of `solid-js`, `@solidjs/signals`, `@solidjs/web`; SRI integrities pinned there) and compiles against those. The checker half of every case must run with no SC9014 notice (`AUDITED_INSTALLATION`, `rust/crates/solid-dialect/src/solid_2/releases.rs`).
+AGENTS.md's absolute rule: never report what TypeScript already reports, judged against the library's real published typings. Fixture stubs cannot answer that (a stub looser than the package invents defects: SC3004/SC9002 survived because stubs typed `apply` as `(value: T) => unknown` where `@solidjs/signals` says `EffectFunction = (v, p?) => (() => void) | void`). The oracle installs the packages in `packages.json` at the audited versions (`2.0.0-rc.17` triple of `solid-js`, `@solidjs/signals`, `@solidjs/web`; SRI integrities pinned there) and compiles against those. The checker half of every case must run with no SC9014 notice (`AUDITED_INSTALLATION`, `rust/crates/solid-dialect/src/solid_2/releases.rs`).
 
 `rule-cases.json` holds one case per rule whose positive spelling could also be a `tsc` error, with `expect` (TypeScript) and `checker` (this checker) and a reason. `removed-because-redundant` requires `checker: "silent"`; `distinct-claim` requires `checker: "reports"` plus diagnostic codes and a reason naming what the finding claims that the type error does not; every exact dialect catalog rule needs a keystone (`expect: "silent"`, `checker: "reports"`) unless listed in the gate's `EXEMPT` map.
 
@@ -14,7 +14,7 @@ The gate (`make tsc-oracle`) needs both binaries; an absent or version/integrity
 
 ## Redundancy ledger
 
-Rules or arms removed because `tsc` reports them (executable record: `removed-because-redundant` cases; code record: `RETIRED_RULES` in `rust/crates/solid-facts-backend/src/dialect.rs`). Judged on rc.9 when each removal landed. The `removed-because-redundant` cases in `rule-cases.json` are re-checked against the pinned rc.13 by the gate; a row with no case there has not been re-judged on rc.13.
+Rules or arms removed because `tsc` reports them (executable record: `removed-because-redundant` cases; code record: `RETIRED_RULES` in `rust/crates/solid-facts-backend/src/dialect.rs`). Judged on rc.9 when each removal landed. The `removed-because-redundant` cases in `rule-cases.json` are re-checked against the pinned rc.17 by the gate; a row with no case there has not been re-judged on rc.17.
 
 | Rule (code) | Removed claim | What `tsc` says | Still valid |
 | --- | --- | --- | --- |

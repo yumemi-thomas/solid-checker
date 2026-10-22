@@ -195,9 +195,9 @@ pub(super) const OWNERS: &[ReleaseOwner] = &[
 /// unread owner's consequence, SC9014's pin) is derived from this list, and
 /// [`Solid2::AUDITED`] is tested to be the vocabulary it reviews to.
 pub(super) const AUDITED_INSTALLATION: &[(&str, &str)] = &[
-    (SOLID_JS, "2.0.0-rc.13"),
-    (SIGNALS, "2.0.0-rc.13"),
-    (WEB, "2.0.0-rc.13"),
+    (SOLID_JS, "2.0.0-rc.17"),
+    (SIGNALS, "2.0.0-rc.17"),
+    (WEB, "2.0.0-rc.17"),
 ];
 
 /// The audited release of one owner, from [`AUDITED_INSTALLATION`].
@@ -310,6 +310,21 @@ pub(super) enum DynamicOptions {
     Unread,
 }
 
+/// Which un-namespaced spread keys the resolved `@solidjs/web`'s
+/// `assignProp` installs as listeners (ADR 0358).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(super) enum SpreadEventKeys {
+    /// A web release whose `assignProp` was not read for this: no answer.
+    #[default]
+    Unaudited,
+    /// rc.13: every `on` prefix (`prop.slice(0, 2) === "on"`,
+    /// `dist/web.dev.js:1803`), lowercase included.
+    AnyOn,
+    /// rc.17: `on` followed by an ASCII uppercase letter
+    /// (`dist/web.dev.js:1943`); `onclick` is set as an attribute.
+    OnUppercase,
+}
+
 /// Three vocabularies that coincide today and are kept apart by name, so that
 /// moving the audited release is a change of which release [`Solid2::AUDITED`]
 /// and [`Solid2::DEFAULTED`] name and of [`AUDITED_INSTALLATION`], and nothing
@@ -343,12 +358,15 @@ impl Solid2 {
         optimistic_store_setter: OptimisticStoreSetterGuard::Guarded,
         lazy_renders_component: false,
         render_creates_root: false,
-        spread_event_keys_audited: false,
+        spread_event_keys: SpreadEventKeys::Unaudited,
+        optimistic_signal_setter_guarded: true,
+        latest_rejects_pending_read: true,
+        hydrate_code_inline: true,
     };
 
     /// The vocabulary of the audited triple, [`AUDITED_INSTALLATION`]: what
     /// the review answers for exactly that installation, with no gap.
-    pub const AUDITED: Self = Self::RC13;
+    pub const AUDITED: Self = Self::RC17;
 
     /// The vocabulary a project is analyzed under when no `solid-js`
     /// resolves at all, so no owner was reviewed (the backend's `Defaulted`
@@ -373,7 +391,10 @@ impl Solid2 {
         optimistic_store_setter: OptimisticStoreSetterGuard::Guarded,
         lazy_renders_component: false,
         render_creates_root: false,
-        spread_event_keys_audited: false,
+        spread_event_keys: SpreadEventKeys::Unaudited,
+        optimistic_signal_setter_guarded: true,
+        latest_rejects_pending_read: true,
+        hydrate_code_inline: true,
     };
 
     /// rc.13 adds one audited strict store-key premise; older reviews
@@ -384,14 +405,26 @@ impl Solid2 {
         store_strict_keys_audited: true,
         lazy_renders_component: true,
         render_creates_root: true,
-        spread_event_keys_audited: true,
+        spread_event_keys: SpreadEventKeys::AnyOn,
         ..Self::RC9
+    };
+
+    /// rc.17 (the 2026-10-22 review): spread listeners need `on` + an
+    /// uppercase letter, `createOptimistic`'s setter meets no owned-scope
+    /// guard, `latest(fn)` absorbs a pending read, and `hydrate` may defer
+    /// `code`. Every other answer is rc.13's, re-measured on rc.17's bytes.
+    pub const RC17: Self = Self {
+        spread_event_keys: SpreadEventKeys::OnUppercase,
+        optimistic_signal_setter_guarded: false,
+        latest_rejects_pending_read: false,
+        hydrate_code_inline: false,
+        ..Self::RC13
     };
 
     /// How many distinct vocabularies the answers above combine into: every
     /// combination is reachable, because the three owners install
     /// independently.
-    const VARIANT_COUNT: usize = 2 * 2 * 2 * 3 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2;
+    const VARIANT_COUNT: usize = 2 * 2 * 2 * 3 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 3 * 2 * 2 * 2;
 
     /// The vocabulary at one mixed-radix index, [`Solid2::CONSERVATIVE`] at
     /// `0`: digit `0` of every answer is its conservative one. A new
@@ -403,7 +436,14 @@ impl Solid2 {
             lazy_renders_component: (index / 384) % 2 == 1,
             flush_in_effect_callback: (index / 768) % 2 == 1,
             render_creates_root: (index / 1536) % 2 == 1,
-            spread_event_keys_audited: (index / 3072) % 2 == 1,
+            spread_event_keys: match (index / 3072) % 3 {
+                0 => SpreadEventKeys::Unaudited,
+                1 => SpreadEventKeys::AnyOn,
+                _ => SpreadEventKeys::OnUppercase,
+            },
+            optimistic_signal_setter_guarded: (index / 9216) % 2 == 1,
+            latest_rejects_pending_read: (index / 18432) % 2 == 1,
+            hydrate_code_inline: (index / 36864) % 2 == 1,
             store_root: if index % 2 == 1 {
                 StoreRootTyping::Mutable
             } else {
@@ -462,7 +502,25 @@ impl Solid2 {
             + 384 * (if self.lazy_renders_component { 1 } else { 0 })
             + 768 * (if self.flush_in_effect_callback { 1 } else { 0 })
             + 1536 * (if self.render_creates_root { 1 } else { 0 })
-            + 3072 * (if self.spread_event_keys_audited { 1 } else { 0 })
+            + 3072
+                * match self.spread_event_keys {
+                    SpreadEventKeys::Unaudited => 0,
+                    SpreadEventKeys::AnyOn => 1,
+                    SpreadEventKeys::OnUppercase => 2,
+                }
+            + 9216
+                * (if self.optimistic_signal_setter_guarded {
+                    1
+                } else {
+                    0
+                })
+            + 18432
+                * (if self.latest_rejects_pending_read {
+                    1
+                } else {
+                    0
+                })
+            + 36864 * (if self.hydrate_code_inline { 1 } else { 0 })
     }
 
     /// The one `'static` value per vocabulary, which is what an analysis holds.
@@ -538,8 +596,19 @@ fn variant_key(vocabulary: Solid2) -> Option<String> {
     if vocabulary.render_creates_root {
         tokens.push("render-creates-root");
     }
-    if vocabulary.spread_event_keys_audited {
-        tokens.push("spread-event-keys");
+    match vocabulary.spread_event_keys {
+        SpreadEventKeys::Unaudited => {}
+        SpreadEventKeys::AnyOn => tokens.push("spread-event-keys"),
+        SpreadEventKeys::OnUppercase => tokens.push("spread-event-keys-uppercase"),
+    }
+    if vocabulary.optimistic_signal_setter_guarded {
+        tokens.push("optimistic-setter-guarded");
+    }
+    if vocabulary.latest_rejects_pending_read {
+        tokens.push("latest-rejects-pending");
+    }
+    if vocabulary.hydrate_code_inline {
+        tokens.push("hydrate-inline");
     }
     (!tokens.is_empty()).then(|| tokens.join("+"))
 }
@@ -570,9 +639,15 @@ const RC1_RC8_REVIEW: &str = "docs/release-audits/2026-09-26-solid-2-rc1-rc8-rel
 #[cfg(test)]
 const RC13_REVIEW: &str = "docs/release-audits/2026-10-05-solid-2-rc13-vocabulary-review.md";
 
-/// Every `2.0.0-rc.N` some review read. rc.10 and rc.11 were published and
-/// never read; rc.12 was never published.
-const READ_RELEASES: &[u8] = &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 13];
+/// The review of the rc.17 triple (ADR 0194).
+const RC17_REVIEW: &str = "docs/release-audits/2026-10-22-solid-2-rc17-release-review.md";
+
+/// Every `2.0.0-rc.N` some review read. rc.10, rc.11 and rc.14-rc.16 were
+/// published and never read; rc.12 was never published.
+const READ_RELEASES: &[u8] = &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 13, 17];
+
+/// The first read release whose answers rc.17 changed (the rc.17 review).
+const RC17: u8 = 17;
 
 /// The first release on which the answers rc.9 introduced (B2, B3, N3) hold.
 /// Every read release from it on gives them: the rc.13 review measured each
@@ -649,6 +724,32 @@ const KNOWN_GAPS: &[KnownGap] = &[
             "$DEVCOMP",
         ]),
     },
+    // The rc.17 review: new root exports that take callbacks.
+    KnownGap {
+        package: SOLID_JS,
+        from: 17,
+        through: 17,
+        gap: "exports createDeferred, dynamicComponent, lazyModule and onHydrationEnd, which take \
+              callbacks this vocabulary neither models nor excludes, so code inside one is not \
+              classified",
+        review: RC17_REVIEW,
+        exports: Some(&[
+            "createDeferred",
+            "dynamicComponent",
+            "lazyModule",
+            "onHydrationEnd",
+        ]),
+    },
+    KnownGap {
+        package: WEB,
+        from: 17,
+        through: 17,
+        gap: "exports dispatchAsInteraction, dynamicComponent and setLinkClaim, which take \
+              callbacks this vocabulary neither models nor excludes, so code inside one is not \
+              classified",
+        review: RC17_REVIEW,
+        exports: Some(&["dispatchAsInteraction", "dynamicComponent", "setLinkClaim"]),
+    },
 ];
 
 /// The pre-beta Solid 2 experiment. Measured on `2.0.0-experimental.1`
@@ -724,15 +825,23 @@ fn is_pre_beta_experiment(version: &str) -> bool {
 fn vocabulary_for(solid_js: Release<'_>, signals: Release<'_>, web: Release<'_>) -> Solid2 {
     Solid2 {
         // The new premise was read only on exact rc.13 signals bytes.
-        store_strict_keys_audited: matches!(signals, Release::Read(13)),
+        store_strict_keys_audited: matches!(signals, Release::Read(13 | 17)),
         // ADR 0292. `lazy` is `solid-js`'s own, and rc.13 is the one read
         // release whose wrapper renders through `createComponent`; rc.3 and
         // rc.9 call the loaded member themselves without a strict-read label.
-        lazy_renders_component: matches!(solid_js, Release::Read(13)),
+        lazy_renders_component: matches!(solid_js, Release::Read(13 | 17)),
         // ADR 0353. `render` and `hydrate` are `@solidjs/web`'s, so only its
         // version decides; rc.13 is the one release whose `render` was read.
-        render_creates_root: matches!(web, Release::Read(13)),
-        spread_event_keys_audited: matches!(web, Release::Read(13)),
+        render_creates_root: matches!(web, Release::Read(13 | 17)),
+        spread_event_keys: match web {
+            Release::Read(13) => SpreadEventKeys::AnyOn,
+            Release::Read(RC17) => SpreadEventKeys::OnUppercase,
+            _ => SpreadEventKeys::Unaudited,
+        },
+        // rc.17 signals changed both (the rc.17 review C1, C2).
+        optimistic_signal_setter_guarded: matches!(signals, Release::Read(n) if n < RC17),
+        latest_rejects_pending_read: matches!(signals, Release::Read(n) if n < RC17),
+        hydrate_code_inline: matches!(web, Release::Read(n) if n < RC17),
         // B1. An unread or unresolved signals keeps `Readonly` (module docs).
         store_root: match signals {
             Release::Read(number) if number >= 7 => StoreRootTyping::Mutable,
@@ -752,7 +861,14 @@ fn vocabulary_for(solid_js: Release<'_>, signals: Release<'_>, web: Release<'_>)
         // B2. No `@solidjs/web` at all leaves nothing to import `dynamic`
         // from, so the answer is never asked; the audited one keeps the
         // vocabulary the language's own.
+        // From rc.17 web forwards `dynamic` to `solid-js`'s `dynamicCore`
+        // (`dist/web.dev.js:2466-2467`), which tests `options?.static`
+        // (`solid-js` `dist/solid.dev.js:1445`): both must be read.
         dynamic_options: match web {
+            Release::Read(RC17) => match solid_js {
+                Release::Read(RC17) => DynamicOptions::StaticForm,
+                _ => DynamicOptions::Unread,
+            },
             Release::Read(number) if number >= RC9 => DynamicOptions::StaticForm,
             Release::Read(_) | Release::Unresolved => DynamicOptions::Ignored,
             Release::Unread(_) => DynamicOptions::Unread,

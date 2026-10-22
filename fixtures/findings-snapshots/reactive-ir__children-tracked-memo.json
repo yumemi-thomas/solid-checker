@@ -20,16 +20,6 @@
       "start": 1735,
       "end": 1738,
       "fixes": 0
-    },
-    {
-      "rule": "unaudited-solid-release",
-      "code": "SC9014",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/children-tracked-memo/node_modules/solid-js/package.json",
-      "start": 0,
-      "end": 0,
-      "fixes": 0
     }
   ]
 }

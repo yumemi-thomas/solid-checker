@@ -3,6 +3,8 @@
 //!
 //! Audited against the exact `solid-js@2.0.0-rc.3` published declaration surface.
 //!
+//! The rc.17 review adds the new root exports of `2.0.0-rc.17`.
+//!
 //! Sorted by name so lookup can binary search. A name appears under every
 //! module that exports it — 1.x's `solid-js/web` re-exports nine control-flow
 //! components from `solid-js`, and importing one of them from either module
@@ -43,6 +45,7 @@ pub static VALUES: &[(&str, &[&str])] = &[
     ("configureRefresh", &["solid-js/refresh"]),
     ("createComponent", &["solid-js"]),
     ("createContext", &["solid-js"]),
+    ("createDeferred", &["solid-js"]),
     ("createEffect", &["solid-js"]),
     ("createErrorBoundary", &["solid-js", "solid-js/internal"]),
     ("createLoadingBoundary", &["solid-js", "solid-js/internal"]),
@@ -61,6 +64,7 @@ pub static VALUES: &[(&str, &[&str])] = &[
     ("createUniqueId", &["solid-js"]),
     ("creationStamp", &["solid-js"]),
     ("deep", &["solid-js"]),
+    ("dynamicComponent", &["solid-js"]),
     ("enableExternalSource", &["solid-js"]),
     ("enableHydration", &["solid-js"]),
     ("enforceLoadingBoundary", &["solid-js"]),
@@ -77,11 +81,13 @@ pub static VALUES: &[(&str, &[&str])] = &[
     ("isWrappable", &["solid-js"]),
     ("latest", &["solid-js"]),
     ("lazy", &["solid-js"]),
+    ("lazyModule", &["solid-js"]),
     ("mapArray", &["solid-js"]),
     ("materializeContainerTrace", &["solid-js"]),
     ("merge", &["solid-js"]),
     ("omit", &["solid-js"]),
     ("onCleanup", &["solid-js"]),
+    ("onHydrationEnd", &["solid-js"]),
     ("onSettled", &["solid-js"]),
     ("reconcile", &["solid-js"]),
     ("refresh", &["solid-js"]),
@@ -119,6 +125,7 @@ pub static TYPES: &[(&str, &[&str])] = &[
     ("Context", &["solid-js"]),
     ("ContextProviderComponent", &["solid-js"]),
     ("CustomPartial", &["solid-js"]),
+    ("DynamicOptions", &["solid-js"]),
     ("ESMRuntimeType", &["solid-js/refresh"]),
     ("EffectBundle", &["solid-js"]),
     ("EffectFunction", &["solid-js"]),
