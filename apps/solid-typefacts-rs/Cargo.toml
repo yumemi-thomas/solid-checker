@@ -1,0 +1,56 @@
+# Rust Type Facts producer, built beside the Go one (apps/solid-typefacts)
+# until the migration switches the default. Its own workspace, lockfile and
+# target directory keep the compiler dependencies that arrive in later slices
+# (tsrs, ~79 crates) out of rust/target and out of rust/'s unsafe_code = "deny"
+# policy. See the migration plan, section 6.
+[workspace]
+members = ["."]
+resolver = "3"
+
+[package]
+name = "solid-typefacts"
+version = "0.0.0"
+edition = "2024"
+license = "MIT"
+publish = false
+rust-version = "1.99.1"
+description = "Type Facts v3 lifecycle producer (Rust)"
+
+[lib]
+name = "solid_typefacts"
+path = "src/lib.rs"
+
+[[bin]]
+name = "solid-typefacts"
+path = "src/main.rs"
+
+# Test double for process-level tests; see src/fake.rs.
+[[bin]]
+name = "solid-typefacts-fake"
+path = "src/bin/solid-typefacts-fake.rs"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[dependencies]
+# Protocol constants, request/response types and the deterministic CBOR codec
+# come from the client crate, so a producer/client mismatch fails to compile.
+typefacts = { path = "../../rust/crates/typefacts" }
+ciborium = "0.2"
+
+# Dependencies (the codec now, tsrs later) run optimized even in dev builds:
+# an unoptimized compiler front end is unusably slow. Workspace code stays at
+# opt-level 0 for fast iteration.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+opt-level = 3
+debug = 0
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = "symbols"
+panic = "unwind"

@@ -1,0 +1,139 @@
+//! Small helpers that reproduce Go's text and path conventions, so error
+//! messages the client may surface stay identical to the Go producer's.
+
+use std::path::Path;
+
+/// Go's `%q` for a string (`strconv.Quote`). Printable-ness approximates
+/// `unicode.IsPrint`: control characters and non-ASCII whitespace are escaped.
+#[must_use]
+pub fn quote(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() + 2);
+    out.push('"');
+    for character in text.chars() {
+        match character {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\u{7}' => out.push_str("\\a"),
+            '\u{8}' => out.push_str("\\b"),
+            '\u{c}' => out.push_str("\\f"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            '\u{b}' => out.push_str("\\v"),
+            ' ' => out.push(' '),
+            printable if !printable.is_control() && !printable.is_whitespace() => {
+                out.push(printable);
+            }
+            other => {
+                let code = u32::from(other);
+                if code < 0x80 {
+                    out.push_str(&format!("\\x{code:02x}"));
+                } else if code < 0x1_0000 {
+                    out.push_str(&format!("\\u{code:04x}"));
+                } else {
+                    out.push_str(&format!("\\U{code:08x}"));
+                }
+            }
+        }
+    }
+    out.push('"');
+    out
+}
+
+/// Renders an I/O error the way Go's `*PathError` does after the path:
+/// the OS message, lowercased first letter, without Rust's "(os error N)".
+#[must_use]
+pub fn io_message(error: &std::io::Error) -> String {
+    let text = error.to_string();
+    let text = match text.rfind(" (os error ") {
+        Some(index) => &text[..index],
+        None => &text,
+    };
+    let mut characters = text.chars();
+    match characters.next() {
+        Some(first) => first.to_lowercase().chain(characters).collect(),
+        None => String::new(),
+    }
+}
+
+/// `*PathError.Error()`: `<op> <path>: <message>`.
+#[must_use]
+pub fn path_error(operation: &str, path: &str, error: &std::io::Error) -> String {
+    format!("{operation} {path}: {}", io_message(error))
+}
+
+/// `filepath.Clean` for Unix-style paths.
+#[must_use]
+pub fn clean(path: &str) -> String {
+    if path.is_empty() {
+        return ".".to_owned();
+    }
+    let rooted = path.starts_with('/');
+    let mut parts: Vec<&str> = Vec::new();
+    for element in path.split('/') {
+        match element {
+            "" | "." => {}
+            ".." => {
+                if parts.last().is_some_and(|last| *last != "..") {
+                    parts.pop();
+                } else if !rooted {
+                    parts.push("..");
+                }
+            }
+            other => parts.push(other),
+        }
+    }
+    let joined = parts.join("/");
+    match (rooted, joined.is_empty()) {
+        (true, _) => format!("/{joined}"),
+        (false, true) => ".".to_owned(),
+        (false, false) => joined,
+    }
+}
+
+/// `filepath.Abs` (which also cleans).
+pub fn absolute(path: &str) -> Result<String, String> {
+    if Path::new(path).has_root() {
+        return Ok(clean(path));
+    }
+    let working = std::env::current_dir().map_err(|error| io_message(&error))?;
+    let working = working.to_string_lossy();
+    let base = if working.is_empty() {
+        "."
+    } else {
+        working.as_ref()
+    };
+    Ok(clean(&format!("{base}/{path}")))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn clean_matches_go() {
+        for (input, want) in [
+            ("", "."),
+            ("/", "/"),
+            ("a//b/./c/..", "a/b"),
+            ("/../a", "/a"),
+            ("../../a/b/..", "../../a"),
+            ("a/..", "."),
+            ("/a/b/", "/a/b"),
+        ] {
+            assert_eq!(clean(input), want, "{input:?}");
+        }
+    }
+
+    #[test]
+    fn quote_matches_go() {
+        assert_eq!(quote("a\"b\\c\n\u{1}é"), "\"a\\\"b\\\\c\\n\\x01é\"");
+        assert_eq!(quote("\u{a0}"), "\"\\u00a0\"");
+    }
+
+    #[test]
+    fn io_message_drops_os_error_suffix() {
+        let error = std::fs::read("/definitely/not/here").unwrap_err();
+        assert_eq!(io_message(&error), "no such file or directory");
+    }
+}

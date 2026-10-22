@@ -16,7 +16,7 @@ CARGO_TEST_RUNNER ?= test
 PROBE_NODE ?= $(shell node -e 'process.stdout.write(require("fs").realpathSync(process.execPath))')
 export SOLID_CHECKER_PROBE_NODE = $(PROBE_NODE)
 
-.PHONY: build build-typefacts build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit wasm-parity clean clean-verify
+.PHONY: build build-typefacts build-typefacts-rs test-typefacts-rs build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit wasm-parity clean clean-verify
 
 build: build-rust
 
@@ -24,6 +24,24 @@ build: build-rust
 # startup handshake rejects any build-id, protocol, or schema mismatch.
 build-typefacts:
 	TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" scripts/build-typefacts.sh
+
+# The Rust Type Facts producer (migration slice S1), built beside the Go one
+# and never selected by default: bin/solid-typefacts stays the Go binary, and
+# scripts/build-typefacts.sh does not build this. Its own Cargo workspace,
+# lockfile and target directory keep it out of rust/target. Point a test or
+# gate at it with SOLID_TYPEFACTS_BIN / TYPEFACTS_TEST_BIN=bin/solid-typefacts-rs.
+build-typefacts-rs:
+	mkdir -p bin
+	TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) build --release --locked \
+	  --manifest-path apps/solid-typefacts-rs/Cargo.toml --bin solid-typefacts
+	cp apps/solid-typefacts-rs/target/release/solid-typefacts bin/solid-typefacts-rs
+
+# fmt, clippy and tests of the Rust producer workspace; the differential tests
+# compare against bin/solid-typefacts, so build it first.
+test-typefacts-rs: build-typefacts
+	cargo +$(RUST_TOOLCHAIN) fmt --manifest-path apps/solid-typefacts-rs/Cargo.toml -- --check
+	TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) clippy --manifest-path apps/solid-typefacts-rs/Cargo.toml --all-targets -- -D warnings
+	TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) test --manifest-path apps/solid-typefacts-rs/Cargo.toml
 
 build-rust: build-typefacts
 	mkdir -p bin

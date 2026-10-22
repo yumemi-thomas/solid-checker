@@ -46,6 +46,7 @@ test("each table row claims its own owner's paths", () => {
     ["rust/crates/solid-facts-backend/src/diagnostics.rs", ["backend-process", "coverage"]],
     ["fixtures/reactive-ir/store-flow/App.tsx", ["coverage", "ownership-gate"]],
     ["fixtures/findings-snapshots/engine__oxlint-conformance.json", ["coverage", "ownership-gate"]],
+    ["apps/solid-typefacts-rs/src/session.rs", ["typefacts-rs"]],
     ["packages/cli/lib/rules-solid-v2.json", ["bun-test-cli"]],
     ["packages/wasm/src/index.ts", ["bun-test-wasm", "wasm-parity"]],
   ];

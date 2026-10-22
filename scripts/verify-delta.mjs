@@ -58,6 +58,7 @@ export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 const TOOLCHAIN = "+1.99.1";
 const MANIFEST = "rust/Cargo.toml";
+const TYPEFACTS_RS_MANIFEST = "apps/solid-typefacts-rs/Cargo.toml";
 const DEBUG_CHECKER = "rust/target/debug/solid-checker-rust";
 const TYPEFACTS = "bin/solid-typefacts";
 
@@ -140,6 +141,19 @@ export const CHECKS = {
       "--all-targets", "--no-default-features", "--features", "dialect-v2",
     ],
   },
+  "typefacts-rs": {
+    why:
+      "the Rust Type Facts producer is its own Cargo workspace (own lockfile and target), so the rust/ " +
+      "fmt and clippy checks never see it; its process tests also compare against bin/solid-typefacts",
+    commands: [
+      ["cargo", TOOLCHAIN, "fmt", "--manifest-path", TYPEFACTS_RS_MANIFEST, "--", "--check"],
+      [
+        "cargo", TOOLCHAIN, "clippy", "--manifest-path", TYPEFACTS_RS_MANIFEST, "--all-targets",
+        "--", "-D", "warnings",
+      ],
+      ["cargo", TOOLCHAIN, "test", "--manifest-path", TYPEFACTS_RS_MANIFEST],
+    ],
+  },
   // The universal handoff set, appended to every plan.
   "fmt-check": {
     command: ["cargo", TOOLCHAIN, "fmt", "--manifest-path", MANIFEST, "--all", "--", "--check"],
@@ -215,6 +229,11 @@ export const ROWS = [
     owner: "fixtures or expected findings",
     checks: ["coverage", "ownership-gate"],
   },
+  {
+    prefix: "apps/solid-typefacts-rs/",
+    owner: "the Rust Type Facts producer (separate workspace; not yet the default)",
+    checks: ["typefacts-rs"],
+  },
   { prefix: "packages/cli/", owner: "packages/cli", checks: ["bun-test-cli"] },
   { prefix: "packages/wasm/", owner: "packages/wasm", checks: ["bun-test-wasm", "wasm-parity"] },
   // Prose that no build, test, or gate reads: the universal set only. Only
@@ -283,6 +302,8 @@ export function planFor(paths) {
     // and everything after it should run against that binary.
     ...["facts-lib", "ir-lib", "backend-process", "dialects-process"].filter((id) => selected.has(id)),
     ...["coverage", "ownership-gate"].filter((id) => selected.has(id)),
+    // Separate workspace; its differential tests read the Go producer built above.
+    ...["typefacts-rs"].filter((id) => selected.has(id)),
     // Before the WASM package's own tests: its Make target builds the package
     // (owned artifacts included) that those tests load on a fresh tree.
     ...["wasm-parity"].filter((id) => selected.has(id)),
