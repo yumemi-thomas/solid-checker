@@ -198,6 +198,10 @@ pub(super) fn semantic_write_execution_role_within(
     root_body: RootBodyGuard,
     visiting: &mut HashSet<(String, Span)>,
 ) -> ExecutionRole {
+    // ADR 0360: a file the compiler refused places no write.
+    if file.compiler.withheld() {
+        return ExecutionRole::Unknown;
+    }
     // Write legality follows the runtime's *owner* context, which is not
     // always the read-execution context: leaf scopes are write-legal though
     // their reads track, and `untrack` writes answer to the enclosing owner

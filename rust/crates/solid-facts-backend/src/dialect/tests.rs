@@ -995,6 +995,35 @@ fn every_release_variant_is_one_its_language_lists() {
     ));
 }
 
+/// ADR 0360: the refused-file notice's identity is the catalog's, and it is a
+/// project-level notice quoting the compiler's first line.
+#[cfg(feature = "dialect-v2")]
+#[test]
+fn the_compiler_refusal_notice_identity_is_the_one_the_catalog_publishes() {
+    let dialect = by_id("solid-v2").expect("the 2.0 dialect is compiled in");
+    let metadata = (dialect.rule_metadata)(COMPILER_REFUSED_RULE)
+        .unwrap_or_else(|| panic!("the 2.0 catalog must declare {COMPILER_REFUSED_RULE}"));
+    assert_eq!(metadata.code, COMPILER_REFUSED_CODE);
+    assert!(metadata.uncertifiable);
+    let finding = crate::diagnostics::compiler_refused_finding(
+        "/app/View.tsx",
+        "/app/View.tsx: The HTML provided is malformed. (3:5)\nUser HTML:\n <p><p></p></p>",
+    );
+    assert_eq!(finding.id, metadata.code);
+    assert_eq!(finding.rule, metadata.name);
+    assert_eq!(finding.severity, metadata.severity);
+    assert_eq!(finding.kind, "uncertifiable");
+    assert_eq!(finding.subject_kind, "project");
+    assert!(
+        finding.message.starts_with(
+            "the Solid compiler refused /app/View.tsx: The HTML provided is malformed. (3:5);"
+        ),
+        "{}",
+        finding.message
+    );
+    assert!(finding.evidence[0].message.contains("User HTML"));
+}
+
 /// The notice's identity is held here and published by the catalog; this
 /// keeps them from drifting, as for the refusal.
 #[cfg(feature = "dialect-v2")]

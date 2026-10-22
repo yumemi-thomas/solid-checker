@@ -499,6 +499,13 @@ pub const UNAUDITED_RELEASE_CODE: &str = "SC9014";
 /// The rule name paired with [`UNAUDITED_RELEASE_CODE`].
 pub const UNAUDITED_RELEASE_RULE: &str = "unaudited-solid-release";
 
+/// The diagnostic identity of the notice for a file the dialect compiler
+/// refused (ADR 0360). Fact building decides it, not a rule, and it is pinned
+/// to the catalog like [`UNAUDITED_RELEASE_CODE`].
+pub const COMPILER_REFUSED_CODE: &str = "SC9015";
+/// The rule name paired with [`COMPILER_REFUSED_CODE`].
+pub const COMPILER_REFUSED_RULE: &str = "compiler-refused-source";
+
 /// What the dialect walk found, and where it found it.
 ///
 /// The three cases are **not** the same answer, and a caller that must refuse

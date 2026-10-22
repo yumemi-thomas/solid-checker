@@ -104,8 +104,11 @@ fn analyze_traced(
 ) -> Result<MaterializedCompilation, CompilerProviderError> {
     use solidjs_compiler::compile;
 
+    // ADR 0360: the compiler declining the source is a refusal of this file,
+    // not a producer failure. The trace-off replay and every identity check
+    // below stay `Native` (fatal): they mean the pinned producer misbehaved.
     let traced = compile(&request.source, &compile_options(request, true)?)
-        .map_err(|error| CompilerProviderError::Native(format!("{}: {error}", request.path)))?;
+        .map_err(|error| CompilerProviderError::Refused(format!("{}: {error}", request.path)))?;
     let trace = traced
         .semantic_trace
         .ok_or(CompilerProviderError::MissingExecutionMap)?;

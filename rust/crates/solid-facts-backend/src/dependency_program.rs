@@ -99,6 +99,20 @@ pub fn prepare_from(
         .map(|name| (*name).to_owned())
         .collect::<BTreeSet<_>>();
     let mut notes = SelectionNotes::default();
+    // ADR 0360: the closure file the build would compile, compiled as the
+    // build compiles it; only a refusal answers here, every other compiler
+    // failure is the fact build's to report.
+    let refusal = |path: &Path, source: &str| {
+        let request = solid_facts::compiler::AnalysisRequest::new(
+            path.to_string_lossy().into_owned(),
+            source,
+            solid_facts::compiler::CompilerOptions::default(),
+        );
+        match (dialect.compiler)().analyze(&request) {
+            Err(solid_facts::compiler::CompilerProviderError::Refused(message)) => Some(message),
+            _ => None,
+        }
+    };
     let outcome = prepare_program(
         project,
         selection,
@@ -107,6 +121,7 @@ pub fn prepare_from(
         modules,
         &excluded,
         dialect.vocabulary.ecosystem_scopes(),
+        &refusal,
         &mut notes,
     );
     (notes, outcome)

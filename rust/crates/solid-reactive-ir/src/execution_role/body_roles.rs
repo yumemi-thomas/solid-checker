@@ -745,6 +745,12 @@ pub(super) fn semantic_execution_role_within(
     lookup: &SemanticLookup<'_>,
     classifying: &mut HashSet<(String, Span)>,
 ) -> ExecutionRole {
+    // ADR 0360: no site of a file the compiler refused is placed. Its syntax
+    // is real, but which of its code runs tracked, deferred, on an event or
+    // during rendering is exactly what the missing compiler facts decide.
+    if file.compiler.withheld() {
+        return ExecutionRole::Unknown;
+    }
     let role = semantic_role_before_awaits(
         file,
         span,

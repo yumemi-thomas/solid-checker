@@ -611,7 +611,9 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         | Rule::UnsupportedSolidRuntime
         // Likewise: the backend builds it beside the analysis from the
         // detected release and the dialect's review of it.
-        | Rule::UnauditedSolidRelease => panic!(
+        | Rule::UnauditedSolidRelease
+        // Likewise: the backend builds it from a file the compiler refused.
+        | Rule::CompilerRefusedSource => panic!(
             "rule {} is not emitted through the static-violation channel",
             rule.metadata().name
         ),
