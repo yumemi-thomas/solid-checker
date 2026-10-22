@@ -14,11 +14,11 @@
     {
       "rule": "reactive-write-in-owned-scope",
       "code": "SC2001",
-      "kind": "uncertifiable",
+      "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/setter-in-render-root/render.ts",
-      "start": 646,
-      "end": 657,
+      "start": 669,
+      "end": 680,
       "fixes": 0
     },
     {
@@ -37,8 +37,18 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/setter-in-render-root/render.ts",
-      "start": 1015,
-      "end": 1026,
+      "start": 1032,
+      "end": 1043,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/setter-in-render-root/render.ts",
+      "start": 1218,
+      "end": 1229,
       "fixes": 0
     },
     {
@@ -47,8 +57,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/setter-in-render-root/render.ts",
-      "start": 1387,
-      "end": 1398,
+      "start": 1590,
+      "end": 1601,
       "fixes": 0
     }
   ]

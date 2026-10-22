@@ -91,10 +91,12 @@ pub(super) enum WriteRegionAdjustment {
     /// `createRenderEffect`'s apply). Later runs come from the flush, where
     /// writes are legal; the first run is as legal as the call site.
     FirstRunAtCallSite(Span),
-    /// The write sits directly in a callback that runs during the call under
-    /// a root owner the call creates (`createRoot`'s body). The ambient owner
-    /// is that root wherever the call is, so the call site does not matter:
-    /// the operation's [`RootBodyGuard`] decides.
+    /// The write sits directly in a callback that runs under a root owner the
+    /// call creates whenever it runs (`createRoot`'s body, rc.17 `hydrate`'s
+    /// possibly later `code`). The ambient owner is that root wherever the
+    /// call is, so neither the call site nor the timing matters: the
+    /// operation's [`RootBodyGuard`] decides, short of a suspension before
+    /// the write.
     CreatedRoot,
     /// The write sits directly in an inline callback whose call may create a
     /// root this vocabulary has not audited
@@ -127,11 +129,11 @@ pub(super) fn write_region_adjustment(
             {
                 return Some(WriteRegionAdjustment::LeafScope);
             }
+            // The root is the owner whenever the callback runs, so its
+            // timing is not asked (rc.17 `hydrate` states none).
             if lookup
                 .dialect
                 .callback_runs_in_created_root(primitive, index)
-                && callback_execution_at_call(file, call, primitive, index, lookup)
-                    == Some(Execution::Inline)
             {
                 return Some(WriteRegionAdjustment::CreatedRoot);
             }
@@ -219,10 +221,18 @@ pub(super) fn semantic_write_execution_role_within(
             // rejected operation there takes the component body's role; an
             // exempted one takes the inline untracked callback's, which
             // reports nothing.
-            Some(WriteRegionAdjustment::CreatedRoot) => match root_body {
-                RootBodyGuard::Rejects => return ExecutionRole::UntrackedRendering,
-                RootBodyGuard::Exempts => return ExecutionRole::UntrackedCallback,
-            },
+            //
+            // Past an await the body runs on a later task with no owner, so
+            // the root is no longer the ambient owner.
+            Some(WriteRegionAdjustment::CreatedRoot) => {
+                if let Some(role) = suspended_write_role(file, span, lookup) {
+                    return role;
+                }
+                match root_body {
+                    RootBodyGuard::Rejects => return ExecutionRole::UntrackedRendering,
+                    RootBodyGuard::Exempts => return ExecutionRole::UntrackedCallback,
+                }
+            }
             // Whether a root wraps this callback is not audited on this
             // release, so the write has no placement the checker can prove.
             Some(WriteRegionAdjustment::UnauditedRoot) => return ExecutionRole::Unknown,
@@ -263,6 +273,11 @@ pub(super) fn semantic_write_execution_role_within(
                     root_body,
                     visiting,
                 ) {
+                    if role.reports_disallowed_write()
+                        && let Some(suspended) = suspended_write_role(file, span, lookup)
+                    {
+                        return suspended;
+                    }
                     return role;
                 }
                 break;
@@ -387,6 +402,24 @@ pub(super) fn semantic_write_execution_role_within(
     }
     visiting.remove(&key);
     imperative.unwrap_or(unknown)
+}
+
+/// The role of a write its own function may reach only past a suspension,
+/// where the owner a callback slot gives the function is gone: legal past a
+/// dominating await, unplaced past one that may be skipped. `None` when no
+/// suspension precedes it.
+fn suspended_write_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<ExecutionRole> {
+    if follows_dominating_await(file, span) || follows_try_head_await(file, span, lookup) {
+        Some(ExecutionRole::Unreported)
+    } else if may_follow_suspension(file, span) {
+        Some(ExecutionRole::Unknown)
+    } else {
+        None
+    }
 }
 
 /// Whether `span` sits in a function literal that is the value of a JSX

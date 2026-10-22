@@ -104,6 +104,22 @@ export function ReadAfterAwaitInRoot() {
   return <div />;
 }
 
+// The root is the ambient owner only before the await: the write after it is
+// legal (a violation before), whether the body is inline or passed by name.
+export function WriteAfterAwaitInRoot() {
+  const [, setX] = createSignal(0);
+  createRoot(async () => {
+    await load();
+    setX(7);
+  });
+  async function init() {
+    await load();
+    setX(8);
+  }
+  createRoot(init);
+  return <div />;
+}
+
 // An async generator suspends again at each `yield`, and its caller may
 // resume it under an owner: no generator is past its awaits (review round 3).
 export function AsyncGenerator() {

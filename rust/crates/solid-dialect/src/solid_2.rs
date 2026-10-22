@@ -119,11 +119,12 @@ pub struct Solid2 {
     lazy_renders_component: bool,
     /// ADR 0353, from `@solidjs/web`: whether `render` and `hydrate` run their
     /// `code` callback under the root they create
-    /// ([`Dialect::callback_runs_in_created_root`]). `true` on rc.13 alone:
-    /// its `render` calls `code()` inside `createRoot(dispose => …)`
-    /// (`dist/web.dev.js:488-495`), and its `hydrate` reaches that `render` on
-    /// every path (`dist/web.dev.js:1521-1620`). No other `@solidjs/web` release
-    /// was read for this, so each keeps `false`.
+    /// ([`Dialect::callback_runs_in_created_root`]). `true` on rc.13 and
+    /// rc.17: `render` calls `code()` inside `createRoot(dispose => …)`
+    /// (rc.13 `dist/web.dev.js:488-495`, rc.17 `:551-558`), and `hydrate`
+    /// reaches that `render` on every path (rc.13 `:1521-1620`, rc.17
+    /// `:1626-1735`, possibly after it returns). No other `@solidjs/web`
+    /// release was read for this, so each keeps `false`.
     render_creates_root: bool,
     /// ADR 0358, from `@solidjs/web`: which spread keys `assignProp`
     /// installs as listeners (`releases::SpreadEventKeys`).
@@ -149,8 +150,8 @@ pub struct Solid2 {
     /// From `@solidjs/web`: whether `hydrate` calls `code` before it returns
     /// on every path. rc.17 defers it behind `DOMContentLoaded` or a
     /// microtask while the document is loading (`dist/web.dev.js:1631-1645`),
-    /// so no inline execution is stated there; read releases through rc.13
-    /// keep `true`.
+    /// so no inline execution is stated there, though its root still is
+    /// (`render_creates_root`); read releases through rc.13 keep `true`.
     hydrate_code_inline: bool,
     /// From all three packages: whether `dynamicComponent` and
     /// `dispatchAsInteraction` are exports, modelled as read on rc.17
@@ -690,11 +691,15 @@ impl Dialect for Solid2 {
     /// apply. Prod builds carry no guard and throw nothing.
     ///
     /// `createRoot`, and `render` and `hydrate` on the audited `@solidjs/web`
-    /// rc.13 (`render_creates_root`). Their `code` argument is called inside
-    /// the `createRoot` that `render` makes (`@solidjs/web@2.0.0-rc.13`
-    /// `dist/web.dev.js:488-495`), and `hydrate` reaches that `render` on every
-    /// path (`:1521-1620`), so the write guard reads the same root there. Only
-    /// rc.13 was read for `render`, so no other release claims it. Not
+    /// rc.13 and rc.17 (`render_creates_root`). Their `code` argument is called
+    /// inside the `createRoot` that `render` makes (`@solidjs/web@2.0.0-rc.13`
+    /// `dist/web.dev.js:488-495`, rc.17 `:551-558`), and `hydrate` reaches that
+    /// `render` on every path (rc.13 `:1521-1620`, rc.17 `:1626-1735`), so the
+    /// write guard reads the same root there. On rc.17 that holds on the path
+    /// that runs `code` after `hydrate` returns too (`:1631-1645` calls
+    /// `hydrate` again from the listener), so the root is claimed while the
+    /// timing is not (`hydrate_code_inline`). Only rc.13 and rc.17 were read
+    /// for `render`, so no other release claims it. Not
     /// `runWithOwner(owner, fn)`, which also runs `fn` inline under an owner,
     /// but a supplied owner can be a leaf (`getOwner()` in a tracked effect),
     /// where every write is legal. `createRevealOrder` makes a root too, but

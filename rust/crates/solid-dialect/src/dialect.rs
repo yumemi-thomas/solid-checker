@@ -462,15 +462,17 @@ pub trait Dialect: Sync {
         false
     }
 
-    /// Whether the callback at `argument` runs during the call, directly
+    /// Whether the callback at `argument`, whenever it runs, runs directly
     /// under a **root** owner the call creates for it, so that the ambient
     /// owner a write guard reads there is that root.
     ///
-    /// A root is a children-capable owner, so a write guard that exempts only
-    /// children-forbidden leaves rejects a write there. Nothing about the
-    /// callback's *reads* follows from this: a root body is untracked. The
-    /// default claims nothing, which leaves such a write to the ordinary
-    /// callback classification.
+    /// *When* it runs is [`Dialect::callback_executions`]'s answer, not this
+    /// one's: rc.17's `hydrate` may run `code` after it returns, under the
+    /// root, and states no execution. A root is a children-capable owner, so a
+    /// write guard that exempts only children-forbidden leaves rejects a write
+    /// there. Nothing about the callback's *reads* follows from this: a root
+    /// body is untracked. The default claims nothing, which leaves such a
+    /// write to the ordinary callback classification.
     fn callback_runs_in_created_root(&self, primitive: Primitive, argument: usize) -> bool {
         let _ = (primitive, argument);
         false

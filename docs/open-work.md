@@ -23,7 +23,7 @@ Write in an owned scope (`reactive-write-in-owned-scope`, SC2001):
 
 - A named handler both attached as `onClick` and called directly in the component body hides the write in a helper it calls; the runtime warns at that call.
 - A setter call in a component's default parameter initializer runs in the owned component scope; the write rule places nothing there.
-- SC2001 in `render`/`hydrate` `code` off web rc.13/17 and in rc.17's deferrable `hydrate`: uncertifiable (ADR 0353). Signals rc.17: a typed-only or `let`-aliased setter may be `createOptimistic`'s (unguarded): unclaimed.
+- SC2001 in `render`/`hydrate` `code` off web rc.13/17: uncertifiable (ADR 0353). Signals rc.17: a typed-only or `let`-aliased setter may be `createOptimistic`'s (unguarded): unclaimed.
 
 `flush` in an effect apply (`flush-in-effect-callback`, SC2008). The runtime reports these; the rule does not claim the open shapes below (ADR 0341). Positions and premises: rule page `flush-in-effect-callback`.
 
@@ -80,7 +80,8 @@ Leaf body (`leaf-owner-forbidden-call`, SC3001):
 - Host-origin proof (DOM objects handed to Solid helpers, `makeEventListener(window, ...)`) needs the premise that project code never installs members on host DOM objects; app-game has 1,232 unknown-key writes. Reopen when a sweep shows a violation hinging on it and the owner states the premise.
 - Anonymous arrows as their own summary owners: they detached captured parameter member calls from the enclosing function and dropped the SC9012 an opaque caller keeps (control: `fixtures/reactive-ir/accessor-provenance/Anonymous.tsx`). Reopen when captured-parameter behavior and callback timing compose across source summaries (Relay's `() => props.environment`).
 - A shared reference/identity layer (`Resolved<T> | Unknown`) is not started. Under ADR 0326 every false positive so far was a proof re-deriving "is this still the same value" (props aliases, `arguments`, `delete`, redeclaration, reassigned tags, views of props). Reopen when a proof needs that answer.
-- Recall fixes for the section 1 oracle sites: zero corpus yield (`useParams()` destructuring: 0 occurrences; every `children()` accessor is read in JSX). Reopen when a real project or report hits one.
+- Recall fixes for the section 1 oracle sites: zero corpus yield (no `useParams()` destructuring; every `children()` accessor is read in JSX). Reopen on a real hit.
+- An inferred browser host keeps rc.17 `setLinkClaim`'s gap: ADR 0270 admits non-Vite scripts (`node server.js` calling `renderToString`).
 - Inferring a `never` exit from a body: a call completes normally unless its signature is `asserts` or returns `never`, and a helper that throws undeclared is outside the model. Treating every helper call in a `try` as unproven would cost recall the owner declined (ADR 0279, option b). Reopen if a producer fact records inferred throws.
 ## 3. Recorded precision trades
 

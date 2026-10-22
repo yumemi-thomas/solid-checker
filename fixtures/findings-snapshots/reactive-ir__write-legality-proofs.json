@@ -67,8 +67,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-legality-proofs/Await.tsx",
-      "start": 2795,
-      "end": 2802,
+      "start": 3194,
+      "end": 3201,
       "fixes": 0
     },
     {
@@ -77,8 +77,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-legality-proofs/Await.tsx",
-      "start": 3163,
-      "end": 3170,
+      "start": 3562,
+      "end": 3569,
       "fixes": 0
     },
     {
@@ -87,8 +87,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-legality-proofs/Await.tsx",
-      "start": 4680,
-      "end": 4688,
+      "start": 5079,
+      "end": 5087,
       "fixes": 0
     },
     {
@@ -97,8 +97,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-legality-proofs/Await.tsx",
-      "start": 4752,
-      "end": 4760,
+      "start": 5151,
+      "end": 5159,
       "fixes": 0
     },
     {
@@ -107,8 +107,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-legality-proofs/Await.tsx",
-      "start": 4822,
-      "end": 4830,
+      "start": 5221,
+      "end": 5229,
       "fixes": 0
     },
     {
@@ -117,8 +117,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-legality-proofs/Await.tsx",
-      "start": 4920,
-      "end": 4928,
+      "start": 5319,
+      "end": 5327,
       "fixes": 0
     },
     {
@@ -127,8 +127,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-legality-proofs/Await.tsx",
-      "start": 5015,
-      "end": 5023,
+      "start": 5414,
+      "end": 5422,
       "fixes": 0
     },
     {
@@ -137,8 +137,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-legality-proofs/Await.tsx",
-      "start": 5090,
-      "end": 5098,
+      "start": 5489,
+      "end": 5497,
       "fixes": 0
     },
     {
@@ -147,8 +147,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-legality-proofs/Await.tsx",
-      "start": 5175,
-      "end": 5183,
+      "start": 5574,
+      "end": 5582,
       "fixes": 0
     }
   ]

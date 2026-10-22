@@ -75,7 +75,7 @@ With no explicit program boundary, the nearest `package.json` decides: `"private
 
 <a id="adr-0194"></a>
 ## ADR 0194 — The audited Solid 2 release is rc.17
-`AUDITED_INSTALLATION` names `solid-js`, `@solidjs/signals` and `@solidjs/web` at `2.0.0-rc.17` (`Solid2::AUDITED` is `RC17`): rc.13's answers but `on`+uppercase spread listeners, an unguarded `createOptimistic` setter, `latest` absorbing a pending read, a deferrable `hydrate`, and `dynamic`'s static form from `solid-js`. `READ_RELEASES` is rc.0-rc.9, rc.13, rc.17; others get conservative answers under `SC9014`, older read ones the older-release notice. On the rc.17 triple `dynamicComponent` takes `dynamic`'s forms and `dispatchAsInteraction` runs `fn` inline in the caller's owner; other new callback exports are import-scoped gaps, `setLinkClaim`'s closed by declared CSR. Owner: rust/crates/solid-dialect/src/solid_2/releases.rs; review in docs/release-audits/.
+`AUDITED_INSTALLATION` names `solid-js`, `@solidjs/signals` and `@solidjs/web` at `2.0.0-rc.17` (`Solid2::AUDITED` is `RC17`): rc.13's answers but `on`+uppercase spread listeners, an unguarded `createOptimistic` setter, `latest` absorbing a pending read, a deferrable `hydrate`, and `dynamic`'s static form from `solid-js`. `READ_RELEASES` is rc.0-rc.9, rc.13, rc.17; others get conservative answers under `SC9014`, older read ones the older-release notice. On the rc.17 triple `dynamicComponent` takes `dynamic`'s forms and `dispatchAsInteraction` runs `fn` inline in the caller's owner; other new callback exports are import-scoped gaps, `setLinkClaim`'s closed by declared CSR only (an inferred host admits non-Vite hosts). Owner: rust/crates/solid-dialect/src/solid_2/releases.rs; review in docs/release-audits/.
 
 <a id="adr-0195"></a>
 ## ADR 0195 — A source tracked before the await is a dependency
@@ -503,7 +503,7 @@ Without an owner, rc.13 `useContext` throws `NoOwnerError` even with a default (
 
 <a id="adr-0353"></a>
 ## ADR 0353 — Audited render callbacks run under a root
-`@solidjs/web` rc.13 and rc.17 call `render`'s code inside `createRoot`; `hydrate` reaches it on every path, though rc.17 may defer it, so no inline execution is stated there. Direct setters and called helpers therefore violate SC2001. Only those web releases enable `render_creates_root`; others yield an uncertifiable write placement. Owners: `solid_2.rs` and `execution_role/write_roles.rs`. Mechanics: `docs/rules/reactive-write-in-owned-scope.md`; fixtures `setter-in-render-root` and rc.9 twin; oracle `render-root-write`.
+`@solidjs/web` rc.13 and rc.17 run `render`'s code in `createRoot`; `hydrate` reaches it on every path. rc.17 may defer it: no execution is stated, but the root is (`callback_runs_in_created_root` is timing-free), so setters in code and called helpers violate SC2001 unless past an await. Other web releases' placement is uncertifiable. Owners: `solid_2.rs`, `execution_role/write_roles.rs`; rule page; fixtures `setter-in-render-root` (+ rc.9 twin); oracle `render-root-write`.
 
 <a id="adr-0354"></a>
 ## ADR 0354 — Possible suspension withholds strict-read placement

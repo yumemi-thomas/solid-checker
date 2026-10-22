@@ -12,12 +12,19 @@ render(() => {
   return document.createElement("span");
 }, document.createElement("div"));
 
-// rc.17's `hydrate` reaches that `render` on every path but may defer it
-// (dist/web.dev.js:1631-1645), so this write is uncertifiable.
+// rc.17's `hydrate` may run `code` after it returns (dist/web.dev.js:1631-1645),
+// but every path ends in that `render` (:1626-1735): SC2001 whenever it runs.
 hydrate(() => {
   setCount(2);
   return document.createElement("span");
 }, document.createElement("div"));
+
+// The same for a function passed by name.
+function hydrateCode() {
+  setCount(7);
+  return document.createElement("span");
+}
+hydrate(hydrateCode, document.createElement("div"));
 
 // A helper only the code callback calls runs under the same root.
 function writeCount() {

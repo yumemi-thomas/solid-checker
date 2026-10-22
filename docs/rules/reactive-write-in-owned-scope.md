@@ -38,7 +38,8 @@ and not reported. `rc.9` removed the exemption, so it throws and is reported.
 For `rc.0`, or a signals release this checker has not read, it is not reported.
 Callbacks nested in the body keep their own answer: an effect apply,
 `onSettled` or an event listener inside the root stays legal, and a memo compute
-inside it is reported as any memo compute is. A function passed to `createRoot`
+inside it is reported as any memo compute is. A write past an await that
+dominates it in an async root body runs with no owner, and is legal. A function passed to `createRoot`
 by name, `createRoot(init)`, is the root body exactly as an inline arrow is; it
 is resolved by the argument's symbol to a `function` declaration or an
 arrow-bound `const` in the same file, so an `init` parameter never stands for a
@@ -49,11 +50,12 @@ body.
 `render(code, el)` and `hydrate(code, el)` run `code` the same way on
 `@solidjs/web` rc.13 and rc.17 (ADR 0353). `render` calls `code()` inside the
 `createRoot` it makes (rc.17 `dist/web.dev.js:551-558`), and `hydrate` reaches
-that `render` on every path (`:1626-1735`), so a setter directly in `render`'s
-`code`, or in a helper only `code` calls, is reported as in a `createRoot`
-body. rc.17's `hydrate` may run `code` after it returns (a `DOMContentLoaded`
-listener or a microtask, `:1631-1645`), so a write there is uncertifiable on
-rc.17. Only rc.13's and rc.17's `@solidjs/web` were read.
+that `render` on every path (`:1626-1735`), so a setter directly in `code`
+(inline or passed by name), or in a helper only `code` calls, is reported as
+in a `createRoot` body. rc.17's `hydrate` may run `code` after it returns (a
+`DOMContentLoaded` listener or a microtask, `:1631-1645`), still under that
+root, so its writes are reported while its timing claims (a read's strict-read
+window) stay unplaced. Only rc.13's and rc.17's `@solidjs/web` were read.
 
 On `@solidjs/signals` rc.17 the setter `createOptimistic` returns is
 `optimisticWrite`, which meets no owned-scope guard (the rc.17 review C1), so
