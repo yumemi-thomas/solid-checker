@@ -20,7 +20,7 @@ Rules or arms removed because `tsc` reports them (executable record: `removed-be
 | --- | --- | --- | --- |
 | `invalid-cleanup-return` (SC3004) | effect callback returns a non-cleanup | TS2345 / TS2322 `Type 'number' is not assignable to type 'void \| (() => void)'` | yes |
 | `cleanup-return-unresolved` (SC9002) | uncertain legality of a returned value | TS2345 / TS2322 (mixed union, `unknown`, non-callback 2nd argument, unconstrained generic) | yes |
-| `invalid-refresh-target`, `invalid-affects-target` (SC7003) | `refresh`/`affects` on a bad target | TS2345 (`Refreshable<T> = T & { readonly [$REFRESH]: any }`; `Accessor<unknown> \| Store<object>`) | yes |
+| `invalid-refresh-target`, `invalid-affects-target` (SC7003) | `refresh`/`affects` on a bad target | TS2345 (`Refreshable<T> = T & { readonly [$REFRESH]: any }`; `Accessor<unknown> \| Store<object>`) |yes; `{}` is TS2741 on 7.1 |
 | `affects-keys-on-accessor` (SC7004) | key with an accessor target | TS2345 | yes |
 | `refresh-target-unresolved`, `affects-target-unresolved` (SC9003) | uncertain brand | TS2345 unbranded, clean branded; TS2554 on arity | yes |
 | `uncalled-accessor` (SC1005), typed positions and binary operators | accessor in a JSX attribute, class value, computed access, arithmetic/bitwise operand | TS2322, TS2538, TS2365, TS2362 | yes |

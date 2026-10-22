@@ -15,6 +15,14 @@
 //   bun scripts/tsc-oracle.mjs check --dialect v1 --code '<snippet>' [--json]
 //   bun scripts/tsc-oracle.mjs versions [--json]
 //
+// The compiler is TypeScript 7.1, the native `tsc`, driven through its
+// `typescript/unstable/sync` API (scripts/lib/tsc-oracle-api.mjs, run under
+// Node). It is a separate, pinned install (`fixtures/tsc-oracle/packages.json`,
+// `typescript`), never packages/cli's `typescript` 5.9.3. The CLI's
+// `--pretty false` output carries no diagnostic length, and the gate compares
+// exact start..end spans, so the API is the least fragile surface that answers
+// the question.
+//
 // Two passes run for every input: `strict` and `loose` (the same options with
 // `strict: false`). Reporting them apart is what distinguishes "TypeScript
 // covers this" from "TypeScript covers this only under `strict`" -- a
@@ -37,7 +45,6 @@ import {
 import { basename, dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { createRequire } from "node:module";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const MANIFEST = join(ROOT, "fixtures/tsc-oracle/packages.json");
@@ -45,12 +52,14 @@ const MANIFEST = join(ROOT, "fixtures/tsc-oracle/packages.json");
 // oracle's installs are build products, not fixtures.
 const ORACLE_ROOT = join(ROOT, "rust/target/tsc-oracle");
 
-const require = createRequire(join(ROOT, "packages/cli/package.json"));
-const ts = require("typescript");
+const API_WORKER = join(ROOT, "scripts/lib/tsc-oracle-api.mjs");
+// The provisioned TypeScript install (see `typescript` in the manifest).
+const TYPESCRIPT_KEY = "typescript";
 
 const manifest = JSON.parse(readFileSync(MANIFEST, "utf8"));
 
 const dialectSpec = (dialect) => {
+  if (dialect === TYPESCRIPT_KEY) return manifest.typescript;
   const spec = manifest.dialects[dialect];
   if (!spec) {
     throw new Error(
@@ -110,8 +119,11 @@ const assertProvisioned = (dialect) => {
       const copies = locked.filter(({ resolved }) => resolved.startsWith(`${name}@`));
       if (!copies.length) wrong.push(`${name}: not in bun.lock`);
       for (const { resolved, integrity } of copies) {
-        if (resolved !== `${name}@${spec.expect[name]}` || integrity !== pinned) {
-          wrong.push(`${name}: locked ${resolved} ${integrity}, expected ${name}@${spec.expect[name]} ${pinned}`);
+        // Platform packages of the native compiler are pinned by integrity
+        // only, at the version of the package that depends on them.
+        const version = spec.expect[name] ?? spec.integrityVersion;
+        if (resolved !== `${name}@${version}` || integrity !== pinned) {
+          wrong.push(`${name}: locked ${resolved} ${integrity}, expected ${name}@${version} ${pinned}`);
         }
       }
     }
@@ -119,7 +131,7 @@ const assertProvisioned = (dialect) => {
   if (wrong.length) {
     const detail = wrong.map((line) => `  ${line}`).join("\n");
     throw new Error(
-      `tsc oracle for ${dialect} is not provisioned at the audited versions:\n${detail}\n` +
+      `tsc oracle for ${dialect} is not provisioned at the pinned versions:\n${detail}\n` +
         `run: bun scripts/tsc-oracle.mjs provision --dialect ${dialect}`,
     );
   }
@@ -197,110 +209,47 @@ export const oracleCompilerOptions = (dialect, strict, overrides = {}) => ({
   noEmit: true,
 });
 
-const compilerOptions = (dialect, root, strict, overrides) => {
-  const converted = ts.convertCompilerOptionsFromJson(
-    oracleCompilerOptions(dialect, strict, overrides),
-    root,
-  );
-  if (converted.errors.length) {
-    throw new Error(
-      converted.errors.map((error) => ts.flattenDiagnosticMessageText(error.messageText, " ")).join("; "),
-    );
+const oraclePasses = (dialect, overrides) =>
+  [
+    ["strict", true],
+    ["loose", false],
+  ].map(([name, strict]) => ({ name, options: oracleCompilerOptions(dialect, strict, overrides) }));
+
+/** Run the Node-side TypeScript API worker; `request` in, parsed response out. */
+const callApiWorker = (request) => {
+  const typescriptRoot = assertProvisioned(TYPESCRIPT_KEY);
+  try {
+    const stdout = execFileSync("node", [API_WORKER], {
+      input: JSON.stringify({
+        ...request,
+        typescriptRoot: join(typescriptRoot, "node_modules", "typescript"),
+      }),
+      encoding: "utf8",
+      maxBuffer: 1 << 28,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    return JSON.parse(stdout);
+  } catch (error) {
+    const detail = String(error.stderr ?? "").trim() || String(error.message ?? error);
+    throw new Error(`tsc oracle API worker failed (needs \`node\` on PATH): ${detail}`);
   }
-  return converted.options;
 };
 
-const byteSpan = (text, start, end) => ({
-  startByte: Buffer.byteLength(text.slice(0, start), "utf8"),
-  endByte: Buffer.byteLength(text.slice(0, end), "utf8"),
-});
-
-const isSubject = (node) =>
-  ts.isCallExpression(node) ||
-  ts.isNewExpression(node) ||
-  ts.isJsxAttribute(node) ||
-  ts.isJsxElement(node) ||
-  ts.isJsxSelfClosingElement(node) ||
-  ts.isReturnStatement(node) ||
-  ts.isVariableDeclaration(node);
-
-const enclosingSubject = (source, start, end) => {
-  let best = source;
-  const visit = (node) => {
-    const nodeStart = node.getStart(source, false);
-    if (nodeStart > start || node.end < end) return;
-    if (isSubject(node) && node.end - nodeStart < best.end - best.getStart(source, false)) best = node;
-    ts.forEachChild(node, visit);
-  };
-  visit(source);
-  const text = source.getFullText();
-  return byteSpan(text, best.getStart(source, false), best.end);
-};
-
-const characterOffsetAtByte = (text, byte) => {
-  let low = 0;
-  let high = text.length;
-  while (low < high) {
-    const middle = Math.ceil((low + high) / 2);
-    if (Buffer.byteLength(text.slice(0, middle), "utf8") <= byte) low = middle;
-    else high = middle - 1;
-  }
-  return low;
-};
+/**
+ * The smallest semantic source subject containing each byte range of `code`
+ * (one worker round trip for all ranges).
+ */
+export const oracleSubjectSpans = (code, ranges, name = "case.tsx") =>
+  ranges.length
+    ? callApiWorker({ op: "subjects", name, code, ranges }).subjects.map(([startByte, endByte]) => ({
+        startByte,
+        endByte,
+      }))
+    : [];
 
 /** Return the smallest semantic source subject containing a byte range. */
-export const oracleSubjectSpan = (code, startByte, endByte, name = "case.tsx") => {
-  const source = ts.createSourceFile(
-    name,
-    code,
-    ts.ScriptTarget.Latest,
-    true,
-    ts.getScriptKindFromFileName(name),
-  );
-  return enclosingSubject(
-    source,
-    characterOffsetAtByte(code, startByte),
-    characterOffsetAtByte(code, endByte),
-  );
-};
-
-// The mapping a ledger entry needs: what the checker claims about a span
-// versus what `tsc` claims about it. A diagnostic is recorded with its exact
-// byte span so the Phase 4 gate can ask "is there a `tsc` error at this
-// finding's span" without guessing at encoding.
-const collect = (program, sources) => {
-  const out = [];
-  for (const file of sources) {
-    const source = program.getSourceFile(file);
-    if (!source) continue;
-    const diagnostics = [
-      ...program.getSyntacticDiagnostics(source),
-      ...program.getSemanticDiagnostics(source),
-    ];
-    for (const diagnostic of diagnostics) {
-      const start = diagnostic.start ?? 0;
-      const { line, character } = source.getLineAndCharacterOfPosition(start);
-      const text = source.getFullText();
-      const subject = enclosingSubject(source, start, start + (diagnostic.length ?? 0));
-      out.push({
-        code: diagnostic.code,
-        category: ts.DiagnosticCategory[diagnostic.category].toLowerCase(),
-        message: ts.flattenDiagnosticMessageText(diagnostic.messageText, " "),
-        file: basename(file),
-        line: line + 1,
-        column: character + 1,
-        // Byte offsets, so a non-ASCII case cannot slip -- the same reason
-        // Checker fixes use UTF-8 byte offsets and are applied to a Buffer.
-        startByte: Buffer.byteLength(text.slice(0, start), "utf8"),
-        endByte: Buffer.byteLength(text.slice(0, start + (diagnostic.length ?? 0)), "utf8"),
-        subjectStartByte: subject.startByte,
-        subjectEndByte: subject.endByte,
-        text: text.slice(start, start + (diagnostic.length ?? 0)),
-      });
-    }
-  }
-  return out.sort((a, b) => a.startByte - b.startByte || a.code - b.code);
-};
+export const oracleSubjectSpan = (code, startByte, endByte, name = "case.tsx") =>
+  oracleSubjectSpans(code, [[startByte, endByte]], name)[0];
 
 /**
  * The audited install for `dialect`, verified to be at the expected versions.
@@ -317,6 +266,13 @@ export const oracleProject = (dialect) => ({
   root: assertProvisioned(dialect),
   jsxImportSource: dialectSpec(dialect).jsxImportSource,
 });
+
+/**
+ * The pinned TypeScript install the oracle executes, verified against the
+ * manifest. Gate caches key on it so a TypeScript move invalidates TypeScript's
+ * cached answers.
+ */
+export const oracleTypescriptTree = () => assertProvisioned(TYPESCRIPT_KEY);
 
 /**
  * Compile `inputs` against the real typings for `dialect`.
@@ -342,20 +298,18 @@ export const runOracle = (dialect, inputs, compilerOptionOverrides = {}) => {
       writeFileSync(target, code);
       return target;
     });
-    const passes = {};
-    for (const [pass, strict] of [
-      ["strict", true],
-      ["loose", false],
-    ]) {
-      const program = ts.createProgram(
-        files,
-        compilerOptions(dialect, work, strict, compilerOptionOverrides),
-      );
-      passes[pass] = collect(program, files);
+    const { passes } = callApiWorker({
+      op: "check",
+      work,
+      files,
+      passes: oraclePasses(dialect, compilerOptionOverrides),
+    });
+    for (const diagnostics of Object.values(passes)) {
+      diagnostics.sort((a, b) => a.startByte - b.startByte || a.code - b.code);
     }
     return {
       dialect,
-      typescript: ts.version,
+      typescript: installedVersion(join(ORACLE_ROOT, TYPESCRIPT_KEY), "typescript"),
       versions: Object.fromEntries(
         Object.keys(spec.expect).map((name) => [name, installedVersion(root, name)]),
       ),
@@ -399,7 +353,9 @@ const main = () => {
   const options = parseArgs(rest);
   if (command === "provision") {
     const dialects =
-      !options.dialect || options.dialect === "all" ? Object.keys(manifest.dialects) : [options.dialect];
+      !options.dialect || options.dialect === "all"
+        ? [TYPESCRIPT_KEY, ...Object.keys(manifest.dialects)]
+        : [options.dialect];
     for (const dialect of dialects) provision(dialect, { force: options.force });
     return;
   }
@@ -419,7 +375,19 @@ const main = () => {
         ];
       }),
     );
-    console.log(JSON.stringify({ typescript: ts.version, dialects: report }, null, 2));
+    console.log(
+      JSON.stringify(
+        {
+          typescript: {
+            expected: manifest.typescript.expect.typescript,
+            installed: installedVersion(join(ORACLE_ROOT, TYPESCRIPT_KEY), "typescript"),
+          },
+          dialects: report,
+        },
+        null,
+        2,
+      ),
+    );
     return;
   }
   if (command !== "check") usage();
@@ -436,7 +404,7 @@ const main = () => {
     console.log(JSON.stringify(result, null, 2));
     return;
   }
-  console.log(`dialect ${result.dialect}  typescript ${result.typescript}`);
+  console.log(`dialect ${result.dialect}  typescript ${result.typescript} (native tsc)`);
   console.log(`packages ${JSON.stringify(result.versions)}`);
   for (const pass of ["strict", "loose"]) {
     const diagnostics = result.passes[pass];

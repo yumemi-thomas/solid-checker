@@ -532,3 +532,15 @@ A package function whose same-operation creation calls cover every exit (`if (c)
 <a id="adr-0360"></a>
 ## ADR 0360 — A refused file has no compiler facts
 A compile error (`CompilerProviderError::Refused`) is no failure: the file keeps AST and Type Facts, `ExecutionMap::refused` places no site, a violation located or evidenced in it is uncertifiable, and SC9015 names it. A refused JSX closure file keeps a `*` package off source (SC9005); a named one fails. A missing or untrusted trace is fatal. Owners: `file_execution_map` (`lib.rs`), `walk` (`dependency_sources.rs`), `diagnostics.rs`.
+
+<a id="adr-0361"></a>
+## ADR 0361 — The tsc oracle is TypeScript 7.1, the producer's compiler
+Native `tsc` 7.1.0-dev.20260930.4 via `typescript/unstable/sync` (Node), pinned apart from `packages/cli`'s 5.9.3 (gitHead 9adc871ff47f: one commit past b85298b6a81f, identical `tsc/`). The CLI has no diagnostic length. Owner: `scripts/lib/tsc-oracle-api.mjs`.
+
+<a id="adr-0362"></a>
+## ADR 0362 — The Go producer pins TypeScript at b85298b6a81f, Go 1.27
+`github.com/microsoft/TypeScript/tsc`, the commit tsrs ports. `proxy.golang.org` times out on it, so a cold cache fetches from GitHub. Commit d1fd86355.
+
+<a id="adr-0363"></a>
+## ADR 0363 — Go producer fixes from the Rust port
+`go-symbol-name-0xfe` (692fc7747): every wire symbol name goes through `wireSymbolName`. `go-reference-index-retained` (349fc4c9c): the reference index never answers a retained or pruned symbol as empty. `go-stale-type-descriptor` (3991f6919): a file entering the program invalidates importers with an unresolved import.

@@ -75,9 +75,10 @@
           "why": "The reactive-read finding concerns reading a source outside tracking while forming the target; TS2345 concerns whether the resulting value carries the refresh brand."
         }
       ],
-      "why": "SC7003, removed 2026-08-17. `Refreshable<T> = T & { readonly [$REFRESH]: any }` encodes the source brand *as a type*, so every target shape the rule proved invalid -- a wrapper thunk, a read value, an object literal, a plain accessor, a store child record, and a value-form store -- is TS2345 against it. A valid target type-checks, so the type draws the same line the rule drew.",
+      "why": "SC7003, removed 2026-08-17. `Refreshable<T> = T & { readonly [$REFRESH]: any }` encodes the source brand *as a type*, so every target shape the rule proved invalid -- a wrapper thunk, a read value, an object literal, a plain accessor, a store child record, and a value-form store -- is TS2345 against it. A valid target type-checks, so the type draws the same line the rule drew. TypeScript 7.1 reports the object literal `{}` as TS2741 (`Property '[$REFRESH]' is missing in type '{}'`) where 5.9.3 reported TS2345: a general 7.1 change of the code for a missing required property, same error and span, so the rule stays tsc-redundant (ADR 0361).",
       "allow": [
-        2345
+        2345,
+        2741
       ],
       "code": "import { createSignal, createMemo, createStore, refresh } from \"solid-js\";\nconst [signalGet] = createSignal(0);\nconst memo = createMemo(() => 1);\nconst [state] = createStore({ user: { name: \"a\" } });\nconst target = () => 1;\nexport function Cases() {\n  refresh(() => target());\n  refresh({});\n  refresh(target);\n  refresh(state.user);\n  refresh(state);\n  refresh(memo.name as never);\n  return <div>{signalGet()}</div>;\n}\n"
     },
