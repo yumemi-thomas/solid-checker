@@ -1,13 +1,16 @@
 # Phase 4 completion report: compiler execution facts
 
-RC.13 adoption (2026-10-05, ADR 0196): the checker pins upstream
-`5efaf260becb32293f2bcb4d32f8be72be6de674`, implementation
-`c04c48779812d3d87166da3741c625748458c62f` and distribution
-`3ad4bbec37ae30f325a803cdb4271a71c86a2a2d`, published as
-`yumemi-thomas/solid:solid-checker/compiler-facts-rc13`. The candidate was
-prepared and validated on 2026-10-03
-(`../phase22/2026-10-03-rc13-compiler-facts-rebase.md`). The historical prose
-below describes the earlier rc.3-era pin.
+RC.17 adoption (2026-10-22, ADR 0196): the facts API was re-applied as two
+linear commits on upstream `next` at the published `solid-js@2.0.0-rc.17`
+release. The checker pins upstream
+`5b1b777648a89b6e207e8bb78514d5c03420e08b`, implementation
+`8148b1530f97d3117fab00cf2f862b5a244c1369` and distribution
+`6c1983c264394c892aafb5277f8afc125376101b`, published as
+`yumemi-thomas/solid:solid-checker/compiler-facts-rc17`. rc.17 removed
+server components (recorded as an explicit `false`), narrowed event names to
+`on` plus an uppercase letter, and evaluates calling spread-element SSR refs
+once (now ref-factory facts); `sourceNames.locations` is refused for tracing.
+The historical prose below describes the earlier rc.3-era pin.
 
 Date: 2026-08-27
 
@@ -22,10 +25,10 @@ request was opened against upstream Solid.
 
 | Role | Identity |
 | --- | --- |
-| Official upstream base | `solidjs/solid@5efaf260becb32293f2bcb4d32f8be72be6de674` |
-| Fork branch | `yumemi-thomas/solid:solid-checker/compiler-facts-rc13` |
-| Semantic implementation | `c04c48779812d3d87166da3741c625748458c62f` |
-| Identity-only distribution commit | `3ad4bbec37ae30f325a803cdb4271a71c86a2a2d` |
+| Official upstream base | `solidjs/solid@5b1b777648a89b6e207e8bb78514d5c03420e08b` |
+| Fork branch | `yumemi-thomas/solid:solid-checker/compiler-facts-rc17` |
+| Semantic implementation | `8148b1530f97d3117fab00cf2f862b5a244c1369` |
+| Identity-only distribution commit | `6c1983c264394c892aafb5277f8afc125376101b` |
 | Solid 2 trace | version 3 |
 | Checker compiler-facts | protocol 2 |
 | Solid 1 producer | `yumemi-thomas/solid-1x-compiler@ca3bbfae7d1e00e28ef73f9af58bdb46e248b512`, trace 2 |

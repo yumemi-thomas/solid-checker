@@ -1446,6 +1446,14 @@ pub trait Dialect: Sync {
         None
     }
 
+    /// Whether the pinned compiler lowers an un-namespaced attribute of this
+    /// name on an intrinsic element as an event listener. A name it does not
+    /// lower is a plain attribute, never a listener. The default claims no
+    /// listener, which only withholds handler findings.
+    fn compiler_lowers_event_attribute(&self, _name: &str) -> bool {
+        false
+    }
+
     /// Whether a statically known string/number in a native `on*` JSX
     /// position is emitted as an attribute instead of installed as a listener.
     /// Solid 1.x's compiler makes that node/value distinction; the shared

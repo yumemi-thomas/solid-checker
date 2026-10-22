@@ -82,8 +82,8 @@ With no explicit program boundary, the nearest `package.json` decides: `"private
 SC1002 (`reactive-read-after-await`) skips an after-`await` accessor call when the async function has a straight-line call of the same symbol before its first suspension of any kind (any `await`, `for await`, `await using`). `straight_line_calls` excludes `if`, ternary, `&&`/`||`/`??`, loops, `try`, `switch` and optional chains, and is per innermost function. Member reads (store paths, props) keep the rule. A mistake can only hide a finding. Owners: rust/crates/solid-reactive-ir/src/static_rules.rs (`tracked_before_first_suspension`), rust/crates/solid-facts/src/ast/mod.rs (`straight_line_calls`).
 
 <a id="adr-0196"></a>
-## ADR 0196 — The compiler follows Solid rc.13
-The compiler fork commit, the adapter's upstream, implementation and distribution revision literals, the compiler-facts identity and the identity document move together. Current pin: distribution `3ad4bbec`, upstream `5efaf260`, implementation `c04c4877`; trace version 3, compiler-facts protocol 2. Universal/Dynamic and authored TSRX trace requests refuse. Owners: rust/Cargo.toml, rust/dialects/solid-v2/compiler/src/lib.rs, docs/compiler-facts.md.
+## ADR 0196 — The compiler follows Solid rc.17
+Fork commit, adapter revision literals, compiler-facts identity and identity document move together; the facts API sits as linear commits on upstream `next`. Pin: distribution `6c1983c2`, upstream `5b1b7776` (rc.17), implementation `8148b153`; trace 3, protocol 2. Only `on` + uppercase lowers as a listener (`Dialect::compiler_lowers_event_attribute`). Universal/Dynamic, TSRX, `sourceNames.locations` traces refuse. Owner: rust/dialects/solid-v2/compiler/src/lib.rs.
 
 <a id="adr-0199"></a>
 ## ADR 0199 — A callback prop forwarded to an event runs on dispatch

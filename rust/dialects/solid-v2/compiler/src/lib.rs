@@ -26,21 +26,21 @@ const READS_TRACE_VERSION: u32 = 3;
 
 /// Consumer-owned provenance literals. These deliberately do not reuse the
 /// producer constants: otherwise a typo in the producer could certify itself.
-const EXPECTED_COMPILER_UPSTREAM_REVISION: &str = "5efaf260becb32293f2bcb4d32f8be72be6de674";
-const EXPECTED_COMPILER_IMPLEMENTATION_REVISION: &str = "c04c48779812d3d87166da3741c625748458c62f";
-pub const COMPILER_DISTRIBUTION_REVISION: &str = "3ad4bbec37ae30f325a803cdb4271a71c86a2a2d";
+const EXPECTED_COMPILER_UPSTREAM_REVISION: &str = "5b1b777648a89b6e207e8bb78514d5c03420e08b";
+const EXPECTED_COMPILER_IMPLEMENTATION_REVISION: &str = "8148b1530f97d3117fab00cf2f862b5a244c1369";
+pub const COMPILER_DISTRIBUTION_REVISION: &str = "6c1983c264394c892aafb5277f8afc125376101b";
 
 /// Stable cache identity for the exact semantic producer this adapter reads.
 /// Keep this synchronized with the pinned compiler revision and trace
 /// implementation when either changes.
 pub const COMPILER_FACTS_IDENTITY: &str =
-    "solid-v2:trace3:c04c48779812d3d87166da3741c625748458c62f";
+    "solid-v2:trace3:8148b1530f97d3117fab00cf2f862b5a244c1369";
 
 /// Digest of the exact Git-owned semantic compiler source identity consumed by
 /// this adapter. The independent identity gate recomputes this value from the
 /// upstream, implementation, distribution, trace, and protocol pins.
 pub const COMPILER_SOURCE_MANIFEST_SHA256: &str =
-    "sha256:35f4874f646f9482d0549fdf052f0d37bd02ec47b5c024d5732b6d9796423a9a";
+    "sha256:856522537373c0a44fccc0d1a8c6ebe1fff84568f773cba633386c497abdabe0";
 
 /// A pin move that changes the producer's schema version fails the build here
 /// instead of silently making the runtime refusal below unreachable again. The

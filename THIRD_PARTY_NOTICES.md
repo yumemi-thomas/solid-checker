@@ -6,11 +6,11 @@ whose original notices remain applicable.
 ## Solid 2 compiler
 
 - Upstream: https://github.com/solidjs/solid
-- Upstream base: `5efaf260becb32293f2bcb4d32f8be72be6de674`
+- Upstream base: `5b1b777648a89b6e207e8bb78514d5c03420e08b`
 - Consumed semantic-only fork: https://github.com/yumemi-thomas/solid
-- Semantic implementation revision: `c04c48779812d3d87166da3741c625748458c62f`
-- Pinned distribution revision: `3ad4bbec37ae30f325a803cdb4271a71c86a2a2d`
-- Fork branch: `solid-checker/compiler-facts-rc13`
+- Semantic implementation revision: `8148b1530f97d3117fab00cf2f862b5a244c1369`
+- Pinned distribution revision: `6c1983c264394c892aafb5277f8afc125376101b`
+- Fork branch: `solid-checker/compiler-facts-rc17`
 - License: MIT
 
 The `solidjs-compiler` crate under `packages/compiler` is consumed as a pinned

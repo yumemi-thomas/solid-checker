@@ -29,13 +29,13 @@ rust-version = "1.97"
 rustc-hash = "2.1.3"
 # Solid 2 compiler facts come from the semantic-only fork of the compiler now
 # owned by solidjs/solid. This exact fork commit is based on upstream `next` at
-# `5efaf260` and adds only trace models, output-neutral recording hooks,
-# validation/serialization, and fact tests. Its 365-entry generated-output
+# `5b1b7776` (published rc.17) and adds only trace models, output-neutral
+# recording hooks, validation/serialization, and fact tests. Its 373-entry generated-output
 # baseline is byte-identical to that exact upstream base. No upstream PR is
 # opened for this fork; compiler behavior fixes remain outside this branch.
 # The producer carries `SEMANTIC_TRACE_VERSION = 3`; the adapter has an
 # independent literal and const assertion so an incompatible pin cannot build.
-solidjs-compiler = { git = "https://github.com/yumemi-thomas/solid", rev = "3ad4bbec37ae30f325a803cdb4271a71c86a2a2d", default-features = false }
+solidjs-compiler = { git = "https://github.com/yumemi-thomas/solid", rev = "6c1983c264394c892aafb5277f8afc125376101b", default-features = false }
 # Moved from `3296ec8` for the signature-less `Function`-supertype answer
 # (producer ADR 0021): wire table schema 15, handshake protocol still 2.
 # `Callability::UntypedCallable` is positive runtime-function evidence without

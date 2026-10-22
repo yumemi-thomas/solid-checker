@@ -11,8 +11,8 @@ runtime handler.
 Flags native-element event-handler bindings in two exact domains. A callable
 value read from reactive props/store state is installed once during DOM setup,
 so later updates cannot replace it. Separately, TypeScript deliberately skips
-hyphenated JSX attribute names, while Solid still lowers a native `on*` name as
-a listener: a proven non-callable, non-array value is a violation, and a mixed,
+hyphenated JSX attribute names, while Solid's compiler still lowers `on`
+followed by an uppercase letter (`onCustom-event`) as a listener: a proven non-callable, non-array value is a violation, and a mixed,
 `any`, or unresolved array/bound-pair shape is uncertifiable. Shared with the
 1.x catalog as
 [v1/reactive-handler-frozen](v1/reactive-handler-frozen.md)
@@ -29,8 +29,10 @@ expression, the strict-read finding on the identical span is suppressed — one
 defect class, one rule.
 
 Ordinary declared attributes remain TypeScript-owned: `onClick={12}` is TS2322
-and receives no SC1007. `on-event={12}` is the checker's domain because
-TypeScript does not inspect that name. Callable values, `undefined`, `null`, and
+and receives no SC1007. `onCustom-event={12}` is the checker's domain because
+TypeScript does not inspect that name. `on-event={12}` is a plain attribute on
+the rc.17 compiler, which lowers only `on` + an uppercase letter, so it is
+silent. Callable values, `undefined`, `null`, and
 `false` are certified as valid/absent handlers; an array is not guessed because
 it may be Solid's `[handler, data]` representation.
 
@@ -51,7 +53,7 @@ function SaveButton(props: { onSave: () => void }) {
 }
 
 const invalid = 12;
-<button on-event={invalid}>Save</button>;
+<button onCustom-event={invalid}>Save</button>;
 ```
 
 Examples of **correct** code for this rule:
@@ -61,7 +63,7 @@ Examples of **correct** code for this rule:
 <button onClick={handler}>Save</button>;
 <button onClick={() => save(id())}>Save</button>;
 <button onClick={handlerAccessor()}>Save</button>;
-<button on-event={() => save(id())}>Save</button>;
+<button onCustom-event={() => save(id())}>Save</button>;
 ```
 
 ## How to fix

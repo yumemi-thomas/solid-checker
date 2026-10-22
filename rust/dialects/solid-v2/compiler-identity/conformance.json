@@ -1,60 +1,58 @@
 {
   "schemaVersion": 1,
   "documentKind": "solid-compiler-semantic-facts-bootstrap-conformance",
-  "capturedAt": "2026-10-05",
+  "capturedAt": "2026-10-22",
   "upstream": {
     "repository": "https://github.com/solidjs/solid",
-    "revision": "5efaf260becb32293f2bcb4d32f8be72be6de674",
+    "revision": "5b1b777648a89b6e207e8bb78514d5c03420e08b",
     "branch": "next"
   },
   "fork": {
     "repository": "https://github.com/yumemi-thomas/solid",
-    "revision": "3ad4bbec37ae30f325a803cdb4271a71c86a2a2d",
-    "implementationRevision": "c04c48779812d3d87166da3741c625748458c62f",
-    "branch": "solid-checker/compiler-facts-rc13",
+    "revision": "6c1983c264394c892aafb5277f8afc125376101b",
+    "implementationRevision": "8148b1530f97d3117fab00cf2f862b5a244c1369",
+    "branch": "solid-checker/compiler-facts-rc17",
     "scope": "semantic facts only",
     "upstreamPullRequest": false
   },
   "trace": {
     "version": 3,
-    "baselineEntries": 365,
+    "baselineEntries": 373,
     "independentlyGeneratedUpstreamBaselineMatched": true,
     "javascriptSourceMapDiagnosticNeutrality": true
   },
   "checker": {
     "dependency": "solidjs-compiler",
     "compilerFactsProtocol": 2,
-    "findingsBefore": 883,
-    "findingsAfter": 883,
-    "reviewedFindingDelta": "none: no fixture finding moved under the rc.13 compiler",
+    "findingsBefore": 3536,
+    "findingsAfter": 3532,
+    "reviewedFindingDelta": "rc.17 lowers only `on` + an uppercase letter as a listener: SC1007 on `on-foo`/`on-event` attributes withdrawn (fixtures moved to `onCustom-event`); eslint-compat drops the `attr:`/`bool:`/`on:`/`oncapture:`/`use:` intrinsic namespaces rc.17 rejects",
     "otherFindingChanges": 0,
     "adoption": "docs/decisions.md#adr-0196"
   },
   "checks": {
     "producerRust": "passed",
     "producerJavaScript": {
-      "testFiles": 41,
-      "tests": 5938,
+      "tests": 6826,
+      "skipped": 2,
       "status": "passed"
     },
     "localChecker": {
       "compilerFactsIdentity": "passed",
       "coverage": {
-        "projects": 167,
-        "findings": 883,
+        "projects": 393,
+        "findings": 3532,
         "status": "passed"
       },
       "makeVerify": {
         "status": "passed",
-        "elapsedSeconds": 879.07
+        "elapsedSeconds": 180.9
       }
     }
   },
   "knownInheritedGate": {
     "command": "cargo clippy --manifest-path packages/compiler/Cargo.toml --no-default-features --all-targets --locked -- -D warnings",
-    "status": "fails on upstream source",
-    "reason": "clippy::collapsible-if in packages/compiler/src/dom/element.rs is present byte-for-byte at the exact upstream base",
-    "forkAction": "not changed because it is unrelated to semantic facts",
-    "factsDeltaWithInheritedLintAllowed": "passed"
+    "status": "passed",
+    "reason": "rc.17 rewrote the formerly inherited collapsible_if site"
   }
 }

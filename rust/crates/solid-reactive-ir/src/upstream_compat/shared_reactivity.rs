@@ -250,7 +250,9 @@ fn expected_function_got_expression(
             .filter(|attribute| attribute.namespace.is_none())
         {
             let name = text(file, attribute.name);
-            if !name.starts_with("on") {
+            // Only a name the compiler lowers as a listener is a handler
+            // position; `onclick` and `on-foo` are plain attributes.
+            if !context.dialect.compiler_lowers_event_attribute(name) {
                 continue;
             }
             let Some(expression) = attribute.expression else {
@@ -266,10 +268,10 @@ fn expected_function_got_expression(
                 continue;
             }
             // TypeScript deliberately skips every JSX attribute whose name
-            // contains a hyphen. Solid's compiler does not: any `on` prefix
-            // on a native element is lowered as an event listener. Keep the
-            // uncovered runtime value in this rule's tri-state domain instead
-            // of leaving `on-foo={someNumber}` to fail only when dispatched.
+            // contains a hyphen. Solid's compiler does not when it lowers the
+            // name as a listener (`onFoo-bar`); `on-foo` is a plain attribute
+            // there. Keep the uncovered listener value in this rule's
+            // tri-state domain instead of leaving it to fail when dispatched.
             if !jsx_name_is_type_checked(name) {
                 let proof = unchecked_handler_value_proof(file, context, attribute, expression);
                 match proof {

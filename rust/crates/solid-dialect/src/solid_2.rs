@@ -227,6 +227,13 @@ pub(crate) fn names() -> Vec<&'static str> {
 pub(crate) const RELEASE_GATED_NAMES: &[&str] = &["until"];
 
 impl Dialect for Solid2 {
+    fn compiler_lowers_event_attribute(&self, name: &str) -> bool {
+        // The pinned rc.17 compiler's `is_event_name`
+        // (`packages/compiler/src/shared/constants.rs:272-275`): `on` followed
+        // by an ASCII uppercase letter. `onclick` and `on-foo` are attributes.
+        let bytes = name.as_bytes();
+        bytes.len() > 2 && bytes.starts_with(b"on") && bytes[2].is_ascii_uppercase()
+    }
     fn spread_key_is_event(&self, key: &str) -> Option<bool> {
         self.spread_event_keys_audited
             .then(|| key.starts_with("on") && !key.contains(':'))

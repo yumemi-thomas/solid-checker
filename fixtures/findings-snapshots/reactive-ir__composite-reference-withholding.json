@@ -7,8 +7,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/composite-reference-withholding/App.tsx",
-      "start": 985,
-      "end": 990,
+      "start": 994,
+      "end": 999,
       "fixes": 0
     },
     {
@@ -17,8 +17,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/composite-reference-withholding/App.tsx",
-      "start": 1094,
-      "end": 1106,
+      "start": 1103,
+      "end": 1115,
       "fixes": 0
     }
   ]
