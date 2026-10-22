@@ -31,6 +31,37 @@ func wireSymbolName(name string) string {
 	return name
 }
 
+// wireSymbolFacts returns facts whose declaration names are safe for a plain
+// CBOR text string. Facts the closure retains are never mutated: a fact is
+// copied only when one of its names changes.
+func wireSymbolFacts(facts []SymbolFact) []SymbolFact {
+	var out []SymbolFact
+	for index := range facts {
+		var declarations []Declaration
+		for position, declaration := range facts[index].Declarations {
+			name := wireSymbolName(declaration.Name)
+			if name == declaration.Name {
+				continue
+			}
+			if declarations == nil {
+				declarations = append([]Declaration(nil), facts[index].Declarations...)
+			}
+			declarations[position].Name = name
+		}
+		if declarations == nil {
+			continue
+		}
+		if out == nil {
+			out = append([]SymbolFact(nil), facts...)
+		}
+		out[index].Declarations = declarations
+	}
+	if out == nil {
+		return facts
+	}
+	return out
+}
+
 // packedWriter appends varint-coded rows and interns every string into the
 // transition's shared dictionary.
 type packedWriter struct {

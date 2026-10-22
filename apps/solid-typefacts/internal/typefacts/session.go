@@ -457,7 +457,7 @@ func (s *Session) populateSymbolEvidence(
 		}
 		response.TableTransition = packed.Bytes
 	} else {
-		response.SymbolEvidence = evidence
+		response.SymbolEvidence = wireSymbolFacts(evidence)
 	}
 	if request.ReferenceChanges {
 		ids, exact, err := s.closure.changedReferences(ctx)
@@ -471,10 +471,11 @@ func (s *Session) populateSymbolEvidence(
 			for index, id := range ids {
 				queries[index] = SymbolQueryV6{ID: id, References: true}
 			}
-			response.ReferenceEvidence, err = s.closure.resolveSymbolEvidence(ctx, queries)
+			referenceEvidence, err := s.closure.resolveSymbolEvidence(ctx, queries)
 			if err != nil {
 				return err
 			}
+			response.ReferenceEvidence = wireSymbolFacts(referenceEvidence)
 			if len(request.ReferencePaths) != 0 {
 				paths := make(map[string]struct{}, len(request.ReferencePaths))
 				for _, path := range request.ReferencePaths {
