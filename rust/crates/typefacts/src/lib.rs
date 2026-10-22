@@ -11,6 +11,8 @@ use std::num::NonZeroU32;
 use std::sync::Arc;
 use thiserror::Error;
 
+#[cfg(feature = "producer")]
+pub mod producer;
 mod retained_table;
 mod session;
 mod shared_transition_arena;

@@ -35,7 +35,7 @@ unsafe_code = "forbid"
 [dependencies]
 # Protocol constants, request/response types and the deterministic CBOR codec
 # come from the client crate, so a producer/client mismatch fails to compile.
-typefacts = { path = "../../rust/crates/typefacts" }
+typefacts = { path = "../../rust/crates/typefacts", features = ["producer"] }
 ciborium = "0.2"
 
 # Dependencies (the codec now, tsrs later) run optimized even in dev builds:

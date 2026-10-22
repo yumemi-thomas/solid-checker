@@ -122,11 +122,12 @@ pub fn run(
             let ctx = Context::new();
             let backend = open_backend(&ctx, &project_id, config_source.as_deref())
                 .map_err(|error| format!("open TS-Go project: {error}"))?;
-            let session = Session::new(backend, &project_id, inline_sources)?;
+            let session =
+                Session::new(backend, &project_id, inline_sources)?.with_trace(trace.clone());
             Ok(LifecycleResponder {
                 session,
                 trace,
-                _transition_arena: arena,
+                transition_arena: arena,
                 crash,
             })
         }
@@ -148,8 +149,9 @@ pub fn run(
 pub struct LifecycleResponder {
     session: Session,
     trace: SharedTrace,
-    /// Held open for the lifetime of the process; rows are written in S2.
-    _transition_arena: Option<TransitionArena>,
+    /// Held open for the lifetime of the process. `analyze` and `symbols`
+    /// write their packed transition into it instead of the response.
+    transition_arena: Option<TransitionArena>,
     crash: CrashMarkers,
 }
 
@@ -161,7 +163,7 @@ impl Responder for LifecycleResponder {
             _ => {}
         }
         let started = Instant::now();
-        let response = self.session.lifecycle(ctx, incoming);
+        let response = self.answer(ctx, incoming);
         if let Some(trace) = &self.trace {
             if incoming.operation() == Some(Operation::Update) {
                 trace.stage("update", started.elapsed());
@@ -171,6 +173,32 @@ impl Responder for LifecycleResponder {
                     std::time::Duration::from_nanos(timings.analyze_ns),
                 );
             }
+        }
+        response
+    }
+}
+
+impl LifecycleResponder {
+    /// Go's `lifecycleResponder.lifecycle` arena branch: begin the request's
+    /// transition, let the session stream into it, and point the client at it.
+    /// If the arena cannot begin, the request is answered inline instead.
+    fn answer(&mut self, ctx: &Context, incoming: &Incoming) -> Response {
+        let streams = matches!(
+            incoming.operation(),
+            Some(Operation::Analyze | Operation::Symbols)
+        );
+        let Some(arena) = self.transition_arena.as_mut().filter(|_| streams) else {
+            return self.session.lifecycle(ctx, incoming);
+        };
+        if arena.begin(incoming.request.request_id).is_err() {
+            return self.session.lifecycle(ctx, incoming);
+        }
+        let mut response = self.session.lifecycle_into(ctx, incoming, Some(arena));
+        if let Some((path, descriptor)) = arena.descriptor()
+            && response.ok
+        {
+            response.source_arena = path;
+            response.source_lengths = descriptor;
         }
         response
     }

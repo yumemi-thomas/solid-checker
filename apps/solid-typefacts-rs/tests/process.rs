@@ -253,3 +253,79 @@ fn trace_stage_sequence_matches_go() {
     assert_eq!(rust_kept, go_kept);
     let _ = std::fs::remove_dir_all(&directory);
 }
+
+/// A real process streams an `analyze` transition into the arena the client
+/// created, and the committed range decodes as the delta it should be.
+#[test]
+fn analyze_streams_its_transition_into_the_arena_file() {
+    use std::io::{Read, Seek, SeekFrom};
+    use typefacts::producer::{TransitionMode, inspect_table_transition};
+    use typefacts::v3::{EntityDemand, FileChange};
+
+    let arena = std::env::temp_dir().join(format!(
+        "solid-typefacts-rs-process-arena-{}",
+        std::process::id()
+    ));
+    std::fs::write(&arena, b"").unwrap();
+    let demand = EntityDemand {
+        location: typefacts::Location {
+            path: "/p/a.ts".into(),
+            start_byte: 2,
+            end_byte: 5,
+        },
+        symbol: true,
+        ..EntityDemand::default()
+    };
+    let mut cold = request(2, Operation::Analyze, 1);
+    cold.reset_state = true;
+    cold.demands = vec![demand];
+    let mut update = request(3, Operation::Update, 2);
+    update.changes = vec![FileChange {
+        path: "/p/a.ts".to_owned(),
+        source: b"changed".to_vec(),
+        deleted: false,
+        version: 2,
+    }];
+    let mut warm = request(4, Operation::Analyze, 2);
+    warm.state_token = "1".to_owned();
+    let input = [
+        frame(&request(1, Operation::Open, 1)),
+        frame(&cold),
+        frame(&update),
+        frame(&warm),
+        frame(&request(5, Operation::Close, 2)),
+    ]
+    .concat();
+    let arena_flag = format!("-transition-arena={}", arena.display());
+    let outcome = run_with(&fake(), &[], &["-project", PROJECT, &arena_flag], &input);
+    assert_eq!(outcome.code, Some(0), "{}", outcome.stderr);
+    let responses = decode_all(&outcome.stdout);
+    assert_eq!(responses.len(), 5);
+    let (cold, warm) = (&responses[1], &responses[3]);
+    for response in [cold, warm] {
+        assert!(response.ok, "{:?}", response.error);
+        assert!(response.table_transition.is_empty());
+        assert_eq!(response.source_arena, arena.to_str().unwrap());
+    }
+    // Only the latest transition survives in the file; its descriptor is the
+    // warm response's.
+    let [request_id, offset, length] = warm.source_lengths[..] else {
+        panic!("{:?}", warm.source_lengths);
+    };
+    assert_eq!(request_id, 4);
+    let mut file = std::fs::File::open(&arena).unwrap();
+    let mut header = [0_u8; 32];
+    file.read_exact(&mut header).unwrap();
+    assert_eq!(&header[..8], b"STFARENA");
+    assert_eq!(u64::from_le_bytes(header[8..16].try_into().unwrap()), 4);
+    let mut bytes = vec![0; usize::try_from(length).unwrap()];
+    file.seek(SeekFrom::Start(offset)).unwrap();
+    file.read_exact(&mut bytes).unwrap();
+    let summary = inspect_table_transition(&bytes).unwrap();
+    assert_eq!(summary.mode, TransitionMode::Delta);
+    assert_eq!(summary.base_state_token, "1");
+    assert_eq!(summary.path_operations, 1);
+    // A sparse file: the rows start at 64 MiB and nothing is allocated below.
+    assert!(file.metadata().unwrap().len() >= 64 << 20);
+    let _ = std::fs::remove_file(arena);
+}

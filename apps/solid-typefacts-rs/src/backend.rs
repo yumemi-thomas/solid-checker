@@ -1,15 +1,19 @@
 //! The compiler seam. Everything the session needs from a program sits behind
 //! these traits, so the session, framing and lifecycle code never name a
 //! compiler type (mirroring Go's `ClosureBackend`, `symbolEvidenceBackend` and
-//! `ModuleGraphProvider`). S1 ships only [`StubBackend`]; the demand closure
-//! (`analyze`) and its backend methods arrive with S2, the tsrs project with S3.
+//! `ModuleGraphProvider`). `analyze` hands the session a [`ProducerTable`]; the
+//! session owns the retained state, the wire transition and the arena. The
+//! demand closure behind a real `analyze` arrives with S2b/S4, the tsrs project
+//! with S3; until then only test backends implement it.
 //!
 //! A backend is created and used on the single worker thread and is dropped
 //! there; it need not be `Send` (tsrs state is thread-local).
 
 use crate::context::Context;
 use std::fmt;
-use typefacts::v3::{FileChange, ModuleGraphRequest, SourceFile, SymbolQuery};
+use std::sync::Arc;
+use typefacts::producer::ProducerTable;
+use typefacts::v3::{FileChange, ModuleGraphRequest, Request, SourceFile, SymbolQuery};
 use typefacts::{ModuleFact, ModuleImportFact, SymbolFact};
 
 /// A backend failure. The session picks the wire code from the operation
@@ -46,6 +50,40 @@ pub struct ModuleInventory {
     pub unknown_import_paths: Vec<std::sync::Arc<str>>,
 }
 
+/// One `analyze` as the backend sees it.
+#[derive(Clone, Copy, Debug)]
+pub struct AnalysisRequest<'a> {
+    /// The open generation the request was validated against.
+    pub generation: u64,
+    pub request: &'a Request,
+    /// Materialize every row rather than only what changed. Set when a sparse
+    /// transition was impossible because the previous table's manifest could
+    /// not prove its changes exact (Go: `forceFullMaterialization`).
+    pub force_full: bool,
+}
+
+/// The stage breakdown Go reports for a materialization (`LifecycleTimings`).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct AnalysisStats {
+    /// A new table was built (rather than the previous one reused).
+    pub materialized: bool,
+    pub async_ns: u64,
+    pub demand_ns: u64,
+    pub assembly_ns: u64,
+    pub sort_ns: u64,
+    pub close_symbols_ns: u64,
+    pub retained_files: u64,
+    pub recomputed_files: u64,
+    pub non_durable_files: u64,
+}
+
+/// The table an `analyze` produced and what building it cost.
+#[derive(Clone, Debug)]
+pub struct AnalyzedTable {
+    pub table: ProducerTable,
+    pub stats: AnalysisStats,
+}
+
 /// The retained program: edits, source bytes, lifetime.
 pub trait ClosureBackend {
     /// Applies versioned overlay changes transactionally: on error the
@@ -55,6 +93,23 @@ pub trait ClosureBackend {
         ctx: &Context,
         changes: &[FileChange],
     ) -> Result<UpdateOutcome, BackendError>;
+
+    /// Runs the demand closure over the retained demand set and returns the
+    /// fact table for the open generation. The default reports that no
+    /// closure exists in this build (every S1 backend).
+    fn analyze(
+        &mut self,
+        _ctx: &Context,
+        _request: &AnalysisRequest<'_>,
+    ) -> Result<AnalyzedTable, BackendError> {
+        Err(BackendError(
+            "analyze is not implemented in this build (migration slice S2)".to_owned(),
+        ))
+    }
+
+    /// Drops checker-expanded query state after a cold materialization
+    /// (`releaseAnalysis`).
+    fn release_analysis_state(&mut self) {}
 
     /// Every program source file, in the order the client should see them.
     fn source_files(&mut self, ctx: &Context) -> Result<Vec<SourceFile>, BackendError>;
@@ -69,6 +124,18 @@ pub trait SymbolEvidence {
         ctx: &Context,
         queries: &[SymbolQuery],
     ) -> Result<Vec<SymbolFact>, BackendError>;
+
+    /// Symbols whose references changed since the previous analysis, and
+    /// whether that list is exact. The default reports that the symbol store
+    /// does not exist in this build.
+    fn changed_references(
+        &mut self,
+        _ctx: &Context,
+    ) -> Result<(Vec<Arc<str>>, bool), BackendError> {
+        Err(BackendError(
+            "symbols is not implemented in this build (migration slice S2)".to_owned(),
+        ))
+    }
 }
 
 /// The resolved module graph for the `modules` operation.

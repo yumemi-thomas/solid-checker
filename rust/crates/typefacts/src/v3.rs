@@ -46,6 +46,29 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V21: u64 = 21;
 /// v22 keeps the rows of v21 under a new number: a v21 table from another build
 /// is refused, so the merged line's transitions carry 22.
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V22: u64 = 22;
+/// Every Wire table schema a transition may carry (v10 is retired).
+pub(crate) const SUPPORTED_TABLE_SCHEMAS: [u64; 19] = [
+    TYPE_FACTS_TABLE_SCHEMA_V3,
+    TYPE_FACTS_TABLE_SCHEMA_V4,
+    TYPE_FACTS_TABLE_SCHEMA_V5,
+    TYPE_FACTS_TABLE_SCHEMA_V6,
+    TYPE_FACTS_TABLE_SCHEMA_V7,
+    TYPE_FACTS_TABLE_SCHEMA_V8,
+    TYPE_FACTS_TABLE_SCHEMA_V9,
+    TYPE_FACTS_TABLE_SCHEMA_V11,
+    TYPE_FACTS_TABLE_SCHEMA_V12,
+    TYPE_FACTS_TABLE_SCHEMA_V13,
+    TYPE_FACTS_TABLE_SCHEMA_V14,
+    TYPE_FACTS_TABLE_SCHEMA_V15,
+    TYPE_FACTS_TABLE_SCHEMA_V16,
+    TYPE_FACTS_TABLE_SCHEMA_V17,
+    TYPE_FACTS_TABLE_SCHEMA_V18,
+    TYPE_FACTS_TABLE_SCHEMA_V19,
+    TYPE_FACTS_TABLE_SCHEMA_V20,
+    TYPE_FACTS_TABLE_SCHEMA_V21,
+    TYPE_FACTS_TABLE_SCHEMA_V22,
+];
+
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
     "sha256:6d2154ba04be45cdd241d78d3b94a32d0ec5c57ce264fe97e1b3ed979e3d0bfd";
 /// 17 says that an empty uncensused-form census includes the reviewed
@@ -753,7 +776,7 @@ pub const DEMAND_FLAG_CONSTRUCTABILITY: u64 = 1 << 16;
 pub const DEMAND_FLAG_PRIMITIVE_LITERAL_CANDIDATES: u64 = 1 << 17;
 pub const DEMAND_FLAG_PARAMETER_OBJECT_SHAPE: u64 = 1 << 18;
 
-fn push_uvarint(output: &mut Vec<u8>, mut value: u64) {
+pub(crate) fn push_uvarint(output: &mut Vec<u8>, mut value: u64) {
     while value >= 0x80 {
         output.push((value as u8) | 0x80);
         value >>= 7;
@@ -768,13 +791,70 @@ pub const FUNCTION_FLAG_ASYNC: u64 = 1 << 1;
 pub const FUNCTION_FLAG_ARROW: u64 = 1 << 2;
 pub const ASYNC_FUNCTION_FLAG_CAN_RETURN_ASYNC: u64 = 1 << 0;
 
-const TABLE_TRANSITION_VERSION: u64 = 1;
+pub(crate) const TABLE_TRANSITION_VERSION: u64 = 1;
 const PACKED_COLLECTION_LIMIT: usize = 1_000_000;
 
+/// Row definitions the transition decoder and the producer-side encoder share.
+/// A flag changes here or nowhere.
+pub(crate) mod rows {
+    /// A path operation packs three two-bit slot tags (unchanged, replace,
+    /// remove) at these shifts.
+    pub(crate) const PATH_SOURCE_SHIFT: u32 = 0;
+    pub(crate) const PATH_ENTITY_SHIFT: u32 = 2;
+    pub(crate) const PATH_FILE_SHIFT: u32 = 4;
+    pub(crate) const SLOT_UNCHANGED: u64 = 0;
+    pub(crate) const SLOT_REPLACE: u64 = 1;
+    pub(crate) const SLOT_REMOVE: u64 = 2;
+
+    pub(crate) const ENTITY_TYPE_DESCRIPTOR: u64 = 1 << 0;
+    pub(crate) const ENTITY_RESOLVED_CALL: u64 = 1 << 1;
+    pub(crate) const ENTITY_CALLABILITY: u64 = 1 << 2;
+    pub(crate) const ENTITY_REFERENCE_SPACE: u64 = 1 << 3;
+    pub(crate) const ENTITY_RUNTIME_IDENTITY: u64 = 1 << 4;
+    pub(crate) const ENTITY_RUNTIME_VALUE_DOMAIN: u64 = 1 << 5;
+    /// From Wire v21 a symbol-bearing entity reads this bit as "the symbol
+    /// covers the whole span"; a symbol-less one as "unresolved".
+    pub(crate) const ENTITY_SYMBOL_FLAG: u64 = 1 << 6;
+    pub(crate) const ENTITY_CALL_RESULT_DOMAIN: u64 = 1 << 7;
+    pub(crate) const ENTITY_CONSTANT_VALUE: u64 = 1 << 8;
+    pub(crate) const ENTITY_ARRAY_SHAPE: u64 = 1 << 9;
+    pub(crate) const ENTITY_TUPLE_SHAPE: u64 = 1 << 10;
+    pub(crate) const ENTITY_LIBRARY_TYPES: u64 = 1 << 11;
+    pub(crate) const ENTITY_PRIMITIVE_VALUE_DOMAIN: u64 = 1 << 12;
+    pub(crate) const ENTITY_CONSTRUCTABILITY: u64 = 1 << 13;
+    pub(crate) const ENTITY_PRIMITIVE_LITERAL_CANDIDATES: u64 = 1 << 14;
+    pub(crate) const ENTITY_RUNTIME_BINDING_KIND: u64 = 1 << 15;
+
+    pub(crate) const PARAMETER_DECLARATION: u64 = 1 << 0;
+    pub(crate) const PARAMETER_REST: u64 = 1 << 1;
+    pub(crate) const PARAMETER_OPTIONAL: u64 = 1 << 2;
+    pub(crate) const PARAMETER_TYPE_DESCRIPTOR: u64 = 1 << 3;
+    pub(crate) const PARAMETER_OBJECT_SHAPE: u64 = 1 << 4;
+
+    pub(crate) const CALL_ASSERTION_SIGNATURE: u64 = 1 << 0;
+    pub(crate) const CALL_NEVER_RETURNS: u64 = 1 << 1;
+
+    pub(crate) const STRING_PREFIX_CODED: u64 = 0;
+    pub(crate) const STRING_HASHED_SYMBOL: u64 = 1;
+    pub(crate) const HASHED_SYMBOL_PREFIX: &str = "symbol:h:";
+    pub(crate) const HASHED_SYMBOL_DIGEST_BYTES: usize = 12;
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum TransitionMode {
+pub enum TransitionMode {
     Full,
     Delta,
+}
+
+impl TransitionMode {
+    /// The spelling Go's trace and logs use.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Full => "full",
+            Self::Delta => "delta",
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1062,7 +1142,7 @@ impl<'a> PackedCursor<'a> {
                 if flags & !known_flags != 0 {
                     return Err(format!("packed parameter has unknown flags {flags}"));
                 }
-                let declaration = if flags & 1 != 0 {
+                let declaration = if flags & rows::PARAMETER_DECLARATION != 0 {
                     let name = self.string_index(strings, "parameter declaration name")?;
                     let kind = self.string_index(strings, "parameter declaration kind")?;
                     let mut state = PackedLocationState::default();
@@ -1075,12 +1155,12 @@ impl<'a> PackedCursor<'a> {
                     None
                 };
                 let callability = parse_callability(self.u64()?, table_schema)?;
-                let type_descriptor = if flags & 8 != 0 {
+                let type_descriptor = if flags & rows::PARAMETER_TYPE_DESCRIPTOR != 0 {
                     Some(self.type_descriptor(strings)?)
                 } else {
                     None
                 };
-                let object_shape = if flags & 16 != 0 {
+                let object_shape = if flags & rows::PARAMETER_OBJECT_SHAPE != 0 {
                     let count = self.count("required object properties")?;
                     let mut properties = Vec::with_capacity(count);
                     for _ in 0..count {
@@ -1103,8 +1183,8 @@ impl<'a> PackedCursor<'a> {
                     index,
                     symbol,
                     declaration,
-                    rest: flags & 2 != 0,
-                    optional: flags & 4 != 0,
+                    rest: flags & rows::PARAMETER_REST != 0,
+                    optional: flags & rows::PARAMETER_OPTIONAL != 0,
                     callability,
                     type_descriptor,
                     object_shape,
@@ -1124,7 +1204,10 @@ impl<'a> PackedCursor<'a> {
             if flags & !3 != 0 {
                 return Err(format!("packed resolved call has unknown flags {flags}"));
             }
-            (flags & 1 != 0, flags & 2 != 0)
+            (
+                flags & rows::CALL_ASSERTION_SIGNATURE != 0,
+                flags & rows::CALL_NEVER_RETURNS != 0,
+            )
         } else {
             (false, false)
         };
@@ -1178,7 +1261,7 @@ fn decode_packed_strings(cursor: &mut PackedCursor<'_>) -> Result<Vec<Arc<str>>,
     for _ in 0..count {
         let tag = cursor.u64()?;
         let value: Arc<str> = match tag {
-            0 => {
+            rows::STRING_PREFIX_CODED => {
                 let prefix = usize::try_from(cursor.u64()?)
                     .map_err(|_| "packed string prefix overflows usize".to_owned())?;
                 if prefix > previous.len() {
@@ -1192,11 +1275,11 @@ fn decode_packed_strings(cursor: &mut PackedCursor<'_>) -> Result<Vec<Arc<str>>,
                     .map_err(|_| "packed string is not UTF-8".to_owned())?
                     .into()
             }
-            1 => {
+            rows::STRING_HASHED_SYMBOL => {
                 const HEX: &[u8; 16] = b"0123456789abcdef";
-                let raw = cursor.raw(12)?;
+                let raw = cursor.raw(rows::HASHED_SYMBOL_DIGEST_BYTES)?;
                 let mut value = String::with_capacity(33);
-                value.push_str("symbol:h:");
+                value.push_str(rows::HASHED_SYMBOL_PREFIX);
                 for byte in raw {
                     value.push(HEX[usize::from(byte >> 4)] as char);
                     value.push(HEX[usize::from(byte & 0x0f)] as char);
@@ -1264,42 +1347,42 @@ fn decode_entity_run(
         if flags & !known_flags != 0 {
             return Err(format!("packed entity has unknown flags {flags}"));
         }
-        let type_descriptor = if flags & 1 != 0 {
+        let type_descriptor = if flags & rows::ENTITY_TYPE_DESCRIPTOR != 0 {
             Some(Arc::new(cursor.type_descriptor(strings)?))
         } else {
             None
         };
-        let resolved_call = if flags & 2 != 0 {
+        let resolved_call = if flags & rows::ENTITY_RESOLVED_CALL != 0 {
             Some(Arc::new(cursor.resolved_call(strings, table_schema)?))
         } else {
             None
         };
-        let callability = if flags & 4 != 0 {
+        let callability = if flags & rows::ENTITY_CALLABILITY != 0 {
             Some(parse_callability(cursor.u64()?, table_schema)?)
         } else {
             None
         };
-        let reference_space = if flags & 8 != 0 {
+        let reference_space = if flags & rows::ENTITY_REFERENCE_SPACE != 0 {
             Some(parse_reference_space(cursor.u64()?)?)
         } else {
             None
         };
-        let runtime_identity = if flags & 16 != 0 {
+        let runtime_identity = if flags & rows::ENTITY_RUNTIME_IDENTITY != 0 {
             cursor.string_index(strings, "runtime identity")?
         } else {
             Arc::from("")
         };
-        let runtime_value_domain = if flags & 32 != 0 {
+        let runtime_value_domain = if flags & rows::ENTITY_RUNTIME_VALUE_DOMAIN != 0 {
             Some(parse_runtime_value_domain(cursor.u64()?)?)
         } else {
             None
         };
-        let call_result_domain = if flags & 128 != 0 {
+        let call_result_domain = if flags & rows::ENTITY_CALL_RESULT_DOMAIN != 0 {
             Some(parse_runtime_value_domain(cursor.u64()?)?)
         } else {
             None
         };
-        let constant_value = if flags & 256 != 0 {
+        let constant_value = if flags & rows::ENTITY_CONSTANT_VALUE != 0 {
             Some(match cursor.u64()? {
                 0 => ConstantValue {
                     kind: ConstantValueKind::String,
@@ -1322,12 +1405,12 @@ fn decode_entity_run(
         } else {
             None
         };
-        let array_shape = if flags & 512 != 0 {
+        let array_shape = if flags & rows::ENTITY_ARRAY_SHAPE != 0 {
             Some(parse_array_shape(cursor.u64()?)?)
         } else {
             None
         };
-        let tuple_shape = if flags & 1024 != 0 {
+        let tuple_shape = if flags & rows::ENTITY_TUPLE_SHAPE != 0 {
             let packed = cursor.u64()?;
             let element_zero = parse_callability(cursor.u64()?, table_schema)?;
             let element_zero_min_parameters = u32::try_from(cursor.u64()?)
@@ -1356,7 +1439,7 @@ fn decode_entity_run(
         } else {
             None
         };
-        let library_types = if flags & 2048 != 0 {
+        let library_types = if flags & rows::ENTITY_LIBRARY_TYPES != 0 {
             let count = cursor.u64()?;
             let mut names =
                 Vec::with_capacity(usize::try_from(count).unwrap_or_default().min(1024));
@@ -1367,17 +1450,18 @@ fn decode_entity_run(
         } else {
             None
         };
-        let primitive_value_domain = if flags & 4096 != 0 {
+        let primitive_value_domain = if flags & rows::ENTITY_PRIMITIVE_VALUE_DOMAIN != 0 {
             parse_primitive_value_domain(cursor.u64()?)?
         } else {
             PrimitiveValueDomain::default()
         };
-        let constructability = if flags & 8192 != 0 {
+        let constructability = if flags & rows::ENTITY_CONSTRUCTABILITY != 0 {
             Some(parse_constructability(cursor.u64()?)?)
         } else {
             None
         };
-        let primitive_literal_candidates = if flags & 16384 != 0 {
+        let primitive_literal_candidates = if flags & rows::ENTITY_PRIMITIVE_LITERAL_CANDIDATES != 0
+        {
             let count = cursor.u64()?;
             if count > 32 {
                 return Err(format!(
@@ -1423,7 +1507,7 @@ fn decode_entity_run(
         } else {
             None
         };
-        let runtime_binding_kind = if flags & 32768 != 0 {
+        let runtime_binding_kind = if flags & rows::ENTITY_RUNTIME_BINDING_KIND != 0 {
             Some(match cursor.u64()? {
                 0 => RuntimeBindingKind::Callable,
                 1 => RuntimeBindingKind::NonCallable,
@@ -1437,7 +1521,7 @@ fn decode_entity_run(
         // Bit 6 is the unresolved flag of a symbol-less entity. From Wire v21 a
         // symbol-bearing entity reads it as "the symbol covers the whole span";
         // before v21 that row is refused, as it always was.
-        let flag = flags & 64 != 0;
+        let flag = flags & rows::ENTITY_SYMBOL_FLAG != 0;
         let symbol_claim = match (
             symbol.is_empty(),
             flag,
@@ -1725,26 +1809,7 @@ pub(crate) fn decode_table_transition(input: &[u8]) -> Result<WireTableTransitio
         value => return Err(format!("unsupported table transition mode {value}")),
     };
     let table_schema = cursor.u64()?;
-    if table_schema != TYPE_FACTS_TABLE_SCHEMA_V3
-        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V4
-        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V5
-        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V6
-        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V7
-        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V8
-        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V9
-        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V11
-        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V12
-        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V13
-        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V14
-        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V15
-        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V16
-        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V17
-        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V18
-        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V19
-        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V20
-        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V21
-        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V22
-    {
+    if !SUPPORTED_TABLE_SCHEMAS.contains(&table_schema) {
         return Err(format!("unsupported Wire table schema {table_schema}"));
     }
     let base_generation = cursor.u64()?;
@@ -1800,25 +1865,27 @@ pub(crate) fn decode_table_transition(input: &[u8]) -> Result<WireTableTransitio
         if flags & !0x3f != 0 {
             return Err(format!("table transition path has unknown flags {flags}"));
         }
-        let source_tag = slot_tag(flags & 3, "source")?;
-        let entity_tag = slot_tag((flags >> 2) & 3, "entity")?;
-        let file_tag = slot_tag((flags >> 4) & 3, "file")?;
-        if source_tag == 0 && entity_tag == 0 && file_tag == 0 {
+        let source_tag = slot_tag((flags >> rows::PATH_SOURCE_SHIFT) & 3, "source")?;
+        let entity_tag = slot_tag((flags >> rows::PATH_ENTITY_SHIFT) & 3, "entity")?;
+        let file_tag = slot_tag((flags >> rows::PATH_FILE_SHIFT) & 3, "file")?;
+        if [source_tag, entity_tag, file_tag] == [rows::SLOT_UNCHANGED; 3] {
             return Err("table transition contains an empty path operation".into());
         }
-        if mode == TransitionMode::Full && [source_tag, entity_tag, file_tag].contains(&2) {
+        if mode == TransitionMode::Full
+            && [source_tag, entity_tag, file_tag].contains(&rows::SLOT_REMOVE)
+        {
             return Err("full table transition contains a remove operation".into());
         }
 
         let source = match source_tag {
-            0 => SlotOp::Unchanged,
-            1 => SlotOp::Replace(raw_digest(cursor.raw(32)?)?),
-            2 => SlotOp::Remove,
+            rows::SLOT_UNCHANGED => SlotOp::Unchanged,
+            rows::SLOT_REPLACE => SlotOp::Replace(raw_digest(cursor.raw(32)?)?),
+            rows::SLOT_REMOVE => SlotOp::Remove,
             _ => unreachable!(),
         };
         let entities = match entity_tag {
-            0 => SlotOp::Unchanged,
-            1 => {
+            rows::SLOT_UNCHANGED => SlotOp::Unchanged,
+            rows::SLOT_REPLACE => {
                 let mut entities = Vec::new();
                 decode_entity_run(&mut cursor, &strings, &path, table_schema, &mut entities)?;
                 if entities.is_empty() {
@@ -1831,13 +1898,15 @@ pub(crate) fn decode_table_transition(input: &[u8]) -> Result<WireTableTransitio
                 }
                 SlotOp::Replace(entities)
             }
-            2 => SlotOp::Remove,
+            rows::SLOT_REMOVE => SlotOp::Remove,
             _ => unreachable!(),
         };
         let file = match file_tag {
-            0 => SlotOp::Unchanged,
-            1 => SlotOp::Replace(decode_file_fact(&mut cursor, &strings, path.clone())?),
-            2 => SlotOp::Remove,
+            rows::SLOT_UNCHANGED => SlotOp::Unchanged,
+            rows::SLOT_REPLACE => {
+                SlotOp::Replace(decode_file_fact(&mut cursor, &strings, path.clone())?)
+            }
+            rows::SLOT_REMOVE => SlotOp::Remove,
             _ => unreachable!(),
         };
         paths.push(PathOp {
