@@ -1,0 +1,1 @@
+{"note": "SC1002 reach: handlers over a settled receiver in a chain an async function returns unawaited raise nothing at runtime (uncertifiable here); the awaited, pending and synchronous shapes at the end do"}

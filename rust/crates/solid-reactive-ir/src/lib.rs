@@ -48,6 +48,7 @@ pub use development_feedback::{
 };
 mod effect_api;
 mod effect_execution;
+mod effect_phase;
 mod execution_role;
 mod findings;
 mod identity;
@@ -221,6 +222,23 @@ pub struct RuntimeEnvironment {
     /// No request or options document sets it, so it is skipped on the wire.
     #[serde(skip)]
     pub router_install: router_params::RouterInstallEvidence,
+    /// Which installed copy of `solid-js` each analyzed file loads at runtime.
+    /// Read from disk by the backend; a caller with no disk carries none.
+    #[serde(skip)]
+    pub package_instances: PackageInstanceEvidence,
+}
+
+/// Runtime package identity, decided by module resolution rather than by
+/// declarations: TypeScript merges a second installed copy of the same package
+/// at the same version into the first copy's declarations, while the runtime
+/// loads both and each has its own scheduler queue.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct PackageInstanceEvidence {
+    /// The real directory of the `solid-js` that resolving `solid-js` from the
+    /// file's directory finds (the nearest `node_modules/solid-js` up the
+    /// tree, symlinks resolved), by the file's path. A file with no entry has
+    /// no resolved copy, or was not resolved.
+    pub solid_js_by_file: std::collections::BTreeMap<String, String>,
 }
 
 /// Whether callers outside the analyzed project may exist.
@@ -242,6 +260,22 @@ impl RuntimeEnvironment {
     #[must_use]
     pub const fn program_is_closed(&self) -> bool {
         matches!(self.program_boundary, Some(ProgramBoundary::Closed))
+    }
+
+    /// Whether the selection names a server build of the Solid packages: a
+    /// Node-family target, or server rendering. There an effect's apply never
+    /// runs and `flush` is empty, so a rule about what the *client* runtime
+    /// does with them claims nothing. No selection is the client default, as
+    /// everywhere else the audited release is assumed.
+    #[must_use]
+    pub fn selects_server_build(&self) -> bool {
+        matches!(
+            self.rendering,
+            Some(RuntimeRendering::StringSsr | RuntimeRendering::StreamingSsr)
+        ) || self
+            .selected_conditions()
+            .iter()
+            .any(|condition| matches!(condition.as_str(), "node" | "deno" | "worker"))
     }
 }
 
@@ -677,6 +711,13 @@ pub const TYPE_ONLY_SOURCE: &str = "type-only-source";
 /// reference's text. Producer: `static_rules.rs`; consumer: `projection.rs`.
 pub const PRIMITIVE_VALUE: &str = "primitive-value";
 
+/// The `analysis_context` of a dispatch obligation at a member call on the
+/// result of a primitive that returns a getter (`createSignal(1).slice(0)`,
+/// ADR 0338): the value it returns has no provenance the analysis can state.
+/// Its `callee` is the primitive and its `member` the method. Producer:
+/// `static_rules.rs`; consumer: `projection.rs`.
+pub const PRIMITIVE_RESULT_METHOD: &str = "primitive-result-method";
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StaticDefect {
@@ -768,6 +809,14 @@ pub enum StaticDefectKind {
         attribute: String,
         expression: String,
     },
+    /// An event handler whose function the checker cannot place exactly: an
+    /// `on…` attribute reads a member with no exact target, or an intrinsic
+    /// element spreads an object it cannot resolve (ADR 0358). The handler may
+    /// run owner-requiring work this analysis cannot see, so it is an obligation.
+    HandlerTargetUnresolved {
+        attribute: String,
+        expression: String,
+    },
     UncalledAccessor {
         name: String,
         position: String,
@@ -854,6 +903,9 @@ pub enum StaticDefectFamily {
     ReactiveSourceUncaptured,
     ReactiveDispatchUnresolved,
     ExpectedFunctionGotExpression,
+    /// A handler the checker cannot place at an exact function, so the owner it
+    /// runs under is unknown (ADR 0358). Its uncertain side is `missing-owner`.
+    HandlerOwnerUnresolved,
     UncalledAccessor,
     DirectMutation,
     /// A value crossing the default server-function transport. Deliberately
@@ -878,6 +930,7 @@ impl StaticDefectFamily {
             Self::ReactiveSourceUncaptured => "reactive-source-uncaptured",
             Self::ReactiveDispatchUnresolved => "reactive-dispatch-unresolved",
             Self::ExpectedFunctionGotExpression => "expected-function-got-expression",
+            Self::HandlerOwnerUnresolved => "handler-owner-unresolved",
             Self::UncalledAccessor => "uncalled-accessor",
             Self::DirectMutation => "no-direct-mutation",
             Self::ServerFunctionRichArgument => "server-function-rich-argument",
@@ -916,6 +969,7 @@ impl StaticDefectKind {
             Self::ReactiveHandlerRead { .. } | Self::HandlerValueUnresolved { .. } => {
                 StaticDefectFamily::ExpectedFunctionGotExpression
             }
+            Self::HandlerTargetUnresolved { .. } => StaticDefectFamily::HandlerOwnerUnresolved,
             Self::UncalledAccessor { .. } => StaticDefectFamily::UncalledAccessor,
             Self::DirectMutation { .. } => StaticDefectFamily::DirectMutation,
             Self::ServerFunctionRichArgument { .. } => {
@@ -945,6 +999,7 @@ impl StaticDefectKind {
             Self::StructuredReturnUnresolved { .. } => "StructuredReturnUnresolved",
             Self::ReactiveHandlerRead { .. } => "ReactiveHandlerRead",
             Self::HandlerValueUnresolved { .. } => "HandlerValueUnresolved",
+            Self::HandlerTargetUnresolved { .. } => "HandlerTargetUnresolved",
             Self::UncalledAccessor { .. } => "UncalledAccessor",
             Self::DirectMutation { .. } => "DirectMutation",
             Self::ServerFunctionRichArgument { .. } => "ServerFunctionRichArgument",
@@ -1056,6 +1111,11 @@ pub enum OwnerRequirementOperation {
     Cleanup,
     Boundary,
     SettledCleanup,
+    /// `useContext(context)` with no owner: rc.13 throws `NoOwnerError` (ADR 0349).
+    ContextRead,
+    /// `useContext` under an owner of a context created with no default that a
+    /// closed program never provides: rc.13 throws `ContextNotFoundError` (ADR 0349).
+    ContextProvider,
 }
 
 impl OwnerRequirementOperation {
@@ -1066,6 +1126,8 @@ impl OwnerRequirementOperation {
             "cleanup" => Self::Cleanup,
             "boundary" => Self::Boundary,
             "settled-cleanup" => Self::SettledCleanup,
+            "context-read" => Self::ContextRead,
+            "context-provider" => Self::ContextProvider,
             _ => panic!("owner analysis emitted unknown operation {operation:?}"),
         }
     }
@@ -1975,6 +2037,17 @@ fn call_primitive_name(
     // that method's, not the primitive's. A namespace member
     // (`Solid.createEffect`), whose object is the namespace, keeps its answer.
     let callee = file.ast.peel_ts_sugar_span(call.callee);
+    // A member call on the *result* of a call (`createSignal(1).slice(1)`,
+    // `createMemo(fn).toString()`) is that value's method, never the
+    // primitive: the whole member span carries the inner callee's symbol.
+    if let Some(member) = file.ast.member_at(callee)
+        && file
+            .ast
+            .call_at(file.ast.peel_ts_sugar_span(member.object))
+            .is_some()
+    {
+        return None;
+    }
     if let Some(member) = file.ast.member_at(callee)
         && referenced_primitive(
             file,

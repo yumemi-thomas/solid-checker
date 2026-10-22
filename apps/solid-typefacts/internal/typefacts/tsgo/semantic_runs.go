@@ -147,6 +147,18 @@ func (p *project) callResultDomainAtLocked(
 	return runtimeValueDomainOfType(p.checker, p.checker.GetTypeAtLocation(node)), nil
 }
 
+// symbolSpanCovers reports whether node is the whole demanded span, with the
+// trivia-free start the producer's locations use. The cursor answers the node
+// at the demand's first byte, which for `f(x)` is the callee `f` and for `o.p`
+// is `o`: a symbol taken from such a node names a token inside the demand, not
+// the value the demand describes. Identifiers that are the whole span
+// (specifiers, bindings, JSX tag names) cover it like any other node.
+func symbolSpanCovers(sourceFile *ast.SourceFile, node *ast.Node, location typefacts.Location) bool {
+	return node != nil &&
+		node.End() == location.EndByte &&
+		scanner.SkipTrivia(sourceFile.Text(), node.Pos()) == location.StartByte
+}
+
 // SemanticDemandRuns resolves canonically ordered per-file runs under one
 // checker lock. Results are index-aligned with runs and with each run's
 // demands; no caller has to flatten or repartition file ownership.
@@ -220,6 +232,7 @@ func (p *project) SemanticDemandRuns(
 				id := p.idFor(symbol)
 				results[runIndex].Structural[demandIndex] = id
 				results[runIndex].Entities[demandIndex].Symbol = id
+				results[runIndex].Entities[demandIndex].SymbolCoversSpan = symbolSpanCovers(sourceFiles[runIndex], node, location)
 				if jsxTagNameAt(node, location) == node {
 					resultSymbols[demandIndex] = symbol
 				}
@@ -296,6 +309,7 @@ func (p *project) SemanticDemandRuns(
 				}
 				if demand.Symbol && entity.Symbol == "" && resultSymbol != nil {
 					entity.Symbol = p.idFor(resultSymbol)
+					entity.SymbolCoversSpan = symbolSpanCovers(sourceFile, jsxTagNameAt(resultNode, location), location)
 				}
 				if demand.Symbol && entity.Symbol == "" && resultSymbol == nil {
 					entity.SymbolUnresolved = true

@@ -1,0 +1,3 @@
+# arrow-bound-helper-workspace-link
+
+**Claim (ADR 0339).** An import the compiler resolves to a workspace package (a `node_modules` symlink whose realpath lies outside `node_modules`) is project code the census sees only through declarations, so the importing module may sit on an import cycle. `ws-a.ts` imports `libws`, whose runtime `libws-src/index.js` imports `ws-b.tsx`, which imports `ws-a.ts` back; `helper` stays uncertifiable, never a violation. A package really installed under `node_modules` is not this case (the ADR's premise: it does not import the project). Stubs are the arrow-bound-helper-reachability stubs; `SC9014` is the missing `@solidjs/signals` install.

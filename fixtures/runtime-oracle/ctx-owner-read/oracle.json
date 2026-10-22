@@ -1,0 +1,3 @@
+{
+  "note": "ADR 0352: useContext with no owner throws NoOwnerError in an event handler and a timer callback (SC4001 context-read); the component-body and computation reads are controls and throw nothing."
+}

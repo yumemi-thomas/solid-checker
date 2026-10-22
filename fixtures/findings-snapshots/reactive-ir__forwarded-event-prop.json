@@ -2,6 +2,16 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-event-prop/App.tsx",
+      "start": 1897,
+      "end": 1910,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -92,6 +102,16 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-event-prop/buttons.tsx",
+      "start": 421,
+      "end": 434,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -112,8 +132,48 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-event-prop/buttons.tsx",
+      "start": 1154,
+      "end": 1159,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-event-prop/buttons.tsx",
+      "start": 1485,
+      "end": 1505,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-event-prop/buttons.tsx",
+      "start": 2050,
+      "end": 2055,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-handler-frozen",
       "code": "SC1007",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-event-prop/buttons.tsx",
+      "start": 2378,
+      "end": 2391,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-event-prop/buttons.tsx",
@@ -129,6 +189,16 @@
       "path": "fixtures/reactive-ir/forwarded-event-prop/buttons.tsx",
       "start": 3031,
       "end": 3046,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-event-prop/buttons.tsx",
+      "start": 3304,
+      "end": 3308,
       "fixes": 0
     },
     {

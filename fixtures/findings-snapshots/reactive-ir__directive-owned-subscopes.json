@@ -14,11 +14,11 @@
     {
       "rule": "primitive-in-directive-application",
       "code": "SC6001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
-      "start": 1041,
-      "end": 1051,
+      "start": 1039,
+      "end": 1049,
       "fixes": 0
     },
     {
@@ -27,8 +27,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
-      "start": 1318,
-      "end": 1328,
+      "start": 1316,
+      "end": 1326,
       "fixes": 0
     },
     {
@@ -37,8 +37,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
-      "start": 1476,
-      "end": 1486,
+      "start": 1474,
+      "end": 1484,
       "fixes": 0
     },
     {
@@ -47,8 +47,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
-      "start": 1533,
-      "end": 1543,
+      "start": 1531,
+      "end": 1541,
       "fixes": 0
     },
     {
@@ -57,38 +57,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
-      "start": 1907,
-      "end": 1917,
-      "fixes": 0
-    },
-    {
-      "rule": "primitive-in-directive-application",
-      "code": "SC6001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
-      "start": 2064,
-      "end": 2074,
-      "fixes": 0
-    },
-    {
-      "rule": "primitive-in-directive-application",
-      "code": "SC6001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
-      "start": 2272,
-      "end": 2282,
-      "fixes": 0
-    },
-    {
-      "rule": "primitive-in-directive-application",
-      "code": "SC6001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
-      "start": 2447,
-      "end": 2457,
+      "start": 1905,
+      "end": 1915,
       "fixes": 0
     },
     {
@@ -97,8 +67,18 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
-      "start": 2677,
-      "end": 2687,
+      "start": 2062,
+      "end": 2072,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-directive-application",
+      "code": "SC6001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
+      "start": 2270,
+      "end": 2280,
       "fixes": 0
     },
     {
@@ -107,8 +87,38 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
-      "start": 2854,
-      "end": 2864,
+      "start": 2445,
+      "end": 2455,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-directive-application",
+      "code": "SC6001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
+      "start": 2675,
+      "end": 2685,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-directive-application",
+      "code": "SC6001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
+      "start": 2852,
+      "end": 2862,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-directive-application",
+      "code": "SC6001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
+      "start": 3023,
+      "end": 3033,
       "fixes": 0
     },
     {
@@ -117,8 +127,38 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
-      "start": 3025,
-      "end": 3035,
+      "start": 3071,
+      "end": 3081,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-directive-application",
+      "code": "SC6001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/directive-owned-subscopes/RootLifetime.tsx",
+      "start": 206,
+      "end": 216,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-directive-application",
+      "code": "SC6001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/directive-owned-subscopes/RootLifetime.tsx",
+      "start": 273,
+      "end": 289,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-directive-application",
+      "code": "SC6001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/directive-owned-subscopes/RootLifetime.tsx",
+      "start": 420,
+      "end": 430,
       "fixes": 0
     },
     {
@@ -126,9 +166,19 @@
       "code": "SC6001",
       "kind": "violation",
       "severity": "warning",
-      "path": "fixtures/reactive-ir/directive-owned-subscopes/App.tsx",
-      "start": 3073,
-      "end": 3083,
+      "path": "fixtures/reactive-ir/directive-owned-subscopes/RootLifetime.tsx",
+      "start": 670,
+      "end": 680,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-directive-application",
+      "code": "SC6001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/directive-owned-subscopes/RootLifetime.tsx",
+      "start": 745,
+      "end": 755,
       "fixes": 0
     }
   ]

@@ -153,10 +153,11 @@ pub(super) fn object_retention_witnesses(
         })
 }
 
-/// [`runs_in_object_callable`] less one disposition (ADR 0292): a witness
-/// that is the `default` of a module object a dialect component loader
-/// renders, and the function's one reference, is a render of that function,
-/// not a retention. It is withdrawn only for a call written directly in that
+/// [`runs_in_object_callable`] less two dispositions (ADR 0292, 0342): a
+/// witness that is the `default` of a module object a dialect component
+/// loader renders, and the function's one reference, is a render of that
+/// function, not a retention; so is a member of a compound component that
+/// only JSX member tags reach, of a function proven a component. It is withdrawn only for a call written directly in that
 /// function's own body; every other witness, an enclosing function's
 /// included, stays in force.
 pub(super) fn runs_in_unrendered_object_callable(
@@ -166,7 +167,8 @@ pub(super) fn runs_in_unrendered_object_callable(
 ) -> bool {
     object_retention_witnesses(file, span).any(|(function, property)| {
         !(crate::owners::written_directly_in(&file.ast, function, span)
-            && lookup.is_lazy_default_render_witness(file, function.span, property.span))
+            && (lookup.is_lazy_default_render_witness(file, function.span, property.span)
+                || lookup.is_compound_render_witness(file, function, property)))
     })
 }
 

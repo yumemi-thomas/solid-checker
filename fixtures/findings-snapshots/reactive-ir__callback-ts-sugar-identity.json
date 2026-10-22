@@ -1,0 +1,105 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callback-ts-sugar-identity/App.tsx",
+      "start": 435,
+      "end": 444,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callback-ts-sugar-identity/App.tsx",
+      "start": 536,
+      "end": 545,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callback-ts-sugar-identity/App.tsx",
+      "start": 631,
+      "end": 640,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callback-ts-sugar-identity/App.tsx",
+      "start": 831,
+      "end": 840,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callback-ts-sugar-identity/App.tsx",
+      "start": 932,
+      "end": 944,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callback-ts-sugar-identity/App.tsx",
+      "start": 993,
+      "end": 1005,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callback-ts-sugar-identity/App.tsx",
+      "start": 1056,
+      "end": 1068,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callback-ts-sugar-identity/App.tsx",
+      "start": 1148,
+      "end": 1160,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callback-ts-sugar-identity/App.tsx",
+      "start": 1219,
+      "end": 1231,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callback-ts-sugar-identity/App.tsx",
+      "start": 2185,
+      "end": 2206,
+      "fixes": 0
+    }
+  ]
+}

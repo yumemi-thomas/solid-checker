@@ -1,3 +1,7 @@
 # leaf-scope-skippable-await
 
-**Claim (ADR 0320, round 7).** The leaf-owner walk skips a call after an `await` its helper reaches on every path (a promise continuation: `missing-owner`'s question); an await that may be skipped (`x ??= await p`, `callback?.(await p)`, `table?.[await p]`, a labelled `break`, a destructuring default) is not such an await, so the call stays a `leaf-owner-forbidden-call` uncertifiable obligation (`UnconditionalAwait` none). The Type Facts `calls_after_await` scan treats the same constructs (`Owner.tsx`).
+ADR 0357: a skippable await leaves both leaf and unowned continuations open
+(SC3001 and SC4001 obligations); a definite await is SC4001's proof.
+MaybeOwner pins namespace, ordinary/callback forwarding, dormant/shadowed
+negatives and a fresh root. `untrack` copies signals rc.13 core/core.d.ts:136;
+other signatures are the existing fixture's published stubs.

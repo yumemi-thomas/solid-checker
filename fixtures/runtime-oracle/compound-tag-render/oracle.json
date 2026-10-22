@@ -1,0 +1,3 @@
+{
+  "note": "ADR 0342: a member stored in an object and reached only by member tags runs under createComponent, so the strict read in its body warns at runtime and the checker reports it as a violation."
+}

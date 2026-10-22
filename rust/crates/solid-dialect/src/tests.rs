@@ -592,6 +592,9 @@ fn owner_requirement_roles_need_exact_dialect_ownership() {
         role("onSettled"),
         Some(OwnerRequirementRole::SettledCleanup)
     );
+    // ADR 0352: the read throws without an owner; creating a context does not.
+    assert_eq!(role("useContext"), Some(OwnerRequirementRole::ContextRead));
+    assert_eq!(role("createContext"), None);
     assert_eq!(role("effect"), None);
     assert_eq!(role("createUnknown"), None);
 }

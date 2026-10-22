@@ -119,7 +119,7 @@ impl<'a, 'c> DirectiveCreationCollector<'a, 'c> {
                     file.path.as_str(),
                     call.callee,
                     true,
-                    uncertain,
+                    uncertain || creation_lifetime_is_unproven(self.lookup.dialect, &primitive),
                 );
             } else if let Some((target_file, target)) = self
                 .lookup
@@ -138,6 +138,17 @@ pub(super) fn is_created_primitive(dialect: &dyn Dialect, primitive: &PrimitiveN
     primitive
         .primitive()
         .is_some_and(|primitive| dialect.creates_directive_owner(primitive))
+}
+
+/// ADR 0355: an explicitly created root owns its work, and may be empty or
+/// disposed by its callback or a retained disposer. Its creation alone proves
+/// neither live work nor an undisposed lifetime. Keep that proof obligation
+/// distinct from a computation created directly without an owner. The dialect
+/// identifies calls that create a root; no primitive spelling is trusted.
+fn creation_lifetime_is_unproven(dialect: &dyn Dialect, primitive: &PrimitiveName) -> bool {
+    primitive
+        .primitive()
+        .is_some_and(|primitive| dialect.callback_runs_in_created_root(primitive, 0))
 }
 
 /// Whether this concrete call registers work an owner would have to dispose.
@@ -254,20 +265,17 @@ fn ref_phase(file: &solid_facts::FileFacts, span: Span) -> RefPhase {
     if enclosing.iter().any(|function| function.generator) {
         return RefPhase::Undecided;
     }
-    let in_expression = |call: &solid_facts::ast::CallFact| callback.span.contains(call.span);
-    if !file
-        .ast
-        .calls
-        .iter()
-        .any(|call| in_expression(call) && call.span.contains(outermost.span))
-    {
+    // Only a function the ref application receives is applied: a getter's
+    // body, a tagged template's substitution or an operand of `void` is
+    // evaluated by the expression itself (ADR 0345).
+    if crate::owners::yielded_value_contains(file, callback.span, outermost.span) {
         return RefPhase::Apply;
     }
     let iife = |function: Span| {
-        file.ast
-            .calls
-            .iter()
-            .any(|call| in_expression(call) && file.ast.peel_ts_sugar_span(call.callee) == function)
+        file.ast.calls.iter().any(|call| {
+            callback.span.contains(call.span)
+                && file.ast.peel_ts_sugar_span(call.callee) == function
+        })
     };
     if enclosing.iter().all(|function| iife(function.span)) {
         RefPhase::Render
@@ -451,7 +459,9 @@ pub(crate) fn discover_directive_creations(ctx: &AnalysisContext<'_>, draft: &mu
                     file.path.as_str(),
                     call.callee,
                     false,
-                    owner == NestedOwner::Supplied || phase == RefPhase::Undecided,
+                    owner == NestedOwner::Supplied
+                        || phase == RefPhase::Undecided
+                        || creation_lifetime_is_unproven(ctx.dialect, &primitive),
                 );
             }
         }

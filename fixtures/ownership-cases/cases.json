@@ -520,29 +520,11 @@
        "ownership": "checker-only",
        "diagnostics": []
       }
-     },
-     {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
-      "span": {
-       "textRange": [
-        85,
-        94
-       ]
-      },
-      "fix": {
-       "behavior": "none"
-      },
-      "typescript": {
-       "ownership": "checker-only",
-       "diagnostics": []
-      }
      }
     ],
     "absent": []
-   }
+   },
+   "note": "The onCleanup in a createTrackedEffect body is SC3001's claim alone. A tracked body always runs under the tracked node, which forbids children, whether or not the effect was created under an owner (ADR 0347, amendment of 2026-10-21), so the runtime throws CLEANUP_IN_FORBIDDEN_SCOPE there and never NO_OWNER_CLEANUP. The SC4001 that was reported on this span claimed a cleanup that cannot run unowned. The unowned effect at the callee keeps its SC4001 (NO_OWNER_EFFECT)."
   },
   {
    "id": "react-prop/typescript-owned/002",
@@ -595,6 +577,32 @@
     ]
    },
    "note": "TypeScript owns this diagnostic (TS2322: the prop does not exist on the element's attribute type) and the checker deliberately carries no rule for it. The expectation asserts both halves: TypeScript really does report it at this span, and no checker finding is emitted there. `silent` keeps the broader claim that nothing else fires either."
+  },
+  {
+   "id": "innerhtml/typescript-owned/003",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "export const Case = () => <div innerhtml=\"x\">child</div>;\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [],
+    "absent": [],
+    "silent": true,
+    "typescript": [
+     {
+      "code": "TS2322",
+      "span": {
+       "marker": "innerhtml"
+      }
+     }
+    ]
+   },
+   "note": "Kept divergence: eslint-plugin-solid 0.14.5 reads a lowercase `innerhtml` alias as inner HTML (rule line 77). In Solid 2.0 rc.13 the spelling is neither typed nor treated as inner HTML. TypeScript rejects it (TS2322 at the attribute name, \"Did you mean 'innerHTML'?\"), and @solidjs/web rc.13 writes it with setAttribute, because its ChildProperties set holds only innerHTML, textContent, innerText and children. It therefore overwrites no content and no SC8003 is emitted. The camel-case spelling still reports (jsx-no-duplicate-props/solid-v2/content-positive/001). `silent` keeps the claim that no other rule fires either."
   },
   {
    "id": "prefer-for/solid-v2/positive/001",
@@ -828,6 +836,40 @@
     ],
     "absent": []
    }
+  },
+  {
+   "id": "innertext/solid-v2/content-positive/001",
+   "dialect": "solid-v2",
+   "source": {
+    "extension": ".tsx",
+    "prelude": "",
+    "text": "export const App = (props: { text: string }) => <div innerText={props.text}>fallback</div>;\n"
+   },
+   "ruleOptions": {},
+   "presets": [],
+   "enableRules": [],
+   "expect": {
+    "findings": [
+     {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "violation",
+      "severity": "error",
+      "span": {
+       "marker": "<div innerText={props.text}>"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     }
+    ],
+    "absent": []
+   },
+   "note": "Kept divergence: 2.0 rc.13 ChildProperties includes innerText (@solidjs/web dist/web.js line 33), so a write to it replaces the element's children, the same clash textContent has. eslint-plugin-solid 0.14.5 has no innerText arm (src/rules/jsx-no-duplicate-props.ts lines 77-83 at 6d3bc311 read innerHTML, innerhtml and textContent only). The published typings accept innerText as an ordinary prop (@solidjs/web types/jsx.d.ts line 953), so TypeScript reports nothing and the finding is checker-only. The camel-case spelling is jsx-no-duplicate-props/solid-v2/content-positive/001."
   },
   {
    "id": "resolve-in-tracked-scope/positive/001",
@@ -1204,6 +1246,22 @@
       "rule": "reactive-handler-frozen",
       "code": "SC1007",
       "kind": "violation",
+      "severity": "warning",
+      "span": {
+       "marker": "props.onSave"
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
       "severity": "warning",
       "span": {
        "marker": "props.onSave"

@@ -160,6 +160,9 @@ pub enum OwnerRequirementRole {
     Effect,
     Cleanup,
     SettledCleanup,
+    /// `useContext(context)`: the read throws `NoOwnerError` when no owner is
+    /// current, whatever default the context was created with (ADR 0352).
+    ContextRead,
 }
 
 /// What one call's arguments prove about one boolean option key, as the

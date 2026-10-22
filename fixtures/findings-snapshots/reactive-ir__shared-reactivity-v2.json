@@ -62,6 +62,16 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
+      "start": 4413,
+      "end": 4425,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",

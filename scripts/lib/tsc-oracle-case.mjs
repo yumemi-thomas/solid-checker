@@ -17,6 +17,7 @@ import {
   mkdirSync,
   readFileSync,
   readlinkSync,
+  rmSync,
   symlinkSync,
   unlinkSync,
   writeFileSync,
@@ -192,6 +193,14 @@ const runChecker = (testCase, index, strict, { checker, typefacts }) => {
     join(dir, caseSourceName),
     code,
   );
+  // A case directory is reused by index, so an earlier closed case's manifest is
+  // removed unless this case is closed too (ADR 0352).
+  const manifest = join(dir, "package.json");
+  if (testCase.programBoundary === "closed") {
+    writeFileSync(manifest, '{"name":"tsc-oracle-case","private":true}\n');
+  } else {
+    rmSync(manifest, { force: true });
+  }
   const enablementArgs = [
     ...(testCase.presets ?? []).flatMap((preset) => ["--preset", preset]),
     ...(testCase.enableRules ?? []).flatMap((rule) => ["--enable-rule", rule]),

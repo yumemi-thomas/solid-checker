@@ -20,6 +20,14 @@ export function Ported(props: { ready: boolean; html: string }) {
       <ul>{items().map((item, index) => <li>{item}{index}</li>)}</ul>
       <section>{ready() && <strong>ready</strong>}</section>
       <div innerHTML={props.html}>fallback</div>
+      {/* SC8003: `innerText` is a content property on rc.13 too, so it competes
+          with children, innerHTML and textContent. The three elements below
+          each report once. */}
+      <div innerText={props.html}>fallback</div>
+      <div innerText="x" textContent="y" />
+      <div innerText="x" innerHTML="y" />
+      {/* Silent: a lone innerText is the only content source here. */}
+      <div innerText={props.html} />
       <div onClick={() => {}} onclick={() => {}} />
       <button title={props.ready ? "yes" : "no"} />
       <Widget innerHTML={props.html}>component content is independent</Widget>

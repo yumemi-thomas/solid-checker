@@ -22,6 +22,16 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fp-summary-nested-helper/App.tsx",
+      "start": 2271,
+      "end": 2278,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",

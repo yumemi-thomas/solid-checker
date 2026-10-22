@@ -1,0 +1,11 @@
+{
+  "note": "ADR 0352: a package hook (kobalte useDialogContext) that reads its context in an event handler throws NoOwnerError. The control reads the hook under the dialog's own provider and throws nothing.",
+  "install": "probus-hk",
+  "open": [
+    {
+      "code": "NO_OWNER_CONTEXT",
+      "site": "App.tsx:8",
+      "reason": "Measurement, not a checker miss: the feedback run's native analysis is feedback-facts and does not source-analyse package code (research item 10). The declared-host run reports SC4001 at this call: `solid-checker --project <this case> --runtime-target browser --runtime-build development --rendering csr` (fixtures/reactive-ir/context-read-package is the fixture)."
+    }
+  ]
+}

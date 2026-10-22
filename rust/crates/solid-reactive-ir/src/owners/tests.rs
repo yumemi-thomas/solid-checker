@@ -1,9 +1,11 @@
 use super::{
     OWNER_CONTEXT_COMPONENT_UNCERTAIN, OWNER_CONTEXT_LATER_RUN_UNOWNED, OWNER_CONTEXT_LEAF,
-    OWNER_CONTEXT_OWNED, OWNER_CONTEXT_PROVEN_UNOWNED, OWNER_CONTEXT_UNOWNED, OwnerEdgeKind,
-    OwnerNode, binding_returns_reactive_source, callback_owner_edge_kind, compiler_owner_context,
-    compose_owner_edge, owner_edge_context, propagate_owner_contexts, providing_region_chain,
-    returned_arrow_function, root_owned_at, seed_contexts,
+    OWNER_CONTEXT_LEAF_OWNED, OWNER_CONTEXT_MAY_RESUME_UNOWNED, OWNER_CONTEXT_OWNED,
+    OWNER_CONTEXT_PROVEN_UNOWNED, OWNER_CONTEXT_UNOWNED, OwnerEdgeKind, OwnerNode,
+    binding_returns_reactive_source, callback_owner_edge_kind, compiler_owner_context,
+    compose_owner_edge, owner_edge_context, possible_await_continuation_context,
+    propagate_owner_contexts, providing_region_chain, returned_arrow_function, root_owned_at,
+    seed_contexts, seed_unnamed_hand_outs, settle_eager_owners,
 };
 use solid_facts::ast;
 use solid_facts::compiler::{
@@ -83,6 +85,49 @@ fn compiler_ownership_regions_seed_owner_analysis() {
 }
 
 #[test]
+fn possible_suspension_preserves_the_owner_without_inventing_an_invocation() {
+    let source = "async function run() { before(); if (flag) await pending; after(); }";
+    let compiler = ExecutionMap {
+        compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
+        source_hash: SourceHash::of(source),
+        semantic_model: Default::default(),
+        tracked_regions: vec![],
+        untracked_regions: vec![],
+        discarded_regions: vec![],
+        ownership_regions: vec![],
+        callback_roles: vec![],
+        jsx_operations: vec![],
+    };
+    let file = owner_context_file(source, compiler);
+    let site = |name| {
+        file.ast
+            .calls
+            .iter()
+            .find(|call| file.source_text(call.callee) == Some(name))
+            .unwrap()
+            .callee
+    };
+    let leaf = OWNER_CONTEXT_LEAF | OWNER_CONTEXT_LEAF_OWNED;
+    assert_eq!(
+        possible_await_continuation_context(&file, site("before"), leaf),
+        None
+    );
+    assert_eq!(
+        possible_await_continuation_context(&file, site("after"), leaf),
+        Some(leaf | OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_MAY_RESUME_UNOWNED)
+    );
+    assert_eq!(
+        possible_await_continuation_context(&file, site("after"), 0),
+        None
+    );
+    let unowned = OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED;
+    assert_eq!(
+        possible_await_continuation_context(&file, site("after"), unowned),
+        Some(unowned)
+    );
+}
+
+#[test]
 fn owner_edge_context_transforms_the_source_bits_per_edge_kind() {
     assert_eq!(
         owner_edge_context(OwnerEdgeKind::Preserve, OWNER_CONTEXT_OWNED),
@@ -107,9 +152,59 @@ fn owner_edge_context_transforms_the_source_bits_per_edge_kind() {
         owner_edge_context(OwnerEdgeKind::Conditional, 0),
         OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED
     );
+    // A createTrackedEffect body runs under the tracked node whatever its
+    // creation owner: its cleanup is SC3001's (`LEAF_OWNED`), and no unowned
+    // bit survives, so it is never SC4001's `NO_OWNER_CLEANUP`. A conditional
+    // creation is live on its owned path too.
     assert_eq!(
         owner_edge_context(OwnerEdgeKind::Leaf, OWNER_CONTEXT_OWNED),
-        OWNER_CONTEXT_LEAF
+        OWNER_CONTEXT_LEAF | OWNER_CONTEXT_LEAF_OWNED
+    );
+    assert_eq!(
+        owner_edge_context(
+            OwnerEdgeKind::Leaf,
+            OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED
+        ),
+        OWNER_CONTEXT_LEAF | OWNER_CONTEXT_LEAF_OWNED
+    );
+    assert_eq!(
+        owner_edge_context(
+            OwnerEdgeKind::Leaf,
+            OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED
+        ),
+        OWNER_CONTEXT_LEAF | OWNER_CONTEXT_LEAF_OWNED
+    );
+    // A tracked effect inside a creation-owned leaf body is dead: it throws
+    // before its callback runs.
+    assert_eq!(
+        owner_edge_context(
+            OwnerEdgeKind::Leaf,
+            OWNER_CONTEXT_LEAF | OWNER_CONTEXT_LEAF_OWNED
+        ),
+        0
+    );
+    // An onSettled inside a leaf body is queued out of band: proven unowned
+    // whatever the body's owner (rc.13). Outside one it is an ordinary leaf.
+    assert_eq!(
+        owner_edge_context(
+            OwnerEdgeKind::QueuedLeaf,
+            OWNER_CONTEXT_LEAF | OWNER_CONTEXT_LEAF_OWNED
+        ),
+        OWNER_CONTEXT_LEAF | OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED
+    );
+    assert_eq!(
+        owner_edge_context(OwnerEdgeKind::QueuedLeaf, OWNER_CONTEXT_OWNED),
+        OWNER_CONTEXT_LEAF | OWNER_CONTEXT_LEAF_OWNED
+    );
+    // A ref application proves the unowned run; a may-be-unowned callback
+    // carries only the open-world bit, whatever its source.
+    assert_eq!(
+        owner_edge_context(OwnerEdgeKind::RefApplied, 0),
+        OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED
+    );
+    assert_eq!(
+        owner_edge_context(OwnerEdgeKind::MayBeUnowned, OWNER_CONTEXT_OWNED),
+        OWNER_CONTEXT_UNOWNED
     );
 }
 
@@ -161,9 +256,11 @@ fn node(seed_context: u8) -> OwnerNode {
         body: Span::new(0, 10),
         symbol: None,
         exported: false,
+        generator: false,
         component: seed_context & OWNER_CONTEXT_OWNED != 0,
         component_uncertain: false,
         seed_context,
+        namespace_candidate: false,
     }
 }
 
@@ -198,7 +295,7 @@ fn propagation_reaches_a_fixed_point_and_accumulates_bits() {
         ],
         vec![],
     ];
-    propagate_owner_contexts(&mut contexts, &outgoing);
+    propagate_owner_contexts(&mut contexts, &outgoing, &[false; 3]);
     assert_eq!(
         contexts,
         vec![
@@ -209,16 +306,98 @@ fn propagation_reaches_a_fixed_point_and_accumulates_bits() {
     );
 }
 
-/// Documents current behavior: only nodes whose seeded context is nonzero
-/// enter the worklist, so even an `Owned` edge (whose contribution does
-/// not depend on the source's bits) stays dormant when its source has no
-/// context of its own.
+/// Only nodes whose seeded context is nonzero enter the worklist, so even an
+/// `Owned` edge (whose contribution does not depend on the source's bits) stays
+/// dormant when its source has no context of its own. That dormancy is the
+/// closed program's, kept on purpose (ADR 0347): an unexported function nothing
+/// calls, and an export no namespace import hands out, have no caller at all,
+/// so the callbacks they pass are not reached. An export a namespace import
+/// does hand out is not context-free: `seed_namespace_hand_outs` gives it an
+/// unknown caller first, and its edges walk (the test below).
 #[test]
 fn propagation_does_not_walk_edges_out_of_context_free_nodes() {
     let mut contexts = vec![0, 0];
     let outgoing = vec![vec![(1, OwnerEdgeKind::Owned)], vec![]];
-    propagate_owner_contexts(&mut contexts, &outgoing);
+    propagate_owner_contexts(&mut contexts, &outgoing, &[false; 2]);
     assert_eq!(contexts, vec![0, 0]);
+}
+
+/// ADR 0347: a `runWithOwner(null)` callback of an export that a namespace
+/// import hands out is reached through the unknown-caller seed, and the
+/// callback is proven unowned whatever that caller does.
+#[test]
+fn a_namespace_handed_out_export_reaches_its_detached_callback() {
+    let mut contexts = vec![OWNER_CONTEXT_UNOWNED, 0];
+    let outgoing = vec![vec![(1, OwnerEdgeKind::Unowned)], vec![]];
+    propagate_owner_contexts(&mut contexts, &outgoing, &[false; 2]);
+    assert_eq!(
+        contexts,
+        vec![
+            OWNER_CONTEXT_UNOWNED,
+            OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED
+        ]
+    );
+}
+
+/// ADR 0347 amendment: a detached callback whose function is reached only through an
+/// unnamed namespace escape is not proven unowned: whether the function runs is
+/// unproven, so the callback's unowned context has no proof bit.
+#[test]
+fn an_unnamed_escape_reaches_a_detached_callback_without_proof() {
+    let mut contexts = vec![0, 0];
+    let outgoing = vec![vec![(1, OwnerEdgeKind::Unowned)], vec![]];
+    let uncertain = seed_unnamed_hand_outs(&mut contexts, &outgoing, &[true, false]);
+    propagate_owner_contexts(&mut contexts, &outgoing, &uncertain);
+    assert_eq!(contexts, vec![OWNER_CONTEXT_UNOWNED, OWNER_CONTEXT_UNOWNED]);
+}
+
+/// ADR 0347 amendment: a function the program also reaches with a certain caller keeps
+/// its proof: the unnamed escape adds no uncertainty to a certain reach.
+#[test]
+fn a_certain_reach_keeps_the_proof_an_unnamed_escape_also_gives() {
+    // 0 is an unnamed candidate and calls 1; 1 is certainly reached (proven
+    // unowned); 1's detached callback 2 is proven.
+    let mut contexts = vec![0, OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED, 0];
+    let outgoing = vec![
+        vec![(1, OwnerEdgeKind::Preserve)],
+        vec![(2, OwnerEdgeKind::Unowned)],
+        vec![],
+    ];
+    let uncertain = seed_unnamed_hand_outs(&mut contexts, &outgoing, &[true, false, false]);
+    // The candidate has no certain reach of its own; 1 and 2 have one.
+    assert_eq!(uncertain, vec![true, false, false]);
+    propagate_owner_contexts(&mut contexts, &outgoing, &uncertain);
+    assert_eq!(
+        contexts[2],
+        OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED
+    );
+}
+
+/// An eager ref call from a function with no owner context settles to the
+/// uncertain unowned bit, and what that call leads to inherits it. From a
+/// proven source the call inherits the proof, as `Preserve` does.
+#[test]
+fn an_eager_call_settles_uncertain_from_a_context_free_source() {
+    // 0 (context-free) --eager--> 1 --preserve--> 2; 3 (proven) --eager--> 4.
+    let mut contexts = vec![
+        0,
+        0,
+        0,
+        OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED,
+        0,
+    ];
+    let outgoing = vec![
+        vec![(1, OwnerEdgeKind::EagerCall)],
+        vec![(2, OwnerEdgeKind::Preserve)],
+        vec![],
+        vec![(4, OwnerEdgeKind::EagerCall)],
+        vec![],
+    ];
+    propagate_owner_contexts(&mut contexts, &outgoing, &[false; 5]);
+    settle_eager_owners(&mut contexts, &outgoing, &[false; 5]);
+    let uncertain = OWNER_CONTEXT_UNOWNED;
+    let proven = OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED;
+    assert_eq!(contexts, vec![0, uncertain, uncertain, proven, proven]);
 }
 
 #[test]
@@ -276,7 +455,8 @@ fn root_owned_at_withholds_for_either_detaching_bit() {
     for (context, answered) in [
         (OWNER_CONTEXT_OWNED, true),
         (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED, true),
-        (OWNER_CONTEXT_LEAF, true),
+        (OWNER_CONTEXT_LEAF, false),
+        (OWNER_CONTEXT_LEAF | OWNER_CONTEXT_LEAF_OWNED, false),
         (0, true),
         (OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED, false),
         (

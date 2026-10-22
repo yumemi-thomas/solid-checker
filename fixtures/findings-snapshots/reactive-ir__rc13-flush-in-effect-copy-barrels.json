@@ -1,0 +1,35 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc13-flush-in-effect-copy-barrels/App.ts",
+      "start": 513,
+      "end": 518,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc13-flush-in-effect-copy-barrels/App.ts",
+      "start": 635,
+      "end": 640,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-source-uncaptured",
+      "code": "SC9011",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc13-flush-in-effect-copy-barrels/App.ts",
+      "start": 990,
+      "end": 995,
+      "fixes": 0
+    }
+  ]
+}

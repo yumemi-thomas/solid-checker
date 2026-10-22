@@ -1,0 +1,3 @@
+{
+  "note": "ADR 0357: six possibly suspending cleanup sites may retain the leaf or resume unowned. Skip paths throw CLEANUP_IN_FORBIDDEN_SCOPE; taken paths warn NO_OWNER_CLEANUP. Both claims must stay covered without asserting one path always runs."
+}

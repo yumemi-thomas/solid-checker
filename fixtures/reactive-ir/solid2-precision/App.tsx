@@ -7,7 +7,9 @@ import {
   onSettled,
 } from "solid-js";
 
-declare function fetchPosts(): Promise<string[]>;
+async function fetchPosts(): Promise<string[]> {
+  return ["a"];
+}
 declare function invoke<T, U>(value: T, callback: (value: T) => U): U;
 declare function makePredicate(
   callback: (post: string) => boolean,
@@ -45,8 +47,12 @@ export function FilterAfterAwait() {
   return <div>{posts()}</div>;
 }
 
-// Promise callbacks are deferred and must not inherit Array.prototype.filter's
-// synchronous proof merely because a filter appears inside them.
+// A promise handler is deferred and does not inherit Array.prototype.filter's
+// synchronous proof from a filter inside it. The read is after the await, but
+// the async memo returns the chain without awaiting it, and over an
+// already-resolved receiver the handler runs before the memo adopts the
+// promise, with no frame of the computation below it: the runtime stays
+// silent, so the read is uncertifiable, not a violation (ADR 0340).
 export function PromiseCallbackAfterAwait() {
   const [id] = createSignal("42");
   const posts = createMemo(async () => {

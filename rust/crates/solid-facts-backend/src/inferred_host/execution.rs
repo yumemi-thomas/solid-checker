@@ -523,7 +523,7 @@ pub(super) fn exact_symbol(facts: &ProjectFacts, path: &str, span: Span) -> Opti
         .filter(|entity| {
             entity.location.start_byte == u64::from(span.start)
                 && entity.location.end_byte == u64::from(span.end)
-                && !entity.symbol_unresolved
+                && !entity.symbol_unresolved()
                 && !entity.symbol.is_empty()
         });
     let mut symbol = matches.next()?.symbol.to_string();

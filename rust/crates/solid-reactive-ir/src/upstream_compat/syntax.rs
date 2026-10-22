@@ -25,7 +25,8 @@ pub(super) fn check_file(file: &FileFacts, violations: &mut Vec<StaticViolation>
 /// `jsx-no-duplicate-props` (SC8003) — the same prop written twice on one
 /// opening tag, whether directly or hidden inside a spread, and the related
 /// "more than one content source" check (`children` prop, JSX children,
-/// `innerHTML`, `textContent` all fighting over the same element).
+/// `innerHTML`, `innerText`, and `textContent` all fighting over the same
+/// element).
 fn jsx_no_duplicate_props(
     file: &FileFacts,
     element: &JsxElementFact,
@@ -52,9 +53,9 @@ fn jsx_no_duplicate_props(
     // the content-competition check below still asks: a component's props are
     // a plain object either way.
     //
-    // Slot folding was already `false` for every 2.0 analysis --
-    // `carries_eslint_era_rules()` gated it and only the 1.x catalog answered
-    // true -- so no finding moves here. The parameter stays on
+    // Slot folding is `false` for every analysis this checker runs. It was
+    // gated on the 1.x catalog, which ADR 0110 retired, and no 2.0 question
+    // replaces that gate, so no finding moves here. The parameter stays on
     // `duplicate_slot` because the model is a property of a *compiler*, and
     // the next vocabulary whose lowering folds slots sets it again.
     let folds_dom_slots = false;
@@ -156,12 +157,23 @@ fn jsx_no_duplicate_props(
 
     let has_children_prop = seen_slots.contains("children");
     let has_children = !element.children.is_empty();
-    let has_inner_html = seen_slots.contains("innerHTML") || seen_slots.contains("innerhtml");
+    // Only the camel-case `innerHTML` writes inner HTML. Upstream also reads a
+    // lowercase `innerhtml` alias (eslint-plugin-solid 0.14.5, rule line 77),
+    // but rc.13 types only `innerHTML` (TS2322 on the lowercase spelling), and
+    // the runtime's property set (`ChildProperties`) has no lowercase entry, so
+    // a lowercase attribute goes through `setAttribute` and overwrites nothing.
+    // The kept divergence is pinned as `innerhtml/typescript-owned/003`.
+    let has_inner_html = seen_slots.contains("innerHTML");
+    // `innerText` is in `ChildProperties` too (rc.13 dist/web.js line 33), so a
+    // property write replaces the child nodes. Upstream has no such arm; the
+    // divergence is pinned as `innertext/solid-v2/content-positive/001`.
+    let has_inner_text = seen_slots.contains("innerText");
     let has_text_content = seen_slots.contains("textContent");
     let used = [
         has_children_prop.then_some("`props.children`"),
         has_children.then_some("JSX children"),
         has_inner_html.then_some("`props.innerHTML`"),
+        has_inner_text.then_some("`props.innerText`"),
         has_text_content.then_some("`props.textContent`"),
     ]
     .into_iter()
@@ -173,15 +185,19 @@ fn jsx_no_duplicate_props(
     // on components as well as intrinsic elements. Narrowed 2026-08-17 after
     // the TypeScript ownership audit matched the two spans.
     //
-    // Any intrinsic set that also includes `innerHTML` or `textContent` still reports: those
-    // conflicts draw no diagnostic at all, so the finding asserts more than
-    // TS2710 does even where TS2710 also fires. Verified: `innerHTML` with
-    // `textContent`, and `innerHTML` with JSX children, are both silent. On a
-    // component these are ordinary props that its implementation may combine.
+    // Any intrinsic set that also includes `innerHTML`, `innerText`, or
+    // `textContent` still reports: those conflicts draw no diagnostic at all,
+    // so the finding asserts more than TS2710 does even where TS2710 also
+    // fires. Verified against the rc.13 typings: `innerHTML` with
+    // `textContent`, `innerHTML` with JSX children, `innerText` with JSX
+    // children, `innerText` with `textContent`, and `innerText` with
+    // `innerHTML` are all silent. On a component these are ordinary props that
+    // its implementation may combine.
     let only_the_children_pair = used.len() == 2
         && has_children_prop
         && has_children
         && !has_inner_html
+        && !has_inner_text
         && !has_text_content;
     if intrinsic && used.len() > 1 && !only_the_children_pair {
         violations.push(violation(
@@ -189,7 +205,7 @@ fn jsx_no_duplicate_props(
             "SC8003",
             "jsx-no-duplicate-props",
             format!("Using {} at the same time is not allowed.", used.join(", ")),
-            "Pick exactly one source of content for this element. When more than one of children, innerHTML, and textContent is set, they overwrite each other and the result depends on write order.",
+            "Pick exactly one source of content for this element. When more than one of children, innerHTML, innerText, and textContent is set, they overwrite each other and the result depends on write order.",
             element.opening,
             vec![],
         ));

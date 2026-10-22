@@ -2,6 +2,109 @@
 
 use super::*;
 
+/// The expression under any parentheses and TypeScript wrappers.
+fn unwrapped<'e, 'a>(mut expression: &'e Expression<'a>) -> &'e Expression<'a> {
+    loop {
+        expression = match expression {
+            Expression::ParenthesizedExpression(inner) => &inner.expression,
+            Expression::TSAsExpression(inner) => &inner.expression,
+            Expression::TSSatisfiesExpression(inner) => &inner.expression,
+            Expression::TSNonNullExpression(inner) => &inner.expression,
+            Expression::TSTypeAssertion(inner) => &inner.expression,
+            _ => return expression,
+        };
+    }
+}
+
+/// The dynamic import an expression awaits: `await import(x)`, through any
+/// parentheses.
+fn awaited_import<'e, 'a>(expression: &'e Expression<'a>) -> Option<&'e ImportExpression<'a>> {
+    let Expression::AwaitExpression(awaited) = unwrapped(expression) else {
+        return None;
+    };
+    match unwrapped(&awaited.argument) {
+        Expression::ImportExpression(import) => Some(import),
+        _ => None,
+    }
+}
+
+/// The dynamic import a concise arrow returns: `() => import(x)`.
+fn concise_import<'e, 'a>(
+    arrow: &'e ArrowFunctionExpression<'a>,
+) -> Option<&'e ImportExpression<'a>> {
+    if !arrow.expression {
+        return None;
+    }
+    let [oxc_ast::ast::Statement::ExpressionStatement(statement)] =
+        arrow.body.statements.as_slice()
+    else {
+        return None;
+    };
+    match unwrapped(&statement.expression) {
+        Expression::ImportExpression(import) => Some(import),
+        _ => None,
+    }
+}
+
+/// The export names an object pattern reads, when every key is stated and
+/// no rest element takes the rest of the namespace.
+fn pattern_names(pattern: &oxc_ast::ast::ObjectPattern<'_>) -> Option<Vec<CompactString>> {
+    if pattern.rest.is_some() {
+        return None;
+    }
+    pattern
+        .properties
+        .iter()
+        .map(
+            |property| match pattern_key_slot(&property.key, property.computed) {
+                PatternSlot::Key(name) => Some(name),
+                _ => None,
+            },
+        )
+        .collect()
+}
+
+/// The export `lazy(() => import(x), options)` reads (facts schema 72):
+/// `default` when the options name none, the one a literal `export` option
+/// names, and `None` for any options whose `export` is not a literal.
+fn lazy_export(call: &CallExpression<'_>) -> Option<CompactString> {
+    let Some(options) = call.arguments.get(1) else {
+        return Some(CompactString::from("default"));
+    };
+    let Argument::ObjectExpression(object) = options else {
+        return None;
+    };
+    let mut export = None;
+    for property in &object.properties {
+        let ObjectPropertyKind::ObjectProperty(property) = property else {
+            return None;
+        };
+        match pattern_key_slot(&property.key, property.computed) {
+            PatternSlot::Key(key) if key.as_str() == "export" => {
+                let Expression::StringLiteral(name) = &property.value else {
+                    return None;
+                };
+                export = Some(CompactString::from(name.value.as_str()));
+            }
+            PatternSlot::Key(_) => {}
+            _ => return None,
+        }
+    }
+    Some(export.unwrap_or_else(|| CompactString::from("default")))
+}
+
+impl Collector<'_, '_> {
+    /// The parts of a `for…in` or `for…of` loop that repeat: its left-hand
+    /// target and its body. The iterable is evaluated once, before the first
+    /// iteration, so it is not among them (`loop_repeats`).
+    fn push_iterated_loop_repeats(&mut self, looped: Span, left: Span, right: Span) {
+        self.loop_repeats
+            .push((looped, Span::new(left.start, right.start)));
+        self.loop_repeats
+            .push((looped, Span::new(right.end, looped.end)));
+    }
+}
+
 impl<'a> Visit<'a> for Collector<'_, '_> {
     fn enter_scope(&mut self, _flags: ScopeFlags, scope_id: &std::cell::Cell<Option<ScopeId>>) {
         // SemanticBuilder populated every scope cell in this same AST before
@@ -57,11 +160,18 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             None
         };
         let (specifier, specifier_span) = specifier.unzip();
+        let at = span(expression.span);
+        let consumer = self
+            .module_consumers
+            .iter()
+            .position(|(load, _)| *load == at)
+            .map(|index| self.module_consumers.swap_remove(index).1);
         self.module_loads.push(ModuleLoadFact {
-            span: span(expression.span),
+            span: at,
             kind: ModuleLoadKind::DynamicImport,
             specifier: specifier.clone(),
             specifier_span,
+            consumer,
         });
         if specifier.is_none() {
             self.module_hazards.push(ModuleHazardFact {
@@ -88,6 +198,22 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_call_expression(&mut self, call: &CallExpression<'a>) {
+        // `lazy(() => import(x), options)`: whether this `lazy` is Solid's is
+        // the reactive IR's answer, from the call's primitive.
+        if let Expression::Identifier(callee) = &call.callee
+            && callee.name.as_str() == "lazy"
+            && let Some(Argument::ArrowFunctionExpression(arrow)) = call.arguments.first()
+            && let Some(import) = concise_import(arrow)
+            && let Some(export) = lazy_export(call)
+        {
+            self.module_consumers.push((
+                span(import.span),
+                ModuleLoadConsumer::Lazy {
+                    call: span(call.span),
+                    export,
+                },
+            ));
+        }
         if self.optional_chain_depth == 0
             && self.conditional_flow_depth
                 == self
@@ -99,8 +225,11 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             self.straight_line_calls.push(span(call.span));
         }
         self.record_completion_site(call.span);
-        if let Expression::Identifier(callee) = &call.callee {
+        // TypeScript wrappers erase at run time: `(require as any)("./b")`,
+        // `require!("./b")` and `require satisfies X` call `require` directly.
+        if let Expression::Identifier(callee) = peel_ts_sugar(&call.callee) {
             if self.is_unresolved_named(callee, "require") {
+                self.direct_require_callees.push(span(callee.span));
                 let specifier = match call.arguments.as_slice() {
                     [Argument::StringLiteral(source)] => {
                         Some((source.value.as_str().into(), span(source.span)))
@@ -118,6 +247,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                     kind: ModuleLoadKind::Require,
                     specifier: specifier.clone(),
                     specifier_span,
+                    consumer: None,
                 });
                 if specifier.is_none() {
                     self.module_hazards.push(ModuleHazardFact {
@@ -142,6 +272,14 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             && self.is_unresolved_named(object, "Object")
         {
             self.record_accessor_installation(call.span);
+        }
+        if let Expression::StaticMemberExpression(member) = call.callee.get_inner_expression()
+            && !member.optional
+            && member.property.name == "glob"
+            && Self::is_import_meta(&member.object)
+            && Self::import_glob_is_lazy(&call.arguments)
+        {
+            self.lazy_import_glob_callees.push(span(member.span));
         }
         let callee_span = call.callee.span();
         self.calls.push(CallFact {
@@ -218,6 +356,21 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_variable_declarator(&mut self, declaration: &VariableDeclarator<'a>) {
+        if let Some(init) = &declaration.init
+            && !matches!(declaration.id, BindingPattern::BindingIdentifier(_))
+        {
+            self.pattern_values
+                .push((span(declaration.id.span()), span(init.span())));
+        }
+        // `const { a, b } = await import(x)`: the export names the pattern reads.
+        if let BindingPattern::ObjectPattern(pattern) = &declaration.id
+            && let Some(init) = &declaration.init
+            && let Some(import) = awaited_import(init)
+            && let Some(names) = pattern_names(pattern)
+        {
+            self.module_consumers
+                .push((span(import.span), ModuleLoadConsumer::Members { names }));
+        }
         // The disposal is awaited where the block exits, which is after this
         // declarator; recording the declarator itself is the earlier, and so
         // the conservative, position.
@@ -273,6 +426,9 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                         .map(|expression| self.runtime_value_kind(expression))
                         .unwrap_or_default(),
                     immutable: declaration.kind == oxc_ast::ast::VariableDeclarationKind::Const,
+                    in_switch_case: self
+                        .switch_case_declarators
+                        .contains(&span(declaration.span)),
                     runtime_let: declaration.kind == oxc_ast::ast::VariableDeclarationKind::Let
                         && !self.ambient_variable
                         && self.ambient_module_depth == 0
@@ -333,6 +489,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                     })
                     .collect(),
                 rest_parameter: function.params.rest.is_some(),
+                parameters_inert: self.parameters_inert(&function.params),
                 rest_parameter_names: self.rest_parameter_names(function.params.rest.as_deref()),
                 r#async: function.r#async,
                 generator: function.generator,
@@ -458,6 +615,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 })
                 .collect(),
             rest_parameter: function.params.rest.is_some(),
+            parameters_inert: self.parameters_inert(&function.params),
             rest_parameter_names: self.rest_parameter_names(function.params.rest.as_deref()),
             r#async: function.r#async,
             generator: false,
@@ -760,6 +918,14 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             span: span(identifier.span),
             role: IdentifierRole::Reference,
         });
+        // Resolved or not: a `declare function require` shadows the host's
+        // `require` in the binder, and the host's is what runs.
+        if identifier.name == "require"
+            && !self.direct_require_callees.contains(&span(identifier.span))
+        {
+            self.unmodeled_require_references
+                .push(span(identifier.span));
+        }
         // The identifier, not `new Proxy(`: `Proxy.revocable` builds the same
         // thing, and `const P = Proxy` defers the construction to a name this
         // pass does not follow. A shadowed `Proxy` is somebody's own class and
@@ -840,6 +1006,10 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         self.if_regions.push(IfRegionFact {
             test,
             consequent: span(statement.consequent.span()),
+            alternate: statement
+                .alternate
+                .as_ref()
+                .map(|alternate| span(alternate.span())),
         });
         self.visit_expression(&statement.test);
         self.conditional_control_stack.push(test);
@@ -865,6 +1035,20 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         self.conditional_control_stack.pop();
     }
 
+    fn visit_switch_case(&mut self, case: &oxc_ast::ast::SwitchCase<'a>) {
+        for statement in &case.consequent {
+            if let oxc_ast::ast::Statement::VariableDeclaration(declaration) = statement {
+                self.switch_case_declarators.extend(
+                    declaration
+                        .declarations
+                        .iter()
+                        .map(|declarator| span(declarator.span)),
+                );
+            }
+        }
+        walk::walk_switch_case(self, case);
+    }
+
     fn visit_assignment_expression(&mut self, expression: &AssignmentExpression<'a>) {
         if self.assignment_target_has_unresolved(&expression.left) {
             self.module_hazards.push(ModuleHazardFact {
@@ -873,6 +1057,14 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             });
         }
         let plain = expression.operator == AssignmentOperator::Assign;
+        if matches!(
+            expression.left,
+            AssignmentTarget::ObjectAssignmentTarget(_)
+                | AssignmentTarget::ArrayAssignmentTarget(_)
+        ) {
+            self.pattern_values
+                .push((span(expression.left.span()), span(expression.right.span())));
+        }
         if plain && matches!(expression.left, AssignmentTarget::ArrayAssignmentTarget(_)) {
             self.iterated_operands.push(span(expression.right.span()));
         }
@@ -1114,14 +1306,28 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_for_statement(&mut self, statement: &oxc_ast::ast::ForStatement<'a>) {
-        self.loop_statements.push(span(statement.span));
+        let whole = span(statement.span);
+        self.loop_statements.push(whole);
+        // The initializer runs once; the test, the update and the body repeat.
+        let repeated_from = statement
+            .init
+            .as_ref()
+            .map_or(whole.start, |init| span(init.span()).end);
+        self.loop_repeats
+            .push((whole, Span::new(repeated_from, whole.end)));
         self.conditional_flow_depth += 1;
         walk::walk_for_statement(self, statement);
         self.conditional_flow_depth -= 1;
     }
 
     fn visit_for_in_statement(&mut self, statement: &oxc_ast::ast::ForInStatement<'a>) {
-        self.loop_statements.push(span(statement.span));
+        let whole = span(statement.span);
+        self.loop_statements.push(whole);
+        self.push_iterated_loop_repeats(
+            whole,
+            span(statement.left.span()),
+            span(statement.right.span()),
+        );
         self.conditional_flow_depth += 1;
         walk::walk_for_in_statement(self, statement);
         self.conditional_flow_depth -= 1;
@@ -1130,8 +1336,19 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     fn visit_for_of_statement(&mut self, statement: &oxc_ast::ast::ForOfStatement<'a>) {
         self.iterated_operands.push(span(statement.right.span()));
         self.loop_statements.push(span(statement.span));
+        self.push_iterated_loop_repeats(
+            span(statement.span),
+            span(statement.left.span()),
+            span(statement.right.span()),
+        );
         if statement.r#await {
-            self.implicit_suspensions.push(span(statement.span));
+            // The suspension is the loop's first `next()`: it comes after the
+            // iterable is evaluated and before the body, so the span ends with
+            // the iterable. The body and everything after the loop are past it.
+            self.implicit_suspensions.push(Span::new(
+                span(statement.span).start,
+                span(statement.right.span()).end,
+            ));
         }
         self.conditional_flow_depth += 1;
         walk::walk_for_of_statement(self, statement);
@@ -1140,6 +1357,8 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
 
     fn visit_while_statement(&mut self, statement: &oxc_ast::ast::WhileStatement<'a>) {
         self.loop_statements.push(span(statement.span));
+        self.loop_repeats
+            .push((span(statement.span), span(statement.span)));
         self.conditional_flow_depth += 1;
         walk::walk_while_statement(self, statement);
         self.conditional_flow_depth -= 1;
@@ -1147,6 +1366,8 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
 
     fn visit_do_while_statement(&mut self, statement: &oxc_ast::ast::DoWhileStatement<'a>) {
         self.loop_statements.push(span(statement.span));
+        self.loop_repeats
+            .push((span(statement.span), span(statement.span)));
         self.conditional_flow_depth += 1;
         walk::walk_do_while_statement(self, statement);
         self.conditional_flow_depth -= 1;
@@ -1682,11 +1903,45 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 .iter()
                 .map(|child| span(child.span()))
                 .collect(),
+            empty_children: element
+                .children
+                .iter()
+                .filter_map(|child| match child {
+                    oxc_ast::ast::JSXChild::ExpressionContainer(container)
+                        if matches!(
+                            container.expression,
+                            oxc_ast::ast::JSXExpression::EmptyExpression(_)
+                        ) =>
+                    {
+                        Some(span(child.span()))
+                    }
+                    _ => None,
+                })
+                .collect(),
         });
         walk::walk_jsx_element(self, element);
     }
 
+    fn visit_sequence_expression(&mut self, sequence: &oxc_ast::ast::SequenceExpression<'a>) {
+        if let Some(tail) = sequence.expressions.last() {
+            self.sequences.push(SequenceFact {
+                span: span(sequence.span),
+                tail: span(tail.span()),
+            });
+        }
+        walk::walk_sequence_expression(self, sequence);
+    }
+
     fn visit_static_member_expression(&mut self, member: &StaticMemberExpression<'a>) {
+        // `(await import(x)).a`: the one export the member reads.
+        if let Some(import) = awaited_import(&member.object) {
+            self.module_consumers.push((
+                span(import.span),
+                ModuleLoadConsumer::Members {
+                    names: vec![CompactString::from(member.property.name.as_str())],
+                },
+            ));
+        }
         if Self::ACCESSOR_INSTALLING_MEMBERS.contains(&member.property.name.as_str()) {
             self.record_accessor_installation(member.span);
         }
@@ -1697,6 +1952,12 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 span: span(member.span),
                 kind: ModuleHazardKind::OpaqueWasm,
             });
+        }
+        if Self::is_import_meta(&member.object)
+            && matches!(member.property.name.as_str(), "glob" | "globEager")
+            && !self.lazy_import_glob_callees.contains(&span(member.span))
+        {
+            self.in_place_import_globs.push(span(member.span));
         }
         self.members.push(MemberFact {
             span: span(member.span),
@@ -1718,6 +1979,13 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 || self.is_unresolved_named(object, "Reflect"))
         {
             self.record_accessor_installation(member.span);
+        }
+        // `import.meta["glob"]`, or a computed key that may spell it.
+        if Self::is_import_meta(&member.object)
+            && literal_property_key(&member.expression)
+                .is_none_or(|key| matches!(key.as_str(), "glob" | "globEager"))
+        {
+            self.in_place_import_globs.push(span(member.span));
         }
         let property = member.expression.span();
         let member_span = span(member.span);

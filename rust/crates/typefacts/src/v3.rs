@@ -10,8 +10,8 @@ use crate::{
     ModuleImportFact, ObjectConstructionProperty, ObjectConstructionShape, ParameterFact,
     PrimitiveLiteralCandidate, PrimitiveLiteralKind, PrimitiveValueDomain, ReferenceSpace,
     ResolvedCall, ResolvedCallValidity, ResolvedDeclaration, RuntimeBindingKind,
-    RuntimeValueDomain, SourceBinding, SourceCall, SourceFunction, SourceHash, SymbolFact,
-    TupleShape, TypeDescriptor,
+    RuntimeValueDomain, SourceBinding, SourceCall, SourceFunction, SourceHash, SymbolClaim,
+    SymbolFact, TupleShape, TypeDescriptor,
 };
 
 pub const TYPE_FACTS_SCHEMA_V1: u64 = 1;
@@ -38,8 +38,16 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 /// `ResolvedCall::assertion_signature`, bit 1 `ResolvedCall::never_returns`.
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V19: u64 = 19;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V20: u64 = 20;
+/// v21 reads the unresolved flag (bit 6) of a symbol-bearing entity as the
+/// claim that its symbol names the whole demanded span
+/// (`EntityFact::symbol_covers_span`). A symbol-less entity keeps reading it as
+/// unresolved. No other row changes, so covering rows keep their flag varint.
+pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V21: u64 = 21;
+/// v22 keeps the rows of v21 under a new number: a v21 table from another build
+/// is refused, so the merged line's transitions carry 22.
+pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V22: u64 = 22;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:2533cc3d559a1318cd62a6adc256bd96aa610a7a9e4b1d6fea985e0996e6d527";
+    "sha256:6d2154ba04be45cdd241d78d3b94a32d0ec5c57ce264fe97e1b3ed979e3d0bfd";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -445,7 +453,9 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // Protocol 78 removes the certification reads `invocations` and
 // `export-values` with their request and response fields.
 // Protocol 79 carries the independent default-library binding in Wire v20.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 79;
+// Protocol 80 carries the span-covering symbol flag in Wire v21.
+// Protocol 81 carries Wire v22, which keeps v21's rows under a new number.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 81;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",
@@ -1237,7 +1247,9 @@ fn decode_entity_run(
             TYPE_FACTS_TABLE_SCHEMA_V16 | TYPE_FACTS_TABLE_SCHEMA_V17 => 32767,
             TYPE_FACTS_TABLE_SCHEMA_V18
             | TYPE_FACTS_TABLE_SCHEMA_V19
-            | TYPE_FACTS_TABLE_SCHEMA_V20 => 65535,
+            | TYPE_FACTS_TABLE_SCHEMA_V20
+            | TYPE_FACTS_TABLE_SCHEMA_V21
+            | TYPE_FACTS_TABLE_SCHEMA_V22 => 65535,
             TYPE_FACTS_TABLE_SCHEMA_V15 | TYPE_FACTS_TABLE_SCHEMA_V14 => 16383,
             TYPE_FACTS_TABLE_SCHEMA_V13 => 8191,
             TYPE_FACTS_TABLE_SCHEMA_V12 => 4095,
@@ -1422,10 +1434,23 @@ fn decode_entity_run(
         } else {
             None
         };
-        let symbol_unresolved = flags & 64 != 0;
-        if symbol_unresolved && !symbol.is_empty() {
-            return Err("packed entity cannot be both resolved and unresolved".into());
-        }
+        // Bit 6 is the unresolved flag of a symbol-less entity. From Wire v21 a
+        // symbol-bearing entity reads it as "the symbol covers the whole span";
+        // before v21 that row is refused, as it always was.
+        let flag = flags & 64 != 0;
+        let symbol_claim = match (
+            symbol.is_empty(),
+            flag,
+            table_schema >= TYPE_FACTS_TABLE_SCHEMA_V21,
+        ) {
+            (true, true, _) => SymbolClaim::Unresolved,
+            (true, false, _) => SymbolClaim::Absent,
+            (false, false, _) => SymbolClaim::Partial,
+            (false, true, true) => SymbolClaim::Covering,
+            (false, true, false) => {
+                return Err("packed entity cannot be both resolved and unresolved".into());
+            }
+        };
         entities.push(EntityFact {
             location: Location {
                 path: path.clone(),
@@ -1433,7 +1458,7 @@ fn decode_entity_run(
                 end_byte: end,
             },
             symbol,
-            symbol_unresolved,
+            symbol_claim,
             type_descriptor,
             resolved_call,
             callability,
@@ -1717,6 +1742,8 @@ pub(crate) fn decode_table_transition(input: &[u8]) -> Result<WireTableTransitio
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V18
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V19
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V20
+        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V21
+        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V22
     {
         return Err(format!("unsupported Wire table schema {table_schema}"));
     }

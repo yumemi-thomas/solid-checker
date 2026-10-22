@@ -2,6 +2,22 @@
 
 use super::*;
 
+/// The owner-requirement partition every dialect so far agrees on: the three
+/// effect constructors register a computation on the owner, and the two
+/// cleanup registrars are each their own role. A dialect that adds a role
+/// (Solid 2's `useContext`, ADR 0352) matches its own and delegates the rest
+/// here, so the shared list is written once.
+pub(crate) fn shared_owner_requirement_role(primitive: Primitive) -> Option<OwnerRequirementRole> {
+    match primitive {
+        Primitive::CreateEffect
+        | Primitive::CreateRenderEffect
+        | Primitive::CreateTrackedEffect => Some(OwnerRequirementRole::Effect),
+        Primitive::OnCleanup => Some(OwnerRequirementRole::Cleanup),
+        Primitive::OnSettled => Some(OwnerRequirementRole::SettledCleanup),
+        _ => None,
+    }
+}
+
 /// One Solid language version's vocabulary.
 ///
 /// Implementors are stateless; a dialect is a set of tables, and every method
@@ -451,6 +467,17 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether the callback at `argument` runs during the call inline, and
+    /// this vocabulary has not read that the call creates a root for it. Such
+    /// a write's legality depends on a fact nobody measured, so it is unplaced
+    /// (uncertifiable), never legal. A callback that is a root on this release
+    /// answers [`Dialect::callback_runs_in_created_root`] instead, and the
+    /// default claims nothing.
+    fn callback_root_is_unaudited(&self, primitive: Primitive, argument: usize) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
     /// Whether the callback at `argument` runs synchronously at the call, in the
     /// strict-read window the call itself is in, while clearing the listener.
     ///
@@ -893,6 +920,13 @@ pub trait Dialect: Sync {
         &[]
     }
 
+    /// Whether an intrinsic spread key installs an event listener. `None`
+    /// means that runtime spelling rule has not been audited for this dialect.
+    fn spread_key_is_event(&self, key: &str) -> Option<bool> {
+        let _ = key;
+        None
+    }
+
     /// Whether a call of `primitive` with exactly one argument, a compute
     /// function that takes no parameters, returns an accessor that is the
     /// only way the values the compute returns reach program code.
@@ -918,6 +952,37 @@ pub trait Dialect: Sync {
     /// drain as they do anywhere else. A vocabulary answers it only for the
     /// releases whose bytes have the throw. The default is `false`.
     fn throws_inside_action_step(&self, primitive: Primitive) -> bool {
+        let _ = primitive;
+        false
+    }
+
+    /// Whether the callback at `argument` of a `primitive` call is the **effect
+    /// phase** of a user effect: the runtime queues it and runs it from inside
+    /// the flush that drains effects, with the effect-callback marker set for
+    /// exactly the duration of that call.
+    ///
+    /// A primitive that runs its callback at its own call, or only on a first
+    /// run that is not queued, is not one: `createRenderEffect`'s first run is
+    /// synchronous at creation, outside any flush, so a `flush` there still
+    /// drains. The default is `false`.
+    fn callback_runs_in_effect_phase(&self, primitive: Primitive, argument: usize) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
+    /// Whether calling `primitive` synchronously from an effect phase
+    /// ([`Dialect::callback_runs_in_effect_phase`]) is a **no-op**, one the
+    /// development build usually reports (`FLUSH_IN_EFFECT_CALLBACK`, a
+    /// warning).
+    ///
+    /// A release's answer: the flush that runs effects is already in progress,
+    /// so a nested `flush` returns without draining in every client build.
+    /// Only the no-op is the claim: the development build of
+    /// `@solidjs/signals` from rc.1 warns through a global marker that a
+    /// nested synchronous effect run lowers, so the warning is not
+    /// guaranteed. An unread or unresolved release states nothing. The
+    /// default is `false`.
+    fn warns_inside_effect_phase(&self, primitive: Primitive) -> bool {
         let _ = primitive;
         false
     }
@@ -1052,6 +1117,22 @@ pub trait Dialect: Sync {
     /// and stays absent until this dialect's owner has one, which is why a
     /// dialect's silence is never filled in from another dialect's row.
     fn reactive_result_slot(&self, primitive: Primitive, slot: ResultSlot) -> Option<ReactiveRole> {
+        let _ = (primitive, slot);
+        None
+    }
+
+    /// The exact `length` of the function a call of `primitive` returns in
+    /// `slot`, when that slot is a getter this dialect builds and its
+    /// audited source states the arity (ADR 0338). It lets a helper that
+    /// tests `typeof p === "function"` or `p.length` be decided for a call
+    /// that passes such a getter, without guessing from the declared
+    /// type: `Accessor<T>` is `() => T` to the compiler and says nothing of
+    /// a function's runtime arity.
+    ///
+    /// `None` states nothing: a slot that is not a getter, a getter the
+    /// audit did not reach, or a dialect that has not audited it. It is
+    /// never a claim that the length is non-zero.
+    fn accessor_getter_length(&self, primitive: Primitive, slot: ResultSlot) -> Option<u32> {
         let _ = (primitive, slot);
         None
     }
@@ -1322,14 +1403,7 @@ pub trait Dialect: Sync {
     /// effect outside any owner leaked with nothing reported. One named answer
     /// is what stops that recurring quietly.
     fn owner_requirement_role(&self, primitive: Primitive) -> Option<OwnerRequirementRole> {
-        match primitive {
-            Primitive::CreateEffect
-            | Primitive::CreateRenderEffect
-            | Primitive::CreateTrackedEffect => Some(OwnerRequirementRole::Effect),
-            Primitive::OnCleanup => Some(OwnerRequirementRole::Cleanup),
-            Primitive::OnSettled => Some(OwnerRequirementRole::SettledCleanup),
-            _ => None,
-        }
+        shared_owner_requirement_role(primitive)
     }
 
     /// Whether an untracked read in this callback is a likely dependency bug.

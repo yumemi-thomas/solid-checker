@@ -438,17 +438,22 @@ pub(crate) fn await_continuation_decides_nothing(
             .is_some_and(|role| flow_safe_role(*role))
 }
 
-pub(super) fn follows_await_in_async_function(file: &solid_facts::FileFacts, span: Span) -> bool {
-    // A call's arguments are evaluated before the call runs, so an await in
-    // the written call's own argument list (`setX(await load())`) also
-    // precedes it.
-    let arguments = file
-        .ast
+/// The argument list of the call written at `span` (as its callee, or as the
+/// whole call). Its arguments are evaluated before the call runs.
+fn written_call_arguments(file: &solid_facts::FileFacts, span: Span) -> Option<Span> {
+    file.ast
         .calls
         .iter()
         .filter(|call| call.callee == span || call.span == span)
         .map(|call| Span::new(call.callee.end, call.span.end))
-        .min_by_key(|arguments| arguments.end - arguments.start);
+        .min_by_key(|arguments| arguments.end - arguments.start)
+}
+
+pub(super) fn follows_await_in_async_function(file: &solid_facts::FileFacts, span: Span) -> bool {
+    // A call's arguments are evaluated before the call runs, so an await in
+    // the written call's own argument list (`setX(await load())`) also
+    // precedes it.
+    let arguments = written_call_arguments(file, span);
     containing_ast_function(&file.ast, span).is_some_and(|function| {
         function.r#async
             && file.ast.awaits.iter().any(|awaited| {
@@ -458,6 +463,69 @@ pub(super) fn follows_await_in_async_function(file: &solid_facts::FileFacts, spa
                     && containing_ast_function(&file.ast, *awaited)
                         .is_some_and(|owner| owner.span == function.span)
             })
+    })
+}
+
+/// ADR 0354: whether code at `span` may run after a suspension of its own
+/// async function. Some await or implicit suspension (`for await`, `yield`)
+/// of that function may execute before it in the same activation: one written
+/// earlier (or in the written call's own argument list), unless the two are
+/// the arms of one `if` or `?:`, of which only one runs; one in a loop whose
+/// repeated part holds `span`, which runs again after it on a later iteration;
+/// or one in the value a destructuring pattern holds `span` in, since the
+/// pattern's defaults run after that value.
+pub(crate) fn may_follow_own_await(file: &solid_facts::FileFacts, span: Span) -> bool {
+    let Some(function) = containing_ast_function(&file.ast, span) else {
+        return false;
+    };
+    if !function.r#async {
+        return false;
+    }
+    let arguments = written_call_arguments(file, span);
+    file.ast
+        .awaits
+        .iter()
+        .chain(&file.ast.implicit_suspensions)
+        .any(|&awaited| {
+            function.body.contains(awaited)
+                && containing_ast_function(&file.ast, awaited)
+                    .is_some_and(|owner| owner.span == function.span)
+                && (file.ast.loop_repeats.iter().any(|&(looped, repeated)| {
+                    repeated.contains(span)
+                        && looped.contains(awaited)
+                        && function.body.contains(looped)
+                }) || ((awaited.end <= span.start
+                    || arguments.is_some_and(|arguments| arguments.contains(awaited)))
+                    && !in_exclusive_arms(file, awaited, span))
+                    || file
+                        .ast
+                        .pattern_values
+                        .iter()
+                        .any(|&(pattern, value)| pattern.contains(span) && value.contains(awaited)))
+        })
+}
+
+/// Whether code at `span` may run after a suspension of its own async
+/// function by any of the tests that place code by position: the textual
+/// await order, an implicit suspension before it, or [`may_follow_own_await`].
+/// A call site or a write that may follow one has no proven placement.
+pub(super) fn may_follow_suspension(file: &solid_facts::FileFacts, span: Span) -> bool {
+    follows_await_in_async_function(file, span)
+        || follows_any_suspension(file, span)
+        || may_follow_own_await(file, span)
+}
+
+/// Whether `awaited` and `span` lie in the two different arms of one `if` or
+/// one `?:`: only one arm runs, so the await cannot come before `span`.
+fn in_exclusive_arms(file: &solid_facts::FileFacts, awaited: Span, span: Span) -> bool {
+    let split = |first: Span, second: Span| first.contains(awaited) && second.contains(span);
+    file.ast.if_regions.iter().any(|region| {
+        region.alternate.is_some_and(|alternate| {
+            split(region.consequent, alternate) || split(alternate, region.consequent)
+        })
+    }) || file.ast.conditional_expressions.iter().any(|conditional| {
+        split(conditional.consequent, conditional.alternate)
+            || split(conditional.alternate, conditional.consequent)
     })
 }
 
@@ -686,15 +754,19 @@ pub(super) fn semantic_execution_role_within(
         lookup,
         classifying,
     );
+    if role == ExecutionRole::EventCallback && lookup.synchronous_event_dispatch_present() {
+        return ExecutionRole::Unknown;
+    }
     // ADR 0323: code after an await its async function reaches on every path
     // runs from a promise continuation, on a later task. The strict-read
     // window is the synchronous extent of `untrack(fn, label)` (`strictRead`
     // is restored in its `finally`, `@solidjs/signals@2.0.0-rc.13`
     // `dist/dev-shared.js:5801-5885`), so a read there has no window and no
     // tracking scope: none of the reporting roles describes it. Only
-    // statement-level awaits count (`unconditional_awaits`); a skippable one
-    // (`x ??= await p`, an optional-call argument, a labelled break) keeps
-    // the role its position earned.
+    // statement-level awaits prove the window closed (`unconditional_awaits`).
+    // Code that only may follow an await, past a skippable one (`x ??= await p`,
+    // an optional-call argument, a labelled break, an `if` arm) or in a loop
+    // that awaits, is unknown rather than placed in the window (ADR 0354).
     // Past an unconditional await the window is proven closed: no breach,
     // only no single role. An implicit suspension (`for await`, `await using`)
     // is placed by position alone, which does not prove it runs (a loop under
@@ -706,7 +778,9 @@ pub(super) fn semantic_execution_role_within(
     {
         return ExecutionRole::Unreported;
     }
-    if role.reports_untracked_read() && follows_any_suspension(file, span) {
+    if role.reports_untracked_read()
+        && (follows_any_suspension(file, span) || may_follow_own_await(file, span))
+    {
         return ExecutionRole::Unknown;
     }
     // Review round 4: code written in a component element's children (an
@@ -737,10 +811,9 @@ pub(crate) fn inside_component_element_children(file: &solid_facts::FileFacts, s
 /// inside or after a `for await` loop: the loop awaits its first `next()`
 /// before the body runs, so code there has left the component body's
 /// strict-read window (ADR 0323) on every path that reaches it. A skippable
-/// `await` (`if (c) await p`, `x ??= await p`) is not such a point: the path
-/// that skips it is feasible and runs the read in the window (ADR 0320), the
-/// premise every direct read rests on. The loop's iterated operand is
-/// evaluated before the first suspension.
+/// `await` (`if (c) await p`, `x ??= await p`) is not an implicit suspension;
+/// [`may_follow_own_await`] covers it (ADR 0354). The loop's iterated operand
+/// is evaluated before the first suspension.
 pub(super) fn follows_any_suspension(file: &solid_facts::FileFacts, span: Span) -> bool {
     let Some(function) = containing_ast_function(&file.ast, span) else {
         return false;

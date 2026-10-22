@@ -52,6 +52,10 @@ pub struct AstFacts {
     /// module census.
     #[serde(default)]
     pub module_loads: Vec<ModuleLoadFact>,
+    /// Every comma expression, with the operand that is its value (facts
+    /// schema 72). `(0, () => …)()` calls the literal the tail names.
+    #[serde(default)]
+    pub sequences: Vec<SequenceFact>,
     /// Every TypeScript `import S = require("…")` (facts schema 46): the one
     /// module load that is neither an `ImportDeclaration` nor a call, so
     /// neither [`AstFacts::imports`] nor [`AstFacts::module_loads`] records
@@ -146,6 +150,23 @@ pub struct AstFacts {
     /// Whether the operand can throw is the consumer's question.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub try_head_awaits: Vec<TryHeadAwaitFact>,
+    /// The `import.meta.glob(…)` and `import.meta.globEager(…)` calls that the
+    /// bundler may turn into static imports run in place (facts schema 70):
+    /// every call except `glob` with no options, or with an options object
+    /// literal (no spread, no computed key) that has no `eager` key or has
+    /// `eager: false`. The matched modules are unknown, so the module holding
+    /// one may sit on an import cycle. A lazy glob is a dynamic import and
+    /// is not recorded.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub in_place_import_globs: Vec<Span>,
+    /// Every reference to the unresolved global `require` that is not the
+    /// callee of a call, once parentheses and TypeScript wrappers (`as`,
+    /// `satisfies`, `!`, `<T>`) are peeled (facts schema 69): `(0, require)(x)`,
+    /// `const r = require`, `typeof require`, `require.resolve`. Such a
+    /// reference may load a module in place with no recorded load, so the
+    /// module holding one may sit on an import cycle.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unmodeled_require_references: Vec<Span>,
     /// The call expressions written in their innermost enclosing function's
     /// straight-line flow, as [`Self::unconditional_awaits`] are, and outside
     /// any optional chain (`a?.b(c())` evaluates `c()` only when `a` is not
@@ -321,6 +342,20 @@ pub struct AstFacts {
     /// again after a suspension.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub loop_statements: Vec<Span>,
+    /// `(loop, repeated)`: the part of a loop statement that runs again after
+    /// its body finished (facts schema 73). A `for` loop's initializer runs
+    /// once, and a `for…of` or `for…in` iterable is evaluated once before the
+    /// first iteration, so both are left out; the left-hand target of those
+    /// loops is re-evaluated each iteration and is kept. An await anywhere in
+    /// the loop may run before code in the repeated part on a later iteration.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub loop_repeats: Vec<(Span, Span)>,
+    /// `(pattern, value)`: a destructuring declarator's or assignment's
+    /// pattern and the value it destructures (facts schema 73). The pattern's
+    /// defaults run after the value is evaluated, so a read there follows an
+    /// await in the value even when it is written first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pattern_values: Vec<(Span, Span)>,
     /// The points where an `async` function or generator suspends without an
     /// [`AstFacts::awaits`] expression, by span, sorted (facts schema 45):
     ///
@@ -699,6 +734,13 @@ pub struct BindingFact {
     /// Missing ambient initializers never establish an undefined value.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub runtime_let: bool,
+    /// Whether this declarator is written directly in a `switch` case clause
+    /// (facts schema 67). All clauses share one lexical scope, so a jump to a
+    /// later clause enters it without running the declarator, and a read
+    /// there throws `ReferenceError`. A declaration in a block inside a
+    /// clause (`case 1: { const x }`) is not this.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub in_switch_case: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub initializer: Option<Span>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -813,6 +855,14 @@ pub struct FunctionFact {
     /// must treat that tail as observable rather than as unnamed.
     #[serde(default)]
     pub rest_parameter: bool,
+    /// Whether evaluating the parameter list can run no user code and so
+    /// cannot throw before the body does (facts schema 70): every default
+    /// initializer, at any depth of a destructuring pattern, is a primitive
+    /// literal, a function or arrow, an empty object or array literal or the
+    /// global `undefined`, no computed key is written, and no parameter has a
+    /// decorator. Absent (an older fact) is false: the list may throw.
+    #[serde(default)]
+    pub parameters_inert: bool,
     /// The binding identifiers a rest parameter declares.
     ///
     /// Kept out of `parameters` for the reason above — the tail fills no single
@@ -921,6 +971,35 @@ pub struct ModuleLoadFact {
     /// same text, so a resolution is joined to this span, not to `span`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub specifier_span: Option<Span>,
+    /// The named reads the program makes of a dynamic import's result (facts
+    /// schema 72). `None` when the result escapes unnamed, or is read in a
+    /// shape this fact does not name. A `require` never has one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub consumer: Option<ModuleLoadConsumer>,
+}
+
+/// The named reads of a dynamic import's result, as the program spells them
+/// (facts schema 72). Each names the exports the program can reach through it;
+/// whether they are Solid's reads is for the reactive IR to decide.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum ModuleLoadConsumer {
+    /// `const { a, b: c } = await import(x)` and `(await import(x)).a`: the
+    /// export names read, and nothing else of the module's namespace.
+    Members { names: Vec<CompactString> },
+    /// `lazy(() => import(x), options)`: `call` is the `lazy` call, and
+    /// `export` the one export its options name (`default` when they name
+    /// none). Solid's `lazy` reads only that export.
+    Lazy { call: Span, export: CompactString },
+}
+
+/// A comma expression and the operand whose value it is (facts schema 72).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SequenceFact {
+    pub span: Span,
+    /// The last operand: the value of the whole expression.
+    pub tail: Span,
 }
 
 /// `import S = require("m")`, `import type S = require("m")`, or either
@@ -1162,6 +1241,11 @@ pub struct JsxElementFact {
     pub self_closing: bool,
     #[serde(default)]
     pub children: Vec<Span>,
+    /// Children that are an expression container holding no expression
+    /// (`{}`, `{/* c */}`, or one the parser reads as whitespace only, such
+    /// as `{\u{200B}}`). No lowering builds a value from them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub empty_children: Vec<Span>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -1449,6 +1533,10 @@ pub enum AssignmentValueKind {
 pub struct IfRegionFact {
     pub test: Span,
     pub consequent: Span,
+    /// The `else` arm, when one is written (facts schema 73). Only one of the
+    /// two arms runs, so an await in one cannot precede code in the other.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alternate: Option<Span>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -1701,6 +1789,7 @@ impl AstFacts {
             imports: Vec::new(),
             exports: Vec::new(),
             module_loads: Vec::new(),
+            sequences: Vec::new(),
             import_equals: Vec::new(),
             type_imports: Vec::new(),
             type_queries: Vec::new(),
@@ -1714,6 +1803,8 @@ impl AstFacts {
             unconditional_awaits: Vec::new(),
             dominating_awaits: Vec::new(),
             try_head_awaits: Vec::new(),
+            in_place_import_globs: Vec::new(),
+            unmodeled_require_references: Vec::new(),
             straight_line_calls: Vec::new(),
             straight_line_constructs: Vec::new(),
             completion_sites: Vec::new(),
@@ -1746,6 +1837,8 @@ impl AstFacts {
             jump_statements: Vec::new(),
             iteration_targets: Vec::new(),
             loop_statements: Vec::new(),
+            loop_repeats: Vec::new(),
+            pattern_values: Vec::new(),
             implicit_suspensions: Vec::new(),
             module_directives: Vec::new(),
             tagged_templates: Vec::new(),

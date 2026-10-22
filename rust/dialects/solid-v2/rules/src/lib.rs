@@ -128,10 +128,15 @@ impl CatalogWording for Catalog {
             FindingSeed::StaticViolation(violation) => static_violation_wording(violation),
             FindingSeed::DirectiveCreation(creation) => FindingWording::new(
                 Rule::PrimitiveInDirectiveApplication.metadata(),
-                format!(
+                if creation.uncertain {
+                    format!(
+                        "reactive primitive {} is created in a possible directive application, but its execution owner or disposal lifetime is not proven; no computation leak is certified",
+                        creation.primitive
+                    )
+                } else { format!(
                     "reactive primitive {} registers a computation in a directive application callback; the apply phase runs once per element with no owner, so the computation is never disposed and leaks for every element the directive is applied to (the dev runtime warns NO_OWNER for it)",
                     creation.primitive
-                ),
+                ) },
                 "Use the two-phase directive factory: create computations and subscriptions in the setup phase (the factory body, which runs in an owned scope) and keep the returned ref callback to DOM work only. Value-form state (createSignal(0), createStore({...})) needs no owner and is fine here.",
             )
             .with_evidence(vec![EvidenceStep {
@@ -156,6 +161,14 @@ impl CatalogWording for Catalog {
                         "onSettled returns a cleanup function in a scope with no owner to register it on; Solid throws SETTLED_CLEANUP_UNOWNED here in dev, and in production the cleanup is silently dropped and will never run",
                         "Call onSettled where an owner is active (a component body or computation), or wrap the scope in createRoot. Inside event handlers a returned cleanup is not supported; do the teardown explicitly instead.",
                     ),
+                    OwnerRequirementOperation::ContextRead => (
+                        "useContext is called without a reactive owner; Solid throws NoOwnerError (\"Context can only be accessed under a reactive root.\") here, so the read never returns a value",
+                        "Read the context while a component, or a computation it creates, is being set up, and pass the value to the handler, timer or callback that needs it. A handler, a timer, a module-scope statement and code after an await run with no owner.",
+                    ),
+                    OwnerRequirementOperation::ContextProvider => (
+                        "useContext reads a context created with no default, and no provider for it exists in this closed program; Solid throws ContextNotFoundError here, so the read never returns a value",
+                        "Render a provider for this context above the component that reads it (`<Context value={...}>`), or create the context with a default if a fallback value is meant. The provider must enclose the reader in the rendered tree.",
+                    ),
                     OwnerRequirementOperation::Effect => (
                         "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app",
                         "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle.",
@@ -164,6 +177,11 @@ impl CatalogWording for Catalog {
                 let mut metadata = Rule::MissingOwner.metadata();
                 if requirement.operation == OwnerRequirementOperation::SettledCleanup {
                     metadata.severity = "error";
+                }
+                // The provider question is its own rule (ADR 0352): a missing
+                // provider is not a missing owner, and its fix is different.
+                if requirement.operation == OwnerRequirementOperation::ContextProvider {
+                    metadata = Rule::MissingContextProvider.metadata();
                 }
                 FindingWording::new(metadata, message, hint)
             }
@@ -547,6 +565,9 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         Rule::FlushInAction => {
             "the flush() call runs directly in an action body, inside a step, where the installed @solidjs/signals throws FLUSH_IN_ACTION in dev"
         }
+        Rule::FlushInEffectCallback => {
+            "the flush() call runs on the stack of a createEffect apply callback, inside the flush that is draining effects, so the queue is already running and the call drains nothing (the installed @solidjs/signals usually also warns FLUSH_IN_EFFECT_CALLBACK in dev)"
+        }
         Rule::StaticDynamicAsyncSource => {
             "the static-form dynamic() source is proven to return a Promise, which the dev builds reject at the call and the production builds render as nothing"
         }
@@ -574,6 +595,7 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         | Rule::ActionCalledInOwnedScope
         | Rule::LeafOwnerForbiddenCall
         | Rule::MissingOwner
+        | Rule::MissingContextProvider
         | Rule::PendingAsyncUnsuspendableRead
         | Rule::AsyncOutsideLoadingBoundary
         | Rule::PrimitiveInDirectiveApplication
@@ -619,6 +641,7 @@ fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
         StaticDefectFamily::ReactiveSourceUncaptured => Rule::ReactiveSourceUncaptured,
         StaticDefectFamily::ReactiveDispatchUnresolved => Rule::ReactiveDispatchUnresolved,
         StaticDefectFamily::ExpectedFunctionGotExpression => Rule::ExpectedFunctionGotExpression,
+        StaticDefectFamily::HandlerOwnerUnresolved => Rule::MissingOwner,
         StaticDefectFamily::UncalledAccessor => Rule::UncalledAccessor,
         StaticDefectFamily::DirectMutation => Rule::NoDirectMutation,
         StaticDefectFamily::ServerFunctionRichArgument => Rule::ServerFunctionRichArgument,
@@ -640,6 +663,7 @@ fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
                 | StaticDefectKind::ResultAccessCallbackUnplaced { .. }
                 | StaticDefectKind::StructuredReturnUnresolved { .. }
                 | StaticDefectKind::HandlerValueUnresolved { .. }
+                | StaticDefectKind::HandlerTargetUnresolved { .. }
                 // The open transport proof names its own reason in the
                 // message; there is no component whose call sites could be
                 // enumerated, so the props sentence would describe a

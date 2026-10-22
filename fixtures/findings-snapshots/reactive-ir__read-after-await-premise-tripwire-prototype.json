@@ -1,0 +1,45 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "unaudited-solid-release",
+      "code": "SC9014",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-after-await-premise/node_modules/solid-js/package.json",
+      "start": 0,
+      "end": 0,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-after-await-premise/variants/tripwire-prototype/App.tsx",
+      "start": 373,
+      "end": 380,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/read-after-await-premise/variants/tripwire-prototype/App.tsx",
+      "start": 373,
+      "end": 378,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-after-await-premise/variants/tripwire-prototype/App.tsx",
+      "start": 406,
+      "end": 412,
+      "fixes": 0
+    }
+  ]
+}

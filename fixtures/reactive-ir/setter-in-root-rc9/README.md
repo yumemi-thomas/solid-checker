@@ -1,3 +1,3 @@
 # setter-in-root-rc9
 
-rc.9 twin of `setter-in-root-rc3` (same `root.ts`): `@solidjs/signals@2.0.0-rc.9` removed the root exemption from `devGuardStoreSetterWrite` (`dist/dev-shared.js:5878`, #3500), so every store setter directly in a root body, in `untrack` there, or in the helper only a root body calls is SC2001 (`StoreSetterRootGuard`, `store_setter_guard_exempts_roots`); plus SC9014; writes in an `addEventListener` listener are uncertifiable, as on rc.3. Stubs from published rc.9 typings (`solid-js`' own `createRoot` const kept); `root.ts` is `tsc --noEmit` clean against stubs and real rc.9.
+rc.3's twin with `@solidjs/signals@2.0.0-rc.9`, which dropped the root exemption (`dist/dev-shared.js:5878`, #3500): every store setter directly in a root body, in `untrack` there, or in a helper only a root body calls is SC2001, plus SC9014. Listeners stay uncertifiable. Stubs from published rc.9 typings; `root.ts` is `tsc --noEmit` clean against them.

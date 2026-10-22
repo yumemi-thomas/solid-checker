@@ -1,0 +1,235 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-maybe-suspended/App.tsx",
+      "start": 757,
+      "end": 764,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-maybe-suspended/App.tsx",
+      "start": 990,
+      "end": 997,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-maybe-suspended/App.tsx",
+      "start": 1277,
+      "end": 1284,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-maybe-suspended/App.tsx",
+      "start": 1533,
+      "end": 1540,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-maybe-suspended/App.tsx",
+      "start": 1806,
+      "end": 1813,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-maybe-suspended/App.tsx",
+      "start": 2090,
+      "end": 2097,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-maybe-suspended/App.tsx",
+      "start": 2341,
+      "end": 2348,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-maybe-suspended/App.tsx",
+      "start": 2603,
+      "end": 2610,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-maybe-suspended/App.tsx",
+      "start": 2888,
+      "end": 2895,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-maybe-suspended/App.tsx",
+      "start": 3142,
+      "end": 3149,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-maybe-suspended/App.tsx",
+      "start": 3584,
+      "end": 3591,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-maybe-suspended/App.tsx",
+      "start": 3905,
+      "end": 3911,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-maybe-suspended/App.tsx",
+      "start": 4148,
+      "end": 4154,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-maybe-suspended/App.tsx",
+      "start": 4509,
+      "end": 4515,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-maybe-suspended/App.tsx",
+      "start": 4806,
+      "end": 4813,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-maybe-suspended/App.tsx",
+      "start": 5137,
+      "end": 5144,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-maybe-suspended/App.tsx",
+      "start": 5404,
+      "end": 5411,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-maybe-suspended/App.tsx",
+      "start": 5667,
+      "end": 5678,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-maybe-suspended/App.tsx",
+      "start": 5998,
+      "end": 6005,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-maybe-suspended/App.tsx",
+      "start": 6316,
+      "end": 6319,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-maybe-suspended/App.tsx",
+      "start": 6651,
+      "end": 6654,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-maybe-suspended/App.tsx",
+      "start": 6884,
+      "end": 6887,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/strict-read-maybe-suspended/App.tsx",
+      "start": 7193,
+      "end": 7200,
+      "fixes": 0
+    }
+  ]
+}

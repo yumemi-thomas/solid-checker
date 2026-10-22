@@ -57,20 +57,21 @@ fn project(source: &str) -> ProjectFacts {
     }
 }
 
+/// Every listed span names its symbol exactly: these fixtures describe spans
+/// whose entity covers them, so `exact` and `get` agree.
 fn entity_symbols(spans: &[(Span, &str)]) -> EntitySymbols {
+    let entries: HashMap<(u64, u64), SymbolId> = spans
+        .iter()
+        .map(|(span, symbol)| {
+            (
+                (u64::from(span.start), u64::from(span.end)),
+                SymbolId::from(*symbol),
+            )
+        })
+        .collect();
     EntitySymbols {
-        by_path: HashMap::from_iter([(
-            PATH.to_string(),
-            spans
-                .iter()
-                .map(|(span, symbol)| {
-                    (
-                        (u64::from(span.start), u64::from(span.end)),
-                        SymbolId::from(*symbol),
-                    )
-                })
-                .collect(),
-        )]),
+        by_path: HashMap::from_iter([(PATH.to_string(), entries.clone())]),
+        exact_by_path: HashMap::from_iter([(PATH.to_string(), entries)]),
     }
 }
 

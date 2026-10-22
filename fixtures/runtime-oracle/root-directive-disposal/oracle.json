@@ -1,0 +1,13 @@
+{
+  "note": "ADR 0355: a disposed root runs no effect after the write, and an empty root creates no live computation. Root allocation alone cannot prove SC6001's leak claim.",
+  "behaviour": [
+    {
+      "rule": "primitive-in-directive-application",
+      "site": "App.tsx:11",
+      "act": [{ "click": "[data-probe=disposed-write]" }],
+      "observe": { "window": "rootDisposalProbe.disposedRuns" },
+      "defect": 1,
+      "correct": 0
+    }
+  ]
+}

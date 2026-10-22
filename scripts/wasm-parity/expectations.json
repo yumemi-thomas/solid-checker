@@ -415,7 +415,7 @@
   },
   "w7BadHandshake": {
     "status": 1,
-    "error": "TypeFacts session error: Type Facts compatibility handshake failed: expected protocol 79, schema sha256:2533cc3d559a1318cd62a6adc256bd96aa610a7a9e4b1d6fea985e0996e6d527, build \"dev\"; got protocol 79, schema sha256:2533cc3d559a1318cd62a6adc256bd96aa610a7a9e4b1d6fea985e0996e6d526, build \"dev\"",
+    "error": "TypeFacts session error: Type Facts compatibility handshake failed: expected protocol 81, schema sha256:6d2154ba04be45cdd241d78d3b94a32d0ec5c57ce264fe97e1b3ed979e3d0bfd, build \"dev\"; got protocol 81, schema sha256:6d2154ba04be45cdd241d78d3b94a32d0ec5c57ce264fe97e1b3ed979e3d0bfe, build \"dev\"",
     "host": {
       "opened": [
         1
@@ -758,7 +758,7 @@
       "metrics": {
         "filesAnalyzed": 4,
         "functionsAnalyzed": 14,
-        "proofObligations": 4,
+        "proofObligations": 5,
         "cachedSummaries": 0,
         "unresolvedObligations": 1
       },

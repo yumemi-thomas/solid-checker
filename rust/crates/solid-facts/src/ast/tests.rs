@@ -126,6 +126,64 @@ fn try_head_awaits_record_their_handlers() {
     assert_eq!(literals, ["1", "'a'", "null", "true", "2n"], "{literals:?}");
 }
 
+/// ADR 0354 (facts schema 73): an `if` records its `else` arm, a loop its
+/// repeated part and a destructuring pattern the value it is evaluated after.
+/// A `for` initializer and a `for…of` iterable run once, before the first
+/// iteration, so neither is repeated; the target of a `for…of` is.
+#[test]
+fn else_arms_loop_repeats_and_pattern_values_are_recorded() {
+    let source = concat!(
+        "declare const c: boolean; declare const xs: number[];\n",
+        "declare const q: Promise<{ a?: number }>;\n",
+        "declare function s(): number;\n",
+        "async function f() {\n",
+        "  if (c) { await s(); } else { s(); }\n",
+        "  for (let i = s(); i < s(); i += s()) { s(); }\n",
+        "  for (const x of xs) { s(); }\n",
+        "  while (c) { s(); }\n",
+        "  const { a = s() } = await q;\n",
+        "  ({ a = s() } = await q);\n",
+        "}\n",
+    );
+    let facts = super::extract("regions.ts", source).unwrap();
+    let text = |span: crate::core::Span| &source[span.start as usize..span.end as usize];
+    let else_arms = facts
+        .if_regions
+        .iter()
+        .filter_map(|region| region.alternate)
+        .map(text)
+        .collect::<Vec<_>>();
+    assert_eq!(else_arms, ["{ s(); }"], "{else_arms:?}");
+    let repeats = facts
+        .loop_repeats
+        .iter()
+        .map(|(looped, repeated)| (text(*looped), text(*repeated)))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        repeats,
+        [
+            (
+                "for (let i = s(); i < s(); i += s()) { s(); }",
+                "; i < s(); i += s()) { s(); }"
+            ),
+            ("for (const x of xs) { s(); }", "const x of "),
+            ("for (const x of xs) { s(); }", ") { s(); }"),
+            ("while (c) { s(); }", "while (c) { s(); }"),
+        ],
+        "{repeats:?}"
+    );
+    let patterns = facts
+        .pattern_values
+        .iter()
+        .map(|(pattern, value)| (text(*pattern), text(*value)))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        patterns,
+        [("{ a = s() }", "await q"), ("{ a = s() }", "await q"),],
+        "{patterns:?}"
+    );
+}
+
 /// ADR 0320 (facts schema 64): an await is unconditional only when no
 /// construct that can skip it lies between the function entry and it:
 /// logical assignments, optional chains, destructuring defaults and
@@ -718,6 +776,98 @@ fn runtime_let_facts_do_not_turn_ambient_bindings_into_undefined() {
             .iter()
             .all(|binding| !binding.runtime_let)
     );
+}
+
+#[test]
+fn switch_case_facts_mark_only_declarators_written_directly_in_a_clause() {
+    let source = "switch (m) { /* } */ case 0: const direct = 1, second = 2; break; case 1: { const blocked = 3; } default: let tail = 4; } const outside = 5; const f = () => { switch (m) { case 0: const nested = 6; } const inner = 7; };";
+    let facts = extract("switch.ts", source).unwrap();
+    let marked = facts
+        .bindings
+        .iter()
+        .filter(|binding| binding.in_switch_case)
+        .map(|binding| {
+            let name = binding.names[0].span;
+            &source[name.start as usize..name.end as usize]
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(marked, ["direct", "second", "tail", "nested"]);
+}
+
+#[test]
+fn parameter_lists_are_inert_only_when_no_default_can_run_user_code() {
+    let source = "const a = (x = 0, y = {}, z = [], w = () => 1, u = undefined, s = `t`) => 1; const b = (x = f()) => 1; const c = ({ k = g() } = {}) => 1; const d = ([k = 1], { m } = {}) => 1; const e = ({ [h()]: v }) => 1; const f2 = (x = [h()]) => 1; const g2 = (x = {p: 1}) => 1; const k = (x = `${h()}`) => 1; const l = (x = new Later()) => 1;";
+    let facts = extract("params.ts", source).unwrap();
+    // Source order: `a` then its nested `w` arrow, then `b` .. `l`.
+    let mut functions = facts.functions.iter().collect::<Vec<_>>();
+    functions.sort_by_key(|function| function.span.start);
+    let by_start = functions
+        .into_iter()
+        .map(|function| function.parameters_inert)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        by_start,
+        [
+            true, true, false, false, true, false, false, false, false, false
+        ]
+    );
+}
+
+#[test]
+fn require_wrappers_are_loads_and_other_mentions_are_unmodeled() {
+    for source in [
+        "require('./a')",
+        "(require as any)('./a')",
+        "require!('./a')",
+        "(require satisfies Function)('./a')",
+        "(<any>require)('./a')",
+    ] {
+        let facts = extract("direct.ts", source).unwrap();
+        assert_eq!(facts.module_loads.len(), 1, "{source}");
+        assert!(facts.unmodeled_require_references.is_empty(), "{source}");
+    }
+    for source in [
+        "(0, require)('./a')",
+        "const r = require; r('./a')",
+        "typeof require",
+        "require.resolve('./a')",
+        "new require('./a')",
+    ] {
+        let facts = extract("other.ts", source).unwrap();
+        assert_eq!(facts.unmodeled_require_references.len(), 1, "{source}");
+    }
+}
+
+#[test]
+fn import_globs_are_in_place_unless_provably_lazy() {
+    let lazy = [
+        "import.meta.glob('./a')",
+        "import.meta.glob('./a', { eager: false })",
+        "import.meta.glob(['./a'], { import: 'x', 'query': '?raw' })",
+        "(import.meta).glob('./a', { eager: false })",
+    ];
+    for source in lazy {
+        let facts = extract("lazy.ts", source).unwrap();
+        assert!(facts.in_place_import_globs.is_empty(), "{source}");
+    }
+    let in_place = [
+        "import.meta.glob('./a', { eager: true })",
+        "import.meta.glob('./a', { eager })",
+        "import.meta.glob('./a', { ...options })",
+        "import.meta.glob('./a', { ['eager']: false })",
+        "import.meta.glob('./a', options)",
+        "import.meta.glob(...args)",
+        "import.meta.globEager('./a')",
+        "const g = import.meta.glob; g('./a')",
+        "import.meta['glob']('./a')",
+        "import.meta?.glob('./a')",
+    ];
+    for source in in_place {
+        let facts = extract("eager.ts", source).unwrap();
+        assert_eq!(facts.in_place_import_globs.len(), 1, "{source}");
+    }
+    let env = extract("env.ts", "import.meta.env.MODE; import.meta['env']").unwrap();
+    assert!(env.in_place_import_globs.is_empty());
 }
 
 #[test]
@@ -2762,7 +2912,7 @@ async function* body(items: AsyncIterable<number>, inner: () => AsyncGenerator<n
             .map(text)
             .collect::<Vec<_>>(),
         [
-            "for await (const item of items) {}",
+            "for await (const item of items",
             "yield* inner()",
             "resource = { async [Symbol.asyncDispose]() {} }"
         ]

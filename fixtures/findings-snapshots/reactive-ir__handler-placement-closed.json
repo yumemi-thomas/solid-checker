@@ -1,0 +1,145 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handler-placement-closed/App.tsx",
+      "start": 307,
+      "end": 325,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handler-placement-closed/App.tsx",
+      "start": 577,
+      "end": 595,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handler-placement-closed/App.tsx",
+      "start": 837,
+      "end": 855,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/handler-placement-closed/App.tsx",
+      "start": 1099,
+      "end": 1120,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-handler-frozen",
+      "code": "SC1007",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handler-placement-closed/App.tsx",
+      "start": 1421,
+      "end": 1440,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handler-placement-closed/App.tsx",
+      "start": 1421,
+      "end": 1440,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handler-placement-closed/App.tsx",
+      "start": 1631,
+      "end": 1636,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handler-placement-closed/App.tsx",
+      "start": 1951,
+      "end": 1973,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handler-placement-closed/App.tsx",
+      "start": 2123,
+      "end": 2141,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handler-placement-closed/App.tsx",
+      "start": 2521,
+      "end": 2539,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handler-placement-closed/App.tsx",
+      "start": 2929,
+      "end": 2937,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handler-placement-closed/App.tsx",
+      "start": 3190,
+      "end": 3212,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handler-placement-closed/App.tsx",
+      "start": 3316,
+      "end": 3334,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handler-placement-closed/App.tsx",
+      "start": 3317,
+      "end": 3330,
+      "fixes": 0
+    }
+  ]
+}

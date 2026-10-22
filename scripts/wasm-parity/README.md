@@ -58,6 +58,13 @@ difference is a failure that needs a disposition, never an update.
 The case list is declared, and the executed list must equal it under each
 engine.
 
+One row is regenerated rather than checked: `w7BadHandshake` pins the handshake
+text, which names the protocol number and the schema digest. A protocol bump
+changes both, and the forged digest (the same schema with its last hex digit
+altered) follows the schema. That row is updated with the bump, in the same
+commit, as `635ed74d4` did for protocol 78 to 79. A row that moves for any other
+reason is still a failure.
+
 **Answering cases.** W1–W4, P1 ×3, the P1 importer spellings ×3,
 install-absent and W6 fresh. Each pins:
 - the request and argv;

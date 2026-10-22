@@ -145,6 +145,11 @@ const validate = (testCase, index) => {
       failures.push(`${label}: ${field} must be an array of strings`);
     }
   }
+  // `closed`: the snippet's project is a closed program (its own private
+  // manifest), for a rule whose claim is about the program boundary (ADR 0352).
+  if (testCase.programBoundary !== undefined && testCase.programBoundary !== "closed") {
+    failures.push(`${label}: programBoundary must be "closed" when present`);
+  }
   if (!EXPECTATIONS.has(testCase.expect)) {
     return stop(`${label}: unknown expectation ${JSON.stringify(testCase.expect)}`);
   }

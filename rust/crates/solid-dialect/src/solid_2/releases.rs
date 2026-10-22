@@ -14,6 +14,7 @@
 //! | B3: does `omit`'s lone function argument run as a predicate? | `@solidjs/signals` (from rc.9) | the installed `solid-js` |
 //! | N3: does the dev store-setter guard reject a root owner? | `@solidjs/signals` (`devGuardStoreSetterWrite`, from rc.9) | the installed `solid-js` |
 //! | N4: does `flush` throw `FLUSH_IN_ACTION` inside an action step? | `@solidjs/signals` (`dist/dev-shared.js`, from rc.8) | the installed `solid-js` |
+//! | N6: does `flush` in an effect's apply report `FLUSH_IN_EFFECT_CALLBACK`? | `@solidjs/signals` (`dist/dev.js` before rc.8, `dist/dev-shared.js` from it; from rc.1) | the installed `solid-js` |
 //! | N5: does an optimistic-store setter meet the owned-scope write guard? | `@solidjs/signals` (`devGuardStoreSetterWrite`, from rc.1) | the installed `solid-js` |
 //! | ADR 0292: does `lazy` render its loaded `default` through `createComponent`? | `solid-js` (`lazy`, rc.13 of the read releases) | the installed `solid-js` |
 //!
@@ -40,6 +41,10 @@
 //! | rc.13 | as rc.9 | as rc.9 | as rc.9 | as rc.9 | as rc.9 | as rc.9 | none: audited (the rc.13 review, 2026-10-05). Its archives carry the rc.9 rows re-read on its bytes, 47 of 48 (ADR 0197) |
 //! | anything else (rc.10-rc.12, rc.14+, betas, `2.0.0`, an inexact spelling) | `Readonly` (see below) | not modelled | absent | not modelled | exempt (see below) | not modelled | the release is named as not compared |
 //! | not resolved | `Readonly` (see below) | as rc.3 (nothing can import `dynamic`) | absent | not modelled | exempt (see below) | not modelled | named for `@solidjs/signals`; none for `@solidjs/web` |
+//!
+//! N6 is present on every read signals release but rc.0 (probed on the published
+//! bytes of rc.0-rc.5 and rc.7 beside the store's rc.6, rc.8, rc.9 and rc.13); the
+//! rows above do not carry a column for it.
 //!
 //! N5 is `guarded` on every row but rc.0's, whose optimistic-store setter
 //! meets no owned-scope guard at all (`OptimisticStoreSetterGuard`); an unread
@@ -152,6 +157,12 @@ pub(super) const AUDITED_ROUTE_RELEASES: &[crate::AuditedRouteRelease] = &[
     crate::AuditedRouteRelease {
         version: "2.0.0-rc.6",
         router_digest: "a5eb41bad71108ceb0ce64ed93517bfea43b07890bce3a1ebbcc02711c199d63",
+        core_version: "1.171.22",
+        core_digest: "f021f4ec652071a558534f6260030d2eed88333e59ad2cf7dbfda6017b7ae1c2",
+    },
+    crate::AuditedRouteRelease {
+        version: "2.0.0-rc.8",
+        router_digest: "f787dd4fcc67947323589722392073fced11f091242642f2206074f57455a9de",
         core_version: "1.171.22",
         core_digest: "f021f4ec652071a558534f6260030d2eed88333e59ad2cf7dbfda6017b7ae1c2",
     },
@@ -328,8 +339,11 @@ impl Solid2 {
         dynamic_options: DynamicOptions::Ignored,
         store_setter_roots: StoreSetterRootGuard::Exempt,
         flush_in_action: false,
+        flush_in_effect_callback: true,
         optimistic_store_setter: OptimisticStoreSetterGuard::Guarded,
         lazy_renders_component: false,
+        render_creates_root: false,
+        spread_event_keys_audited: false,
     };
 
     /// The vocabulary of the audited triple, [`AUDITED_INSTALLATION`]: what
@@ -355,8 +369,11 @@ impl Solid2 {
         dynamic_options: DynamicOptions::StaticForm,
         store_setter_roots: StoreSetterRootGuard::Guarded,
         flush_in_action: true,
+        flush_in_effect_callback: true,
         optimistic_store_setter: OptimisticStoreSetterGuard::Guarded,
         lazy_renders_component: false,
+        render_creates_root: false,
+        spread_event_keys_audited: false,
     };
 
     /// rc.13 adds one audited strict store-key premise; older reviews
@@ -366,13 +383,15 @@ impl Solid2 {
     pub const RC13: Self = Self {
         store_strict_keys_audited: true,
         lazy_renders_component: true,
+        render_creates_root: true,
+        spread_event_keys_audited: true,
         ..Self::RC9
     };
 
     /// How many distinct vocabularies the answers above combine into: every
     /// combination is reachable, because the three owners install
     /// independently.
-    const VARIANT_COUNT: usize = 2 * 2 * 2 * 3 * 2 * 2 * 2 * 2 * 2;
+    const VARIANT_COUNT: usize = 2 * 2 * 2 * 3 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2;
 
     /// The vocabulary at one mixed-radix index, [`Solid2::CONSERVATIVE`] at
     /// `0`: digit `0` of every answer is its conservative one. A new
@@ -382,6 +401,9 @@ impl Solid2 {
         Self {
             store_strict_keys_audited: (index / 192) % 2 == 1,
             lazy_renders_component: (index / 384) % 2 == 1,
+            flush_in_effect_callback: (index / 768) % 2 == 1,
+            render_creates_root: (index / 1536) % 2 == 1,
+            spread_event_keys_audited: (index / 3072) % 2 == 1,
             store_root: if index % 2 == 1 {
                 StoreRootTyping::Mutable
             } else {
@@ -438,6 +460,9 @@ impl Solid2 {
             + 96 * optimistic
             + 192 * (if self.store_strict_keys_audited { 1 } else { 0 })
             + 384 * (if self.lazy_renders_component { 1 } else { 0 })
+            + 768 * (if self.flush_in_effect_callback { 1 } else { 0 })
+            + 1536 * (if self.render_creates_root { 1 } else { 0 })
+            + 3072 * (if self.spread_event_keys_audited { 1 } else { 0 })
     }
 
     /// The one `'static` value per vocabulary, which is what an analysis holds.
@@ -493,6 +518,9 @@ fn variant_key(vocabulary: Solid2) -> Option<String> {
     if vocabulary.flush_in_action {
         tokens.push("flush-in-action");
     }
+    if vocabulary.flush_in_effect_callback {
+        tokens.push("flush-in-effect-callback");
+    }
     match vocabulary.dynamic_options {
         DynamicOptions::Ignored => {}
         DynamicOptions::StaticForm => tokens.push("dynamic-static"),
@@ -506,6 +534,12 @@ fn variant_key(vocabulary: Solid2) -> Option<String> {
     }
     if vocabulary.lazy_renders_component {
         tokens.push("lazy-renders-component");
+    }
+    if vocabulary.render_creates_root {
+        tokens.push("render-creates-root");
+    }
+    if vocabulary.spread_event_keys_audited {
+        tokens.push("spread-event-keys");
     }
     (!tokens.is_empty()).then(|| tokens.join("+"))
 }
@@ -695,6 +729,10 @@ fn vocabulary_for(solid_js: Release<'_>, signals: Release<'_>, web: Release<'_>)
         // release whose wrapper renders through `createComponent`; rc.3 and
         // rc.9 call the loaded member themselves without a strict-read label.
         lazy_renders_component: matches!(solid_js, Release::Read(13)),
+        // ADR 0353. `render` and `hydrate` are `@solidjs/web`'s, so only its
+        // version decides; rc.13 is the one release whose `render` was read.
+        render_creates_root: matches!(web, Release::Read(13)),
+        spread_event_keys_audited: matches!(web, Release::Read(13)),
         // B1. An unread or unresolved signals keeps `Readonly` (module docs).
         store_root: match signals {
             Release::Read(number) if number >= 7 => StoreRootTyping::Mutable,
@@ -741,6 +779,14 @@ fn vocabulary_for(solid_js: Release<'_>, signals: Release<'_>, web: Release<'_>)
         // dev). An unread or unresolved signals keeps `false`: the throw is
         // not claimed on bytes nobody read.
         flush_in_action: matches!(signals, Release::Read(number) if number >= 8),
+        // N6. The `inEffectCallback` marker and the `FLUSH_IN_EFFECT_CALLBACK`
+        // report in `flush`'s running-flush branch are in every read signals
+        // release from rc.1 (`dist/dev.js:1120` on rc.1, `:1810` on rc.2 and
+        // rc.3, `:1863` on rc.4, `:2109` on rc.5, `:2286` on rc.6;
+        // `dist/dev-shared.js:1935` on rc.8, `:2241` on rc.9, `:2687` on
+        // rc.13; rc.7 `dist/dev.js` likewise), and absent from rc.0. An
+        // unread or unresolved signals keeps `false`.
+        flush_in_effect_callback: matches!(signals, Release::Read(number) if number >= 1),
         // N5. The optimistic store's write path is signals', and only rc.0's
         // skips every owned-scope guard (`OptimisticStoreSetterGuard`). Every
         // other answer, unread and unresolved included, keeps the audited

@@ -1,0 +1,3 @@
+{
+  "note": "ADR 0356: synchronous DOM dispatch inherits its caller owner. The handler verifies getOwner() and runs exactly once; its owner requirement is uncertifiable rather than a violation."
+}

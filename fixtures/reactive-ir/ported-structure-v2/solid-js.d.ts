@@ -12,7 +12,7 @@ declare namespace JSX {
     section: { children?: unknown };
     strong: { children?: unknown };
     span: { children?: unknown };
-    div: { children?: unknown; innerHTML?: string; textContent?: string; onClick?: unknown; onclick?: unknown };
+    div: { children?: unknown; innerHTML?: string; innerText?: string | number; textContent?: string; onClick?: unknown; onclick?: unknown };
     button: { title?: string };
   }
   interface Element {}

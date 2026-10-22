@@ -471,12 +471,22 @@ pub(crate) fn callback_argument_literal(
     let end = usize::try_from(argument.end).ok()?;
     let inner_start = usize::try_from(function.span.start).ok()?;
     let inner_end = usize::try_from(function.span.end).ok()?;
-    let filler = |text: &str| {
+    // Opening parentheses only before the function and closing ones only
+    // after it: `(() => get)()` ends in `)()`, an invocation of the literal,
+    // which is its result and not the function.
+    let filler = |text: &str, paren: u8| {
         text.bytes()
-            .all(|byte| byte.is_ascii_whitespace() || byte == b'(' || byte == b')')
+            .all(|byte| byte.is_ascii_whitespace() || byte == paren)
     };
-    (filler(file.source.get(start..inner_start)?) && filler(file.source.get(inner_end..end)?))
-        .then_some(function)
+    let (before, after) = (
+        file.source.get(start..inner_start)?,
+        file.source.get(inner_end..end)?,
+    );
+    (filler(before, b'(')
+        && filler(after, b')')
+        && before.bytes().filter(|byte| *byte == b'(').count()
+            == after.bytes().filter(|byte| *byte == b')').count())
+    .then_some(function)
 }
 
 /// The leaf-owner operation kind a call performs under `dialect`, or `None`
@@ -1651,7 +1661,7 @@ fn cleanup_return_status(
             domain_cleanup_return_status(returned_call_domain(lookup, file, callee))
         }
         solid_facts::ast::ReturnValueKind::Identifier => {
-            let Some(symbol) = entities.get(&location(file.path.shared(), returned.span)) else {
+            let Some(symbol) = entities.exact(&location(file.path.shared(), returned.span)) else {
                 return CleanupReturnStatus::Unresolved;
             };
             if identifier_return_is_exact_function(lookup, file, symbol) {
@@ -1731,7 +1741,7 @@ pub(super) fn function_cleanup_return_proof(
                 solid_facts::ast::ReturnValueKind::Function => CleanupReturnProof::Function,
                 solid_facts::ast::ReturnValueKind::Identifier => lookup
                     .entities()
-                    .get(&location(file.path.shared(), returned.span))
+                    .exact(&location(file.path.shared(), returned.span))
                     .filter(|symbol| identifier_return_is_exact_function(lookup, file, symbol))
                     .map_or(CleanupReturnProof::OptionalFunction, |_| {
                         CleanupReturnProof::Function

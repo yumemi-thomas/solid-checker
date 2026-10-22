@@ -11,8 +11,8 @@
 //! and a fixture or focused regression test.
 
 use crate::{
-    Boundary, CallbackOwner, CleanupRule, ContextRole, Dialect, Execution, Primitive, ReactiveRole,
-    ResultSlot, TrackedCallbackTiming, Version, lookup, reverse,
+    Boundary, CallbackOwner, CleanupRule, ContextRole, Dialect, Execution, OwnerRequirementRole,
+    Primitive, ReactiveRole, ResultSlot, TrackedCallbackTiming, Version, lookup, reverse,
 };
 
 mod releases;
@@ -88,6 +88,14 @@ pub struct Solid2 {
     /// rc.8 or later; an unread or unresolved one keeps `false`, which states
     /// nothing, under its `SC9014` notice.
     flush_in_action: bool,
+    /// N6, from `@solidjs/signals`: whether its dev `flush` reports
+    /// `FLUSH_IN_EFFECT_CALLBACK` when called from an effect's apply callback
+    /// (`dist/dev-shared.js:2687-2698` on rc.13; rc.1 `dist/dev.js:1120`, rc.3
+    /// `:1810`, rc.6 `:2286`, rc.8 `dist/dev-shared.js:1935`, rc.9 `:2241`).
+    /// rc.0 has no `inEffectCallback` marker. `true` only for a signals
+    /// release some review read at rc.1 or later; an unread or unresolved one
+    /// keeps `false`.
+    flush_in_effect_callback: bool,
     /// B2, from `@solidjs/web`.
     dynamic_options: releases::DynamicOptions,
     /// N3, from `@solidjs/signals`: whether its dev store-setter guard
@@ -109,6 +117,16 @@ pub struct Solid2 {
     /// no strict-read window there. `true` on rc.13 alone; every other
     /// release, unread and unresolved included, keeps `false`.
     lazy_renders_component: bool,
+    /// ADR 0353, from `@solidjs/web`: whether `render` and `hydrate` run their
+    /// `code` callback under the root they create
+    /// ([`Dialect::callback_runs_in_created_root`]). `true` on rc.13 alone:
+    /// its `render` calls `code()` inside `createRoot(dispose => …)`
+    /// (`dist/web.dev.js:488-495`), and its `hydrate` reaches that `render` on
+    /// every path (`dist/web.dev.js:1521-1620`). No other `@solidjs/web` release
+    /// was read for this, so each keeps `false`.
+    render_creates_root: bool,
+    /// ADR 0358: rc.13 web assignProp installs un-namespaced `on` keys.
+    spread_event_keys_audited: bool,
 }
 
 /// The Solid 2 language's own vocabulary, [`Solid2::CONSERVATIVE`], spelled
@@ -209,6 +227,10 @@ pub(crate) fn names() -> Vec<&'static str> {
 pub(crate) const RELEASE_GATED_NAMES: &[&str] = &["until"];
 
 impl Dialect for Solid2 {
+    fn spread_key_is_event(&self, key: &str) -> Option<bool> {
+        self.spread_event_keys_audited
+            .then(|| key.starts_with("on") && !key.contains(':'))
+    }
     fn host_boolean_exports(&self) -> &'static [crate::HostBooleanExport] {
         &[crate::HostBooleanExport {
             module: "@solidjs/web",
@@ -519,12 +541,31 @@ impl Dialect for Solid2 {
     /// module scope, in a component body, in a memo compute or in an effect
     /// apply. Prod builds carry no guard and throw nothing.
     ///
-    /// Only `createRoot`. `runWithOwner(owner, fn)` also runs `fn` inline under
-    /// an owner, but a supplied owner can be a leaf (`getOwner()` in a tracked
-    /// effect), where every write is legal; `render`, `hydrate` and
-    /// `createRevealOrder` create a root too but were not probed for this.
+    /// `createRoot`, and `render` and `hydrate` on the audited `@solidjs/web`
+    /// rc.13 (`render_creates_root`). Their `code` argument is called inside
+    /// the `createRoot` that `render` makes (`@solidjs/web@2.0.0-rc.13`
+    /// `dist/web.dev.js:488-495`), and `hydrate` reaches that `render` on every
+    /// path (`:1521-1620`), so the write guard reads the same root there. Only
+    /// rc.13 was read for `render`, so no other release claims it. Not
+    /// `runWithOwner(owner, fn)`, which also runs `fn` inline under an owner,
+    /// but a supplied owner can be a leaf (`getOwner()` in a tracked effect),
+    /// where every write is legal. `createRevealOrder` makes a root too, but
+    /// was not probed.
     fn callback_runs_in_created_root(&self, primitive: Primitive, argument: usize) -> bool {
-        primitive == Primitive::CreateRoot && argument == 0
+        argument == 0
+            && (primitive == Primitive::CreateRoot
+                || (self.render_creates_root
+                    && matches!(primitive, Primitive::Render | Primitive::Hydrate)))
+    }
+
+    /// ADR 0353. Off rc.13, `render`'s and `hydrate`'s `code` callback is not
+    /// audited as a root body ([`Solid2::render_creates_root`]), so a write
+    /// directly in it is unplaced rather than legal: a call at module scope is
+    /// legal only if no root wraps the callback, and nothing read says so.
+    fn callback_root_is_unaudited(&self, primitive: Primitive, argument: usize) -> bool {
+        argument == 0
+            && !self.render_creates_root
+            && matches!(primitive, Primitive::Render | Primitive::Hydrate)
     }
 
     /// ADR 0323 (review round 10). `createRoot(init)` is `runWithOwner(createOwner(),
@@ -721,6 +762,7 @@ impl Dialect for Solid2 {
     /// | `2.0.0-rc.0` | `1.171.16` |
     /// | `2.0.0-rc.4` | `1.171.22` |
     /// | `2.0.0-rc.6` | `1.171.22` |
+    /// | `2.0.0-rc.8` | `1.171.22` |
     ///
     /// What was read: every factory (`createFileRoute`, `createRoute`,
     /// `createRootRoute`, `createRootRouteWithContext`, `createLazyRoute`,
@@ -735,6 +777,15 @@ impl Dialect for Solid2 {
     /// `route.options[type]?.preload?.()`, truth tests, and
     /// `Object.assign(route.options, lazyRoute.options)`. None of the four
     /// values is called.
+    ///
+    /// rc.8 was audited by diffing its `npm pack` against rc.6 on all three
+    /// builds: every file above is byte-identical and the same router-core
+    /// is loaded; only `RouterProvider`, `Transitioner`, `link` and `router`
+    /// changed (an `isServer ?? router.isServer` test, navigation
+    /// attribution, intent handlers installed through getters), `Asset`'s
+    /// compiled output differs on `esm`/`cjs` (a `mergeProps` dropped), and
+    /// the new `flightData` module reads a server-function response's
+    /// headers. None reads one of the four keys.
     fn audited_route_components(&self, version: &str) -> Option<crate::AuditedRouteRelease> {
         releases::AUDITED_ROUTE_RELEASES
             .iter()
@@ -1041,6 +1092,31 @@ impl Dialect for Solid2 {
             (Primitive::CreateMemo, ResultSlot::Whole) => Some(ReactiveRole::Accessor),
             _ => None,
         }
+    }
+
+    /// ADR 0338. Source: `@solidjs/signals@2.0.0-rc.13`. Every getter these
+    /// primitives return is `accessor(node)`, which is
+    /// `read.bind(null, node)`: `dist/dev.js` `accessor` (line 2341; callers
+    /// `createSignal` 2350 and 2354, `createMemo` 2357, `createOptimistic`
+    /// 2931 and 2935) and `dist/prod/signals.js` `accessor` (line 68). `read`
+    /// is declared `function read(el)` (`dist/dev-shared.js` line 6333,
+    /// `dist/prod/core/core.js` line 1494), so a function of length 1 bound
+    /// to one argument has `length` 0, in both builds. `solid-js@2.0.0-rc.13`
+    /// wraps the client primitives only to choose between them
+    /// (`dist/solid.dev.js` `hydratedCreateSignal`, `createOptimistic`) and
+    /// returns what they return; its server build (`dist/server.js`
+    /// `createSignal`, `createMemo`, `createSyncMemo`, `createOptimistic`)
+    /// returns arrow functions with no parameter, also length 0. A
+    /// `createSignal(fn)` getter and a `createOptimistic` getter are the same.
+    fn accessor_getter_length(&self, primitive: Primitive, slot: ResultSlot) -> Option<u32> {
+        matches!(
+            (primitive, slot),
+            (
+                Primitive::CreateSignal | Primitive::CreateOptimistic,
+                ResultSlot::TupleItem(0)
+            ) | (Primitive::CreateMemo, ResultSlot::Whole)
+        )
+        .then_some(0)
     }
 
     /// ADR 0183. Source: `@solidjs/signals@2.0.0-rc.9`, `dist/dev-shared.js`
@@ -1853,6 +1929,18 @@ impl Dialect for Solid2 {
         }
     }
 
+    /// rc.13's `getContext` (the read `useContext` wraps, `solid-js`
+    /// `dist/solid.dev.js`) checks the owner before anything else and throws
+    /// `NoOwnerError`, whatever default the context has (ADR 0352). The
+    /// `ContextNotFoundError` half is a different claim (a missing provider),
+    /// so it is not a role here.
+    fn owner_requirement_role(&self, primitive: Primitive) -> Option<OwnerRequirementRole> {
+        match primitive {
+            Primitive::UseContext => Some(OwnerRequirementRole::ContextRead),
+            _ => crate::dialect::shared_owner_requirement_role(primitive),
+        }
+    }
+
     /// `Dynamic`'s `component`, on every release the reviews read. `Dynamic`
     /// is `@solidjs/web`'s, the same function in every build of rc.3 and rc.9
     /// (rc.3 `web.js:1865`, `dev.js:1935`, `server.js:3208`; rc.9 `web.js:2099`,
@@ -1930,6 +2018,30 @@ impl Dialect for Solid2 {
     /// releases that have it (`Solid2::flush_in_action`).
     fn throws_inside_action_step(&self, primitive: Primitive) -> bool {
         self.flush_in_action && primitive == Primitive::Flush
+    }
+
+    /// `createEffect(compute, apply)`'s apply, argument 1: queued on the effect
+    /// queue and run by `runEffect` inside the draining flush, between
+    /// `setEffectCallback(true)` and `setEffectCallback(false)`
+    /// (`@solidjs/signals@2.0.0-rc.13` `dist/dev.js:1876`, `:1906`). Every
+    /// creation path of a user effect enqueues the run (`dist/dev.js:1737-1740`),
+    /// so the draining flush is always the one on the stack. `createRenderEffect`
+    /// is not: unless `schedule` is set its first run is the synchronous
+    /// `runEffect(node, LANE_RUN)` at creation, with no flush in progress.
+    fn callback_runs_in_effect_phase(&self, primitive: Primitive, argument: usize) -> bool {
+        primitive == Primitive::CreateEffect && argument == 1
+    }
+
+    /// Once a flush is running, `flush` returns without draining, after
+    /// reporting `FLUSH_IN_EFFECT_CALLBACK` if `inEffectCallback` is up (rc.13
+    /// `dist/dev-shared.js:2680-2698`); the production build returns at the
+    /// same branch without the report (`dist/prod/core/scheduler.js`). The
+    /// marker is one global boolean that a nested synchronous `runEffect`
+    /// lowers (`dist/dev.js:1906`), so the no-op is the claim and the report
+    /// is not. The marker and the report are in every read release from rc.1;
+    /// rc.0 has neither (`Solid2::flush_in_effect_callback`).
+    fn warns_inside_effect_phase(&self, primitive: Primitive) -> bool {
+        self.flush_in_effect_callback && primitive == Primitive::Flush
     }
 
     /// `createSignal` and `createOptimistic` both return

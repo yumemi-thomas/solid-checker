@@ -22,5 +22,7 @@ declare module "solid-js" {
   ): void;
   export function onSettled(callback: () => void | (() => void)): void;
   export function onCleanup(callback: () => void): void;
+  // @solidjs/signals@2.0.0-rc.13 dist/types/core/core.d.ts:136.
+  export function untrack<T>(fn: () => T, strictReadLabel?: string | false): T;
   export function flush(): void;
 }

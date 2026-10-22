@@ -79,7 +79,7 @@ install of `solid-js@2.0.0-rc.3` over signals rc.9 gets rc.9's store answers.
 Every distinct vocabulary other than the language's own is a release variant,
 `dialect::RELEASE_VARIANTS`: the same catalog under an id of its own,
 `solid-v2@<variant key>` (for the rc.9 triple
-`solid-v2@store-root-mutable+omit-predicate+until+flush-in-action+dynamic-static+store-setter-guards-roots`),
+`solid-v2@store-root-mutable+omit-predicate+until+flush-in-action+flush-in-effect-callback+dynamic-static+store-setter-guards-roots`),
 so caches and daemon sockets never mix two. The registry is built from
 `Dialect::variants`, and shared code never classifies a release or names what a
 package owns. See `solid-dialect/src/solid_2/releases.rs`.
@@ -168,6 +168,146 @@ Source selection assumes Vite with the Solid plugin. Runtime models additionally
 state standard runtime configuration, package integrity and browser Window-realm
 premises. Unknown targets, unresolved dispatch, visible mutations/providers and
 unsupported namespace/member paths keep their relevant obligations open.
+
+## Shared proof mechanics
+
+Several rules read these proofs, so they live here. Each rule page names the
+ones it uses.
+
+### Component census
+
+Two cases join ADR 0331's census, where a function is a proven component when
+every reference to it is accounted for:
+
+- **Audited TanStack routers (ADR 0334).** The rc.8 release was checked by an
+  `npm pack` diff against rc.6: every route-option read is byte-identical, the
+  changed files read none, and both load the same `@tanstack/router-core`
+  (`1.171.22`). `route_install_roots` and `route_replacement_recorded`
+  (`rust/crates/solid-facts-backend/src/installed_bytes.rs`) read the installed
+  bytes of the router and of the router-core it loads, from the router's real
+  directory. A `createRouter` key-read veto covers its four default components,
+  and an anonymous inline function at one of those keys is a component
+  (`execution_role/callee_roles.rs` no longer treats it as the call's callback).
+- **Compound holders (ADR 0342).** `rust/crates/solid-reactive-ir/src/indexes/compound.rs`
+  refuses a holder when: a stored identifier or `Object.assign` target is not a
+  hoisted function declaration, an import, or a binding declared earlier at top
+  level (a function running before the holder's statement would reach an
+  uninitialized `const`); an `Object.assign` literal names `name`, `length`,
+  `prototype`, `arguments` or `caller` (own non-writable function properties, so
+  the call throws); top-level code before the holder's statement calls,
+  constructs, renders JSX or evaluates a tagged template outside every function
+  (a dialect primitive given only data literals, such as `createSignal(0)`, is
+  the exception); its module is on an import cycle, imports one, or the project
+  has an unresolved load; or a computed member write or a reflective call
+  (`Reflect.set`, `Reflect.defineProperty`, `Reflect.defineProperties`,
+  `Reflect.deleteProperty`, `Object.defineProperty`) may target `Object` (an
+  unresolved target counts; `Object.assign(target, …)` refuses only a target
+  that resolves to `Object`). Not followed: `Object.assign(F, {...})` written as
+  a statement or `F.List = …` (the holder is the function itself), identifier-valued
+  nested namespaces, and a holder reached through a namespace import.
+
+### Function-valued bindings (ADR 0339)
+
+`rust/crates/solid-reactive-ir/src/indexes/initialization.rs` decides whether a
+mention runs after its declarator.
+
+- **Same module.** A mention follows when it is in the declarator's own body
+  after it; inside the function itself; in a function expression or arrow created
+  after it; in an arrow or nested declaration written before it whose every
+  mention follows (from the compiler's reference list, which withholds when
+  missing); or in a hoisted module-level declaration that nothing running ahead of
+  the declarator can call: no module-level function written before it, no
+  declaration mentioned by such code or by module-level code before it, and no
+  import cycle.
+- **Across modules.** The census orders static imports and re-exports,
+  `import x = require(…)` and `require(…)` as edges; a dynamic `import(…)` runs in
+  a later job and orders nothing. These loads leave the importer possibly cyclic:
+  an unresolved or ambient module (`declare module "virtual:b"`); a relative
+  import that resolves to a declaration file with no runtime redirect; a package
+  that resolves outside `node_modules` once realpath'd (a workspace link); a
+  nonliteral load; a `require` the facts did not record (a `declare function require`
+  shim); an `import.meta.glob` or `globEager` that is not provably lazy
+  (lazy means no options, or an options literal whose `eager` is absent or the
+  literal `false`); and a project file no analysed file carries (JavaScript
+  outside `allowJs`). `require` is peeled of parentheses and TypeScript wrappers
+  (`(require as any)(x)`, `require!(x)`, `require satisfies F`) before it is read
+  as a load; any other mention (`(0, require)(x)`, an alias, `typeof require`)
+  makes the importer possibly cyclic.
+- **Other withholdings.** A `require` of a module that has, or transitively
+  imports, a top-level `await` throws `ERR_REQUIRE_ASYNC_MODULE`. A direct `eval`
+  in the declaring or the calling file withholds every mention, and a binding
+  whose name is written (`eval` included) reaches nothing by name. A member
+  mention (`A.helper()`) is withheld by its property. A function whose parameter
+  list is not inert (a default that is more than a literal, a computed pattern key,
+  a decorator) has its mentions withheld, and its defaults count as early mentions
+  of what they reference. A name a load binds (an import-equals alias, a `require`
+  result) is in its own dead zone until the load runs. The component, export and
+  callback reachability roots are withheld when the root's binding may be
+  written. The dialect's own packages and `node:` modules count as installed.
+  Never credited: `var`, a `require()` call, a dynamic `import()`, and
+  `createRequire`.
+
+### Callback identity (ADR 0346)
+
+- **Covering symbol.** A typefacts entity names the symbol at its demanded span's
+  first byte. That symbol is the value's only when it covers the whole span:
+  `symbol_covers_span` (`rust/crates/typefacts/src/lib.rs`), set by
+  `symbolSpanCovers` in `apps/solid-typefacts/internal/typefacts/tsgo/semantic_runs.go`,
+  carried by Type Facts wire schema v21 (handshake protocol 80). `EntitySymbols::exact`
+  (`rust/crates/solid-reactive-ir/src/indexes.rs`) answers only for covering
+  entities. `EntitySymbols::value_symbol` peels TypeScript wrappers and, when the
+  peeled span is one identifier starting at the wrapper's first byte, reads the
+  symbol at the wrapper's own span.
+- **Callees.** `function_called_at`, `callee_symbol` and `callee_symbols` name the
+  callee's identifier and nothing else: the entity at a call-valued callee
+  describes the inner call. The tuple-iteration veto asks a call's
+  TypeScript-resolved declaration (`resolves_to_project_function`), not the
+  object-member index. A member read of a server function is uncertain only when
+  TypeScript resolves no declaration for it (`member_of_server_function`).
+- **Identity wrappers** (`rust/crates/solid-reactive-ir/src/indexes/identity_wrappers.rs`).
+  A project function, declared or bound by an immutable `const` to a function
+  literal, that returns one of its parameters on every completion by a
+  straight-line return (or an arrow's expression body), returns no other value, is
+  neither async nor a generator, and never otherwise references that parameter,
+  its name, `arguments` or `eval`. A wrapper whose declaration is written later in
+  its module names nothing, and a member written through a TypeScript wrapper is no
+  write of the binding (`binding_written_through_wrappers`). The index is digested
+  into the cross-file owner cache, so a wrapper changed in one file invalidates its
+  callers in others.
+
+### Invoked literals and namespace hand-outs (ADR 0347)
+
+- **Invoked literal edge.** `invoked_function_literal` and `invocation_runs_under_owner`
+  (`rust/crates/solid-reactive-ir/src/owners/owner_context.rs`) make a direct call of a
+  function literal an owner edge, after the callee's parentheses and type assertions are
+  peeled. `.call`/`.apply` on a literal, `new` on a plain function expression and a comma
+  expression's last operand (`SequenceFact`, `rust/crates/solid-facts/src/ast/types.rs`)
+  count too. Both owner passes read them: `find_missing_owners` (`owners/missing_owners.rs`)
+  and `discover_owner_file` (`owners/owner_discovery.rs`). The edge is withheld for an
+  instance field initializer and for JSX in the owner's own body.
+- **Hand-out census.** `namespace_hand_outs` (`rust/crates/solid-reactive-ir/src/attribution.rs`)
+  is built once per build by the pipeline (`SemanticLookup::set_namespace_hand_outs`). A
+  hand-out is a static member read `ns.fn` used as a value, or a namespace object used
+  other than by a static member (`Object.entries(ns)`, an alias, an element access,
+  `export * as`). A specifier that does not resolve to the module is not counted.
+- **Named reads.** `ModuleLoadConsumer` (`types.rs`) records the names a dynamic import's
+  result reads: `Members` for `const { a } = await import(x)` and `(await import(x)).a`,
+  and `Lazy` for `lazy(() => import(x), options)`, whose callee must be a named import of
+  `lazy` from a module the dialect's export table names. Typefacts does not name the
+  overloaded `lazy`, so the import binding decides. rc.13's `lazy` reads
+  `mod[options.export]`, or `mod.default` (`solid-js` `dist/solid.dev.js`).
+- **Seeds.** `seed_namespace_hand_outs` (`owners/owner_graph.rs`) applies the named
+  hand-outs at graph assembly, so per-file fragments stay cached; it seeds
+  `OWNER_CONTEXT_UNOWNED` without a proof. `seed_unnamed_hand_outs` seeds an export that
+  only an unnamed escape reaches the same way, and `propagate_owner_contexts` passes no
+  proof out of it. `open_world_unowned_only` (`owners.rs`) is the open-world test and
+  ignores `OWNER_CONTEXT_LEAF`.
+- **Leaf bits.** `OWNER_CONTEXT_LEAF_OWNED` (`owners.rs`) marks a leaf created under a
+  children-capable owner; `QueuedLeaf` edges (an `onSettled` inside a leaf body) run with
+  no owner. `tracked_leaf_body_context` (`owner_context.rs`) gives a `createTrackedEffect`
+  body `LEAF | LEAF_OWNED` on every live path. `OWNER_CONTEXT_LEAVES_REGION` includes
+  `LEAF`, since a leaf body is not region-owned. The owner gate reads the run-owned bit
+  (`owner_context.rs`).
 
 ## How the Solid 1.x dialect landed
 

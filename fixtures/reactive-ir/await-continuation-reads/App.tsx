@@ -5,9 +5,9 @@ import { createSignal, createStore } from "solid-js";
 // strict-read window is the synchronous extent of `untrack(fn, label)`
 // (`@solidjs/signals@2.0.0-rc.13` `dist/dev-shared.js:5801-5885`: `strictRead`
 // is restored in the `finally`), so there is no window and no tracking scope
-// for it. A read before the first await is in the window; an await that may
-// be skipped (`x ??= await p`, an optional-call argument, a labelled break)
-// does not make what follows a continuation.
+// for it. A read before the first await is in the window; after an await that
+// may be skipped (`x ??= await p`, an optional-call argument, a labelled break),
+// the read is uncertifiable (ADR 0354).
 
 function now(f: () => void) {
   f();
@@ -33,7 +33,7 @@ export function AfterAwait() {
   });
   return <div />;
 }
-// A skippable await: the read may still run in the window.
+// A skippable await: the read is uncertifiable (ADR 0354).
 export function SkippableAssign() {
   const [count] = createSignal(0);
   now(async () => {

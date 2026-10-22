@@ -65,8 +65,7 @@ fn push_unavailable_import(
                     .computed_members
                     .binary_search(&member.span)
                     .is_err()
-                    && entities.get(&location(file.path.shared(), member.object))
-                        == Some(namespace_symbol)
+                    && entities.value_symbol(file, member.object) == Some(namespace_symbol)
             }) {
                 let export = file.source_text(member.property).unwrap_or_default();
                 if !native_vocabulary_outranks_package_boundary(dialect, &import.module, export) {

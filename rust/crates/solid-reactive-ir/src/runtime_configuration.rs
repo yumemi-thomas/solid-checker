@@ -362,7 +362,7 @@ fn same_scanned_entities(left: &[typefacts::EntityFact], right: &[typefacts::Ent
             && left.iter().zip(right).all(|(left, right)| {
                 left.location.start_byte == right.location.start_byte
                     && left.location.end_byte == right.location.end_byte
-                    && left.symbol_unresolved == right.symbol_unresolved
+                    && left.symbol_claim == right.symbol_claim
                     && left.symbol == right.symbol
             })
 }
@@ -401,7 +401,7 @@ fn scan_file(
     let mut symbols = HashMap::default();
     for entity in facts.typescript.entities_for_path(file.path.as_str()) {
         let key = (entity.location.start_byte, entity.location.end_byte);
-        let symbol = (!entity.symbol_unresolved && !entity.symbol.is_empty())
+        let symbol = (!entity.symbol_unresolved() && !entity.symbol.is_empty())
             .then_some(entity.symbol.as_ref());
         symbols
             .entry(key)

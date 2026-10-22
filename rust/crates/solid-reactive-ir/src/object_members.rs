@@ -14,6 +14,12 @@ use crate::{
     location,
 };
 
+#[path = "object_members/handlers.rs"]
+mod handlers;
+pub(crate) use handlers::{
+    SpreadTargets, intrinsic_element, spread_index, unresolved_handler_defects,
+};
+
 pub(crate) type Targets = HashMap<Location, (String, Span)>;
 
 pub(crate) fn index(facts: &ProjectFacts, lookup: &SemanticLookup<'_>) -> Targets {
@@ -37,11 +43,31 @@ pub(crate) fn index(facts: &ProjectFacts, lookup: &SemanticLookup<'_>) -> Target
             .map(|member| (member.span, member))
             .collect::<HashMap<_, _>>();
         let references = references(file);
-        for call in &file.ast.calls {
-            if call.construct {
-                continue;
-            }
-            let callee = file.ast.peel_ts_sugar_span(call.callee);
+        // The member a call invokes, and the member a JSX event handler attribute
+        // takes as its value: both name the function the member holds (ADR 0358).
+        let reads = file
+            .ast
+            .calls
+            .iter()
+            .filter(|call| !call.construct)
+            .map(|call| (call.callee, call.callee))
+            .chain(
+                file.compiler
+                    .callback_roles
+                    .iter()
+                    .filter(|callback| {
+                        callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
+                    })
+                    .map(|callback| {
+                        (
+                            callback.span,
+                            crate::owners::handler_value_span(file, callback.span),
+                        )
+                    }),
+            )
+            .collect::<Vec<_>>();
+        for (read, value) in reads {
+            let callee = file.ast.peel_ts_sugar_span(value);
             let Some(member) = members.get(&callee) else {
                 continue;
             };
@@ -94,7 +120,7 @@ pub(crate) fn index(facts: &ProjectFacts, lookup: &SemanticLookup<'_>) -> Target
             // Both receiver and own callable are now proven non-nullish;
             // optional links therefore select the same function.
             targets.insert(
-                location(file.path.shared(), call.callee),
+                location(file.path.shared(), read),
                 (function.0.path.to_string(), function.1.span),
             );
         }
@@ -184,18 +210,153 @@ pub(crate) fn namespace_exposed_modules(
     (!census.unknown_load).then_some(census.exposed)
 }
 
+/// Where one specifier loads.
+enum Landing {
+    /// Analyzed project modules (and the runtime modules a declaration
+    /// redirects to).
+    Modules(HashSet<String>),
+    /// A real installed package (ADR 0339's premise).
+    Installed,
+    /// Code no analyzed file carries: an unresolved or ambient module, a
+    /// declaration file with no runtime redirect, a workspace link.
+    Unknown,
+}
+
 /// Namespace bindings and module loads are separate export channels: their
 /// references need not contain a receiver identifier at all. Until those uses
 /// can be censused exactly, refuse the entire exposed module (and its barrels).
 #[derive(Default)]
-struct ModuleCensus {
+pub(crate) struct ModuleCensus {
     exposed: HashSet<String>,
     cyclic: HashSet<String>,
     unknown_load: bool,
+    /// Static import and re-export edges between analyzed modules.
+    graph: HashMap<String, HashSet<String>>,
+    /// The edges ES evaluation runs before the importer's own body: static
+    /// imports and `export … from`.
+    hoisted: HashMap<String, HashSet<String>>,
+    /// `import x = require(…)` statements, which sit at module level (never
+    /// inside a block, loop, branch or `try`) and run where they are written:
+    /// the targets and where the statement ends. A `require()` call is not
+    /// here: it may be skipped by the code around it (ADR 0339).
+    equals_loads: HashMap<String, Vec<(HashSet<String>, u32)>>,
+    /// Loads that bind a name to a module at the point they run, by module:
+    /// the targets, where an `import x = require(…)` statement ends (`None`
+    /// for a `require()` call or a dynamic `import()` at module level, which
+    /// are never credited).
+    alias_loads: HashMap<String, Vec<AliasLoad>>,
+    /// Modules with a load whose targets the census cannot see.
+    opaque_loads: HashSet<String>,
+    /// Modules with a top-level `await` or `for await`.
+    async_modules: HashSet<String>,
 }
 
+type AliasLoad = (HashSet<String>, Option<u32>);
+
 impl ModuleCensus {
-    fn new(facts: &ProjectFacts, lookup: &SemanticLookup<'_>) -> Self {
+    /// Whether the module is on an import cycle, or imports (transitively) a
+    /// module on one, or has a relative import the census could not resolve.
+    pub(crate) fn is_cyclic(&self, path: &str) -> bool {
+        self.cyclic.contains(path)
+    }
+
+    /// Whether some load the census could not resolve (a computed dynamic
+    /// `import()`, an unresolved namespace import or re-export) may run any
+    /// module's code, so no module's initialization order is certain.
+    pub(crate) fn has_unknown_load(&self) -> bool {
+        self.unknown_load
+    }
+
+    /// Whether `from` statically imports `to`, directly or through re-exports.
+    pub(crate) fn statically_imports(&self, from: &str, to: &str) -> bool {
+        let mut seen = HashSet::<&str>::default();
+        let mut stack = vec![from];
+        while let Some(module) = stack.pop() {
+            for target in self.graph.get(module).into_iter().flatten() {
+                if target == to {
+                    return true;
+                }
+                if seen.insert(target.as_str()) {
+                    stack.push(target.as_str());
+                }
+            }
+        }
+        false
+    }
+
+    /// Whether a module, or one it loads, has a top-level `await`:
+    /// `require` of it throws `ERR_REQUIRE_ASYNC_MODULE`.
+    fn loads_async_module(&self, module: &str) -> bool {
+        self.async_modules.contains(module)
+            || self
+                .async_modules
+                .iter()
+                .any(|asynchronous| self.statically_imports(module, asynchronous))
+    }
+
+    /// Whether `to` is reached from `from` by `import` and `export … from`
+    /// alone, the edges ES evaluation runs ahead of the importer's body.
+    fn hoisted_reaches(&self, from: &str, to: &str) -> bool {
+        let mut seen = HashSet::<&str>::default();
+        let mut stack = vec![from];
+        while let Some(module) = stack.pop() {
+            for target in self.hoisted.get(module).into_iter().flatten() {
+                if target == to {
+                    return true;
+                }
+                if seen.insert(target.as_str()) {
+                    stack.push(target.as_str());
+                }
+            }
+        }
+        false
+    }
+
+    /// Whether `from` has loaded `to` by the time code at module-level
+    /// position `position` runs (`None`: the position is not known): through
+    /// static imports and re-exports, or an `import x = require(…)` statement
+    /// that ends at or before it. Nothing else is credited. What the first
+    /// module loads is finished by then (the importer is on no cycle).
+    ///
+    /// A name bound to a module by a load that reaches `to` is itself in its
+    /// temporal dead zone until the load runs, whatever the module's own
+    /// initialization: a mention in the file reaching `to` is proved only
+    /// after every such `import x = require(…)`, and is withheld where a
+    /// `require()` call or a module-level `import()` may bind it, the
+    /// module has a top-level `await` (`require` throws), or a load of
+    /// unseen targets exists.
+    pub(crate) fn imports_before(&self, from: &str, to: &str, position: Option<u32>) -> bool {
+        if self.opaque_loads.contains(from) {
+            return false;
+        }
+        for (targets, end) in self.alias_loads.get(from).into_iter().flatten() {
+            if !targets
+                .iter()
+                .any(|target| target == to || self.statically_imports(target, to))
+            {
+                continue;
+            }
+            let (Some(position), Some(end)) = (position, end) else {
+                return false;
+            };
+            if position < *end || targets.iter().any(|target| self.loads_async_module(target)) {
+                return false;
+            }
+        }
+        let mut firsts = self.hoisted.get(from).cloned().unwrap_or_default();
+        if let Some(position) = position {
+            for (targets, end) in self.equals_loads.get(from).into_iter().flatten() {
+                if *end <= position {
+                    firsts.extend(targets.iter().cloned());
+                }
+            }
+        }
+        firsts
+            .iter()
+            .any(|first| first == to || self.hoisted_reaches(first, to))
+    }
+
+    pub(crate) fn new(facts: &ProjectFacts, lookup: &SemanticLookup<'_>) -> Self {
         let mut redirects = HashMap::<String, HashSet<String>>::default();
         for (declaration, runtime) in &facts.runtime_symbol_redirects {
             let (Some(declarations), Some(implementations)) = (
@@ -213,37 +374,96 @@ impl ModuleCensus {
                 }
             }
         }
-        let landing = |file: &FileFacts, span, module: &str| -> Option<HashSet<String>> {
-            let path = if let Some(imports) = lookup.resolved_imports() {
-                let solid_facts::SpecifierAttestation::Attested(row) =
-                    imports.specifier(file.path.as_str(), span, module)
-                else {
-                    return None;
-                };
-                if row.resolved_path.is_empty() {
-                    return None;
-                }
-                if row.included_path.is_empty() {
-                    row.resolved_path.to_string()
-                } else {
-                    row.included_path.to_string()
-                }
+        let unresolved = |relative: bool, module: &str| {
+            let package = module
+                .split('/')
+                .take(if module.starts_with('@') { 2 } else { 1 })
+                .collect::<Vec<_>>()
+                .join("/");
+            if relative
+                || !(module.starts_with("node:")
+                    || lookup.dialect.owns_module(module)
+                    || lookup.dialect.owns_module(&package))
+            {
+                // A project module, an ambient or virtual module, or a
+                // specifier with no attested resolution: no followed source.
+                // The runtime's own `node:` modules and the dialect's own
+                // packages are installed code, as ADR 0339 assumes.
+                Landing::Unknown
             } else {
-                solid_facts::resolve_relative_module_path(
-                    file.path.as_str(),
-                    module,
-                    lookup.files().iter().map(|file| file.path.as_str()),
-                )?
-                .to_string()
-            };
+                Landing::Installed
+            }
+        };
+        let analyzed = lookup
+            .files()
+            .iter()
+            .map(|file| file.path.as_str())
+            .collect::<HashSet<_>>();
+        // Where a specifier loads: analyzed project modules (graph edges), an
+        // installed dependency, or code the census cannot see.
+        let landing = |file: &FileFacts, span, module: &str| -> Landing {
+            let relative = module.starts_with('.') || module.starts_with('/');
+            let (path, declaration_only, installed) =
+                if let Some(imports) = lookup.resolved_imports() {
+                    let solid_facts::SpecifierAttestation::Attested(row) =
+                        imports.specifier(file.path.as_str(), span, module)
+                    else {
+                        return unresolved(relative, module);
+                    };
+                    if row.resolved_path.is_empty() {
+                        return unresolved(relative, module);
+                    }
+                    let path = if row.included_path.is_empty() {
+                        row.resolved_path.to_string()
+                    } else {
+                        row.included_path.to_string()
+                    };
+                    // The resolver landed in a real installed package: realpath
+                    // keeps a workspace symlink out of `node_modules`.
+                    let installed = row.resolution == solid_facts::ImportResolution::NodeModules
+                        && path.contains("/node_modules/");
+                    let declaration_only = [".d.ts", ".d.mts", ".d.cts"]
+                        .iter()
+                        .any(|suffix| path.ends_with(suffix));
+                    (path, declaration_only, installed)
+                } else {
+                    match solid_facts::resolve_relative_module_path(
+                        file.path.as_str(),
+                        module,
+                        lookup.files().iter().map(|file| file.path.as_str()),
+                    ) {
+                        Some(path) => (path.to_string(), false, false),
+                        None => return unresolved(relative, module),
+                    }
+                };
+            if installed {
+                // ADR 0339's premise: an installed dependency's runtime code
+                // does not import the project's own modules.
+                return Landing::Installed;
+            }
             let mut paths = HashSet::from_iter([path.clone()]);
+            // What runs: the redirect's runtime modules, else the module itself.
+            let mut runs = vec![path.clone()];
             if let Some(runtime) = redirects.get(&path) {
                 paths.extend(runtime.iter().cloned());
+                runs = runtime.iter().cloned().collect();
+            } else if declaration_only {
+                // Types only: the runtime module beside them is project code
+                // no analyzed file carries.
+                return Landing::Unknown;
             }
-            Some(paths)
+            // A project file no analyzed file carries (JavaScript outside
+            // `allowJs`) has imports the census cannot see.
+            if runs.iter().any(|run| !analyzed.contains(run.as_str())) {
+                return Landing::Unknown;
+            }
+            Landing::Modules(paths)
         };
         let mut result = Self::default();
         let mut graph = HashMap::<String, HashSet<String>>::default();
+        let mut hoisted = HashMap::<String, HashSet<String>>::default();
+        let mut in_place_loads = HashMap::<String, Vec<(HashSet<String>, u32)>>::default();
+        let mut alias_loads = HashMap::<String, Vec<AliasLoad>>::default();
         let mut barrels = HashMap::<String, HashSet<String>>::default();
         for file in lookup.files() {
             let path = file.path.to_string();
@@ -251,8 +471,17 @@ impl ModuleCensus {
                 let namespace = import.bindings.iter().any(|binding| {
                     !binding.type_only && binding.kind == ast::ImportKind::Namespace
                 });
-                if let Some(targets) = landing(file, import.span, &import.module) {
+                let landed = landing(file, import.span, &import.module);
+                if matches!(landed, Landing::Unknown) {
+                    result.cyclic.insert(path.clone());
+                    result.unknown_load |= namespace;
+                }
+                if let Landing::Modules(targets) = landed {
                     graph
+                        .entry(path.clone())
+                        .or_default()
+                        .extend(targets.iter().cloned());
+                    hoisted
                         .entry(path.clone())
                         .or_default()
                         .extend(targets.iter().cloned());
@@ -267,15 +496,6 @@ impl ModuleCensus {
                     if namespace {
                         result.exposed.extend(targets);
                     }
-                } else {
-                    // A missing project-module edge cannot prove absence of
-                    // a cycle in the analyzed source graph. External modules
-                    // without followed source remain outside that graph, as
-                    // they do for the other source-owned proofs here.
-                    if import.module.starts_with('.') || import.module.starts_with('/') {
-                        result.cyclic.insert(path.clone());
-                    }
-                    result.unknown_load |= namespace;
                 }
             }
             for export in file
@@ -286,32 +506,78 @@ impl ModuleCensus {
                 let Some(module) = export.module.as_deref() else {
                     continue;
                 };
-                if let Some(targets) = landing(file, export.span, module) {
-                    graph
-                        .entry(path.clone())
-                        .or_default()
-                        .extend(targets.iter().cloned());
-                    barrels
-                        .entry(path.clone())
-                        .or_default()
-                        .extend(targets.iter().cloned());
-                    if export.namespace.is_some() {
-                        result.exposed.extend(targets);
+                match landing(file, export.span, module) {
+                    Landing::Modules(targets) => {
+                        graph
+                            .entry(path.clone())
+                            .or_default()
+                            .extend(targets.iter().cloned());
+                        hoisted
+                            .entry(path.clone())
+                            .or_default()
+                            .extend(targets.iter().cloned());
+                        barrels
+                            .entry(path.clone())
+                            .or_default()
+                            .extend(targets.iter().cloned());
+                        if export.namespace.is_some() {
+                            result.exposed.extend(targets);
+                        }
                     }
-                } else {
-                    result.cyclic.insert(path.clone());
-                    result.unknown_load = true;
+                    Landing::Installed => {}
+                    Landing::Unknown => {
+                        result.cyclic.insert(path.clone());
+                        result.unknown_load = true;
+                    }
                 }
             }
+            // A `require` runs the module it loads in place, so it is an
+            // edge of the evaluation order, and one the census cannot resolve
+            // (a nonliteral specifier, an unresolved project module) leaves
+            // the importer possibly on a cycle. A dynamic `import()` evaluates
+            // its module in a later job, after the importer's own synchronous
+            // evaluation, and a module still being evaluated is awaited, so it
+            // orders nothing: it only exposes the module as a namespace.
             for load in &file.ast.module_loads {
-                if let Some(targets) = load
-                    .specifier
-                    .as_deref()
-                    .and_then(|module| landing(file, load.span, module))
-                {
-                    result.exposed.extend(targets);
-                } else {
-                    result.unknown_load = true;
+                let in_place = load.kind == ast::ModuleLoadKind::Require;
+                let landed = match load.specifier.as_deref() {
+                    Some(module) => landing(file, load.span, module),
+                    None => Landing::Unknown,
+                };
+                match landed {
+                    Landing::Modules(targets) => {
+                        if in_place {
+                            graph
+                                .entry(path.clone())
+                                .or_default()
+                                .extend(targets.iter().cloned());
+                        }
+                        // A `require()` call may be skipped by the code around
+                        // it, and what it binds is in its dead zone until it
+                        // runs: it orders nothing and withholds mentions of
+                        // its targets. A dynamic `import()` written at module
+                        // level binds a name the same way.
+                        let in_function = file
+                            .ast
+                            .functions
+                            .iter()
+                            .any(|function| function.span.contains(load.span));
+                        if in_place || !in_function {
+                            alias_loads
+                                .entry(path.clone())
+                                .or_default()
+                                .push((targets.clone(), None));
+                        }
+                        result.exposed.extend(targets);
+                    }
+                    Landing::Installed => {}
+                    Landing::Unknown => {
+                        if in_place {
+                            result.cyclic.insert(path.clone());
+                        }
+                        result.opaque_loads.insert(path.clone());
+                        result.unknown_load = true;
+                    }
                 }
             }
             for import in file
@@ -320,17 +586,92 @@ impl ModuleCensus {
                 .iter()
                 .filter(|import| !import.type_only)
             {
-                if let Some(targets) = landing(file, import.span, &import.module) {
-                    result.exposed.extend(targets);
-                } else {
-                    result.unknown_load = true;
+                match landing(file, import.span, &import.module) {
+                    Landing::Modules(targets) => {
+                        graph
+                            .entry(path.clone())
+                            .or_default()
+                            .extend(targets.iter().cloned());
+                        // `import x = require(…)` runs where it is written.
+                        let module_level = !file
+                            .ast
+                            .module_blocks
+                            .iter()
+                            .any(|block| block.contains(import.span));
+                        if module_level {
+                            in_place_loads
+                                .entry(path.clone())
+                                .or_default()
+                                .push((targets.clone(), import.span.end));
+                        }
+                        alias_loads
+                            .entry(path.clone())
+                            .or_default()
+                            .push((targets.clone(), module_level.then_some(import.span.end)));
+                        result.exposed.extend(targets);
+                    }
+                    Landing::Installed => {}
+                    Landing::Unknown => {
+                        result.cyclic.insert(path.clone());
+                        result.unknown_load = true;
+                    }
                 }
             }
-            result.unknown_load |= file
+            // A bundler turns an `import.meta.glob(…, { eager: true })` into
+            // static imports of modules no specifier names: unknown loads in
+            // place. A lazy glob is a dynamic import and orders nothing.
+            if !file.ast.in_place_import_globs.is_empty() {
+                result.opaque_loads.insert(path.clone());
+                result.unknown_load = true;
+                result.cyclic.insert(path.clone());
+            }
+            // A call of a bare `require` the facts did not record as a load
+            // (a `declare function require` shim shadows the global in the
+            // binder, though the host `require` is what runs): an unmodeled
+            // load, so the importer may be on a cycle.
+            if file.ast.calls.iter().any(|call| {
+                !call.construct
+                    && file.source_text(file.ast.peel_ts_sugar_span(call.callee)) == Some("require")
+                    && !file
+                        .ast
+                        .module_loads
+                        .iter()
+                        .any(|load| load.span == call.span)
+            }) {
+                result.unknown_load = true;
+                result.cyclic.insert(path.clone());
+            }
+            // Any other mention of `require` (`(0, require)(x)`, an alias, an
+            // argument) may load in place with no recorded load.
+            if !file.ast.unmodeled_require_references.is_empty() {
+                result.unknown_load = true;
+                result.cyclic.insert(path.clone());
+            }
+            if file
                 .ast
                 .module_hazards
                 .iter()
-                .any(|hazard| hazard.kind == ast::ModuleHazardKind::NonliteralDynamicLoading);
+                .any(|hazard| hazard.kind == ast::ModuleHazardKind::NonliteralDynamicLoading)
+            {
+                result.opaque_loads.insert(path.clone());
+                result.unknown_load = true;
+            }
+            let top_level = |span: Span| {
+                !file
+                    .ast
+                    .functions
+                    .iter()
+                    .any(|function| function.span.contains(span))
+            };
+            if file
+                .ast
+                .awaits
+                .iter()
+                .chain(&file.ast.implicit_suspensions)
+                .any(|span| top_level(*span))
+            {
+                result.async_modules.insert(path.clone());
+            }
         }
         loop {
             let mut changed = false;
@@ -357,6 +698,10 @@ impl ModuleCensus {
                 break;
             }
         }
+        result.graph = graph;
+        result.hoisted = hoisted;
+        result.equals_loads = in_place_loads;
+        result.alias_loads = alias_loads;
         result
     }
 }
@@ -731,6 +1076,19 @@ fn receiver_closed<'a>(
         if !initialized_use(owner, literal, declaration, file, span, modules) {
             return false;
         }
+        // A spread onto an intrinsic element copies the object's own handlers
+        // onto the element (ADR 0358): a read that neither escapes the object nor
+        // hands it to a callee. A spread into a component hands it on, so it is
+        // not this case.
+        if file.ast.jsx_elements.iter().any(|element| {
+            intrinsic_element(file, element)
+                && element
+                    .spreads
+                    .iter()
+                    .any(|spread| file.ast.peel_ts_sugar_span(spread.argument) == span)
+        }) {
+            continue;
+        }
         let Some(member) = file.ast.members.iter().find(|member| {
             file.ast.peel_ts_sugar_span(member.object) == span
                 && !file.ast.computed_members.contains(&member.span)
@@ -740,12 +1098,17 @@ fn receiver_closed<'a>(
         // Merely extracting a member lets a method receive an opaque `this`.
         // Require immediate calls, rather than treating all member reads as
         // harmless receiver uses.
-        if !file
-            .ast
-            .calls
-            .iter()
-            .any(|call| !call.construct && file.ast.peel_ts_sugar_span(call.callee) == member.span)
-        {
+        // An event attribute's value is read by the host with no receiver of the
+        // program's, the same way an immediate call of a function literal
+        // without `this` is (ADR 0358).
+        let invoked =
+            file.ast.calls.iter().any(|call| {
+                !call.construct && file.ast.peel_ts_sugar_span(call.callee) == member.span
+            }) || file.compiler.callback_roles.iter().any(|callback| {
+                callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
+                    && crate::owners::handler_value_span(file, callback.span) == member.span
+            });
+        if !invoked {
             return false;
         }
         let Some((function_file, function)) = file

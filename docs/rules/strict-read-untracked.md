@@ -62,7 +62,19 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   way under `pending-async-unsuspendable-read`. The checker does not prove a
   synchronous dispatch in the body reaches the listener, so even that case stays
   uncertifiable. A JSX event handler (`onClick={...}`) is the compiler's event
-  callback and is not reported.
+  callback. Visible native synchronous dispatch withholds its execution proof
+  (ADR 0356), so its reads are then uncertifiable; otherwise it is not reported.
+- **A read an await may precede is uncertifiable.** Past an unconditional
+  `await` the window is closed and the read is silent. Past a conditional
+  (`if (c) await p`, `x ??= await p`, `f?.(await p)`, a labelled `break`), a
+  loop that awaits, or a `try` whose block awaits (its `catch` and `finally`),
+  the path that takes the await runs the read after the suspension, so the
+  role is unknown: uncertifiable, never reported (ADR 0354). A loop body that
+  reads before its await is in that set too, since a later iteration follows
+  the await. The other arm of the same `if` or `?:` does not follow it, and an
+  await in a nested closure belongs to that closure. A destructuring default
+  runs after the value it destructures, so it follows that value's await. A
+  helper called at such a site is uncertifiable at the call.
 - **A read no fact places is uncertifiable.** Code in a component's element
   children, in a helper with no resolved caller, or in a closure a tracked
   scope only stores has no execution role; a read there is reported as
@@ -90,6 +102,13 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   the same read for `access(count)`. A call-scoped lower bound of at least one
   proves the read; an optional invocation is **uncertifiable**. Neither callback
   closure nor a possible invocation proves that this call invokes the accessor.
+  When the argument is a `createSignal`, `createOptimistic` or `createMemo`
+  getter, the walk knows it is a function of `length` 0 (ADR 0338), so the
+  package's `access(v) = typeof v === "function" && !v.length ? v() : v` calls
+  it on every path: `access(count)` in a component body is a violation, and
+  the same call on an alias, a function literal, a props value or any value
+  whose arity is unknown stays uncertifiable
+  (`fixtures/reactive-ir/package-access-helper`).
   The invocation's execution event and trigger must both be the export call;
   a same-stack schedule at a later event is insufficient. Tracked JSX and event
   handlers remain clean; a retained callback, a spread slot, or a non-call protocol item does
@@ -116,7 +135,13 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   proven signal-backed and reported as a violation. When the component's call
   sites cannot be enumerated — it is exported, spread into (`<Card {...rest}/>`),
   or referenced outside JSX — the finding is reported as **uncertifiable**: a
-  proof obligation rather than a proven runtime warning.
+  proof obligation rather than a proven runtime warning. A `props.x` read keeps
+  that classification when the body also passes `props` to an `omit`, to a
+  `merge` with another never-falsy source, or to a spread onto a DOM element, or
+  binds a `const` alias that does the same: none can write to the object
+  (ADR 0337, `fixtures/reactive-ir/omit-view-props-root`). A read through the
+  view or alias (`rest.x`, `local.x`), a destructured binding, a `merge` that may
+  return its only source, and a spread onto a component stay uncertifiable.
 
 ## Why is this bad?
 
@@ -173,6 +198,12 @@ read in `untrack()` so the intent is visible to both readers and the analyzer.
 For component props specifically, read `props.name` directly in JSX or derive it
 with `createMemo(() => props.name)`. `untrack(() => props.name)` is only an
 explicit one-time snapshot; it does not make the prop reactive.
+
+## How it is proven
+
+- **Props views.** `omit(props, …)` always builds a view: `omitTraps` in `@solidjs/signals@2.0.0-rc.13` (`dist/dev.js`) returns true from `set` and `deleteProperty`. `merge(...)` returns its one non-falsy source, so it is a view only with no spread argument and an argument that is syntactically never falsy (an object or function literal, or a call that is itself a view). `@solidjs/web`'s `spread` and `ssrElement` only read the object. An element that spreads the props among several sources is a view only when another source is provably never falsy: a non-`ref` attribute, a rendering child, or a member spread (a bare identifier may be `undefined`). A `children` attribute beside a raw child, and a member spread carrying `/*@static*/`, count as no such source, in the native lowering and in `@solidjs/babel-plugin` alike. The view premise needs `Proxy`, since without it `merge` can return its last source.
+- **Getter arity.** The rc.13 accessor is `read.bind(null, node)` over `function read(el)` (`dist/dev.js` `accessor`, `dist/prod/signals.js` `accessor`). `solid-js`'s client wrappers return it unchanged, and its server builds return arrows with no parameter. Probed on the dev and prod client builds: `length` 0 and `typeof` `"function"`. The walk folds `p.length` against a numeric literal (`===`, `!==`, `==`, `!=`, `<`, `<=`, `>`, `>=`), and `typeof p`, or a `p.length` that only feeds a test, is no escape, so a branch that cannot run for the arguments is proven absent. A hoisted function declaration's body runs whenever it is called, so an earlier `return` leaves it possible rather than unreachable. A binding declared in a file with a direct `eval` is refused, and a binding the module exports proves no length.
+- **Not decided.** A read through another helper hop, an array of accessors (`accessArray`), and a read after an `await` (always an obligation).
 
 ## Related
 

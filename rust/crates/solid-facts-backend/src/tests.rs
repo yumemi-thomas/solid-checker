@@ -550,6 +550,50 @@ fn an_argumentless_primitive_call_is_demanded_its_resolved_call() {
     );
 }
 
+/// SC1002 needs the standard-library declaration of an argumentless call that
+/// runs before an async function's first suspension (`Promise.resolve()`,
+/// `Math.random()`); a call after it, and one in a function that never
+/// suspends, stay as they were.
+#[test]
+fn an_argumentless_call_before_a_suspension_is_demanded_its_resolved_call() {
+    let file = test_file_facts(
+        "src/before.ts",
+        "export async function probe() {\n\
+           Math.random();\n\
+           local();\n\
+           await Promise.resolve();\n\
+           Date.now();\n\
+         }\n\
+         function local() {}\n\
+         export function quiet() {\n\
+           Math.floor();\n\
+         }",
+    );
+    let demands = semantic_demands(
+        dialect::default_dialect(),
+        std::slice::from_ref(&file),
+        SemanticDemandOptions::NONE,
+    )
+    .unwrap();
+    let resolved = |spelling: &str| {
+        let call = file
+            .ast
+            .calls
+            .iter()
+            .find(|call| file.source_text(call.callee) == Some(spelling))
+            .expect(spelling);
+        let location = typefacts_location(file.path.as_str(), call.callee);
+        demands
+            .iter()
+            .any(|demand| demand.location == location && demand.resolved_call)
+    };
+    assert!(resolved("Math.random"));
+    assert!(resolved("Promise.resolve"), "the awaited operand");
+    assert!(!resolved("local"), "a project function is not a global");
+    assert!(!resolved("Date.now"), "after the only suspension");
+    assert!(!resolved("Math.floor"), "a function that never suspends");
+}
+
 #[test]
 fn argumentless_factory_result_calls_demand_validity_by_exact_binding() {
     let file = test_file_facts(

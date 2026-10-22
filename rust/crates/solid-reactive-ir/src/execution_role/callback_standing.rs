@@ -541,6 +541,9 @@ pub(crate) fn parameter_call_standing(
     // Every other reference -- an alias, an argument (`list.forEach(cb)`),
     // a member -- may run the callback too, so ruling out the direct calls
     // proves no absence (review round 4).
+    // A `typeof p` or a `p.length` test cannot run it, so those references
+    // are not an escape (ADR 0338).
+    let inert = std::cell::OnceCell::new();
     let only_direct_calls = function_file
         .ast
         .reference_declarations
@@ -550,7 +553,17 @@ pub(crate) fn parameter_call_standing(
             function_file.ast.calls.iter().any(|inner| {
                 sites.contains(&inner.span)
                     && function_file.ast.peel_ts_sugar_span(inner.callee) == *reference
-            })
+            }) || inert
+                .get_or_init(|| {
+                    solid_facts::ast::inert_parameter_references(
+                        std::path::Path::new(function_file.path.as_str()),
+                        &function_file.source,
+                        function.span,
+                        index,
+                    )
+                    .unwrap_or_default()
+                })
+                .contains(reference)
         });
     if standings.contains(&SiteStanding::Guaranteed) {
         Some(SiteStanding::Guaranteed)

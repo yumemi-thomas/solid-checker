@@ -324,7 +324,7 @@ pub(super) fn intrinsic_attribute_value(file: &solid_facts::FileFacts, value: Sp
 
 /// Whether a JSX element is an intrinsic (DOM) element: a lowercase, undotted
 /// tag, which JSX resolves as an element name rather than a binding.
-pub(super) fn intrinsic_element(
+pub(crate) fn intrinsic_element(
     file: &solid_facts::FileFacts,
     element: &solid_facts::ast::JsxElementFact,
 ) -> bool {

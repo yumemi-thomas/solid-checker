@@ -218,7 +218,7 @@ pub(super) fn classify_component_props(
             if function.parameters.len() > 1 || !lookup.function_may_be_component(file, function) {
                 continue;
             }
-            let (classification, forwarded) = classify_one_component(
+            let (classification, forwarded, spreads) = classify_one_component(
                 runtime,
                 facts,
                 lookup,
@@ -234,9 +234,10 @@ pub(super) fn classify_component_props(
             pending.push((
                 location(file.path.shared(), parameter.pattern),
                 forwarded.clone(),
+                spreads.clone(),
             ));
             if let Some(name) = parameter.names.first() {
-                pending.push((location(file.path.shared(), name.span), forwarded));
+                pending.push((location(file.path.shared(), name.span), forwarded, spreads));
             }
             by_declaration.insert(
                 location(file.path.shared(), parameter.pattern),
@@ -287,13 +288,43 @@ pub(super) fn classification_use(classification: &PropsReactivity, name: &str) -
 /// fixpoint from "contributes nothing", so a prop is proven static only when
 /// no chain of forwards reaches a reactive or unresolved value. A forward into
 /// a component whose own classification has no entry is unknown.
+///
+/// A spread of the parent's own props (`<Inner {...props} />`) carries only
+/// the reactive direction: every parent prop proven reactive becomes reactive
+/// here unless the element sets that name after the spread. The receiving
+/// component already escapes, so nothing is proven static through it.
 pub(super) fn resolve_forwarded_props(
     by_declaration: &mut HashMap<Location, PropsReactivity>,
-    pending: &[(Location, ForwardedProps)],
+    pending: &[(Location, ForwardedProps, Vec<SpreadForward>)],
 ) {
     loop {
         let mut changed = false;
-        for (declaration, forwarded) in pending {
+        for (declaration, _, spreads) in pending {
+            for (source, overridden) in spreads {
+                let Some(
+                    PropsReactivity::Enumerated { reactive, .. }
+                    | PropsReactivity::Escaping { reactive, .. },
+                ) = by_declaration.get(source)
+                else {
+                    continue;
+                };
+                let witnessed: Vec<String> = reactive
+                    .iter()
+                    .filter(|name| !overridden.contains(*name))
+                    .cloned()
+                    .collect();
+                if let Some(
+                    PropsReactivity::Enumerated { reactive, .. }
+                    | PropsReactivity::Escaping { reactive, .. },
+                ) = by_declaration.get_mut(declaration)
+                {
+                    for name in witnessed {
+                        changed |= reactive.insert(name);
+                    }
+                }
+            }
+        }
+        for (declaration, forwarded, _) in pending {
             for (name, sources) in forwarded {
                 let mut verdict = PropUse::Static;
                 for (source, prop, exact) in sources {
@@ -355,7 +386,7 @@ pub(super) fn classify_one_component(
     uses: &HashMap<(&str, solid_facts::core::Span), Vec<(usize, usize)>>,
     file: &FileFacts,
     function: &solid_facts::ast::FunctionFact,
-) -> (PropsReactivity, ForwardedProps) {
+) -> (PropsReactivity, ForwardedProps, Vec<SpreadForward>) {
     use solid_facts::core::Span;
     let mut forwarded = ForwardedProps::new();
     let name = crate::owners::component_binding_name(file, function).or(function.name.as_ref());
@@ -370,6 +401,7 @@ pub(super) fn classify_one_component(
                 accessor_values: BTreeSet::new(),
             },
             forwarded,
+            Vec::new(),
         );
     };
     // Escape hatches below only forfeit the *static* half of the proof. Each
@@ -441,6 +473,7 @@ pub(super) fn classify_one_component(
     let mut reactive = BTreeSet::new();
     let mut unresolved = BTreeSet::new();
     let mut accessor_values = BTreeSet::new();
+    let mut spreads = Vec::new();
     for (file_index, element_index) in component_uses {
         let use_file = &facts.files[*file_index];
         let element = &use_file.ast.jsx_elements[*element_index];
@@ -449,8 +482,18 @@ pub(super) fn classify_one_component(
         // explicit attribute, it can also overwrite one of this element's own
         // attributes with a static value. So this element witnesses nothing
         // in either direction; other elements still do.
+        //
+        // One shape still witnesses the reactive direction: the last spread
+        // is the enclosing component's own props object. rc.13's `merge`
+        // resolves each key lazily from the last source that has it, so a
+        // name no later attribute or child sets reads the parent's getter.
         if !element.spreads.is_empty() {
             escapes = true;
+            if let Some(forward) =
+                spread_of_own_props(lookup, entities, prop_sources, use_file, element)
+            {
+                spreads.push(forward);
+            }
             continue;
         }
         for attribute in &element.attributes {
@@ -560,6 +603,7 @@ pub(super) fn classify_one_component(
                 accessor_values,
             },
             forwarded,
+            spreads,
         );
     }
     (
@@ -569,6 +613,7 @@ pub(super) fn classify_one_component(
             accessor_values,
         },
         forwarded,
+        spreads,
     )
 }
 
@@ -581,6 +626,170 @@ pub(super) type ForwardedProps = BTreeMap<String, Vec<Forward>>;
 /// at the head of the forwarded chain, and whether the chain is exactly that
 /// one member (`props.a`, not `props.a.b`).
 pub(super) type Forward = (Location, String, bool);
+
+/// A call site whose last spread is the enclosing component's own props
+/// object (`<Inner {...props} label="x" />` inside `Outer`): the parent's
+/// props declaration, and the names the element sets after that spread
+/// (attributes, `children`), which the spread cannot supply.
+pub(super) type SpreadForward = (Location, BTreeSet<String>);
+
+/// The forward a spread call site makes when its last spread is exactly the
+/// props parameter of a component (the props object itself, still current,
+/// with nothing but proven views and const aliases attached to its
+/// declaration — the same identity `props.x` forwarding requires). Any other spread, or an
+/// attribute whose name cannot be read, forwards nothing.
+fn spread_of_own_props(
+    lookup: &SemanticLookup<'_>,
+    entities: &EntitySymbols,
+    prop_sources: &HashMap<SymbolId, (SymbolId, Location)>,
+    file: &FileFacts,
+    element: &solid_facts::ast::JsxElementFact,
+) -> Option<SpreadForward> {
+    let spread = element
+        .spreads
+        .iter()
+        .max_by_key(|spread| spread.span.start)?;
+    let argument = file.ast.peel_ts_sugar_span(spread.argument);
+    if !file.ast.identifiers.iter().any(|identifier| {
+        identifier.span == argument
+            && identifier.role == solid_facts::ast::IdentifierRole::Reference
+    }) {
+        return None;
+    }
+    let symbol = entities
+        .get(&location(file.path.shared(), argument))
+        .cloned()
+        .or_else(|| {
+            lookup
+                .binding_at_reference(file.path.as_str(), argument)
+                .map(|(_, _, symbol)| symbol)
+        })?;
+    let (_, declaration) = prop_sources.get(&symbol)?;
+    if entities.get(declaration) != Some(&symbol)
+        || !props_root_is_current_through_spreads(
+            lookup,
+            entities,
+            file,
+            declaration,
+            &symbol,
+            SPREAD_RECEIVER_DEPTH,
+        )
+        || !crate::local_access::props_root_attachments_are_views(
+            file,
+            prop_sources,
+            declaration,
+            &symbol,
+            entities,
+            lookup,
+        )
+    {
+        return None;
+    }
+    let mut overridden = BTreeSet::new();
+    for attribute in &element.attributes {
+        if attribute.span.start > spread.span.start {
+            overridden.insert(file.source_text(attribute.local_name)?.to_owned());
+        }
+    }
+    if !element.children.is_empty() {
+        overridden.insert("children".to_owned());
+    }
+    Some((declaration.clone(), overridden))
+}
+
+/// How many lone-spread receivers deep the inertness proof follows before it
+/// gives up (an unproven chain forwards nothing).
+const SPREAD_RECEIVER_DEPTH: usize = 4;
+
+/// Whether a props root still holds the getters its callers wrote, allowing
+/// one more kind of whole-object use than [`crate::local_access::props_root_is_current`]:
+/// a JSX spread into a component. When a source other than the props is
+/// provably never falsy, the compiler's `mergeProps(...)` is a view whose `set`
+/// and `deleteProperty` are no-ops on rc.13
+/// ([`crate::local_access::component_element_builds_view`]). Otherwise the
+/// callee may get the object itself (`createComponent(Child, props)`, or a
+/// `mergeProps` of an `undefined` second spread), so the receiver's own props
+/// root must be proven inert the same way.
+fn props_root_is_current_through_spreads(
+    lookup: &SemanticLookup<'_>,
+    entities: &EntitySymbols,
+    file: &FileFacts,
+    declaration: &Location,
+    symbol: &SymbolId,
+    depth: usize,
+) -> bool {
+    let Some(uses) = crate::local_access::props_root_unaccounted_uses(
+        file,
+        declaration,
+        symbol,
+        entities,
+        lookup,
+    ) else {
+        return false;
+    };
+    uses.iter().all(|span| {
+        let Some(element) = file.ast.jsx_elements.iter().find(|element| {
+            element
+                .spreads
+                .iter()
+                .any(|spread| file.ast.peel_ts_sugar_span(spread.argument) == *span)
+        }) else {
+            return false;
+        };
+        // Several sources are a `mergeProps` view only when one is provably
+        // never falsy; otherwise `merge` can return the spread props object
+        // itself (a second spread of an `undefined` identifier), exactly as
+        // a lone spread does, and the receiver must be proven inert.
+        crate::local_access::component_element_builds_view(file, element)
+            || (depth > 0
+                && lone_spread_receiver_is_inert(lookup, entities, file, element, depth - 1))
+    })
+}
+
+/// Whether the component a lone spread hands its props object to can neither
+/// write, delete nor alias it beyond further proven-inert spreads.
+fn lone_spread_receiver_is_inert(
+    lookup: &SemanticLookup<'_>,
+    entities: &EntitySymbols,
+    file: &FileFacts,
+    element: &solid_facts::ast::JsxElementFact,
+    depth: usize,
+) -> bool {
+    let Some((target_file, target)) =
+        lookup.function_called_at(file.path.as_str(), element.name.span)
+    else {
+        return false;
+    };
+    if target.rest_parameter
+        || target_file.ast.identifiers.iter().any(|identifier| {
+            target.body.contains(identifier.span)
+                && target_file.source_text(identifier.span) == Some("arguments")
+        })
+    {
+        return false;
+    }
+    match target.parameters.as_slice() {
+        [] => true,
+        [parameter] if parameter.shape == solid_facts::ast::BindingShape::Identifier => {
+            let Some(name) = parameter.names.first() else {
+                return false;
+            };
+            let declaration = location(target_file.path.shared(), name.span);
+            let Some(symbol) = entities.get(&declaration) else {
+                return false;
+            };
+            props_root_is_current_through_spreads(
+                lookup,
+                entities,
+                target_file,
+                &declaration,
+                symbol,
+                depth,
+            )
+        }
+        _ => false,
+    }
+}
 
 pub(super) fn passed_expression_is_accessor(
     lookup: &SemanticLookup<'_>,
@@ -759,19 +968,26 @@ pub(super) fn classify_passed_expression(
             // in the parent: decided once every component is classified.
             Some(symbol) if prop_sources.contains_key(&symbol) => {
                 let (_, declaration) = &prop_sources[&symbol];
-                // Only the props parameter itself: a `merge` result or a
-                // destructured binding attached to it is a view whose keys
-                // this does not map back to the parent's props.
+                // Only the props parameter itself: a view or alias attached
+                // to it never certifies a read of its own (its keys are not
+                // mapped back to the parent's props), and a destructured
+                // binding attached to it still blocks the forward.
                 if entities.get(declaration) != Some(&symbol)
                     || !crate::local_access::props_root_is_current(
                         file,
                         declaration,
                         &symbol,
                         entities,
+                        lookup,
                     )
-                    || prop_sources
-                        .iter()
-                        .any(|(other, (_, attached))| other != &symbol && attached == declaration)
+                    || !crate::local_access::props_root_attachments_are_views(
+                        file,
+                        prop_sources,
+                        declaration,
+                        &symbol,
+                        entities,
+                        lookup,
+                    )
                 {
                     result = PropUse::Unknown;
                     continue;

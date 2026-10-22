@@ -105,6 +105,46 @@ fn package_install_roots(facts: &ProjectFacts, package: &str) -> Vec<PathBuf> {
     roots
 }
 
+/// Which installed `solid-js` each analyzed file loads at runtime: the
+/// nearest `node_modules/solid-js` (with a `package.json`) in the file's
+/// directory or above, symlinks resolved. Two copies of one version are two
+/// instances however TypeScript merged their declarations.
+#[must_use]
+pub fn package_instance_evidence(
+    facts: &ProjectFacts,
+) -> solid_reactive_ir::PackageInstanceEvidence {
+    let mut by_directory: std::collections::HashMap<PathBuf, Option<String>> =
+        std::collections::HashMap::new();
+    let mut solid_js_by_file = BTreeMap::new();
+    for file in &facts.files {
+        let Some(directory) = Path::new(file.path.as_str()).parent() else {
+            continue;
+        };
+        // Node resolves from the file's real directory: a file reached
+        // through a symlinked workspace package sees the workspace's own
+        // `node_modules`, not the linking project's.
+        let directory = fs::canonicalize(directory).unwrap_or_else(|_| directory.to_path_buf());
+        let resolved = by_directory
+            .entry(directory.clone())
+            .or_insert_with(|| {
+                directory.ancestors().find_map(|ancestor| {
+                    let package = ancestor.join("node_modules").join("solid-js");
+                    package.join("package.json").is_file().then(|| {
+                        fs::canonicalize(&package)
+                            .unwrap_or(package)
+                            .to_string_lossy()
+                            .into_owned()
+                    })
+                })
+            })
+            .clone();
+        if let Some(resolved) = resolved {
+            solid_js_by_file.insert(file.path.to_string(), resolved);
+        }
+    }
+    solid_reactive_ir::PackageInstanceEvidence { solid_js_by_file }
+}
+
 /// The router evidence for `project`'s analysis of `facts`.
 #[must_use]
 pub fn router_install_evidence(project: &Path, facts: &ProjectFacts) -> RouterInstallEvidence {
@@ -410,6 +450,25 @@ mod tests {
             package_digest(&modified).as_deref(),
             Some(audited.core_digest)
         );
+    }
+
+    /// ADR 0334: the rc.8 fixture's router and the router-core beside it hash
+    /// to the digests recorded for `2.0.0-rc.8`.
+    #[test]
+    fn the_published_rc8_tanstack_router_hashes_to_its_audited_digests() {
+        let audited = crate::dialect::default_dialect()
+            .vocabulary
+            .audited_route_components("2.0.0-rc.8")
+            .expect("audited release");
+        let router = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../fixtures/reactive-ir/route-components/variants/rc8")
+            .join("node_modules/@tanstack/solid-router");
+        assert_eq!(
+            package_digest(&router).as_deref(),
+            Some(audited.router_digest)
+        );
+        let core = route_core_root(&router).expect("router-core beside the router");
+        assert_eq!(package_digest(&core).as_deref(), Some(audited.core_digest));
     }
 
     #[test]

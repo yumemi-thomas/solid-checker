@@ -408,7 +408,7 @@ pub(crate) fn function_symbol<'a>(
         .name
         .as_ref()
         .or_else(|| function_binding_name(file, function))?;
-    entities.get(&location(file.path.shared(), name.span))
+    entities.exact(&location(file.path.shared(), name.span))
 }
 
 pub(crate) fn argument_references_callback_symbol(
@@ -419,12 +419,12 @@ pub(crate) fn argument_references_callback_symbol(
     symbol_names: &HashMap<SymbolId, SymbolId>,
 ) -> bool {
     entities
-        .get(&location(file.path.shared(), argument.span))
+        .value_symbol(file, argument.span)
         .map(SymbolId::as_str)
         == Some(symbol)
         || argument.identifier_properties.iter().any(|property| {
             entities
-                .get(&location(file.path.shared(), property.span))
+                .exact(&location(file.path.shared(), property.span))
                 .map(SymbolId::as_str)
                 == Some(symbol)
                 || symbol_names.get(symbol).map(SymbolId::as_str) == file.source_text(property.span)

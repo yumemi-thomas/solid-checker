@@ -1,0 +1,3 @@
+{
+  "note": "ADR 0352: a computation a component creates reads a default-less context with no provider; its memo throws ContextNotFoundError when it runs (SC4002). The defaulted memo is the control."
+}

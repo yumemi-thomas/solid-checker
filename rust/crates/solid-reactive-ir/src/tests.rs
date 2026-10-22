@@ -83,6 +83,7 @@ fn runtime_environment_requires_exact_noncontradictory_selection() {
         framework_transforms: BTreeSet::from(["use-server".into()]),
         program_boundary: None,
         router_install: router_params::RouterInstallEvidence::default(),
+        package_instances: PackageInstanceEvidence::default(),
     };
     assert!(environment.validate().is_ok());
     assert_eq!(
@@ -485,7 +486,8 @@ fn exact_index_patch_replaces_local_alias_ids_without_retargeting_the_graph() {
             end_byte: start + 1,
         },
         symbol: symbol.into(),
-        symbol_unresolved: false,
+        // Each fixture entity is a one-byte identifier span: the symbol covers it.
+        symbol_claim: typefacts::SymbolClaim::Covering,
         type_descriptor: None,
         resolved_call: None,
         callability: None,

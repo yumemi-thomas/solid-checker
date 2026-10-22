@@ -1,0 +1,45 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-leaf-closed-hand-out/hand.ts",
+      "start": 156,
+      "end": 165,
+      "fixes": 1
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-leaf-closed-hand-out/hand.ts",
+      "start": 156,
+      "end": 165,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-leaf-closed-hand-out/hand.ts",
+      "start": 228,
+      "end": 240,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-leaf-closed-hand-out/hand.ts",
+      "start": 228,
+      "end": 240,
+      "fixes": 0
+    }
+  ]
+}

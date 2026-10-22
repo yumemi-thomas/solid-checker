@@ -1,0 +1,3 @@
+{
+  "note": "pins staticOnly's frame coverage: the SC1004 finding at the props read (App.tsx:9) is a frame of the diagnostic the runtime attributes to Parent's call site (App.tsx:17); it must not print as static-only"
+}

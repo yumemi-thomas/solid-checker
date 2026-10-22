@@ -14,18 +14,8 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/dependency-source-owner/App.tsx",
-      "start": 787,
-      "end": 813,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "uncertifiable",
-      "severity": "error",
+      "kind": "violation",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/dependency-source-owner/App.tsx",
       "start": 787,
       "end": 813,
@@ -109,6 +99,66 @@
       "path": "fixtures/reactive-ir/dependency-source-owner/App.tsx",
       "start": 3946,
       "end": 3971,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-owner/Joint.tsx",
+      "start": 318,
+      "end": 345,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-owner/Joint.tsx",
+      "start": 520,
+      "end": 548,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-owner/Joint.tsx",
+      "start": 719,
+      "end": 751,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-owner/Joint.tsx",
+      "start": 898,
+      "end": 922,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-owner/Joint.tsx",
+      "start": 1090,
+      "end": 1114,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-owner/Joint.tsx",
+      "start": 1090,
+      "end": 1114,
       "fixes": 0
     }
   ]

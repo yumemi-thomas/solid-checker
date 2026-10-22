@@ -913,6 +913,17 @@
       "code": "export const Case = (props: { html: string }) => <div innerHTML={props.html}>fallback</div>;\n"
     },
     {
+      "rule": "jsx-no-duplicate-props",
+      "dialect": "v2",
+      "expect": "removed-because-redundant",
+      "checker": "silent",
+      "allow": [
+        2322
+      ],
+      "why": "Lowercase `innerhtml` arm of SC8003, removed 2026-10-21. The rc.13 typings reject the attribute (TS2322, `Did you mean 'innerHTML'?`), and @solidjs/web writes it with setAttribute, so it is never a content slot. Upstream's lowercase alias (eslint-plugin-solid 0.14.5, rule line 77) is narrowed away, not demoted. The camel-case keystone above still reports.",
+      "code": "export const Case = () => <div innerhtml=\"x\">child</div>;\n"
+    },
+    {
       "rule": "until-in-tracked-scope",
       "dialect": "v2",
       "expect": "silent",
@@ -961,6 +972,41 @@
       "sourceExtension": "ts",
       "why": "The negative beside the keystone: after an `await` an async generator body continues from a microtask, outside any step, so the same `flush()` is legal there and the rule must stay quiet.",
       "code": "import { action, flush } from \"solid-js\";\nexport const save = action(async function* () {\n  await Promise.resolve();\n  flush();\n});\n"
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "reports",
+      "sourceExtension": "ts",
+      "why": "`EffectFunction` is `(v, p?) => (() => void) | void` and `flush(): void`, so `flush()` in a createEffect apply type-checks; the claim is the runtime's: the flush that runs effects is already in progress, so the nested call drains nothing in every build and the dev build warns FLUSH_IN_EFFECT_CALLBACK, which no type expresses.",
+      "code": "import { createEffect, createRoot, createSignal, flush } from \"solid-js\";\nexport const dispose = createRoot((dispose) => {\n  const [value] = createSignal(1);\n  createEffect(value, () => {\n    flush();\n  });\n  return dispose;\n});\n"
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "silent",
+      "sourceExtension": "ts",
+      "why": "The negative beside the keystone: a microtask created in the apply runs after the effect phase, where `flush()` drains normally, so the rule must stay quiet.",
+      "code": "import { createEffect, createRoot, createSignal, flush } from \"solid-js\";\nexport const dispose = createRoot((dispose) => {\n  const [value] = createSignal(1);\n  createEffect(value, () => {\n    queueMicrotask(() => flush());\n  });\n  return dispose;\n});\n"
+    },
+    {
+      "rule": "missing-owner",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "reports",
+      "why": "ADR 0349: `useContext<T>(context: Context<T>): T` type-checks in an event handler, and a default-less `createContext<T>()` is typed as `Context<T>`, so TypeScript has no complaint about either. The read throws NoOwnerError, because `getContext` finds no owner, which is an ownership fact tsc cannot see.",
+      "code": "import { createContext, useContext } from \"solid-js\";\nconst Ctx = createContext<number>();\nexport function Button() {\n  return <button onClick={() => useContext(Ctx)} />;\n}\n"
+    },
+    {
+      "rule": "missing-context-provider",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "reports",
+      "programBoundary": "closed",
+      "why": "ADR 0349: `useContext<T>(context: Context<T>): T` and a default-less `createContext<T>()` type-check in a component body, so TypeScript has no complaint. The read throws ContextNotFoundError because no provider exists in the closed program, a fact about the whole program that tsc cannot see.",
+      "code": "import { createContext, useContext } from \"solid-js\";\nconst Ctx = createContext<number>();\nexport function Panel() {\n  const value = useContext(Ctx);\n  return <i>{value}</i>;\n}\n"
     }
   ]
 }

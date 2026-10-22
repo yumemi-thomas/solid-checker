@@ -1545,8 +1545,13 @@ fn solid2_precision_corrections_are_end_to_end() {
     };
 
     // Each count pins one side of a proof. SC1002: the accessor call and the
-    // store member read inside the exact `Array#filter` callback, and nothing
-    // for the Promise, shadowed, unresolved, or wrapper-built callbacks.
+    // store member read inside the exact `Array#filter` callback, and the
+    // read in `PromiseCallbackAfterAwait` (ADR 0340), which is uncertifiable:
+    // the handler of `Promise.resolve(..).then(..)` returned, not awaited, by
+    // the async memo is queued before the memo adopts the promise, and the
+    // rc.13 runtime attributes no read to a handler that has no frame of the
+    // computation below it; nothing for the shadowed, unresolved, or
+    // wrapper-built callbacks.
     // The cleanup-return *value* rules are gone (every illegal return is a
     // TypeScript error against the real `EffectFunction` signature), so the
     // contextual, explicit, parenthesized, `as`-cast, member, and returned-call
@@ -1556,14 +1561,16 @@ fn solid2_precision_corrections_are_end_to_end() {
     // while the compound and update forms also read their target and a
     // computed key stays a read. SC3001/SC4001/SC4001: the one owner-backed
     // settled cleanup written as a literal callback reports SC3001 without a
-    // duplicate SC4001; the wrapper-built, identifier-referenced, and
-    // out-of-band cleanups are SC4001 only. The returned-call block adds three
+    // duplicate SC4001; the identifier-referenced and out-of-band cleanups are
+    // SC4001 only. A cleanup inside `wrap(...)`'s literal is not named as the
+    // callback, since a call's value is not its literal (ADR 0345 review D), so
+    // it is not reported. The returned-call block adds three
     // SC3004 (a produced `number` in both return spellings, plus the unowned
     // one), one SC9002 (`any`), and one SC4001 (a produced function is a real
     // cleanup); a produced function, `(() => void) | undefined`, and `void`
     // are legal and silent.
     for (rule, expected) in [
-        ("reactive-read-after-await", 2),
+        ("reactive-read-after-await", 3),
         ("invalid-cleanup-return", 0),
         ("cleanup-return-unresolved", 0),
         // Five placed reads, and three reads in the Promise, wrapper-built and
@@ -1575,9 +1582,10 @@ fn solid2_precision_corrections_are_end_to_end() {
         // asserted by span below. A count alone cannot tell those apart.
         ("no-direct-mutation", 4),
         ("leaf-owner-forbidden-call", 1),
-        // One proven returned cleanup plus four callbacks whose runtime
-        // return may be a cleanup and therefore cannot be certified safe.
-        ("missing-owner", 8),
+        // One fewer than before ADR 0345 review D: the wrapper-built callback is
+        // no longer named, so its cleanup is not reported; the rest of the
+        // breakdown is unchanged.
+        ("missing-owner", 7),
     ] {
         assert_rule_findings(&findings, rule, expected);
     }
@@ -1600,8 +1608,8 @@ fn solid2_precision_corrections_are_end_to_end() {
             .iter()
             .filter(|start| **start > non_literal_leaf)
             .count(),
-        3,
-        "the wrapped, referenced, and out-of-band cleanups stay unowned"
+        2,
+        "the referenced and out-of-band cleanups stay unowned; the wrapped one is not named (ADR 0345 review D)"
     );
 
     assert!(

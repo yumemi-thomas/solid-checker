@@ -341,6 +341,39 @@ fn the_flush_throw_follows_the_resolved_signals() {
     }
 }
 
+/// ADR 0341: `flush` from an effect's apply reports `FLUSH_IN_EFFECT_CALLBACK`
+/// on every signals release some review read from rc.1, and on none before it,
+/// none unread and none unresolved. The effect phase is `createEffect`'s apply
+/// alone: `createRenderEffect`'s first run is not queued.
+#[test]
+fn the_effect_phase_report_follows_the_resolved_signals() {
+    for (signals, reports) in [
+        (Some("2.0.0-rc.0"), false),
+        (Some("2.0.0-rc.1"), true),
+        (Some("2.0.0-rc.3"), true),
+        (Some("2.0.0-rc.8"), true),
+        (Some("2.0.0-rc.9"), true),
+        (Some("2.0.0-rc.13"), true),
+        (Some("2.0.0-rc.10"), false),
+        (Some("2.0.0-rc.15"), false),
+        (Some("2.0.0-beta.2"), false),
+        (None, false),
+    ] {
+        let (vocabulary, _) = analyzed(&triple(Some("2.0.0-rc.3"), signals, Some("2.0.0-rc.3")));
+        assert_eq!(vocabulary.flush_in_effect_callback, reports, "{signals:?}");
+        assert_eq!(
+            vocabulary.warns_inside_effect_phase(Primitive::Flush),
+            reports,
+            "{signals:?}"
+        );
+        assert!(!vocabulary.warns_inside_effect_phase(Primitive::Untrack));
+        assert!(vocabulary.callback_runs_in_effect_phase(Primitive::CreateEffect, 1));
+        assert!(!vocabulary.callback_runs_in_effect_phase(Primitive::CreateEffect, 0));
+        assert!(!vocabulary.callback_runs_in_effect_phase(Primitive::CreateRenderEffect, 1));
+        assert!(!vocabulary.callback_runs_in_effect_phase(Primitive::CreateMemo, 1));
+    }
+}
+
 /// ADR 0136: `createComponent` renders its first argument on every
 /// release the reviews read (rc.0-rc.9 all call `Comp` in place), so the
 /// answer is the same in every vocabulary, and no other name renders.
@@ -400,6 +433,42 @@ fn lazy_renders_its_loaded_default_only_on_solid_js_rc13() {
         !vocabulary_for(Release::Read(9), Release::Read(13), Release::Read(13))
             .lazy_renders_component
     );
+}
+
+/// ADR 0353: `render` and `hydrate` run `code` under the root they create on
+/// `@solidjs/web` rc.13 alone. Only the web owner decides it, whatever
+/// `solid-js` and `@solidjs/signals` resolve to.
+#[test]
+fn render_and_hydrate_create_a_root_only_on_web_rc13() {
+    for release in ["2.0.0-rc.3", "2.0.0-rc.9", "2.0.0-rc.14"] {
+        assert!(!analyzed(&same(release)).0.render_creates_root, "{release}");
+    }
+    assert!(analyzed(&same("2.0.0-rc.13")).0.render_creates_root);
+    for primitive in [Primitive::Render, Primitive::Hydrate] {
+        assert!(
+            vocabulary_for(Release::Read(13), Release::Read(13), Release::Read(13))
+                .callback_runs_in_created_root(primitive, 0),
+            "{primitive:?}"
+        );
+        assert!(
+            !vocabulary_for(Release::Read(13), Release::Read(13), Release::Read(9))
+                .callback_runs_in_created_root(primitive, 0),
+            "{primitive:?} with rc.9 web"
+        );
+        assert!(
+            vocabulary_for(Release::Read(9), Release::Read(9), Release::Read(13))
+                .callback_runs_in_created_root(primitive, 0),
+            "{primitive:?} with rc.13 web and rc.9 solid-js"
+        );
+    }
+    // Off rc.13 the callback's root is unaudited, so its writes are unplaced.
+    for primitive in [Primitive::Render, Primitive::Hydrate] {
+        assert!(Solid2::CONSERVATIVE.callback_root_is_unaudited(primitive, 0));
+        assert!(Solid2::RC9.callback_root_is_unaudited(primitive, 0));
+        assert!(!Solid2::RC13.callback_root_is_unaudited(primitive, 0));
+        assert!(!Solid2::RC13.callback_root_is_unaudited(primitive, 1));
+    }
+    assert!(!Solid2::RC9.callback_root_is_unaudited(Primitive::CreateRoot, 0));
 }
 
 /// ADR 0138: `Dynamic` renders `component` on every release the reviews
@@ -616,7 +685,7 @@ fn every_variant_has_its_own_key() {
     assert_eq!(
         Solid2::RC9.key(),
         Some(
-            "store-root-mutable+omit-predicate+until+flush-in-action+dynamic-static+store-setter-guards-roots"
+            "store-root-mutable+omit-predicate+until+flush-in-action+flush-in-effect-callback+dynamic-static+store-setter-guards-roots"
         )
     );
 }
@@ -640,6 +709,7 @@ fn the_conservative_answers_do_not_depend_on_the_audited_release() {
         StoreSetterRootGuard::Exempt
     );
     assert!(!conservative.flush_in_action);
+    assert!(!conservative.flush_in_effect_callback);
     assert_eq!(
         conservative.optimistic_store_setter,
         OptimisticStoreSetterGuard::Guarded
@@ -672,14 +742,20 @@ fn the_conservative_answers_do_not_depend_on_the_audited_release() {
         );
         assert_eq!(vocabulary.flush_in_action, conservative.flush_in_action);
         assert_eq!(
+            vocabulary.flush_in_effect_callback,
+            conservative.flush_in_effect_callback
+        );
+        assert_eq!(
             vocabulary.optimistic_store_setter,
             conservative.optimistic_store_setter
         );
     }
-    // Ids are spelled against it, so either candidate audited release
-    // keeps the id it has today.
+    // Ids are spelled against it. rc.3 is no longer the vocabulary that
+    // names nothing: it reports `flush` in an effect's apply (N6), which an
+    // installation whose signals nobody read does not, so its id carries that
+    // answer (ADR 0341).
     assert_eq!(conservative.key(), None);
-    assert_eq!(Solid2::RC3.key(), None);
+    assert_eq!(Solid2::RC3.key(), Some("flush-in-effect-callback"));
     assert!(Solid2::RC9.key().is_some());
 }
 
@@ -741,7 +817,9 @@ fn the_trait_answers_from_the_variant() {
             "{release}"
         );
     }
-    // Only `createRoot`'s own body is a created root.
+    // Only `createRoot`'s own body is a created root on the conservative
+    // vocabulary. `render` and `hydrate` join it on the audited rc.13 web
+    // alone (ADR 0353).
     assert!(Solid2.callback_runs_in_created_root(Primitive::CreateRoot, 0));
     for (primitive, argument) in [
         (Primitive::CreateRoot, 1),
@@ -750,10 +828,22 @@ fn the_trait_answers_from_the_variant() {
         (Primitive::Flush, 0),
         (Primitive::CreateMemo, 0),
         (Primitive::Render, 0),
+        (Primitive::Hydrate, 0),
     ] {
         assert!(
             !Solid2.callback_runs_in_created_root(primitive, argument),
             "{primitive:?} {argument}"
+        );
+    }
+    assert!(Solid2::RC13.callback_runs_in_created_root(Primitive::CreateRoot, 0));
+    for primitive in [Primitive::Render, Primitive::Hydrate] {
+        assert!(
+            Solid2::RC13.callback_runs_in_created_root(primitive, 0),
+            "{primitive:?}"
+        );
+        assert!(
+            !Solid2::RC13.callback_runs_in_created_root(primitive, 1),
+            "{primitive:?} 1"
         );
     }
     // `flush(fn)` creates no root: it keeps the caller's owner, as
@@ -845,4 +935,19 @@ fn every_review_names_a_document_that_exists() {
         assert!(known.from <= known.through && READ_RELEASES.contains(&known.through));
         assert!(OWNERS.iter().any(|owner| owner.package == known.package));
     }
+}
+
+/// ADR 0358: spread listener grammar belongs to the audited web runtime.
+#[test]
+fn spread_event_keys_require_web_rc13() {
+    let audited = vocabulary_for(Release::Read(9), Release::Read(9), Release::Read(13));
+    for key in ["onClick", "onclick", "onpointerdown", "on"] {
+        assert_eq!(audited.spread_key_is_event(key), Some(true), "{key}");
+    }
+    for key in ["title", "OnClick", "on:click", "prop:onClick"] {
+        assert_eq!(audited.spread_key_is_event(key), Some(false), "{key}");
+    }
+    let older_web = vocabulary_for(Release::Read(13), Release::Read(13), Release::Read(9));
+    assert_eq!(older_web.spread_key_is_event("onClick"), None);
+    assert_eq!(Solid2::CONSERVATIVE.spread_key_is_event("onClick"), None);
 }

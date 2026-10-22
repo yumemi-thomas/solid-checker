@@ -22,6 +22,16 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-config/variants/context/Read.tsx",
+      "start": 197,
+      "end": 207,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",

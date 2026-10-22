@@ -200,11 +200,19 @@ impl Finding {
             };
         }
         let mut evidence = vec![EvidenceStep {
-            message: if requirement.after_await {
+            message: if requirement.operation == crate::OwnerRequirementOperation::ContextProvider {
+                "the read runs under a reactive owner, and the closed program has no provider for this context, so Solid finds no value".into()
+            } else if requirement.after_await {
                 "this call runs after an `await`, from a promise continuation: the owner current before the `await` is not current after it, and no other owner is"
                     .into()
             } else if component_uncertain {
                 "component identity is unresolved, so this operation may execute with or without a reactive owner"
+                    .into()
+            } else if conditional_owner && requirement.caller_uncertain {
+                // An exported function is owned by its owned callers and unowned
+                // to any caller this build cannot see (its open-world seed); the
+                // runWithOwner wording would name a cause that is not there.
+                "this function is exported, and a caller solid-checker cannot see may supply no owner, so this operation may execute with or without a reactive owner"
                     .into()
             } else if conditional_owner {
                 "runWithOwner receives a nullable owner, so this operation may execute detached"
@@ -270,7 +278,9 @@ impl Finding {
                 location: Some(requirement.location.clone()),
             });
         }
-        if conditional_owner {
+        // The exported-caller clause below carries the open-world cause; the
+        // runWithOwner clause is for a nullable owner only (ADR 0349).
+        if conditional_owner && !requirement.caller_uncertain {
             message.push_str(
                 "; runWithOwner may receive null, so solid-checker cannot prove this execution has an owner",
             );

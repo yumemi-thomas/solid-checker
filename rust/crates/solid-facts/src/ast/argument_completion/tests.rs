@@ -40,6 +40,7 @@ fn number(index: usize) -> ParameterValue {
         truthy: Some(true),
         nullish: Some(false),
         undefined: Some(false),
+        length: None,
     }
 }
 
@@ -50,6 +51,7 @@ fn function(index: usize) -> ParameterValue {
         truthy: Some(true),
         nullish: Some(false),
         undefined: Some(false),
+        length: None,
     }
 }
 
@@ -221,5 +223,101 @@ function aliased(flag: boolean) {\n  if (arguments[0]) readA();\n}\n";
         )
         .is_none(),
         "`arguments` refuses"
+    );
+}
+
+fn getter(index: usize, length: u32) -> ParameterValue {
+    ParameterValue {
+        length: Some(length),
+        ..function(index)
+    }
+}
+
+/// `@solid-primitives/utils` `access`: `typeof v === "function" && !v.length
+/// ? v() : v`. A zero-length function is called on every path; a function
+/// with a parameter, or a value of unknown arity, is not decided.
+#[test]
+fn a_function_of_known_length_decides_a_length_test() {
+    let source = "declare function readIt(): number;\n\
+function access(v: any) {\n  return typeof v === \"function\" && !v.length ? readIt() : v;\n}\n\
+function exact(v: any) {\n  return v.length === 0 ? readIt() : 0;\n}\n\
+function reversed(v: any) {\n  return 1 > v.length ? readIt() : 0;\n}\n\
+function relational(v: any) {\n  return v.length >= 1 ? 0 : readIt();\n}\n\
+function optional(v: any) {\n  return v?.length === 0 ? readIt() : 0;\n}\n";
+    let site = ["readIt()"];
+    let decided = |name: &str, value: ParameterValue| standings(source, name, &[value], &site);
+    assert_eq!(decided("access", getter(0, 0)), [SiteStanding::Guaranteed]);
+    assert_eq!(decided("access", getter(0, 1)), [SiteStanding::Unreachable]);
+    assert_eq!(decided("access", function(0)), [SiteStanding::Possible]);
+    assert_eq!(decided("access", number(0)), [SiteStanding::Unreachable]);
+    assert_eq!(decided("exact", getter(0, 0)), [SiteStanding::Guaranteed]);
+    assert_eq!(decided("exact", getter(0, 2)), [SiteStanding::Unreachable]);
+    assert_eq!(
+        decided("reversed", getter(0, 0)),
+        [SiteStanding::Guaranteed]
+    );
+    assert_eq!(
+        decided("reversed", getter(0, 1)),
+        [SiteStanding::Unreachable]
+    );
+    assert_eq!(
+        decided("relational", getter(0, 0)),
+        [SiteStanding::Guaranteed]
+    );
+    assert_eq!(
+        decided("relational", getter(0, 3)),
+        [SiteStanding::Unreachable]
+    );
+    // A length is only a function's: a number's `.length` is not read here.
+    let mut numeric = number(0);
+    numeric.length = Some(0);
+    assert_eq!(decided("exact", numeric), [SiteStanding::Possible]);
+    // An optional chain is a different expression and decides nothing.
+    assert_eq!(decided("optional", getter(0, 0)), [SiteStanding::Possible]);
+}
+
+/// A `typeof p` or a `p.length` test cannot run `p`; a call, an alias or an
+/// argument may.
+#[test]
+fn only_a_type_or_length_test_is_an_inert_parameter_reference() {
+    use super::inert_parameter_references;
+    let source = "function tests(v: any) { return typeof v === \"string\" && v.length > 0 ? 1 : 0; }\n\
+function calls(v: any) { return v.length ? v() : 0; }\n\
+function aliases(v: any) { const w = v; return typeof v === \"function\" ? 0 : w; }\n\
+function member(v: any) { return v.length(); }\n";
+    let inert = |name: &str| {
+        let start = source.find(&format!("function {name}")).expect("function");
+        let end = start + source[start..].find("}\n").expect("end") + 1;
+        inert_parameter_references(
+            Path::new("test.ts"),
+            source,
+            Span::new(start as u32, end as u32),
+            0,
+        )
+        .expect("parses")
+        .len()
+    };
+    assert_eq!(inert("tests"), 2);
+    // `v.length` is inert and `v()` is not.
+    assert_eq!(inert("calls"), 1);
+    assert_eq!(inert("aliases"), 1);
+    assert_eq!(inert("member"), 0);
+}
+
+/// A hoisted function declaration runs whenever it is called, so an earlier
+/// `return` does not make a site in it unreachable; a function expression
+/// written after the `return` never exists, and a site in it is.
+#[test]
+fn a_hoisted_declaration_is_not_ordered_by_an_earlier_return() {
+    let source = "declare function readIt(): number;\n\
+function hoisted(v: any) {\n  return 1;\n  function inner() { return readIt(); }\n}\n\
+function expression(v: any) {\n  return 1;\n  const inner = () => readIt();\n}\n";
+    assert_eq!(
+        standings(source, "hoisted", &[function(0)], &["readIt()"]),
+        [SiteStanding::Possible]
+    );
+    assert_eq!(
+        standings(source, "expression", &[function(0)], &["readIt()"]),
+        [SiteStanding::Unreachable]
     );
 }

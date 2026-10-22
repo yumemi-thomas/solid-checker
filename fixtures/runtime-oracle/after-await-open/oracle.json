@@ -1,0 +1,25 @@
+{
+  "note": "SC1002 reach: shapes the runtime reports and the checker does not prove (docs/open-work.md section 1)",
+  "open": [
+    {
+      "code": "UNTRACKED_READ_AFTER_AWAIT",
+      "site": "App.tsx:11",
+      "reason": "a native promise's handler held in a variable before it is returned: the result is not syntactically the returned or awaited call"
+    },
+    {
+      "code": "UNTRACKED_READ_AFTER_AWAIT",
+      "site": "App.tsx:38",
+      "reason": "a `Promise<void>` read from a property is typed, not proven native: a thenable or subclass has that type"
+    },
+    {
+      "code": "UNTRACKED_READ_AFTER_AWAIT",
+      "site": "App.tsx:46",
+      "reason": "`Promise.race` of helpers is not followed; the loser's continuation is not awaited"
+    },
+    {
+      "code": "UNTRACKED_READ_AFTER_AWAIT",
+      "site": "App.tsx:57",
+      "reason": "an async IIFE awaited by the computation is not followed"
+    }
+  ]
+}

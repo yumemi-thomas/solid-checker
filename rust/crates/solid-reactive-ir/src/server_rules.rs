@@ -398,6 +398,27 @@ fn server_function_rich_argument(ctx: &AnalysisContext<'_>, draft: &mut ProgramD
                 .semantic_lookup
                 .function_called_at(file.path.as_str(), call.callee)
             else {
+                // A member read off a server function (`query.keyFor(x)`) is
+                // not that function, and nothing names it by its leading token.
+                // Unless TypeScript resolves the member to a declaration, whether
+                // its call crosses the transport is unproven: uncertain, never a
+                // violation. An invalid call is TypeScript's, as elsewhere here.
+                let unresolved_member =
+                    match ctx.semantic_lookup.resolved_callee_call(file, call.callee) {
+                        None => true,
+                        Some(resolved) => {
+                            resolved.validity == ResolvedCallValidity::Valid
+                                && resolved.declaration.is_none()
+                        }
+                    };
+                if unresolved_member && member_of_server_function(ctx, file, call.callee) {
+                    push_rich_argument_uncertainty(
+                        draft,
+                        file,
+                        call.arguments[0].span,
+                        "the member of a server function is not resolved, so whether its call crosses the transport is unproven",
+                    );
+                }
                 continue;
             };
             let server_function = function.has_directive(USE_SERVER)
@@ -704,6 +725,35 @@ enum SerializerProof {
     Enabled,
     Disabled,
     Unresolved,
+}
+
+/// Whether `callee` is a member read off a value whose exact identity is a
+/// server function (`query.keyFor`, with `query` a server function). The member
+/// is not that function: the leading token of the callee names the object only.
+fn member_of_server_function(
+    ctx: &AnalysisContext<'_>,
+    file: &solid_facts::FileFacts,
+    callee: Span,
+) -> bool {
+    let callee = file.ast.peel_ts_sugar_span(callee);
+    let Some(member) = file.ast.members.iter().find(|member| member.span == callee) else {
+        return false;
+    };
+    let Some(symbol) = ctx.entities.value_symbol(file, member.object) else {
+        return false;
+    };
+    let Some((declaration_file, function)) =
+        ctx.semantic_lookup.function_for_symbol(symbol.as_str())
+    else {
+        return false;
+    };
+    function.has_directive(USE_SERVER)
+        || (declaration_file
+            .ast
+            .module_directives
+            .iter()
+            .any(|directive| directive.value == USE_SERVER)
+            && declaration_file.path != file.path)
 }
 
 fn push_rich_argument_uncertainty(

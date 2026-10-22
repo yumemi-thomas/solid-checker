@@ -72,6 +72,12 @@ debug = "line-tables-only"
 [profile.dev.package."*"]
 debug = 0
 
+# Linux derives the daemon identity by hashing the whole executable; unoptimized
+# SHA-256 over a debug binary takes seconds and outlasts the idle-watchdog test's
+# window (the client's start-up, not the daemon, was the slow part).
+[profile.dev.package.sha2]
+opt-level = 3
+
 [profile.debugger]
 inherits = "dev"
 debug = 2

@@ -29,6 +29,8 @@ mod owner_graph;
 pub(crate) use owner_graph::*;
 mod missing_owners;
 pub(crate) use missing_owners::*;
+mod context_census;
+pub(crate) use context_census::*;
 mod owner_discovery;
 pub(crate) use owner_discovery::*;
 mod owner_context;
@@ -256,6 +258,15 @@ pub(crate) const OWNER_CONTEXT_PROVEN_UNOWNED: u8 = 16;
 /// scheduler's flush, runs with no owner. Kept as its own bit so the finding
 /// names that reason instead of a nullable `runWithOwner` owner.
 pub(crate) const OWNER_CONTEXT_LATER_RUN_UNOWNED: u8 = 32;
+/// The leaf body ([`OWNER_CONTEXT_LEAF`]) is created under a children-capable
+/// owner, so the body's own owner is the children-forbidden leaf owner: an
+/// `onCleanup` there throws (SC3001's claim) and a nested `onSettled` is queued
+/// out of band. A run-owned path ([`OWNER_CONTEXT_OWNED`]) is children-capable
+/// and carries no leaf shape, so the owner gate can tell a conditional leaf
+/// body from a plain one. A leaf body created unowned never carries this bit.
+pub(crate) const OWNER_CONTEXT_LEAF_OWNED: u8 = 64;
+/// A synchronous owner may have been left by an await on the call path.
+pub(crate) const OWNER_CONTEXT_MAY_RESUME_UNOWNED: u8 = 128;
 
 /// Whether a node's unowned context is *only* the open-world assumption an
 /// exported non-component entry seeds ([`owner_node`]), carried to this node
@@ -269,7 +280,9 @@ pub(crate) const OWNER_CONTEXT_LATER_RUN_UNOWNED: u8 = 32;
 /// first-run edge sets later-run), so the bare bit names the open world and
 /// nothing else. A requirement under it is a caller obligation exactly like
 /// the same call written inside the exported function itself, and is no more a
-/// proven violation one call-edge away.
+/// proven violation one call-edge away. A leaf body the open-world bit creates
+/// keeps the bare bit (`LEAF` is the leaf's shape, not a proof), so `LEAF` is
+/// not part of the test; a creation-owned leaf body is not open-world.
 const fn open_world_unowned_only(context: u8, node: &OwnerNode) -> bool {
     !node.component
         && !node.component_uncertain
@@ -278,13 +291,15 @@ const fn open_world_unowned_only(context: u8, node: &OwnerNode) -> bool {
                 | OWNER_CONTEXT_UNOWNED
                 | OWNER_CONTEXT_PROVEN_UNOWNED
                 | OWNER_CONTEXT_LATER_RUN_UNOWNED
-                | OWNER_CONTEXT_LEAF)
+                | OWNER_CONTEXT_LEAF_OWNED)
             == OWNER_CONTEXT_UNOWNED
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum OwnerEdgeKind {
     Preserve,
+    /// The source owner on an unsuspended path, or no owner after suspension.
+    MayResumeUnowned,
     Owned,
     Unowned,
     Conditional,
@@ -292,6 +307,25 @@ pub(crate) enum OwnerEdgeKind {
     /// owner on a later one.
     InheritsFirstRun,
     Leaf,
+    /// A ref application runs the callback with no owner, which is proven
+    /// unowned -- unless the callback is a generator. Calling a generator
+    /// returns an iterator and runs none of its body, so the target resolves
+    /// to [`OwnerEdgeKind::MayBeUnowned`] there.
+    RefApplied,
+    /// The callback may run with no owner, and nothing proves it: the bare
+    /// open-world unowned bit, a caller obligation that stays uncertifiable.
+    MayBeUnowned,
+    /// A function a ref expression calls while the expression evaluates
+    /// (ADR 0345). It runs under its enclosing function's owner, as
+    /// [`OwnerEdgeKind::Preserve`] does, and a source with no owner context
+    /// settles to the uncertain unowned bit ([`settle_eager_owners`]).
+    EagerCall,
+    /// The callback of a leaf owner that `onSettled` is, when the call sits in
+    /// another leaf body (the dialect's `leaf_owner_requires_owned_call_site`).
+    /// rc.13 queues `onSettled` under a children-forbidden owner, so the callback
+    /// runs with no owner whatever the enclosing leaf's owner: it is proven
+    /// unowned. Any other leaf callback takes [`OwnerEdgeKind::Leaf`].
+    QueuedLeaf,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -336,9 +370,16 @@ pub(crate) struct OwnerNode {
     pub(crate) body: Span,
     pub(crate) symbol: Option<SymbolId>,
     pub(crate) exported: bool,
+    /// A generator's body runs only when its iterator is iterated, never on
+    /// a call, so a ref application proves nothing about its owner.
+    pub(crate) generator: bool,
     pub(crate) component: bool,
     pub(crate) component_uncertain: bool,
     pub(crate) seed_context: u8,
+    /// An exported, named, non-component function of a closed program. Its
+    /// unknown-caller seed waits for the namespace census
+    /// ([`seed_namespace_hand_outs`], ADR 0347), which is not cached per file.
+    pub(crate) namespace_candidate: bool,
 }
 
 impl FunctionBoundary for OwnerNode {

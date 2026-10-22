@@ -18,10 +18,18 @@ use crate::owners::function_binding_name;
 
 mod callees;
 mod class_prototype;
+mod closed_members;
 mod completion;
 mod components;
+mod compound;
+mod event_delivery;
+mod identity_wrappers;
+pub(crate) use identity_wrappers::identity_wrapped_literal_span;
+mod initialization;
+mod intrinsics;
 mod member_values;
 mod primitive_proof;
+pub(crate) use intrinsics::mentions_word;
 
 /// Functions by `(path, span)`: the proven components, then the escaped ones
 /// among them ([`SemanticLookup::escaped_component_functions`]).
@@ -129,6 +137,23 @@ pub(crate) fn returns_source_root(file: &FileFacts) -> bool {
 }
 
 pub(super) fn binding_written(file: &FileFacts, declaration: Span) -> bool {
+    binding_written_by(file, declaration, false)
+}
+
+/// [`binding_written`], except that a member write whose object is wrapped in
+/// TypeScript (`(c as X).p = v`, `c!.p = v`) writes a member of the value, not
+/// the binding, as the plain `c.p = v` does. Identity wrappers use this reading;
+/// the other binding analyses keep the conservative one above.
+pub(super) fn binding_written_through_wrappers(file: &FileFacts, declaration: Span) -> bool {
+    binding_written_by(file, declaration, true)
+}
+
+fn binding_written_by(file: &FileFacts, declaration: Span, through_wrappers: bool) -> bool {
+    // A direct `eval` reaches every binding visible where it is written and
+    // can rebind it (`eval("go = () => {}")`) with no static reference.
+    if crate::interproc::property_gets::direct_eval_in(file, Span::new(0, u32::MAX)) {
+        return true;
+    }
     // A redeclaration (`var xs = …` over a parameter, a second `function f`)
     // writes the same binding without any reference. Any other declaration
     // of the same name in the scope counts, a shadowing one included.
@@ -169,11 +194,14 @@ pub(super) fn binding_written(file: &FileFacts, declaration: Span) -> bool {
         .filter(|(_, declared)| *declared == declaration)
         .any(|(reference, _)| {
             targets.iter().any(|target| target.contains(*reference))
-                && !file
-                    .ast
-                    .members
-                    .iter()
-                    .any(|member| member.object == *reference)
+                && !file.ast.members.iter().any(|member| {
+                    let object = if through_wrappers {
+                        file.ast.peel_ts_sugar_span(member.object)
+                    } else {
+                        member.object
+                    };
+                    object == *reference
+                })
         })
 }
 
@@ -385,11 +413,26 @@ pub(super) enum ComponentStatus {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct EntitySymbols {
     pub(super) by_path: HashMap<String, HashMap<(u64, u64), SymbolId>>,
+    /// The entries of `by_path` whose symbol names the whole span
+    /// (`EntityFact::symbol_covers_span`).
+    pub(super) exact_by_path: HashMap<String, HashMap<(u64, u64), SymbolId>>,
 }
 
 impl EntitySymbols {
+    /// The symbol of the entity at `location`, whatever its span. At a call
+    /// span this is the callee's; at a member span, the object's. Use it for a
+    /// callee or a declaration position only.
     pub(super) fn get(&self, location: &Location) -> Option<&SymbolId> {
         self.by_path
+            .get(location.path.as_ref())
+            .and_then(|entities| entities.get(&(location.start_byte, location.end_byte)))
+    }
+
+    /// The symbol that is the value at exactly `location`: an entity whose
+    /// symbol names the whole span. A callback's or a value's identity is read
+    /// here, so a call or member span never answers with a token inside it.
+    pub(super) fn exact(&self, location: &Location) -> Option<&SymbolId> {
+        self.exact_by_path
             .get(location.path.as_ref())
             .and_then(|entities| entities.get(&(location.start_byte, location.end_byte)))
     }
@@ -398,6 +441,37 @@ impl EntitySymbols {
         self.by_path
             .get(path)
             .and_then(|entities| entities.get(&(u64::from(span.start), u64::from(span.end))))
+    }
+
+    /// The symbol of the value `span` denotes, when that value is one identifier
+    /// (ADR 0346). TypeScript wrappers keep the value (`h as X`, `h!`,
+    /// `h satisfies X`), so the identity is the identifier's symbol:
+    ///
+    /// - the covering symbol at the peeled span, when the entity exists there;
+    /// - else, when the peeled span is a single identifier that starts at the
+    ///   span's first byte, the symbol at the span itself. An entity names the
+    ///   symbol at its first byte, and that token is the identifier.
+    ///
+    /// A call, a member or any other expression answers with nothing: the
+    /// token at its first byte is a callee or an object, not the value.
+    pub(crate) fn value_symbol(
+        &self,
+        file: &solid_facts::FileFacts,
+        span: Span,
+    ) -> Option<&SymbolId> {
+        let path = file.path.as_str();
+        let peeled = file.ast.peel_ts_sugar_span(span);
+        if let Some(symbol) = self
+            .exact_by_path
+            .get(path)
+            .and_then(|entities| entities.get(&(u64::from(peeled.start), u64::from(peeled.end))))
+        {
+            return Some(symbol);
+        }
+        if peeled.start != span.start || !crate::owners::is_identifier_span(file, peeled) {
+            return None;
+        }
+        self.at(path, span)
     }
 }
 
@@ -663,6 +737,8 @@ pub(super) struct ResultAccessForwarded {
 /// never pay for an index.
 pub(super) struct SemanticLookup<'a> {
     object_members: OnceLock<crate::object_members::Targets>,
+    /// ADR 0358: the handlers each intrinsic element's spread supplies.
+    spread_handlers: OnceLock<crate::object_members::SpreadTargets>,
     literal_receiver_members: OnceLock<HashSet<(String, Span)>>,
     facts: &'a ProjectFacts,
     /// The Solid-version vocabulary this build analyzes with. Every consumer
@@ -679,10 +755,13 @@ pub(super) struct SemanticLookup<'a> {
     entities: &'a EntitySymbols,
     symbol_names: &'a HashMap<SymbolId, SymbolName>,
     functions_by_symbol: OnceLock<HashMap<&'a str, SymbolFunction>>,
+    /// ADR 0346: the project's identity wrappers, by declaration symbol.
+    identity_wrappers: OnceLock<HashMap<&'a str, usize>>,
     /// ADR 0319: every literal's invocation-flow answer.
     invocation_flow_answers: OnceLock<HashMap<(String, Span), crate::ExecutionRole>>,
     /// The literals whose every invocation is a host event dispatch.
-    unowned_event_literals: OnceLock<HashSet<(String, Span)>>,
+    event_invoked_literals: OnceLock<HashSet<(String, Span)>>,
+    synchronous_event_dispatch: OnceLock<bool>,
     /// ADR 0320: whether some call may copy keys into an existing object.
     objects_assigned_into: OnceLock<bool>,
     router_params: OnceLock<crate::router_params::RouterParamsStatus>,
@@ -694,6 +773,10 @@ pub(super) struct SemanticLookup<'a> {
     /// Review round 1 of ADR 0293: whether some file may define a property
     /// reflectively ([`Self::property_may_be_defined_reflectively`]).
     reflective_property_definition: OnceLock<bool>,
+    /// ADR 0349: the Promise and array-iteration premises, by their tripwires.
+    intrinsics: OnceLock<intrinsics::Intrinsics>,
+    /// ADR 0351: each member read that names a closed object literal's function.
+    closed_members: OnceLock<HashMap<(&'a str, Span), Span>>,
     entities_by_location: OnceLock<HashMap<(&'a str, u64, u64), &'a EntityFact>>,
     contained_entities_by_path: OnceLock<HashMap<&'a str, Vec<&'a EntityFact>>>,
     descriptors_by_symbol: OnceLock<HashMap<&'a str, &'a TypeDescriptor>>,
@@ -703,8 +786,15 @@ pub(super) struct SemanticLookup<'a> {
     jsx_call_sites: OnceLock<HashMap<(&'a str, Span), CallSiteLoading>>,
     declaration_symbols: OnceLock<DeclarationSymbols<'a>>,
     function_call_sites: OnceLock<HashMap<(&'a str, Span), Vec<FunctionCallSite>>>,
+    /// ADR 0339: references to function-valued bindings not proven to follow
+    /// their declarators.
+    initialization: initialization::State,
+    /// ADR 0342: the member values of compound components that tags render.
+    compound: compound::State<'a>,
     prop_render_sites: OnceLock<PropRenderSites<'a>>,
     direct_value_aliases: OnceLock<HashSet<SymbolId>>,
+    /// The closed program's namespace census (ADR 0347), set once per build.
+    namespace_hand_outs: OnceLock<crate::attribution::NamespaceHandOuts>,
     bindings_by_symbol: OnceLock<HashMap<SymbolId, BindingResolution>>,
     bindings_by_reference: OnceLock<BindingsByReference>,
     files_by_path: OnceLock<HashMap<&'a str, usize>>,
@@ -732,6 +822,8 @@ pub(super) struct SemanticLookup<'a> {
     /// of its own parameters in a condition or a logical operand, the only
     /// functions a call's arguments can decide anything in.
     parameter_testing_functions: OnceLock<HashSet<(&'a str, Span)>>,
+    /// ADR 0338: whether some analysed file may patch `Function.prototype.bind`.
+    function_bind_patched: OnceLock<bool>,
     /// ADR 0292: `(path, function span, property span)` for each object
     /// property that is a proven component's one route, the `default` of the
     /// module a dialect component loader renders.
@@ -833,6 +925,29 @@ impl<'a> SemanticLookup<'a> {
         self
     }
 
+    /// Records the closed program's namespace census (ADR 0347). The pipeline
+    /// sets it once per build, before any owner pass reads it.
+    pub(crate) fn set_namespace_hand_outs(&self, hand_outs: crate::attribution::NamespaceHandOuts) {
+        let _ = self.namespace_hand_outs.set(hand_outs);
+    }
+
+    /// Whether the program names the function at `function` in the module at
+    /// `path` as a value it hands out (ADR 0347, amendment): a static member read or
+    /// a named dynamic-import read. Until the census is set, nothing is.
+    pub(crate) fn hands_out_by_name(&self, path: &str, function: Span) -> bool {
+        self.namespace_hand_outs
+            .get()
+            .is_some_and(|hand_outs| hand_outs.named(path, function))
+    }
+
+    /// Whether the module at `path`'s namespace escapes with no name the
+    /// analysis can read (ADR 0347, amendment). Until the census is set, nothing does.
+    pub(crate) fn escapes_unnamed(&self, path: &str) -> bool {
+        self.namespace_hand_outs
+            .get()
+            .is_some_and(|hand_outs| hand_outs.escapes_unnamed(path))
+    }
+
     pub(super) fn new(
         facts: &'a ProjectFacts,
         ast_indexes: &'a HashMap<solid_facts::core::SourcePath, CachedAstFileIndex>,
@@ -851,6 +966,7 @@ impl<'a> SemanticLookup<'a> {
         );
         Self {
             object_members: OnceLock::new(),
+            spread_handlers: OnceLock::new(),
             literal_receiver_members: OnceLock::new(),
             facts,
             dialect,
@@ -860,13 +976,17 @@ impl<'a> SemanticLookup<'a> {
             entities,
             symbol_names,
             functions_by_symbol: OnceLock::new(),
+            identity_wrappers: OnceLock::new(),
             invocation_flow_answers: OnceLock::new(),
-            unowned_event_literals: OnceLock::new(),
+            event_invoked_literals: OnceLock::new(),
+            synchronous_event_dispatch: OnceLock::new(),
             objects_assigned_into: OnceLock::new(),
             router_params: OnceLock::new(),
             route_component_values: OnceLock::new(),
             assigned_member_names: OnceLock::new(),
             reflective_property_definition: OnceLock::new(),
+            intrinsics: OnceLock::new(),
+            closed_members: OnceLock::new(),
             entities_by_location: OnceLock::new(),
             contained_entities_by_path: OnceLock::new(),
             descriptors_by_symbol: OnceLock::new(),
@@ -876,8 +996,11 @@ impl<'a> SemanticLookup<'a> {
             jsx_call_sites: OnceLock::new(),
             declaration_symbols: OnceLock::new(),
             function_call_sites: OnceLock::new(),
+            initialization: initialization::State::default(),
+            compound: compound::State::default(),
             prop_render_sites: OnceLock::new(),
             direct_value_aliases: OnceLock::new(),
+            namespace_hand_outs: OnceLock::new(),
             bindings_by_symbol: OnceLock::new(),
             bindings_by_reference: OnceLock::new(),
             files_by_path: OnceLock::new(),
@@ -895,6 +1018,7 @@ impl<'a> SemanticLookup<'a> {
             parameter_completion_calls: OnceLock::new(),
             never_returning_calls: OnceLock::new(),
             parameter_testing_functions: OnceLock::new(),
+            function_bind_patched: OnceLock::new(),
             lazy_default_render_witnesses: OnceLock::new(),
             effect_apply_regions: OnceLock::new(),
             effect_apply_calls: OnceLock::new(),
@@ -1160,6 +1284,20 @@ impl<'a> SemanticLookup<'a> {
             // every file (a history in one decides what another reads).
             hasher.update(b"router-params\0");
             hasher.update([u8::from(self.router_params().applies())]);
+            // ADR 0346: a wrapper in another file decides whether a call hands
+            // back a callback literal, so every wrapper's identity is digested.
+            hasher.update(b"identity-wrappers\0");
+            let mut wrappers = self.identity_wrappers().iter().collect::<Vec<_>>();
+            wrappers.sort_unstable();
+            for (symbol, index) in wrappers {
+                hasher.update(
+                    u64::try_from(symbol.len())
+                        .unwrap_or(u64::MAX)
+                        .to_le_bytes(),
+                );
+                hasher.update(symbol.as_bytes());
+                hasher.update(u64::try_from(*index).unwrap_or(u64::MAX).to_le_bytes());
+            }
             // ADR 0325: an imported constant's primitive-ness is another
             // file's fact.
             hasher.update(b"imported-primitive-consts\0");
@@ -1210,6 +1348,22 @@ impl<'a> SemanticLookup<'a> {
                     hasher.update([u8::from(dom)]);
                 }
             }
+            // ADR 0339: a mention of a function-valued binding that may run
+            // before its declarator supplies no call site or reachability
+            // edge; another module's imports decide it.
+            hasher.update(b"uninitialized-references\0");
+            let mut withheld = self
+                .uninitialized_references()
+                .iter()
+                .flat_map(|(path, spans)| spans.iter().map(move |span| (path.as_str(), *span)))
+                .collect::<Vec<_>>();
+            withheld.sort_unstable();
+            for (path, span) in withheld {
+                hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
+                hasher.update(path.as_bytes());
+                hasher.update(span.start.to_le_bytes());
+                hasher.update(span.end.to_le_bytes());
+            }
             let mut member_targets = self.object_member_targets().iter().collect::<Vec<_>>();
             member_targets.sort_unstable_by(|a, b| {
                 (a.0.path.as_ref(), a.0.start_byte, a.0.end_byte).cmp(&(
@@ -1229,6 +1383,34 @@ impl<'a> SemanticLookup<'a> {
                 hasher.update(span.start.to_le_bytes());
                 hasher.update(span.end.to_le_bytes());
             }
+            // A remote handler replacement moves the exact function spans
+            // cached by the owner fragments, even when the spread is unchanged.
+            let mut spreads = self.spread_handler_targets().iter().collect::<Vec<_>>();
+            spreads.sort_unstable_by_key(|(site, _)| {
+                (site.path.as_ref(), site.start_byte, site.end_byte)
+            });
+            hasher.update(b"spread-handler-targets\0");
+            for (site, targets) in spreads {
+                hasher.update(
+                    u64::try_from(site.path.len())
+                        .unwrap_or(u64::MAX)
+                        .to_le_bytes(),
+                );
+                hasher.update(site.path.as_bytes());
+                hasher.update(site.start_byte.to_le_bytes());
+                hasher.update(site.end_byte.to_le_bytes());
+                hasher.update([u8::from(targets.is_some())]);
+                if let Some(targets) = targets {
+                    let mut targets = targets.iter().collect::<Vec<_>>();
+                    targets.sort_unstable();
+                    for (path, span) in targets {
+                        hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
+                        hasher.update(path.as_bytes());
+                        hasher.update(span.start.to_le_bytes());
+                        hasher.update(span.end.to_le_bytes());
+                    }
+                }
+            }
             // Returned-source proofs inspect callee syntax and binding facts,
             // even when its public type and read summary do not change. Bind
             // the byte identity of every file that can hold such a proof (a
@@ -1247,6 +1429,8 @@ impl<'a> SemanticLookup<'a> {
                 hasher.update(path.as_bytes());
                 hasher.update(file.source_hash.as_str().as_bytes());
             }
+            hasher.update(b"synchronous-event-dispatch\0");
+            hasher.update([u8::from(self.synchronous_event_dispatch_present())]);
             // ADR 0319: an invocation-flow proof follows a function value
             // through any file of a closed program -- bindings, returns,
             // object members, callee parameters, component props -- so a
@@ -1269,9 +1453,9 @@ impl<'a> SemanticLookup<'a> {
                     hasher.update([0]);
                 }
                 // The owner seeds read the same walk's owner answers.
-                let mut literals = self.unowned_event_literals().iter().collect::<Vec<_>>();
+                let mut literals = self.event_invoked_literals().iter().collect::<Vec<_>>();
                 literals.sort_unstable();
-                hasher.update(b"unowned-event-literals\0");
+                hasher.update(b"event-invoked-literals\0");
                 for (path, span) in literals {
                     hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
                     hasher.update(path.as_bytes());
@@ -1475,6 +1659,12 @@ impl<'a> SemanticLookup<'a> {
             .get_or_init(|| crate::object_members::index(self.facts, self))
     }
 
+    /// ADR 0358: what each spread argument of an intrinsic element supplies.
+    pub(crate) fn spread_handler_targets(&self) -> &crate::object_members::SpreadTargets {
+        self.spread_handlers
+            .get_or_init(|| crate::object_members::spread_index(self.facts, self))
+    }
+
     pub(super) fn literal_receiver_members(&self) -> &HashSet<(String, Span)> {
         self.literal_receiver_members
             .get_or_init(|| crate::object_members::literal_receiver_members(self))
@@ -1502,7 +1692,7 @@ impl<'a> SemanticLookup<'a> {
         span: Span,
     ) -> Option<solid_facts::TypeScriptSymbol<'a>> {
         let entity = self.entity_at(path, span)?;
-        if entity.symbol_unresolved || entity.symbol.is_empty() {
+        if entity.symbol_unresolved() || entity.symbol.is_empty() {
             return None;
         }
         self.symbols_by_id().get(entity.symbol.as_ref()).copied()
@@ -1518,11 +1708,11 @@ impl<'a> SemanticLookup<'a> {
             .get_or_init(|| crate::execution_role::invocation_flow_answers(self))
     }
 
-    /// The literals whose every invocation is a host event dispatch, for the
-    /// owner seeds; see [`crate::execution_role::unowned_event_literals`].
-    pub(crate) fn unowned_event_literals(&self) -> &HashSet<(String, Span)> {
-        self.unowned_event_literals
-            .get_or_init(|| crate::execution_role::unowned_event_literals(self))
+    /// The literals whose every invocation comes through event delivery, for the
+    /// owner seeds; see [`crate::execution_role::event_invoked_literals`].
+    pub(crate) fn event_invoked_literals(&self) -> &HashSet<(String, Span)> {
+        self.event_invoked_literals
+            .get_or_init(|| crate::execution_role::event_invoked_literals(self))
     }
 
     pub(super) fn tuple_iteration_may_be_mutated(&self) -> bool {

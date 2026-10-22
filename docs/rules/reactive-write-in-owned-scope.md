@@ -46,6 +46,15 @@ same-named module function. A root body taken from another module, or from a
 value the checker cannot resolve to one declaration, is not judged as a root
 body.
 
+`render(code, el)` and `hydrate(code, el)` run `code` the same way on
+`@solidjs/web` rc.13 (ADR 0353). `render` calls `code()` inside the
+`createRoot` it makes (`dist/web.dev.js:488-495`), and `hydrate` reaches that
+`render` on every path (`:1521-1620`), so a setter directly in `code`, or in a
+helper only `code` calls, is reported as in a `createRoot` body. Only rc.13's
+`@solidjs/web` was read. On every other release a write directly in `code` is
+uncertifiable: whether a root wraps it was not measured, so it is neither
+reported nor legal.
+
 The same exemption covers component bodies. In dev builds `solid-js` runs every
 component body under `createRoot(…, { transparent: true })`, so a store setter
 directly in a component body, or reached from it through `untrack`,
@@ -148,6 +157,9 @@ createMemo(() => setDoubled(count() * 2));
 
 // A root body runs under the root, a children-capable owner.
 createRoot(() => setCount(1));
+
+// render's code callback runs under the root render creates (rc.13).
+render(() => setCount(1), document.body);
 
 // flush(fn) keeps the memo's owner, inline or by name.
 createMemo(() => flush(() => setCount(2)));

@@ -26,8 +26,8 @@ export function App() {
           rendering, under the component's owner (runtime-probed). */}
       <div ref={tip(createMemo(() => count()))} />
       {/* Negative: a memo inside a root the apply callback creates is owned
-          by that root. The createRoot call itself stays reported: the rule's
-          premise is that a root created per element is a detached owner. */}
+          by that root. The createRoot call itself is uncertifiable: its
+          allocation alone does not prove an undisposed lifetime (ADR 0355). */}
       <div
         ref={element => {
           createRoot(dispose => {

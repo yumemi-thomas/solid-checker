@@ -167,3 +167,46 @@ fn completion_cover_uses_dead_returns_only_as_extra_fallthrough() {
         Some(false)
     );
 }
+
+#[test]
+fn owner_call_cover_includes_catchable_throws_and_refuses_deferred_control() {
+    for (body, expected) in [
+        ("if(flag) a(); else b();", Some(true)),
+        ("if(flag) { a(); return; } else b();", Some(true)),
+        ("if(flag) return a(); else return b();", Some(true)),
+        ("if(flag) a();", Some(false)),
+        ("if(flag) return; else a();", Some(false)),
+        ("if(flag) throw 0; else a();", Some(false)),
+        ("throw 0; a();", Some(false)),
+        ("a(); throw 0;", Some(true)),
+        (
+            "class C { static value = (() => { throw 0; })(); } a();",
+            None,
+        ),
+        ("try { a(); } catch {}", None),
+        ("while(flag) a();", None),
+        ("flag ? a() : b();", Some(false)),
+        ("const later = () => a();", Some(false)),
+        ("obj?.a();", Some(false)),
+    ] {
+        let source = format!("function test(flag) {{ {body} }}");
+        let candidates = ["a()", "b()"]
+            .into_iter()
+            .flat_map(|needle| {
+                source
+                    .match_indices(needle)
+                    .map(move |(at, _)| Span::new(at as u32, (at + needle.len()) as u32))
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            completion_call_cover_including_throws(
+                Path::new("test.js"),
+                &source,
+                Span::new(source.find('{').unwrap() as u32, source.len() as u32),
+                &candidates
+            ),
+            expected,
+            "{body}"
+        );
+    }
+}

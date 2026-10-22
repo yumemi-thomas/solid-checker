@@ -1,4 +1,4 @@
-use super::{duplicate_slot, is_lowercase_led, is_numeric_literal};
+use super::{check_file, duplicate_slot, is_lowercase_led, is_numeric_literal};
 
 /// The compiler lowers delegated events to `el.$$event = handler`, a
 /// property write where a later occurrence overwrites an earlier one —
@@ -149,4 +149,73 @@ fn classifies_element_names_by_leading_case() {
     assert!(is_lowercase_led("div"));
     assert!(!is_lowercase_led("Component"));
     assert!(!is_lowercase_led("Foo.Bar"));
+}
+
+/// Solid 2.0 has no lowercase `innerhtml` content slot. rc.13 types only the
+/// camel-case name (TS2322 on the lowercase spelling), and the runtime writes
+/// an unknown lowercase prop with `setAttribute`, so it competes with nothing.
+/// The camel-case control beside it must still report.
+#[test]
+fn lowercase_innerhtml_is_not_a_content_source() {
+    let lowercase = violations_for(r#"export const Case = () => <div innerhtml="x">child</div>;"#);
+    assert_eq!(lowercase.len(), 0, "lowercase innerhtml is an attribute");
+
+    let camel = violations_for(r#"export const Case = () => <div innerHTML="x">child</div>;"#);
+    assert_eq!(
+        camel.len(),
+        1,
+        "camel-case innerHTML competes with children"
+    );
+    assert_eq!(camel[0].rule, "jsx-no-duplicate-props");
+}
+
+/// `innerText` is a content source on rc.13: `ChildProperties` lists it, so a
+/// write replaces the element's child nodes. Upstream has no innerText arm, so
+/// this is a kept divergence. A lone `innerText` and a component's `innerText`
+/// beside children stay silent.
+#[test]
+fn inner_text_is_a_content_source() {
+    let beside_children =
+        violations_for(r#"export const Case = () => <div innerText="x">child</div>;"#);
+    assert_eq!(beside_children.len(), 1, "innerText competes with children");
+    assert_eq!(beside_children[0].rule, "jsx-no-duplicate-props");
+
+    let alone = violations_for(r#"export const Case = () => <div innerText="x" />;"#);
+    assert_eq!(
+        alone.len(),
+        0,
+        "a lone innerText is the only content source"
+    );
+
+    let component =
+        violations_for(r#"export const Case = () => <Widget innerText="x">child</Widget>;"#);
+    assert_eq!(
+        component.len(),
+        0,
+        "a component's innerText is an ordinary prop"
+    );
+}
+
+fn violations_for(source: &str) -> Vec<crate::StaticViolation> {
+    use solid_facts::{
+        FileFacts, ast,
+        compiler::{COMPILER_FACTS_PROTOCOL, ExecutionMap},
+        core::Generation,
+    };
+    let ast = ast::extract("app.tsx", source).unwrap();
+    let compiler = ExecutionMap {
+        compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
+        source_hash: ast.source.hash.clone(),
+        semantic_model: Default::default(),
+        tracked_regions: vec![],
+        untracked_regions: vec![],
+        discarded_regions: vec![],
+        ownership_regions: vec![],
+        callback_roles: vec![],
+        jsx_operations: vec![],
+    };
+    let file = FileFacts::new(Generation::new(1).unwrap(), source, ast, compiler).unwrap();
+    let mut violations = Vec::new();
+    check_file(&file, &mut violations);
+    violations
 }

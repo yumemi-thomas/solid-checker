@@ -96,6 +96,11 @@ pub(super) enum WriteRegionAdjustment {
     /// is that root wherever the call is, so the call site does not matter:
     /// the operation's [`RootBodyGuard`] decides.
     CreatedRoot,
+    /// The write sits directly in an inline callback whose call may create a
+    /// root this vocabulary has not audited
+    /// ([`solid_dialect::Dialect::callback_root_is_unaudited`]). Whether it runs
+    /// under a root is unknown, so the write is unplaced.
+    UnauditedRoot,
 }
 
 /// The write-legality adjustment for the innermost callback directly
@@ -129,6 +134,12 @@ pub(super) fn write_region_adjustment(
                     == Some(Execution::Inline)
             {
                 return Some(WriteRegionAdjustment::CreatedRoot);
+            }
+            if lookup.dialect.callback_root_is_unaudited(primitive, index)
+                && callback_execution_at_call(file, call, primitive, index, lookup)
+                    == Some(Execution::Inline)
+            {
+                return Some(WriteRegionAdjustment::UnauditedRoot);
             }
             if lookup
                 .dialect
@@ -208,6 +219,9 @@ pub(super) fn semantic_write_execution_role_within(
                 RootBodyGuard::Rejects => return ExecutionRole::UntrackedRendering,
                 RootBodyGuard::Exempts => return ExecutionRole::UntrackedCallback,
             },
+            // Whether a root wraps this callback is not audited on this
+            // release, so the write has no placement the checker can prove.
+            Some(WriteRegionAdjustment::UnauditedRoot) => return ExecutionRole::Unknown,
             Some(WriteRegionAdjustment::FirstRunAtCallSite(call)) => {
                 // Where the call site forbids the write, the first run throws
                 // exactly when it runs during the call -- which needs the
@@ -328,8 +342,7 @@ pub(super) fn semantic_write_execution_role_within(
     // An implicit suspension (`for await`) is the same, and is not proven to
     // run at all; its callers' roles do not describe the code after it.
     if (direct == ExecutionRole::Unknown || direct.reports_disallowed_write())
-        && (follows_await_in_async_function(file, span)
-            || super::body_roles::follows_any_suspension(file, span))
+        && may_follow_suspension(file, span)
     {
         return unknown;
     }

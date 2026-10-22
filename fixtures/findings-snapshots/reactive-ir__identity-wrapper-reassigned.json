@@ -1,0 +1,15 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/identity-wrapper-reassigned/App.tsx",
+      "start": 323,
+      "end": 332,
+      "fixes": 0
+    }
+  ]
+}

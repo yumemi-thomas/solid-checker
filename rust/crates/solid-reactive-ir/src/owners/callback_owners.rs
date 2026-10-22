@@ -302,8 +302,11 @@ pub(crate) fn returned_callback_invocation_sites(
             })
         {
             let inherited_owner = primitive
-                .and_then(|primitive| callback_owner_at_call(file, outer, primitive, index, lookup))
-                .map_or(OwnerEdgeKind::Preserve, callback_owner_edge_kind);
+                .and_then(|primitive| {
+                    callback_owner_at_call(file, outer, primitive, index, lookup)
+                        .map(|owner| callback_owner_edge_kind_at(lookup, primitive, owner))
+                })
+                .unwrap_or(OwnerEdgeKind::Preserve);
             sites.push(ReturnedCallbackInvocationSite {
                 path: file.path.to_string(),
                 span: outer.span,
@@ -408,8 +411,9 @@ pub(crate) fn returned_callback_invocation_sites(
                     let inherited_owner = primitive
                         .and_then(|primitive| {
                             callback_owner_at_call(use_file, outer, primitive, index, lookup)
+                                .map(|owner| callback_owner_edge_kind_at(lookup, primitive, owner))
                         })
-                        .map_or(OwnerEdgeKind::Preserve, callback_owner_edge_kind);
+                        .unwrap_or(OwnerEdgeKind::Preserve);
                     sites.push(ReturnedCallbackInvocationSite {
                         path: use_file.path.to_string(),
                         span: outer.span,

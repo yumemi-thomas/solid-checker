@@ -34,24 +34,73 @@ pub(crate) fn discover_owner_file(
             span,
         )
     };
-    let callback_target = |argument: Span| {
-        nodes_by_path
-            .get(file.path.as_str())
-            .into_iter()
-            .flatten()
-            .copied()
-            .filter(|index| argument.contains(nodes[*index].span))
-            .max_by_key(|index| nodes[*index].span.end - nodes[*index].span.start)
+    // The callback an argument names, exactly as `owner_callback_index` reads
+    // it: the function literal itself (or an event tuple's handler slot), or
+    // the function a bare identifier names. A function literal inside any other
+    // expression is not the callback (SC4001 review D).
+    let callback_target = |argument: Span, handler_tuple: bool| {
+        callback_literal_span(file, argument, handler_tuple)
+            .or_else(|| crate::indexes::identity_wrapped_literal_span(lookup, file, argument))
+            .and_then(|span| {
+                nodes_by_path
+                    .get(file.path.as_str())
+                    .into_iter()
+                    .flatten()
+                    .copied()
+                    .find(|index| nodes[*index].span == span)
+            })
             .map(|index| OwnerTarget::LocalSpan(nodes[index].span))
             .or_else(|| {
+                if !is_identifier_span(file, argument) {
+                    return None;
+                }
                 entities
-                    .get(&location(file.path.shared(), argument))
+                    .value_symbol(file, argument)
                     .cloned()
                     .map(OwnerTarget::Symbol)
             })
     };
     let mut edges = Vec::new();
     let mut requirements = Vec::new();
+    // ADR 0358: an event attribute's member read, and the handlers an intrinsic
+    // element's spread supplies, name their functions exactly; the host runs
+    // them with no owner.
+    for callback in &file.compiler.callback_roles {
+        if callback.role != solid_facts::compiler::CallbackRoleKind::EventHandler {
+            continue;
+        }
+        if let Some((target, function)) = lookup.object_member_function(file, callback.span) {
+            edges.push(SymbolicOwnerEdge {
+                source: None,
+                target: OwnerTarget::Function(target.path.to_string(), function.span),
+                kind: event_owner_edge(lookup, function.generator),
+            });
+        }
+    }
+    for element in &file.ast.jsx_elements {
+        if !crate::object_members::intrinsic_element(file, element) {
+            continue;
+        }
+        for spread in &element.spreads {
+            let key = crate::location(file.path.shared(), spread.argument);
+            let Some(Some(targets)) = lookup.spread_handler_targets().get(&key) else {
+                continue;
+            };
+            for (path, span) in targets {
+                edges.push(SymbolicOwnerEdge {
+                    source: None,
+                    target: OwnerTarget::Function(path.clone(), *span),
+                    kind: event_owner_edge(
+                        lookup,
+                        lookup
+                            .file_by_path(path)
+                            .and_then(|file| file.ast.function_at(*span))
+                            .is_some_and(|function| function.generator),
+                    ),
+                });
+            }
+        }
+    }
     for (call_index, call) in file.ast.calls.iter().enumerate() {
         let owner = owner_at(call.span);
         let target = lookup
@@ -69,14 +118,32 @@ pub(crate) fn discover_owner_file(
                     span,
                 }),
                 target,
-                kind: OwnerEdgeKind::Preserve,
+                kind: call_owner_edge(file, call.callee),
             });
         }
+        // ADR 0347: an invoked function literal runs in the call, under the
+        // owner of the code around it (`invocation_runs_under_owner`).
+        if let Some(function) = invoked_function_literal(file, call) {
+            let invoker =
+                enclosing_function_span(&nodes, &nodes_by_path, file.path.as_str(), call.span);
+            if invocation_runs_under_owner(file, call.span, invoker.map(|index| nodes[index].span))
+            {
+                edges.push(SymbolicOwnerEdge {
+                    source: invoker.map(|index| OwnerSource {
+                        path: file.path.to_string(),
+                        span: nodes[index].span,
+                    }),
+                    target: OwnerTarget::LocalSpan(function.span),
+                    kind: call_owner_edge(file, call.callee),
+                });
+            }
+        }
         for edge in owner_callback_edges(file, call, &call_primitives[call_index], lookup) {
+            let kind = callback_call_owner_edge(lookup, &edge.source_path, edge.source, edge.kind);
             if let Some(target) = call
                 .arguments
                 .get(edge.argument)
-                .and_then(|argument| callback_target(argument.span))
+                .and_then(|argument| callback_target(argument.span, false))
             {
                 let source = lookup
                     .files()
@@ -93,7 +160,7 @@ pub(crate) fn discover_owner_file(
                 edges.push(SymbolicOwnerEdge {
                     source,
                     target,
-                    kind: edge.kind,
+                    kind,
                 });
             }
         }
@@ -118,22 +185,30 @@ pub(crate) fn discover_owner_file(
                     registration == ProofStatus::Uncertain,
                 ))
             }
-            (Some(OwnerRequirementRole::Cleanup), _) => Some((
-                "cleanup",
-                OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LEAF,
-                None,
-                call.callee,
-                false,
-            )),
+            // A leaf owner exists here, and the runtime throws
+            // CLEANUP_IN_FORBIDDEN_SCOPE (SC3001's claim), not an unowned
+            // registration: the mask is unowned only (ADR 0347 amendment).
+            (Some(OwnerRequirementRole::Cleanup), _) => {
+                Some(("cleanup", OWNER_CONTEXT_UNOWNED, None, call.callee, false))
+            }
             (Some(OwnerRequirementRole::SettledCleanup), _) => Some((
                 "settled-cleanup",
                 OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LEAF,
                 call.arguments
                     .first()
-                    .and_then(|argument| callback_target(argument.span)),
+                    .and_then(|argument| callback_target(argument.span, false)),
                 call.arguments
                     .first()
                     .map_or(call.callee, |argument| argument.span),
+                false,
+            )),
+            // ADR 0352: `useContext` with no owner throws `NoOwnerError`; the
+            // batch pass asks the same unowned question.
+            (Some(OwnerRequirementRole::ContextRead), _) => Some((
+                "context-read",
+                OWNER_CONTEXT_UNOWNED,
+                None,
+                call.callee,
                 false,
             )),
             _ => None,
@@ -144,6 +219,13 @@ pub(crate) fn discover_owner_file(
             let settled_gate = known_primitive(&call_primitives[call_index])
                 .filter(|primitive| dialect.leaf_owner_requires_owned_call_site(*primitive))
                 .map(|_| call.span);
+            // The context argument of a `useContext` read, for the closed
+            // provider census (ADR 0352). Only a read with exactly one argument.
+            let context_argument = (operation == "context-read")
+                .then(|| call.arguments.first())
+                .flatten()
+                .filter(|_| call.arguments.len() == 1 && !call.arguments[0].spread)
+                .map(|argument| argument.span);
             requirements.push(OwnerRequirementCandidate {
                 operation,
                 operation_span,
@@ -154,6 +236,7 @@ pub(crate) fn discover_owner_file(
                 settled_target,
                 settled_gate,
                 providing_region_chain,
+                context_argument,
             });
         }
     }
@@ -163,14 +246,57 @@ pub(crate) fn discover_owner_file(
             solid_facts::compiler::CallbackRoleKind::EventHandler
                 | solid_facts::compiler::CallbackRoleKind::DirectiveApply
         ) && (callback.role != solid_facts::compiler::CallbackRoleKind::DirectiveApply
-            || ref_application_on_intrinsic(file, callback.span))
-            && let Some(target) = callback_target(callback.span)
+            || (ref_application_on_intrinsic(file, callback.span)
+                && is_identifier_span(file, callback.span)))
+            && let Some(target) = callback_target(
+                callback.span,
+                callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler,
+            )
         {
+            // A ref application's callback is resolved against its node: a
+            // generator there never runs its body (`RefApplied`).
+            let kind = match callback.role {
+                solid_facts::compiler::CallbackRoleKind::DirectiveApply => {
+                    OwnerEdgeKind::RefApplied
+                }
+                _ if lookup.synchronous_event_dispatch_present() => OwnerEdgeKind::Conditional,
+                _ => OwnerEdgeKind::Unowned,
+            };
             edges.push(SymbolicOwnerEdge {
                 source: None,
                 target,
-                kind: OwnerEdgeKind::Unowned,
+                kind,
             });
+        }
+    }
+    // The function literals a ref value writes at its top level (ADR 0345),
+    // placed by position as the batch pass places them.
+    for mark in ref_value_marks(file, &call_primitives, lookup) {
+        match mark {
+            RefValueMark::Applied { function } | RefValueMark::Unowned { function } => {
+                edges.push(SymbolicOwnerEdge {
+                    source: None,
+                    target: OwnerTarget::LocalSpan(function),
+                    kind: OwnerEdgeKind::Unowned,
+                })
+            }
+            RefValueMark::Eager { function, call } => edges.push(SymbolicOwnerEdge {
+                source: nodes
+                    .iter()
+                    .filter(|node| node.span.contains(call))
+                    .min_by_key(|node| node.span.end - node.span.start)
+                    .map(|node| OwnerSource {
+                        path: file.path.to_string(),
+                        span: node.span,
+                    }),
+                target: OwnerTarget::LocalSpan(function),
+                kind: OwnerEdgeKind::EagerCall,
+            }),
+            RefValueMark::Unproven { function } => edges.push(SymbolicOwnerEdge {
+                source: None,
+                target: OwnerTarget::LocalSpan(function),
+                kind: OwnerEdgeKind::MayBeUnowned,
+            }),
         }
     }
     for element in &file.ast.jsx_elements {
@@ -196,6 +322,7 @@ pub(crate) fn discover_owner_file(
                 settled_target: None,
                 settled_gate: None,
                 providing_region_chain: region_chain(element.span),
+                context_argument: None,
             });
         }
     }
@@ -294,6 +421,7 @@ pub(crate) fn find_missing_owners_incremental(
         .filter_map(|(index, node)| node.symbol.clone().map(|symbol| (symbol, index)))
         .collect::<HashMap<_, _>>();
     let mut contexts = seed_contexts(&nodes);
+    seed_named_hand_outs(&nodes, lookup, &mut contexts);
     let mut outgoing = vec![Vec::<(usize, OwnerEdgeKind)>::new(); nodes.len()];
     for file in &facts.files {
         let Some(fragment) = cache.get(file.path.as_str()) else {
@@ -305,25 +433,32 @@ pub(crate) fn find_missing_owners_incremental(
             else {
                 continue;
             };
+            // The same answer the fresh pass gives a ref application's
+            // callback: a generator's body never runs, so nothing is proven.
+            let kind = match edge.kind {
+                OwnerEdgeKind::RefApplied if nodes[target].generator => OwnerEdgeKind::MayBeUnowned,
+                kind => kind,
+            };
             if let Some(source) = edge.source.as_ref().and_then(|source| {
                 nodes_by_span
                     .get(&source.path)
                     .and_then(|nodes| nodes.get(&source.span))
                     .copied()
             }) {
-                outgoing[source].push((target, edge.kind));
+                outgoing[source].push((target, kind));
             } else {
-                contexts[target] |= owner_edge_context(
-                    edge.kind,
-                    OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED,
-                );
+                contexts[target] |=
+                    owner_edge_context(kind, OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED);
             }
         }
     }
     let graph_assembly = graph_started.elapsed();
 
     let propagation_started = Instant::now();
-    propagate_owner_contexts(&mut contexts, &outgoing);
+    let candidates = unnamed_hand_out_candidates(&nodes, lookup);
+    let uncertain = seed_unnamed_hand_outs(&mut contexts, &outgoing, &candidates);
+    propagate_owner_contexts(&mut contexts, &outgoing, &uncertain);
+    settle_eager_owners(&mut contexts, &outgoing, &uncertain);
     let propagation = propagation_started.elapsed();
 
     let requirements_started = Instant::now();
@@ -331,6 +466,8 @@ pub(crate) fn find_missing_owners_incremental(
     let continuations = AwaitContinuations::new(facts, lookup);
     let mut settled_gates = SettledGateDecisions::default();
     let mut seen = HashSet::default();
+    // Program-wide: a context's provider census spans every file (ADR 0352).
+    let provider_free = provider_free_contexts(facts, lookup, symbol_names);
     for file in &facts.files {
         let Some(fragment) = cache.get(file.path.as_str()) else {
             continue;
@@ -343,27 +480,48 @@ pub(crate) fn find_missing_owners_incremental(
                     .copied()
             });
             let context = owner_index.map_or(OWNER_CONTEXT_UNOWNED, |index| contexts[index]);
-            // As in the batch pass: effects and cleanups, never a JSX boundary
-            // or `onSettled`'s returned cleanup.
-            let after_await = matches!(candidate.operation, "effect" | "cleanup")
-                && candidate.operation != "settled-cleanup"
+            // As in the batch pass: effects, cleanups and context reads, never a
+            // JSX boundary or `onSettled`'s returned cleanup. The two passes must
+            // agree here: a context read after an `await` is unowned (ADR 0352).
+            let after_await = matches!(candidate.operation, "effect" | "cleanup" | "context-read")
                 && continuations.contains(file.path.as_str(), candidate.operation_span.start);
+            let possible_continuation = (!after_await
+                && matches!(candidate.operation, "effect" | "cleanup" | "context-read"))
+            .then(|| possible_await_continuation_context(file, candidate.operation_span, context))
+            .flatten();
             let context = if after_await {
                 await_continuation_context(context)
             } else {
-                context
+                possible_continuation.unwrap_or(context)
             };
+            // A read of a provider-free context under an owner throws
+            // `ContextNotFoundError` (ADR 0352). The batch pass decides the same.
+            let provider_free_read = candidate.operation == "context-read"
+                && candidate.context_argument.is_some_and(|argument| {
+                    context_key_at(lookup, file, argument)
+                        .is_some_and(|key| provider_free.contains(&key))
+                });
             // The batch pass skips these before recording a settled gate too.
             // Every chain span is one of this fragment's own nodes; one that
             // did not resolve would withhold the lexical answer, not grant it.
-            if root_owned_at(candidate.providing_region_chain.as_deref(), |span| {
-                nodes_by_span
-                    .get(file.path.as_str())
-                    .and_then(|nodes| nodes.get(span))
-                    .map_or(OWNER_CONTEXT_LEAVES_REGION, |index| contexts[*index])
-            }) {
+            let root_owned = possible_continuation.is_none()
+                && root_owned_at(candidate.providing_region_chain.as_deref(), |span| {
+                    nodes_by_span
+                        .get(file.path.as_str())
+                        .and_then(|nodes| nodes.get(span))
+                        .map_or(OWNER_CONTEXT_LEAVES_REGION, |index| contexts[*index])
+                });
+            // A providing region owns its reads, so a provider-free read there is
+            // a provider finding, not an owner question (ADR 0352).
+            let provider = provider_free_read && (root_owned || owned_on_every_path(context));
+            if root_owned && !provider {
                 continue;
             }
+            let (operation, report_hit) = if provider {
+                ("context-provider", true)
+            } else {
+                (candidate.operation, context & candidate.report_mask != 0)
+            };
             if let Some(gate) = candidate.settled_gate {
                 settled_gates.insert(
                     (
@@ -423,8 +581,8 @@ pub(crate) fn find_missing_owners_incremental(
             let conditional_owner = !component_uncertain
                 && !proven_unowned
                 && !later_run_unowned
-                && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED)
-                    == (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED);
+                && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED) != 0
+                && context & OWNER_CONTEXT_UNOWNED != 0;
             let caller_uncertain = candidate.allow_uncertain
                 && !proven_unowned
                 && owner_index.is_some_and(|index| {
@@ -466,7 +624,7 @@ pub(crate) fn find_missing_owners_incremental(
             push_owner_requirement(
                 &mut requirements,
                 &mut seen,
-                candidate.operation,
+                operation,
                 file,
                 candidate.operation_span,
                 OwnerRequirementStatus {
@@ -477,7 +635,13 @@ pub(crate) fn find_missing_owners_incremental(
                     later_run_unowned,
                     component_uncertain,
                     after_await,
-                    report: context & candidate.report_mask != 0,
+                    // The batch pass's cleanup rule (ADR 0347 amendment): a cleanup in a
+                    // leaf that is not owned is reported; in an owned leaf it is
+                    // SC3001's claim.
+                    report: report_hit
+                        || (candidate.operation == "cleanup"
+                            && context & OWNER_CONTEXT_LEAF != 0
+                            && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF_OWNED) == 0),
                 },
                 lookup,
             );

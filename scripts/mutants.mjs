@@ -60,6 +60,35 @@ const patterns = {
   P9: { rule: "flush-in-action", code: "FLUSH_IN_ACTION", family: "handler",
     imports: ["action as __scMutantAction", "flush as __scMutantFlush"],
     body: () => "void __scMutantAction(function* () { __scMutantFlush(); })();" },
+  // Round 2 seeds through code the project already has. Each family's
+  // defect holds wherever its insertion point runs in that role, so a site
+  // the checker does not prove is a miss, not an unknown.
+  // `helper`: a function every reference of which is a direct call statement
+  // or initializer in a component body.
+  H1: { rule: "strict-read-untracked", code: "STRICT_READ_UNTRACKED", family: "helper",
+    imports: ["createSignal as __scMutantSignal"],
+    body: id => `const [${id}Read] = __scMutantSignal(0);\nconsole.log(${id}Read());` },
+  H8: { rule: "action-called-in-owned-scope", code: "ACTION_CALLED_IN_OWNED_SCOPE", family: "helper",
+    imports: ["action as __scMutantAction"],
+    body: id => `const ${id}Action = __scMutantAction(function* () {});\nvoid ${id}Action();` },
+  // `named-handler`: a function referenced only as `onX={name}` on intrinsic
+  // elements, in its own file or through an import.
+  N2: { rule: "missing-owner", code: "NO_OWNER_CLEANUP", family: "named-handler",
+    imports: ["onCleanup as __scMutantCleanup"],
+    body: () => "__scMutantCleanup(() => {});" },
+  // `existing-accessor`: a component body reads a `createSignal` accessor the
+  // project declared (in the body, at module level, or imported), inserted
+  // before the body's first top-level return.
+  E1: { rule: "strict-read-untracked", code: "STRICT_READ_UNTRACKED", family: "existing-accessor",
+    imports: [], body: (id, site) => `console.log(${site.accessor}());`,
+    template: body => `import { createSignal } from "solid-js";\nconst [count] = createSignal(0);\nexport function App() {\n${body}\nreturn <div>probe</div>;\n}\n`,
+    templateSite: { accessor: "count" } },
+  // `reactive-prop`: a component body reads a prop that some JSX call site
+  // passes as a project signal read, with no spread after that attribute.
+  R1: { rule: "strict-read-untracked", code: "STRICT_READ_UNTRACKED", family: "reactive-prop",
+    imports: [], body: (id, site) => `console.log(${site.propsName}${/^[A-Za-z_$][\w$]*$/.test(site.prop) ? `.${site.prop}` : `[${JSON.stringify(site.prop)}]`});`,
+    template: body => `import { createSignal } from "solid-js";\nfunction Child(props: { value: number }) {\n${body}\nreturn <div>probe</div>;\n}\nexport function App() {\nconst [count] = createSignal(0);\nreturn <Child value={count()} />;\n}\n`,
+    templateSite: { propsName: "props", prop: "value" } },
 };
 const sha = value => createHash("sha256").update(value).digest("hex");
 const json = path => JSON.parse(readFileSync(path, "utf8"));
@@ -89,13 +118,18 @@ function classify(findings, rule) {
     : expected.some(f => f.kind === "uncertifiable") ? "uncertifiable"
     : findings.length ? "other" : "missed";
 }
-function mutationBody(pattern, id) {
-  return patterns[pattern].body(id);
+function mutationBody(pattern, id, site) {
+  return patterns[pattern].body(id, site);
 }
 function patternSource(pattern) {
+  const { family, template, templateSite } = patterns[pattern];
+  const body = mutationBody(pattern, "__scMutant0", templateSite);
+  if (template) return template(body);
   const imports = patterns[pattern].imports.join(", ");
-  const body = mutationBody(pattern, "__scMutant0");
-  return `import { ${imports} } from "solid-js";\nexport function App() {\n${patterns[pattern].family === "handler"
+  const head = `import { ${imports} } from "solid-js";\n`;
+  if (family === "helper") return `${head}function __scMutantHelper() {\n${body}\n}\nexport function App() {\n__scMutantHelper();\nreturn <div>probe</div>;\n}\n`;
+  if (family === "named-handler") return `${head}export function App() {\nconst handler = () => {\n${body}\n};\nreturn <button onClick={handler}>probe</button>;\n}\n`;
+  return `${head}export function App() {\n${family === "handler"
     ? `return <button onClick={() => {\n${body}\n}}>probe</button>;`
     : `${body}\nreturn <div>probe</div>;`}\n}\n`;
 }
@@ -122,6 +156,161 @@ if (process.argv[2] === "--self-check") {
   assert.equal(Buffer.byteLength("é"), 2);
   console.log("mutants self-check passed");
   process.exit(0);
+}
+
+// Round-2 candidates: sites reached through bindings, helpers and handlers
+// the project already has. Symbols come from the TypeScript checker, never
+// from names, and every family keeps its defect independent of what else the
+// project does: a helper only ever called directly in a component body, a
+// handler only ever attached to intrinsic events, a signal accessor (not a
+// memo, whose read may suspend), a prop some call site passes a signal read.
+function seedThroughExistingCode(ts, program, spec, bomOffset, candidates, { functions, ownJSX, insertion }) {
+  const checker = program.getTypeChecker();
+  const files = program.getSourceFiles().filter(sf => {
+    const file = relative(spec.clone, sf.fileName);
+    return !sf.isDeclarationFile && !file.startsWith("..") && !file.split("/").includes("node_modules") && /\.[jt]sx?$/.test(file);
+  });
+  const symbolAt = node => {
+    const symbol = checker.getSymbolAtLocation(node);
+    return symbol && symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
+  };
+  const isAsync = node => node.modifiers?.some(m => m.kind === ts.SyntaxKind.AsyncKeyword);
+  const plainBlock = node => node && functions(node) && node.body && ts.isBlock(node.body) && !node.asteriskToken && !isAsync(node);
+  const nameOf = node => ts.isFunctionDeclaration(node) ? node.name
+    : ts.isVariableDeclaration(node.parent) && ts.isIdentifier(node.parent.name) ? node.parent.name : null;
+  // The v1 component shape: a top-level capitalized function with a block
+  // body whose own return is JSX.
+  const isComponent = node => {
+    if (!plainBlock(node)) return false;
+    let parent = node.parent;
+    while (parent && !functions(parent)) parent = parent.parent;
+    const name = nameOf(node)?.text ?? "";
+    return !parent && /^[A-Z]/.test(name)
+      && node.body.statements.some(s => ts.isReturnStatement(s) && s.expression && ownJSX(s.expression));
+  };
+  const references = new Map();
+  for (const sf of files) (function visit(node) {
+    if (ts.isIdentifier(node)) {
+      const symbol = symbolAt(node);
+      if (symbol) {
+        if (!references.has(symbol)) references.set(symbol, []);
+        references.get(symbol).push(node);
+      }
+    }
+    ts.forEachChild(node, visit);
+  })(sf);
+  const fromSolid = callee => {
+    const declaration = symbolAt(ts.isPropertyAccessExpression(callee) ? callee.name : callee)?.declarations?.[0];
+    return declaration && /node_modules\/(solid-js|@solidjs\/signals)\//.test(declaration.getSourceFile().fileName);
+  };
+  // `const [a] = createSignal(<non-function initial value>)`: `a` is a plain
+  // signal accessor whose read is a strict read wherever setup runs.
+  const signalAccessor = symbol => {
+    const declaration = symbol?.declarations?.[0];
+    if (!declaration || !ts.isBindingElement(declaration) || !ts.isArrayBindingPattern(declaration.parent)
+      || declaration.parent.elements[0] !== declaration || declaration.dotDotDotToken) return false;
+    const variable = declaration.parent.parent;
+    if (!ts.isVariableDeclaration(variable) || !(variable.parent.flags & ts.NodeFlags.Const)) return false;
+    const call = variable.initializer;
+    if (!call || !ts.isCallExpression(call) || !fromSolid(call.expression)
+      || symbolAt(ts.isPropertyAccessExpression(call.expression) ? call.expression.name : call.expression)?.name !== "createSignal") return false;
+    const first = call.arguments[0];
+    if (!first) return true;
+    let value = first;
+    while (ts.isAsExpression(value) || ts.isSatisfiesExpression?.(value) || ts.isParenthesizedExpression(value)) value = value.expression;
+    return ts.isLiteralExpression(value) || ts.isNoSubstitutionTemplateLiteral(value) || ts.isObjectLiteralExpression(value)
+      || ts.isArrayLiteralExpression(value) || ts.isPrefixUnaryExpression(value)
+      || [ts.SyntaxKind.TrueKeyword, ts.SyntaxKind.FalseKeyword, ts.SyntaxKind.NullKeyword].includes(value.kind)
+      || (ts.isIdentifier(value) && value.text === "undefined");
+  };
+  const site = (node, pos, family, shape, extra = {}) => {
+    const sf = node.getSourceFile(), file = relative(spec.clone, sf.fileName);
+    candidates.push({ file, pos: pos + bomOffset(sf.fileName), family, shape, owner: `${file}:${node.getStart(sf)}`,
+      line: sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1, ...extra });
+  };
+  const components = [];
+  for (const sf of files) (function visit(node) {
+    if (isComponent(node)) components.push(node);
+    ts.forEachChild(node, visit);
+  })(sf);
+  for (const sf of files) (function visit(node) {
+    const name = plainBlock(node) ? nameOf(node) : null;
+    const symbol = name && symbolAt(name);
+    const uses = symbol ? (references.get(symbol) ?? []).filter(id => id !== name) : [];
+    if (symbol && uses.length && !isComponent(node)) {
+      // helper: every use is `helper(...)` as an expression statement or a
+      // const initializer directly in a component body.
+      const inBody = id => {
+        const call = id.parent;
+        if (!ts.isCallExpression(call) || call.expression !== id) return false;
+        const statement = ts.isExpressionStatement(call.parent) ? call.parent
+          : ts.isVariableDeclaration(call.parent) && call.parent.initializer === call ? call.parent.parent.parent : null;
+        return statement && ts.isBlock(statement.parent) && isComponent(statement.parent.parent);
+      };
+      if (!/^[A-Z]/.test(name.text) && !node.body.statements.some(s => ts.isReturnStatement(s) && s.expression && ownJSX(s.expression))
+        && uses.every(inBody))
+        site(node, insertion(node.body, node.getSourceFile()), "helper", `helper ${ts.SyntaxKind[node.kind]} ${name.text}`);
+      // named handler: every use is `onX={name}` on an intrinsic element.
+      const handlerUse = id => {
+        const expression = id.parent, attribute = expression?.parent;
+        return ts.isJsxExpression(expression) && expression.expression === id && ts.isJsxAttribute(attribute)
+          && /^on[A-Z]/.test(attribute.name.getText()) && /^[a-z][a-z0-9-]*$/.test(attribute.parent.parent.tagName.getText());
+      };
+      const local = uses.filter(id => !ts.isImportSpecifier(id.parent) && !ts.isExportSpecifier(id.parent) && !ts.isImportClause(id.parent));
+      if (local.length && local.every(handlerUse)
+        && uses.every(id => handlerUse(id) || ts.isImportSpecifier(id.parent) || ts.isExportSpecifier(id.parent) || ts.isImportClause(id.parent))) {
+        let owner = node, ancestor = node.parent;
+        while (ancestor) { if (functions(ancestor)) owner = ancestor; ancestor = ancestor.parent; }
+        const imported = local.some(id => id.getSourceFile() !== node.getSourceFile());
+        const sf = node.getSourceFile(), file = relative(spec.clone, sf.fileName);
+        candidates.push({ file, pos: insertion(node.body, sf) + bomOffset(sf.fileName), family: "named-handler",
+          shape: `named handler ${imported ? "imported" : "same-file"} ${ts.SyntaxKind[node.kind]} ${name.text}`,
+          owner: `${file}:${owner.getStart(sf)}`, line: sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1 });
+      }
+    }
+    ts.forEachChild(node, visit);
+  })(sf);
+  for (const component of components) {
+    const sf = component.getSourceFile(), body = component.body;
+    const firstReturn = body.statements.find(s => ts.isReturnStatement(s));
+    // existing accessor: the first in-scope signal accessor, preferring one
+    // the body did not declare itself (v1 already seeds fresh locals).
+    if (firstReturn) {
+      const seen = new Map();
+      for (const symbol of checker.getSymbolsInScope(firstReturn, ts.SymbolFlags.Value)) {
+        const target = symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
+        if (!signalAccessor(target)) continue;
+        const declaration = target.declarations[0];
+        if (declaration.getSourceFile() === sf && declaration.pos >= body.pos && declaration.end > firstReturn.pos) continue;
+        const where = declaration.getSourceFile() !== sf ? "imported" : body.pos <= declaration.pos && declaration.end <= body.end ? "body" : "module";
+        if (!seen.has(where)) seen.set(where, symbol.name);
+      }
+      const where = ["imported", "module", "body"].find(w => seen.has(w));
+      if (where) site(component, firstReturn.getStart(sf), "existing-accessor", `existing accessor ${where}`, { accessor: seen.get(where) });
+    }
+    // reactive prop: a JSX call site passes `k={signal()}` after its last spread.
+    const parameter = component.parameters[0];
+    if (component.parameters.length === 1 && parameter && ts.isIdentifier(parameter.name)) {
+      const name = nameOf(component), symbol = name && symbolAt(name);
+      let prop = null;
+      for (const id of symbol ? references.get(symbol) ?? [] : []) {
+        const element = id.parent;
+        if (!(ts.isJsxOpeningElement(element) || ts.isJsxSelfClosingElement(element)) || element.tagName !== id) continue;
+        const properties = element.attributes.properties;
+        const lastSpread = properties.findLastIndex(p => ts.isJsxSpreadAttribute(p));
+        for (const [index, attribute] of properties.entries()) {
+          if (index < lastSpread || !ts.isJsxAttribute(attribute) || !ts.isIdentifier(attribute.name)) continue;
+          const value = attribute.initializer && ts.isJsxExpression(attribute.initializer) ? attribute.initializer.expression : null;
+          if (value && ts.isCallExpression(value) && value.arguments.length === 0 && ts.isIdentifier(value.expression)
+            && signalAccessor(symbolAt(value.expression))) prop ??= attribute.name.text;
+        }
+      }
+      const written = (references.get(symbolAt(parameter.name)) ?? []).some(id =>
+        ts.isBinaryExpression(id.parent) && id.parent.left === id && id.parent.operatorToken.kind === ts.SyntaxKind.EqualsToken);
+      if (prop && !written)
+        site(component, insertion(body, sf), "reactive-prop", "reactive prop", { propsName: parameter.name.text, prop });
+    }
+  }
 }
 
 // A fresh process per project bounds TypeScript's program memory.
@@ -223,6 +412,7 @@ if (process.argv[2] === "--prepare") {
     }
     visit(sf);
   }
+  seedThroughExistingCode(ts, before, spec, bomOffset, candidates, { functions, ownJSX, insertion });
   const ranked = candidates.sort((a, b) => sha(`${spec.seed}:${spec.app}:${a.file}:${a.pos}`)
     .localeCompare(sha(`${spec.seed}:${spec.app}:${b.file}:${b.pos}`)));
   const sites = [], used = new Set();
@@ -234,7 +424,7 @@ if (process.argv[2] === "--prepare") {
       if (!candidate) continue;
       used.add(candidate.owner);
       const id = `__scMutant${sites.length}`;
-      const body = mutationBody(pattern, id);
+      const body = mutationBody(pattern, id, candidate);
       sites.push({ ...candidate, id, pattern, text: `\n/* ${id} ${pattern} */\n${body}\n`,
         rule: patterns[pattern].rule, code: patterns[pattern].code });
     }
@@ -260,7 +450,7 @@ if (process.argv[2] === "--prepare") {
       else break;
     }
     const imports = [...new Set(sites.filter(s => s.file === file).flatMap(s => patterns[s.pattern].imports))];
-    list.push({ pos: importPos, text: `\nimport { ${imports.join(", ")} } from "solid-js";\n` });
+    if (imports.length) list.push({ pos: importPos, text: `\nimport { ${imports.join(", ")} } from "solid-js";\n` });
     list.sort((a, b) => a.pos - b.pos);
     let result = "", cursor = 0;
     for (const edit of list) {
@@ -413,8 +603,12 @@ for (const [app, appRows] of Map.groupBy(rows, r => r.app)) {
       return !baselineKeys.has(JSON.stringify([file, Buffer.byteLength(original.slice(0, offset)), f.rule, f.kind]));
     }) : [];
     for (const site of prepared.sites) {
-      const covering = added.filter(f => relative(clone, f.primaryLocation.path) === site.file
-        && f.primaryLocation.startByte >= site.startByte && f.primaryLocation.startByte < site.endByte);
+      // A new finding covers the site when it is located there, or names the
+      // inserted span as evidence (a helper's read reported at its call).
+      const inSite = loc => loc && relative(clone, loc.path) === site.file
+        && loc.startByte >= site.startByte && loc.startByte < site.endByte;
+      const covering = added.filter(f => [f.primaryLocation, ...(f.relatedLocations ?? []).map(r => r.location ?? r),
+        ...(f.evidence ?? []).map(e => e.location)].some(inSite));
       const typing = prepared.introduced;
       const classification = typing.length ? "type-error" : classify(covering, site.rule);
       sites.push({ app, project: row.project, clone, ...site, classification, typing, findings: covering });

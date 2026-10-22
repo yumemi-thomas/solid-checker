@@ -1,0 +1,65 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-invoked-literal-forms/App.tsx",
+      "start": 341,
+      "end": 353,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-invoked-literal-forms/App.tsx",
+      "start": 428,
+      "end": 440,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-invoked-literal-forms/App.tsx",
+      "start": 591,
+      "end": 603,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-invoked-literal-forms/App.tsx",
+      "start": 738,
+      "end": 750,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-invoked-literal-forms/App.tsx",
+      "start": 906,
+      "end": 918,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-invoked-literal-forms/App.tsx",
+      "start": 1099,
+      "end": 1111,
+      "fixes": 0
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-guard-iife/App.tsx",
+      "start": 1026,
+      "end": 1038,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-guard-iife/App.tsx",
+      "start": 1254,
+      "end": 1266,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-guard-iife/App.tsx",
+      "start": 1494,
+      "end": 1506,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-guard-iife/App.tsx",
+      "start": 1704,
+      "end": 1716,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-guard-iife/App.tsx",
+      "start": 1918,
+      "end": 1930,
+      "fixes": 0
+    }
+  ]
+}

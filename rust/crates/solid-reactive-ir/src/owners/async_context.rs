@@ -139,18 +139,38 @@ pub(super) fn function_is_mount_root(
 /// is not a proven ownerless application.
 pub(crate) fn ref_application_on_intrinsic(file: &solid_facts::FileFacts, span: Span) -> bool {
     !file.ast.jsx_elements.iter().any(|element| {
-        let tag = file
-            .source
-            .get(element.name.span.start as usize..element.name.span.end as usize)
-            .unwrap_or_default();
-        let component = tag.contains('.') || tag.starts_with(|c: char| c.is_ascii_uppercase());
-        component
+        is_component_element(file, element)
             && element.attributes.iter().any(|attribute| {
                 attribute
                     .expression
                     .is_some_and(|value| file.ast.peel_ts_sugar_span(value).contains(span))
             })
     })
+}
+
+/// Whether a JSX element is a component: a capitalized or dotted tag. Its
+/// children and spreads are not the intrinsic element's own, so a ref written
+/// inside them is not placed by the intrinsic element's owner.
+pub(crate) fn is_component_element(
+    file: &solid_facts::FileFacts,
+    element: &solid_facts::ast::JsxElementFact,
+) -> bool {
+    let tag = file
+        .source
+        .get(element.name.span.start as usize..element.name.span.end as usize)
+        .unwrap_or_default();
+    tag.contains('.') || tag.starts_with(|c: char| c.is_ascii_uppercase())
+}
+
+/// Whether `span` lies inside a component element, in its children, spreads
+/// or attributes. A component's children run inside the component's own memo
+/// (`<Show>`'s children, ADR 0345), so an owner read from the code around the
+/// element says nothing about what runs in them.
+pub(crate) fn inside_component_element(file: &solid_facts::FileFacts, span: Span) -> bool {
+    file.ast
+        .jsx_elements
+        .iter()
+        .any(|element| element.span.contains(span) && is_component_element(file, element))
 }
 
 /// The role a pending async read plays for the missing-boundary claim: a

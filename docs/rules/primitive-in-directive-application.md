@@ -8,10 +8,14 @@ callback — the function a directive factory returns for each element.
 ## What it does
 
 Flags creations of primitives that register a computation an owner would have
-to dispose (`createMemo`, `createEffect`, `createRoot`, function-form
+to dispose (`createMemo`, `createEffect`, function-form
 `createSignal`/`createStore`, …) inside callbacks that the compiler
 recognizes as `ref`/directive applications, including callbacks returned from
 a directive factory.
+
+An explicit `createRoot` is uncertifiable (ADR 0355). It may be empty or
+disposed, and its allocation alone proves no leak. Proving live work and its
+undisposed lifetime is still open; computations inside the root are owned.
 
 Value-form state (`createSignal(0)`, `createStore({...})`) is **not**
 flagged: it allocates plain state that needs no owner and misbehaves in no

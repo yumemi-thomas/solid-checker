@@ -1,0 +1,15 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-provider-namespace/App.tsx",
+      "start": 309,
+      "end": 319,
+      "fixes": 0
+    }
+  ]
+}

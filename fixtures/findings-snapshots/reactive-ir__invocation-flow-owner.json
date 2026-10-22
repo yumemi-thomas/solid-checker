@@ -24,6 +24,16 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow-owner/App.tsx",
+      "start": 512,
+      "end": 513,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/invocation-flow-owner/App.tsx",
@@ -34,11 +44,81 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow-owner/App.tsx",
+      "start": 713,
+      "end": 722,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/invocation-flow-owner/App.tsx",
       "start": 838,
       "end": 847,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow-owner/App.tsx",
+      "start": 893,
+      "end": 894,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow-owner/App.tsx",
+      "start": 1216,
+      "end": 1217,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow-owner/App.tsx",
+      "start": 1499,
+      "end": 1500,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow-owner/App.tsx",
+      "start": 1768,
+      "end": 1769,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow-owner/App.tsx",
+      "start": 2221,
+      "end": 2222,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow-owner/App.tsx",
+      "start": 2657,
+      "end": 2658,
       "fixes": 0
     }
   ]

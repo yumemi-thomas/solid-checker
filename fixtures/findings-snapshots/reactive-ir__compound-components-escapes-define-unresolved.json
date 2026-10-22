@@ -1,0 +1,15 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/compound-components-escapes/variants/define-unresolved/App.tsx",
+      "start": 146,
+      "end": 153,
+      "fixes": 0
+    }
+  ]
+}
