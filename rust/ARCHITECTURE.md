@@ -187,7 +187,14 @@ every reference to it is accounted for:
   exports hand out no record. It adds `createRouter({ links })`, called with
   the router context during setup (`claims.js:42-44`), so `names_links`
   (`route_components.rs`) and `history_not_stock` (`router_params.rs`) refuse
-  any config naming `links`, on every release.
+  any config naming `links`, on every release. Two older paths also hand a
+  project callable the context as `this`, in all four releases:
+  `useAction(action)` runs `action.apply({ r: useRouter() }, args)`
+  (`data/action.js:232-235` next.41), and Root calls `props.preload(...)` on
+  props holding `routerState` (`components.jsx:13`). `router_context_as_this`
+  (`router_params.rs`) withholds both premises unless every `useAction`
+  argument is an arrow or the router's own action wrapper, and
+  `history_not_stock` unless a config `preload` is an arrow.
 
 - **Audited TanStack routers (ADR 0334).** The rc.8 release was checked by an
   `npm pack` diff against rc.6, and rc.9 against rc.8: every route-option read

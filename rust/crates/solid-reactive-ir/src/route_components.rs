@@ -750,6 +750,16 @@ fn definitions_exposed(
     let names_router = |module: &str| {
         module == ROUTER_PACKAGE || module.starts_with(concat!("@solidjs/router", "/"))
     };
+    // `useAction(action)` calls `action` with the router context as `this`,
+    // whose `matches()` hold every definition.
+    let audited_file = |file: &FileFacts| {
+        audited
+            .iter()
+            .any(|directory| file.path.as_str().starts_with(directory.as_str()))
+    };
+    if crate::router_params::router_context_as_this(facts, &audited_file).is_some() {
+        return true;
+    }
     for file in unaudited_files(facts, audited) {
         let ast = &*file.ast;
         // Vite's `import.meta.glob` loads modules no load fact names.
