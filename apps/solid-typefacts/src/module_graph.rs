@@ -3,7 +3,10 @@
 //! Nothing here consults the file system or reasons about path shape: every
 //! field is read off the program, a source file, or the resolver's
 //! `ResolvedModule`, so an absent answer is the compiler's absence and not
-//! this adapter's.
+//! this adapter's. The one exception is [`root_positions`], which repeats the
+//! loader's root lookup (`fileloader.rs` `source_file_from_reference`) against
+//! the compiler host's own file system, because tsrs keeps the root include
+//! records private.
 
 use crate::backend::{BackendError, ModuleInventory};
 use crate::context::Context;
@@ -12,8 +15,9 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tsrs_ast::SourceFile;
 use tsrs_compiler::Program;
-use tsrs_core::{ModuleKind, P, Pattern, PatternKind, try_parse_pattern};
+use tsrs_core::{ModuleKind, P, Pattern, PatternKind, try_parse_pattern, tspath};
 use tsrs_scanner::skip_trivia;
+use tsrs_tsoptions as tsoptions;
 use typefacts::v3::ModuleGraphRequest;
 use typefacts::{
     Location, ModuleFact, ModuleFormat, ModuleImportFact, ModuleResolution, PackageIdentity,
@@ -31,7 +35,8 @@ pub fn module_graph(
         modules: Vec::with_capacity(files.len()),
         ..ModuleInventory::default()
     };
-    let roots = root_positions(program);
+    let (roots, unmapped) = root_positions(program);
+    inventory.unmapped_roots = unmapped;
     for file in files {
         check(ctx)?;
         let mut fact = module_fact(program, *file);
@@ -107,18 +112,71 @@ fn import_scope(
 }
 
 /// Each configured root file's position in `ParsedCommandLine.fileNames`,
-/// TypeScript's own root order, keyed by the program's source file. A root the
-/// program does not hold is skipped; a file named twice keeps its first
-/// position, as the program does.
-fn root_positions(program: &Program) -> HashMap<usize, u32> {
+/// TypeScript's own root order, keyed by the program's source file, and the
+/// configured roots the program holds no file for although the loader's
+/// lookup finds one (review of ADR 0368).
+///
+/// A root is mapped as the loader maps it: a name with an extension is the
+/// file (an unsupported extension loads nothing), an extensionless name is the
+/// first `name + extension` of the first supported group that exists
+/// (`files: ["src/main"]` loads `src/main.ts`), and a project-reference
+/// redirect then replaces it (`get_source_file_for_resolved_module`). A root
+/// whose lookup finds no file loaded none; it is no position and not
+/// unmapped. A root that maps to a file the program does not hold is
+/// unmapped: the caller cannot place it, and must not take path order for
+/// root order. A file named twice keeps its first position, as the program
+/// does.
+fn root_positions(program: &Program) -> (HashMap<usize, u32>, Vec<Arc<str>>) {
+    let command_line = program.command_line();
+    let options = program.options();
+    let host = program.host();
+    let fs = host.fs();
+    let supported = tsoptions::get_supported_extensions(
+        Some(&options),
+        &command_line.content_mapper_extensions(),
+    );
+    let supported_with_json = tsoptions::get_supported_extensions_with_json_if_resolve_json_module(
+        Some(&options),
+        &supported,
+    );
+    let allow_non_ts_extensions = options.allow_non_ts_extensions.is_true();
     let mut positions = HashMap::new();
-    for (index, name) in program.command_line().file_names().iter().enumerate() {
-        let (Some(file), Ok(index)) = (program.get_source_file(name), u32::try_from(index)) else {
+    let mut unmapped = Vec::new();
+    for (index, name) in command_line.file_names().iter().enumerate() {
+        let absolute = tspath::get_normalized_absolute_path(name, host.get_current_directory());
+        let looked_up = if tspath::has_extension(&absolute) {
+            let canonical =
+                tspath::get_canonical_file_name(&absolute, fs.use_case_sensitive_file_names());
+            let supported_extension = supported_with_json.iter().any(|group| {
+                let group = group.iter().map(String::as_str).collect::<Vec<_>>();
+                tspath::file_extension_is_one_of(&canonical, &group)
+            });
+            ((allow_non_ts_extensions || supported_extension) && fs.file_exists(&absolute))
+                .then_some(absolute)
+        } else if allow_non_ts_extensions {
+            fs.file_exists(&absolute).then_some(absolute)
+        } else {
+            supported.first().and_then(|group| {
+                group
+                    .iter()
+                    .map(|extension| format!("{absolute}{extension}"))
+                    .find(|candidate| fs.file_exists(candidate))
+            })
+        };
+        let Some(looked_up) = looked_up else {
             continue;
         };
-        positions.entry(file.addr()).or_insert(index);
+        match (
+            program.get_source_file_for_resolved_module(&looked_up),
+            u32::try_from(index),
+        ) {
+            (Some(file), Ok(index)) => {
+                positions.entry(file.addr()).or_insert(index);
+            }
+            _ => unmapped.push(Arc::from(clean(name))),
+        }
     }
-    positions
+    (positions, unmapped)
 }
 
 fn module_fact(program: &Program, file: P<SourceFile>) -> ModuleFact {

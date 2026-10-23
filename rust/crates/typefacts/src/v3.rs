@@ -70,7 +70,7 @@ pub(crate) const SUPPORTED_TABLE_SCHEMAS: [u64; 19] = [
 ];
 
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:64805adaa7b2e0a0542806cdb4bf11408c450b3af7894a53ed7adbc8f0c82946";
+    "sha256:ff5a9ac55ed6ea694c6b8a02d37652fb03ac735eae84985e6957c460040aa8b8";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -480,7 +480,8 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // Protocol 81 carries Wire v22, which keeps v21's rows under a new number.
 // Protocol 82 (ADR 0368) adds `ModuleFact.root`; a protocol-81 consumer
 // decodes with `deny_unknown_fields` and would reject it.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 82;
+// Protocol 83 (ADR 0368 review) adds the `Modules` answer's `unmappedRoots`.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 83;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",
@@ -713,6 +714,10 @@ pub struct Response {
     pub reference_evidence: Vec<SymbolFact>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub unknown_import_paths: Vec<Arc<str>>,
+    /// A `Modules` answer's configured roots the program holds no file for
+    /// although the loader's lookup finds one (protocol 83).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unmapped_roots: Vec<Arc<str>>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub reference_changes_exact: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

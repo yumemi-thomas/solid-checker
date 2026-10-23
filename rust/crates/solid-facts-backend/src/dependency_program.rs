@@ -73,26 +73,64 @@ pub fn prepare(
     ))
 }
 
-/// Every file the open program holds: its configured root files in
-/// TypeScript's own root order, then every other file by path. The order is
-/// the generated program's root order (ADR 0368): TypeScript orders a
-/// program's files by its roots and its answers can depend on that order, so
-/// a project root listed after a package file can give a type error `tsc`
-/// never reports.
-pub fn program_modules(original: &mut TypeFactsSession) -> Result<Vec<PathBuf>, Box<dyn Error>> {
-    let graph = original.module_graph(&typefacts::ModuleGraphDemand::default())?;
-    Ok(in_root_order(&graph.modules))
+/// Every file the open program holds, in the generated program's root order
+/// (ADR 0368): TypeScript orders a program's files by its roots and its
+/// answers can depend on that order, so a project root listed after a package
+/// file can give a type error `tsc` never reports.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ProgramModules {
+    /// The configured root files, in TypeScript's own root order
+    /// (`ModuleFact.root`), wherever they live: a root under `node_modules`
+    /// is the project's root all the same.
+    pub roots: Vec<PathBuf>,
+    /// Every other file, by path.
+    pub others: Vec<PathBuf>,
+    /// Configured roots the producer could not place (`ModuleGraph::unmapped_roots`):
+    /// the root order is then unknown, and preparation refuses rather than
+    /// take path order for it.
+    pub unmapped_roots: Vec<String>,
 }
 
-/// `modules` (ordered by path): the roots by their position, then the rest
-/// in the order given.
-fn in_root_order(modules: &[typefacts::ModuleFact]) -> Vec<PathBuf> {
-    let mut modules = modules.iter().collect::<Vec<_>>();
-    modules.sort_by_key(|module| module.root.map_or((1, 0), |root| (0, root)));
-    modules
-        .into_iter()
-        .map(|module| PathBuf::from(module.path.as_ref()))
-        .collect()
+impl ProgramModules {
+    /// Every file, roots first.
+    pub fn iter(&self) -> impl Iterator<Item = &PathBuf> {
+        self.roots.iter().chain(&self.others)
+    }
+}
+
+/// The open program's [`ProgramModules`].
+pub fn program_modules(original: &mut TypeFactsSession) -> Result<ProgramModules, Box<dyn Error>> {
+    let graph = original.module_graph(&typefacts::ModuleGraphDemand::default())?;
+    Ok(in_root_order(&graph))
+}
+
+/// `graph.modules` (ordered by path) split into the roots by their position
+/// and the rest in the order given.
+fn in_root_order(graph: &typefacts::ModuleGraph) -> ProgramModules {
+    let mut roots = graph
+        .modules
+        .iter()
+        .filter_map(|module| {
+            module
+                .root
+                .map(|root| (root, PathBuf::from(module.path.as_ref())))
+        })
+        .collect::<Vec<_>>();
+    roots.sort_by_key(|(root, _)| *root);
+    ProgramModules {
+        roots: roots.into_iter().map(|(_, path)| path).collect(),
+        others: graph
+            .modules
+            .iter()
+            .filter(|module| module.root.is_none())
+            .map(|module| PathBuf::from(module.path.as_ref()))
+            .collect(),
+        unmapped_roots: graph
+            .unmapped_roots
+            .iter()
+            .map(|root| root.to_string())
+            .collect(),
+    }
 }
 
 /// [`prepare`] from an inventory the caller already holds.
@@ -102,7 +140,7 @@ pub fn prepare_from(
     host: &Host,
     dialect: &'static Dialect,
     sources: &[SourceFile],
-    modules: &[PathBuf],
+    modules: &ProgramModules,
 ) -> Preparation {
     let excluded = dialect
         .vocabulary
@@ -240,21 +278,31 @@ mod tests {
     /// ADR 0368: TypeScript's root order first, not path order.
     #[test]
     fn roots_come_first_in_typescript_order() {
-        let modules = [
-            module("/p/node_modules/pkg/index.d.ts", None),
-            module("/p/src/app.tsx", Some(1)),
-            module("/p/src/main.tsx", Some(0)),
-            module("/p/src/shared.ts", None),
-        ];
+        let graph = typefacts::ModuleGraph {
+            modules: vec![
+                module("/p/node_modules/pkg/globals.d.ts", Some(2)),
+                module("/p/node_modules/pkg/index.d.ts", None),
+                module("/p/src/app.tsx", Some(1)),
+                module("/p/src/main.tsx", Some(0)),
+                module("/p/src/shared.ts", None),
+            ],
+            unmapped_roots: vec!["/p/src/lost".into()],
+            ..typefacts::ModuleGraph::default()
+        };
+        let modules = super::in_root_order(&graph);
         assert_eq!(
-            super::in_root_order(&modules),
+            modules.roots,
             [
                 "/p/src/main.tsx",
                 "/p/src/app.tsx",
-                "/p/node_modules/pkg/index.d.ts",
-                "/p/src/shared.ts",
+                "/p/node_modules/pkg/globals.d.ts",
             ]
             .map(PathBuf::from)
         );
+        assert_eq!(
+            modules.others,
+            ["/p/node_modules/pkg/index.d.ts", "/p/src/shared.ts"].map(PathBuf::from)
+        );
+        assert_eq!(modules.unmapped_roots, ["/p/src/lost"]);
     }
 }

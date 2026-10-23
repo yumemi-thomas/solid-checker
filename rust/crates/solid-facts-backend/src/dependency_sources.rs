@@ -34,6 +34,7 @@ use std::path::{Path, PathBuf};
 use sha2::{Digest, Sha256};
 
 use crate::SourceFile;
+use crate::dependency_program::ProgramModules;
 use crate::host_constants::{Ordered, find_package_root, split_bare_specifier};
 use solid_reactive_ir::package_boundary::{BindingForm, SelectionFailure, UnanalyzableReason};
 
@@ -348,7 +349,7 @@ pub fn prepare_program(
     selection: &[String],
     host: &Host,
     project_sources: &[SourceFile],
-    program_modules: &[PathBuf],
+    program_modules: &ProgramModules,
     excluded: &BTreeSet<String>,
     ecosystem_scopes: &[&str],
     refusal: CompilerRefusal<'_>,
@@ -358,19 +359,26 @@ pub fn prepare_program(
     // module` stub is part of the project's program too: take every file the
     // program holds outside `node_modules`, in `program_modules` order (its
     // roots in TypeScript's order first, ADR 0368).
+    let in_node_modules = |path: &Path| {
+        path.components()
+            .any(|component| component.as_os_str() == "node_modules")
+    };
     let mut project_order = Vec::new();
+    let mut listed = BTreeSet::new();
     let mut project_files = BTreeSet::new();
-    for path in program_modules.iter().cloned().chain(
+    for path in &program_modules.roots {
+        if path.is_file() && !in_node_modules(path) && listed.insert(path.clone()) {
+            project_order.push(path.clone());
+            project_files.insert(path.clone());
+        }
+    }
+    for path in program_modules.others.iter().cloned().chain(
         project_sources
             .iter()
             .map(|source| PathBuf::from(&source.path)),
     ) {
-        if path.is_file()
-            && !path
-                .components()
-                .any(|component| component.as_os_str() == "node_modules")
-            && project_files.insert(path.clone())
-        {
+        if path.is_file() && !in_node_modules(&path) && listed.insert(path.clone()) {
+            project_files.insert(path.clone());
             project_order.push(path);
         }
     }
@@ -459,6 +467,28 @@ pub fn prepare_program(
     else {
         return Ok(None);
     };
+    // Review of ADR 0368: a configured root the producer could not place
+    // leaves the root order unknown, and a program listing the project's
+    // roots in another order can type the project's own calls differently.
+    // Refuse rather than take path order for it.
+    if !program_modules.unmapped_roots.is_empty() {
+        let detail = format!(
+            "the project's root order is unknown: configured roots the program holds no file for ({})",
+            program_modules.unmapped_roots.join(", ")
+        );
+        notes.lines.push(format!(
+            "solid-checker: note: packages are not analyzed from source: {detail}; their behaviour stays uncertifiable"
+        ));
+        for name in &selection.package_names {
+            notes.refuse(
+                name,
+                None,
+                UnanalyzableReason::ProgramPreparationUnavailable,
+                detail.clone(),
+            );
+        }
+        return Ok(None);
+    }
     let document = program_document(tsconfig, &project_order, &selection.files)?;
     Ok(Some(PreparedDependencyProgram {
         tsconfig: tsconfig.to_path_buf(),

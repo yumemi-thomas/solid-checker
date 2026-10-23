@@ -466,7 +466,7 @@ struct OriginalProgram {
     /// Every file the program holds. `sources` is a path-decided subset of
     /// it, so while this is unchanged so is which files `sources` holds; an
     /// edited import that changes it rebuilds (review round 1).
-    modules: Vec<PathBuf>,
+    modules: dependency_program::ProgramModules,
     tracking: Tracking,
 }
 

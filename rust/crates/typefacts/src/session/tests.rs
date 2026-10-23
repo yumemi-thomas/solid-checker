@@ -119,6 +119,7 @@ fn response(generation: u64, state_token: &str, table_transition: Vec<u8>) -> Re
         modules: Vec::new(),
         module_imports: Vec::new(),
         unknown_import_paths: Vec::new(),
+        unmapped_roots: Vec::new(),
         client_decode_ns: 0,
         client_response_bytes: 0,
         client_request_send_ns: 0,

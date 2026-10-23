@@ -1407,6 +1407,7 @@ impl Session {
             modules: response.modules,
             imports: response.module_imports,
             unknown_import_paths: response.unknown_import_paths,
+            unmapped_roots: response.unmapped_roots,
         })
     }
 

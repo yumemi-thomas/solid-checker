@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 
 use super::{Host, entry_target, select};
+use crate::dependency_program::ProgramModules;
 use crate::host_constants::Ordered;
 use solid_reactive_ir::package_boundary::{BindingForm, UnanalyzableReason};
 
@@ -200,7 +201,7 @@ fn a_reexporting_package_without_manifest_identity_keeps_its_selection_identity(
         &["anonymous".into()],
         &host(&["browser", "development"]),
         &[],
-        &[],
+        &ProgramModules::default(),
         &BTreeSet::new(),
         &[],
         &|_, _| None,
@@ -230,7 +231,7 @@ fn a_project_installing_none_of_the_packages_is_analyzed_as_usual() {
         &["not-installed-here".to_owned()],
         &host(&["browser", "development"]),
         &[],
-        &[],
+        &ProgramModules::default(),
         &BTreeSet::new(),
         &[],
         &|_, _| None,
@@ -740,13 +741,15 @@ fn the_generated_program_lists_the_project_roots_first_in_their_order() {
     }
     let tsconfig = directory.join("tsconfig.json");
     std::fs::write(&tsconfig, "{}").unwrap();
-    let modules = [
-        "src/main.ts",
-        "src/app.ts",
-        "node_modules/aaa/index.d.ts",
-        "src/shared.d.ts",
-    ]
-    .map(|name| directory.join(name));
+    let modules = ProgramModules {
+        roots: ["src/main.ts", "src/app.ts"]
+            .map(|name| directory.join(name))
+            .to_vec(),
+        others: ["node_modules/aaa/index.d.ts", "src/shared.d.ts"]
+            .map(|name| directory.join(name))
+            .to_vec(),
+        unmapped_roots: Vec::new(),
+    };
     let mut notes = super::SelectionNotes::default();
     let prepared = super::prepare_program(
         &tsconfig,
@@ -777,4 +780,65 @@ fn the_generated_program_lists_the_project_roots_first_in_their_order() {
     .map(|name| directory.join(name).to_string_lossy().into_owned());
     std::fs::remove_dir_all(&directory).unwrap();
     assert_eq!(files, expected);
+}
+
+/// A project with `src/main.ts` and the installed package `aaa`, its
+/// `node_modules/aaa/globals.d.ts` beside the runtime entry.
+fn root_scratch(name: &str) -> std::path::PathBuf {
+    let directory = std::env::temp_dir().join(format!(
+        "solid-checker-source-{name}-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(directory.join("src")).unwrap();
+    let directory = directory.canonicalize().unwrap();
+    let package = directory.join("node_modules/aaa");
+    std::fs::create_dir_all(&package).unwrap();
+    std::fs::write(package.join("package.json"), r#"{"module":"index.js"}"#).unwrap();
+    std::fs::write(package.join("index.js"), "export const x = 1;").unwrap();
+    std::fs::write(
+        package.join("globals.d.ts"),
+        "declare global { interface Window { aaa: number } } export {};",
+    )
+    .unwrap();
+    std::fs::write(directory.join("src/main.ts"), "export {};").unwrap();
+    std::fs::write(directory.join("tsconfig.json"), "{}").unwrap();
+    directory
+}
+
+fn prepare_with(
+    directory: &std::path::Path,
+    modules: &ProgramModules,
+    notes: &mut super::SelectionNotes,
+) -> Option<super::PreparedDependencyProgram> {
+    super::prepare_program(
+        &directory.join("tsconfig.json"),
+        &["aaa".into()],
+        &host(&["browser", "development"]),
+        &[],
+        modules,
+        &BTreeSet::new(),
+        &[],
+        &|_, _| None,
+        notes,
+    )
+    .unwrap()
+}
+
+/// Review of ADR 0368: a configured root the producer could not place leaves
+/// the root order unknown. Preparation refuses the selected packages (their
+/// behaviour stays uncertifiable) rather than list the roots in path order.
+#[test]
+fn an_unmapped_root_refuses_the_generated_program() {
+    let directory = root_scratch("unmapped-root");
+    let modules = ProgramModules {
+        roots: vec![directory.join("src/main.ts")],
+        others: Vec::new(),
+        unmapped_roots: vec![directory.join("src/lost").to_string_lossy().into_owned()],
+    };
+    let mut notes = super::SelectionNotes::default();
+    let prepared = prepare_with(&directory, &modules, &mut notes);
+    std::fs::remove_dir_all(&directory).unwrap();
+    assert!(prepared.is_none());
+    assert!(notes.refusals.iter().any(|refusal| refusal.name == "aaa"
+        && refusal.kind == UnanalyzableReason::ProgramPreparationUnavailable));
 }
