@@ -1,8 +1,8 @@
 # component-alias-entries
 
-ADR 0331: a visible call proves no identity unless the census finds every entry. Exact aliases (`const`, unwritten `let`) are followed.
+ADR 0331: a call proves no identity unless the census finds all entries; exact aliases are followed.
 
-- Violation: `Plain`, `Chained` (`App.tsx`) and `Imported` (`Importer.tsx`) are called in tracked JSX and rendered by alias (runtime-oracle `component-alias-entries`).
-- Uncertifiable (`Escapes.tsx`, `Exported.tsx`): also passed, stored, aliased by a written `let`, or exported from an open program.
-- `Kept.tsx`: call-proven SC1001/SC4001 violations stay; a write legal at its calls is SC2001 uncertifiable.
-- Clean (`Negatives.tsx`): alias only called, unused, `typeof`, in a handler, shadowed.
+- Violation: `Plain`, `Chained`, `Imported`, `Handled`: called and rendered by alias (runtime-oracle `component-alias-entries`); a handler entry clears none.
+- Uncertifiable: `Escapes.tsx`, `Exported.tsx` (passed, stored, written `let`, exported); `Reassigned2.tsx` (aliased binding written); `NestedWriter.tsx` (its host component proves nothing).
+- `Kept.tsx`: call-proven SC1001/SC4001 violations stay; a write its calls allow is SC2001 uncertifiable.
+- Clean (`Negatives.tsx`): alias only called, unused, `typeof`, in a handler, shadowed

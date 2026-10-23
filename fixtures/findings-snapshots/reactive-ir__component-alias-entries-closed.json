@@ -10,6 +10,16 @@
       "start": 410,
       "end": 417,
       "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/component-alias-entries-closed/Views.tsx",
+      "start": 262,
+      "end": 269,
+      "fixes": 0
     }
   ]
 }

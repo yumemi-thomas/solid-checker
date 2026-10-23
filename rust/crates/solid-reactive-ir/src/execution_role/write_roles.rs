@@ -369,8 +369,7 @@ pub(super) fn semantic_write_execution_role_within(
     // render, the rendering role is only a possibility. A call that proves a
     // disallowed write still proves it; otherwise no role is proven.
     let possible_render = direct == ExecutionRole::UntrackedRendering
-        && !lookup.inside_component(file, span)
-        && lookup.inside_possible_component(file, span);
+        && innermost_identity_is_possible(file, span, lookup);
     if direct != ExecutionRole::Unknown && !possible_render {
         return direct;
     }
@@ -459,4 +458,20 @@ pub(super) fn attribute_function_within(
             && (jsx_attribute_value_function(file, function.span)
                 || call_argument_invocation_unproven(file, function, lookup))
     })
+}
+
+/// ADR 0331: whether the innermost function around `span` that has a
+/// component identity at all is a possible component rather than a proven
+/// one. An enclosing component renders its own body, not a function nested
+/// in it, so it proves nothing about how that function is entered.
+fn innermost_identity_is_possible(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    file.ast
+        .functions_body_containing(span)
+        .filter(|function| lookup.function_component_status(file, function) != ComponentStatus::No)
+        .min_by_key(|function| function.body.end - function.body.start)
+        .is_some_and(|function| !lookup.function_is_component(file, function))
 }

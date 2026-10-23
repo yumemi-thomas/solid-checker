@@ -83,7 +83,9 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   proven silent.
 - **A rendered function's body is a component body, however else it is
   called.** `const P2 = Plain; <P2 />` renders `Plain` as `<Plain />` would,
-  so a body read in `Plain` is a violation even beside a tracked `{Plain()}`.
+  so a body read in `Plain` is a violation even beside a tracked `{Plain()}`
+  or a handler position (`onClick={Plain}`). An alias of a binding that is
+  ever written renders nothing proven.
   A visible call clears a function only when every other reference is
   followed (ADR 0331): one passed, stored, aliased by a written `let`, or
   exported from an open program leaves its body reads uncertifiable, beside

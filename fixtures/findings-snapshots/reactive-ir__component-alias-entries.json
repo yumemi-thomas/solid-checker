@@ -84,6 +84,16 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/component-alias-entries/Handler.tsx",
+      "start": 218,
+      "end": 225,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/component-alias-entries/Kept.tsx",
@@ -119,6 +129,26 @@
       "path": "fixtures/reactive-ir/component-alias-entries/Kept.tsx",
       "start": 670,
       "end": 681,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/component-alias-entries/NestedWriter.tsx",
+      "start": 356,
+      "end": 367,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/component-alias-entries/Reassigned2.tsx",
+      "start": 339,
+      "end": 346,
       "fixes": 0
     }
   ]

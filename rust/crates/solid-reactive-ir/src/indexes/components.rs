@@ -399,10 +399,14 @@ impl<'a> SemanticLookup<'a> {
         }
         // An open program's unseen importers of an exported function are
         // entries no census enumerates (ADR 0331 treats the module surface as
-        // no entry only for the proof that it *is* a component).
+        // no entry only for the proof that it *is* a component). A closed
+        // program has none, but a visible namespace read can still hand the
+        // export out with no reference naming it (ADR 0347): a computed or
+        // otherwise unnamed escape, or a named member or dynamic-import read.
         if directly_called
-            && !self.program_closed
-            && binding_name.is_some_and(|name| binding_exported(file, name.span))
+            && (binding_name.is_some_and(|name| binding_exported(file, name.span))
+                && (!self.program_closed || self.escapes_unnamed(file.path.as_str()))
+                || self.hands_out_by_name(file.path.as_str(), function.span))
         {
             alias_entries.unfollowed = true;
         }
@@ -999,8 +1003,11 @@ impl<'a> SemanticLookup<'a> {
                 .entities
                 .value_symbol(binding_file, initializer)?
                 .as_str();
-            if let Some(found) = self.function_for_symbol(symbol) {
-                return Some(found);
+            if let Some((target_file, target)) = self.function_for_symbol(symbol) {
+                // The alias holds what its initializer's binding held when it
+                // ran; that is this function only if nothing writes it.
+                return function_holds_its_binding(target_file, target)
+                    .then_some((target_file, target));
             }
         }
         None
@@ -1241,4 +1248,28 @@ enum Identity {
     Escaped,
     Possible,
     No,
+}
+
+/// Whether the binding that names `function` holds it whenever it is read: a
+/// function declaration nothing writes, or a `const` (or a `let` nothing
+/// writes) initialized with the function itself. A call's result
+/// (`withX(() => ...)`), a method, or a written binding holds no proven value.
+fn function_holds_its_binding(file: &FileFacts, function: &solid_facts::ast::FunctionFact) -> bool {
+    if let Some(name) = function.name.as_ref()
+        && function.kind == solid_facts::ast::FunctionKind::Declaration
+    {
+        return !binding_written(file, name.span);
+    }
+    let Some(name) = crate::owners::function_binding_name(file, function) else {
+        return false;
+    };
+    file.ast.bindings.iter().any(|binding| {
+        binding.initializer_function
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && matches!(binding.names.as_slice(), [only] if only.span == name.span)
+            && binding.initializer.is_some_and(|initializer| {
+                file.ast.peel_ts_sugar_span(initializer) == function.span
+            })
+            && (binding.immutable || binding.runtime_let && !binding_written(file, name.span))
+    })
 }
