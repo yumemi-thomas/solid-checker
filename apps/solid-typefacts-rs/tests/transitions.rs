@@ -121,8 +121,9 @@ fn full_then_sparse_then_reuse() {
     assert!(reuse.table_transition.is_empty());
     assert_eq!(reuse.timings.map(|t| t.analyze_ns), Some(0));
 
-    // An edit advances the generation; the closure's exact manifest makes the
-    // delta sparse: one unconditional upsert for the edited path.
+    // An edit advances the generation. Nothing is reused across it, so the
+    // manifest names every demanded path (a.ts and b.ts), not only the edited
+    // one: either could differ after ids are claimed afresh.
     assert!(ask(&mut session, update(3, 2, "/p/a.ts", "edited")).ok);
     let delta = ask(&mut session, analyze(4, 2, "1", Vec::new()));
     assert!(delta.ok, "{:?}", delta.error);
@@ -131,7 +132,7 @@ fn full_then_sparse_then_reuse() {
     assert_eq!(sparse.mode, TransitionMode::Delta);
     assert_eq!(sparse.base_state_token, "1");
     assert_eq!((sparse.base_generation, sparse.target_generation), (1, 2));
-    assert_eq!(sparse.path_operations, 1);
+    assert_eq!(sparse.path_operations, 2);
     assert_eq!(sparse.symbol_operations, 0);
 
     // A generation that changed no path still advances the retained identity:

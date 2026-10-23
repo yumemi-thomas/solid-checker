@@ -14,6 +14,7 @@ mod project_open;
 mod project_references;
 mod project_support;
 mod protocol;
+mod randomized_incremental;
 mod reactor;
 mod regression;
 mod resolved_calls;

@@ -268,7 +268,7 @@ fn an_unknown_run_file_leaves_bare_entities() {
 /// them instead of letting a long session accrete every file it ever saw.
 /// Identities of files still in the program must survive the same sweep.
 #[test]
-fn full_rebuild_sweeps_departed_files_durable_identities() {
+fn update_drops_durable_identities() {
     let scratch = Scratch::new(&[
         ("tsconfig.json", SMALL_CONFIG),
         ("kept.ts", "export const kept = 1\n"),
@@ -293,17 +293,16 @@ fn full_rebuild_sweeps_departed_files_durable_identities() {
         before.contains(&kept) && before.contains(&doomed),
         "identities were not minted for both files: {before:?}"
     );
-    // A delete forces the full-rebuild update path, which sweeps.
+    // An update keeps no durable identity, whichever file it touched (ADR
+    // 0364): they are minted again when asked for.
     project.update(&ctx, &[deletion(&doomed, 1)]).unwrap();
     let after = ref_paths(&project);
     assert!(
-        !after.contains(&doomed),
-        "the deleted file's durable identities survived the sweep"
+        after.is_empty(),
+        "durable identities survived the update: {after:?}"
     );
-    assert!(
-        after.contains(&kept),
-        "a living file's identities were swept"
-    );
+    project.symbol_at(&ctx, &loc(&kept, 13, 17)).unwrap();
+    assert!(ref_paths(&project).contains(&kept));
 }
 
 #[test]

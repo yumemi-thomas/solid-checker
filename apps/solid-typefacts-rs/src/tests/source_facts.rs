@@ -368,7 +368,7 @@ fn source_facts_memo_across_generations() {
     };
     let sees = |affected: &[String], name: &str| affected.iter().any(|path| path.ends_with(name));
 
-    // unrelated update keeps the memo and resolves held ids
+    // every update clears the memo, and held ids still resolve
     let affected = project
         .update(&ctx, &[change(&c, 1, "export const unrelated = 2;\n")])
         .unwrap()
@@ -378,17 +378,18 @@ fn source_facts_memo_across_generations() {
         "a.ts unexpectedly affected: {affected:?}"
     );
     assert!(
-        memo_has_calls(&project, &a),
-        "memo entry for a.ts did not survive an unrelated update"
+        project.source_memo().is_empty(),
+        "an unrelated update kept memo entries"
     );
     assert_eq!(project.source_calls(&ctx, &a).unwrap(), calls);
+    assert!(memo_has_calls(&project, &a), "the query refills the memo");
     assert_eq!(
         project.declarations(&ctx, &target).unwrap().unwrap(),
         declarations,
         "declarations diverged across generations"
     );
 
-    // shape-preserving imported body edit retains the importer
+    // shape-preserving imported body edit
     let affected = project
         .update(
             &ctx,
@@ -405,8 +406,8 @@ fn source_facts_memo_across_generations() {
         "shape-preserving edit unexpectedly affected a.ts: {affected:?}"
     );
     assert!(
-        project.source_memo().contains_key(&a),
-        "memo entry for a.ts did not survive a shape-preserving edit"
+        project.source_memo().is_empty(),
+        "a shape-preserving edit kept memo entries"
     );
     let reused = project.source_calls(&ctx, &a).unwrap();
     assert_eq!(reused, calls);
@@ -416,7 +417,7 @@ fn source_facts_memo_across_generations() {
         "durable id changed for an unmoved declaration"
     );
 
-    // exported signature change evicts the importer
+    // exported signature change
     let affected = project
         .update(
             &ctx,
@@ -437,7 +438,7 @@ fn source_facts_memo_across_generations() {
         "memo entry for a.ts survived an exported signature change"
     );
 
-    // multi-file update clears the memo wholesale
+    // multi-file update
     project.source_calls(&ctx, &a).unwrap();
     assert!(
         !project.source_memo().is_empty(),
@@ -461,9 +462,11 @@ fn source_facts_memo_across_generations() {
         "expected an empty memo after a full rebuild, found {} entries",
         project.source_memo().len()
     );
+    assert!(project.declarations(&ctx, &target).unwrap().is_none());
+    project.source_calls(&ctx, &a).unwrap();
     assert!(
         project.declarations(&ctx, &target).unwrap().is_some(),
-        "durable id failed to re-resolve after a full rebuild"
+        "durable id failed to re-resolve after being minted again"
     );
 }
 

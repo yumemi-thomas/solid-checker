@@ -533,6 +533,12 @@ impl ClosureBackend for Project {
         outcome
     }
 
+    fn discard_derived_state(&mut self) {
+        self.ids.release_pointers();
+        self.references.reset();
+        self.evict_source_memo();
+    }
+
     /// Go: `Close`.
     fn close(&mut self) -> Result<(), BackendError> {
         if self.generation.is_none() {
@@ -982,32 +988,16 @@ impl Project {
         let affected_duration = stage.elapsed();
 
         let stage = Instant::now();
-        // An incremental update keeps reference contributions (and, with the
-        // `Source*` families, source facts) of files outside the affected set:
-        // their text is unchanged and every durable identity they reference
-        // declares in an unchanged file (a changed declaring file would have
-        // put the referencing file in the affected set). Files that left the
-        // program are evicted now, not when they are next queried, so an entry
-        // cannot go stale while its file is outside the program and be reused
-        // if the file later re-enters. A full rebuild (deletes, tsconfig
-        // changes, multi-file updates) can change resolution outside the
-        // module graph: it fails closed and sweeps the durable identities of
-        // files that left the program.
+        // Nothing derived from the preceding generation's analysis survives
+        // an update: not the source-fact memo, not the reference
+        // contributions or merged buckets (their ids and the spaces of
+        // references into other files are claim-order and cross-file facts),
+        // and not the identity maps (`Identities::after_update`). Only the
+        // program's own incremental reuse and the declaration shapes that
+        // decide the affected set carry over. A full rebuild also sweeps the
+        // durable identities of files that left the program.
+        ClosureBackend::discard_derived_state(self);
         if incremental {
-            let dropped: std::collections::HashSet<&str> =
-                affected.iter().map(String::as_str).collect();
-            self.evict_source_memo(Some(&|path| {
-                !dropped.contains(path) && program.get_source_file(path).is_some()
-            }));
-            self.references.invalidate(
-                &affected,
-                &|path| {
-                    program
-                        .get_source_file(path)
-                        .is_some_and(|file| !file.is_declaration_file())
-                },
-                &|path| !dropped.contains(path) && program.get_source_file(path).is_some(),
-            );
             for path in &affected {
                 self.declaration_shapes.remove(&clean(path));
             }
@@ -1016,9 +1006,6 @@ impl Project {
                     .insert(incremental_path.clone(), shape);
             }
         } else {
-            self.evict_source_memo(None);
-            self.references.reset();
-            self.ids.sweep_durable(program);
             self.declaration_shapes.clear();
         }
         let invalidation_duration = stage.elapsed();
@@ -1089,7 +1076,6 @@ impl Project {
         // The identity maps and the generation-scoped reference ids name the
         // chain about to be freed.
         self.ids.release_pointers();
-        self.references.rebase();
         generation.commit(fresh);
         true
     }

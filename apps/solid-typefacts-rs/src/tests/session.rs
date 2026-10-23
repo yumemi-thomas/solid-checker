@@ -333,12 +333,12 @@ fn session_analysis_traverses_the_retained_path() {
     assert!(warm_response.ok, "warm analyze = {warm_response:?}");
 
     let retention = session.closure().stats().retention;
-    assert!(
-        retention.retained_files != 0,
-        "no file was retained across the update; retention = {retention:?}"
+    assert_eq!(
+        retention.retained_files, 0,
+        "a file was retained across the update; retention = {retention:?}"
     );
     // The active V1 session always uses the latest semantic transport path;
-    // retained files are the stable contract here.
+    // nothing is retained across an update, and the transition still advances.
     assert!(
         !warm_response.table_transition.is_empty(),
         "warm analyze omitted its generation-advancing transition; retention = {retention:?}"

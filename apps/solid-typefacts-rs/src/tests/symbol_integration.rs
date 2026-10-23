@@ -21,7 +21,7 @@ use typefacts::producer::{ProducerTable, TransitionEncoder, TransitionInput};
 use typefacts::v3::{EntityDemand, FileChange, Operation};
 use typefacts::{EntityFact, Location};
 
-fn testdata(name: &str) -> PathBuf {
+pub(super) fn testdata(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../solid-typefacts/internal/typefacts/testdata")
         .join(name)
@@ -29,12 +29,12 @@ fn testdata(name: &str) -> PathBuf {
         .unwrap()
 }
 
-fn open(config: &str) -> Project {
+pub(super) fn open(config: &str) -> Project {
     Project::open(&Context::new(), config, None, None).unwrap()
 }
 
 /// Go's `realisticDemands`.
-fn symbol_demands(closure: &mut DemandClosure) -> Vec<EntityDemand> {
+pub(super) fn symbol_demands(closure: &mut DemandClosure) -> Vec<EntityDemand> {
     let ctx = Context::new();
     let mut demands = Vec::new();
     for source in closure.source_files(&ctx).unwrap() {
@@ -80,7 +80,7 @@ fn symbol_demands(closure: &mut DemandClosure) -> Vec<EntityDemand> {
     demands
 }
 
-fn groups(demands: &[EntityDemand]) -> Vec<DemandInputGroup> {
+pub(super) fn groups(demands: &[EntityDemand]) -> Vec<DemandInputGroup> {
     let mut by_path: std::collections::BTreeMap<String, Vec<EntityDemand>> = Default::default();
     for demand in demands {
         by_path
@@ -94,7 +94,7 @@ fn groups(demands: &[EntityDemand]) -> Vec<DemandInputGroup> {
         .collect()
 }
 
-fn paths(demands: &[EntityDemand]) -> Vec<String> {
+pub(super) fn paths(demands: &[EntityDemand]) -> Vec<String> {
     let mut paths: Vec<String> = demands
         .iter()
         .map(|demand| crate::gocompat::clean(&demand.location.path))
@@ -105,7 +105,7 @@ fn paths(demands: &[EntityDemand]) -> Vec<String> {
 }
 
 /// Go's `assertFullWireTransitionsIdentical`.
-fn assert_full_transitions_identical(
+pub(super) fn assert_full_transitions_identical(
     what: &str,
     step: usize,
     project_id: &str,
@@ -131,7 +131,7 @@ fn assert_full_transitions_identical(
     );
 }
 
-fn open_closure(config: &str) -> DemandClosure {
+pub(super) fn open_closure(config: &str) -> DemandClosure {
     DemandClosure::new(Box::new(open(config)), None)
 }
 
@@ -419,7 +419,7 @@ fn global_scope_edit_fails_closed_and_keeps_parity() {
 
 // ---- non_durable_integration_test.go ----------------------------------------
 
-fn is_ident(byte: u8) -> bool {
+pub(super) fn is_ident(byte: u8) -> bool {
     byte == b'_' || byte.is_ascii_alphanumeric()
 }
 
@@ -663,7 +663,7 @@ fn alternating(path: &str, before: &[u8], after: &[u8], count: u64) -> Vec<FileC
         .collect()
 }
 
-const STRICT_CONFIG: &str = r#"{"compilerOptions":{"module":"esnext","moduleResolution":"bundler","target":"esnext","strict":true},"include":["*.ts"]}"#;
+pub(super) const STRICT_CONFIG: &str = r#"{"compilerOptions":{"module":"esnext","moduleResolution":"bundler","target":"esnext","strict":true},"include":["*.ts"]}"#;
 
 #[test]
 fn module_and_global_augmentation_alternating_generations_match_fresh() {
@@ -787,7 +787,10 @@ fn deletion_restoration_and_config_alternation_match_fresh() {
 /// Go's `familyDemands`: symbol plus exactly one fact family at every binding
 /// name and call callee, so no other family's recorded dependencies can mask a
 /// stale answer.
-fn family_demands(closure: &mut DemandClosure, mark: fn(&mut EntityDemand)) -> Vec<EntityDemand> {
+pub(super) fn family_demands(
+    closure: &mut DemandClosure,
+    mark: fn(&mut EntityDemand),
+) -> Vec<EntityDemand> {
     let ctx = Context::new();
     let mut demands = Vec::new();
     let mut add = |location: Location| {
@@ -918,7 +921,7 @@ fn deletion_restoration_single_family_demands_match_fresh() {
 /// keeping the two constructions independent is deliberate, so the incremental
 /// and fresh sides of the oracle cannot agree merely because they share a
 /// helper.
-fn canonical_groups(demands: &[EntityDemand]) -> Vec<DemandInputGroup> {
+pub(super) fn canonical_groups(demands: &[EntityDemand]) -> Vec<DemandInputGroup> {
     let mut sorted: Vec<EntityDemand> = demands.to_vec();
     sorted.sort_by(|left, right| {
         let (left, right) = (&left.location, &right.location);
@@ -989,7 +992,6 @@ fn assert_retained_matches_fresh_materialization(name: &str, edit: &str, other: 
         .demand_table_for_groups(&ctx, 1, &groups(&demands), &paths(&demands))
         .unwrap();
     let mut generation = 1;
-    let (mut retained_seen, mut async_cache_seen, mut async_facts_exist) = (false, false, false);
     for (step, change) in script.iter().enumerate() {
         incremental
             .update(&ctx, std::slice::from_ref(change))
@@ -1010,17 +1012,11 @@ fn assert_retained_matches_fresh_materialization(name: &str, edit: &str, other: 
             )
             .unwrap();
         let retention = incremental.stats().retention;
-        retained_seen |= retention.retained_files > 0;
-        // A retained async group with no async functions still counts, so
-        // require a retained generation whose table carries async facts.
-        if table
-            .files
-            .iter()
-            .any(|file| !file.async_functions.is_empty())
-        {
-            async_facts_exist = true;
-            async_cache_seen |= retention.retained_async_files > 0;
-        }
+        assert_eq!(
+            (retention.retained_files, retention.retained_async_files),
+            (0, 0),
+            "step {step}: an update must retain nothing"
+        );
 
         let mut fresh = open_closure(&config);
         for replay in &script[..=step] {
@@ -1046,11 +1042,6 @@ fn assert_retained_matches_fresh_materialization(name: &str, edit: &str, other: 
             &fresh_table,
         );
     }
-    assert!(retained_seen, "the edit script never exercised retention");
-    assert!(
-        !async_facts_exist || async_cache_seen,
-        "the fixture has async functions but no retained generation carried them"
-    );
 }
 
 /// `TestRetainedDemandClosureMatchesFreshMaterialization`.

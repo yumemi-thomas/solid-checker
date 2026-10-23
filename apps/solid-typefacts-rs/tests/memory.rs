@@ -90,7 +90,7 @@ fn rebuild_and_update_loops_do_not_accumulate() {
 
     // 300 full rebuilds: two files changed at once take the rebuild path.
     let (mut at_30, mut at_300) = (0, 0);
-    let (mut arena_30, mut arena_300) = (0, 0);
+    let (mut arena_100, mut arena_300) = (0, 0);
     for round in 1..=300_u64 {
         project
             .update(
@@ -118,7 +118,7 @@ fn rebuild_and_update_loops_do_not_accumulate() {
             at_30 = rss_kib();
         }
         if round == 100 {
-            arena_30 = arena_kib();
+            arena_100 = arena_kib();
         }
         if round == 300 {
             at_300 = rss_kib();
@@ -126,11 +126,12 @@ fn rebuild_and_update_loops_do_not_accumulate() {
         }
     }
     eprintln!("rebuilds: start {start} KiB, #30 {at_30} KiB, #300 {at_300} KiB");
+    eprintln!("rebuild arena: #100 {arena_100} KiB, #300 {arena_300} KiB");
 
     // 100 incremental updates (one file each; the rebase policy runs once).
     let before_updates = rss_kib();
     let (mut at_10, mut at_100) = (0, 0);
-    let (mut arena_10, mut arena_100) = (0, 0);
+    let (mut arena_10, mut arena_u100) = (0, 0);
     for round in 1..=100_u64 {
         project
             .update(
@@ -149,10 +150,11 @@ fn rebuild_and_update_loops_do_not_accumulate() {
         }
         if round == 100 {
             at_100 = rss_kib();
-            arena_100 = arena_kib();
+            arena_u100 = arena_kib();
         }
     }
     eprintln!("updates: before {before_updates} KiB, #10 {at_10} KiB, #100 {at_100} KiB");
+    eprintln!("update arena: #10 {arena_10} KiB, #100 {arena_u100} KiB");
 
     // 1,100 edits of a 100 KB file, across the rebase at 1,024: every edited
     // version's tree, binder output and lazily filled data is freed once no
@@ -187,19 +189,30 @@ fn rebuild_and_update_loops_do_not_accumulate() {
         eprintln!("TSRS_ARENA_POISON=1: growth is expected, no RSS bound asserted");
         return;
     }
-    // The arena is exact: file versions, configurations and checkers are
-    // freed with their generation, so 200 rebuilds after the warm-up (the slab cache
-    // and the thread arenas settle by about the 100th) and 90 updates leave it
-    // where it was (measured: 0 KiB; the bound is one slab of slack).
+    // The arena is exact apart from slab pinning: file versions,
+    // configurations and checkers are freed with their generation, but a slab
+    // stays in use while any region in it lives, and which regions share a slab
+    // depends on the order frees and allocations interleave. That order differs
+    // per process (idle runs spread as widely as loaded ones, so it is not
+    // scheduling; a seeded hash-map iteration is the likely source, not
+    // isolated). So the in-use total climbs in whole 1 MiB steps at rounds that
+    // differ per run, then stays flat once every long-lived region has pinned
+    // its slab. Growth between #100 and #300
+    // over 30 runs (20 idle, 10 beside 14 busy processes): 0 KiB in 11, 1 MiB
+    // in 8, 2 MiB in 8, 3 MiB in 2, 5 MiB in 1; the last step was as late as
+    // #220. A leak is not a few steps: before the `Generation` machinery every
+    // rebuild kept 9 MiB, 1.8 GiB over 200. The bound is three times the
+    // largest step count seen and under 1% of that leak. The update loop does not
+    // step (0 KiB in 20 runs), so its bound stays one slab.
     assert!(
-        arena_300.saturating_sub(arena_30) <= 1024,
+        arena_300.saturating_sub(arena_100) <= 16 * 1024,
         "200 rebuilds grew the arena by {} KiB",
-        arena_300.saturating_sub(arena_30)
+        arena_300.saturating_sub(arena_100)
     );
     assert!(
-        arena_100.saturating_sub(arena_10) <= 1024,
+        arena_u100.saturating_sub(arena_10) <= 1024,
         "90 updates grew the arena by {} KiB",
-        arena_100.saturating_sub(arena_10)
+        arena_u100.saturating_sub(arena_10)
     );
     assert!(
         arena_b.saturating_sub(arena_a) <= 8 * 1024,

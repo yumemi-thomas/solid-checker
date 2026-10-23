@@ -136,85 +136,6 @@ impl ReferenceIndex {
         &self.changed_symbols
     }
 
-    /// Go: `invalidate`. Retains safe contributions and records exact symbol
-    /// evidence for every discarded file. Small updates patch the merged index
-    /// in place; broad updates rebuild it, but no longer discard the exact
-    /// changed-symbol set.
-    ///
-    /// `is_scannable` answers whether the program holds a non-declaration
-    /// file at a path; `retained` whether a file's contribution may survive.
-    pub fn invalidate(
-        &mut self,
-        affected: &[String],
-        is_scannable: &dyn Fn(&str) -> bool,
-        retained: &dyn Fn(&str) -> bool,
-    ) {
-        self.spaces = None;
-        let composing =
-            self.delta_exact && (self.merged.is_none() || !self.refresh_paths.is_empty());
-        let had_exact_base = self.merged.is_some() || composing;
-        // Large affected sets still favor a full merged-index rebuild.
-        // Exactness and the physical update strategy are independent
-        // decisions.
-        let incremental = self.merged.is_some() && affected.len() <= 64 && !composing;
-        let mut refresh_paths: HashSet<String> = HashSet::with_capacity(affected.len());
-        let mut changed_symbols = if composing {
-            std::mem::take(&mut self.changed_symbols)
-        } else {
-            HashSet::new()
-        };
-        let mut doomed: Vec<String> = Vec::new();
-        for (path, entry) in &self.files {
-            // A non-durable entry holds generation-scoped counter ids no later
-            // generation can resolve; fail closed and re-scan.
-            if retained(path) && entry.durable {
-                continue;
-            }
-            doomed.push(path.clone());
-        }
-        // Go ranges the map in unspecified order; the effects below are
-        // order-insensitive (set unions and per-path removals).
-        for path in doomed {
-            let Some(entry) = self.files.remove(&path) else {
-                continue;
-            };
-            if had_exact_base {
-                for group in &entry.refs {
-                    changed_symbols.insert(group.id.clone());
-                }
-            }
-            if incremental {
-                let path_index = self.paths.partition_point(|candidate| *candidate < path);
-                if let Some(merged) = &mut self.merged {
-                    for group in &entry.refs {
-                        let Some(references) = merged.get_mut(&group.id) else {
-                            continue;
-                        };
-                        references.retain(|reference| reference.path as usize != path_index);
-                        if references.is_empty() {
-                            merged.remove(&group.id);
-                        }
-                    }
-                }
-                if is_scannable(&path) {
-                    refresh_paths.insert(path);
-                }
-            }
-        }
-        if incremental {
-            self.refresh_paths = refresh_paths;
-            self.changed_symbols = changed_symbols;
-            self.delta_exact = true;
-            return;
-        }
-        self.merged = None;
-        self.spaces = None;
-        self.paths.clear();
-        self.refresh_paths.clear();
-        self.changed_symbols = changed_symbols;
-        self.delta_exact = had_exact_base;
-    }
-
     /// Go: `reset`.
     pub fn reset(&mut self) {
         self.merged = None;
@@ -228,57 +149,18 @@ impl ReferenceIndex {
         self.complete = None;
     }
 
-    /// The reference half of the rebase policy: the program is a different
-    /// arena with equal content, so the generation-scoped ids of non-durable
-    /// contributions no longer name anything. They are dropped as `invalidate`
-    /// drops them (their symbols join the exact delta) and the merged index
-    /// is rebuilt from the durable contributions that remain.
-    pub fn rebase(&mut self) {
-        let had_exact_base = self.delta_exact || self.merged.is_some();
-        let doomed: Vec<String> = self
-            .files
-            .iter()
-            .filter(|(_, entry)| !entry.durable)
-            .map(|(path, _)| path.clone())
-            .collect();
-        for path in doomed {
-            if let Some(entry) = self.files.remove(&path)
-                && had_exact_base
-            {
-                {
-                    for group in &entry.refs {
-                        self.changed_symbols.insert(group.id.clone());
-                    }
-                }
-            }
-        }
-        self.delta_exact = had_exact_base;
+    /// Go: `releaseAnalysisState`: drops the whole index. Merging moves each
+    /// file's spans into the merged buckets, so a pruned bucket cannot be
+    /// restored from the per-file entries; a later query in the same generation
+    /// rebuilds the index from the program.
+    pub fn release_analysis_state(&mut self) {
         self.merged = None;
         self.spaces = None;
-        self.paths.clear();
         self.refresh_paths.clear();
+        self.files.clear();
+        self.paths.clear();
         self.used.clear();
         self.complete = None;
-    }
-
-    /// Go: `releaseAnalysisState`.
-    pub fn release_analysis_state(&mut self) {
-        let mut pruned = false;
-        if let Some(merged) = &mut self.merged {
-            let before = merged.len();
-            merged.retain(|id, _| self.used.contains(id));
-            pruned = merged.len() != before;
-        }
-        if pruned || self.complete.is_some() {
-            // Buckets kept before this release but unused since are pruned
-            // now, so only the ids used since the last release remain whole.
-            self.complete = Some(self.used.clone());
-        }
-        self.used.clear();
-        // Reference-space rows are cheap to rebuild from the compact per-file
-        // entries and otherwise duplicate that complete union between
-        // analyses.
-        self.spaces = None;
     }
 
     /// Go: `ensure`.
@@ -733,38 +615,8 @@ impl ReferenceIndex {
 
 #[cfg(test)]
 impl ReferenceIndex {
-    /// Test seam for the broad-invalidation case, which Go builds by filling
-    /// the struct directly.
     /// Go sets `referenceIndex.used` directly.
     pub(crate) fn set_used_for_test(&mut self, ids: &[SymbolId]) {
         self.used = ids.iter().cloned().collect();
-    }
-
-    pub(crate) fn insert_for_test(&mut self, path: &str, id: &str, durable: bool) {
-        let id: SymbolId = id.into();
-        let path_index = u32::try_from(self.paths.len()).unwrap();
-        self.paths.push(path.to_owned());
-        self.next_serial += 1;
-        self.files.insert(
-            path.to_owned(),
-            FileReferences {
-                refs: vec![Group {
-                    id: id.clone(),
-                    spans: vec![Span { start: 1, end: 2 }],
-                }],
-                spaces: Vec::new(),
-                durable,
-                merged: false,
-                serial: self.next_serial,
-            },
-        );
-        self.merged.get_or_insert_with(HashMap::new).insert(
-            id,
-            vec![Indexed {
-                path: path_index,
-                start: 1,
-                end: 2,
-            }],
-        );
     }
 }

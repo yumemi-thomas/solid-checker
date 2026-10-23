@@ -34,7 +34,7 @@ use crate::model::SymbolId;
 use crate::nodes::node_at;
 use crate::shape::{ExportedSymbol, exported_symbols_with};
 use crate::unsafe_boundary::CheckerLease;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 use tsrs_ast::{Node, SourceFile, Symbol, SymbolFlags, is_external_module};
@@ -156,25 +156,6 @@ impl Identities {
         self.exported_by_ref.clear();
     }
 
-    /// Go: `sweepDurableIdentities`. Drops identity bookkeeping for files the
-    /// program no longer contains. This is the one eviction that cannot change
-    /// behavior: an absent file's declarations cannot re-resolve regardless,
-    /// and a file that re-enters the program re-mints identical entries
-    /// through the location scans that precede any by-id query. Identities
-    /// whose declaring file stays in the program are never dropped, even when
-    /// the file is affected: recomputing an edited file's facts resolves
-    /// enqueued symbols by id, and evicting those entries would silently cost
-    /// their declarations.
-    pub fn sweep_durable(&mut self, program: &Program) {
-        let present: HashSet<String> = program
-            .source_files()
-            .iter()
-            .map(|file| clean(file.file_name()))
-            .collect();
-        self.durable_refs
-            .retain(|_, reference| present.contains(&reference.path));
-    }
-
     /// Seeds the exported identities at open (Go: `OpenProject`).
     pub fn seed_exported(&mut self, program: &Program, checker: &mut Checker) {
         let identities = collect_exported_identities(program, checker);
@@ -182,19 +163,19 @@ impl Identities {
         self.exported = Some(identities);
     }
 
-    /// Go: the identity half of `Update` after a candidate is accepted.
-    ///
-    /// `current` is `Some` when the candidate's exports for `incremental_path`
-    /// are known: they replace that file's by-ref entries. Otherwise the
-    /// whole program's exports are collected again. Either way the
-    /// pointer-keyed maps restart from the candidate's own symbols.
+    /// Go: the identity half of `Update` after a candidate is accepted. Nothing
+    /// derived from the preceding generation survives: the claims and the
+    /// durable references restart empty, and the exported identities are
+    /// collected again from the candidate program, so an id minted before the
+    /// update fails closed until the new generation mints it. (The exports the
+    /// update already derived, `current`, only feed its cutoff decisions.)
     pub fn after_update(
         &mut self,
         generation: u64,
         program: &Program,
         checker: &mut Checker,
-        incremental_path: Option<&str>,
-        current: Option<CurrentExports>,
+        _incremental_path: Option<&str>,
+        _current: Option<CurrentExports>,
     ) {
         self.generation = generation;
         self.ids_by_symbol.clear();
@@ -203,35 +184,8 @@ impl Identities {
         self.runtime_paths.clear();
         self.write_indexes.clear();
         self.next_symbol = 0;
-        match (incremental_path, current) {
-            (Some(path), Some(current)) => {
-                self.exported_by_ref
-                    .retain(|reference, _| reference.path != path);
-                let mut exported = HashMap::with_capacity(current.len());
-                for (symbol, preserved) in &current {
-                    exported.insert(symbol.addr(), preserved.clone());
-                    self.exported_by_ref
-                        .insert(preserved.reference.clone(), preserved.clone());
-                }
-                self.exported = Some(exported);
-                self.seed_current(&current);
-            }
-            _ => {
-                self.seed_exported(program, checker);
-            }
-        }
-    }
-
-    /// Go: `for symbol, preserved := range currentExports`.
-    fn seed_current(&mut self, current: &CurrentExports) {
-        for (symbol, preserved) in current {
-            self.ids_by_symbol
-                .insert(symbol.addr(), Arc::clone(&preserved.id));
-            self.symbols_by_id
-                .insert(Arc::clone(&preserved.id), *symbol);
-            self.durable_refs
-                .insert(Arc::clone(&preserved.id), preserved.reference.clone());
-        }
+        self.durable_refs.clear();
+        self.seed_exported(program, checker);
     }
 }
 

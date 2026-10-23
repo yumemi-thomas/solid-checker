@@ -78,52 +78,45 @@ fn async_functions(table: &ProducerTable, path: &str) -> usize {
 }
 
 #[test]
-fn async_facts_are_cached_per_file_across_unrelated_edits() {
+fn async_facts_are_requeried_after_every_update_and_demand_change() {
     let mut backend = backend_with(&[(A, "a"), (B, "b")]);
     backend.async_facts = vec![async_fact(A)];
     let mut closure = DemandClosure::new(Box::new(backend), None);
     let groups = [group(A, vec![async_demand(A)]), group(B, vec![])];
+    let counts = |closure: &DemandClosure| {
+        let retention = closure.stats().retention;
+        (
+            retention.retained_async_files,
+            retention.recomputed_async_files,
+        )
+    };
 
     let cold = analyze(&mut closure, &groups, &[]);
     assert_eq!(async_functions(&cold, A), 1);
-    let retention = closure.stats().retention;
-    assert_eq!(
-        (
-            retention.retained_async_files,
-            retention.recomputed_async_files
-        ),
-        (0, 1)
-    );
+    assert_eq!(counts(&closure), (0, 1));
 
-    edit(&mut closure, B);
-    let after_unrelated = analyze(&mut closure, &groups, &[]);
-    assert_eq!(async_functions(&after_unrelated, A), 1);
-    let retention = closure.stats().retention;
-    assert_eq!(
-        (
-            retention.retained_async_files,
-            retention.recomputed_async_files
-        ),
-        (1, 0),
-        "an unrelated edit must not re-query the async facts"
-    );
+    // Nothing derived from a generation survives into the next one, whether or
+    // not the edit touched the file that asked.
+    for edited in [B, A] {
+        edit(&mut closure, edited);
+        let table = analyze(&mut closure, &groups, &[]);
+        assert_eq!(async_functions(&table, A), 1);
+        assert_eq!(
+            counts(&closure),
+            (0, 1),
+            "an update must re-query the async facts (edited {edited})"
+        );
+    }
 
-    edit(&mut closure, A);
-    let after_edit = analyze(&mut closure, &groups, &[]);
-    assert_eq!(async_functions(&after_edit, A), 1);
-    let retention = closure.stats().retention;
-    assert_eq!(
-        (
-            retention.retained_async_files,
-            retention.recomputed_async_files
-        ),
-        (0, 1),
-        "an edit to the file re-queries its async facts"
-    );
+    // A demand change inside a generation does not reuse them either: the
+    // ids of a table do not depend on which demands came first.
+    let table = analyze(&mut closure, &groups, &[B]);
+    assert_eq!(async_functions(&table, A), 1);
+    assert_eq!(counts(&closure), (0, 1));
 }
 
 #[test]
-fn cross_path_async_facts_fall_back_to_a_full_batch_and_are_not_cached() {
+fn async_facts_the_backend_reports_for_other_paths_are_kept_whole() {
     let mut backend = backend_with(&[(A, "a"), (B, "b")]);
     backend.async_facts = vec![async_fact(A), async_fact(B)];
     backend.async_ignore_locations = true;
@@ -134,12 +127,10 @@ fn cross_path_async_facts_fall_back_to_a_full_batch_and_are_not_cached() {
     ];
 
     analyze(&mut closure, &groups, &[]);
-    assert!(closure.async_files.is_some(), "a clean batch is cacheable");
-
     edit(&mut closure, A);
     let table = analyze(&mut closure, &groups, &[]);
-    // The backend answered for B although only A was asked about: the whole
-    // batch is redone and nothing is cached from it.
+    // The backend answered for B although only A was asked about; every path
+    // is queried after an update anyway, so nothing is retained or redone.
     let retention = closure.stats().retention;
     assert_eq!(
         (
@@ -148,7 +139,6 @@ fn cross_path_async_facts_fall_back_to_a_full_batch_and_are_not_cached() {
         ),
         (0, 2)
     );
-    assert!(closure.async_files.is_none());
     assert_eq!(async_functions(&table, A), 1);
     assert_eq!(async_functions(&table, B), 1);
 }
@@ -158,7 +148,7 @@ fn scopes(seen: &Arc<std::sync::Mutex<Vec<ScopeSeen>>>) -> Vec<ScopeSeen> {
 }
 
 #[test]
-fn a_changed_suppression_union_refreshes_only_the_descriptor_users() {
+fn a_changed_suppression_union_is_applied_to_the_whole_batch() {
     let mut backend = backend_with(&[(A, "a"), (B, "b")]);
     let shared: SymbolId = "symbol:h:shared".into();
     backend
@@ -194,8 +184,8 @@ fn a_changed_suppression_union_refreshes_only_the_descriptor_users() {
     assert_eq!(scopes(&seen).len(), 1);
 
     // A stops asking for the structural accessor: the union loses the shared
-    // symbol, so B, whose descriptor demand touches it, is refreshed under the
-    // new union while A is recomputed by its own demand change.
+    // symbol. Every file is recomputed in one batch under the new union, so no
+    // retained descriptor is ever refreshed against a shifted union.
     let plain = EntityDemand {
         location: location(A, 1, 2),
         symbol: true,
@@ -207,30 +197,18 @@ fn a_changed_suppression_union_refreshes_only_the_descriptor_users() {
         &[A],
     );
     let retention = closure.stats().retention;
-    assert!(retention.suppression_recompute);
+    assert!(!retention.suppression_recompute);
     assert_eq!(
         (retention.retained_files, retention.recomputed_files),
         (0, 2)
     );
     let calls = scopes(&seen);
-    assert_eq!(
-        calls.len(),
-        3,
-        "cold, A's recompute, B's refresh: {calls:?}"
-    );
-    assert_eq!(calls[1].paths, vec![A.to_owned()]);
-    assert_eq!(
-        calls[2],
-        ScopeSeen {
-            paths: vec![B.to_owned()],
-            suppression: BTreeSet::new(),
-            descriptor_seed: BTreeSet::new(),
-        },
-        "the refresh runs under the exact current union and no seed"
-    );
+    assert_eq!(calls.len(), 2, "cold, then one whole batch: {calls:?}");
+    assert_eq!(calls[1].paths, vec![A.to_owned(), B.to_owned()]);
+    assert_eq!(calls[1].suppression, BTreeSet::new());
     assert_eq!(closure.last_suppression, Some(Default::default()));
 
-    // An unchanged union refreshes nothing.
+    // An update recomputes everything again, even with an unchanged union.
     let unchanged = [
         group(
             A,
@@ -253,7 +231,7 @@ fn a_changed_suppression_union_refreshes_only_the_descriptor_users() {
     edit(&mut closure, "/p/unrelated.ts");
     analyze(&mut closure, &unchanged, &[]);
     assert!(!closure.stats().retention.suppression_recompute);
-    assert_eq!(closure.stats().retention.retained_files, 2);
+    assert_eq!(closure.stats().retention.retained_files, 0);
     assert_eq!(scopes(&seen).len(), 3);
 }
 
@@ -291,7 +269,7 @@ fn non_durable_contributions_are_never_retained() {
 }
 
 #[test]
-fn an_edit_invalidates_direct_dependents_and_the_manifest_names_them() {
+fn an_edit_recomputes_every_file_and_the_manifest_names_them() {
     let mut backend = backend_with(&[(A, "a"), (B, "b"), ("/p/c.ts", "c")]);
     backend
         .dependencies
@@ -315,11 +293,11 @@ fn an_edit_invalidates_direct_dependents_and_the_manifest_names_them() {
     let retention = closure.stats().retention;
     assert_eq!(
         (retention.retained_files, retention.recomputed_files),
-        (1, 2),
-        "the edited file and its direct dependent recompute; c.ts is retained"
+        (0, 3),
+        "an update retains nothing: every demanded file recomputes"
     );
     let manifest = table.transport.expect("an exact manifest");
     assert!(manifest.exact);
     let paths: BTreeSet<&str> = manifest.entity_paths.iter().map(String::as_str).collect();
-    assert_eq!(paths, BTreeSet::from([A, B]));
+    assert_eq!(paths, BTreeSet::from([A, B, "/p/c.ts"]));
 }

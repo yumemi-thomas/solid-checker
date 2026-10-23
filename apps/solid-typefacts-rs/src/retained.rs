@@ -1,15 +1,16 @@
-//! The retained-aware materializer of the demand closure (Go:
-//! `semantic_retained.go`): files outside every accepted update's affected set
-//! whose demand lists hash identically reuse their previous contributions;
-//! only changed files run against the compiler.
+//! The materializer of the demand closure (Go: `semantic_retained.go`).
 //!
-//! A contribution is stored only when every identity it carries is durable
-//! (the source-fact memo's rule), so retained facts stay resolvable and wire
-//! output is byte-identical to a fresh whole-batch run. Descriptor suppression
-//! keeps whole-batch semantics via the structural-accessor union: recomputed
-//! files always run under the exact current union, and when the union differs
-//! from the previous generation's, the retained files whose descriptor demands
-//! touch the difference are refreshed under it.
+//! This producer reuses no answer across an update or across a change of the
+//! demand set: every table begins by discarding what earlier analysis left
+//! (`DemandClosure::discard_derived_state`), so each file is resolved against
+//! the compiler, in canonical order, and ids are claimed as a fresh program
+//! claims them. The retained-contribution store below is still filled and read
+//! back by the shared machinery, but it is empty whenever a table starts. Reuse
+//! comes back with instantiation-stable ids and recorded dependencies.
+//!
+//! A contribution carries the structural-accessor union that descriptor
+//! suppression needs; recomputed files always run under the exact current
+//! union, which is the batch's own.
 
 use crate::backend::BackendError;
 use crate::closure::{ClosureRetention, DemandClosure, SemanticDemandStages};
@@ -455,23 +456,6 @@ impl DemandClosure {
                 changed.extend(refresh);
             }
         }
-        // Every recomputed group's rows may differ from the preceding
-        // generation, and the transport manifest is built from changed paths
-        // alone, so all of them must be named here or the delta silently omits
-        // their rows. There are more reasons to recompute than an edit: a
-        // changed demand run, a descriptor refresh under a shifted suppression
-        // union, or a file holding non-durable identities, which are re-minted
-        // every generation and so can never be retained. Naming them is what
-        // lets such a file take the delta path instead of forcing a
-        // whole-table pack.
-        let manifest_changed_paths: Option<HashSet<String>> = if changed.is_empty() {
-            self.transport_changed_paths.clone()
-        } else {
-            let mut paths = self.transport_changed_paths.clone().unwrap_or_default();
-            paths.extend(changed.iter().map(|&index| groups[index].path.clone()));
-            Some(paths)
-        };
-
         // The source-fact memo's rule (ADR 0001): a contribution is stored only
         // when every identity it carries is durable. Files holding
         // generation-scoped counter ids recompute every generation, all of them
@@ -511,10 +495,23 @@ impl DemandClosure {
             self.next_table_state_id += 1;
         }
         table.state_id = self.next_table_state_id;
+        // Every demanded file was recomputed and ids are claimed afresh, so any
+        // path may differ from the previous table (a different claim order, a
+        // shifted reference space) and the manifest names all of them, along
+        // with the paths the update named. The previous table keeps no rows
+        // (they are released once published), so there is nothing to compare
+        // values against; naming a path that did not change only costs bytes.
+        let manifest_changed_paths: Option<HashSet<String>> = {
+            let mut paths = self.transport_changed_paths.clone().unwrap_or_default();
+            paths.extend(changed.iter().map(|&index| groups[index].path.clone()));
+            Some(paths)
+        };
         table.transport = rust_owned_transport_manifest(
             self.previous_table.as_ref(),
             manifest_changed_paths.as_ref(),
         );
+        // Published for this generation's readers; the next table or update
+        // discards them (`discard_derived_state`), never reuses them.
         self.retained.commit(groups);
         self.last_suppression = Some(union);
         self.previous_table = None;

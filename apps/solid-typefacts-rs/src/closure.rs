@@ -239,9 +239,19 @@ impl DemandClosure {
     }
 
     /// Applies editor overlays and advances exactly one generation, even when
-    /// the backend reports no affected source files. Retained contributions
-    /// survive except for the affected set and the changed files themselves,
-    /// which are evicted here rather than when next demanded.
+    /// the backend reports no affected source files.
+    ///
+    /// Nothing derived from the preceding generation's analysis survives: a
+    /// retained answer is reusable only if everything it read is unchanged,
+    /// and that took a record of dependencies (claim-order ids, configuration,
+    /// reference space across files, runtime identity) this producer does not
+    /// keep. So the demand contributions, async facts, suppression union and
+    /// the backend's source-fact memo, reference contributions and identity
+    /// maps are all discarded, and the next table is computed as a fresh
+    /// program would compute it. What stays is the program itself (incremental
+    /// reuse inside the backend) and the previous table, which only the
+    /// transport delta compares against. Every changed path plus the affected
+    /// set is named as changed, and the recompute names every demanded path.
     pub fn update(
         &mut self,
         ctx: &Context,
@@ -252,41 +262,28 @@ impl DemandClosure {
         for change in changes {
             invalid_paths.insert(clean(&change.path));
         }
-        for path in &invalid_paths {
-            while let Some(id) = self
-                .symbols_by_path
-                .get(path)
-                .and_then(|ids| ids.last())
-                .cloned()
-            {
-                self.invalidated_symbols.insert(id.clone());
-                let retained = self
-                    .table
-                    .as_ref()
-                    .and_then(|table| table.symbol(&id))
-                    .cloned();
-                if let Some(fact) = retained {
-                    self.unindex_symbol_fact(&fact);
-                } else if let Some(ids) = self.symbols_by_path.get_mut(path) {
-                    ids.pop();
-                }
-                if let Some(references) = &mut self.symbol_references {
-                    references.remove(&id);
-                }
-            }
-        }
+        self.discard_derived_state();
         self.previous_table = self.table.take();
-        // Accepted source state invalidates the exact retained contributions
-        // and their direct dependency users immediately. Analyze-time
-        // preparation is transactional, but an accepted update itself cannot
-        // be rolled back. Invalidation extends the set with those dependents,
-        // and the manifest must name them all.
-        self.retained.invalidate(&mut invalid_paths);
         self.transport_changed_paths = Some(invalid_paths);
         // Every accepted protocol update advances exactly one generation, even
         // when the backend reports no affected source files.
         self.generation += 1;
         Ok(affected)
+    }
+
+    /// Drops what earlier analysis left behind and a table could otherwise
+    /// reuse: demand contributions, async facts, the suppression union, and the
+    /// backend's memo, reference contributions and id claims. The previous
+    /// table stays (it only feeds the transport delta).
+    fn discard_derived_state(&mut self) {
+        self.symbols_by_path = HashMap::new();
+        self.symbol_references = None;
+        self.invalidated_symbols = HashSet::new();
+        self.symbol_memo_complete = false;
+        self.retained.reset();
+        self.async_files = None;
+        self.last_suppression = None;
+        self.backend.discard_derived_state();
     }
 
     pub fn close(&mut self) -> Result<(), BackendError> {
@@ -478,6 +475,9 @@ impl DemandClosure {
         groups: &mut [DemandGroup],
     ) -> Result<(), BackendError> {
         let started = std::time::Instant::now();
+        // A table is a function of the program and its demands, not of the
+        // order earlier queries or earlier tables claimed ids in.
+        self.discard_derived_state();
         let (table, full_tier_symbols, stages, retention) =
             self.materialize_semantic_demand_retained(ctx, groups, generation)?;
         let entity_count = table.entities.len();

@@ -698,7 +698,10 @@ fn populate_symbol_evidence(
             response.reference_evidence = evidence;
         }
     }
-    if request.release_analysis {
+    // An inexact reference delta leaves the client to ask for the references
+    // it needs next, in the same generation: its request carries the release.
+    if request.release_analysis && !(request.reference_changes && !response.reference_changes_exact)
+    {
         closure.release_backend_analysis_state();
     }
     Ok(())

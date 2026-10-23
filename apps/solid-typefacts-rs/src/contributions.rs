@@ -405,24 +405,6 @@ impl RetainedContributionStore {
         }
     }
 
-    /// Removes the named paths and their direct dependents. It extends `paths`
-    /// with those dependents so the transport manifest names every recomputed
-    /// contribution, but deliberately does not recurse beyond the source
-    /// evidence the previous implementation used.
-    pub fn invalidate(&mut self, paths: &mut HashSet<String>) {
-        let direct: Vec<String> = paths.iter().cloned().collect();
-        for path in &direct {
-            if let Some(users) = self.dependents_by_path.get(path) {
-                users.range_paths(|dependent| {
-                    paths.insert(dependent.to_owned());
-                });
-            }
-        }
-        for path in paths.iter() {
-            self.remove(path);
-        }
-    }
-
     /// Removes only the named demand runs. Changing what one file asks for
     /// cannot change a different file's source-derived semantic facts.
     pub fn discard(&mut self, paths: &HashSet<String>) {

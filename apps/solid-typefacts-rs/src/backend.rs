@@ -114,6 +114,15 @@ pub trait ClosureBackend {
     /// Releases the program (Go: `Close`).
     fn close(&mut self) -> Result<(), BackendError>;
 
+    /// Forgets every answer and identity claim derived from earlier queries:
+    /// the source-fact memo, the reference contributions and the claims of
+    /// symbol ids. A table is built from nothing but the program and the
+    /// demands, so ids that two symbols contend for (a declaration hash, a
+    /// transient copy of a member) go to whichever symbol the table's own
+    /// demands reach first, however the earlier queries were ordered. The
+    /// program itself and its checker are kept.
+    fn discard_derived_state(&mut self) {}
+
     /// The alias target of one symbol, or `None` when it has none or is
     /// unknown (Go: `ResolveAlias`, `ErrNotFound`).
     fn resolve_alias(&mut self, ctx: &Context, id: &str) -> Result<Option<SymbolId>, BackendError>;

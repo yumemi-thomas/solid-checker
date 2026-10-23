@@ -9,13 +9,12 @@
 //!
 //! # The memo
 //!
-//! Go keeps one `fileFactsMemo` per `Source*` path argument across
-//! generations. A fact set is stored only when every symbol identity it
+//! Go keeps one `fileFactsMemo` per `Source*` path argument. Here it lives for
+//! one generation: every accepted update clears it. A fact set is stored only when every symbol identity it
 //! carries is durable (`symbol:h:`), so a reused set never hands out an id the
 //! current generation cannot resolve. The memo holds ids and locations, never
-//! a tsrs handle, so it survives a rebase and `ReleaseAnalysisState`. An
-//! incremental update drops the affected files and the files that left the
-//! program; any other update clears it (`Project::evict_source_memo`).
+//! a tsrs handle, so it survives `ReleaseAnalysisState` within the generation
+//! (`Project::evict_source_memo` clears it on update).
 //!
 //! # Differences from Go
 //!
@@ -52,8 +51,6 @@ use typefacts::{AsyncFunctionFact, Location, SourceBinding, SourceCall, SourceFu
 /// Go: `fileFactsMemo`: one `Source*` path argument's fact sets.
 #[derive(Clone, Debug, Default)]
 pub struct FileFactsMemo {
-    /// The cleaned absolute path, retained for affected-set eviction.
-    pub(crate) abs_path: String,
     pub(crate) calls: Option<Vec<SourceCall>>,
     pub(crate) bindings: Option<Vec<SourceBinding>>,
     pub(crate) functions: Option<Vec<SourceFunction>>,
@@ -699,18 +696,12 @@ type FactKey = (String, u64, u64, Arc<str>, Arc<str>);
 impl Project {
     /// Go: `memoFor`: the memo entry for a `Source*` path argument, keyed by
     /// the argument itself so memoized facts repeat the caller's own path
-    /// form, with the normalized path retained for affected-set eviction.
-    /// `None` when the path cannot be made absolute.
+    /// form. `None` when the path cannot be made absolute.
     fn memo_for(&mut self, path: &str) -> Option<&mut FileFactsMemo> {
         if !self.source_memo.contains_key(path) {
-            let abs_path = clean(&absolute(path).ok()?);
-            self.source_memo.insert(
-                path.to_owned(),
-                FileFactsMemo {
-                    abs_path,
-                    ..FileFactsMemo::default()
-                },
-            );
+            absolute(path).ok()?;
+            self.source_memo
+                .insert(path.to_owned(), FileFactsMemo::default());
         }
         self.source_memo.get_mut(path)
     }
@@ -721,16 +712,10 @@ impl Project {
         &self.source_memo
     }
 
-    /// Go: the memo half of `Update`. `kept` is `Some` on the incremental
-    /// path: a file's entries survive when its text is unchanged and every
-    /// durable identity they reference declares in an unchanged file (a
-    /// changed declaring file would have put the referencing file in the
-    /// affected set). Anything else fails closed and clears the memo.
-    pub(crate) fn evict_source_memo(&mut self, kept: Option<&dyn Fn(&str) -> bool>) {
-        match kept {
-            Some(kept) => self.source_memo.retain(|_, memo| kept(&memo.abs_path)),
-            None => self.source_memo.clear(),
-        }
+    /// Go: the memo half of `Update`: every update clears it, because a
+    /// memoized fact may embed a claim-order id or read another file.
+    pub(crate) fn evict_source_memo(&mut self) {
+        self.source_memo.clear();
     }
 
     /// Go: `SourceCalls`.

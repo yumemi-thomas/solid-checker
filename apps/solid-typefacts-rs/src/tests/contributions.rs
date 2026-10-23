@@ -154,50 +154,6 @@ fn paths(items: &[&str]) -> HashSet<String> {
 }
 
 #[test]
-fn store_invalidates_only_direct_dependents() {
-    const SOURCE: &str = "/project/source.ts";
-    const DIRECT: &str = "/project/direct.ts";
-    const PEER: &str = "/project/peer.ts";
-    const TRANSITIVE: &str = "/project/transitive.ts";
-    const UNRELATED: &str = "/project/unrelated.ts";
-    let mut store = RetainedContributionStore::default();
-    store.add(SOURCE, store_test_contribution(&[], &[], true));
-    store.add(DIRECT, store_test_contribution(&[SOURCE], &[], true));
-    store.add(PEER, store_test_contribution(&[SOURCE], &[], true));
-    store.add(TRANSITIVE, store_test_contribution(&[DIRECT], &[], true));
-    store.add(
-        UNRELATED,
-        store_test_contribution(&["/project/elsewhere.ts"], &[], true),
-    );
-
-    let mut changed = paths(&[SOURCE]);
-    store.invalidate(&mut changed);
-
-    assert_eq!(
-        changed.len(),
-        3,
-        "invalidated paths = {changed:?}, want source and two direct dependents"
-    );
-    for path in [SOURCE, DIRECT, PEER] {
-        assert!(changed.contains(path), "invalidated paths omit {path:?}");
-        assert!(
-            store.get(path).is_none(),
-            "{path:?} survived source invalidation"
-        );
-    }
-    for path in [TRANSITIVE, UNRELATED] {
-        assert!(
-            !changed.contains(path),
-            "source invalidation fanned out to {path:?}"
-        );
-        assert!(
-            store.get(path).is_some(),
-            "unrelated contribution {path:?} was removed"
-        );
-    }
-}
-
-#[test]
 fn path_membership_promotes_without_changing_set_semantics() {
     let mut membership = PathMembership::default();
     for index in 0..PATH_MEMBERSHIP_MAP_THRESHOLD + 4 {
@@ -345,7 +301,7 @@ fn contribution_commit_is_transactional() {
     let mut closure = DemandClosure::new(Box::new(backend), None);
 
     let old_contribution = store_test_contribution(&[], &[OLD_SUPPRESS], true);
-    closure.retained.add(OLD_PATH, Rc::clone(&old_contribution));
+    closure.retained.add(OLD_PATH, old_contribution);
     closure.last_suppression = Some(HashSet::from([SymbolId::from(OLD_SUPPRESS)]));
     let groups = [DemandInputGroup {
         path: PATH.to_owned(),
@@ -372,14 +328,14 @@ fn contribution_commit_is_transactional() {
         (1, 0),
         "backend calls after failure (semantic, references)"
     );
+    // Building a table starts by discarding what an earlier table left, so a
+    // failure publishes nothing and leaves nothing a retry could reuse.
     assert!(
-        Rc::ptr_eq(&closure.retained.get(OLD_PATH).unwrap(), &old_contribution)
-            && closure.retained.get(PATH).is_none(),
-        "failed materialization changed installed contributions"
+        closure.retained.get(OLD_PATH).is_none() && closure.retained.get(PATH).is_none(),
+        "failed materialization published or kept contributions"
     );
     assert_eq!(
-        closure.last_suppression,
-        Some(HashSet::from([SymbolId::from(OLD_SUPPRESS)])),
+        closure.last_suppression, None,
         "last suppression advanced after failure"
     );
 

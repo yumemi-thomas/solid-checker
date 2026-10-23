@@ -59,14 +59,6 @@ fn reference_index_across_generations() {
     );
     assert!(base(&references[0].path) == "a.ts" && base(&references[1].path) == "b.ts");
     assert!(references_sorted(&references), "{references:?}");
-    let serial = |project: &Project, path: &str| {
-        project
-            .reference_index()
-            .files()
-            .get(path)
-            .map(|entry| entry.serial)
-    };
-    let (entry_a, entry_b) = (serial(&project, &a).unwrap(), serial(&project, &b).unwrap());
     for (path, entry) in project.reference_index().files() {
         assert!(
             entry.refs.iter().all(|group| group.spans.is_empty()),
@@ -74,44 +66,36 @@ fn reference_index_across_generations() {
         );
     }
 
-    // An unrelated update keeps contributions and answers.
+    // Every update discards the reference contributions, whichever file it
+    // touched, and the next query rebuilds them with the same answers.
+    assert!(!project.reference_index().files().is_empty());
     project
         .update(&ctx, &[change(&c, 1, "export const unrelated = 2;\n")])
         .unwrap();
-    assert_eq!(
-        serial(&project, &a),
-        Some(entry_a),
-        "a.ts contribution replaced"
+    assert!(
+        project.reference_index().files().is_empty(),
+        "an unrelated update kept reference contributions"
     );
-    assert_eq!(
-        serial(&project, &b),
-        Some(entry_b),
-        "b.ts contribution replaced"
-    );
+    // Held ids fail closed across an update; asking again mints the same one.
+    assert_eq!(target_of(&mut project, &a, A_SOURCE), target);
     assert_eq!(project.references(&ctx, &target).unwrap(), references);
 
-    // A shape-preserving declaring-file edit retains its importers.
+    // A shape-preserving declaring-file edit discards them too.
     let edited_b = "export function makeThing(): number {\n  return 2;\n}\nexport const local = makeThing();\n";
     project.update(&ctx, &[change(&b, 1, edited_b)]).unwrap();
-    assert_eq!(
-        serial(&project, &a),
-        Some(entry_a),
-        "a.ts did not survive a shape-preserving edit"
-    );
     assert!(
-        serial(&project, &b).is_none(),
-        "b.ts contribution survived its own edit"
+        project.reference_index().files().is_empty(),
+        "a shape-preserving edit kept reference contributions"
     );
+    assert_eq!(target_of(&mut project, &a, A_SOURCE), target);
     let recomputed = project.references(&ctx, &target).unwrap();
     assert_eq!(
         recomputed, references,
         "the edit moves neither declaration nor references"
     );
-    let refreshed = serial(&project, &b).expect("b.ts contribution is lazily replaced");
-    assert_ne!(refreshed, entry_b);
     assert!(
-        serial(&project, &c).is_some(),
-        "the unaffected c.ts contribution is retained"
+        !project.reference_index().files().is_empty(),
+        "the query rebuilt the contributions"
     );
 
     // A fresh project over the same tree answers the same durable id with
@@ -141,38 +125,17 @@ fn reference_index_across_generations() {
         project.reference_index().files().is_empty(),
         "no contributions after a full rebuild"
     );
+    // Held ids fail closed across an update; asking again mints the same one.
+    assert_eq!(target_of(&mut project, &a, A_SOURCE), target);
     assert_eq!(project.references(&ctx, &target).unwrap(), references);
 }
 
-/// Go builds the index struct directly; so does this.
+/// `TestReferenceIndexBroadInvalidationKeepsRetainedReferences`: an update that
+/// affects more than 64 files drops the merged index and every contribution;
+/// the rebuilt index must still answer with the unaffected file's references,
+/// exactly as a fresh open does.
 #[test]
-fn broad_invalidation_keeps_exact_symbol_evidence() {
-    const FILES: usize = 65;
-    let mut index = crate::references::ReferenceIndex::default();
-    let mut affected = Vec::new();
-    for file in 0..FILES {
-        let path = format!("/project/file-{file:02}.ts");
-        index.insert_for_test(&path, &format!("symbol-{file:02}"), true);
-        affected.push(path);
-    }
-    index.invalidate(&affected, &|_| false, &|_| false);
-    assert!(
-        !index.is_merged(),
-        "broad invalidation selects a full merged-index rebuild"
-    );
-    assert!(
-        index.delta_exact(),
-        "broad rebuild discarded exact changed-symbol evidence"
-    );
-    assert_eq!(index.changed_symbol_set().len(), FILES);
-}
-
-/// `TestReferenceIndexBroadInvalidationKeepsRetainedReferences`: a broad
-/// invalidation (more than 64 affected files) drops the merged index but keeps
-/// the contributions of unaffected files; the rebuilt index must still answer
-/// with their references, exactly as a fresh open does.
-#[test]
-fn reference_index_broad_invalidation_keeps_retained_references() {
+fn reference_index_broad_invalidation_rebuilds_every_reference() {
     let kept_source =
         "export const shared = 1;\nexport const a = shared;\nexport const b = shared + shared;\n";
     let importer = "import { hub } from \"./hub\";\nexport const v = hub;\n";
@@ -206,10 +169,13 @@ fn reference_index_broad_invalidation_keeps_retained_references() {
         .update(&ctx, &[change(&hub, 1, "export const hub = \"s\";\n")])
         .unwrap();
     assert!(
-        !project.reference_index().is_merged()
-            && project.reference_index().files().contains_key(&kept),
-        "update did not take the broad retained path"
+        !project.reference_index().is_merged() && project.reference_index().files().is_empty(),
+        "update kept a merged index or contributions"
     );
+    let shared_again = project
+        .symbol_at(&ctx, &find(&kept, kept_source, "shared"))
+        .unwrap();
+    assert_eq!(shared_again, shared);
     let after = project.references(&ctx, &shared).unwrap();
     assert_eq!(after, before, "broad invalidation lost retained references");
 }
@@ -260,6 +226,10 @@ fn reference_index_after_release_answers_pruned_symbol() {
     project.release_analysis_state_for_test();
     let edited = format!("{a_source}export const a2 = pruned;\n");
     project.update(&ctx, &[change(&a, 1, &edited)]).unwrap();
+    let pruned_again = project
+        .symbol_at(&ctx, &find(&decl, decl_source, "pruned"))
+        .unwrap();
+    assert_eq!(pruned_again, pruned);
     let patched = project.references(&ctx, &pruned).unwrap();
 
     scratch.write_all(&[("a.ts", edited.as_str())]);
@@ -368,6 +338,8 @@ fn references_drop_a_file_that_left_the_program() {
         error.0.starts_with("not found"),
         "expected not-found for source calls of a departed file, got {error}"
     );
+    let calls = project.source_calls(&ctx, &main).unwrap();
+    assert_eq!(calls[0].target, target, "the call target is minted again");
     let after = project.references(&ctx, &target).unwrap();
     assert!(
         after
@@ -441,6 +413,9 @@ fn held_ids_resolve_across_generations() {
         affected.iter().all(|path| base(path) != "a.ts"),
         "{affected:?}"
     );
+    // Held ids fail closed across an update (ADR 0364) until asked for again.
+    assert!(project.declarations(&ctx, &target).unwrap().is_none());
+    assert_eq!(target_of(&mut project, &a, A_SOURCE), target);
     assert_eq!(
         project.declarations(&ctx, &target).unwrap().unwrap(),
         declarations
@@ -500,6 +475,8 @@ fn held_ids_resolve_across_generations() {
             ],
         )
         .unwrap();
+    assert!(project.declarations(&ctx, &target).unwrap().is_none());
+    assert_eq!(target_of(&mut project, &a, A_SOURCE), target);
     assert!(
         project.declarations(&ctx, &target).unwrap().is_some(),
         "durable id failed to re-resolve after a full rebuild"
@@ -549,9 +526,14 @@ fn export_ids_survive_span_shifts() {
         "export id after span shift"
     );
     assert_eq!(
+        at(&mut project, &importer, importer_source, "value"),
+        alias_id,
+        "import alias id after span shift"
+    );
+    assert_eq!(
         project.resolve_alias(&ctx, &alias_id).unwrap().as_deref(),
         Some(&*before_id),
-        "retained import target after span shift"
+        "import target after span shift"
     );
 
     let affected = project
