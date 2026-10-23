@@ -1,3 +1,9 @@
 {
-  "note": "rc.17 PRIMITIVE_IN_EFFECT_CALLBACK (SC4005): a root, memo and deferred memo created with no owner on a createEffect apply's stack throw in dev (directly and through a project helper); control: the same memo under runWithOwner(owner, …) with the component's owner runs"
+  "note": "rc.17 PRIMITIVE_IN_EFFECT_CALLBACK (SC4005): a root, memo and deferred memo created with no owner on a createEffect apply's stack throw in dev (directly and through a project helper); control: the same memo under runWithOwner(owner, …) with the component's owner runs",
+  "scenario": "constructed-misuse",
+  "requires": [
+    "an Errored boundary (Guard) around every case so a thrown error does not halt the others",
+    "rc.17 dev build: createEffect's apply asserts no owner-less root or memo"
+  ],
+  "reaches": "no step asserts it: each exported component renders in its own root and createEffect's apply runs on the settle step; the thrown PRIMITIVE_IN_EFFECT_CALLBACK dev diagnostic is the evidence the target ran"
 }

@@ -1,0 +1,4 @@
+{
+  "$comment": "Independent classification of corpus findings (scripts/corpus-metrics.mjs reports reviewed precision from it). Entries: { key, class, reviewer, date, evidence }. key = app|project|id|kind|path|startByte|endByte, the corpus-sweep-compare key with path relative to the project root. class: confirmed-violation | adopted-policy-violation | valid-for-claim | essential-unknown | unresolved-review | tsc-owned | compiler-refused. date = YYYY-MM-DD. evidence = one line: runtime oracle case id, manual probe, or published bytes. Never add an entry for a finding nobody reviewed.",
+  "entries": []
+}

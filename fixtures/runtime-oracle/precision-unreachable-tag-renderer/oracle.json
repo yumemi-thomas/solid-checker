@@ -1,1 +1,9 @@
-{ "note": "Precision probe 2026-10-22: Row is rendered by a tag the program never reaches (`<Show when={false}><Row/></Show>`) and handed to items().map inside tracked JSX, where it runs as a plain call; the one tag does not account for the other reference. Its body read was a proven SC1001 and is now uncertifiable (fixture reactive-ir/component-identity-escapes, Mixed.tsx)." }
+{
+  "note": "Precision probe 2026-10-22: Row is rendered by a tag the program never reaches (`<Show when={false}><Row/></Show>`) and handed to items().map inside tracked JSX, where it runs as a plain call; the one tag does not account for the other reference. Its body read was a proven SC1001 and is now uncertifiable (fixture reactive-ir/component-identity-escapes, Mixed.tsx).",
+  "scenario": "constructed-misuse",
+  "requires": [
+    "module-level createSignal read by Row",
+    "Row also passed to items().map in tracked JSX while its <Row /> tag sits under <Show when={false}>"
+  ],
+  "reaches": "no step asserts it: the settle step renders App, which runs items().map(Row) in the tracked JSX, so Row's body read executes; the case expects no dev diagnostic and no violation"
+}

@@ -5,8 +5,14 @@
 //   node scripts/corpus-sweep.mjs [--manifest scripts/corpus/rc17-manifest.json]
 //     [--apps-root ../solid-checker-rc17-corpus/apps]
 //     [--checker rust/target/release/solid-checker-rust]
-//     [--typefacts bin/solid-typefacts] [--jobs 4] --out <report.json>
+//     [--typefacts bin/solid-typefacts] [--jobs 4] [--split dev|holdout|all]
+//     [--dry-run] --out <report.json>
 //
+// --split selects manifest rows by their `holdout` flag (default all) and the
+// report records it. Fix against the dev split and read the holdout split only
+// to judge the result, so the number is not steered by the data that chose the
+// fixes. --dry-run prints the selected rows and exits without running.
+
 // Use the release binary: a debug build inflates certification about 19x.
 // Prefix the run with ~/.local/bin/sc-heavy when other agents share the
 // machine. Compare two reports with scripts/corpus-sweep-compare.mjs, by
@@ -16,6 +22,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { selectRows } from "./corpus-lib.mjs";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const options = {
@@ -25,9 +32,12 @@ const options = {
   typefacts: join(repo, "bin/solid-typefacts"),
   jobs: "4",
   timeout: "900",
+  split: "all",
   out: null,
 };
 const argv = process.argv.slice(2);
+const dryRun = argv.includes("--dry-run");
+if (dryRun) argv.splice(argv.indexOf("--dry-run"), 1);
 for (let index = 0; index < argv.length; index += 2) {
   const key = argv[index].replace(/^--/, "");
   if (!(key in options) || argv[index + 1] === undefined) {
@@ -35,7 +45,7 @@ for (let index = 0; index < argv.length; index += 2) {
   }
   options[key] = argv[index + 1];
 }
-if (!options.out) throw new Error("--out <report.json> is required");
+if (!options.out && !dryRun) throw new Error("--out <report.json> is required");
 
 // A relative producer path fails every project (the checker runs with each
 // project root as its working directory), so every path is made absolute.
@@ -45,11 +55,17 @@ const checker = resolve(options.checker);
 const typefacts = resolve(options.typefacts);
 const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 const configuration = manifest.configuration;
-const rows = manifest.projects.map((row) => ({
+const rows = selectRows(manifest, options.split).map((row) => ({
   app: row.app,
   root: join(appsRoot, row.root),
   project: row.project,
+  holdout: row.holdout,
 }));
+if (dryRun) {
+  for (const row of rows) console.log(`${row.holdout ? "holdout" : "dev    "} ${row.app} ${row.project}`);
+  console.log(`${rows.length} of ${manifest.projects.length} rows selected by --split ${options.split}`);
+  process.exit(0);
+}
 for (const row of rows) {
   const project = join(row.root, row.project);
   if (!existsSync(project)) throw new Error(`missing project input: ${project}`);
@@ -132,6 +148,7 @@ const summary = {
   producer: typefacts,
   producerSha256: sha256(typefacts),
   manifestSha256: sha256(manifestPath),
+  split: options.split,
   configuration: { ...configuration, daemon: false },
   projectCount: results.length,
   findingCount: results.reduce((total, result) => total + result.findings.length, 0),
