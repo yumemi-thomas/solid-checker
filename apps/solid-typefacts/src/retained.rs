@@ -248,9 +248,10 @@ impl DemandClosure {
             self.next_table_state_id += 1;
         }
         table.state_id = self.next_table_state_id;
-        // Every demanded file was recomputed and ids are claimed afresh, so any
-        // path may differ from the previous table (a different claim order, a
-        // shifted reference space) and the manifest names all of them, along
+        // Every demanded file was recomputed and generation-scoped ids are
+        // minted afresh, so any path may differ from the previous table (a
+        // different counter, a shifted reference space) and the manifest names
+        // all of them, along
         // with the paths the update named. The previous table keeps no rows
         // (they are released once published), so there is nothing to compare
         // values against; naming a path that did not change only costs bytes.

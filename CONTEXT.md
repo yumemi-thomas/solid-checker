@@ -14,7 +14,7 @@ A semantic summary of a function-like declaration or expression, including wheth
 _Avoid_: Async scan result, async metadata
 
 **Reference index**:
-The generation-scoped mapping from durable symbol identities to their source reference locations.
+The generation-scoped mapping from symbol identities to their source reference locations.
 _Avoid_: Reference cache, usage map
 
 **Type Facts session**:

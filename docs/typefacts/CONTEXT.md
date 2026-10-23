@@ -107,15 +107,23 @@ with earlier Generations while those earlier tables remain readable.
 _Avoid_: client snapshot, cached table
 
 **Retained contribution**:
-One file's share of a demand closure, reusable for as long as the file stays
-outside every accepted update's affected set and its demand list is unchanged.
+One file's share of a published table, held only until the packed transition
+owns its rows. A table recomputes every contribution (ADR 0364); what outlives
+a table is the producer's binder-level answers, each with the digests it read
+(ADR 0369).
 _Avoid_: cache entry, memo, fragment
 
-**Durable symbol identity**:
-A symbol identity derived from its declaration, and therefore still meaningful
-in generations after the one that minted it. The alternative is an identity
-scoped to a single generation, which no retained state may outlive.
-_Avoid_: stable id, persistent id, global id
+**Canonical symbol identity**:
+A symbol identity (`symbol:h:<24 hex>`) that is a pure function of the program:
+a binder-level symbol's key (a checker singleton, a global by name, a module
+export, else its minimum declaration), or a multi-origin property's combination
+and origins when they fix its type (ADRs 0366, 0371). Whatever asked first, and
+whatever the checker computed before, it is the same. Every other symbol
+(an instantiation, a `this`-type or widened copy, a mapped property) has a
+**generation-scoped identity** (`symbol:<generation>:<n>`), meaningful only in
+the generation that minted it; a derived symbol is not erased to its root
+(ADR 0372).
+_Avoid_: durable id, stable id, persistent id, global id
 
 **Transport manifest**:
 The record of exactly which rows of a fact table may differ from the
