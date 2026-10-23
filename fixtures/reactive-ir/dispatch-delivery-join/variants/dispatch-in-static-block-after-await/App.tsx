@@ -1,9 +1,9 @@
 import { createSignal, onCleanup } from "solid-js";
 
-// ADR 0366: a class body after an `await` is refused whole. This static block
-// does run when the class is evaluated, on the continuation, so the refusal is
-// a deliberate miss: the dispatch fires the `click()` set and the click, focus
-// and change handlers are obligations, as is the write.
+// ADR 0369: a static block runs when its class is evaluated, and the class
+// expression is evaluated after the `await`, on the continuation. The dispatch
+// runs on an ownerless stack (ADR 0366), so the handlers it runs have no owner:
+// the `onCleanup` calls are violations, the write is legal.
 declare function load(): Promise<void>;
 
 export const holder: { C?: object } = {};

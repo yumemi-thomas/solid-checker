@@ -251,24 +251,112 @@ pub(crate) fn written_directly_in_flow(
             .classes
             .iter()
             .any(|class| function.span.contains(class.span) && class.span.contains(span))
-        && !ast
-            .jsx_containing(span)
-            .any(|element| function.body.contains(element.span))
-        && !ast
+        && !in_jsx_of(ast, function, span)
+}
+
+/// Whether `span` is in JSX written in `function`'s body, which the compiler
+/// wraps in getters and render effects.
+fn in_jsx_of(
+    ast: &solid_facts::ast::AstFacts,
+    function: &solid_facts::ast::FunctionFact,
+    span: Span,
+) -> bool {
+    ast.jsx_containing(span)
+        .any(|element| function.body.contains(element.span))
+        || ast
             .jsx_fragments
             .iter()
             .any(|fragment| function.body.contains(*fragment) && fragment.contains(span))
 }
 
-/// Whether `span` is written directly in the flow of the async function that
-/// contains it. The producer's `calls_after_await` stops at arrows, function
-/// expressions and declarations and methods, but not at getters, setters,
-/// constructors, class field initialisers, static blocks or JSX: code there
-/// runs when it is read, constructed or rendered, on that stack. A getter,
-/// setter or constructor is its own (never async) function here.
+/// Whether `span` is in an instance field initializer of a class written in
+/// `function`'s body: it runs at `new`.
+fn in_instance_field_of(
+    ast: &solid_facts::ast::AstFacts,
+    function: &solid_facts::ast::FunctionFact,
+    span: Span,
+) -> bool {
+    ast.classes.iter().any(|class| {
+        function.body.contains(class.span)
+            && class.elements.iter().any(|element| {
+                element.kind == solid_facts::ast::ClassElementKind::Field
+                    && !element.r#static
+                    && element.value.is_some_and(|value| value.contains(span))
+            })
+    })
+}
+
+/// Whether `function` is a getter, setter or constructor, of a class or an
+/// object literal: its body runs when the property is read or written, or at
+/// `new`.
+fn accessor_or_constructor(
+    ast: &solid_facts::ast::AstFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> bool {
+    use solid_facts::ast::ClassElementKind;
+    ast.object_properties
+        .iter()
+        .any(|property| !property.data && !property.method && property.value == function.span)
+        || ast.classes.iter().any(|class| {
+            class.span.contains(function.span)
+                && class.elements.iter().any(|element| {
+                    matches!(
+                        element.kind,
+                        ClassElementKind::Getter
+                            | ClassElementKind::Setter
+                            | ClassElementKind::Constructor
+                    ) && element.value == Some(function.span)
+                })
+        })
+}
+
+/// ADR 0369: whether `span` is on the continuation of the async function that
+/// contains it, by the contract of the producer's `calls_after_await`: inside
+/// no nested function (an arrow, function, method, getter, setter or
+/// constructor is its own function here), no JSX and no instance field
+/// initializer. A class's heritage, computed keys, static field initializers
+/// and static blocks run where the class is evaluated, so they are on it.
+/// Every listed call passes; a consumer drops one that does not.
 pub(crate) fn written_directly_in_async_flow(ast: &solid_facts::ast::AstFacts, span: Span) -> bool {
-    containing_ast_function(ast, span)
-        .is_some_and(|function| function.r#async && written_directly_in_flow(ast, function, span))
+    containing_ast_function(ast, span).is_some_and(|function| {
+        function.r#async
+            && written_directly_in(ast, function, span)
+            && !in_jsx_of(ast, function, span)
+            && !in_instance_field_of(ast, function, span)
+    })
+}
+
+/// ADR 0369: the async function whose own flow writes `span` in a getter,
+/// setter, constructor, instance field initializer or JSX after one of its own
+/// awaits may have run ([`crate::execution_role::may_follow_own_await`]). The
+/// producer's `calls_after_await` does not list that code: it runs when the
+/// accessor is read, the class constructed or the JSX rendered, on the
+/// continuation or later. It is an obligation, never a proof.
+pub(crate) fn deferred_after_own_await(
+    file: &solid_facts::FileFacts,
+    span: Span,
+) -> Option<&solid_facts::ast::FunctionFact> {
+    let ast = &file.ast;
+    let inner = containing_ast_function(ast, span)?;
+    if !written_directly_in(ast, inner, span) {
+        return None;
+    }
+    if inner.r#async {
+        return ((in_jsx_of(ast, inner, span) || in_instance_field_of(ast, inner, span))
+            && crate::execution_role::may_follow_own_await(file, span))
+        .then_some(inner);
+    }
+    if !accessor_or_constructor(ast, inner) {
+        return None;
+    }
+    // `inner` itself is the one function between them.
+    containing_ast_function(ast, inner.span).filter(|outer| {
+        outer.r#async
+            && !ast
+                .functions_within(outer.body)
+                .any(|nested| nested.span != inner.span && nested.span.contains(inner.span))
+            && crate::execution_role::may_follow_own_await(file, inner.span)
+    })
 }
 
 pub(crate) const OWNER_CONTEXT_OWNED: u16 = 1;

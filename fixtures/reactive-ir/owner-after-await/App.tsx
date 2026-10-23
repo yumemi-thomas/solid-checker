@@ -106,8 +106,8 @@ export function CapturedOwner() {
 
 // Not proven: a cleanup in a getter defined after the await runs when the
 // getter is read (here by the returned JSX, under its render effect), not on
-// the continuation. The producer lists it after the await; it keeps the
-// getter's own placement, an SC4001 uncertifiable result.
+// the continuation. Deferred code after an await (ADR 0369) retains the
+// getter's own placement: an SC4001 uncertifiable result.
 async function cleanupInGetterAfterAwait() {
   await fetch("/api/i");
   const view = { get label() { onCleanup(() => {}); return "x"; } };

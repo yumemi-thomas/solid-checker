@@ -496,11 +496,9 @@ pub(crate) fn find_missing_owners_incremental(
             let possible_continuation = (!after_await
                 && matches!(candidate.operation, "effect" | "cleanup" | "context-read"))
             .then(|| {
-                continuations
-                    .nested_context(file.path.as_str(), candidate.operation_span.start, context)
-                    .or_else(|| {
-                        possible_await_continuation_context(file, candidate.operation_span, context)
-                    })
+                deferred_continuation_context(file, candidate.operation_span, context).or_else(
+                    || possible_await_continuation_context(file, candidate.operation_span, context),
+                )
             })
             .flatten();
             let context = if after_await {

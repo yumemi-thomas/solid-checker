@@ -48,8 +48,8 @@ use crate::cleanup::callback_argument_literal;
 use crate::identity::SymbolId;
 use crate::indexes::mentions_word;
 use crate::owners::{
-    containing_ast_function, written_directly_in, written_directly_in_async_flow,
-    written_directly_in_flow,
+    containing_ast_function, deferred_after_own_await, written_directly_in,
+    written_directly_in_async_flow, written_directly_in_flow,
 };
 use crate::pipeline::{AnalysisContext, ProgramDraft};
 use crate::runtime_semantics::{is_inline_standard_callback, is_timer_call, standard_call_name};
@@ -557,14 +557,16 @@ impl<'f, 'a> Reach<'f, 'a> {
             unproven: false,
         };
         let mark = draft.static_defects.len();
-        // The producer's dominance facts: accessor calls after the first
-        // await that dominates them. The producer also lists calls in a
-        // getter, setter, constructor, class body or JSX written after the
-        // await, which run when read, constructed or rendered: on the
-        // continuation or not, so a read there is an obligation.
+        // The producer's dominance facts: accessor calls on the continuation
+        // of the first await that dominates them (ADR 0369). A listed call
+        // off it breaks that contract and proves nothing. A call the function
+        // writes in a getter, setter, constructor, instance field initializer
+        // or JSX after its own await is not listed: it runs when read,
+        // constructed or rendered, on the continuation or not, so a read
+        // there is an obligation.
         let mut after_await_calls: Vec<(&'f FileFacts, &'f CallFact)> = Vec::new();
         let mut nested_calls: Vec<(&'f FileFacts, &'f CallFact)> = Vec::new();
-        for call in &function.calls_after_await {
+        let listed = function.calls_after_await.iter().filter_map(|call| {
             let ast_call = self.files.get(&*call.path).and_then(|file| {
                 file.ast
                     .calls
@@ -575,9 +577,32 @@ impl<'f, 'a> Reach<'f, 'a> {
                     })
                     .map(|candidate| (*file, candidate))
             });
-            let nested = ast_call.is_some_and(|(file, candidate)| {
+            (!ast_call.is_some_and(|(file, candidate)| {
                 !written_directly_in_async_flow(&file.ast, candidate.callee)
-            });
+            }))
+            .then(|| (call.clone(), ast_call, false))
+        });
+        let deferred =
+            ast_function(&self.files, function)
+                .into_iter()
+                .flat_map(|(file, ast_function)| {
+                    file.ast
+                        .calls_within(ast_function.body)
+                        .filter(move |call| {
+                            deferred_after_own_await(file, call.callee)
+                                .is_some_and(|owner| owner.span == ast_function.span)
+                        })
+                        .map(move |call| {
+                            let location = typefacts::Location {
+                                path: file.path.as_str().into(),
+                                start_byte: u64::from(call.callee.start),
+                                end_byte: u64::from(call.callee.end),
+                            };
+                            (location, Some((file, call)), true)
+                        })
+                });
+        for (call, ast_call, nested) in listed.chain(deferred).collect::<Vec<_>>() {
+            let call = &call;
             if let Some(found) = ast_call {
                 if nested {
                     nested_calls.push(found);

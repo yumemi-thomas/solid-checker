@@ -4,7 +4,11 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 81: Wire table schema v22 keeps the rows of v21
+// TypeFactsHandshakeProtocol is 82 (ADR 0369): AsyncFunctionFact.CallsAfterAwait
+// lists only the calls on the continuation, not those in a getter, setter,
+// constructor, instance field initializer or JSX written after the await. The
+// rows are v22's; a protocol-81 consumer reads the narrower list as the wider one.
+// Protocol 81: Wire table schema v22 keeps the rows of v21
 // under a new number, so a v21 table from another build is refused.
 // Protocol 80: Wire table schema v21 flags an entity's symbol as covering its
 // whole demanded span (EntityFact.SymbolCoversSpan). A symbol without the flag
@@ -541,8 +545,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // signatures refused it as incomplete. The selected-signature identity digest
 // includes the count, so the numbers move together.
 const (
-	TypeFactsHandshakeProtocol uint64 = 81
-	TypeFactsSchemaSHA256             = "sha256:6d2154ba04be45cdd241d78d3b94a32d0ec5c57ce264fe97e1b3ed979e3d0bfd"
+	TypeFactsHandshakeProtocol uint64 = 82
+	TypeFactsSchemaSHA256             = "sha256:0bb6be6e988245df9aecc441cba92f8a5e93ea7622499ed29dc9d7d8920e5f88"
 )
 
 type ServiceHandshake struct {

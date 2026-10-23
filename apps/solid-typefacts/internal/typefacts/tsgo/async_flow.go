@@ -340,7 +340,18 @@ func scanAsyncFlow(p *project, path string, sourceFile *ast.SourceFile, root, no
 	if node == nil || !state.reachable {
 		return
 	}
-	if node != root && (ast.IsArrowFunction(node) || ast.IsFunctionExpression(node) || ast.IsFunctionDeclaration(node) || ast.IsMethodDeclaration(node)) {
+	if node != root && runsOffAsyncFlow(node) {
+		return
+	}
+	// ADR 0369: an instance field's initializer runs at `new`, not where the
+	// class is evaluated. Its decorators and computed key do run there.
+	if ast.IsPropertyDeclaration(node) && !ast.HasSyntacticModifier(node, ast.ModifierFlagsStatic) {
+		node.ForEachChild(func(child *ast.Node) bool {
+			if child != node.AsPropertyDeclaration().Initializer {
+				scanAsyncFlow(p, path, sourceFile, root, child, state, calls)
+			}
+			return false
+		})
 		return
 	}
 	if ast.IsBlock(node) {
@@ -486,6 +497,24 @@ func scanAsyncFlow(p *project, path string, sourceFile *ast.SourceFile, root, no
 		scanAsyncFlow(p, path, sourceFile, root, child, state, calls)
 		return false
 	})
+}
+
+// runsOffAsyncFlow reports whether code written in node runs on a stack of its
+// own rather than on the continuation that evaluates node (ADR 0369): a
+// function or method runs when called, an accessor when read, a constructor at
+// `new`, and the compiler lowers JSX expressions into getters and render
+// effects. A class's heritage, decorators, computed keys, static field
+// initializers and static blocks are not here: evaluating the class runs them.
+func runsOffAsyncFlow(node *ast.Node) bool {
+	switch node.Kind {
+	case ast.KindGetAccessor, ast.KindSetAccessor, ast.KindConstructor,
+		ast.KindJsxElement, ast.KindJsxSelfClosingElement, ast.KindJsxFragment:
+		return true
+	}
+	return ast.IsArrowFunction(node) ||
+		ast.IsFunctionExpression(node) ||
+		ast.IsFunctionDeclaration(node) ||
+		ast.IsMethodDeclaration(node)
 }
 
 func scanAsyncSwitchFlow(p *project, path string, sourceFile *ast.SourceFile, root, node *ast.Node, state *asyncFlowState, calls *[]typefacts.Location) {
