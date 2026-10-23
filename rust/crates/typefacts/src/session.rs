@@ -5,7 +5,7 @@ use std::{
     path::{Component, Path, PathBuf},
     process::{Child, ChildStdin, Command, Stdio},
     sync::{
-        Arc, Mutex, Weak,
+        Arc, Mutex, PoisonError, Weak,
         atomic::{AtomicBool, AtomicU64, Ordering},
         mpsc,
     },
@@ -381,22 +381,24 @@ impl ProcessConnection {
         let reader_pending = Arc::clone(&pending);
         let reader_arena = transition_arena.as_ref().map(Arc::clone);
         let reader = std::thread::spawn(move || {
+            // Fails what is pending however the reader stops, unwinding included.
+            let reader_pending = ReaderExit(reader_pending);
             loop {
                 let payload = match read_frame(&mut output) {
                     Ok(payload) => payload,
                     Err(error) => {
-                        fail_pending(&reader_pending, error.to_string());
+                        fail_pending(&reader_pending.0, error.to_string());
                         break;
                     }
                 };
                 let response = match decode_response_payload(&payload, reader_arena.as_deref()) {
                     Ok(response) => response,
                     Err(error) => {
-                        fail_pending(&reader_pending, error);
+                        fail_pending(&reader_pending.0, error);
                         break;
                     }
                 };
-                if let Ok(mut pending) = reader_pending.lock()
+                if let Ok(mut pending) = reader_pending.0.lock()
                     && let Some(sender) = pending.senders.remove(&response.request_id)
                 {
                     let _ = sender.send(Ok(response));
@@ -2362,12 +2364,24 @@ fn decode_sources(response: Response) -> Result<Vec<SourceFile>, SessionError> {
     decoded
 }
 
+/// Fails every pending request and refuses later ones. The first failure is
+/// the one kept, and a lock poisoned by a panicking holder is still drained:
+/// leaving a sender behind would strand its receiver.
 fn fail_pending(pending: &PendingResponses, message: String) {
-    if let Ok(mut pending) = pending.lock() {
-        for (_, sender) in pending.senders.drain() {
-            let _ = sender.send(Err(message.clone()));
-        }
-        pending.failure = Some(message);
+    let mut pending = pending.lock().unwrap_or_else(PoisonError::into_inner);
+    let message = pending.failure.get_or_insert(message).clone();
+    for (_, sender) in pending.senders.drain() {
+        let _ = sender.send(Err(message.clone()));
+    }
+}
+
+/// The reader thread's hold on the pending map. Dropping it, on a normal
+/// exit or while unwinding, fails whatever is still pending.
+struct ReaderExit(PendingResponses);
+
+impl Drop for ReaderExit {
+    fn drop(&mut self) {
+        fail_pending(&self.0, "producer response reader stopped".into());
     }
 }
 
