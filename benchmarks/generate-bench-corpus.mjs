@@ -24,8 +24,9 @@ const out = process.argv[3];
 // "widget" is the default corpus every gate but export scaling uses.
 // "structured" gives every module exported factories that return objects and
 // tuples (shorthand properties), the shape export
-// aggregation works on; the widget corpus has none, so it exercises only the
-// scan of exported functions. Export scaling (performance-invariants.mjs)
+// aggregation works on (plus a wrapper, a projection and a nested result per
+// module); the widget corpus has none, so it exercises only the scan of
+// exported functions. Export scaling (performance-invariants.mjs)
 // counts that phase's work on this shape.
 const shape = process.argv[4] ?? "widget";
 if (!["widget", "structured"].includes(shape)) {
@@ -74,6 +75,22 @@ export const cfg${n} = { index: ${i} };
 export function make${n}() {
   const [count, setCount] = createSignal(${i});
   return { count, setCount, cfg: cfg${n} };
+}
+
+// Propagation through the factory above: a wrapper, a projection, and nested
+// results, so summary instantiation and the discovery rounds have work.
+export function wrap${n}() {
+  return make${n}();
+}
+
+export function project${n}() {
+  const { count } = make${n}();
+  return { count };
+}
+
+export function nested${n}() {
+  const inner = wrap${n}();
+  return { outer: { inner, again: project${n}() } };
 }
 
 export function pair${n}() {

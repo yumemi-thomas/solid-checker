@@ -553,3 +553,7 @@ packages/wasm/owned/
 !fixtures/reactive-ir/dependency-source-compiler-refused/node_modules/**
 !fixtures/reactive-ir/component-identity-escapes/node_modules/
 !fixtures/reactive-ir/component-identity-escapes/node_modules/**
+!fixtures/reactive-ir/component-alias-entries/node_modules/
+!fixtures/reactive-ir/component-alias-entries/node_modules/**
+!fixtures/reactive-ir/component-alias-entries-closed/node_modules/
+!fixtures/reactive-ir/component-alias-entries-closed/node_modules/**

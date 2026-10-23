@@ -80,12 +80,12 @@ export function assessPerformance(
   // count is a nondeterministic analysis, not noise.
   const workOf = samples => {
     const counts = [...new Set(samples.map(exportWork))];
-    return counts.length === 1 ? counts[0] : Number.NaN;
+    return counts.length === 1 && Number.isSafeInteger(counts[0]) && counts[0] > 0 ? counts[0] : Number.NaN;
   };
+  // A side that counted nothing (or disagreed) is NaN, and NaN fails.
   const smallWork = workOf(exportSmallSamples);
   const largeWork = workOf(exportLargeSamples);
-  // A counter that counted nothing would pass vacuously.
-  const workScaling = smallWork > 0 ? largeWork / smallWork : Number.NaN;
+  const workScaling = largeWork / smallWork;
   const timeScaling =
     Math.min(...exportLargeSamples.map(exportTime)) / Math.max(Math.min(...exportSmallSamples.map(exportTime)), 1);
   const responseBytes = small.firstAnalysisBreakdown.responseBytes.medianNs / small.sourceCount;
