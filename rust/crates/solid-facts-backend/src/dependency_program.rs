@@ -388,6 +388,56 @@ pub fn project_call_validity(
     answer
 }
 
+/// Review of ADR 0368: a selected package whose own source holds a call
+/// TypeScript rejects (`Recovery`). `tsc` on the project never checks that
+/// source, so no error the user sees owns it, and every pass leaves a
+/// `Recovery` call to TypeScript: the package's behaviour there is unproven.
+/// Each such package is refused for its project importers, which keeps an
+/// open requirement (SC9005) at every import of it instead of a silent
+/// clean.
+#[must_use]
+pub fn package_call_errors(
+    facts: &solid_facts::ProjectFacts,
+    program: &PreparedDependencyProgram,
+) -> Vec<crate::dependency_sources::SourceRefusal> {
+    let mut first = BTreeMap::<PathBuf, &typefacts::Location>::new();
+    for entity in facts.typescript.entities() {
+        if !entity
+            .resolved_call
+            .as_ref()
+            .is_some_and(|call| call.validity == typefacts::ResolvedCallValidity::Recovery)
+        {
+            continue;
+        }
+        let path = Path::new(entity.location.path.as_ref());
+        if let Some(root) = program
+            .selection
+            .roots
+            .iter()
+            .filter(|root| path.starts_with(root))
+            .max_by_key(|root| root.as_os_str().len())
+        {
+            let held = first.entry(root.clone()).or_insert(&entity.location);
+            if (&entity.location.path, entity.location.start_byte) < (&held.path, held.start_byte) {
+                *held = &entity.location;
+            }
+        }
+    }
+    first
+        .into_iter()
+        .map(|(root, location)| crate::dependency_sources::SourceRefusal {
+            name: crate::dependency_sources::package_name_of_root(&root)
+                .unwrap_or_else(|| root.to_string_lossy().into_owned()),
+            detail: format!(
+                "TypeScript rejects a call in the package's own source ({} at byte {}), which no project tsc error owns, so its behaviour is unproven",
+                location.path, location.start_byte
+            ),
+            root: Some(root),
+            kind: solid_reactive_ir::package_boundary::UnanalyzableReason::ClosureUnavailable,
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;

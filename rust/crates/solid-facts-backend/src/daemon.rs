@@ -1342,7 +1342,9 @@ fn answer(
         }
     };
     // Review of ADR 0368: a project call's validity is the project's own
-    // program's (the retained original, current: `resync` ran).
+    // program's (the retained original, current: `resync` ran), and a package
+    // whose own source has a call error is unproven.
+    let mut package_refusals = Vec::new();
     let facts = match state.dependency.as_mut() {
         Some(DependencyState {
             original,
@@ -1353,6 +1355,7 @@ fn answer(
                 },
             ..
         }) => {
+            package_refusals = dependency_program::package_call_errors(&facts, program);
             let calls = dependency_program::project_calls(&facts, program);
             let own = if calls.is_empty() {
                 Vec::new()
@@ -1376,11 +1379,12 @@ fn answer(
         .project
         .parent()
         .ok_or("tsconfig has no parent directory")?;
-    let source_refusals = state
+    let mut source_refusals = state
         .dependency
         .as_ref()
         .map(|dependency| dependency.prepared.notes.refusals.clone())
         .unwrap_or_default();
+    source_refusals.extend(package_refusals);
     // The same package inputs the one-shot path reads.
     // Capture discovery's exact input generation before it runs. A refusal
     // needs only its witness; success retains the complete graph-input closure.

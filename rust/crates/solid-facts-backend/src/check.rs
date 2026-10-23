@@ -181,7 +181,7 @@ pub fn run(
     let OpenedProgram {
         mut typescript,
         dependency_sources,
-        source_refusals,
+        mut source_refusals,
         project_id,
         mut original,
     } = open_program(options, sessions, note)?;
@@ -231,7 +231,7 @@ pub fn run(
     if let Some(program) = &dependency_sources {
         dependency_program::bind(&mut facts, &mut typescript, program)?;
         // Review of ADR 0368: a project call's validity is the project's own
-        // program's.
+        // program's; a package whose own source has a call error is unproven.
         let asked = Instant::now();
         let calls = dependency_program::project_calls(&facts, program);
         // The project's own program is closed once it has answered.
@@ -253,6 +253,16 @@ pub fn run(
             ));
         }
         validity.apply(&mut facts);
+        let package_errors = dependency_program::package_call_errors(&facts, program);
+        if std::env::var_os("SOLID_CHECKER_TIMINGS").is_some() {
+            for refusal in &package_errors {
+                note(&format!(
+                    "dependency-source package refused: {}: {}",
+                    refusal.name, refusal.detail
+                ));
+            }
+        }
+        source_refusals.extend(package_errors);
     }
     let facts_complete = started.elapsed();
     let mut import_identity = ImportIdentityMeasurement::default();

@@ -769,7 +769,7 @@ pub fn prepare_all(
 }
 
 /// The `name` a package directory's manifest declares.
-fn package_name_of_root(root: &Path) -> Option<String> {
+pub(crate) fn package_name_of_root(root: &Path) -> Option<String> {
     let manifest = fs::read(root.join("package.json")).ok()?;
     let manifest = serde_json::from_slice::<Ordered>(&manifest).ok()?;
     manifest.get("name")?.as_str().map(str::to_owned)
