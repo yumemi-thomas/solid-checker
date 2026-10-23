@@ -153,10 +153,9 @@ fn the_fact_families_answer_or_fail_never_empty() {
     let mut project = scratch.open();
     let ctx = Context::new();
     let name = |error: crate::backend::BackendError| error.0;
-    let (suppression, seed) = (Default::default(), Default::default());
+    let suppression = Default::default();
     let scope = SemanticScope {
         suppression: &suppression,
-        descriptor_seed: &seed,
     };
     assert!(project.async_functions_at(&ctx, &[]).unwrap().is_empty());
     assert!(

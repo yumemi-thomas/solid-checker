@@ -42,7 +42,7 @@ use crate::type_facts::{
     library_types_at, primitive_literal_candidates_of_type, primitive_value_domain_of_type,
     runtime_value_domain_of_type, tuple_shape_at,
 };
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 use tsrs_ast::{Node, SourceFile, Symbol, is_identifier};
 use tsrs_checker::types::Type;
@@ -267,9 +267,10 @@ pub fn run(
         symbols.push(run_symbols);
     }
 
-    // Go: `batchDescriptors` and `project.typeDescriptors` (the latter held
-    // per call here, so no type address outlives its checker).
-    let mut batch_descriptors: HashMap<SymbolId, Arc<TypeDescriptor>> = HashMap::new();
+    // Go: `project.typeDescriptors`, held per call here, so no type address
+    // outlives its checker. Go's `batchDescriptors` (the first descriptor of a
+    // symbol answered every later entity of it) is gone: a descriptor depends
+    // on its location only (ADR 0367).
     let mut memo = DescriptorMemo::default();
     let mut caches = CallCaches::default();
     let suppressed =
@@ -347,23 +348,9 @@ pub fn run(
                 && !suppressed(&entity.symbol)
                 && let Some(node) = query_node
             {
-                // A descriptor the batch already holds answers any entity of
-                // that symbol; the scope's seed is compiler-independent.
-                let held = batch_descriptors
-                    .get(&entity.symbol)
-                    .or_else(|| scope.descriptor_seed.get(&entity.symbol))
-                    .cloned();
-                let descriptor = if let Some(descriptor) = held {
-                    descriptor
-                } else {
-                    let value = env.checker.get_type_at_location(node);
-                    query_type = Some(value);
-                    let descriptor = memo.descriptor(env.checker, value);
-                    if !entity.symbol.is_empty() {
-                        batch_descriptors.insert(entity.symbol.clone(), Arc::clone(&descriptor));
-                    }
-                    descriptor
-                };
+                let value = env.checker.get_type_at_location(node);
+                query_type = Some(value);
+                let descriptor = memo.descriptor(env.checker, value);
                 evidence[run_index].descriptor(Some(&descriptor));
                 entity.type_descriptor = Some(descriptor);
             }

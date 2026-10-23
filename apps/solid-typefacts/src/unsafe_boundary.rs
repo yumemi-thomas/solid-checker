@@ -337,36 +337,20 @@ pub struct Generation {
     kind: UpdateKind,
 }
 
-/// Test hook (tests/binder_ids.rs, its own process): open programs with tsrs's
-/// canonical checker history instead of typescript-go's. Never set in the
-/// producer.
-static CANONICAL_HISTORY_FOR_TESTS: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
-
-#[doc(hidden)]
-pub fn use_canonical_history_for_tests(canonical: bool) {
-    CANONICAL_HISTORY_FOR_TESTS.store(canonical, std::sync::atomic::Ordering::Relaxed);
-}
-
 fn options_for(
     config: P<ParsedCommandLine>,
     host: Arc<dyn CompilerHost>,
     regions: &Arc<ProgramRegions>,
     factory: &CreateCheckerPool,
 ) -> ProgramOptions {
-    // The producer answers what the Go producer answers, byte for byte, and a
-    // few checker caches let the printed text depend on what the checker saw
-    // first (`undefinedProperties` is keyed by name across the whole program, so
-    // the property order of a normalized object-literal union follows the first
-    // literal that mentioned the name). tsrs's default makes those caches a
-    // function of the program alone; this keeps typescript-go's history, which
-    // is what every recorded fact and snapshot was produced with. A process-wide
-    // flag that has to be set before any checker exists, and the same value on
-    // every call. Moving to the canonical history is a snapshot-reviewed change
-    // for after the Go producer is gone (tsrs `tsrs_core::compat`).
-    tsrs_core::compat::set_go_compatible_history(
-        !CANONICAL_HISTORY_FOR_TESTS.load(std::sync::atomic::Ordering::Relaxed),
-    );
+    // tsrs's canonical checker history (ADR 0367): the caches typescript-go
+    // keys by what the checker saw first (`undefinedProperties`, keyed by name
+    // across the program, orders the properties of a normalized object-literal
+    // union by the first literal that mentioned the name) are a function of the
+    // program alone. Printed text can still follow type creation order (union
+    // constituents); no decision reads it. A process-wide flag that has to be
+    // set before any checker exists, and the same value on every call.
+    tsrs_core::compat::set_go_compatible_history(false);
     // Binding runs in the region of the file it binds (and a file's lazily
     // filled data goes there too) once files have regions of their own
     // (`RegionHost`). A process-wide flag, set before any file is parsed.

@@ -2205,4 +2205,6 @@ fn location(path: impl Into<Arc<str>>, span: Span) -> Location {
 }
 
 #[cfg(test)]
+mod descriptor_text_gate;
+#[cfg(test)]
 mod tests;

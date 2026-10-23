@@ -147,10 +147,9 @@ pub(crate) fn entities(
     path: &str,
     demands: &[EntityDemand],
 ) -> Vec<EntityFact> {
-    let (suppression, seed) = (Default::default(), Default::default());
+    let suppression = Default::default();
     let scope = SemanticScope {
         suppression: &suppression,
-        descriptor_seed: &seed,
     };
     let run = SemanticDemandRun { path, demands };
     let mut results = project

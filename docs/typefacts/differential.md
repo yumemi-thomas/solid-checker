@@ -180,9 +180,15 @@ session reports the same cells), so they are not port defects:
   (`Hono<...>` texts): two Go runs print different orders; the cause in Go is
   not isolated.
 
-The Rust producer runs tsrs in Go-compatible check history
-(`tsrs_core::compat`): tsrs's canonical default would print a normalized
-object-literal union's properties in a different order than Go does.
+Rust differs from Go by design in these cells (ADR 0367). It runs tsrs's
+canonical check history (`tsrs_core::compat`), so a normalized object-literal
+union's properties can print in another order: text only, and no decision
+reads type text. An entity's own descriptor is its location's type, where Go
+gave every entity of a symbol the first one answered (`families_differential`
+counts these rows). Wire names and runtime identities leave the checker's
+counters out (`__@iterator`, the runtime identity of `[Symbol.hasInstance]` at
+`instanceof`). Check-first can change a fact to the source-order answer (a
+`.value` read on an object literal gets reference space `Value`).
 
 ## Replaying the archive
 

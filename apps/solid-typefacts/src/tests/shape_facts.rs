@@ -571,4 +571,12 @@ fn internal_library_symbol_names_are_spelled_as_clients_decode_go() {
     use crate::type_facts::library_symbol_name;
     assert_eq!(library_symbol_name("\u{7f}type"), "\u{fffd}type");
     assert_eq!(library_symbol_name("Date"), "Date");
+    assert_eq!(
+        library_symbol_name("\u{7f}@iterator@16"),
+        library_symbol_name("\u{7f}@iterator@42")
+    );
+    assert_eq!(
+        library_symbol_name("\u{7f}@iterator@16"),
+        "\u{fffd}@iterator"
+    );
 }
