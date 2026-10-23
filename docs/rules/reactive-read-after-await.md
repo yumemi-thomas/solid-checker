@@ -25,7 +25,9 @@ only on some paths (`await load(); return byUser(posts)`) is
 **uncertifiable**: the read is past the await, but whether the callee reads on
 this call is not proven.
 
-Both proofs exclude nested closures by default. The continuation reaches code
+Both proofs exclude nested closures by default. A read in a getter, setter,
+constructor, class body or JSX child written after the await runs when it is
+read, constructed or rendered, maybe not on the continuation: uncertifiable. The continuation reaches code
 past the awaiting function's body only where the execution model proves it runs
 there, and the reads in it are then reported with the same two proofs:
 

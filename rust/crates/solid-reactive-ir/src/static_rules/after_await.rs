@@ -47,7 +47,10 @@ use crate::HashSet;
 use crate::cleanup::callback_argument_literal;
 use crate::identity::SymbolId;
 use crate::indexes::mentions_word;
-use crate::owners::{containing_ast_function, written_directly_in};
+use crate::owners::{
+    containing_ast_function, written_directly_in, written_directly_in_async_flow,
+    written_directly_in_flow,
+};
 use crate::pipeline::{AnalysisContext, ProgramDraft};
 use crate::runtime_semantics::{is_inline_standard_callback, is_timer_call, standard_call_name};
 use crate::{StaticDefect, StaticDefectKind, location};
@@ -555,8 +558,12 @@ impl<'f, 'a> Reach<'f, 'a> {
         };
         let mark = draft.static_defects.len();
         // The producer's dominance facts: accessor calls after the first
-        // await that dominates them.
+        // await that dominates them. The producer also lists calls in a
+        // getter, setter, constructor, class body or JSX written after the
+        // await, which run when read, constructed or rendered: on the
+        // continuation or not, so a read there is an obligation.
         let mut after_await_calls: Vec<(&'f FileFacts, &'f CallFact)> = Vec::new();
+        let mut nested_calls: Vec<(&'f FileFacts, &'f CallFact)> = Vec::new();
         for call in &function.calls_after_await {
             let ast_call = self.files.get(&*call.path).and_then(|file| {
                 file.ast
@@ -568,8 +575,15 @@ impl<'f, 'a> Reach<'f, 'a> {
                     })
                     .map(|candidate| (*file, candidate))
             });
+            let nested = ast_call.is_some_and(|(file, candidate)| {
+                !written_directly_in_async_flow(&file.ast, candidate.callee)
+            });
             if let Some(found) = ast_call {
-                after_await_calls.push(found);
+                if nested {
+                    nested_calls.push(found);
+                } else {
+                    after_await_calls.push(found);
+                }
             }
             // Whole member spans may retain their receiver's symbol. The
             // exact property demand carries the callable member's identity;
@@ -626,7 +640,7 @@ impl<'f, 'a> Reach<'f, 'a> {
                 },
                 analysis_context: member.context.clone(),
                 fixes: vec![],
-                uncertain: tracking == Tracking::Possible,
+                uncertain: tracking == Tracking::Possible || nested,
             });
         }
         // The promise chain first: it records which function literals become
@@ -647,13 +661,22 @@ impl<'f, 'a> Reach<'f, 'a> {
                     && containing_ast_function(&file.ast, call.span)
                         .is_some_and(|owner| owner.span == ast_function.span)
                 {
-                    after_await_calls.push((file, call));
+                    if written_directly_in_flow(&file.ast, ast_function, call.span) {
+                        after_await_calls.push((file, call));
+                    } else {
+                        nested_calls.push((file, call));
+                    }
                 }
             }
         }
         for (file, call) in after_await_calls {
             self.visit_call(draft, &mut walk, file, call, 0);
         }
+        let before = draft.static_defects.len();
+        for (file, call) in nested_calls {
+            self.visit_call(draft, &mut walk, file, call, 0);
+        }
+        mark_uncertain(draft, before);
         if let Some((file, ast_function)) = ast_function(&self.files, function) {
             // A catch/finally may follow a rejected await even though the
             // producer has no normal-flow dominance fact for its reads.

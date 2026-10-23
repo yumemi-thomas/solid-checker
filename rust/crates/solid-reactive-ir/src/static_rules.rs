@@ -992,7 +992,10 @@ fn member_reads_after_await(
             location: location(file.path.shared(), member.span),
             analysis_context: analysis_context.to_owned(),
             fixes: vec![],
-            uncertain,
+            // A read in a class body or JSX after the await runs when the
+            // class is constructed or the JSX rendered, maybe not here.
+            uncertain: uncertain
+                || !crate::owners::written_directly_in_flow(&file.ast, ast_function, member.span),
         });
     }
 }
