@@ -62,7 +62,9 @@ const updateFrames = realpathSync(options["update-frames"]);
 if (!existsSync(join(updateFrames, "frames.json"))) fail(`${updateFrames}/frames.json is missing: the bridge test recorded no update frames`);
 const recording = JSON.parse(readFileSync(join(updateFrames, "frames.json"), "utf8"));
 const oracleInstall = join(repositoryRoot, "rust/target/tsc-oracle/v2/node_modules");
-const tscPath = join(repositoryRoot, "packages/cli/node_modules/typescript/bin/tsc");
+// The reference `tsc` is TypeScript 7.1, the oracle's provisioned compiler (ADR 0361)
+// and the producer's own, not packages/cli's 5.9.3.
+const tscPath = join(repositoryRoot, "rust/target/tsc-oracle/typescript/node_modules/typescript/bin/tsc");
 const expectations = JSON.parse(readFileSync(join(gateFiles, "expectations.json"), "utf8"));
 const OLD_FILES = [
   "node.cjs", "browser-entry.js", "index.d.ts", "solid-checker-wasm.wasi.cjs",
@@ -233,7 +235,7 @@ const typedProject = files => root => {
     compilerOptions: {
       target: "ES2022", module: "ESNext", moduleResolution: "Bundler", jsx: "preserve",
       jsxImportSource: "@solidjs/web", lib: ["ES2022", "DOM"], types: [], skipLibCheck: true,
-      allowJs: false, baseUrl: ".", strict: true, noEmit: true,
+      allowJs: false, strict: true, noEmit: true,
     },
     files: Object.keys(files),
   }, null, 2)}\n`);
