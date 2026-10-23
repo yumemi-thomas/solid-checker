@@ -56,6 +56,26 @@
       "code": "SC1001",
       "kind": "uncertifiable",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/component-identity-escapes/MethodAlias.tsx",
+      "start": 458,
+      "end": 465,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/component-identity-escapes/MethodAlias.tsx",
+      "start": 696,
+      "end": 703,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/component-identity-escapes/Route.tsx",
       "start": 567,
       "end": 574,
