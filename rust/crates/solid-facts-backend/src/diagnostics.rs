@@ -606,10 +606,6 @@ pub fn analyze_project_inputs_measured_with_enablement(
         .analyze_inputs_measured_with_enablement(project, sources, facts, inputs, enablement)
 }
 
-/// Drops the findings of disabled rules. Returns the dropped findings of
-/// coverage rules (`RuleMetadata::uncertifiable`: SC9005, SC9011, SC9012),
-/// which report where the analysis is incomplete rather than a defect.
-
 /// A finding demoted to uncertifiable keeps its rule's hint, whose last
 /// sentence asserts the dev warning fires. The may-warn wording the rule
 /// uses for its own uncertifiable findings replaces it, so a demoted hint
@@ -623,6 +619,9 @@ fn soften_strict_read_hint(hint: &mut String) {
     }
 }
 
+/// Drops the findings of disabled rules. Returns the dropped findings of
+/// coverage rules (`RuleMetadata::uncertifiable`: SC9005, SC9011, SC9012),
+/// which report where the analysis is incomplete rather than a defect.
 fn retain_enabled(
     dialect: &Dialect,
     options: &RuleOptions,
