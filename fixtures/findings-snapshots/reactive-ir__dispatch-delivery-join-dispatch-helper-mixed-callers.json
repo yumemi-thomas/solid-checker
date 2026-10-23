@@ -1,0 +1,55 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dispatch-delivery-join/variants/dispatch-helper-mixed-callers/App.tsx",
+      "start": 808,
+      "end": 817,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dispatch-delivery-join/variants/dispatch-helper-mixed-callers/App.tsx",
+      "start": 884,
+      "end": 893,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dispatch-delivery-join/variants/dispatch-helper-mixed-callers/App.tsx",
+      "start": 949,
+      "end": 958,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dispatch-delivery-join/variants/dispatch-helper-mixed-callers/App.tsx",
+      "start": 1014,
+      "end": 1035,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dispatch-delivery-join/variants/dispatch-helper-mixed-callers/App.tsx",
+      "start": 1023,
+      "end": 1030,
+      "fixes": 0
+    }
+  ]
+}

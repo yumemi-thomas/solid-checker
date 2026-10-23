@@ -239,6 +239,38 @@ pub(crate) fn written_directly_in(
             .any(|nested| nested.span != function.span && nested.span.contains(span))
 }
 
+/// Whether `span` runs when `function` does, on its stack: written directly in
+/// its body, outside a class body and outside JSX the compiler wraps in a getter.
+pub(crate) fn written_directly_in_flow(
+    ast: &solid_facts::ast::AstFacts,
+    function: &solid_facts::ast::FunctionFact,
+    span: Span,
+) -> bool {
+    written_directly_in(ast, function, span)
+        && !ast
+            .classes
+            .iter()
+            .any(|class| function.span.contains(class.span) && class.span.contains(span))
+        && !ast
+            .jsx_containing(span)
+            .any(|element| function.body.contains(element.span))
+        && !ast
+            .jsx_fragments
+            .iter()
+            .any(|fragment| function.body.contains(*fragment) && fragment.contains(span))
+}
+
+/// Whether `span` is written directly in the flow of the async function that
+/// contains it. The producer's `calls_after_await` stops at arrows, function
+/// expressions and declarations and methods, but not at getters, setters,
+/// constructors, class field initialisers, static blocks or JSX: code there
+/// runs when it is read, constructed or rendered, on that stack. A getter,
+/// setter or constructor is its own (never async) function here.
+pub(crate) fn written_directly_in_async_flow(ast: &solid_facts::ast::AstFacts, span: Span) -> bool {
+    containing_ast_function(ast, span)
+        .is_some_and(|function| function.r#async && written_directly_in_flow(ast, function, span))
+}
+
 pub(crate) const OWNER_CONTEXT_OWNED: u16 = 1;
 pub(crate) const OWNER_CONTEXT_UNOWNED: u16 = 2;
 pub(crate) const OWNER_CONTEXT_LEAF: u16 = 4;

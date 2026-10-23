@@ -23,6 +23,7 @@ mod completion;
 mod components;
 mod compound;
 mod event_delivery;
+pub(crate) use event_delivery::listener_type;
 mod flush_reach;
 mod identity_wrappers;
 pub(crate) use identity_wrappers::identity_wrapped_literal_span;
@@ -782,6 +783,8 @@ pub(super) struct SemanticLookup<'a> {
     mixed_event_literals: OnceLock<HashMap<(String, Span), crate::execution_role::EventEdge>>,
     /// ADR 0361: what the project's synchronous DOM dispatches can reach.
     event_delivery: OnceLock<event_delivery::EventDelivery>,
+    /// ADR 0361 (amended): where the event runs of the event-run literals end.
+    event_terminals: OnceLock<HashMap<(String, Span), crate::execution_role::EventTerminals>>,
     /// ADR 0362: whether a call may run `flush` from an owned scope.
     flush_may_run_applies_owned: OnceLock<bool>,
     /// ADR 0320: whether some call may copy keys into an existing object.
@@ -1019,6 +1022,7 @@ impl<'a> SemanticLookup<'a> {
             event_invoked_literals: OnceLock::new(),
             mixed_event_literals: OnceLock::new(),
             event_delivery: OnceLock::new(),
+            event_terminals: OnceLock::new(),
             flush_may_run_applies_owned: OnceLock::new(),
             objects_assigned_into: OnceLock::new(),
             router_params: OnceLock::new(),

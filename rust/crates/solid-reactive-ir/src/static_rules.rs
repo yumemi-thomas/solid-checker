@@ -20,6 +20,7 @@ use typefacts::Location;
 
 mod after_await;
 mod native_promise;
+pub(crate) use native_promise::native_promise_in;
 mod pre_await;
 
 /// The static-prepass stage: every prepass rule, in their pipeline order.
@@ -991,7 +992,10 @@ fn member_reads_after_await(
             location: location(file.path.shared(), member.span),
             analysis_context: analysis_context.to_owned(),
             fixes: vec![],
-            uncertain,
+            // A read in a class body or JSX after the await runs when the
+            // class is constructed or the JSX rendered, maybe not here.
+            uncertain: uncertain
+                || !crate::owners::written_directly_in_flow(&file.ast, ast_function, member.span),
         });
     }
 }

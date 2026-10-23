@@ -12,7 +12,9 @@ A `useContext(context)` read with no owner is the `context-read` operation (ADR
 `NoOwnerError` whatever default the context has, and the message says so. The
 owner walk places it as it places an effect: an ownerless event handler, a timer callback,
 module scope, code after an `await`, or a `runWithOwner(null)` callback is
-unowned. A package hook that reads a context is followed through its source, and
+unowned. After an `await` that means code written directly in the async
+function: one in a getter, setter, constructor, class body or JSX child there
+runs when read, constructed or rendered, and is uncertifiable. A package hook that reads a context is followed through its source, and
 the finding sits at the project call that runs it, as for any package owner
 requirement (ADR 0290). A context with no provider throws `ContextNotFoundError`
 instead, which is [missing-context-provider](missing-context-provider.md)'s claim,
@@ -95,8 +97,9 @@ owned setup beside `{ onClick: run }`) has no owner on the event run. An
 it: "…; when run as the `onClick` handler of `<button>` this callback has no
 owner, though it is also invoked where one is current" (a helper the callback
 calls says "an event handler"). The owned runs are not asked, and a write is still
-an obligation (the owned run may write legally). It stays an obligation when the
-program has a synchronous dispatch, when a holder of the value cannot be followed,
+an obligation (the owned run may write legally). It stays an obligation when a
+synchronous dispatch may reach its event run (it fires the type of the attribute
+the run ends at), when a holder of the value cannot be followed,
 when the event run follows a skippable `await` (ADR 0357), and when a later attribute
 or spread of the element may replace the event key (`<button {...h} onClick={x}>`: the
 spread's last definition wins, so `h.onClick` may never be the handler; ADR 0364).
@@ -131,9 +134,23 @@ not read lets every dispatch reach every handler. One shape is narrower: a
 CustomEvent(T, init)` with a literal `T` the web release does not delegate, on a
 function-local `const` that is one intrinsic element read only through members,
 reaches only that element's `T` handlers and its exact spreads' handlers, and
-fires no type program-wide. A handler no element names (a forwarded prop, a
-literal nested in a handler, a helper flow) stays uncertifiable while any
-dispatch exists. No unsupported dispatch edge is guessed.
+fires no type program-wide. A callback no element names takes the type of the
+attributes its runs end at, when every run is followed to one (ADR 0361,
+amended): a literal forwarded through a component prop to `onScroll` keeps its
+ownerless proof beside a `focus()`; one forwarded to `onFocus`, or to both, is
+uncertifiable, and so is one on the element a narrow `dispatchEvent` targets.
+A callback whose flow the walk cannot follow to an attribute (a prop stored
+or never put on an element, an attribute a later spread may replace, a helper
+flow) stays uncertifiable while any dispatch exists. No unsupported dispatch
+edge is guessed. A dispatch whose own stack provably has no owner is no site
+(ADR 0366): one after an `await` that dominates it, written directly in its
+async function's flow (not in a getter, constructor, class body or JSX), one
+written directly in a callback literal a host scheduler runs from a task or
+microtask queue (the scheduler list above; a `then` handler only on a promise
+proven native), and one written directly in a module-local helper every call
+of which follows such an `await`. It runs its handlers with no owner, as the
+host does, so their proofs stand. A skippable `await`, a callback the scheduler
+is handed by name, and a closure the callback stores do not count.
 A `window.dispatchEvent(…)` or `document.dispatchEvent(…)` of the unshadowed
 global, whatever the event, reaches no compiler handler: its path
 (`[window]`, `[document, window]`) holds no element, and an element handler is

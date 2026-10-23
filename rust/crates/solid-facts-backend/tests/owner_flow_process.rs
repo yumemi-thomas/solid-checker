@@ -30,8 +30,15 @@ const LIB_BODY: &str = r#"export function handlers(cb: () => void) {
   return { onClick: () => cb() };
 }
 "#;
+// ADR 0361 (amended): a `ping` dispatch cannot run the `onClick` handler the
+// callback's event run ends at; a `click` dispatch can.
 const LIB_DISPATCH: &str = r#"export function handlers(cb: () => void) {
   new EventTarget().dispatchEvent(new Event("ping"));
+  return { onClick: () => cb() };
+}
+"#;
+const LIB_DISPATCH_CLICK: &str = r#"export function handlers(cb: () => void) {
+  new EventTarget().dispatchEvent(new Event("click"));
   return { onClick: () => cb() };
 }
 "#;
@@ -98,7 +105,8 @@ fn helper_event_edits_match_cold() {
     for (version, (text, expected)) in [
         (LIB_NOT_EVENT, false),
         (LIB_EVENT, true),
-        (LIB_DISPATCH, false),
+        (LIB_DISPATCH, true),
+        (LIB_DISPATCH_CLICK, false),
         (LIB_EVENT, true),
         (LIB_HOMONYM, true),
         (LIB_BODY, true),
@@ -344,6 +352,183 @@ fn supported_dispatch_edits_match_cold() {
             .edit(
                 vec![SourceChange {
                     path: paths["App.tsx"].clone(),
+                    version: version as u64 + 1,
+                    source: Some(source.into()),
+                    compiler_options: CompilerOptions::default(),
+                }],
+                None,
+            )
+            .unwrap();
+        check(name, &facts, violation);
+    }
+    drop(session);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+/// ADR 0361 (amended): a callback forwarded through a component prop takes the
+/// type of the attribute it ends at, in another file. Beside a `focus()` site,
+/// the callback is a proven violation while that attribute is `onScroll` and an
+/// obligation while it is `onFocus`; the retained session must follow the
+/// component's file as a cold build does (open: no walk, no proof).
+#[test]
+fn forwarded_terminal_edits_match_cold() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    const APP: &str = "import { onCleanup } from 'solid-js'; import { Child } from './child'; export function App() { return <><Child on={() => { onCleanup(() => {}); }} /><button onClick={(event) => (event.currentTarget as HTMLElement).focus()} /></>; }";
+    const SCROLL: &str =
+        "export function Child(props: { on: () => void }) { return <div onScroll={props.on} />; }";
+    const FOCUS: &str =
+        "export function Child(props: { on: () => void }) { return <div onFocus={props.on} />; }";
+    const BOTH: &str = "export function Child(props: { on: () => void }) { return <div onScroll={props.on} onFocus={props.on} />; }";
+    let (directory, paths) = project(
+        "forwarded-terminal",
+        &[("App.tsx", APP), ("child.tsx", SCROLL)],
+    );
+    let tsconfig = directory
+        .join("tsconfig.json")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let selected = dialect::default_dialect();
+    let typescript = TypeFactsSession::open(&typefacts, &tsconfig, &[]).unwrap();
+    let (mut session, _) =
+        NativeIncrementalSession::open_pipelined(selected, tsconfig, typescript).unwrap();
+    let mut closed_builder = solid_reactive_ir::IncrementalBuilder::default();
+    let mut open_builder = solid_reactive_ir::IncrementalBuilder::default();
+    let start = APP.find("onCleanup(() =>").unwrap() as u64;
+    let mut check = |generation: &str, facts: &solid_facts::ProjectFacts, violation: bool| {
+        for (closed, builder) in [(true, &mut closed_builder), (false, &mut open_builder)] {
+            let retained = warm(builder, facts, selected.vocabulary, closed);
+            let fresh = cold(facts, selected.vocabulary, closed);
+            assert_eq!(retained, fresh, "{generation} closed={closed}");
+            let findings = selected.solve(&retained);
+            assert_eq!(
+                findings,
+                selected.solve(&fresh),
+                "{generation} closed={closed}: findings"
+            );
+            let proven = findings.iter().any(|finding| {
+                finding.id == "SC4001"
+                    && finding.kind == "violation"
+                    && finding.primary_location.path.as_ref() == paths["App.tsx"]
+                    && finding.primary_location.start_byte == start
+            });
+            assert_eq!(
+                proven,
+                closed && violation,
+                "{generation} closed={closed}: {findings:?}"
+            );
+        }
+    };
+    check("scroll", &session.analyze().unwrap(), true);
+    for (version, (name, source, violation)) in [
+        ("focus", FOCUS, false),
+        ("scroll", SCROLL, true),
+        ("both", BOTH, false),
+        ("scroll", SCROLL, true),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let facts = session
+            .edit(
+                vec![SourceChange {
+                    path: paths["child.tsx"].clone(),
+                    version: version as u64 + 1,
+                    source: Some(source.into()),
+                    compiler_options: CompilerOptions::default(),
+                }],
+                None,
+            )
+            .unwrap();
+        check(name, &facts, violation);
+    }
+    drop(session);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+/// ADR 0366: a dispatch on a provably ownerless stack (after a dominating
+/// `await`, in a fresh-stack scheduler's callback, in a helper every call of
+/// which follows one) is no site. The dispatching file is edited between those
+/// and the shapes that still reach the handler; the retained session must
+/// answer what a cold build answers.
+#[test]
+fn ownerless_dispatch_edits_match_cold() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    const APP: &str = "import { onCleanup } from 'solid-js'; export function App() { return <button onClick={() => { onCleanup(() => {}); }} />; }";
+    const SYNC: &str = "export function fire(el: HTMLElement) { el.click(); }";
+    const AFTER: &str = "export async function fire(el: HTMLElement) { await 0; el.click(); }";
+    const SKIPPABLE: &str =
+        "export async function fire(el: HTMLElement, c: boolean) { if (c) await 0; el.click(); }";
+    const MICROTASK: &str =
+        "export function fire(el: HTMLElement) { queueMicrotask(() => el.click()); }";
+    const STORED: &str = "export function fire(el: HTMLElement) { const later = () => el.click(); queueMicrotask(later); }";
+    const THEN_NATIVE: &str =
+        "export function fire(el: HTMLElement) { void Promise.resolve(0).then(() => el.click()); }";
+    const THEN_TYPED: &str = "export function fire(el: HTMLElement, p: Promise<void>) { void p.then(() => el.click()); }";
+    const HELPER: &str = "function save(el: HTMLElement) { el.click(); } export async function fire(el: HTMLElement) { await 0; save(el); }";
+    const HELPER_MIXED: &str = "function save(el: HTMLElement) { el.click(); } export async function fire(el: HTMLElement) { save(el); await 0; save(el); }";
+    let (directory, paths) = project("ownerless-dispatch", &[("App.tsx", APP), ("lib.ts", SYNC)]);
+    let tsconfig = directory
+        .join("tsconfig.json")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let selected = dialect::default_dialect();
+    let typescript = TypeFactsSession::open(&typefacts, &tsconfig, &[]).unwrap();
+    let (mut session, _) =
+        NativeIncrementalSession::open_pipelined(selected, tsconfig, typescript).unwrap();
+    let mut closed_builder = solid_reactive_ir::IncrementalBuilder::default();
+    let mut open_builder = solid_reactive_ir::IncrementalBuilder::default();
+    let start = APP.find("onCleanup(() =>").unwrap() as u64;
+    let mut check = |generation: &str, facts: &solid_facts::ProjectFacts, violation: bool| {
+        for (closed, builder) in [(true, &mut closed_builder), (false, &mut open_builder)] {
+            let retained = warm(builder, facts, selected.vocabulary, closed);
+            let fresh = cold(facts, selected.vocabulary, closed);
+            assert_eq!(retained, fresh, "{generation} closed={closed}");
+            let findings = selected.solve(&retained);
+            assert_eq!(
+                findings,
+                selected.solve(&fresh),
+                "{generation} closed={closed}: findings"
+            );
+            let proven = findings.iter().any(|finding| {
+                finding.id == "SC4001"
+                    && finding.kind == "violation"
+                    && finding.primary_location.path.as_ref() == paths["App.tsx"]
+                    && finding.primary_location.start_byte == start
+            });
+            assert_eq!(
+                proven, violation,
+                "{generation} closed={closed}: {findings:?}"
+            );
+        }
+    };
+    check("sync", &session.analyze().unwrap(), false);
+    for (version, (name, source, violation)) in [
+        ("after await", AFTER, true),
+        ("skippable await", SKIPPABLE, false),
+        ("microtask", MICROTASK, true),
+        ("stored closure", STORED, false),
+        ("then of a native promise", THEN_NATIVE, true),
+        ("then of a typed promise", THEN_TYPED, false),
+        ("helper after await", HELPER, true),
+        ("helper with a synchronous call", HELPER_MIXED, false),
+        ("after await", AFTER, true),
+        ("sync", SYNC, false),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let facts = session
+            .edit(
+                vec![SourceChange {
+                    path: paths["lib.ts"].clone(),
                     version: version as u64 + 1,
                     source: Some(source.into()),
                     compiler_options: CompilerOptions::default(),

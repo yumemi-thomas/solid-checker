@@ -5,9 +5,10 @@ function handlers(cb: () => void) {
 }
 
 // The mix of the root project, beside a synchronous dispatch the analysis
-// cannot join to a handler (a parameter receiver): the click handler may run on
-// the dispatcher's stack, under its owner (ADR 0356), so the event run is no
-// longer proven ownerless and the callback keeps its obligation.
+// cannot join to one element (a parameter receiver). It fires `ping` only, and
+// the callback's event run ends at `onClick` (ADR 0361, amended): no dispatch
+// runs it, so the event run is still a violation. `sync-dispatch-click` fires
+// `click` and keeps the obligation.
 export function RunWithOwnerAndHandler() {
   const owner = getOwner();
   const h = handlers(() => {

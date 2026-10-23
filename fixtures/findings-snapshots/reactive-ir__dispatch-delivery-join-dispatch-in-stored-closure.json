@@ -1,0 +1,35 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dispatch-delivery-join/variants/dispatch-in-stored-closure/App.tsx",
+      "start": 1046,
+      "end": 1055,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dispatch-delivery-join/variants/dispatch-in-stored-closure/App.tsx",
+      "start": 1122,
+      "end": 1131,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dispatch-delivery-join/variants/dispatch-in-stored-closure/App.tsx",
+      "start": 1187,
+      "end": 1196,
+      "fixes": 0
+    }
+  ]
+}

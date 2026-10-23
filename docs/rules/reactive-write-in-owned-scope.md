@@ -20,7 +20,11 @@ proven legal one. Only the handlers whose event type some dispatch in the
 program fires (a `focus()` fires `onFocus` and `onBlur` handlers; any dispatch
 of an unknown type fires every type), or that a supported element-specific
 `dispatchEvent` delivers to, are affected (ADR 0361, `missing-owner.md`); a
-handler no dispatch can reach is ownerless and its write is legal.
+handler no dispatch can reach is ownerless and its write is legal. A callback
+forwarded to an element (a component prop) takes the type of the attribute it
+ends at, so its write is legal when that type is not fired. A dispatch on a
+provably ownerless stack (after a dominating `await`, in a scheduler callback;
+ADR 0366) fires nothing.
 
 A `createRenderEffect` apply callback is only partly such a scope. Its first run
 happens before `createRenderEffect` returns, under the caller's owner, so a

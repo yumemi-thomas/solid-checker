@@ -1,6 +1,6 @@
 # owner-mixed-invocation
 
-**Claim (ADR 0363).** A callback the host runs as a proven event handler (an intrinsic element's `on…` attribute or an exact spread key, ADR 0319's walk) and that something else also runs (a `runWithOwner` slot, a plain call in owned setup) has no owner on the event run. An `onCleanup` or effect reached on that run is a proven `SC4001` violation, worded "when run as the `onClick` handler of `<button>`"; the owned runs are not asked. The premise is ADR 0327's (an event handler fires with no owner) with ADR 0356/0361's veto: any synchronous dispatch in the program keeps the callback an obligation.
+**Claim (ADR 0363).** A callback the host runs as a proven event handler (an intrinsic element's `on…` attribute or an exact spread key, ADR 0319's walk) and that something else also runs (a `runWithOwner` slot, a plain call in owned setup) has no owner on the event run. An `onCleanup` or effect reached on that run is a proven `SC4001` violation, worded "when run as the `onClick` handler of `<button>`"; the owned runs are not asked. The premise is ADR 0327's (an event handler fires with no owner) with ADR 0356/0361's veto: a synchronous dispatch that fires the type of an attribute the callback's event runs end at keeps it an obligation (ADR 0361, amended).
 
 `App.tsx` (rc.17 stubs, byte-faithful declarations in `solid-js.d.ts`):
 
@@ -32,8 +32,9 @@ Variants (each a project; the root's `package.json` closes the program):
 
 | variant | what it pins |
 | --- | --- |
-| `sync-dispatch` | a `dispatchEvent` on a parameter receiver (ADR 0356): the handler may run on the dispatcher's stack, so the mix keeps its obligation |
-| `window-dispatch` | even a dispatch that reaches no element handler (ADR 0361) keeps a flow-derived handler conditional, as the helper flows of `dispatch-delivery-join` do |
+| `sync-dispatch` | a `dispatchEvent` of `ping` on a parameter receiver: it fires `ping` only, and the mix's event run ends at `onClick` (ADR 0361, amended), so the event run is still a violation |
+| `sync-dispatch-click` | the same with `new Event("click")`: the click handler may run on the dispatcher's stack (ADR 0356), so the mix keeps its obligation |
+| `window-dispatch` | a dispatch that reaches no element handler (ADR 0361) withholds nothing: the event run is still a violation |
 | `may-resume` | the cleanup (or a helper call) follows a skippable `await` (ADR 0357): the possible-suspension edge ends the event path, so it is an obligation |
 | `exact-holder` | event-only handlers in function-local holders the checker resolves exactly (the main project's `registry.onClick` write makes `onClick` holders unresolved, ADR 0299): the graph edge is proven unowned unless a later `onClick` attribute, a later exact holder with the key or a later unknown spread follows (obligations); a later exact holder with `onScroll` only, and an earlier attribute, keep the violation |
 

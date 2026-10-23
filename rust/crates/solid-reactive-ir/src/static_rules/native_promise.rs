@@ -9,6 +9,7 @@
 //! `Promise<T>` or `PromiseLike<T>` proves nothing: a subclass or a thenable has
 //! that type too.
 
+use crate::indexes::SemanticLookup;
 use crate::pipeline::AnalysisContext;
 use crate::runtime_semantics::standard_call_name;
 use solid_facts::FileFacts;
@@ -72,6 +73,14 @@ pub(super) fn async_helper<'x>(
     file: &FileFacts,
     call: &CallFact,
 ) -> Option<(&'x FileFacts, &'x FunctionFact)> {
+    async_helper_in(ctx.semantic_lookup, file, call)
+}
+
+fn async_helper_in<'x>(
+    lookup: &SemanticLookup<'x>,
+    file: &FileFacts,
+    call: &CallFact,
+) -> Option<(&'x FileFacts, &'x FunctionFact)> {
     if call.construct {
         return None;
     }
@@ -81,18 +90,14 @@ pub(super) fn async_helper<'x>(
         if file.ast.computed_members.contains(&member.span) {
             return None;
         }
-        let (helper_file, helper) = ctx.semantic_lookup.closed_member_function(file, member)?;
+        let (helper_file, helper) = lookup.closed_member_function(file, member)?;
         return (helper.r#async && !helper.generator).then_some((helper_file, helper));
     }
-    let (helper_file, helper) = ctx
-        .semantic_lookup
-        .function_called_at(file.path.as_str(), callee)?;
+    let (helper_file, helper) = lookup.function_called_at(file.path.as_str(), callee)?;
     (helper.r#async
         && !helper.generator
         && helper.method_name.is_none()
-        && ctx
-            .semantic_lookup
-            .function_value_is_current(helper_file, helper))
+        && lookup.function_value_is_current(helper_file, helper))
     .then_some((helper_file, helper))
 }
 
@@ -105,7 +110,18 @@ pub(super) fn native_promise(
     span: Span,
     depth: usize,
 ) -> bool {
-    ctx.semantic_lookup.promise_intrinsics_intact() && native_promise_claim(ctx, file, span, depth)
+    native_promise_in(ctx.semantic_lookup, file, span, depth)
+}
+
+/// [`native_promise`] asked of the semantic lookup alone (ADR 0366: the
+/// receiver of a `then` whose callback dispatches).
+pub(crate) fn native_promise_in(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    span: Span,
+    depth: usize,
+) -> bool {
+    lookup.promise_intrinsics_intact() && native_promise_claim_in(lookup, file, span, depth)
 }
 
 /// What the expression at `span` is when no visible write changes the
@@ -117,6 +133,15 @@ pub(super) fn native_promise_claim(
     span: Span,
     depth: usize,
 ) -> bool {
+    native_promise_claim_in(ctx.semantic_lookup, file, span, depth)
+}
+
+fn native_promise_claim_in(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    span: Span,
+    depth: usize,
+) -> bool {
     if depth > MAX_DEPTH {
         return false;
     }
@@ -124,7 +149,7 @@ pub(super) fn native_promise_claim(
     let Some(call) = file.ast.call_at(span) else {
         return false;
     };
-    if async_helper(ctx, file, call).is_some() {
+    if async_helper_in(lookup, file, call).is_some() {
         return true;
     }
     let callee = file.ast.peel_ts_sugar_span(call.callee);
@@ -137,8 +162,7 @@ pub(super) fn native_promise_claim(
     {
         return true;
     }
-    let standard = ctx
-        .semantic_lookup
+    let standard = lookup
         .resolved_callee_call(file, call.callee)
         .and_then(standard_call_name);
     match (call.construct, standard) {
@@ -158,11 +182,11 @@ pub(super) fn native_promise_claim(
             .ast
             .member_at(callee)
             .filter(|_| !file.ast.computed_members.contains(&callee))
-            .is_some_and(|member| native_promise_claim(ctx, file, member.object, depth + 1)),
+            .is_some_and(|member| native_promise_claim_in(lookup, file, member.object, depth + 1)),
         (false, Some(name @ ("fetch" | "WindowOrWorkerGlobalScope.fetch"))) => {
             direct_builtin(file, call, name)
         }
-        (false, None) => returns_native_promise_claim(ctx, file, call, depth),
+        (false, None) => returns_native_promise_claim(lookup, file, call, depth),
         _ => false,
     }
 }
@@ -170,7 +194,7 @@ pub(super) fn native_promise_claim(
 /// A call to a project function that, on every path, returns a native promise
 /// (`const pause = () => new Promise(...)`).
 fn returns_native_promise_claim(
-    ctx: &AnalysisContext<'_>,
+    lookup: &SemanticLookup<'_>,
     file: &FileFacts,
     call: &CallFact,
     depth: usize,
@@ -182,17 +206,12 @@ fn returns_native_promise_claim(
     if file.ast.member_at(callee).is_some() {
         return false;
     }
-    let Some((helper_file, helper)) = ctx
-        .semantic_lookup
-        .function_called_at(file.path.as_str(), callee)
-    else {
+    let Some((helper_file, helper)) = lookup.function_called_at(file.path.as_str(), callee) else {
         return false;
     };
     if helper.generator
         || helper.method_name.is_some()
-        || !ctx
-            .semantic_lookup
-            .function_value_is_current(helper_file, helper)
+        || !lookup.function_value_is_current(helper_file, helper)
     {
         return false;
     }
@@ -205,8 +224,8 @@ fn returns_native_promise_claim(
         return false;
     }
     returned.all(|returned| {
-        returned
-            .argument
-            .is_some_and(|argument| native_promise_claim(ctx, helper_file, argument, depth + 1))
+        returned.argument.is_some_and(|argument| {
+            native_promise_claim_in(lookup, helper_file, argument, depth + 1)
+        })
     })
 }

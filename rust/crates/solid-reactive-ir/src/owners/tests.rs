@@ -6,7 +6,7 @@ use super::{
     callback_owner_edge_kind, compiler_owner_context, compose_owner_edge, owner_edge_context,
     possible_await_continuation_context, propagate_owner_contexts, providing_region_chain,
     returned_arrow_function, root_owned_at, seed_contexts, seed_unnamed_hand_outs,
-    settle_eager_owners,
+    settle_eager_owners, written_directly_in_async_flow,
 };
 use solid_facts::ast;
 use solid_facts::compiler::{
@@ -567,4 +567,47 @@ fn root_owned_at_withholds_for_either_detaching_bit() {
             "context {context:#b}"
         );
     }
+}
+
+/// Whether the `target.click()` call in `source` is written directly in the
+/// flow of the async function containing it.
+fn click_in_async_flow(source: &str) -> bool {
+    let facts = ast::extract("test.tsx", source).unwrap();
+    let start = u32::try_from(source.find("target.click()").unwrap()).unwrap();
+    let call = facts
+        .calls
+        .iter()
+        .find(|call| call.callee.start == start)
+        .unwrap();
+    written_directly_in_async_flow(&facts, call.callee)
+}
+
+#[test]
+fn a_call_after_an_await_runs_on_the_continuation_only_in_the_async_flow() {
+    let wrap = |body: &str| format!("async function f(target: any) {{ await 0; {body} }}");
+    assert!(click_in_async_flow(&wrap("target.click();")));
+    assert!(click_in_async_flow(&wrap(
+        "if (target) { target.click(); }"
+    )));
+    assert!(click_in_async_flow(
+        "const o = { async m(target: any) { await 0; target.click(); } };"
+    ));
+    for nested in [
+        "const o = { get go() { target.click(); return 1; } };",
+        "const o = { set go(v: number) { target.click(); } };",
+        "const C = class { constructor() { target.click(); } };",
+        "class C { get go() { return target.click(); } }",
+        "class C { field = target.click(); }",
+        "class C { static { target.click(); } }",
+        "return <div>{(target.click(), 'x')}</div>;",
+        "return <div title={target.click()} />;",
+        "return <>{target.click()}</>;",
+        "const g = () => target.click();",
+        "function g(x = target.click()) {}",
+    ] {
+        assert!(!click_in_async_flow(&wrap(nested)), "{nested}");
+    }
+    assert!(!click_in_async_flow(
+        "function f(target: any) { target.click(); }"
+    ));
 }

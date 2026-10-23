@@ -331,9 +331,14 @@ pub(super) fn spread_key_edge(
 ///
 /// The positions are the producer's `calls_after_await` dominance fact (the
 /// same one `reactive-read-after-await` proves reads with): branches, `&&`,
-/// `try`/`catch`, loops and `switch` merge conservatively, and a nested
-/// closure is never scanned, so a callback handed to `runWithOwner` after the
-/// `await` is not one of them. Such a call runs from a promise continuation,
+/// `try`/`catch`, loops and `switch` merge conservatively, and an arrow,
+/// function or method is never scanned, so a callback handed to `runWithOwner`
+/// after the `await` is not one of them. The producer does scan getters,
+/// setters, constructors, class bodies and JSX, which run when read,
+/// constructed or rendered, on the continuation or later: a listed call there
+/// ([`written_directly_in_async_flow`] answers no) is not proven unowned; it
+/// may be, so it is an obligation ([`Self::nested_context`]).
+/// A call written directly in the flow runs from a promise continuation,
 /// on an otherwise empty stack. Whether an owner is current there is the
 /// dialect's fresh-stack answer, the same one host schedulers get
 /// ([`Dialect::fresh_stack_callback_owner`]): Solid 2.0's owner is a
@@ -341,24 +346,41 @@ pub(super) fn spread_key_edge(
 /// answer [`solid_dialect::CallbackOwner::None`].
 pub(crate) struct AwaitContinuations<'a> {
     pub(super) starts: HashMap<&'a str, HashSet<u64>>,
+    /// Listed calls written in a getter, setter, constructor, class body or JSX.
+    nested: HashMap<&'a str, HashSet<u64>>,
 }
 
 impl<'a> AwaitContinuations<'a> {
     pub(crate) fn new(facts: &'a ProjectFacts, lookup: &SemanticLookup<'_>) -> Self {
         let mut starts = HashMap::<&'a str, HashSet<u64>>::default();
+        let mut nested = HashMap::<&'a str, HashSet<u64>>::default();
         if lookup.dialect.fresh_stack_callback_owner() == Some(solid_dialect::CallbackOwner::None) {
             for file in facts.typescript.files() {
                 for function in file.async_functions.iter() {
                     for call in &function.calls_after_await {
-                        starts
-                            .entry(call.path.as_ref())
-                            .or_default()
-                            .insert(call.start_byte);
+                        // A file the analysis does not hold proves nothing.
+                        let on_continuation =
+                            lookup.file_by_path(call.path.as_ref()).is_some_and(|file| {
+                                let (Ok(start), Ok(end)) =
+                                    (u32::try_from(call.start_byte), u32::try_from(call.end_byte))
+                                else {
+                                    return false;
+                                };
+                                written_directly_in_async_flow(&file.ast, Span::new(start, end))
+                            });
+                        if on_continuation {
+                            &mut starts
+                        } else {
+                            &mut nested
+                        }
+                        .entry(call.path.as_ref())
+                        .or_default()
+                        .insert(call.start_byte);
                     }
                 }
             }
         }
-        Self { starts }
+        Self { starts, nested }
     }
 
     /// Whether the call whose callee starts at `start` runs after an `await`.
@@ -366,6 +388,25 @@ impl<'a> AwaitContinuations<'a> {
         self.starts
             .get(path)
             .is_some_and(|starts| starts.contains(&u64::from(start)))
+    }
+
+    /// The owner context of an operation the producer lists after an `await`
+    /// although it is written in a nested getter, setter, constructor, class
+    /// body or JSX: it may run on the continuation (a getter read there) or
+    /// wherever it is read, constructed or rendered. Possibly unowned, never
+    /// proven, even where nothing places the nested code (context zero).
+    pub(super) fn nested_context(&self, path: &str, start: u32, context: u16) -> Option<u16> {
+        self.nested
+            .get(path)
+            .is_some_and(|starts| starts.contains(&u64::from(start)))
+            .then(|| {
+                let source = if context == 0 {
+                    OWNER_CONTEXT_UNOWNED
+                } else {
+                    context
+                };
+                owner_edge_context(OwnerEdgeKind::MayResumeUnowned, source)
+            })
     }
 }
 
