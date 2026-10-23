@@ -16,7 +16,7 @@
 //   bun scripts/tsc-oracle.mjs versions [--json]
 //
 // The compiler is TypeScript 7.1, the native `tsc`, driven through its
-// `typescript/unstable/sync` API (scripts/lib/tsc-oracle-api.mjs, run under
+// `typescript/sync` API (scripts/lib/tsc-oracle-api.mjs, run under
 // Node). It is a separate, pinned install (`fixtures/tsc-oracle/packages.json`,
 // `typescript`), never packages/cli's `typescript` 5.9.3. The CLI's
 // `--pretty false` output carries no diagnostic length, and the gate compares

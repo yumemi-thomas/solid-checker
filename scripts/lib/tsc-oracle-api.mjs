@@ -1,4 +1,4 @@
-// The oracle's only contact with TypeScript 7's `typescript/unstable/sync` API.
+// The oracle's only contact with TypeScript 7's `typescript/sync` API.
 //
 // Runs under Node, not Bun: the sync API blocks on the native `tsc` process
 // through a file descriptor that Bun's child-process streams do not expose
@@ -19,8 +19,8 @@ import { pathToFileURL } from "node:url";
 const request = JSON.parse(readFileSync(0, "utf8"));
 const require = createRequire(join(request.typescriptRoot, "package.json"));
 const load = (specifier) => import(pathToFileURL(require.resolve(specifier)).href);
-const { API, ScriptKind, DiagnosticCategory } = await load("typescript/unstable/sync");
-const is = await load("typescript/unstable/ast/is");
+const { API, ScriptKind, DiagnosticCategory } = await load("typescript/sync");
+const is = await load("typescript/ast/is");
 
 const subjectOf = (node) =>
   is.isCallExpression(node) ||

@@ -55,11 +55,11 @@ goldens, tests, ADRs, and benchmarks now move together here; their original MIT 
 ## tsrs
 
 - Upstream: https://github.com/oxc-project/tsrs
-- Upstream revision: `467182f2402b140897e8a02d7a25699db0e79e2a` (v0.18.0)
+- Upstream revision: `3bbcc754` (v0.19.0)
 - Consumed fork: https://github.com/yumemi-thomas/tsrs
-- Pinned revision: `49f534856809ad8d5a596123f02175ba01675c8d`
-- TypeScript commit it ports: `b85298b6a81f` (microsoft/TypeScript,
-  `7.1.0-dev.20260929`)
+- Pinned revision: `e1e9183c5da78de3261b9832598e3ebebc04cb73`
+- TypeScript commit it ports: `3e9236361fa97a9e6c685f4833ac457ae2d8c50a` (microsoft/TypeScript,
+  `7.1.0-beta`)
 - License: Apache-2.0 (tsrs is a derivative work of TypeScript, Copyright (c)
   Microsoft Corporation, also Apache-2.0; its `NOTICE` carries TypeScript's
   third-party notices and the bundled `lib.*.d.ts` files)

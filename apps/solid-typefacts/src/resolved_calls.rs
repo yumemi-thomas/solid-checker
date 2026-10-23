@@ -102,7 +102,7 @@ fn check(ctx: &Context) -> Result<(), BackendError> {
 
 /// Go: `invocationPropertyName`.
 fn invocation_property_name(name: &str) -> Option<&str> {
-    (!name.is_empty() && !name.starts_with(tsrs_ast::InternalSymbolNamePrefix)).then_some(name)
+    (!name.is_empty() && !name.starts_with(tsrs_ast::INTERNAL_SYMBOL_NAME_PREFIX)).then_some(name)
 }
 
 /// Go: `transparentCallCallee`.
@@ -274,7 +274,10 @@ impl CallRun<'_, '_> {
             symbol = Some(found);
             result.symbol = self.env.id_for(found);
             result.origin_module = declaration_module(found).into();
-            if !found.name().starts_with(tsrs_ast::InternalSymbolNamePrefix) {
+            if !found
+                .name()
+                .starts_with(tsrs_ast::INTERNAL_SYMBOL_NAME_PREFIX)
+            {
                 name = found.name().to_owned();
             }
         }
@@ -326,7 +329,10 @@ impl CallRun<'_, '_> {
         owners.reverse();
         let mut qualified: Vec<&str> = Vec::with_capacity(owners.len() + 1);
         for owner in &owners {
-            if !owner.name.is_empty() && !owner.name.starts_with(tsrs_ast::InternalSymbolNamePrefix)
+            if !owner.name.is_empty()
+                && !owner
+                    .name
+                    .starts_with(tsrs_ast::INTERNAL_SYMBOL_NAME_PREFIX)
             {
                 qualified.push(&owner.name);
             }
@@ -926,7 +932,7 @@ impl CallRun<'_, '_> {
         // 0xFE and so follows every ordinary name; tsrs's marker (U+007F) would
         // sort before non-ASCII names. Sort by (internal, name) to match.
         required.sort_by(|left, right| {
-            let key = |name: &str| match name.strip_prefix(tsrs_ast::InternalSymbolNamePrefix) {
+            let key = |name: &str| match name.strip_prefix(tsrs_ast::INTERNAL_SYMBOL_NAME_PREFIX) {
                 Some(rest) => (true, rest.to_owned()),
                 None => (false, name.to_owned()),
             };

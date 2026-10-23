@@ -12,8 +12,9 @@
 //! intrinsics, and its answer is history-dependent: it is never retained.
 //!
 //! The rules mirror `Checker::get_symbol_at_location` and
-//! `get_symbol_of_name_or_property_access_expression` at tsrs 49f5348
-//! (checker_15.rs). A position this module cannot place is type-resolved
+//! `get_symbol_of_name_or_property_access_expression` at tsrs 3bbcc754
+//! (checker_15.rs; the meta-property and import-phase arms differ from 467182f
+//! and are type-resolved here). A position this module cannot place is type-resolved
 //! (fail closed): the cost of a wrong "type-resolved" is a recomputation, the
 //! cost of a wrong "binder-resolved" a stale answer.
 

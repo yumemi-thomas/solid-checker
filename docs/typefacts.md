@@ -75,14 +75,14 @@ incremental program is still reused.
 ## Native integration pins
 
 - tsrs: the fork `https://github.com/yumemi-thomas/tsrs` at
-  `49f534856809ad8d5a596123f02175ba01675c8d`, every tsrs crate pinned to that
+  `e1e9183c5da78de3261b9832598e3ebebc04cb73`, every tsrs crate pinned to that
   one `rev` in `apps/solid-typefacts/Cargo.toml` (and so in its `Cargo.lock`).
-  Upstream `oxc-project/tsrs@467182f` plus one marked commit that exports
+  Upstream `oxc-project/tsrs@3bbcc754` (v0.19.0) plus one marked commit that exports
   `is_untyped_function_call` and `get_reduced_apparent_type`; it changes no
   behavior. The fork is unpublished: a producer builds only with network access
   to it.
-- TypeScript: commit `b85298b6a81f772d080b0455de0ca9d744cd6fd6`
-  (`7.1.0-dev.20260929`), the commit tsrs ports. The `tsc` oracle runs the same
+- TypeScript: commit `3e9236361fa97a9e6c685f4833ac457ae2d8c50a`
+  (`7.1.0-beta`), the commit tsrs ports. The `tsc` oracle runs the same
   release line (ADR 0361).
 - Toolchain: Rust 1.99.1 (`apps/solid-typefacts/rust-toolchain.toml`), CMake for
   the native allocator (mimalloc), and the `wasm32-wasip1` target for the

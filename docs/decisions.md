@@ -535,7 +535,7 @@ A compile error (`CompilerProviderError::Refused`) is no failure: the file keeps
 
 <a id="adr-0361"></a>
 ## ADR 0361 — The tsc oracle is TypeScript 7.1, the producer's compiler
-Native `tsc` 7.1.0-dev.20260930.4 via `typescript/unstable/sync` (Node), pinned apart from `packages/cli`'s 5.9.3 (gitHead 9adc871ff47f: one commit past b85298b6a81f, identical `tsc/`). The CLI has no diagnostic length. Owner: `scripts/lib/tsc-oracle-api.mjs`.
+Native `tsc` 7.1 (the current pin: ADR 0374) via `typescript/sync` (Node), pinned apart from `packages/cli`'s 5.9.3. The CLI has no diagnostic length. Owner: `scripts/lib/tsc-oracle-api.mjs`.
 
 <a id="adr-0362"></a>
 ## ADR 0362 — The producer's TypeScript is b85298b6a81f (Go pin superseded by ADR 0365)
@@ -590,3 +590,7 @@ Policy E (STABLE-IDS) rejected. A derived symbol (instantiation, clone, mapped p
 ## ADR 0373 — The stable-id scheme as built (ADRs 0366-0372)
 A symbol id is canonical (`symbol:h:`, program-pure) or generation-scoped (`symbol:<gen>:<n>`). Built: binder keys (0366); check-first, location-pure descriptors, canonical history, no checker counter in a fact (0367); roots first (0368); three binder-level families reused under recorded dependencies, type-derived facts recomputed (0369); set keys (0371); no erasure of derived symbols, which id-keyed consumers would conflate (0372). ADR 0364's inert leftovers (contribution reuse, async cache, suppression union, reference delta, symbol-closure builder) are deleted; `retainedFiles` stays on the wire at zero.
 Not built: parallel checkers; reuse of type-derived facts. Ids can be history-independent, types cannot be proven so: a result cut by a guard is cached for every later caller; a detector flagged 12% of corpus files with no soundness argument, 78% with one (docs/open-work.md).
+
+<a id="adr-0374"></a>
+## ADR 0374 — tsrs 3bbcc754 (v0.19.0), TypeScript 7.1.0-beta, and the oracle moved with it
+The producer pins fork `yumemi-thomas/tsrs@e1e9183` (upstream `3bbcc754` plus the same marked export commit; the old `solid-checker` branch stays fetchable). Its TypeScript is `3e9236361fa9` (7.1.0-beta), so the tsc oracle moved in the same change (ADR 0361): `fixtures/tsc-oracle/packages.json` now names typescript 7.1.0-beta, whose gitHead is that commit, with re-verified integrities. The only source adaptation was upstream's Rust renames (`INTERNAL_SYMBOL_NAME_PREFIX`, `ModuleKind::COMMON_JS` and `PRESERVE`). Lib text moved, so lib offsets and `symbol:h:` ids differ; the differential tests compare only against a producer on the same TypeScript. Supersedes the pins named in ADRs 0361, 0362 and 0365.

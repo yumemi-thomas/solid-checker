@@ -223,11 +223,11 @@ fn module_fact(program: &Program, file: P<SourceFile>) -> ModuleFact {
 /// the legacy kinds are the only ones that reach the default arm, and they are
 /// answered as unknown rather than characterized.
 fn module_format(kind: ModuleKind) -> ModuleFormat {
-    if kind == ModuleKind::CommonJS {
+    if kind == ModuleKind::COMMON_JS {
         ModuleFormat::Commonjs
     } else if kind.is_non_node_esm() {
         ModuleFormat::Esm
-    } else if kind == ModuleKind::Preserve {
+    } else if kind == ModuleKind::PRESERVE {
         ModuleFormat::Preserve
     } else {
         ModuleFormat::Unknown

@@ -22,7 +22,7 @@ To compare two Rust builds, point the reference at the older binary (build it
 from the older commit; `make typefacts-differential` records through it). The
 producer's differential tests fail on a reference named by
 `SOLID_TYPEFACTS_REFERENCE_BIN` that is absent or whose handshake names another
-protocol or schema. The implicit archive default is skipped in that case (since
+protocol or schema, or was built on another tsrs rev (its `.buildinfo`; other TypeScript means other lib offsets and ids). The implicit archive default is skipped in that case (since
 protocol 82, ADR 0368, the archived Go producer speaks 81) with a `SKIPPED` line
 every run shows; `SOLID_TYPEFACTS_REQUIRE_REFERENCE=1` fails instead.
 

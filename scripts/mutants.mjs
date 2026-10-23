@@ -17,7 +17,7 @@
 // (createProgram, AST walking, diagnostics differenced against the same
 // project's baseline), never packages/cli's 5.9.3 and not the tsc oracle's 7.1
 // (ADR 0361): the probe needs the project's own typings resolution and an
-// in-process AST, which 7.1's `unstable/sync` API is not used for, and it
+// in-process AST, which 7.1's `sync` API is not used for, and it
 // compares baseline against mutant under one compiler, so no version is
 // claimed to match the producer's.
 import assert from "node:assert/strict";
