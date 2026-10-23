@@ -89,6 +89,29 @@ test("first IR uses the best of the independent cold samples", () => {
   assert.deepEqual(assessment.findings[3].samples.map(Math.round), [300000, 61000, 59000]);
 });
 
+test("export scaling uses the best cold sample on both sides", () => {
+  const exportAt = (report, ns) => ({
+    ...report,
+    firstRustPipelineBreakdown: {
+      ...report.firstRustPipelineBreakdown,
+      reactiveIr: { ...report.firstRustPipelineBreakdown.reactiveIr, interproceduralExportSummaries: { medianNs: ns } }
+    }
+  });
+  // Scheduling jitter only slows samples: one slow small and one slow large
+  // sample. The best of each side is 120 us vs 260 us, a 2.17x ratio.
+  const jitter = {
+    ...healthy,
+    smallSamples: [exportAt(healthy.small, 180_000), exportAt(healthy.small, 120_000), exportAt(healthy.small, 125_000)],
+    largeSamples: [exportAt(healthy.largeSamples[0], 400_000), exportAt(healthy.largeSamples[1], 260_000), exportAt(healthy.largeSamples[2], 270_000)]
+  };
+  assert.equal(assessPerformance(jitter, { wallTimeGate: "enforce" }).ok, true);
+  // Every large sample slow is a real super-linear cost.
+  const superLinear = { ...jitter, largeSamples: jitter.largeSamples.map(sample => exportAt(sample, 400_000)) };
+  const assessment = assessPerformance(superLinear, { wallTimeGate: "enforce" });
+  assert.equal(assessment.ok, false);
+  assert.match(assessment.violations[0].message, /export aggregation scales 3\.\d+x/);
+});
+
 test("ceilings can be overridden and unknown gates are refused", () => {
   const strict = assessPerformance(healthy, { ceilings: { ...DEFAULT_CEILINGS, incrementalNs: 1 } });
   assert.deepEqual(strict.violations.map(finding => finding.id), ["incremental"]);

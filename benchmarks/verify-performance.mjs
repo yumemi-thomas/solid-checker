@@ -85,13 +85,15 @@ function measure(files, options = {}) {
 }
 
 try {
-  const small = measure(500);
-  // Three independent cold processes; the gate takes the best, since shared
-  // scheduling slows one sample while a real regression slows every one.
+  // Three independent cold processes per corpus size; the gates take the best,
+  // since shared scheduling slows one sample while a real regression slows
+  // every one.
+  const smallSamples = Array.from({ length: 3 }, (_, index) => measure(500, { corpus: `small-${index}` }));
+  const small = smallSamples[0];
   const largeSamples = Array.from({ length: 3 }, (_, index) => measure(1000, { corpus: `large-${index}` }));
   const incremental = measure(1000, { iterations: 10, warmups: 2, edit: "mod0001.tsx" });
 
-  const assessment = assessPerformance({ small, largeSamples, incremental }, { wallTimeGate, ceilings });
+  const assessment = assessPerformance({ small, smallSamples, largeSamples, incremental }, { wallTimeGate, ceilings });
   if (process.env.GITHUB_STEP_SUMMARY) {
     appendFileSync(
       process.env.GITHUB_STEP_SUMMARY,
