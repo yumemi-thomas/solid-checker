@@ -691,4 +691,97 @@ mod table_tests {
             }
         }
     }
+
+    /// The reference: what `min_by_key` returns over the payload-ordered
+    /// `containing` list (the first, so the lowest payload, among equal keys).
+    fn reference_least(
+        entries: &[(Span, u32)],
+        query: Span,
+        key: impl Fn(u32) -> u32,
+    ) -> Option<u32> {
+        let mut containing = entries
+            .iter()
+            .filter(|(span, _)| span.contains(query))
+            .map(|(_, payload)| *payload)
+            .collect::<Vec<_>>();
+        containing.sort_unstable();
+        containing.into_iter().min_by_key(|payload| key(*payload))
+    }
+
+    #[test]
+    fn containing_least_by_matches_min_by_key_with_the_lowest_payload_on_ties() {
+        // Explicit cases. The key ignores the span, so equal keys are common.
+        let spans = [
+            (Span::new(0, 10), 3),
+            (Span::new(0, 10), 1), // duplicate span, lower payload
+            (Span::new(2, 8), 2),
+            (Span::new(5, 5), 0), // zero-length entry
+        ];
+        let table = SpanTable::build(spans.to_vec());
+        let same_key = |_: u32| 7;
+        // Payloads 1, 2 and 3 contain (4, 6) with equal keys: the lowest wins.
+        assert_eq!(
+            table.containing_least_by(Span::new(4, 6), same_key),
+            Some(1)
+        );
+        // A zero-length query at an entry's edge and inside the zero-length one.
+        assert_eq!(
+            table.containing_least_by(Span::new(5, 5), same_key),
+            Some(0)
+        );
+        assert_eq!(
+            table.containing_least_by(Span::new(0, 0), same_key),
+            Some(1)
+        );
+        // The key decides before the payload does.
+        assert_eq!(
+            table.containing_least_by(Span::new(4, 6), |payload| 10 - payload),
+            Some(3)
+        );
+        // Nothing contains the query.
+        assert_eq!(table.containing_least_by(Span::new(9, 11), same_key), None);
+        // An empty table.
+        let empty = SpanTable::build(Vec::new());
+        assert_eq!(empty.containing_least_by(Span::new(0, 0), same_key), None);
+        assert_eq!(empty.containing_least_by(Span::new(3, 4), same_key), None);
+        assert!(!empty.contains_any(Span::new(0, 0)));
+    }
+
+    #[test]
+    fn containing_least_by_matches_a_full_scan() {
+        let mut seed = 0x9e37_79b9_u32;
+        let mut next = move |modulus: u32| {
+            seed ^= seed << 13;
+            seed ^= seed >> 17;
+            seed ^= seed << 5;
+            seed % modulus
+        };
+        for round in 0..60 {
+            let count = round % 7 * 9 + next(12) as usize; // includes 0
+            let entries = (0..count)
+                .map(|index| {
+                    // Narrow ranges force duplicate spans.
+                    let start = next(25);
+                    let end = start + next(12);
+                    (Span::new(start, end), index as u32)
+                })
+                .collect::<Vec<_>>();
+            let table = SpanTable::build(entries.clone());
+            // Few distinct keys: most queries tie.
+            let key = |payload: u32| payload % 3;
+            for _ in 0..200 {
+                let start = next(30);
+                let length = if next(3) == 0 { 0 } else { next(8) };
+                let query = Span::new(start, start + length);
+                assert_eq!(
+                    table.containing_least_by(query, key),
+                    reference_least(&entries, query, key)
+                );
+                assert_eq!(
+                    table.containing_least_by(query, |_| 0),
+                    reference_least(&entries, query, |_| 0)
+                );
+            }
+        }
+    }
 }
