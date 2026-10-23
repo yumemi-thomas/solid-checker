@@ -221,6 +221,7 @@ pub fn check(request_json: &str) -> Result<String, Box<dyn std::error::Error>> {
         AnalysisInputs {
             boundary: &boundary,
             hosts: None,
+            package_returns: AnalysisInputs::no_package_returns(),
         },
         Default::default(),
     )?;

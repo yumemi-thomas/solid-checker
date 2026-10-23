@@ -1,0 +1,15 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-spread-shape/variants/solid-condition/App.tsx",
+      "start": 618,
+      "end": 627,
+      "fixes": 0
+    }
+  ]
+}

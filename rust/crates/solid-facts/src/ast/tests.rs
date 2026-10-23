@@ -849,6 +849,7 @@ fn import_globs_are_in_place_unless_provably_lazy() {
     for source in lazy {
         let facts = extract("lazy.ts", source).unwrap();
         assert!(facts.in_place_import_globs.is_empty(), "{source}");
+        assert_eq!(facts.lazy_import_globs.len(), 1, "{source}");
     }
     let in_place = [
         "import.meta.glob('./a', { eager: true })",
@@ -865,6 +866,7 @@ fn import_globs_are_in_place_unless_provably_lazy() {
     for source in in_place {
         let facts = extract("eager.ts", source).unwrap();
         assert_eq!(facts.in_place_import_globs.len(), 1, "{source}");
+        assert!(facts.lazy_import_globs.is_empty(), "{source}");
     }
     let env = extract("env.ts", "import.meta.env.MODE; import.meta['env']").unwrap();
     assert!(env.in_place_import_globs.is_empty());

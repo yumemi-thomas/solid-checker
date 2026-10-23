@@ -1391,6 +1391,7 @@ fn answer(
             hosts,
             note: inference_note,
         },
+        package_returns,
     ) = solid_facts_backend::check::package_inputs(
         directory,
         &facts,
@@ -1436,6 +1437,7 @@ fn answer(
             solid_reactive_ir::AnalysisInputs {
                 boundary: &boundary,
                 hosts: hosts.as_ref(),
+                package_returns: &package_returns,
             },
             RequestedRuleEnablement {
                 presets: &check.presets,

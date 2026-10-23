@@ -423,9 +423,11 @@ pub(super) fn classify_one_component(
     // Every reference must be the declaration itself or one of the resolved
     // JSX uses; anything else (passed as a value, aliased, re-exported) hands
     // the component to callers this cannot see. An empty reference list is
-    // the absence of the fact, not proof of no references.
+    // the absence of the fact, not proof of no references, unless the closed
+    // program's census proves nothing can render the function (ADR 0373):
+    // then no tag passes anything, and every prop is the vacuous static.
     let references = lookup.symbol_references(symbol.as_str());
-    if references.is_empty() {
+    if references.is_empty() && !lookup.component_never_rendered(file, function) {
         escapes = true;
     }
     let name_text = name

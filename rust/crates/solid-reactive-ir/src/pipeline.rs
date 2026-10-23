@@ -189,6 +189,9 @@ pub(crate) struct AnalysisContext<'a> {
 pub struct AnalysisInputs<'a> {
     pub boundary: &'a PackageBoundary,
     pub hosts: Option<&'a ProjectHostIndex>,
+    /// ADR 0372: what installed package functions return, read from their
+    /// selected runtime source.
+    pub package_returns: &'a crate::package_returns::PackageReturnKeys,
 }
 
 impl<'a> AnalysisInputs<'a> {
@@ -200,7 +203,16 @@ impl<'a> AnalysisInputs<'a> {
         Self {
             boundary: EMPTY.get_or_init(PackageBoundary::default),
             hosts: None,
+            package_returns: Self::no_package_returns(),
         }
+    }
+
+    /// No package return keys: every caller whose host read no package source.
+    #[must_use]
+    pub fn no_package_returns() -> &'static crate::package_returns::PackageReturnKeys {
+        static EMPTY: std::sync::OnceLock<crate::package_returns::PackageReturnKeys> =
+            std::sync::OnceLock::new();
+        EMPTY.get_or_init(Default::default)
     }
 
     /// These inputs with an inferred host.
@@ -220,6 +232,9 @@ impl<'a> AnalysisInputs<'a> {
         let mut fingerprints = Vec::new();
         if !self.boundary.is_empty() {
             fingerprints.push(self.boundary.digest());
+        }
+        if !self.package_returns.is_empty() {
+            fingerprints.push(self.package_returns.digest());
         }
         if let Some(hosts) = self.hosts {
             let mut hash = Sha256::new();
@@ -406,7 +421,8 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         rule_options.runtime.program_is_closed(),
     )
     .with_router_install(rule_options.runtime.router_install.clone())
-    .with_package_instances(rule_options.runtime.package_instances.clone());
+    .with_package_instances(rule_options.runtime.package_instances.clone())
+    .with_package_returns(inputs.package_returns.clone());
     // ADR 0347: which exports a namespace import hands out, read once per build.
     semantic_lookup.set_namespace_hand_outs(crate::attribution::namespace_hand_outs(
         &semantic_lookup,

@@ -30,26 +30,6 @@
       "start": 920,
       "end": 924,
       "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/parameter-pass-through-dispatch/App.tsx",
-      "start": 929,
-      "end": 939,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/parameter-pass-through-dispatch/App.tsx",
-      "start": 1114,
-      "end": 1125,
-      "fixes": 0
     }
   ]
 }

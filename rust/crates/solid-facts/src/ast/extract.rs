@@ -426,6 +426,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.try_head_awaits
             .sort_unstable_by_key(|fact| fact.awaited);
         self.in_place_import_globs.sort_unstable();
+        self.lazy_import_glob_callees.sort_unstable();
         self.unmodeled_require_references.sort_unstable();
         self.straight_line_calls.sort_unstable();
         self.straight_line_constructs.sort_unstable();
@@ -507,6 +508,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             dominating_awaits: self.dominating_awaits,
             try_head_awaits: self.try_head_awaits,
             in_place_import_globs: self.in_place_import_globs,
+            lazy_import_globs: self.lazy_import_glob_callees,
             unmodeled_require_references: self.unmodeled_require_references,
             straight_line_calls: self.straight_line_calls,
             straight_line_constructs: self.straight_line_constructs,

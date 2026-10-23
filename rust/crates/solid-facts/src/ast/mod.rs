@@ -47,7 +47,7 @@ use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 73;
+pub const AST_FACTS_SCHEMA: u32 = 74;
 
 mod argument_completion;
 mod completion_call_cover;
@@ -61,6 +61,7 @@ mod literal_array;
 mod module_requests;
 mod primitive_completion;
 mod proxy_get_forward;
+mod returned_keys;
 mod span_index;
 mod unconditional_calls;
 

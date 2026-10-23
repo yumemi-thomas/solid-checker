@@ -268,8 +268,8 @@ impl DiagnosticSession {
                 sources,
                 facts,
                 AnalysisInputs {
-                    boundary: inputs.boundary,
                     hosts: None,
+                    ..inputs
                 },
                 enablement,
             )?;

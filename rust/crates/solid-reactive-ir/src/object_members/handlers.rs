@@ -132,6 +132,9 @@ fn spread_handlers<'a>(
     if file.source_text(argument)?.trim_start().starts_with('{') {
         return on_keys(facts, lookup, file, argument, None);
     }
+    if let Some(call) = file.ast.call_at(argument) {
+        return package_call_handlers(lookup, file, call);
+    }
     if !references.contains(&argument) {
         return None;
     }
@@ -154,6 +157,29 @@ fn spread_handlers<'a>(
         return None;
     }
     on_keys(facts, lookup, owner, literal, Some(stability))
+}
+
+/// ADR 0372: a spread of a call of an installed package's export hands the
+/// element the own keys that export's returns hold, as the host read them from
+/// the package's selected runtime source. When no key is an event key under the
+/// release's grammar, the spread hands no handler; any event key, an unaudited
+/// release or no row at all leaves it unresolved.
+fn package_call_handlers(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    call: &ast::CallFact,
+) -> Option<Vec<SpreadHandler>> {
+    if call.construct {
+        return None;
+    }
+    let (import, export) = file.ast.imported_callee(&file.source, call.callee)?;
+    let keys = lookup.package_return_keys(file.path.as_str(), import.module.as_str(), &export)?;
+    for key in keys {
+        if lookup.dialect.spread_key_is_event(key)? {
+            return None;
+        }
+    }
+    Some(Vec::new())
 }
 
 /// The `on…` functions a closed object literal holds, each resolved exactly. A
@@ -232,6 +258,9 @@ pub(crate) fn unresolved_handler_defects<'a>(
             {
                 continue;
             }
+            if never_rendered_props_value(lookup, file, callback.span) {
+                continue;
+            }
             let Some(expression) = file.source_text(callback.span) else {
                 continue;
             };
@@ -265,7 +294,9 @@ pub(crate) fn unresolved_handler_defects<'a>(
             }
             for spread in &element.spreads {
                 let key = location(file.path.shared(), spread.argument);
-                if lookup.spread_handler_targets().get(&key) != Some(&None) {
+                if lookup.spread_handler_targets().get(&key) != Some(&None)
+                    || never_rendered_props_value(lookup, file, spread.argument)
+                {
                     continue;
                 }
                 let expression = file.source_text(spread.argument).unwrap_or_default();
@@ -283,4 +314,126 @@ pub(crate) fn unresolved_handler_defects<'a>(
         }
     }
     defects
+}
+
+/// How many `const` and view calls a never-rendered component's props value
+/// is followed through.
+const PROPS_VALUE_DEPTH: usize = 8;
+
+/// ADR 0373: whether the handler value at `span` is drawn only from the props
+/// of an enclosing component the closed program never renders: its sole plain,
+/// unassigned parameter, a member of it, a `const` holding such a value, or a
+/// view built of it (`omit(props, …)`, a `merge` whose other arguments are
+/// object literals with no event key). No tag passes that component anything,
+/// so the value holds no handler. The element may still be in a never-rendered
+/// body for other values, which keep their obligations.
+fn never_rendered_props_value(lookup: &SemanticLookup<'_>, file: &FileFacts, span: Span) -> bool {
+    file.ast
+        .functions
+        .iter()
+        .filter(|function| function.body.contains(span))
+        .any(|function| {
+            plain_props_parameter(file, function).is_some_and(|props| {
+                props_derived(lookup, file, span, props, PROPS_VALUE_DEPTH)
+                    && lookup.function_may_be_component(file, function)
+                    && lookup.component_never_rendered(file, function)
+            })
+        })
+}
+
+/// The name of `function`'s sole parameter when it is a plain identifier with
+/// no default that no assignment rewrites (ADR 0214's props root).
+fn plain_props_parameter(file: &FileFacts, function: &ast::FunctionFact) -> Option<Span> {
+    let [parameter] = function.parameters.as_slice() else {
+        return None;
+    };
+    let [name] = parameter.names.as_slice() else {
+        return None;
+    };
+    if function.rest_parameter || parameter.initializer.is_some() || parameter.pattern != name.span
+    {
+        return None;
+    }
+    let rewritten = file.ast.assignments.iter().any(|assignment| {
+        file.ast
+            .reference_declaration(file.ast.peel_ts_sugar_span(assignment.target))
+            == Some(name.span)
+    });
+    (!rewritten).then_some(name.span)
+}
+
+/// Whether the value at `span` is the props root declared at `props`, a member
+/// of it, or a `const` or props view drawn from it (see
+/// [`never_rendered_props_value`]).
+fn props_derived(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    span: Span,
+    props: Span,
+    depth: usize,
+) -> bool {
+    let span = file.ast.peel_ts_sugar_span(span);
+    if let Some(member) = file.ast.member_at(span) {
+        return file
+            .ast
+            .reference_declaration(file.ast.peel_ts_sugar_span(member.object))
+            == Some(props);
+    }
+    if let Some(declaration) = file.ast.reference_declaration(span) {
+        if declaration == props {
+            return true;
+        }
+        return depth > 0
+            && file
+                .ast
+                .bindings
+                .iter()
+                .find(|binding| {
+                    binding.immutable
+                        && binding.shape == ast::BindingShape::Identifier
+                        && binding.names.len() == 1
+                        && binding.names[0].span == declaration
+                })
+                .and_then(|binding| binding.initializer)
+                .is_some_and(|initializer| {
+                    props_derived(lookup, file, initializer, props, depth - 1)
+                });
+    }
+    let Some(call) = file.ast.call_at(span) else {
+        return false;
+    };
+    if call.construct || depth == 0 {
+        return false;
+    }
+    let Some(primitive) = lookup.primitive_at_call(file, call.span) else {
+        return false;
+    };
+    if lookup.dialect.splits_props(primitive) {
+        return call.arguments.first().is_some_and(|first| {
+            !first.spread && props_derived(lookup, file, first.span, props, depth - 1)
+        });
+    }
+    lookup.dialect.merges_props_reactivity(primitive)
+        && call.arguments.iter().all(|argument| {
+            !argument.spread
+                && (props_derived(lookup, file, argument.span, props, depth - 1)
+                    || literal_without_event_key(lookup, file, argument.span))
+        })
+}
+
+/// Whether `span` is a closed object literal none of whose keys is an event
+/// key under the release's grammar.
+fn literal_without_event_key(lookup: &SemanticLookup<'_>, file: &FileFacts, span: Span) -> bool {
+    let span = file.ast.peel_ts_sugar_span(span);
+    file.ast
+        .object_get_shapes
+        .iter()
+        .find(|shape| shape.span == span)
+        .is_some_and(|shape| {
+            shape.closed
+                && shape.properties.iter().all(|property| {
+                    property.getter.is_none()
+                        && lookup.dialect.spread_key_is_event(&property.key) == Some(false)
+                })
+        })
 }

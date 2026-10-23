@@ -19,3 +19,10 @@ export function Shown(props: { at: Date }) {
   // In a click handler: no read rule reports what runs there.
   return <button onClick={() => console.log(ageOf(props.at))}>{age}</button>;
 }
+
+// Each component above is rendered with props no tag enumerates, so they are
+// unknown, not the empty props of a component nothing renders (ADR 0373).
+declare const shownProps: Parameters<typeof Shown>[0];
+export function ShownHost() {
+  return <Shown {...shownProps} />;
+}

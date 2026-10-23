@@ -159,6 +159,12 @@ pub struct AstFacts {
     /// is not recorded.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub in_place_import_globs: Vec<Span>,
+    /// The `import.meta.glob` callees [`AstFacts::in_place_import_globs`]
+    /// leaves out, sorted (facts schema 74): a lazy glob. It orders nothing,
+    /// but each matched module's namespace reaches the program through the
+    /// loader it returns, so the modules no specifier names are loaded.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub lazy_import_globs: Vec<Span>,
     /// Every reference to the unresolved global `require` that is not the
     /// callee of a call, once parentheses and TypeScript wrappers (`as`,
     /// `satisfies`, `!`, `<T>`) are peeled (facts schema 69): `(0, require)(x)`,
@@ -1804,6 +1810,7 @@ impl AstFacts {
             dominating_awaits: Vec::new(),
             try_head_awaits: Vec::new(),
             in_place_import_globs: Vec::new(),
+            lazy_import_globs: Vec::new(),
             unmodeled_require_references: Vec::new(),
             straight_line_calls: Vec::new(),
             straight_line_constructs: Vec::new(),

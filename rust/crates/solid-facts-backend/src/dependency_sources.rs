@@ -81,6 +81,28 @@ pub fn solid_vite_plugin(project: &Path) -> Option<PathBuf> {
         })
 }
 
+/// The premise every read of an entry under [`BUILD_CONDITIONS`] rests on
+/// when the user stated none: the project is built by Vite with the Solid
+/// plugin (review round 1 of ADR 0297). Only [`exports_conditions_premise`]
+/// makes one, and the implicit source selection and
+/// [`installed_runtime_entry`] (ADR 0372) both ask it, so they cannot drift.
+#[derive(Clone, Copy, Debug)]
+pub struct ExportsConditionsPremise(());
+
+/// The premise for `project` (a tsconfig), or why nothing establishes it:
+/// no [`solid_vite_plugin`] resolves.
+pub fn exports_conditions_premise(project: &Path) -> Result<ExportsConditionsPremise, String> {
+    if solid_vite_plugin(project).is_none() {
+        return Err(
+            "no Solid Vite plugin (@solidjs/vite-plugin, vite-plugin-solid, or one \
+             @solidjs/start ships) resolves from the project, so nothing establishes the \
+             resolver source selection reads `exports` with"
+                .into(),
+        );
+    }
+    Ok(ExportsConditionsPremise(()))
+}
+
 /// The nearest `node_modules/<package>/package.json` at or above `start`
 /// whose `version` is a string; a manifest without one does not stop the
 /// walk.
@@ -728,6 +750,35 @@ pub fn prepare_all(
         files: files.into_iter().collect(),
         resolutions: resolutions.into_iter().collect(),
     }))
+}
+
+/// ADR 0372: the runtime source file a bare `specifier` loads from
+/// `importer` under `host`, chosen as [`prepare_all`] chooses an entry (ADR
+/// 0284): the installed package directory the importer resolves the name to,
+/// under `node_modules` (a workspace link is project code), and its manifest's
+/// `exports` or main fields read for the declared conditions. That reading is
+/// the project's only under the premise the implicit selection needs, so the
+/// caller must hold it. `None` wherever that selection refuses, so the
+/// package stays unknown.
+#[must_use]
+pub fn installed_runtime_entry(
+    importer: &Path,
+    specifier: &str,
+    host: &Host,
+    _premise: ExportsConditionsPremise,
+) -> Option<PathBuf> {
+    let (name, subpath) = split_bare_specifier(specifier)?;
+    if name.starts_with("node:") {
+        return None;
+    }
+    let root = runtime_package_root(importer, &name).ok().flatten()?;
+    if !root
+        .components()
+        .any(|component| component.as_os_str() == "node_modules")
+    {
+        return None;
+    }
+    select_entry(&root, &subpath, host).ok()
 }
 
 /// The `name` a package directory's manifest declares.

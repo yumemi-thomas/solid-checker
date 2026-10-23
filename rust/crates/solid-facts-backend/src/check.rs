@@ -246,7 +246,7 @@ pub fn run(
     let import_identity_elapsed = started.elapsed().saturating_sub(facts_complete);
 
     let directory = project_directory(&facts.project_id);
-    let (boundary, inferred) = package_inputs(
+    let (boundary, inferred, package_returns) = package_inputs(
         &directory,
         &facts,
         &source_refusals,
@@ -268,6 +268,7 @@ pub fn run(
         solid_reactive_ir::AnalysisInputs {
             boundary: &boundary,
             hosts: hosts.as_ref(),
+            package_returns: &package_returns,
         },
         requested_enablement(),
     )?;
@@ -300,13 +301,18 @@ pub fn package_inputs(
     (
         solid_reactive_ir::package_boundary::PackageBoundary,
         crate::InferredHost,
+        solid_reactive_ir::package_returns::PackageReturnKeys,
     ),
     Box<dyn Error>,
 > {
     let boundary = crate::external_package_boundary(facts, source_refusals);
     let inferred =
         crate::inferred_project_host_with_note(directory, runtime, dialect.vocabulary, facts)?;
-    Ok((boundary, inferred))
+    // The project's tsconfig, or a generated one beside it (ADR 0303): the
+    // same directory the ADR 0297 premise is read from.
+    let returns =
+        crate::package_returns::package_return_keys(Path::new(&facts.project_id), facts, runtime);
+    Ok((boundary, inferred, returns))
 }
 
 fn project_directory(project_id: &str) -> PathBuf {
@@ -372,20 +378,12 @@ pub fn effective_dependency_selection(
 /// (`solid`, `import` and `module` always set), and a target and build do
 /// not say that is how the project is built: a Node host never sets
 /// `solid`. The default therefore needs that plugin resolvable from the
-/// project (`dependency_sources::solid_vite_plugin`). The generated program
-/// is written to a scratch directory, never the project, so a read-only
-/// project needs nothing more.
+/// project (`dependency_sources::exports_conditions_premise`). The generated
+/// program is written to a scratch directory, never the project, so a
+/// read-only project needs nothing more.
 #[must_use]
 pub fn implicit_dependency_source_refusal(project: &Path) -> Option<String> {
-    if crate::dependency_sources::solid_vite_plugin(project).is_none() {
-        return Some(
-            "no Solid Vite plugin (@solidjs/vite-plugin, vite-plugin-solid, or one \
-             @solidjs/start ships) resolves from the project, so nothing establishes the \
-             resolver source selection reads `exports` with"
-                .into(),
-        );
-    }
-    None
+    crate::dependency_sources::exports_conditions_premise(project).err()
 }
 
 /// An installed Solid runtime this build has no dialect for (ADR 0110): the

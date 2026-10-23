@@ -126,6 +126,84 @@ impl<'a> SemanticLookup<'a> {
         self.function_component_status(file, function) != ComponentStatus::No
     }
 
+    /// ADR 0373: whether no code of a closed program can render or call
+    /// `function`, so it receives no props at all (ADR 0214's vacuous case).
+    ///
+    /// The binding through which code reaches it is its declaration's name,
+    /// or the `const` an unnamed function or arrow initializes (a named
+    /// function expression's own name is visible only inside it, so its
+    /// outer binding is not known here). Type Facts must know that binding's
+    /// complete reference list, and every reference must be the declaration,
+    /// a use inside the function itself, or the module surface (an export
+    /// specifier or an import statement). The module census must be complete
+    /// and leave the module unreached by any namespace (`namespace_exposed_modules`:
+    /// namespace imports and re-exports, dynamic loads, `import =`, through
+    /// barrels), and no file may hold a direct `eval` or an `import.meta.glob`,
+    /// which load or name what no reference shows. A dependency-source file
+    /// answers `false`.
+    pub(crate) fn component_never_rendered(
+        &self,
+        file: &FileFacts,
+        function: &solid_facts::ast::FunctionFact,
+    ) -> bool {
+        let Some(exposed) = self.unrendered_census.get_or_init(|| {
+            let opaque = self.facts.files.iter().any(|file| {
+                !file.ast.lazy_import_globs.is_empty()
+                    || !file.ast.in_place_import_globs.is_empty()
+                    || file
+                        .ast
+                        .module_hazards
+                        .iter()
+                        .any(|hazard| hazard.kind == solid_facts::ast::ModuleHazardKind::Eval)
+            });
+            if !self.program_closed || opaque {
+                return None;
+            }
+            crate::object_members::namespace_exposed_modules(self.facts, self)
+        }) else {
+            return false;
+        };
+        let path = file.path.as_str();
+        if exposed.contains(path)
+            || self.facts.dependency_source_root(path).is_some()
+            || self.hands_out_by_name(path, function.span)
+        {
+            return false;
+        }
+        let binding = match function.kind {
+            solid_facts::ast::FunctionKind::Declaration => function.name.as_ref(),
+            _ if function.name.is_none()
+                && crate::owners::own_method_name(file, function).is_none() =>
+            {
+                crate::owners::function_binding_name(file, function)
+            }
+            _ => None,
+        };
+        let Some(binding) = binding else {
+            return false;
+        };
+        let Some(references) = self
+            .entities
+            .at(path, binding.span)
+            .and_then(|symbol| self.symbol_references_if_present(symbol.as_str()))
+        else {
+            return false;
+        };
+        references.iter().all(|reference| {
+            let (Some(candidate), Ok(start), Ok(end)) = (
+                self.file_by_path(reference.path.as_ref()),
+                u32::try_from(reference.start_byte),
+                u32::try_from(reference.end_byte),
+            ) else {
+                return false;
+            };
+            let span = Span::new(start, end);
+            (candidate.path.as_str() == path
+                && (span == binding.span || function.span.contains(span)))
+                || super::reference_is_declaration_or_module_surface(candidate, span)
+        })
+    }
+
     pub(super) fn component_functions(&self) -> &HashSet<(&'a str, Span)> {
         &self.component_statuses().0
     }
