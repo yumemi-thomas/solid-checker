@@ -494,3 +494,30 @@ fn applies_the_producers_transitions_exactly() {
         assert_eq!(actual, expected, "{} produced the wrong table", step.label);
     }
 }
+
+/// Once the reader has failed what was pending it is gone, so a request
+/// registered afterwards would wait forever. Registration must refuse it with
+/// the reader's failure, which the session treats as a transport failure and
+/// recovers from by restarting the producer.
+#[test]
+fn a_request_registered_after_the_reader_failed_is_refused() {
+    let pending = PendingResponses::default();
+    let (early, early_response) = mpsc::sync_channel(1);
+    pending.lock().unwrap().register(1, early).unwrap();
+
+    fail_pending(&pending, "producer closed its output".into());
+    assert_eq!(
+        early_response.recv().unwrap().unwrap_err(),
+        "producer closed its output"
+    );
+
+    let (late, late_response) = mpsc::sync_channel(1);
+    assert_eq!(
+        pending.lock().unwrap().register(2, late),
+        Err("producer closed its output".into())
+    );
+    assert!(
+        late_response.recv().is_err(),
+        "nobody holds the refused sender"
+    );
+}

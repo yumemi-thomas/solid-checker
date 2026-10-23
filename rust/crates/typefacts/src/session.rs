@@ -26,7 +26,34 @@ use crate::{
     write_frame,
 };
 
-type PendingResponses = Arc<Mutex<HashMap<u64, mpsc::SyncSender<Result<Response, String>>>>>;
+type PendingResponses = Arc<Mutex<PendingState>>;
+
+/// Requests awaiting a response, and why the reader stopped once it has.
+///
+/// The reader records its failure under the same lock it drains with, so a
+/// request registered afterwards is refused instead of waiting on a reader
+/// that no longer exists. A write to a dead producer does not reliably fail:
+/// a child forked concurrently elsewhere in the process briefly holds the
+/// pipe's read end, so the frame can be accepted with nobody left to answer.
+#[derive(Default)]
+struct PendingState {
+    senders: HashMap<u64, mpsc::SyncSender<Result<Response, String>>>,
+    failure: Option<String>,
+}
+
+impl PendingState {
+    fn register(
+        &mut self,
+        request_id: u64,
+        sender: mpsc::SyncSender<Result<Response, String>>,
+    ) -> Result<(), String> {
+        if let Some(failure) = &self.failure {
+            return Err(failure.clone());
+        }
+        self.senders.insert(request_id, sender);
+        Ok(())
+    }
+}
 
 /// An explicitly located Type Facts producer.
 ///
@@ -370,7 +397,7 @@ impl ProcessConnection {
                     }
                 };
                 if let Ok(mut pending) = reader_pending.lock()
-                    && let Some(sender) = pending.remove(&response.request_id)
+                    && let Some(sender) = pending.senders.remove(&response.request_id)
                 {
                     let _ = sender.send(Ok(response));
                 }
@@ -405,10 +432,21 @@ impl ProcessConnection {
             self.active_request_id.store(request_id, Ordering::Release);
         }
         let (sender, receiver) = mpsc::sync_channel(1);
-        self.pending
-            .lock()
-            .map_err(|_| SessionError::Process("pending response map is poisoned".into()))?
-            .insert(request_id, sender);
+        let registered = (|| {
+            let mut pending = self
+                .pending
+                .lock()
+                .map_err(|_| SessionError::Process("pending response map is poisoned".into()))?;
+            pending
+                .register(request_id, sender)
+                .map_err(SessionError::Process)
+        })();
+        if let Err(error) = registered {
+            if cancellable {
+                self.clear_active_request(request_id);
+            }
+            return Err(error);
+        }
         let sent_at = Instant::now();
         let mut request_bytes = 0;
         let result = (|| {
@@ -424,7 +462,7 @@ impl ProcessConnection {
         let request_send = sent_at.elapsed();
         if let Err(error) = result {
             if let Ok(mut pending) = self.pending.lock() {
-                pending.remove(&request_id);
+                pending.senders.remove(&request_id);
             }
             if cancellable {
                 self.clear_active_request(request_id);
@@ -471,7 +509,7 @@ impl ProcessConnection {
             Ok(response) => response.map_err(SessionError::Process),
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 if let Ok(mut pending) = self.pending.lock() {
-                    pending.remove(&sent.request_id);
+                    pending.senders.remove(&sent.request_id);
                 }
                 Err(SessionError::Process(
                     "producer did not acknowledge close before termination".into(),
@@ -2326,9 +2364,10 @@ fn decode_sources(response: Response) -> Result<Vec<SourceFile>, SessionError> {
 
 fn fail_pending(pending: &PendingResponses, message: String) {
     if let Ok(mut pending) = pending.lock() {
-        for (_, sender) in pending.drain() {
+        for (_, sender) in pending.senders.drain() {
             let _ = sender.send(Err(message.clone()));
         }
+        pending.failure = Some(message);
     }
 }
 
