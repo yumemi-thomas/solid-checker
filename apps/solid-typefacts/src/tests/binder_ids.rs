@@ -217,3 +217,234 @@ fn an_augmentation_beside_a_same_named_export_never_shares_its_id() {
         );
     }
 }
+
+/// Multi-origin properties (ADR 0371): a union, an intersection and a spread
+/// property over two declared properties each, and a union whose origins
+/// include a late-bound member (no binder key).
+const SET_SOURCE: &str = "interface A { kind: \"a\"; tag?: string }\n\
+interface B { kind: \"b\"; tag?: string }\n\
+declare const u: A | B\n\
+export const k = u.kind\n\
+declare const i: A & { kind: \"a\" }\n\
+export const ik = i.kind\n\
+declare const x: { p: number }\n\
+declare const y: { p?: number }\n\
+export const sp = ({ ...x, ...y }).p\n\
+const c = \"c\"\n\
+export interface CX { [c]: number }\n\
+export interface D { c: number }\n\
+declare const cd: CX | D\n\
+export const cc = cd.c\n";
+
+fn set_scratch() -> (Scratch, String) {
+    let scratch = Scratch::new(&[("tsconfig.json", SMALL_CONFIG), ("a.ts", SET_SOURCE)]);
+    let path = scratch.path("a.ts");
+    (scratch, path)
+}
+
+/// The symbol the checker answers at the start of `needle` + `offset`.
+fn symbol_in(
+    env: &mut crate::identity::Env<'_>,
+    path: &str,
+    needle: &str,
+    offset: usize,
+) -> tsrs_core::P<tsrs_ast::Symbol> {
+    let file = env.program.get_source_file(path).unwrap();
+    let at = u32::try_from(SET_SOURCE.find(needle).unwrap() + offset).unwrap();
+    env.checker
+        .get_symbol_at_location_exported(crate::nodes::node_at(file, at))
+        .unwrap_or_else(|| panic!("{needle}"))
+}
+
+/// Each construct is recognised as what it is, with one origin per declared
+/// property; one late-bound origin (whose node holds the binder's
+/// `__computed` placeholder) leaves the property unkeyed.
+#[test]
+fn multi_origin_properties_have_set_keys_of_their_combination() {
+    use crate::binder_key::{Combination, Key, set_key};
+    let (scratch, path) = set_scratch();
+    let mut project = scratch.open();
+    project
+        .with_env(|env, _| {
+            for (needle, offset, want) in [
+                ("u.kind", 2, Combination::Union),
+                ("i.kind", 2, Combination::Intersection),
+                ("}).p", 3, Combination::Spread),
+            ] {
+                let symbol = symbol_in(env, &path, needle, offset);
+                match set_key(env.checker, symbol, |_| false) {
+                    Some(Key::Set {
+                        combination,
+                        origins,
+                        ..
+                    }) => {
+                        assert_eq!(combination, want, "{needle}");
+                        assert_eq!(origins.len(), 2, "{needle}: {origins:?}");
+                        assert!(origins.iter().all(Key::is_binder), "{needle}");
+                    }
+                    other => panic!("{needle}: {other:?}"),
+                }
+                let id = env.id_for(symbol);
+                assert!(id.starts_with("symbol:h:"), "{needle}: {id}");
+                assert!(env.ids.is_set_id(&id), "{needle}");
+            }
+            let mixed = symbol_in(env, &path, "cd.c", 3);
+            assert_eq!(mixed.declarations().len(), 2, "the case proves nothing");
+            assert!(set_key(env.checker, mixed, |_| false).is_none());
+            let id = env.id_for(mixed);
+            assert!(!id.starts_with("symbol:h:"), "{id}");
+            // A declared property keeps its binder key.
+            let declared = symbol_in(env, &path, "kind", 0);
+            assert!(set_key(env.checker, declared, |_| false).is_none());
+        })
+        .unwrap();
+}
+
+/// The checker lists a multi-origin property's declarations in constituent
+/// order: a union's by type name (type ids as the last tie-break, history),
+/// an intersection's as written. `P | Q` lists `v` as P's then Q's; `AQ | P`
+/// (`AQ` inherits Q's `v` and sorts first) as Q's then P's: one union
+/// property, one id and one declarations row, whichever is minted first. An
+/// intersection resolves overloaded members in its written order, so
+/// `P & Q` and `Q & P` keep two ids.
+#[test]
+fn set_ids_do_not_depend_on_constituent_order() {
+    let source = "interface P { v: number }\n\
+interface Q { v: number }\n\
+interface AQ extends Q { w: number }\n\
+declare const pq: P | Q\n\
+declare const qp: AQ | P\n\
+declare const ipq: P & Q\n\
+declare const iqp: Q & P\n\
+export const a = pq.v\n\
+export const b = qp.v\n\
+export const c = ipq.v\n\
+export const d = iqp.v\n";
+    let scratch = Scratch::new(&[("tsconfig.json", SMALL_CONFIG), ("a.ts", source)]);
+    let path = scratch.path("a.ts");
+    let ctx = Context::new();
+    let at = |needle: &str| {
+        let mut at = find(&path, source, needle);
+        at.start_byte += u64::try_from(needle.len()).unwrap() - 1;
+        at.end_byte = at.start_byte + 1;
+        at
+    };
+    let reads = [at("pq.v"), at("qp.v")];
+    let mut seen = Vec::new();
+    for first in [0, 1] {
+        let mut project = scratch.open();
+        let ids = [first, 1 - first].map(|n| project.symbol_at(&ctx, &reads[n]).unwrap());
+        assert_eq!(ids[0], ids[1], "first {first}");
+        assert!(ids[0].starts_with("symbol:h:"), "{}", ids[0]);
+        let mut raw = Vec::new();
+        project
+            .with_env(|env, _| {
+                let file = env.program.get_source_file(&path).unwrap();
+                for read in &reads {
+                    let node = crate::nodes::node_at(file, u32::try_from(read.start_byte).unwrap());
+                    let symbol = env.checker.get_symbol_at_location_exported(node).unwrap();
+                    let order: Vec<u32> = symbol
+                        .declarations()
+                        .iter()
+                        .map(|node| node.pos().source_offset().unwrap())
+                        .collect();
+                    raw.push(order);
+                }
+            })
+            .unwrap();
+        assert_ne!(
+            raw[0], raw[1],
+            "one constituent order: the case proves nothing"
+        );
+        let row = project.declarations(&ctx, &ids[0]).unwrap().unwrap();
+        let starts: Vec<u64> = row.iter().map(|d| d.location.start_byte).collect();
+        assert!(
+            starts.windows(2).all(|pair| pair[0] < pair[1]),
+            "{starts:?}"
+        );
+        seen.push((ids[0].clone(), row));
+        let pq = project.symbol_at(&ctx, &at("ipq.v")).unwrap();
+        let qp = project.symbol_at(&ctx, &at("iqp.v")).unwrap();
+        assert!(pq.starts_with("symbol:h:") && qp.starts_with("symbol:h:"));
+        assert_ne!(pq, qp, "intersections in two orders share an id");
+        assert_ne!(pq, ids[0]);
+    }
+    assert_eq!(seen[0], seen[1]);
+}
+
+/// A key is only given when every property sharing it has one type: the
+/// same origins under a generic container whose member reads the type
+/// parameter, under a mapped constituent, or with a constituent that only
+/// has an index signature, keep counters.
+#[test]
+fn a_set_key_needs_one_type_for_every_container() {
+    let source = "interface Box<T> { v: T; k: \"box\" }\n\
+interface Bag<T> { v: T; k: \"bag\" }\n\
+declare const n: Box<number> | Bag<number>\n\
+type Wrap<T> = { [K in keyof T]: () => T[K] }\n\
+interface P { v: number }\n\
+interface Q { v: number }\n\
+declare const w: Wrap<P> | Wrap<Q>\n\
+declare const r: P | { [key: string]: number }\n\
+class C { v = this }\n\
+class D { v = this }\n\
+declare const cd: C | D\n\
+export const a = n.v\n\
+export const b = n.k\n\
+export const c = w.v\n\
+export const d = r.v\n\
+export const e = cd.v\n";
+    let scratch = Scratch::new(&[("tsconfig.json", SMALL_CONFIG), ("a.ts", source)]);
+    let path = scratch.path("a.ts");
+    let ctx = Context::new();
+    let mut project = scratch.open();
+    let mut id = |needle: &str| {
+        let mut at = find(&path, source, needle);
+        at.start_byte += u64::try_from(needle.len()).unwrap() - 1;
+        at.end_byte = at.start_byte + 1;
+        project.symbol_at(&ctx, &at).unwrap()
+    };
+    // `k` does not read `T`: one type under every instantiation.
+    assert!(id("n.k").starts_with("symbol:h:"));
+    for open in ["n.v", "w.v", "r.v", "cd.v"] {
+        let got = id(open);
+        assert!(!got.starts_with("symbol:h:"), "{open}: {got}");
+    }
+}
+
+/// A `Set` id names a checker-made property, which no position re-resolves:
+/// after a release it fails closed until the generation mints it again (to
+/// the same id), and no retained binder-level answer may hold it.
+#[test]
+fn a_set_id_fails_closed_after_a_release_and_is_never_retained() {
+    let (scratch, path) = set_scratch();
+    let ctx = Context::new();
+    let mut project = scratch.open();
+    let read = find(&path, SET_SOURCE, "kind\n");
+    let id = project.symbol_at(&ctx, &read).unwrap();
+    project
+        .with_env(|env, _| {
+            assert!(env.ids.is_set_id(&id));
+            assert!(
+                env.ids.key_of_id(&id).is_none(),
+                "a binder answer could hold it"
+            );
+        })
+        .unwrap();
+    project.release_analysis_state_for_test();
+    project
+        .with_env(|env, _| {
+            assert!(
+                env.symbol_for(&id).is_none(),
+                "{id} resolved after a release"
+            );
+            let key = std::sync::Arc::new(crate::binder_key::Key::Set {
+                combination: crate::binder_key::Combination::Union,
+                name: "kind".into(),
+                origins: Vec::new(),
+            });
+            assert!(!env.ids.register_key(&key.id().as_str().into(), &key));
+        })
+        .unwrap();
+    assert_eq!(project.symbol_at(&ctx, &read).unwrap(), id);
+}

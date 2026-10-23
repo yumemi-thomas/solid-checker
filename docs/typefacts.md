@@ -58,9 +58,11 @@ binder-level symbol's hash ID is
 a pure function of the program (ADR 0366): a checker singleton, a global by
 name, a module export by declaring path and name, else its minimum declaration
 by path and offset, with the checker's private and unique-symbol counters
-stripped from names. Whatever symbol asks first, the ID is the same. A derived
-symbol (an instantiation, a `this`-type or widened copy, a mapped or spread
-property) and any symbol not proven binder-level get counters (`symbol:<gen>:<n>`). A
+stripped from names. Whatever symbol asks first, the ID is the same. A union,
+intersection or spread property hashes its combination, name and origins'
+binder keys when those fix its type (ADR 0371). Any other derived symbol (an
+instantiation, a `this`-type or widened copy, a mapped property) and any symbol
+not proven binder-level get counters (`symbol:<gen>:<n>`). A
 table build discards every type-derived answer, so none is reused inside a
 generation or across an update (ADR 0364). Answers the checker gives by scope
 lookup alone are kept with the digests they read (file text, the exports scan,
