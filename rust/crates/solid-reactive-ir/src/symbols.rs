@@ -629,37 +629,159 @@ pub(super) fn source_reference_locations<'a>(
     index
 }
 
+/// ADR 0365: a declaration is a Solid primitive only when it is one of the
+/// dialect's primitive-defining packages' own exports of that name.
+///
+/// - The file belongs to an installed copy of exactly one of
+///   [`Dialect::primitive_defining_packages`]: the package directory after the
+///   path's last `node_modules/` ([`crate::indexes::declared_in_package`]).
+///   `@solidjs/router`, `@solidjs/meta` and `@solidjs/testing-library` are
+///   consumers of those packages, never definers, so a local `const flush` in
+///   the router's `preload.js` or the parameter `action` of its `useAction` is
+///   an ordinary dependency binding and is analysed as one.
+/// - The declaration is a module-scope `function` or `variable` declaration
+///   in a TypeScript declaration file (`.d.ts`, `.d.mts`, `.d.cts`). Those are
+///   the only places such a declaration can sit in a declaration file, and
+///   the defining packages are never analysed from source
+///   (`dependency_program::prepare_from` excludes them), so this is the
+///   package's declared surface: a parameter, a method signature
+///   (`@solidjs/signals`' `Queue.flush()`, `dist/types/core/scheduler.d.ts`)
+///   or a type is the compiler's `declaration` kind and is excluded.
+/// - The name is one the dialect exports ([`Dialect::declares_primitive`]).
+///
+/// What this gives up: a declaration outside every `node_modules` (Solid's
+/// own repository analysed as the project) or in a defining package's
+/// JavaScript or TypeScript source gets no identity from its declaration. Its
+/// uses still get identity from an import of a dialect module
+/// ([`add_solid_import_names`]); everything else is an ordinary function.
 fn solid_primitive_declaration(declaration: &Declaration, dialect: &dyn Dialect) -> bool {
-    // Bootstrap analysis of Solid's own implementation, where there is no
-    // package import to establish provenance. Require an exact package path
-    // component; substring matches would misclassify similarly named projects.
-    declaration_path_is_solid_package(declaration.location.path.as_ref())
+    let path = declaration.location.path.as_ref();
+    matches!(declaration.kind.as_ref(), "function" | "variable")
         && dialect.declares_primitive(declaration.name.as_ref())
+        && is_declaration_file(path)
+        && crate::indexes::declared_in_package(path, dialect.primitive_defining_packages())
 }
 
-fn declaration_path_is_solid_package(path: &str) -> bool {
-    path.replace('\\', "/")
-        .split('/')
-        .any(|component| matches!(component, "solid-js" | "@solidjs"))
+fn is_declaration_file(path: &str) -> bool {
+    [".d.ts", ".d.mts", ".d.cts"]
+        .iter()
+        .any(|extension| path.ends_with(extension))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::declaration_path_is_solid_package;
+    use super::solid_primitive_declaration;
+    use typefacts::{Declaration, Location};
+
+    fn declaration(name: &str, kind: &str, path: &str) -> Declaration {
+        Declaration {
+            name: name.into(),
+            kind: kind.into(),
+            location: Location {
+                path: path.into(),
+                start_byte: 0,
+                end_byte: 1,
+            },
+        }
+    }
+
+    fn primitive(name: &str, kind: &str, path: &str) -> bool {
+        solid_primitive_declaration(&declaration(name, kind, path), &solid_dialect::Solid2)
+    }
 
     #[test]
-    fn solid_declaration_paths_require_an_exact_package_component() {
-        assert!(declaration_path_is_solid_package(
-            "/project/node_modules/solid-js/dist/solid.js"
-        ));
-        assert!(declaration_path_is_solid_package(
-            r"C:\project\node_modules\@solidjs\web\dist\web.js"
-        ));
-        assert!(!declaration_path_is_solid_package(
-            "/project/my-solid-js-tools/createSignal.ts"
-        ));
-        assert!(!declaration_path_is_solid_package(
-            "/project/node_modules/not-@solidjs/runtime.ts"
-        ));
+    fn a_defining_package_export_is_a_primitive() {
+        for (name, kind, path) in [
+            (
+                "flush",
+                "function",
+                "/p/node_modules/@solidjs/signals/dist/types/core/scheduler.d.ts",
+            ),
+            (
+                "createMemo",
+                "variable",
+                "/p/node_modules/solid-js/types/client/hydration.d.ts",
+            ),
+            (
+                "useHead",
+                "function",
+                r"C:\p\node_modules\@solidjs\web\types\client.d.ts",
+            ),
+            (
+                "createSignal",
+                "function",
+                "/p/node_modules/.pnpm/solid-js@2.0.0-rc.17/node_modules/solid-js/types/index.d.ts",
+            ),
+        ] {
+            assert!(primitive(name, kind, path), "{name} at {path}");
+        }
+    }
+
+    #[test]
+    fn a_same_named_declaration_elsewhere_is_not_a_primitive() {
+        for (name, kind, path, why) in [
+            (
+                "flush",
+                "variable",
+                "/p/node_modules/@solidjs/router/dist/data/preload.js",
+                "a consumer package's local",
+            ),
+            (
+                "action",
+                "declaration",
+                "/p/node_modules/@solidjs/router/dist/data/action.js",
+                "a consumer package's parameter",
+            ),
+            (
+                "useHead",
+                "function",
+                "/p/node_modules/@solidjs/meta/dist/index.d.ts",
+                "a consumer package's own declaration",
+            ),
+            (
+                "createEffect",
+                "function",
+                "/p/node_modules/@solidjs/fake-tools/index.d.ts",
+                "an unknown package in the scope",
+            ),
+            (
+                "flush",
+                "declaration",
+                "/p/node_modules/@solidjs/signals/dist/types/core/scheduler.d.ts",
+                "a method signature of the defining package",
+            ),
+            (
+                "flush",
+                "variable",
+                "/p/node_modules/@solidjs/signals/dist/dev.js",
+                "a local in the defining package's runtime source",
+            ),
+            (
+                "createSignal",
+                "function",
+                "/repo/packages/solid/types/index.d.ts",
+                "outside every node_modules",
+            ),
+            (
+                "createSignal",
+                "function",
+                "/p/node_modules/solid-js/node_modules/helper/index.d.ts",
+                "a package nested in a defining package",
+            ),
+            (
+                "createSignal",
+                "function",
+                "/p/my-solid-js-tools/createSignal.d.ts",
+                "a substring of the package name",
+            ),
+            (
+                "notAPrimitive",
+                "function",
+                "/p/node_modules/solid-js/types/index.d.ts",
+                "a name the dialect does not export",
+            ),
+        ] {
+            assert!(!primitive(name, kind, path), "{why}: {name} at {path}");
+        }
     }
 }

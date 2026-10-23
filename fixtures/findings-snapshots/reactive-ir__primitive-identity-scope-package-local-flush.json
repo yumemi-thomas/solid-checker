@@ -1,0 +1,15 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC4005",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/primitive-identity-scope/variants/package-local-flush/App.ts",
+      "start": 549,
+      "end": 559,
+      "fixes": 0
+    }
+  ]
+}
