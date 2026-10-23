@@ -824,6 +824,42 @@ fn prepare_with(
     .unwrap()
 }
 
+/// Review of ADR 0368: a configured root inside `node_modules` (`files:
+/// ["node_modules/aaa/globals.d.ts", "src/main.ts"]`) that nothing imports
+/// stays a root of the generated program, in its position: its global
+/// declarations are part of the project's program. It is listed only, not a
+/// project file whose imports select packages.
+#[test]
+fn a_configured_package_declaration_root_stays_in_the_generated_program() {
+    let directory = root_scratch("package-root");
+    let globals = directory.join("node_modules/aaa/globals.d.ts");
+    let main = directory.join("src/main.ts");
+    let modules = ProgramModules {
+        roots: vec![globals.clone(), main.clone()],
+        others: Vec::new(),
+        unmapped_roots: Vec::new(),
+    };
+    let mut notes = super::SelectionNotes::default();
+    let prepared = prepare_with(&directory, &modules, &mut notes).unwrap();
+    let document: serde_json::Value = serde_json::from_slice(&prepared.document).unwrap();
+    let files = document["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|file| file.as_str().unwrap().to_owned())
+        .collect::<Vec<_>>();
+    let expected = [
+        globals.clone(),
+        main.clone(),
+        directory.join("node_modules/aaa/index.js"),
+    ]
+    .map(|path| path.to_string_lossy().into_owned());
+    let project_files = prepared.project_files.clone();
+    std::fs::remove_dir_all(&directory).unwrap();
+    assert_eq!(files, expected);
+    assert_eq!(project_files, [main].into_iter().collect());
+}
+
 /// Review of ADR 0368: a configured root the producer could not place leaves
 /// the root order unknown. Preparation refuses the selected packages (their
 /// behaviour stays uncertifiable) rather than list the roots in path order.

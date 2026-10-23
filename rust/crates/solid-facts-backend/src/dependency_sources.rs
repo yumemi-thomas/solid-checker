@@ -358,7 +358,11 @@ pub fn prepare_program(
     // Configured sources omit declaration files, and an ambient `declare
     // module` stub is part of the project's program too: take every file the
     // program holds outside `node_modules`, in `program_modules` order (its
-    // roots in TypeScript's order first, ADR 0368).
+    // roots in TypeScript's order first, ADR 0368). A configured root is
+    // listed wherever it lives (review of ADR 0368): `files` may name a
+    // package's global declarations no import reaches, and the generated
+    // `files` replaces the project's. Such a root is listed only; it is not a
+    // project file whose imports select packages.
     let in_node_modules = |path: &Path| {
         path.components()
             .any(|component| component.as_os_str() == "node_modules")
@@ -367,9 +371,11 @@ pub fn prepare_program(
     let mut listed = BTreeSet::new();
     let mut project_files = BTreeSet::new();
     for path in &program_modules.roots {
-        if path.is_file() && !in_node_modules(path) && listed.insert(path.clone()) {
+        if path.is_file() && listed.insert(path.clone()) {
             project_order.push(path.clone());
-            project_files.insert(path.clone());
+            if !in_node_modules(path) {
+                project_files.insert(path.clone());
+            }
         }
     }
     for path in program_modules.others.iter().cloned().chain(
