@@ -212,7 +212,7 @@ fn a_failed_project_open_issues_no_handle() {
             .open(&envelope(&scratch.config(), None))
             .unwrap_err(),
         format!(
-            "open TS-Go project: parse tsconfig: TS5083: Cannot read file '{}'.",
+            "open TypeScript project: parse tsconfig: TS5083: Cannot read file '{}'.",
             scratch.config()
         )
     );

@@ -53,7 +53,7 @@ test("a refusal answers status 1 with its message and issues no handle", () => {
   assert.equal(refused(encodeCbor({ config: Buffer.from("{}"), projectId: "/p/tsconfig.json" })),
     "open request carries configuration bytes without hasConfig");
   const missing = join(top, "missing", "tsconfig.json");
-  assert.equal(refused(encodeCbor({ projectId: missing })), `open TS-Go project: parse tsconfig: TS5083: Cannot read file '${missing}'.`);
+  assert.equal(refused(encodeCbor({ projectId: missing })), `open TypeScript project: parse tsconfig: TS5083: Cannot read file '${missing}'.`);
 });
 
 test("handles are issued in order, never reused, and refused when foreign or closed", () => {

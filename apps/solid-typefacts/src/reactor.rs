@@ -95,7 +95,7 @@ impl Reactor {
             .has_config
             .then(|| String::from_utf8_lossy(&request.config).into_owned());
         let backend = (self.open_project)(&Context::new(), id, config_source.as_deref())
-            .map_err(|error| format!("open TS-Go project: {error}"))?;
+            .map_err(|error| format!("open TypeScript project: {error}"))?;
         // Session::new owns the backend from here, including on failure.
         let session = Session::new(backend, id, true)?;
         self.next += 1;

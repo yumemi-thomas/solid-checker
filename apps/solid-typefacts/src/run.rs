@@ -122,7 +122,7 @@ pub fn run(
         move || -> Result<LifecycleResponder, String> {
             let ctx = Context::new();
             let backend = open_backend(&ctx, &project_id, config_source.as_deref())
-                .map_err(|error| format!("open TS-Go project: {error}"))?;
+                .map_err(|error| format!("open TypeScript project: {error}"))?;
             let session =
                 Session::new(backend, &project_id, inline_sources)?.with_trace(trace.clone());
             Ok(LifecycleResponder {
