@@ -182,6 +182,15 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         StaticDefectKind::ReactiveDispatchUnresolved {
             callee,
             member: None,
+        } if defect.analysis_context == crate::DEPENDENCY_SOURCE_CALL_ERROR => (
+            format!(
+                "the program that analyzes packages from source types this call of {callee} as an error that TypeScript does not report on the project's own program, so its target and behaviour there are not the project's; whether it reads reactive state cannot be certified"
+            ),
+            "Packages analyzed from source change what TypeScript sees (for example a package's global augmentation merged into a project interface); make the project's declaration unambiguous, or rename it apart from the package's.".into(),
+        ),
+        StaticDefectKind::ReactiveDispatchUnresolved {
+            callee,
+            member: None,
         } if defect.analysis_context == crate::PRIMITIVE_VALUE => (
             format!(
                 "Solid primitive {callee} is used as a value here, so the calls that reach it are not followed; the owner, tracking and write rules that apply where it runs are not checked"
@@ -358,6 +367,11 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         }
         StaticDefectKind::PackageBehaviorUnavailable { .. } => {
             "the imported package's behavior is not available from analyzed source"
+        }
+        StaticDefectKind::ReactiveDispatchUnresolved { .. }
+            if defect.analysis_context == crate::DEPENDENCY_SOURCE_CALL_ERROR =>
+        {
+            "TypeScript reports a call error here only in the program that adds package sources, not on the project's own program"
         }
         StaticDefectKind::ReactiveDispatchUnresolved { .. } => {
             "the call is type-correct, but exact runtime dispatch or equivalent reactive summaries are not proven"

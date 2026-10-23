@@ -195,6 +195,7 @@ fn empty_project(generation: u64) -> ProjectFacts {
         runtime_resolutions: None,
         runtime_symbol_redirects: std::collections::HashMap::default(),
         dependency_source_roots: Vec::new(),
+        dependency_source_call_errors: Vec::new(),
     }
 }
 

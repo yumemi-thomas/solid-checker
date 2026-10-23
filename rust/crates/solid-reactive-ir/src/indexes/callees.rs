@@ -369,10 +369,19 @@ impl<'a> SemanticLookup<'a> {
     ) -> Option<&'a ResolvedCall> {
         let original_callee = callee;
         let callee = file.ast.peel_ts_sugar_span(callee);
-        let call_span = self
+        let outer = self
             .call_by_callee(file, original_callee)
-            .or_else(|| self.call_by_callee(file, callee))
-            .map_or(original_callee, |call| call.span);
+            .or_else(|| self.call_by_callee(file, callee));
+        let call_span = outer.map_or(original_callee, |call| call.span);
+        // Review of ADR 0368: a callee that is itself a call (`get()(x)`)
+        // has, at its own span, the inner call's fact. Only the outer call's
+        // exact fact (demanded at its whole span) answers for the outer call;
+        // without it there is no fact.
+        if outer.is_some() && file.ast.call_at(callee).is_some() {
+            return self
+                .entity_at(file.path.as_str(), call_span)
+                .and_then(|entity| entity.resolved_call.as_deref());
+        }
         // A wrapped callee has its own exact call demand. Prefer that fact:
         // the peeled expression may also be another invocation's location
         // (a factory result, for example), or may have only a symbol demand.

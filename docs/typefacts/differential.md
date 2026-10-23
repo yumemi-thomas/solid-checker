@@ -20,9 +20,11 @@ Rust versions, such as a change of symbol ids.
 
 To compare two Rust builds, point the reference at the older binary (build it
 from the older commit; `make typefacts-differential` records through it). The
-producer's differential tests skip, with a NOTICE, a reference whose handshake
-names another protocol or schema: since protocol 82 (ADR 0368) that includes the
-archived Go producer (protocol 81).
+producer's differential tests fail on a reference named by
+`SOLID_TYPEFACTS_REFERENCE_BIN` that is absent or whose handshake names another
+protocol or schema. The implicit archive default is skipped in that case (since
+protocol 82, ADR 0368, the archived Go producer speaks 81) with a `SKIPPED` line
+every run shows; `SOLID_TYPEFACTS_REQUIRE_REFERENCE=1` fails instead.
 
 Pieces: `scripts/typefacts-differential.mjs` (CLI), `scripts/lib/typefacts-differential.mjs`
 (normalise, diff, report, allow-list; unit-tested without a producer),

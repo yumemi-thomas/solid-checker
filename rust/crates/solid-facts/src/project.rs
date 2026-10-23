@@ -63,6 +63,14 @@ pub struct ProjectFacts {
     /// project's findings. Empty for ordinary analysis.
     #[serde(skip)]
     pub dependency_source_roots: Vec<String>,
+    /// Review of ADR 0368: in a dependency-source program, the project calls
+    /// the analyzed program answers `Recovery` (a call error) and the
+    /// project's own program does not. TypeScript reports no such error on
+    /// the project, so the call is not TypeScript-owned: analysis keeps it as
+    /// an uncertifiable obligation instead of staying silent. Empty for
+    /// ordinary analysis.
+    #[serde(skip)]
+    pub dependency_source_call_errors: Vec<typefacts::Location>,
 }
 
 #[derive(Clone)]
@@ -70,6 +78,9 @@ pub struct TypeScriptTable {
     retained: Option<FactTable>,
     synthetic: Option<Arc<TypeScriptSnapshot>>,
     file_overrides: Option<Arc<[FileFact]>>,
+    /// Per path, entities that replace the table's own (ADR 0368 review: a
+    /// project call's validity taken from the project's own program).
+    entity_overrides: Option<Arc<HashMap<String, Arc<[EntityFact]>>>>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -139,6 +150,7 @@ impl TypeScriptTable {
             retained: Some(table),
             synthetic: None,
             file_overrides: None,
+            entity_overrides: None,
         }
     }
 
@@ -164,7 +176,26 @@ impl TypeScriptTable {
                 files,
             })),
             file_overrides: None,
+            entity_overrides: None,
         }
+    }
+
+    /// This table with `path`'s entities replaced, for each path given (each
+    /// a path the table holds entities for, in the table's own order).
+    #[must_use]
+    pub fn with_entity_overrides(mut self, overrides: HashMap<String, Vec<EntityFact>>) -> Self {
+        let mut merged = self
+            .entity_overrides
+            .as_deref()
+            .cloned()
+            .unwrap_or_default();
+        merged.extend(
+            overrides
+                .into_iter()
+                .map(|(path, entities)| (path, Arc::from(entities))),
+        );
+        self.entity_overrides = (!merged.is_empty()).then(|| Arc::new(merged));
+        self
     }
 
     #[must_use]
@@ -213,6 +244,13 @@ impl TypeScriptTable {
 
     #[must_use]
     pub fn entities_for_path(&self, path: &str) -> &[EntityFact] {
+        if let Some(entities) = self
+            .entity_overrides
+            .as_deref()
+            .and_then(|overrides| overrides.get(path))
+        {
+            return entities;
+        }
         self.retained.as_ref().map_or_else(
             || {
                 let entities = &self.synthetic().entities;
@@ -249,11 +287,29 @@ impl TypeScriptTable {
     }
 
     pub fn entities(&self) -> impl Iterator<Item = &EntityFact> {
-        self.retained.iter().flat_map(FactTable::entities).chain(
-            self.synthetic
-                .iter()
-                .flat_map(|table| table.entities.iter()),
-        )
+        // Path order is kept: a replaced path's entities take the place of
+        // the table's own, which stay sorted by path.
+        let overrides = self.entity_overrides.as_deref();
+        let mut replaced: Option<&str> = None;
+        self.retained
+            .iter()
+            .flat_map(FactTable::entities)
+            .chain(
+                self.synthetic
+                    .iter()
+                    .flat_map(|table| table.entities.iter()),
+            )
+            .flat_map(move |entity| {
+                let path = entity.location.path.as_ref();
+                let Some(entities) = overrides.and_then(|overrides| overrides.get(path)) else {
+                    return std::slice::from_ref(entity).iter();
+                };
+                if replaced == Some(path) {
+                    return [].iter();
+                }
+                replaced = Some(path);
+                entities.iter()
+            })
     }
 
     pub fn files(&self) -> impl Iterator<Item = &FileFact> {
@@ -386,6 +442,7 @@ impl<'de> Deserialize<'de> for TypeScriptTable {
             retained: None,
             synthetic: Some(Arc::new(TypeScriptSnapshot::deserialize(deserializer)?)),
             file_overrides: None,
+            entity_overrides: None,
         })
     }
 }
@@ -534,6 +591,7 @@ impl ProjectFacts {
             runtime_resolutions: None,
             runtime_symbol_redirects: HashMap::new(),
             dependency_source_roots: Vec::new(),
+            dependency_source_call_errors: Vec::new(),
         })
     }
 }
@@ -543,6 +601,64 @@ mod tests {
     use super::*;
     use crate::ast::extract;
     use crate::compiler::COMPILER_FACTS_PROTOCOL;
+
+    fn entity(path: &str, start: u64, symbol: &str) -> EntityFact {
+        EntityFact {
+            location: Location {
+                path: path.into(),
+                start_byte: start,
+                end_byte: start + 1,
+            },
+            symbol: symbol.into(),
+            symbol_claim: typefacts::SymbolClaim::Covering,
+            type_descriptor: None,
+            resolved_call: None,
+            callability: None,
+            constructability: None,
+            runtime_binding_kind: None,
+            runtime_value_domain: None,
+            primitive_value_domain: typefacts::PrimitiveValueDomain::default(),
+            primitive_literal_candidates: None,
+            call_result_domain: None,
+            constant_value: None,
+            array_shape: None,
+            tuple_shape: None,
+            library_types: None,
+            reference_space: None,
+            runtime_identity: "".into(),
+        }
+    }
+
+    /// ADR 0368 review: a replaced path's entities take its place, in path
+    /// order (per-path containment slices need the table sorted by path).
+    #[test]
+    fn entity_overrides_keep_path_order() {
+        let table = TypeScriptTable::from_parts(
+            1,
+            1,
+            "p",
+            Vec::new(),
+            vec![
+                entity("a.ts", 0, "a"),
+                entity("b.ts", 0, "b0"),
+                entity("b.ts", 2, "b2"),
+                entity("c.ts", 0, "c"),
+            ],
+            Vec::new(),
+            Vec::new(),
+        )
+        .with_entity_overrides(HashMap::from([(
+            "b.ts".to_owned(),
+            vec![entity("b.ts", 0, "B0"), entity("b.ts", 2, "B2")],
+        )]));
+        let symbols = table
+            .entities()
+            .map(|entity| entity.symbol.to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(symbols, ["a", "B0", "B2", "c"]);
+        assert_eq!(table.entities_for_path("b.ts")[1].symbol.as_ref(), "B2");
+        assert_eq!(table.entities_for_path("c.ts")[0].symbol.as_ref(), "c");
+    }
     #[test]
     fn joins_one_coherent_generation() {
         let source = "const value = 1;";

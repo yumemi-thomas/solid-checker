@@ -75,6 +75,9 @@ pub struct ModuleInventory {
     pub modules: Vec<ModuleFact>,
     pub imports: Vec<ModuleImportFact>,
     pub unknown_import_paths: Vec<Arc<str>>,
+    /// Configured roots the program holds no file for although the loader's
+    /// lookup finds one (`module_graph::root_positions`).
+    pub unmapped_roots: Vec<Arc<str>>,
 }
 
 /// The live project surface the demand closure materializes from. Every method

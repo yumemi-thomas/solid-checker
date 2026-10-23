@@ -1645,8 +1645,7 @@ fn cleanup_return_status(
                 return CleanupReturnStatus::Unresolved;
             };
             let resolved = lookup
-                .entity_at(file.path.as_str(), callee)
-                .and_then(|entity| entity.resolved_call.as_ref())
+                .resolved_callee_call(file, callee)
                 .is_some_and(|call| call.validity == ResolvedCallValidity::Valid);
             if !resolved {
                 return CleanupReturnStatus::Unresolved;

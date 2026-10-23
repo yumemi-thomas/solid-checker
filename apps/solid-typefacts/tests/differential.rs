@@ -366,3 +366,48 @@ fn compiler_free_lifecycle_responses_match_go_byte_for_byte() {
     }
     let _ = std::fs::remove_dir_all(&directory);
 }
+
+/// Review of ADR 0368: a reference on another protocol made every
+/// differential test pass vacuously. A reference the caller named fails the
+/// test; only the implicit archive default is skipped, and a required
+/// reference never is.
+#[test]
+fn an_incompatible_or_missing_named_reference_fails_rather_than_skips() {
+    use common::{ReferenceChoice, choose_reference};
+    let present = std::env::current_exe().unwrap();
+    let missing = present.with_file_name("no-such-reference-producer");
+    let speaks = |protocol: u64| {
+        move |_: &Path| {
+            Ok(typefacts::v3::Handshake {
+                protocol,
+                schema_hash: typefacts::v3::TYPE_FACTS_SCHEMA_SHA256.to_owned(),
+                build_id: "dev".to_owned(),
+            })
+        }
+    };
+    let current = speaks(typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL);
+    let older = speaks(81);
+    // Named: incompatible or absent fails.
+    assert!(choose_reference(Some(present.clone()), None, false, &older).is_err());
+    assert!(choose_reference(Some(missing.clone()), None, false, &current).is_err());
+    assert_eq!(
+        choose_reference(Some(present.clone()), None, false, &current),
+        Ok(ReferenceChoice::Use(present.clone()))
+    );
+    // The implicit archive default: skipped unless required.
+    assert!(matches!(
+        choose_reference(None, Some(present.clone()), false, &older),
+        Ok(ReferenceChoice::Skip(_))
+    ));
+    assert!(matches!(
+        choose_reference(None, Some(missing.clone()), false, &current),
+        Ok(ReferenceChoice::Skip(_))
+    ));
+    assert!(choose_reference(None, Some(present.clone()), true, &older).is_err());
+    assert!(choose_reference(None, Some(missing), true, &current).is_err());
+    assert!(choose_reference(None, None, true, &current).is_err());
+    assert_eq!(
+        choose_reference(None, Some(present.clone()), false, &current),
+        Ok(ReferenceChoice::Use(present))
+    );
+}

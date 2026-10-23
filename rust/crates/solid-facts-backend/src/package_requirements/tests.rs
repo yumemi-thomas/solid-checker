@@ -160,6 +160,7 @@ impl Fixture {
             runtime_resolutions: None,
             runtime_symbol_redirects: Default::default(),
             dependency_source_roots: self.source_roots.clone(),
+            dependency_source_call_errors: Vec::new(),
         }
     }
 
@@ -783,6 +784,7 @@ fn virtual_facts(rows: Vec<(&str, AttestedImport)>) -> ProjectFacts {
         runtime_resolutions: None,
         runtime_symbol_redirects: Default::default(),
         dependency_source_roots: Vec::new(),
+        dependency_source_call_errors: Vec::new(),
     }
 }
 

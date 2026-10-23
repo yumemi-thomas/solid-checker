@@ -39,7 +39,7 @@
             2,
             3
           ],
-          "exchanges": 12,
+          "exchanges": 15,
           "faulted": false,
           "pendingResults": []
         },
@@ -71,7 +71,7 @@
             5,
             6
           ],
-          "exchanges": 12,
+          "exchanges": 15,
           "faulted": false,
           "pendingResults": []
         },
@@ -103,7 +103,7 @@
             8,
             9
           ],
-          "exchanges": 12,
+          "exchanges": 15,
           "faulted": false,
           "pendingResults": []
         },
@@ -135,7 +135,7 @@
             11,
             12
           ],
-          "exchanges": 12,
+          "exchanges": 15,
           "faulted": false,
           "pendingResults": []
         },
@@ -167,7 +167,7 @@
             14,
             15
           ],
-          "exchanges": 12,
+          "exchanges": 15,
           "faulted": false,
           "pendingResults": []
         },
@@ -199,7 +199,7 @@
             17,
             18
           ],
-          "exchanges": 12,
+          "exchanges": 15,
           "faulted": false,
           "pendingResults": []
         },
@@ -215,8 +215,8 @@
             20
           ],
           "closed": [
-            19,
-            20
+            20,
+            19
           ],
           "exchanges": 8,
           "faulted": true,
@@ -233,7 +233,7 @@
             21,
             22
           ],
-          "exchanges": 12,
+          "exchanges": 15,
           "faulted": false,
           "pendingResults": []
         },
@@ -269,7 +269,7 @@
             25,
             26
           ],
-          "exchanges": 12,
+          "exchanges": 15,
           "faulted": false,
           "pendingResults": []
         },
@@ -324,8 +324,8 @@
         16,
         17,
         18,
-        19,
         20,
+        19,
         21,
         22,
         24,
@@ -433,7 +433,7 @@
   },
   "w7BadHandshake": {
     "status": 1,
-    "error": "TypeFacts session error: Type Facts compatibility handshake failed: expected protocol 82, schema sha256:64805adaa7b2e0a0542806cdb4bf11408c450b3af7894a53ed7adbc8f0c82946, build \"dev\"; got protocol 82, schema sha256:64805adaa7b2e0a0542806cdb4bf11408c450b3af7894a53ed7adbc8f0c82947, build \"dev\"",
+    "error": "TypeFacts session error: Type Facts compatibility handshake failed: expected protocol 83, schema sha256:ff5a9ac55ed6ea694c6b8a02d37652fb03ac735eae84985e6957c460040aa8b8, build \"dev\"; got protocol 83, schema sha256:ff5a9ac55ed6ea694c6b8a02d37652fb03ac735eae84985e6957c460040aa8b9, build \"dev\"",
     "host": {
       "opened": [
         1
@@ -672,11 +672,11 @@
             1,
             2
           ],
-          "exchanges": 12,
+          "exchanges": 15,
           "faulted": false,
           "pendingResults": []
         },
-        "frames": 18
+        "frames": 21
       },
       "findings": [
         {
@@ -749,11 +749,11 @@
             1,
             2
           ],
-          "exchanges": 13,
+          "exchanges": 16,
           "faulted": false,
           "pendingResults": []
         },
-        "frames": 19
+        "frames": 22
       },
       "findings": [
         {

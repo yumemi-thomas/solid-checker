@@ -328,6 +328,39 @@ impl TypeFactsSession {
         Ok(self.session.module_graph(demand)?)
     }
 
+    /// The validity this program answers for the call demanded at each of
+    /// `locations` (`None` where it answers no resolved call), in order. One
+    /// analysis whose demand set is exactly these calls: it replaces any
+    /// retained one, so it is meant for a session that is otherwise only read
+    /// (`configured_sources`, `module_graph`).
+    pub fn call_validities(
+        &mut self,
+        locations: &[typefacts::Location],
+    ) -> Result<Vec<Option<typefacts::ResolvedCallValidity>>, BackendError> {
+        let demand = typefacts::AnalysisDemand {
+            entities: locations
+                .iter()
+                .map(|location| typefacts::v3::EntityDemand {
+                    location: location.clone(),
+                    resolved_call: true,
+                    ..typefacts::v3::EntityDemand::default()
+                })
+                .collect(),
+        };
+        let table = self.session.analyze(&demand)?;
+        Ok(locations
+            .iter()
+            .map(|location| {
+                table
+                    .entities_for_path(&location.path)
+                    .iter()
+                    .find(|entity| entity.location == *location)
+                    .and_then(|entity| entity.resolved_call.as_ref())
+                    .map(|call| call.validity)
+            })
+            .collect())
+    }
+
     /// Applies an overlay and advances the generation.
     pub fn update(&mut self, changes: Vec<typefacts::v3::FileChange>) -> Result<(), BackendError> {
         self.session.update(changes)?;

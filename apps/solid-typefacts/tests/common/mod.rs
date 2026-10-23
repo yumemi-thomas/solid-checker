@@ -73,31 +73,94 @@ pub fn frames(mut bytes: &[u8]) -> Vec<Vec<u8>> {
 /// The reference producer the differential tests compare against:
 /// `SOLID_TYPEFACTS_REFERENCE_BIN`, else the archived Go producer
 /// (`$TSGO_ARCHIVE/bin/solid-typefacts-go`, default
-/// `~/Documents/Github/sc-worktrees.noindex/tsgo-archive`). Without one the
-/// differential tests print a NOTICE and skip; they are an acceptance tool for
-/// producer changes, not a gate (docs/typefacts/differential.md). A reference
-/// whose startup handshake names another protocol or schema (the archived Go
-/// producer speaks protocol 81) cannot answer this client either: same NOTICE.
+/// `~/Documents/Github/sc-worktrees.noindex/tsgo-archive`). They are an
+/// acceptance tool for producer changes, not a gate
+/// (docs/typefacts/differential.md).
+///
+/// A reference the caller named (`SOLID_TYPEFACTS_REFERENCE_BIN`), or any
+/// reference under `SOLID_TYPEFACTS_REQUIRE_REFERENCE=1`, must be present and
+/// speak this client's protocol and schema: otherwise the test fails, never
+/// passes vacuously. The implicit archive default is skipped when absent or on
+/// another protocol (the archived Go producer speaks 81), with a SKIPPED line
+/// written past the test harness's output capture so every run shows it.
 pub fn reference_binary(what: &str) -> Option<std::path::PathBuf> {
-    let path = reference_path(what)?;
-    match reference_handshake(&path) {
-        Ok(handshake)
-            if handshake.protocol == typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
-                && handshake.schema_hash == typefacts::v3::TYPE_FACTS_SCHEMA_SHA256 =>
-        {
-            Some(path)
-        }
-        Ok(handshake) => {
-            eprintln!(
-                "NOTICE: reference producer at {} speaks protocol {} (schema {}), this client {}; {what} skipped (set SOLID_TYPEFACTS_REFERENCE_BIN)",
-                path.display(),
-                handshake.protocol,
-                handshake.schema_hash,
-                typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL,
+    let explicit = std::env::var_os("SOLID_TYPEFACTS_REFERENCE_BIN").map(std::path::PathBuf::from);
+    let required =
+        std::env::var_os("SOLID_TYPEFACTS_REQUIRE_REFERENCE").is_some_and(|value| value == "1");
+    match choose_reference(
+        explicit,
+        archived_reference(),
+        required,
+        &reference_handshake,
+    ) {
+        Ok(ReferenceChoice::Use(path)) => Some(path),
+        Ok(ReferenceChoice::Skip(reason)) => {
+            // `eprintln!` is captured for a passing test; the handle is not.
+            let line = format!(
+                "SKIPPED {what}: {reason} (set SOLID_TYPEFACTS_REFERENCE_BIN, or SOLID_TYPEFACTS_REQUIRE_REFERENCE=1 to fail instead)\n"
             );
+            let _ = std::io::stderr().write_all(line.as_bytes());
             None
         }
-        Err(error) => panic!("reference producer at {}: {error}", path.display()),
+        Err(reason) => panic!("{what}: {reason}"),
+    }
+}
+
+/// What [`reference_binary`] does with a candidate reference.
+#[derive(Debug, PartialEq, Eq)]
+pub enum ReferenceChoice {
+    Use(std::path::PathBuf),
+    /// Skip the comparison, for this reason.
+    Skip(String),
+}
+
+/// The decision behind [`reference_binary`], apart from the environment:
+/// `explicit` is the reference the caller named, `archive` the implicit
+/// default, `required` whether a skip fails instead.
+pub fn choose_reference(
+    explicit: Option<std::path::PathBuf>,
+    archive: Option<std::path::PathBuf>,
+    required: bool,
+    handshake: &dyn Fn(&std::path::Path) -> Result<typefacts::v3::Handshake, String>,
+) -> Result<ReferenceChoice, String> {
+    let named = explicit.is_some();
+    let Some(path) = explicit.or(archive) else {
+        return skip_or_fail(required, "no reference producer".to_owned());
+    };
+    if !path.is_file() {
+        let reason = format!("no reference producer at {}", path.display());
+        return if named {
+            Err(reason)
+        } else {
+            skip_or_fail(required, reason)
+        };
+    }
+    let handshake = handshake(&path)
+        .map_err(|error| format!("reference producer at {}: {error}", path.display()))?;
+    if handshake.protocol == typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
+        && handshake.schema_hash == typefacts::v3::TYPE_FACTS_SCHEMA_SHA256
+    {
+        return Ok(ReferenceChoice::Use(path));
+    }
+    let reason = format!(
+        "reference producer at {} speaks protocol {} (schema {}), this client {}",
+        path.display(),
+        handshake.protocol,
+        handshake.schema_hash,
+        typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL,
+    );
+    if named {
+        Err(reason)
+    } else {
+        skip_or_fail(required, reason)
+    }
+}
+
+fn skip_or_fail(required: bool, reason: String) -> Result<ReferenceChoice, String> {
+    if required {
+        Err(format!("{reason}, and SOLID_TYPEFACTS_REQUIRE_REFERENCE=1"))
+    } else {
+        Ok(ReferenceChoice::Skip(reason))
     }
 }
 
@@ -120,28 +183,15 @@ fn reference_handshake(path: &std::path::Path) -> Result<typefacts::v3::Handshak
     handshake
 }
 
-fn reference_path(what: &str) -> Option<std::path::PathBuf> {
-    let path = std::env::var_os("SOLID_TYPEFACTS_REFERENCE_BIN")
+/// The archived Go producer's path, present or not.
+fn archived_reference() -> Option<std::path::PathBuf> {
+    let archive = std::env::var_os("TSGO_ARCHIVE")
         .map(std::path::PathBuf::from)
         .or_else(|| {
-            let archive = std::env::var_os("TSGO_ARCHIVE")
-                .map(std::path::PathBuf::from)
-                .or_else(|| {
-                    std::env::var_os("HOME").map(|home| {
-                        std::path::PathBuf::from(home)
-                            .join("Documents/Github/sc-worktrees.noindex/tsgo-archive")
-                    })
-                })?;
-            Some(archive.join("bin/solid-typefacts-go"))
-        });
-    match path {
-        Some(path) if path.is_file() => Some(path),
-        other => {
-            eprintln!(
-                "NOTICE: no reference producer{}; {what} skipped (set SOLID_TYPEFACTS_REFERENCE_BIN)",
-                other.map_or_else(String::new, |path| format!(" at {}", path.display())),
-            );
-            None
-        }
-    }
+            std::env::var_os("HOME").map(|home| {
+                std::path::PathBuf::from(home)
+                    .join("Documents/Github/sc-worktrees.noindex/tsgo-archive")
+            })
+        })?;
+    Some(archive.join("bin/solid-typefacts-go"))
 }

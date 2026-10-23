@@ -202,6 +202,7 @@ mod tests {
             modules: Vec::new(),
             module_imports: Vec::new(),
             unknown_import_paths: Vec::new(),
+            unmapped_roots: Vec::new(),
             client_decode_ns: 0,
             client_response_bytes: 37,
             client_request_send_ns: 0,

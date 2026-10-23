@@ -711,6 +711,10 @@ pub const TYPE_ONLY_SOURCE: &str = "type-only-source";
 /// …)`): the calls it reaches are not followed. Its `callee` is the
 /// reference's text. Producer: `static_rules.rs`; consumer: `projection.rs`.
 pub const PRIMITIVE_VALUE: &str = "primitive-value";
+/// ADR 0368 review: a project call the dependency-source program answers as
+/// a call error and the project's own program does not
+/// (`ProjectFacts::dependency_source_call_errors`).
+pub const DEPENDENCY_SOURCE_CALL_ERROR: &str = "dependency-source-program-call-error";
 
 /// The `analysis_context` of a dispatch obligation at a member call on the
 /// result of a primitive that returns a getter (`createSignal(1).slice(0)`,
