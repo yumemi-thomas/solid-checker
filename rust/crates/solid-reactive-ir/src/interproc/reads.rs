@@ -1982,6 +1982,10 @@ struct StructuredReturnInputs<'a> {
     returned: &'a [SummaryReads],
 }
 
+/// Files with at most this many returns filter them per exported function;
+/// larger ones group them by owner once.
+const SMALL_RETURN_COUNT: usize = 16;
+
 fn export_structured_return_obligations(
     context: &InterproceduralContext<'_, '_>,
     inputs: &StructuredReturnInputs<'_>,
@@ -2019,6 +2023,8 @@ fn export_structured_return_obligations(
                 })
     });
     let accessor_declarations = structured_returns::accessor_declarations(accessors);
+    let accessors_by_identity = std::sync::OnceLock::new();
+    let module_exports = std::sync::OnceLock::new();
     if has_structured_return_seed {
         for _ in 0..=nodes.len() {
             let discovered = discover_structured_returns(&StructuredReturnDiscovery {
@@ -2032,6 +2038,8 @@ fn export_structured_return_obligations(
                 work: &work,
                 accessors,
                 accessor_declarations: &accessor_declarations,
+                accessors_by_identity: &accessors_by_identity,
+                module_exports: &module_exports,
                 source_kinds,
                 entities,
                 symbol_names,
@@ -2060,11 +2068,14 @@ fn export_structured_return_obligations(
         work: &work,
         accessors,
         accessor_declarations: &accessor_declarations,
+        accessors_by_identity: &accessors_by_identity,
+        module_exports: &module_exports,
         source_kinds,
         entities,
         symbol_names,
         lookup,
     };
+    let mut returns_by_owner: HashMap<&str, HashMap<Span, Vec<usize>>> = HashMap::default();
     for node in nodes.iter().filter(|node| node.exported) {
         work.fetch_add(1, Ordering::Relaxed);
         let Some(file) = lookup.file_by_path(node.path.as_str()) else {
@@ -2073,13 +2084,44 @@ fn export_structured_return_obligations(
         let Some(function) = file.ast.function_at(node.span) else {
             continue;
         };
+        // The returns this function owns, in source order. A file with many
+        // returns groups them by owner once: filtering every return per
+        // exported function was quadratic in a module with many functions.
+        // Exactly one of the two chained iterators is non-empty.
+        let small = file.ast.returns.len() <= SMALL_RETURN_COUNT;
+        let grouped = (!small).then(|| {
+            returns_by_owner
+                .entry(file.path.as_str())
+                .or_insert_with(|| {
+                    let mut owned: HashMap<Span, Vec<usize>> = HashMap::default();
+                    for (index, returned) in file.ast.returns.iter().enumerate() {
+                        if let Some(owner) = containing_ast_function(&file.ast, returned.span) {
+                            owned.entry(owner.span).or_default().push(index);
+                        }
+                    }
+                    owned
+                })
+        });
         for property in function
             .expression_return
             .iter()
-            .chain(file.ast.returns.iter().filter(|returned| {
-                containing_ast_function(&file.ast, returned.span)
-                    .is_some_and(|owner| owner.span == function.span)
-            }))
+            .chain(
+                file.ast
+                    .returns
+                    .iter()
+                    .take(if small { usize::MAX } else { 0 })
+                    .filter(|returned| {
+                        containing_ast_function(&file.ast, returned.span)
+                            .is_some_and(|owner| owner.span == function.span)
+                    }),
+            )
+            .chain(
+                grouped
+                    .and_then(|grouped| grouped.get(&function.span))
+                    .into_iter()
+                    .flatten()
+                    .map(|index| &file.ast.returns[*index]),
+            )
             .flat_map(|returned| returned.properties())
         {
             work.fetch_add(1, Ordering::Relaxed);

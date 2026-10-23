@@ -17,7 +17,7 @@ pub mod runtime_resolution;
 
 mod project;
 
-pub use core::resolve_relative_module_path;
+pub use core::{resolve_relative_module_path, resolve_relative_module_path_indexed};
 pub use project::{
     FileFacts, JoinError, ProjectFacts, TypeScriptChanges, TypeScriptSymbol, TypeScriptTable,
 };

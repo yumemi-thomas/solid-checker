@@ -19,6 +19,14 @@ pub(super) struct StructuredReturnDiscovery<'a, 'facts> {
     /// The accessor declared at each `(path, start, end)`: the first in the
     /// iteration order of `accessors` (see [`accessor_declarations`]).
     pub(super) accessor_declarations: &'a AccessorDeclarations<'a>,
+    /// The accessor whose declaring entity has each non-empty runtime identity:
+    /// the first in the iteration order of `accessors` (see
+    /// [`accessors_by_runtime_identity`]). Built on the first lookup that
+    /// needs it, so a project with no imported shorthand never pays for it.
+    pub(super) accessors_by_identity: &'a std::sync::OnceLock<AccessorsByIdentity<'facts>>,
+    /// Each file's exports by exported name (see [`ModuleExports`]), built on
+    /// the first import that reaches a module's exports.
+    pub(super) module_exports: &'a std::sync::OnceLock<ModuleExports<'facts>>,
     pub(super) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
     pub(super) entities: &'a EntitySymbols,
     pub(super) symbol_names: &'a HashMap<SymbolId, SymbolId>,
@@ -46,6 +54,118 @@ pub(super) fn accessor_declarations(
         }
     }
     declarations
+}
+
+/// The accessors by the runtime identity of their declaring entity.
+pub(super) type AccessorsByIdentity<'a> = HashMap<&'a str, SymbolId>;
+
+/// Indexes `accessors` by runtime identity, once per analysis. Several
+/// accessors may share an identity (a re-export or alias declares the same
+/// runtime value); the first in `accessors`' iteration order wins, as the
+/// per-lookup scan this replaces returned. `identity_at` answers the runtime
+/// identity of the entity at a location (`None`: no entity there). An empty
+/// identity proves nothing and is never indexed.
+pub(super) fn accessors_by_runtime_identity<'a>(
+    accessors: &HashMap<SymbolId, (SymbolId, Location)>,
+    identity_at: impl Fn(&Location) -> Option<&'a str>,
+) -> AccessorsByIdentity<'a> {
+    let mut by_identity = AccessorsByIdentity::default();
+    for (symbol, (_, location)) in accessors {
+        if let Some(identity) = identity_at(location).filter(|identity| !identity.is_empty()) {
+            by_identity
+                .entry(identity)
+                .or_insert_with(|| symbol.clone());
+        }
+    }
+    by_identity
+}
+
+/// The exports of every analyzed file, by exported name, so resolving one
+/// export of a module does not scan all of that module's exports (a barrel
+/// of N exports resolved N times was quadratic).
+#[derive(Default)]
+pub(super) struct ModuleExports<'f> {
+    by_path: HashMap<&'f str, FileExports<'f>>,
+}
+
+#[derive(Default)]
+struct FileExports<'f> {
+    /// The local span of each own (module-less, value) export of a name, in
+    /// source order; more than one is ambiguous.
+    direct: HashMap<&'f str, Vec<Span>>,
+    /// The value re-exports with a named specifier for a name (the first such
+    /// specifier of each export), in source order.
+    named: HashMap<&'f str, Vec<(&'f solid_facts::ast::ExportFact, Span)>>,
+    /// The value `export * from` re-exports, in source order.
+    star: Vec<&'f solid_facts::ast::ExportFact>,
+    /// The name span of the first binding (in source order) of each symbol.
+    declarations: HashMap<&'f SymbolId, Span>,
+}
+
+impl<'f> ModuleExports<'f> {
+    pub(super) fn new(files: &'f [solid_facts::FileFacts], entities: &'f EntitySymbols) -> Self {
+        let mut by_path = HashMap::default();
+        for file in files {
+            let mut exports = FileExports::default();
+            for name in file.ast.bindings.iter().flat_map(|binding| &binding.names) {
+                if let Some(symbol) = entities.at(file.path.as_str(), name.span) {
+                    exports.declarations.entry(symbol).or_insert(name.span);
+                }
+            }
+            for export in file.ast.exports.iter().filter(|export| !export.type_only) {
+                if export.module.is_none() {
+                    for specifier in export
+                        .specifiers
+                        .iter()
+                        .chain(&export.declarations)
+                        .filter(|specifier| !specifier.type_only)
+                    {
+                        exports
+                            .direct
+                            .entry(specifier.exported.as_str())
+                            .or_default()
+                            .push(specifier.local.span);
+                    }
+                    continue;
+                }
+                match export.kind {
+                    solid_facts::ast::ExportKind::Named => {
+                        let mut seen = HashSet::default();
+                        for specifier in export.specifiers.iter().filter(|s| !s.type_only) {
+                            if seen.insert(specifier.exported.as_str()) {
+                                exports
+                                    .named
+                                    .entry(specifier.exported.as_str())
+                                    .or_default()
+                                    .push((export, specifier.local.span));
+                            }
+                        }
+                    }
+                    solid_facts::ast::ExportKind::All => exports.star.push(export),
+                    _ => {}
+                }
+            }
+            // A later file with the same path replaces an earlier one, as
+            // `file_by_path` does.
+            by_path.insert(file.path.as_str(), exports);
+        }
+        Self { by_path }
+    }
+}
+
+/// The runtime identity of the entity declared at exactly `location`
+/// (path, start and end): the first such entity, or `None` when there is none.
+pub(super) fn entity_identity_at<'a>(
+    entities: &HashMap<(&'a str, u64, u64), &'a typefacts::EntityFact>,
+    location: &Location,
+) -> Option<&'a str> {
+    entities
+        .get(&(
+            location.path.as_ref(),
+            location.start_byte,
+            location.end_byte,
+        ))
+        .map(|entity| entity.runtime_identity.as_ref())
 }
 
 impl StructuredReturnDiscovery<'_, '_> {
@@ -680,12 +800,9 @@ impl StructuredReturnDiscovery<'_, '_> {
         let mut visiting = HashSet::default();
         let (target_path, target) =
             self.resolve_export_binding(sibling.path.as_str(), imported, &mut visiting)?;
-        self.accessors.iter().find_map(|(symbol, (_, location))| {
-            (location.path.as_ref() == target_path
-                && u32::try_from(location.start_byte).ok()? == target.start
-                && u32::try_from(location.end_byte).ok()? == target.end)
-                .then_some(symbol)
-        })
+        self.accessor_declarations
+            .get(&(target_path.as_str(), target.start, target.end))
+            .copied()
     }
 
     fn accessor_with_same_runtime_identity(
@@ -701,11 +818,13 @@ impl StructuredReturnDiscovery<'_, '_> {
         if identity.is_empty() {
             return None;
         }
-        self.accessors.iter().find_map(|(symbol, (_, location))| {
-            self.entity_at_location(location)
-                .is_some_and(|entity| entity.runtime_identity.as_ref() == identity)
-                .then_some(symbol)
-        })
+        self.accessors_by_identity
+            .get_or_init(|| {
+                accessors_by_runtime_identity(self.accessors, |location| {
+                    entity_identity_at(self.lookup.entities_by_location(), location)
+                })
+            })
+            .get(identity)
     }
 
     fn imported_binding_has_project_source_declaration(
@@ -760,14 +879,6 @@ impl StructuredReturnDiscovery<'_, '_> {
         false
     }
 
-    fn entity_at_location(&self, location: &Location) -> Option<&typefacts::EntityFact> {
-        self.facts
-            .typescript
-            .entities_for_path(location.path.as_ref())
-            .iter()
-            .find(|entity| entity.location == *location)
-    }
-
     /// The project file a plain relative import specifier resolves to, by
     /// textual normalization against the analyzed file set — never the
     /// filesystem, so a file outside the project cannot resolve. `None` for
@@ -786,9 +897,15 @@ impl StructuredReturnDiscovery<'_, '_> {
         from: &solid_facts::FileFacts,
         module: &str,
     ) -> Option<&solid_facts::FileFacts> {
-        let paths = self.lookup.files().iter().map(|file| file.path.as_str());
-        let path = solid_facts::resolve_relative_module_path(from.path.as_str(), module, paths)?;
+        let path = self
+            .lookup
+            .relative_module_path(from.path.as_str(), module)?;
         self.lookup.file_by_path(path)
+    }
+
+    fn module_exports(&self) -> &ModuleExports<'_> {
+        self.module_exports
+            .get_or_init(|| ModuleExports::new(self.lookup.files(), self.lookup.entities()))
     }
 
     fn resolve_export_binding(
@@ -803,15 +920,8 @@ impl StructuredReturnDiscovery<'_, '_> {
         }
         let result = (|| {
             let file = self.lookup.file_by_path(path)?;
-            let direct = file
-                .ast
-                .exports
-                .iter()
-                .filter(|export| !export.type_only && export.module.is_none())
-                .flat_map(|export| export.specifiers.iter().chain(&export.declarations))
-                .filter(|specifier| !specifier.type_only && specifier.exported.as_str() == exported)
-                .map(|specifier| specifier.local.span)
-                .collect::<Vec<_>>();
+            let exports = self.module_exports().by_path.get(file.path.as_str())?;
+            let direct = exports.direct.get(exported).map_or(&[][..], Vec::as_slice);
             if direct.len() > 1 {
                 return None;
             }
@@ -819,28 +929,28 @@ impl StructuredReturnDiscovery<'_, '_> {
                 return self.resolve_export_local(file, local, visiting);
             }
 
+            // Every re-export that publishes `exported`. The outcome does not
+            // depend on their order: an unresolvable module or two different
+            // bindings fail the whole resolution wherever they fall.
+            let named = exports.named.get(exported).map_or(&[][..], Vec::as_slice);
+            let star = if exported == "default" {
+                &[][..]
+            } else {
+                exports.star.as_slice()
+            };
             let mut result = None;
-            for export in file
-                .ast
-                .exports
+            for (export, source_name) in named
                 .iter()
-                .filter(|export| !export.type_only && export.module.is_some())
-            {
-                let source_name = match export.kind {
-                    solid_facts::ast::ExportKind::Named => export
-                        .specifiers
-                        .iter()
-                        .find(|specifier| {
-                            !specifier.type_only && specifier.exported.as_str() == exported
-                        })
-                        .and_then(|specifier| {
-                            file.source_text(specifier.local.span).map(|name| {
-                                name.trim_matches(|character| character == '"' || character == '\'')
-                            })
+                .map(|(export, local)| {
+                    (
+                        *export,
+                        file.source_text(*local).map(|name| {
+                            name.trim_matches(|character| character == '"' || character == '\'')
                         }),
-                    solid_facts::ast::ExportKind::All if exported != "default" => Some(exported),
-                    _ => None,
-                };
+                    )
+                })
+                .chain(star.iter().map(|export| (*export, Some(exported))))
+            {
                 let Some(source_name) = source_name else {
                     continue;
                 };
@@ -896,12 +1006,12 @@ impl StructuredReturnDiscovery<'_, '_> {
             return self.resolve_export_binding(sibling.path.as_str(), imported, visiting);
         }
         let declaration = symbol.and_then(|symbol| {
-            file.ast.bindings.iter().find_map(|binding| {
-                binding.names.iter().find_map(|name| {
-                    (self.lookup.entities().at(file.path.as_str(), name.span) == Some(symbol))
-                        .then_some(name.span)
-                })
-            })
+            self.module_exports()
+                .by_path
+                .get(file.path.as_str())?
+                .declarations
+                .get(symbol)
+                .copied()
         });
         Some((file.path.to_string(), declaration.unwrap_or(local)))
     }

@@ -757,6 +757,23 @@ pub(super) struct ResultAccessForwarded {
     pub(super) primitive: solid_dialect::Primitive,
 }
 
+/// The entity at each exact `(path, start_byte, end_byte)`: the first in
+/// `entities`' order when several share one location.
+pub(crate) fn first_entity_by_location<'a>(
+    entities: impl Iterator<Item = &'a EntityFact>,
+) -> HashMap<(&'a str, u64, u64), &'a EntityFact> {
+    let mut map = HashMap::default();
+    for entity in entities {
+        map.entry((
+            entity.location.path.as_ref(),
+            entity.location.start_byte,
+            entity.location.end_byte,
+        ))
+        .or_insert(entity);
+    }
+    map
+}
+
 /// Lazy project-wide lookups that replace repeated whole-project scans.
 ///
 /// Every map is built at most once per build, on first use, in the exact
@@ -835,6 +852,9 @@ pub(super) struct SemanticLookup<'a> {
     bindings_by_symbol: OnceLock<HashMap<SymbolId, BindingResolution>>,
     bindings_by_reference: OnceLock<BindingsByReference>,
     files_by_path: OnceLock<HashMap<&'a str, usize>>,
+    /// How many analyzed files carry each path, for the indexed relative
+    /// module resolver (a path listed twice is ambiguous, not unique).
+    file_path_counts: OnceLock<HashMap<&'a str, usize>>,
     file_primitives: OnceLock<Vec<OnceLock<FilePrimitives>>>,
     file_named_callback_roles: OnceLock<Vec<OnceLock<super::NamedCallbackRoles>>>,
     project_primitives: OnceLock<HashSet<solid_dialect::Primitive>>,
@@ -1044,6 +1064,7 @@ impl<'a> SemanticLookup<'a> {
             bindings_by_symbol: OnceLock::new(),
             bindings_by_reference: OnceLock::new(),
             files_by_path: OnceLock::new(),
+            file_path_counts: OnceLock::new(),
             file_primitives: OnceLock::new(),
             file_named_callback_roles: OnceLock::new(),
             project_primitives: OnceLock::new(),
@@ -1795,6 +1816,24 @@ impl<'a> SemanticLookup<'a> {
         self.lazy_default_render_witnesses
             .get_or_init(|| crate::owners::lazy_default_render_witnesses(self))
             .contains(&(file.path.as_str(), function, property))
+    }
+
+    /// The analyzed file path a plain relative import specifier resolves to,
+    /// exactly as [`solid_facts::resolve_relative_module_path`] over every
+    /// analyzed path, without scanning them.
+    pub(super) fn relative_module_path(&self, from: &str, module: &str) -> Option<&'a str> {
+        let counts = self.file_path_counts.get_or_init(|| {
+            let mut counts = HashMap::default();
+            for file in &self.facts.files {
+                *counts.entry(file.path.as_str()).or_insert(0) += 1;
+            }
+            counts
+        });
+        solid_facts::resolve_relative_module_path_indexed(from, module, |probe| {
+            counts
+                .get_key_value(probe)
+                .map(|(path, count)| (*path, *count))
+        })
     }
 
     pub(super) fn file_by_path(&self, path: &str) -> Option<&'a FileFacts> {

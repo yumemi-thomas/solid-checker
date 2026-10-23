@@ -782,3 +782,135 @@ fn dependency_users_are_reference_counted() {
     assert!(users.is_empty());
     assert!(states.is_empty());
 }
+
+fn accessor_at(path: &str, start: u64, end: u64) -> (SymbolId, (SymbolId, Location)) {
+    let symbol: SymbolId = format!("{path}:{start}:{end}").as_str().into();
+    (
+        symbol.clone(),
+        (
+            symbol,
+            Location {
+                path: Arc::from(path),
+                start_byte: start,
+                end_byte: end,
+            },
+        ),
+    )
+}
+
+fn entity(path: &str, start: u64, end: u64, identity: &str) -> typefacts::EntityFact {
+    serde_json::from_value(serde_json::json!({
+        "location": { "path": path, "startByte": start, "endByte": end },
+        "runtimeIdentity": identity,
+    }))
+    .expect("an entity row with a location and an identity")
+}
+
+/// The per-lookup scan the identity index replaces: for each accessor in
+/// iteration order, the first entity of its path whose whole location equals
+/// the accessor's, compared by runtime identity.
+fn scan_by_identity<'a>(
+    accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
+    by_path: &HashMap<&str, Vec<typefacts::EntityFact>>,
+    identity: &str,
+) -> Option<&'a SymbolId> {
+    accessors.iter().find_map(|(symbol, (_, location))| {
+        by_path
+            .get(location.path.as_ref())?
+            .iter()
+            .find(|entity| entity.location == *location)
+            .is_some_and(|entity| entity.runtime_identity.as_ref() == identity)
+            .then_some(symbol)
+    })
+}
+
+#[test]
+fn the_runtime_identity_index_answers_what_the_accessor_scan_answered() {
+    // Entities per path, in the producer's order. a.ts has two entities that
+    // share a start and differ in end; b.ts two at one location with
+    // different identities; d.ts the same pair in the reverse order.
+    let rows = [
+        (
+            "a.ts",
+            vec![
+                entity("a.ts", 10, 14, "v:short"),
+                entity("a.ts", 10, 20, "v:long"),
+            ],
+        ),
+        (
+            "b.ts",
+            vec![
+                entity("b.ts", 10, 14, "v:first"),
+                entity("b.ts", 10, 14, "v:second"),
+            ],
+        ),
+        ("c.ts", vec![entity("c.ts", 3, 9, "v:c")]),
+        (
+            "d.ts",
+            vec![
+                entity("d.ts", 10, 14, "v:second"),
+                entity("d.ts", 10, 14, "v:first"),
+            ],
+        ),
+        ("e.ts", vec![entity("e.ts", 1, 2, "")]),
+        ("g.ts", vec![entity("g.ts", 1, 2, "v:shared")]),
+        ("h.ts", vec![entity("h.ts", 1, 2, "v:shared")]),
+    ];
+    let accessors: HashMap<SymbolId, (SymbolId, Location)> = [
+        accessor_at("a.ts", 10, 14),
+        accessor_at("a.ts", 10, 20),
+        accessor_at("b.ts", 10, 14),
+        accessor_at("c.ts", 3, 9),
+        accessor_at("d.ts", 10, 14),
+        accessor_at("e.ts", 1, 2),
+        accessor_at("f.ts", 5, 8),
+        accessor_at("g.ts", 1, 2),
+        accessor_at("h.ts", 1, 2),
+        // A span no entity has: a longer end than the entity at the start.
+        accessor_at("c.ts", 3, 12),
+    ]
+    .into_iter()
+    .collect();
+    for reversed in [false, true] {
+        let by_path: HashMap<&str, Vec<typefacts::EntityFact>> = rows
+            .iter()
+            .map(|(path, entities)| {
+                let mut entities = entities.clone();
+                if reversed {
+                    entities.reverse();
+                }
+                (*path, entities)
+            })
+            .collect();
+        let mut paths: Vec<&str> = by_path.keys().copied().collect();
+        paths.sort_unstable();
+        let by_location = crate::indexes::first_entity_by_location(
+            paths.iter().flat_map(|path| by_path[path].iter()),
+        );
+        let index =
+            super::structured_returns::accessors_by_runtime_identity(&accessors, |location| {
+                super::structured_returns::entity_identity_at(&by_location, location)
+            });
+        for identity in [
+            "v:short",
+            "v:long",
+            "v:first",
+            "v:second",
+            "v:c",
+            "v:shared",
+            "v:missing",
+        ] {
+            assert_eq!(
+                index.get(identity),
+                scan_by_identity(&accessors, &by_path, identity),
+                "{identity} (reversed: {reversed})"
+            );
+        }
+        // The end byte is part of the key: the 10..14 and 10..20 accessors
+        // answer to different identities, and a 3..12 span answers to none.
+        assert_eq!(index["v:short"], SymbolId::from("a.ts:10:14"));
+        assert_eq!(index["v:long"], SymbolId::from("a.ts:10:20"));
+        // An empty identity proves nothing and is never indexed.
+        assert!(!index.contains_key(""));
+    }
+}
