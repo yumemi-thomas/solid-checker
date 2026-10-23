@@ -73,14 +73,26 @@ pub fn prepare(
     ))
 }
 
-/// Every file the open program holds, by path.
+/// Every file the open program holds: its configured root files in
+/// TypeScript's own root order, then every other file by path. The order is
+/// the generated program's root order (ADR 0368): TypeScript orders a
+/// program's files by its roots and its answers can depend on that order, so
+/// a project root listed after a package file can give a type error `tsc`
+/// never reports.
 pub fn program_modules(original: &mut TypeFactsSession) -> Result<Vec<PathBuf>, Box<dyn Error>> {
-    Ok(original
-        .module_graph(&typefacts::ModuleGraphDemand::default())?
-        .modules
-        .iter()
+    let graph = original.module_graph(&typefacts::ModuleGraphDemand::default())?;
+    Ok(in_root_order(&graph.modules))
+}
+
+/// `modules` (ordered by path): the roots by their position, then the rest
+/// in the order given.
+fn in_root_order(modules: &[typefacts::ModuleFact]) -> Vec<PathBuf> {
+    let mut modules = modules.iter().collect::<Vec<_>>();
+    modules.sort_by_key(|module| module.root.map_or((1, 0), |root| (0, root)));
+    modules
+        .into_iter()
         .map(|module| PathBuf::from(module.path.as_ref()))
-        .collect())
+        .collect()
 }
 
 /// [`prepare`] from an inventory the caller already holds.
@@ -208,4 +220,41 @@ pub fn bind(
         crate::source_redirects::dependency_source_redirects(facts, typescript, program)?;
     facts.runtime_symbol_redirects.extend(redirects);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    fn module(path: &str, root: Option<u32>) -> typefacts::ModuleFact {
+        typefacts::ModuleFact {
+            path: path.into(),
+            root,
+            format: typefacts::ModuleFormat::Unknown,
+            declaration_file: false,
+            redirect_targets: Vec::new().into(),
+            project_reference: None,
+        }
+    }
+
+    /// ADR 0368: TypeScript's root order first, not path order.
+    #[test]
+    fn roots_come_first_in_typescript_order() {
+        let modules = [
+            module("/p/node_modules/pkg/index.d.ts", None),
+            module("/p/src/app.tsx", Some(1)),
+            module("/p/src/main.tsx", Some(0)),
+            module("/p/src/shared.ts", None),
+        ];
+        assert_eq!(
+            super::in_root_order(&modules),
+            [
+                "/p/src/main.tsx",
+                "/p/src/app.tsx",
+                "/p/node_modules/pkg/index.d.ts",
+                "/p/src/shared.ts",
+            ]
+            .map(PathBuf::from)
+        );
+    }
 }

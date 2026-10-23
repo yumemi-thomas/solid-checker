@@ -356,22 +356,24 @@ pub fn prepare_program(
 ) -> Result<Option<PreparedDependencyProgram>, String> {
     // Configured sources omit declaration files, and an ambient `declare
     // module` stub is part of the project's program too: take every file the
-    // program holds outside `node_modules`.
-    let project_files = program_modules
-        .iter()
-        .cloned()
-        .chain(
-            project_sources
-                .iter()
-                .map(|source| PathBuf::from(&source.path)),
-        )
-        .filter(|path| {
-            path.is_file()
-                && !path
-                    .components()
-                    .any(|component| component.as_os_str() == "node_modules")
-        })
-        .collect::<BTreeSet<_>>();
+    // program holds outside `node_modules`, in `program_modules` order (its
+    // roots in TypeScript's order first, ADR 0368).
+    let mut project_order = Vec::new();
+    let mut project_files = BTreeSet::new();
+    for path in program_modules.iter().cloned().chain(
+        project_sources
+            .iter()
+            .map(|source| PathBuf::from(&source.path)),
+    ) {
+        if path.is_file()
+            && !path
+                .components()
+                .any(|component| component.as_os_str() == "node_modules")
+            && project_files.insert(path.clone())
+        {
+            project_order.push(path);
+        }
+    }
     // Imported project barrels need not be configured roots (`files` may
     // name only App.tsx). Inspect the complete runtime project inventory.
     let project_imports = project_files
@@ -457,7 +459,7 @@ pub fn prepare_program(
     else {
         return Ok(None);
     };
-    let document = program_document(tsconfig, &project_files, &selection.files)?;
+    let document = program_document(tsconfig, &project_order, &selection.files)?;
     Ok(Some(PreparedDependencyProgram {
         tsconfig: tsconfig.to_path_buf(),
         host: host.clone(),
@@ -791,22 +793,38 @@ fn select_entry(
     Ok(entry)
 }
 
-/// The sibling tsconfig's bytes: the project's own program files plus the
-/// closure, with an empty `include` (review round 2).
+/// The sibling tsconfig's bytes: the project's own program files, in the
+/// order given, then the closure by path, with an empty `include` (review
+/// round 2).
+///
+/// ADR 0368: TypeScript orders a program's files by its root files, and its
+/// answers can depend on that order (merge order, and the order its checker
+/// meets and caches types in). The project's roots therefore come first, in
+/// `tsc`'s own order, and the closure after them, so TypeScript holds the
+/// project's own files in the order `tsc` does. Listed by path, a closure
+/// file came first (`node_modules` sorts before `src`) and TypeScript itself
+/// reported call errors `tsc` does not report on the project, which the
+/// checker takes as TypeScript-owned and stays silent on.
 fn program_document(
     tsconfig: &Path,
-    project_files: &BTreeSet<PathBuf>,
+    project_files: &[PathBuf],
     files: &[PathBuf],
 ) -> Result<Vec<u8>, String> {
     let tsconfig_name = tsconfig
         .file_name()
         .and_then(|name| name.to_str())
         .ok_or("--dependency-source: the project tsconfig name is not UTF-8")?;
-    let root_files = project_files
+    let project = project_files
         .iter()
-        .chain(files)
         .map(|file| file.to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
+    let listed = project.iter().cloned().collect::<BTreeSet<_>>();
+    let closure = files
+        .iter()
+        .map(|file| file.to_string_lossy().into_owned())
+        .filter(|file| !listed.contains(file))
         .collect::<BTreeSet<_>>();
+    let root_files = project.into_iter().chain(closure).collect::<Vec<_>>();
     let document = serde_json::json!({
         "extends": format!("./{tsconfig_name}"),
         "compilerOptions": { "allowJs": true, "checkJs": false },

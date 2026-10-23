@@ -352,6 +352,7 @@ fn session_answers_the_module_graph_without_touching_retained_state() {
         modules: vec![
             ModuleFact {
                 path: "/project/shape.d.ts".into(),
+                root: None,
                 declaration_file: true,
                 format: typefacts::ModuleFormat::Esm,
                 project_reference: None,
@@ -359,6 +360,7 @@ fn session_answers_the_module_graph_without_touching_retained_state() {
             },
             ModuleFact {
                 path: SOURCE.into(),
+                root: None,
                 declaration_file: false,
                 format: typefacts::ModuleFormat::Esm,
                 project_reference: None,

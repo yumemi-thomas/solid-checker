@@ -31,9 +31,12 @@ pub fn module_graph(
         modules: Vec::with_capacity(files.len()),
         ..ModuleInventory::default()
     };
+    let roots = root_positions(program);
     for file in files {
         check(ctx)?;
-        inventory.modules.push(module_fact(program, *file));
+        let mut fact = module_fact(program, *file);
+        fact.root = roots.get(&file.addr()).copied();
+        inventory.modules.push(fact);
     }
     inventory
         .modules
@@ -103,6 +106,21 @@ fn import_scope(
     (answered, unknown)
 }
 
+/// Each configured root file's position in `ParsedCommandLine.fileNames`,
+/// TypeScript's own root order, keyed by the program's source file. A root the
+/// program does not hold is skipped; a file named twice keeps its first
+/// position, as the program does.
+fn root_positions(program: &Program) -> HashMap<usize, u32> {
+    let mut positions = HashMap::new();
+    for (index, name) in program.command_line().file_names().iter().enumerate() {
+        let (Some(file), Ok(index)) = (program.get_source_file(name), u32::try_from(index)) else {
+            continue;
+        };
+        positions.entry(file.addr()).or_insert(index);
+    }
+    positions
+}
+
 fn module_fact(program: &Program, file: P<SourceFile>) -> ModuleFact {
     let mut project_reference = None;
     // The only declaration-to-implementation pairing TypeScript records is a
@@ -133,6 +151,7 @@ fn module_fact(program: &Program, file: P<SourceFile>) -> ModuleFact {
     }
     ModuleFact {
         path: clean(file.file_name()).into(),
+        root: None,
         declaration_file: file.is_declaration_file(),
         format: module_format(program.get_emit_module_format_of_file(file)),
         project_reference,

@@ -433,7 +433,7 @@
   },
   "w7BadHandshake": {
     "status": 1,
-    "error": "TypeFacts session error: Type Facts compatibility handshake failed: expected protocol 81, schema sha256:6d2154ba04be45cdd241d78d3b94a32d0ec5c57ce264fe97e1b3ed979e3d0bfd, build \"dev\"; got protocol 81, schema sha256:6d2154ba04be45cdd241d78d3b94a32d0ec5c57ce264fe97e1b3ed979e3d0bfe, build \"dev\"",
+    "error": "TypeFacts session error: Type Facts compatibility handshake failed: expected protocol 82, schema sha256:64805adaa7b2e0a0542806cdb4bf11408c450b3af7894a53ed7adbc8f0c82946, build \"dev\"; got protocol 82, schema sha256:64805adaa7b2e0a0542806cdb4bf11408c450b3af7894a53ed7adbc8f0c82947, build \"dev\"",
     "host": {
       "opened": [
         1

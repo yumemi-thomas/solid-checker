@@ -49,6 +49,39 @@ fn module_by_path<'a>(inventory: &'a ModuleInventory, path: &str) -> &'a ModuleF
         .unwrap_or_else(|| panic!("no module fact for {path:?}"))
 }
 
+/// ADR 0368: `root` is a file's position in the configuration's root files,
+/// TypeScript's own order (here `files`, not path order); a file the program
+/// reached through an import is not a root.
+#[test]
+fn module_facts_carry_the_configured_root_order() {
+    let scratch = Scratch::new(&[
+        (
+            "tsconfig.json",
+            r#"{"compilerOptions":{"module":"esnext","moduleResolution":"bundler","target":"esnext"},"files":["main.ts","app.ts"]}"#,
+        ),
+        (
+            "main.ts",
+            "import { shared } from \"./shared\";\nexport const main = shared;\n",
+        ),
+        ("app.ts", "export const app = 1;\n"),
+        ("shared.ts", "export const shared = 1;\n"),
+    ]);
+    let mut project = scratch.open();
+    let inventory = graph(&mut project, &ModuleGraphRequest::default());
+    let root = |name: &str| module_by_path(&inventory, &scratch.path(name)).root;
+    assert_eq!(root("main.ts"), Some(0));
+    assert_eq!(root("app.ts"), Some(1));
+    assert_eq!(root("shared.ts"), None);
+    assert!(
+        inventory
+            .modules
+            .iter()
+            .filter(|module| module.root.is_some())
+            .count()
+            == 2
+    );
+}
+
 #[test]
 fn module_inventory_reports_every_included_file() {
     let scratch = Scratch::new(&[
