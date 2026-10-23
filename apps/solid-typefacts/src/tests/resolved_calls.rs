@@ -15,7 +15,7 @@
 use super::project_support::{Scratch, change, entities, find, find_last, loc};
 use crate::backend::ClosureBackend;
 use crate::context::Context;
-use crate::model::{SemanticDemandRun, SemanticDemandRunResult, SemanticScope, durable_symbol_id};
+use crate::model::{SemanticDemandRun, SemanticDemandRunResult, durable_symbol_id};
 use std::collections::HashSet;
 use typefacts::v3::EntityDemand;
 use typefacts::{
@@ -1283,7 +1283,7 @@ function shadow(setTimeout: typeof schedule) { setTimeout(() => {}, 2); }\n";
 }
 
 fn embedded_semantic_ids(result: &SemanticDemandRunResult) -> Vec<String> {
-    let mut ids: Vec<String> = result.structural.iter().map(|id| id.to_string()).collect();
+    let mut ids: Vec<String> = Vec::new();
     for entity in &result.entities {
         ids.push(entity.symbol.to_string());
         let Some(call) = &entity.resolved_call else {
@@ -1348,28 +1348,18 @@ export const beta = mapped.run(1);\n";
             demands: &alpha_demands,
         },
     ];
-    let suppression = HashSet::new();
-    let scope = SemanticScope {
-        suppression: &suppression,
-    };
     let results = project
-        .semantic_demand_runs(&Context::new(), &runs, &scope)
+        .semantic_demand_runs(&Context::new(), &runs)
         .unwrap();
     assert_eq!(results.len(), runs.len());
     for (run, result) in runs.iter().zip(&results) {
         assert_eq!(result.entities.len(), run.demands.len());
-        assert_eq!(result.structural.len(), run.demands.len());
         for (demand, entity) in run.demands.iter().zip(&result.entities) {
             assert_eq!(entity.location, demand.location);
         }
     }
 
     let alpha_result = &results[1];
-    assert_eq!(
-        alpha_result.dependencies,
-        vec![library_path.clone(), types_path.clone()],
-        "alpha dependencies"
-    );
     let call = alpha_result.entities[0]
         .resolved_call
         .as_ref()

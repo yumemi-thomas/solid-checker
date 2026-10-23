@@ -148,6 +148,35 @@ value types). The crate root re-exports that interface for compatibility;
 session lifecycle, caches, incremental rebuilding, and joining stay in the
 orchestration implementation.
 
+## Type Facts producer and symbol identity
+
+The producer is `apps/solid-typefacts`, a Rust process (and, for WASM, a
+`reactor` cdylib) over the tsrs TypeScript checker, pinned by fork revision
+(ADR 0365). It sits behind the versioned process protocol, so no checker node,
+type or symbol crosses into solid-facts; `docs/typefacts.md` owns the protocol.
+
+A table is a function of the program and its demands. Before it answers any
+demand, the producer checks every demanded file in path order (check-first,
+ADR 0367); a type descriptor is its location's type, and no checker counter
+reaches a fact. Each update and each table discards the demand contributions,
+async facts, source-fact memo and id maps (ADR 0364); only the compiler's
+incremental program and the binder-level answers survive, the latter under
+recorded `Text`, `Exports`, `Ambient` and `Options` dependencies (ADR 0369).
+A dependency-source program lists the project's roots first, in `tsc`'s order,
+because TypeScript's answers can depend on it (ADR 0368).
+
+A symbol id is canonical or generation-scoped. A binder-level symbol's
+`symbol:h:` id is `H(domain, key)` over a checker singleton, a global name, a
+module export or its minimum declaration (ADR 0366); a union, intersection or
+spread property's id is its combination and origins when they fix its type
+(ADR 0371). Every other symbol (an instantiation, a `this` clone, a mapped
+property) keeps a `symbol:<generation>:<n>` id and never shares a canonical
+one: derived symbols are not erased to their root, because index-keyed
+consumers (typed sources, descriptors and call sites by symbol) would then
+apply one instantiation's type to another's (ADR 0372). The reactive IR may
+therefore treat an id as naming one symbol and must not assume it names one
+type.
+
 ## Dependency-source boundary
 
 The backend selects installed runtime files for the declared target and build,

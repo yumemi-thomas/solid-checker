@@ -145,7 +145,6 @@ fn a_closed_project_refuses_every_operation_and_a_second_close() {
 
 #[test]
 fn the_fact_families_answer_or_fail_never_empty() {
-    use crate::model::SemanticScope;
     let scratch = Scratch::new(&[
         ("tsconfig.json", SMALL_CONFIG),
         ("a.ts", "export const a = 1;\n"),
@@ -153,10 +152,6 @@ fn the_fact_families_answer_or_fail_never_empty() {
     let mut project = scratch.open();
     let ctx = Context::new();
     let name = |error: crate::backend::BackendError| error.0;
-    let suppression = Default::default();
-    let scope = SemanticScope {
-        suppression: &suppression,
-    };
     assert!(project.async_functions_at(&ctx, &[]).unwrap().is_empty());
     assert!(
         name(
@@ -175,12 +170,7 @@ fn the_fact_families_answer_or_fail_never_empty() {
         project.changed_references(&ctx).unwrap(),
         (Vec::new(), false)
     );
-    assert!(
-        project
-            .semantic_demand_runs(&ctx, &[], &scope)
-            .unwrap()
-            .is_empty()
-    );
+    assert!(project.semantic_demand_runs(&ctx, &[]).unwrap().is_empty());
     let query = typefacts::v3::SymbolQuery {
         id: "symbol:h:x".into(),
         references: true,

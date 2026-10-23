@@ -50,8 +50,8 @@ stay inside the producer's tsrs backend.
   prior project generation queryable and unchanged.
 
 Generation-scoped opaque identities include their project generation and must
-be reacquired after every successful `Update`. Declaration-backed durable
-identities are minted again after an update, or answered again by a retained
+be reacquired after every successful `Update`. Canonical identities
+(`symbol:h:`) are minted again after an update, or answered again by a retained
 binder-level answer that holds them (ADR 0369); any other ID held over an
 update fails closed with not-found until a location scan mints it. A
 binder-level symbol's hash ID is

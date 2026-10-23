@@ -77,7 +77,7 @@ release checker for a corpus (the debug one is about 19x slower).
 producer minted: `stateToken` (each reference token is mapped to the token the
 candidate returned for the same exchange) and the ids in a `symbols` request. A
 symbol id belongs to the producer that issued it: `symbol:<generation>:<n>`
-follows its visit order, and the durable id of a library symbol hashes offsets
+follows its visit order, and the canonical id of a library symbol hashes offsets
 in its TypeScript snapshot's lib text. Such an id is replaced by the id the
 replaying producer gave the entity at the same source location in the preceding
 analyze tables (`rewrittenSymbolIds` in `replay.json`), unless two locations
@@ -85,11 +85,11 @@ disagree about it, and an id no entity carries is sent as recorded. The tables
 themselves are compared as they came. Cancel frames are not replayed.
 
 Unless `--no-evidence` is given, each producer is also asked, just before the
-recorded `close`, for the declarations of every durable id its own tables
+recorded `close`, for the declarations of every canonical id its own tables
 mention (`rust-evidence.json`, and `go-evidence.json` from a second replay
 against the reference; the extra request is not part of any compared
 stream). The recorded streams almost never carry declarations for the symbols
-their entities name, and `compare` needs them to prove a durable id
+their entities name, and `compare` needs them to prove a canonical id
 library-only (below). `compare DIR` decodes both streams, normalises, diffs and writes the
 report; `run DIR` does both.
 
@@ -121,16 +121,16 @@ Normalisation, in `normalizeTranscript`:
 - Default-library modules, symbols and declarations are dropped (which lib files
   exist and where their declarations sit follows each producer's TypeScript). A
   symbol id whose declarations are all in lib becomes `symbol:~lib:<name>`, so an
-  entity pointing at it still compares. Durable ids hash declaration offsets and
+  entity pointing at it still compares. Canonical ids hash declaration offsets and
   the lib text differs between the producers' TypeScript snapshots, so `JSON`
   has a different `symbol:h:` id in each; the proof that an id is library-only is
   a symbol row for it with every declaration in lib, from the transcript's own
   symbol rows or from that producer's evidence file. An id with no such proof is
-  left alone: a durable id that differs without proof is a difference. A
+  left alone: a canonical id that differs without proof is a difference. A
   well-known symbol's counter suffix (`__@hasInstance@73`) is dropped from the
   name.
-- Non-durable `symbol:<gen>:<n>` ids are renamed from content (first
-  declaration, else first use), one mapping per transcript. Durable
+- Generation-scoped `symbol:<gen>:<n>` ids are renamed from content (first
+  declaration, else first use), one mapping per transcript. Canonical
   `symbol:h:...` ids compare exactly.
 - `stateToken` keeps only its presence; timings and the source-arena path are
   dropped.
@@ -162,7 +162,7 @@ client `Session` and diffs decoded rows. `TSRS_DIFF_ALL=1` runs every
 
 - `families_differential`: every family demanded at every word, dotted chain
   and literal span, cold, after a span-shifting update and after the restore.
-  Entity rows must be equal after renaming non-durable ids and dropping the
+  Entity rows must be equal after renaming generation-scoped ids and dropping the
   unique-symbol counter of well-known symbol names. `TSRS_DIFF_PROJECT=<tsconfig>`
   probes one project, `TSRS_DIFF_FILES=a,b` limits the demanded files.
 - `delete_restore_differential`: a dependency deleted and restored, each family
@@ -178,7 +178,7 @@ client `Session` and diffs decoded rows. `TSRS_DIFF_ALL=1` runs every
 Go itself differs between two runs on these (a Go-vs-Go replay of the same
 session reports the same cells), so they are not port defects:
 
-- the durable id of an ES private-name member (`#add`): the binder spells the
+- the id of an ES private-name member (`#add`) in Go: the binder spells the
   symbol name with the class symbol's id (`GetSymbolNameForPrivateIdentifier`),
   a global counter handed out while files bind in parallel;
 - the member order of a union of route-handler result types on `sensor-sim`

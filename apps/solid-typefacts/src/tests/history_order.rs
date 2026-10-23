@@ -12,9 +12,9 @@ use crate::backend::ClosureBackend;
 use crate::closure::DemandClosure;
 use crate::context::Context;
 use crate::gocompat::{absolute, clean};
-use crate::model::{SemanticDemandRun, SemanticScope};
+use crate::model::SemanticDemandRun;
 use crate::project::Project;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 use typefacts::Location;
 use typefacts::v3::EntityDemand;
 
@@ -220,7 +220,6 @@ fn facts_do_not_depend_on_demand_order_inside_a_batch() {
         let mut sorted: Vec<&str> = runs.iter().map(|(path, _)| path.as_str()).collect();
         sorted.sort_unstable();
         project.check_demanded_files(&ctx, &sorted).unwrap();
-        let suppression = HashSet::new();
         let results = project
             .semantic_demand_runs(
                 &ctx,
@@ -228,9 +227,6 @@ fn facts_do_not_depend_on_demand_order_inside_a_batch() {
                     .iter()
                     .map(|(path, demands)| SemanticDemandRun { path, demands })
                     .collect::<Vec<_>>(),
-                &SemanticScope {
-                    suppression: &suppression,
-                },
             )
             .unwrap();
         // Back to canonical order before counters are renamed.

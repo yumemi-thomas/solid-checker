@@ -1013,8 +1013,7 @@ fn assert_retained_matches_fresh_materialization(name: &str, edit: &str, other: 
             .unwrap();
         let retention = incremental.stats().retention;
         assert_eq!(
-            (retention.retained_files, retention.retained_async_files),
-            (0, 0),
+            retention.retained_files, 0,
             "step {step}: an update must retain nothing"
         );
 
