@@ -9,6 +9,8 @@
 //! * Every request yields exactly one response frame.
 //! * The responder is built, used and dropped on the worker thread, so it need
 //!   not be `Send` (a compiler's thread-local state stays on one thread).
+//! * A panic on any thread ends the process at once ([`crate::fail_stop`]); no
+//!   thread here recovers from one.
 
 use crate::context::Context;
 use crate::frame::{FrameError, read_frame, write_frame_header};

@@ -24,6 +24,8 @@ fn run_with(binary: &Path, env: &[(&str, &str)], args: &[&str], stdin: &[u8]) ->
         .env_remove("SOLID_TYPEFACTS_TIMINGS")
         .env_remove("SOLID_TYPEFACTS_CRASH_BEFORE_UPDATE")
         .env_remove("SOLID_TYPEFACTS_CRASH_BEFORE_ANALYZE")
+        .env_remove("SOLID_TYPEFACTS_PANIC_BEFORE_UPDATE")
+        .env_remove("SOLID_TYPEFACTS_PANIC_BEFORE_ANALYZE")
         .envs(env.iter().copied())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -127,6 +129,112 @@ fn crash_hook_fires_once_per_marker_and_consumes_it() {
     assert_eq!(outcome.code, Some(0));
     assert!(marker.exists());
     let _ = std::fs::remove_dir_all(&directory);
+}
+
+/// Spawns the fake producer with `env`, feeds `input` and keeps stdin open (a
+/// producer that only exits on EOF would hang), never reads stdout, and waits
+/// for the exit. A hung producer is killed and fails the test.
+fn exits_on_its_own(
+    env: &[(&str, &str)],
+    input: Vec<u8>,
+    drop_stderr_reader: bool,
+) -> (i32, String) {
+    let mut command = Command::new(fake());
+    command
+        .args(["-project", PROJECT])
+        .envs(env.iter().copied())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = command.spawn().unwrap();
+    let mut stderr = child.stderr.take().unwrap();
+    let mut stdin = child.stdin.take().unwrap();
+    let feeder = std::thread::spawn(move || {
+        let _ = stdin.write_all(&input);
+        // Held open until the producer is gone.
+        stdin
+    });
+    let collector = if drop_stderr_reader {
+        drop(stderr);
+        None
+    } else {
+        Some(std::thread::spawn(move || {
+            let mut text = String::new();
+            let _ = std::io::Read::read_to_string(&mut stderr, &mut text);
+            text
+        }))
+    };
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    let status = loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            break status;
+        }
+        if std::time::Instant::now() > deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("producer still alive 20s after a panic");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    };
+    drop(feeder.join());
+    let stderr = collector
+        .map(|thread| thread.join().unwrap())
+        .unwrap_or_default();
+    (status.code().unwrap_or(-1), stderr)
+}
+
+fn armed_marker(label: &str) -> (PathBuf, String) {
+    let directory =
+        std::env::temp_dir().join(format!("solid-typefacts-rs-{label}-{}", std::process::id()));
+    std::fs::create_dir_all(&directory).unwrap();
+    let marker = directory.join("marker");
+    std::fs::write(&marker, "").unwrap();
+    let text = marker.to_string_lossy().into_owned();
+    (marker, text)
+}
+
+/// A panic on the worker thread stops the whole process at once with the
+/// distinct fail-stop status: nothing waits for a client that waits for it.
+#[test]
+fn a_worker_panic_stops_the_process() {
+    let (marker, text) = armed_marker("panic");
+    let (code, stderr) = exits_on_its_own(
+        &[("SOLID_TYPEFACTS_PANIC_BEFORE_UPDATE", &text)],
+        script(),
+        false,
+    );
+    assert!(!marker.exists());
+    assert_eq!(code, solid_typefacts::fail_stop::PANIC_EXIT_CODE);
+    assert!(stderr.contains("injected worker panic"), "{stderr}");
+    let _ = std::fs::remove_dir_all(marker.parent().unwrap());
+}
+
+/// The shutdown path used to join the writer, which cannot finish while a
+/// client leaves a full stdout unread. The hook never joins anything.
+#[test]
+fn a_panic_with_a_full_unread_stdout_still_stops_promptly() {
+    let (marker, text) = armed_marker("panic-full");
+    let mut input = Vec::new();
+    for _ in 0..1500 {
+        input.extend(frame(&request(1, Operation::Open, 1)));
+    }
+    input.extend(frame(&request(2, Operation::Update, 2)));
+    let (code, _) = exits_on_its_own(
+        &[("SOLID_TYPEFACTS_PANIC_BEFORE_UPDATE", &text)],
+        input,
+        false,
+    );
+    assert_eq!(code, solid_typefacts::fail_stop::PANIC_EXIT_CODE);
+    let _ = std::fs::remove_dir_all(marker.parent().unwrap());
+}
+
+/// A panic outside `lifecycle`: with `TSRS_MEM_SPLIT=1` the worker reports
+/// memory after each request through stderr and panics when stderr's reader
+/// is gone. No request-level catch could see it.
+#[test]
+fn a_panic_after_the_request_stops_the_process() {
+    let (code, _) = exits_on_its_own(&[("TSRS_MEM_SPLIT", "1")], script(), true);
+    assert_eq!(code, solid_typefacts::fail_stop::PANIC_EXIT_CODE);
 }
 
 fn stages(stderr: &str) -> Vec<String> {

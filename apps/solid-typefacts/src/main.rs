@@ -12,6 +12,8 @@ fn main() -> ExitCode {
     // constructor disables them (tsrs's own binaries do the same).
     #[cfg(all(target_os = "linux", not(target_arch = "wasm32")))]
     tsrs_core::allocator::init_mimalloc();
+    #[cfg(not(target_arch = "wasm32"))]
+    solid_typefacts::fail_stop::install();
     let args: Vec<String> = std::env::args_os()
         .skip(1)
         .map(|argument| argument.to_string_lossy().into_owned())
