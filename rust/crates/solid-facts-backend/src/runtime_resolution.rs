@@ -110,6 +110,24 @@ fn vite_config(directory: &Path) -> Option<PathBuf> {
     None
 }
 
+/// What the worker is asked. The mode is always `development`: neither the
+/// declared runtime build nor the target reaches the worker, so it answers for
+/// a client dev-server environment whatever the host declares.
+fn request(root: &Path, config: &Path, sites: &[Site]) -> serde_json::Value {
+    serde_json::json!({
+        "protocol": PROTOCOL,
+        "root": root,
+        "configFile": config,
+        "mode": "development",
+        "loads": sites.iter().enumerate().map(|(id, site)| serde_json::json!({
+            "id": id.to_string(),
+            "importer": site.path,
+            "specifier": site.text,
+            "kind": site.kind,
+        })).collect::<Vec<_>>(),
+    })
+}
+
 /// Resolves every module load of `facts` through the project's bundler. The
 /// index is returned in every case; an occurrence without an answer is
 /// unknown.
@@ -133,18 +151,7 @@ pub fn resolve_runtime_imports(
     };
     let node = std::env::var_os("SOLID_CHECKER_PROBE_NODE").unwrap_or_else(|| "node".into());
     let root = config.parent().unwrap_or(project_directory);
-    let request = serde_json::json!({
-        "protocol": PROTOCOL,
-        "root": root,
-        "configFile": config,
-        "mode": "development",
-        "loads": sites.iter().enumerate().map(|(id, site)| serde_json::json!({
-            "id": id.to_string(),
-            "importer": site.path,
-            "specifier": site.text,
-            "kind": site.kind,
-        })).collect::<Vec<_>>(),
-    });
+    let request = request(root, &config, &sites);
     let report = match run_worker(&node, &script, root, &request) {
         Ok(report) => report,
         Err(status) => {
@@ -255,3 +262,6 @@ fn run_worker(
     let line = line.lines().last().unwrap_or_default();
     serde_json::from_str(line).map_err(|error| format!("report: {error}"))
 }
+
+#[cfg(test)]
+mod tests;

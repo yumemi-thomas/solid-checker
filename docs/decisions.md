@@ -251,7 +251,24 @@ A project function Gets `p.key` on every call when it is exact, current, synchro
 
 <a id="adr-0284"></a>
 ## ADR 0284 — Dependency source mode
-`--dependency-source <specifier>` analyzes an installed package's runtime source as project code. Entry selection reads `exports` as Vite with the Solid plugin does for the declared target and build (first of `solid`, `import`, `module`, `default` and host conditions; else `mainFields`); patterns, arrays and `browser` maps refuse. Relative static imports close to 4,000 files in a generated sibling tsconfig; declaration imports redirect to the runtime export within the same package; package files fold under the declared host and their own findings are not reported. Owners: `rust/crates/solid-facts-backend/src/dependency_sources.rs`, `dependency_program.rs`.
+`--dependency-source <specifier>` analyzes an installed package's runtime source as project code. Entry selection reads `exports` as Vite with the Solid plugin does for the declared target and build (first of `solid`, `import`, `module`, `default` and host conditions; else `mainFields`); arrays, `null`, unread values and `browser` maps refuse; subpath patterns resolve as Node does (ADR 0291). Relative static imports close to 4,000 files in a generated sibling tsconfig; declaration imports redirect to the runtime export within the same package; package files fold under the declared host and their own findings are not reported. Owners: `rust/crates/solid-facts-backend/src/dependency_sources.rs`, `dependency_program.rs`.
+
+Amendment (2026-10-23), against ADR 0220: `--runtime-resolution required` and this entry selection answer "which file does a Solid package load" separately, and nothing compares them (the implicit default of ADR 0297 is off under `--runtime-resolution required`; an explicit `--dependency-source` combines silently). The resolver is Vite's client dev environment, `resolveId` only, mode `development`; scope in docs/open-work.md section 4. Where they can differ, checked against the code and Vite 8.2.2:
+
+| Input | This selection | Runtime resolver | Silent? |
+| --- | --- | --- | --- |
+| `NODE_ENV` and `--runtime-build` | `development` or `production` condition from `--runtime-build` | mode is always `development`; the worker inherits `NODE_ENV`, from which Vite takes `development\|production` | yes: `--runtime-build production` still resolves as development, or as production under `NODE_ENV=production` |
+| `solid` condition | always set, with `import`, `module`, `default`; ADR 0297 checks the plugin is installed, not registered | the project's own `resolve.conditions` and registered plugins | yes: no plugin in `vite.config`, or an overriding `resolve.conditions`, selects another file |
+| `resolve.alias` | not read; the package is the one the importer resolves to under TypeScript | applied | yes |
+| `resolve.dedupe` | not read; nearest `node_modules` of each importer | resolved from the config root | yes, with nested copies |
+| `mainFields` | `browser` (browser host), `module`, `main` | `browser`, `module`, `jsnext:main`, `jsnext`, then `main` | yes: a package without `exports` that sets `jsnext:main` |
+| `--runtime-target node` | node host, no `browser` | always the client environment | yes: the two answer different hosts |
+| `exports` patterns (`./*`) | Node's match; `..` and `.` segments refuse | answered | no known gap |
+| arrays, `null`, no-match nested objects | refuse | answered | no: the check is uncertifiable |
+| `browser` field map | refuses a browser host, even beside `exports` | answered | no for a browser host; node host ignores it |
+| `optimizeDeps` | none | discovery off; a project `optimizeDeps.include` is merged, unverified | not established |
+
+Not fixed here. Pinned: `dependency_sources/tests.rs` (refusals, `jsnext:main` as current behaviour), `packages/cli/test/runtime-resolver-worker.test.mjs` (the worker's calls, `NODE_ENV` inheritance, every `unknown` reason), `runtime_resolution/tests.rs` (the request).
 <a id="adr-0285"></a>
 ## ADR 0285 — A forwarded parameter is called where its target calls it
 `f` calls its parameter `p` on every completion when `g(…, p, …)` is a completion site of `f`, passes the identifier `p` itself (unwritten, exact position, no earlier spread) to a function declaration `g` that calls that position on every completion, to a fixpoint. `const` callees are refused (temporal dead zone); a module with direct `eval` adds nothing; no destructured parameter may precede `p`. Owner: `parameter_completion_calls` in `rust/crates/solid-reactive-ir/src/indexes.rs`.

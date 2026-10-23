@@ -717,3 +717,90 @@ fn an_unread_exports_value_or_a_self_reference_does_not_hide_a_cycle() {
     );
     std::fs::remove_dir_all(&directory).unwrap();
 }
+
+#[test]
+fn a_browser_map_refuses_a_browser_host_even_beside_exports() {
+    // ADR 0284 amendment: the `browser` map check precedes `exports`, so a
+    // package whose `exports` would select cleanly is still refused for a
+    // browser host. Vite applies such a map to files inside the package; the
+    // closure walk does not.
+    let directory = std::env::temp_dir().join(format!(
+        "solid-checker-browser-map-exports-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&directory);
+    std::fs::create_dir_all(&directory).unwrap();
+    std::fs::write(directory.join("index.js"), "export {};\n").unwrap();
+    std::fs::write(
+        directory.join("package.json"),
+        r#"{"exports":{".":"./index.js"},"browser":{"./a.js":"./b.js"}}"#,
+    )
+    .unwrap();
+    let root = directory.canonicalize().unwrap();
+    let browser = super::select_entry(&root, ".", &host(&["browser", "development"]));
+    let node = super::select_entry(&root, ".", &host(&["node", "development"]));
+    std::fs::remove_dir_all(&directory).unwrap();
+    assert_eq!(
+        browser.unwrap_err().0,
+        UnanalyzableReason::RuntimeEntryUnavailable
+    );
+    assert_eq!(node.unwrap(), root.join("index.js"));
+}
+
+#[test]
+fn exports_forms_the_selection_does_not_read_select_nothing() {
+    // ADR 0284 amendment: each form refuses (no entry) rather than falling
+    // through to another field or a later key.
+    let browser = host(&["browser", "development"]);
+    for (manifest, subpath) in [
+        // A condition-only object names `.` alone.
+        (r#"{"exports":{"import":"./a.js"}}"#, "./x"),
+        // An array of fallbacks, at the root and as a pattern's value.
+        (r#"{"exports":["./a.js","./b.js"]}"#, "."),
+        (r#"{"exports":{"./*":["./dist/*.js"]}}"#, "./a"),
+        // A target excluded with `null`.
+        (
+            r#"{"exports":{".":"./a.js","./internal":null}}"#,
+            "./internal",
+        ),
+        // A pattern match that climbs or stays in place.
+        (r#"{"exports":{"./*":"./dist/*.js"}}"#, "./a/../b"),
+        (r#"{"exports":{"./*":"./dist/*.js"}}"#, "./a/./b"),
+        // A target naming a pattern without a pattern key.
+        (r#"{"exports":{".":"./dist/*.js"}}"#, "."),
+        // `exports` present: `module` and `main` are never a fallback.
+        (
+            r#"{"exports":{"./x":"./x.js"},"module":"./m.js","main":"./a.js"}"#,
+            ".",
+        ),
+        // No `exports`: only the root has an entry.
+        (r#"{"module":"./m.js"}"#, "./x"),
+        (r#"{}"#, "."),
+    ] {
+        assert!(
+            entry_target(&ordered(manifest), subpath, &browser).is_none(),
+            "{manifest} at {subpath}"
+        );
+    }
+}
+
+#[test]
+fn main_fields_are_browser_module_main_and_not_the_jsnext_fields() {
+    // ADR 0284 amendment: Vite's client `mainFields` default is `browser`,
+    // `module`, `jsnext:main`, `jsnext`, then `main` (checked against Vite
+    // 8.2.2). Only `browser`, `module` and `main` are read here, so a package
+    // without `exports` that sets `jsnext:main` is a silent disagreement:
+    // Vite's resolver loads the `jsnext:main` file, this selects `main`.
+    // Pinned as the current behaviour, not as a decision that it is right.
+    let node = host(&["node", "development"]);
+    let jsnext = ordered(r#"{"jsnext:main":"./jsnext.js","main":"./main.js"}"#);
+    assert_eq!(
+        entry_target(&jsnext, ".", &node).as_deref(),
+        Some("./main.js")
+    );
+    let main = ordered(r#"{"main":"./main.js"}"#);
+    assert_eq!(
+        entry_target(&main, ".", &host(&["browser", "development"])).as_deref(),
+        Some("./main.js")
+    );
+}
