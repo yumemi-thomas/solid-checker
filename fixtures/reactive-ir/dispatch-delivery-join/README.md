@@ -1,6 +1,6 @@
 # dispatch-delivery-join
 
-**Claim (ADR 0361).** A synchronous dispatch runs handlers on its caller's stack, under its owner (ADR 0356), but only the handlers of the event types it fires. Every dispatching call (`dispatchEvent`, `focus()`, `click()`, `checkValidity()`, `abort()`, ...) is a set of types (`dispatch_events.rs`); an element handler stays an obligation (SC4001/SC2001 uncertifiable) when its `on…` type is in the union of every site's set in the program, and keeps its ownerless proof (a proven SC4001 violation; a write stays legal) otherwise. A call that may fire any type (an event argument that is not an inline `new …Event("T")`, a computed key, a stored member, an `execCommand`) makes every handler an obligation. A handler no element names, or a type the index cannot read, stays an obligation while any type fires.
+**Claim (ADR 0361).** A synchronous dispatch runs handlers on its caller's stack, under its owner (ADR 0356), but only the handlers of the event types it fires. Every dispatching call (`dispatchEvent`, `focus()`, `click()`, `checkValidity()`, `abort()`, ...) is a set of types (`dispatch_events.rs`); an element handler stays an obligation (SC4001/SC2001 uncertifiable) when its `on…` type is in the union of every site's set in the program, and keeps its ownerless proof (a proven SC4001 violation; a write stays legal) otherwise. A call that may fire any type (an event argument that is not an inline `new …Event("T")`, a computed key, a stored member, an `execCommand`) makes every handler an obligation. A callback no element names whose every run ADR 0319's walk ends at intrinsic `on…` attributes (a forwarded prop) takes those attributes' types (ADR 0361, amended); any other flow, or a type the index cannot read, stays an obligation while any dispatch exists.
 
 One shape is narrower than its type: a `dispatchEvent` that delivers to one known element joins only that element's handlers and fires no type program-wide. All of these hold:
 
@@ -53,6 +53,16 @@ The type-set variants (`event-elements.d.ts` adds `input`, `section`, `form`; ea
 | `key-union`, `key-generic` | `target[k]()` with `k: "click" \| "focus"` or `K extends …` resolves to no target set: any type, `onFocus` and the rest are obligations |
 | `owned-member-value`, `owned-member-reflect` | `dialog.showModal.call(dialog)` and `Reflect.apply(dialog.showModal, …)` run an owner-specific member as a value: any type |
 | `owned-member-read` | contrast: `dialog.open` and a project `store.close.call(dialog)` are no dispatch: every handler keeps its proof |
+
+Forwarded callbacks (each variant's `package.json` closes the program, which the walk needs; a `focus()` site fires the focus move):
+
+| variant | what it pins |
+| --- | --- |
+| `forwarded-type-join` | a literal forwarded through a component prop to `onScroll` takes `scroll`: its `onCleanup` is a proven violation and its write is legal; one forwarded to `onFocus` keeps both obligations |
+| `forwarded-two-terminals` | forwarded to an `onScroll` and an `onFocus`: the union is reached, obligations |
+| `forwarded-unknown-terminal` | the prop is stored where the walk cannot follow it: no terminal, no proof |
+| `forwarded-override` | the terminal `onScroll` is followed by an unread spread that may replace it (ADR 0364): no terminal, obligations |
+| `forwarded-narrow-site` | a narrow `dispatchEvent(new Event("sync"))` on the element the literal is forwarded to keeps it an obligation; the same forward to another element is a violation |
 
 A dispatch on the global `window` or `document` is supported with any argument and an empty delivery set (no element is on the path; `Dialect::global_dispatch_reaches_no_element_handler`). Variants `window-dispatch`, `document-dispatch` (every handler keeps its proof), `shadowed-window` (`window` is a parameter: `{app:ping}`), `shared-handler` (a function that is an element handler and a `window` listener keeps its element's violation; a listener no element names stays conditional).
 

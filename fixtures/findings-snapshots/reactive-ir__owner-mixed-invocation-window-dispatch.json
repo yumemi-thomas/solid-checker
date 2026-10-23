@@ -1,6 +1,16 @@
 {
-  "status": "uncertifiable",
+  "status": "violation",
   "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-mixed-invocation/variants/window-dispatch/App.tsx",
+      "start": 385,
+      "end": 394,
+      "fixes": 0
+    },
     {
       "rule": "missing-owner",
       "code": "SC4001",

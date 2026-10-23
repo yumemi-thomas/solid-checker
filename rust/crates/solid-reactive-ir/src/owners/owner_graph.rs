@@ -50,9 +50,11 @@ pub(super) fn owner_node(
         && lookup.program_closed;
     let mut seed_context = compiler_owner_context(file, function.body);
     // ADR 0361: a handler written on an element is conditional only where a
-    // synchronous dispatch may reach it; one a helper's flow proves an event
-    // invocation is joined to no site (`dispatch_uncertain`).
-    let dispatch_uncertain = lookup.synchronous_event_dispatch_present();
+    // synchronous dispatch may reach it; one a flow proves an event invocation
+    // only where a dispatch fires the type of an attribute its event runs end
+    // at (`dispatch_uncertain`; ADR 0361, amended).
+    let dispatch_uncertain =
+        lookup.event_literal_may_run_on_a_dispatcher_stack(file.path.as_str(), function.span);
     if file.compiler.callback_roles.iter().any(|callback| {
         callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
             && callback.span.contains(function.body)
@@ -80,8 +82,9 @@ pub(super) fn owner_node(
     // invocations that may supply an owner. The event run has no owner; the
     // seed adds that run to whatever the other invocations contribute, and
     // propagation keeps it apart from them (`OWNER_CONTEXT_EVENT_PATH_UNOWNED`).
-    // With a synchronous dispatch in the program the host's run may not be
-    // ownerless, so the literal keeps its obligation (ADR 0356).
+    // With a synchronous dispatch that may reach one of its event runs the
+    // host's run may not be ownerless, so the literal keeps its obligation
+    // (ADR 0356).
     if !dispatch_uncertain
         && lookup
             .mixed_event_literals()

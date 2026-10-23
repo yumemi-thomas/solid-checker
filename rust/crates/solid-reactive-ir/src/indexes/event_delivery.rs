@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::dispatch_events::Fires;
+use crate::execution_role::EventTerminals;
 use solid_facts::ast::ArgumentLiteralFact;
 use solid_facts::compiler::CallbackRoleKind;
 
@@ -25,6 +26,9 @@ pub(crate) struct EventDelivery {
     /// The handlers of the narrowly joined sites, by file: the span of an event
     /// attribute's value, or of a function a spread holder supplies.
     delivered: HashMap<String, HashSet<Span>>,
+    /// The elements the narrowly joined sites dispatch on, by file and span: a
+    /// forwarded handler that ends at one of their attributes is reached.
+    delivered_elements: HashSet<(String, Span)>,
     /// The event type of each handler written on an element or supplied by a
     /// spread holder, by file and span. Built only while no site fires any type.
     handler_types: HashMap<(String, Span), HandlerTypes>,
@@ -69,6 +73,7 @@ impl EventDelivery {
         self.fired_any = true;
         self.fired.clear();
         self.delivered.clear();
+        self.delivered_elements.clear();
         self
     }
 
@@ -118,7 +123,11 @@ impl EventDelivery {
             {
                 self.any_site = true;
                 match supported_site(lookup, file, call) {
-                    Some(handlers) => {
+                    Some((element, handlers)) => {
+                        if let Some(element) = element {
+                            self.delivered_elements
+                                .insert((file.path.to_string(), element));
+                        }
                         for (path, span) in handlers {
                             self.delivered.entry(path).or_default().insert(span);
                         }
@@ -278,6 +287,25 @@ impl EventDelivery {
                 handler.unreadable || handler.types.iter().any(|ty| self.fired.contains(ty))
             })
     }
+
+    /// Whether an event run that ends at `terminals` may be reached by some
+    /// site (ADR 0361, amended): as [`Self::reaches`], by the terminal
+    /// attributes' types, or by a narrowly joined site on one of their elements.
+    /// A walk the census could not follow (no terminals, none at all, or an
+    /// unreadable one) is reached by any site, as before the join.
+    fn reaches_terminals(&self, terminals: Option<&EventTerminals>) -> bool {
+        let Some(terminals) = terminals else {
+            return true;
+        };
+        self.fired_any
+            || terminals.unreadable
+            || terminals.types.is_empty()
+            || terminals
+                .elements
+                .iter()
+                .any(|element| self.delivered_elements.contains(element))
+            || terminals.types.iter().any(|ty| self.fired.contains(ty))
+    }
 }
 
 /// Whether a call through a computed key that is not a literal (`target[key]()`)
@@ -351,7 +379,7 @@ fn well_known_symbol(lookup: &SemanticLookup<'_>, file: &FileFacts, key: Span) -
 /// The lowercase listener type the compiler (or a spread's `assignProp`) gives
 /// the attribute or key `name`: `name.slice(2).toLowerCase()`. `None` for a
 /// name this does not read (non-ASCII).
-fn listener_type(name: &str) -> Option<String> {
+pub(crate) fn listener_type(name: &str) -> Option<String> {
     (name.is_ascii() && name.len() > 2).then(|| name[2..].to_ascii_lowercase())
 }
 
@@ -361,11 +389,35 @@ impl SemanticLookup<'_> {
             .get_or_init(|| EventDelivery::build(self))
     }
 
-    /// ADR 0356: whether any synchronous dispatch is visible. The answer for a
-    /// handler no element names (a literal only a helper's flow proves an event
-    /// invocation), which no site is joined to.
-    pub(crate) fn synchronous_event_dispatch_present(&self) -> bool {
-        self.event_delivery().any_site
+    /// ADR 0361 (amended): where the event runs of the literals the owner
+    /// censuses prove event-run end; computed only while a dispatch site exists
+    /// and none fires every type.
+    pub(crate) fn event_terminals(&self) -> &HashMap<(String, Span), EventTerminals> {
+        self.event_terminals.get_or_init(|| {
+            let delivery = self.event_delivery();
+            if delivery.any_site && !delivery.fired_any {
+                crate::execution_role::event_terminals(self)
+            } else {
+                HashMap::default()
+            }
+        })
+    }
+
+    /// ADR 0356, 0361 (amended): whether a synchronous dispatch may run the
+    /// function literal at `literal` in `path`, which the owner censuses prove
+    /// event-run (a forwarded handler, a literal a handler calls), on its
+    /// caller's stack: some site fires the type of an attribute its event runs
+    /// end at ([`EventTerminals`]), a narrowly joined site dispatches on that
+    /// attribute's element, or the census could not follow it and any site
+    /// exists.
+    pub(crate) fn event_literal_may_run_on_a_dispatcher_stack(
+        &self,
+        path: &str,
+        literal: Span,
+    ) -> bool {
+        let delivery = self.event_delivery();
+        delivery.any_site
+            && delivery.reaches_terminals(self.event_terminals().get(&(path.to_owned(), literal)))
     }
 
     /// ADR 0361: whether a synchronous dispatch may run the handler written as
@@ -424,11 +476,14 @@ impl SemanticLookup<'_> {
     }
 
     /// [`Self::event_handler_may_run_on_a_dispatcher_stack`] for code at `site`
-    /// that has the event role. Only code written directly in the function
-    /// literal of an element's own event attribute names its handler; any other
-    /// event role (a forwarded prop, a helper a handler calls, a literal nested
-    /// in a handler) is joined to no site, because the flow that made it an
-    /// event callback may be one a dispatch delivers to.
+    /// that has the event role. Code written directly in the function literal
+    /// of an element's own event attribute is joined by that attribute; code
+    /// written directly in a literal whose every invocation is an event run
+    /// (a forwarded prop, a literal a handler calls) by the attributes those
+    /// runs end at ([`EventTerminals`]). Any other event role (a literal nested
+    /// in a handler and called by code the census does not follow, a mixed
+    /// literal, a helper) is joined to no site, because the flow that made it
+    /// an event callback may be one a dispatch delivers to.
     pub(crate) fn event_role_may_run_on_a_dispatcher_stack(
         &self,
         file: &FileFacts,
@@ -454,12 +509,17 @@ impl SemanticLookup<'_> {
                 && crate::owners::callback_literal_span(file, callback.span, true)
                     == Some(innermost.span)
         });
-        attributes.next().is_none_or(|callback| {
-            delivery.reaches(
+        match attributes.next() {
+            Some(callback) => delivery.reaches(
                 file.path.as_str(),
                 file.ast.peel_ts_sugar_span(callback.span),
-            )
-        })
+            ),
+            None => delivery.reaches_terminals(
+                self.event_terminals()
+                    .get(&(file.path.to_string(), innermost.span))
+                    .filter(|terminals| terminals.event_only),
+            ),
+        }
     }
 
     /// The cross-file digest input: everything the answers above depend on.
@@ -489,6 +549,47 @@ impl SemanticLookup<'_> {
             hasher.update(path.as_bytes());
             hasher.update(span.start.to_le_bytes());
             hasher.update(span.end.to_le_bytes());
+        }
+        let mut elements = delivery.delivered_elements.iter().collect::<Vec<_>>();
+        elements.sort_unstable();
+        hasher.update(b"delivered-elements\0");
+        for (path, span) in elements {
+            hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
+            hasher.update(path.as_bytes());
+            hasher.update(span.start.to_le_bytes());
+            hasher.update(span.end.to_le_bytes());
+        }
+        // ADR 0361 (amended): a forwarded handler's answer reads the attributes
+        // its event runs end at, in any file of the closed program.
+        let mut terminals = self.event_terminals().iter().collect::<Vec<_>>();
+        terminals.sort_unstable_by(|left, right| left.0.cmp(right.0));
+        hasher.update(b"event-terminals\0");
+        for ((path, span), terminal) in terminals {
+            hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
+            hasher.update(path.as_bytes());
+            hasher.update(span.start.to_le_bytes());
+            hasher.update(span.end.to_le_bytes());
+            hasher.update([u8::from(terminal.unreadable), u8::from(terminal.event_only)]);
+            for event_type in &terminal.types {
+                hasher.update(
+                    u64::try_from(event_type.len())
+                        .unwrap_or(u64::MAX)
+                        .to_le_bytes(),
+                );
+                hasher.update(event_type.as_bytes());
+            }
+            hasher.update(b"\0");
+            for (element_path, element) in &terminal.elements {
+                hasher.update(
+                    u64::try_from(element_path.len())
+                        .unwrap_or(u64::MAX)
+                        .to_le_bytes(),
+                );
+                hasher.update(element_path.as_bytes());
+                hasher.update(element.start.to_le_bytes());
+                hasher.update(element.end.to_le_bytes());
+            }
+            hasher.update(b"\0");
         }
     }
 }
@@ -660,24 +761,30 @@ fn declaration_in_lib_dom(path: &str) -> bool {
         .is_some_and(|name| name == "lib.dom.d.ts" || name == "lib.dom.iterable.d.ts")
 }
 
+/// A narrowly joined site: the element it dispatches on (none for `window` or
+/// `document`) and the handlers it reaches, by file and span.
+type SupportedSite = (Option<Span>, Vec<(String, Span)>);
+
 /// The handlers one `dispatchEvent` call reaches, when that is provable: the
 /// event is a non-bubbling, non-composed `new Event(T)`/`new CustomEvent(T,
 /// init)` of a type the web runtime does not delegate, dispatched on a local
 /// `const` that is exactly one intrinsic element, so the only listeners it runs
 /// are that element's own `T` handlers, all of which are known. `None` for
-/// anything else (ADR 0361): the call then fires its type program-wide.
+/// anything else (ADR 0361): the call then fires its type program-wide. With
+/// the handlers, the span of the element dispatched on (none for `window` or
+/// `document`).
 fn supported_site(
     lookup: &SemanticLookup<'_>,
     file: &FileFacts,
     call: &solid_facts::ast::CallFact,
-) -> Option<Vec<(String, Span)>> {
+) -> Option<SupportedSite> {
     // The path of a `window` or `document` dispatch holds no element, whatever
     // the event is: it needs no argument analysis (ADR 0361).
     if global_event_target(lookup, file, call.callee) {
         return lookup
             .dialect
             .global_dispatch_reaches_no_element_handler()
-            .then(Vec::new);
+            .then(|| (None, Vec::new()));
     }
     let [argument] = call.arguments.as_slice() else {
         return None;
@@ -724,7 +831,7 @@ fn supported_site(
         let targets = lookup.spread_handler_targets().get(&key)?.as_ref()?;
         handlers.extend(targets.iter().map(|held| (held.path.clone(), held.span)));
     }
-    Some(handlers)
+    Some((Some(element.span), handlers))
 }
 
 /// Whether the receiver of `callee` is the `lib.dom` global `window` or
@@ -1158,6 +1265,48 @@ mod tests {
         assert!(delivery.reaches("a.tsx", Span::new(9, 10)));
         delivery.fired_any = true;
         assert!(delivery.reaches("b.tsx", Span::new(0, 1)));
+    }
+
+    fn terminals(types: &[&str], element: Option<u32>) -> EventTerminals {
+        let mut terminals = EventTerminals::default();
+        terminals
+            .types
+            .extend(types.iter().map(|t| (*t).to_owned()));
+        if let Some(start) = element {
+            terminals
+                .elements
+                .insert(("a.tsx".into(), Span::new(start, start + 1)));
+        }
+        terminals
+    }
+
+    #[test]
+    fn a_forwarded_handler_is_reached_by_its_terminal_types() {
+        let delivery = delivery(&["focus", "blur"]);
+        // Ends at an `onScroll`: no fired type is its.
+        assert!(!delivery.reaches_terminals(Some(&terminals(&["scroll"], Some(1)))));
+        // Ends at an `onScroll` and an `onFocus`: the union is reached.
+        assert!(delivery.reaches_terminals(Some(&terminals(&["scroll", "focus"], Some(1)))));
+        // No terminal at all, an unreadable one, or no census entry: reached.
+        assert!(delivery.reaches_terminals(Some(&terminals(&[], Some(1)))));
+        let mut unreadable = terminals(&["scroll"], Some(1));
+        unreadable.unreadable = true;
+        assert!(delivery.reaches_terminals(Some(&unreadable)));
+        assert!(delivery.reaches_terminals(None));
+    }
+
+    #[test]
+    fn a_forwarded_handler_on_a_narrowly_joined_element_is_reached() {
+        // A narrow site fires no type program-wide but dispatches on element 1.
+        let mut delivery = delivery(&[]);
+        delivery
+            .delivered_elements
+            .insert(("a.tsx".into(), Span::new(1, 2)));
+        assert!(delivery.reaches_terminals(Some(&terminals(&["sync"], Some(1)))));
+        assert!(!delivery.reaches_terminals(Some(&terminals(&["sync"], Some(5)))));
+        // Any type fired reaches every terminal.
+        delivery.fired_any = true;
+        assert!(delivery.reaches_terminals(Some(&terminals(&["sync"], Some(5)))));
     }
 
     #[test]

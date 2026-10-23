@@ -98,6 +98,88 @@ pub(crate) fn mixed_event_literals(
     literals
 }
 
+/// ADR 0361 (amended): where the host's event runs of a function literal end.
+/// Each is an intrinsic element's `on…` attribute or spread key the literal
+/// reaches through ADR 0319's walk, or the attribute of a compiler event
+/// handler that calls it; the listener type is the attribute's lowercased tail.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub(crate) struct EventTerminals {
+    /// The lowercase listener types of the attributes and keys the runs end at.
+    pub(crate) types: std::collections::BTreeSet<String>,
+    /// The intrinsic elements those attributes and keys are written on.
+    pub(crate) elements: std::collections::BTreeSet<(String, Span)>,
+    /// Some run ends at an attribute whose type is not read (non-ASCII, a
+    /// handler no attribute names exactly, a cycle or refused walk on the way).
+    pub(crate) unreadable: bool,
+    /// Every invocation is an event run ([`event_invoked_literals`]): the
+    /// terminals are all of the literal's runs, not only its event runs.
+    pub(crate) event_only: bool,
+}
+
+impl EventTerminals {
+    fn note(&mut self, attribute: &str, element: Option<(String, Span)>) {
+        match crate::indexes::listener_type(attribute) {
+            Some(event_type) => {
+                self.types.insert(event_type);
+            }
+            None => self.unreadable = true,
+        }
+        match element {
+            Some(element) => {
+                self.elements.insert(element);
+            }
+            None => self.unreadable = true,
+        }
+    }
+
+    fn merge(&mut self, other: Self) {
+        self.types.extend(other.types);
+        self.elements.extend(other.elements);
+        self.unreadable |= other.unreadable;
+    }
+}
+
+/// ADR 0361 (amended): the event terminals of every literal the owner censuses
+/// prove event-run ([`event_invoked_literals`], [`mixed_event_literals`]), so a
+/// synchronous dispatch withholds a forwarded handler only when it fires the
+/// type of an attribute the handler ends at, as it does a handler written on
+/// the element. A literal whose walk the terminal census cannot follow has no
+/// entry: it stays conditional while any dispatch exists.
+pub(crate) fn event_terminals(
+    lookup: &SemanticLookup<'_>,
+) -> HashMap<(String, Span), EventTerminals> {
+    let mut terminals = HashMap::default();
+    let event_only = lookup.event_invoked_literals();
+    let literals = event_only
+        .iter()
+        .map(|key| (key, true))
+        .chain(lookup.mixed_event_literals().keys().map(|key| (key, false)));
+    for ((path, span), only) in literals {
+        let Some(file) = lookup.file_by_path(path) else {
+            continue;
+        };
+        let Some(literal) = file.ast.function_at(*span) else {
+            continue;
+        };
+        let mut classifying = HashSet::default();
+        let mut flow = InvocationFlow {
+            lookup,
+            classifying: &mut classifying,
+            budget: FLOW_BUDGET,
+            seen: HashSet::default(),
+            frames: Vec::new(),
+            props_stack: Vec::new(),
+            owner_mode: true,
+            mixed_mode: true,
+        };
+        if let Some(mut found) = flow.function_event_terminals(file, literal) {
+            found.event_only = only;
+            terminals.insert((path.clone(), *span), found);
+        }
+    }
+    terminals
+}
+
 /// The attribute and intrinsic element a compiler event handler's value is
 /// written on; empty when no attribute names it exactly.
 fn handler_edge(file: &solid_facts::FileFacts, handler: Span) -> EventEdge {
@@ -129,6 +211,29 @@ fn handler_edge(file: &solid_facts::FileFacts, handler: Span) -> EventEdge {
         .unwrap_or_default()
 }
 
+/// The attribute name and the intrinsic element a compiler event handler's
+/// value is written on, when an attribute names it exactly.
+fn handler_attribute(file: &solid_facts::FileFacts, handler: Span) -> Option<(&str, Span)> {
+    let handler = file.ast.peel_ts_sugar_span(handler);
+    file.ast
+        .jsx_elements
+        .iter()
+        .filter(|element| intrinsic_element(file, element))
+        .find_map(|element| {
+            element
+                .attributes
+                .iter()
+                .find(|attribute| {
+                    attribute.namespace.is_none()
+                        && attribute
+                            .expression
+                            .is_some_and(|value| file.ast.peel_ts_sugar_span(value) == handler)
+                })
+                .and_then(|attribute| file.source_text(attribute.name))
+                .map(|name| (name, element.span))
+        })
+}
+
 impl<'a> InvocationFlow<'a, '_, '_> {
     /// The one safe role of every invocation of `function`; `Some(None)`
     /// when the (complete) census finds no invocation at all.
@@ -142,7 +247,7 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         for invocation in invocations {
             let here = match invocation {
                 Invocation::Role(role) => role,
-                Invocation::Event(_) => ExecutionRole::EventCallback,
+                Invocation::Event(..) => ExecutionRole::EventCallback,
                 // Only the mixed-invocation census produces these, and it asks
                 // for event edges, not for the one role of every invocation.
                 Invocation::Other => return None,
@@ -320,13 +425,17 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         if !self.mixed_mode {
             return Some(Invocation::Role(ExecutionRole::EventCallback));
         }
-        Some(Invocation::Event(EventEdge {
-            attribute: attribute.to_owned(),
-            element: file
-                .source_text(element.name.span)
-                .unwrap_or_default()
-                .to_owned(),
-        }))
+        Some(Invocation::Event(
+            EventEdge {
+                attribute: attribute.to_owned(),
+                element: file
+                    .source_text(element.name.span)
+                    .unwrap_or_default()
+                    .to_owned(),
+            },
+            file,
+            element.span,
+        ))
     }
 
     /// The invocation a returning function has when it is the callback of an
@@ -378,7 +487,7 @@ impl<'a> InvocationFlow<'a, '_, '_> {
         let mut found = None;
         for invocation in invocations {
             let edge = match invocation {
-                Invocation::Event(edge) => Some(edge),
+                Invocation::Event(edge, ..) => Some(edge),
                 Invocation::Call(call_file, call, frames) => {
                     self.call_event_edge(call_file, call, frames)
                 }
@@ -389,6 +498,95 @@ impl<'a> InvocationFlow<'a, '_, '_> {
             }
         }
         found
+    }
+
+    /// The event terminals of every event run of `function`: each
+    /// [`Invocation::Event`], and each call written directly in a compiler event
+    /// handler (its attribute) or in a plain function (that function's
+    /// terminals), with [`Self::call_event_edge`]'s eligibility. Other
+    /// invocations are not event runs and add nothing. `None` when the walk
+    /// cannot follow every holder.
+    pub(super) fn function_event_terminals(
+        &mut self,
+        file: &'a solid_facts::FileFacts,
+        function: &'a solid_facts::ast::FunctionFact,
+    ) -> Option<EventTerminals> {
+        let invocations = self.function_invocations(file, function)?;
+        let mut terminals = EventTerminals::default();
+        for invocation in invocations {
+            match invocation {
+                Invocation::Event(edge, element_file, element) => terminals.note(
+                    &edge.attribute,
+                    Some((element_file.path.to_string(), element)),
+                ),
+                Invocation::Call(call_file, call, frames) => {
+                    terminals.merge(self.call_event_terminals(call_file, call, frames));
+                }
+                Invocation::Role(_) | Invocation::Other => {}
+            }
+        }
+        Some(terminals)
+    }
+
+    /// [`Self::function_event_terminals`] for one call that runs the tracked
+    /// value. A handler a later attribute may replace still names the type it
+    /// would run as; a call whose function cannot be followed is unreadable.
+    fn call_event_terminals(
+        &mut self,
+        file: &'a solid_facts::FileFacts,
+        call: Span,
+        frames: Vec<FlowFrame<'a>>,
+    ) -> EventTerminals {
+        let mut terminals = EventTerminals::default();
+        let Some(owner) = containing_ast_function(&file.ast, call) else {
+            return terminals;
+        };
+        if !owner.body.contains(call)
+            || (owner.r#async && may_follow_suspension(file, call))
+            || owner.generator
+            || self.lookup.function_component_status(file, owner) != ComponentStatus::No
+            || !crate::owners::written_directly_in(&file.ast, owner, call)
+            || class_within(file, owner.span, call)
+            || file
+                .ast
+                .jsx_containing(call)
+                .any(|element| owner.body.contains(element.span))
+            || file
+                .ast
+                .jsx_fragments
+                .iter()
+                .any(|fragment| owner.body.contains(*fragment) && fragment.contains(call))
+        {
+            return terminals;
+        }
+        if let Some(callback) = file.compiler.callback_roles.iter().find(|callback| {
+            callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
+                && file.ast.peel_ts_sugar_span(callback.span) == owner.span
+        }) {
+            match handler_attribute(file, callback.span) {
+                Some((attribute, element)) => {
+                    terminals.note(attribute, Some((file.path.to_string(), element)))
+                }
+                None => terminals.unreadable = true,
+            }
+            return terminals;
+        }
+        let key = (
+            format!("\0terminal-flow:{}", file.path.as_str()),
+            owner.span,
+        );
+        if !self.classifying.insert(key.clone()) {
+            terminals.unreadable = true;
+            return terminals;
+        }
+        let outer = std::mem::replace(&mut self.frames, frames);
+        match self.function_event_terminals(file, owner) {
+            Some(found) => terminals.merge(found),
+            None => terminals.unreadable = true,
+        }
+        self.frames = outer;
+        self.classifying.remove(&key);
+        terminals
     }
 
     /// The event edge of a call that runs the tracked value: the call is written
@@ -892,7 +1090,7 @@ impl<'a> InvocationFlow<'a, '_, '_> {
                     // The value this function returns goes into a primitive's
                     // slot: the walk does not follow it there.
                     Invocation::Other => return None,
-                    Invocation::Role(_) | Invocation::Event(_) => {}
+                    Invocation::Role(_) | Invocation::Event(..) => {}
                 }
             }
             return Some(());

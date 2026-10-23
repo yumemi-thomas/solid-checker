@@ -64,8 +64,9 @@ pub(super) enum Invocation<'a> {
     Call(&'a solid_facts::FileFacts, Span, Vec<FlowFrame<'a>>),
     Role(ExecutionRole),
     /// ADR 0363, [`InvocationFlow::mixed_mode`] only: the host runs the value
-    /// as the handler an intrinsic element's attribute or spread key names.
-    Event(EventEdge),
+    /// as the handler an intrinsic element's attribute or spread key names,
+    /// written on the element at that file and span.
+    Event(EventEdge, &'a solid_facts::FileFacts, Span),
     /// ADR 0363, [`InvocationFlow::mixed_mode`] only: a primitive's callback
     /// slot runs the value. Who owns that run is the owner graph's question; it
     /// neither supports nor limits an event edge found beside it.
