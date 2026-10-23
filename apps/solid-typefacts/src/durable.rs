@@ -23,10 +23,12 @@ pub struct DurableRef {
 /// Go: `hashedSymbolID`: `symbol:h:` and 24 lowercase hex digits (the first 12
 /// bytes of the digest).
 pub(crate) fn hashed_symbol_id(digest: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut id = String::with_capacity(9 + 24);
     id.push_str("symbol:h:");
     for byte in &digest[..12] {
-        id.push_str(&format!("{byte:02x}"));
+        id.push(char::from(HEX[usize::from(byte >> 4)]));
+        id.push(char::from(HEX[usize::from(byte & 0x0f)]));
     }
     id
 }
