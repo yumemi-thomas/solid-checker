@@ -2032,87 +2032,148 @@ fn edit_recovers_when_the_service_dies_between_update_and_analyze() {
     );
 }
 
-/// A panic on the producer's worker thread (not a clean exit, as above) must
-/// reach the client as an error, within a bound, never as a hang or a result.
-/// The producer answers the panicking request with a `producer-panic` error and
-/// exits; the next call finds a dead process and recovers by relaunch and replay.
+/// A launch-counting wrapper around the real producer. Each launch appends a
+/// line to the returned log. `rearm_after` names a file: while it exists every
+/// launch re-creates the panic marker, so the producer panics on every launch;
+/// otherwise the marker is whatever the test wrote (one shot, consumed).
 #[cfg(unix)]
-#[test]
-fn a_worker_panic_during_the_update_fails_the_edit_and_the_session_recovers() {
-    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
-        Ok(value) => value,
-        Err(_) => return,
-    };
-    let (wrapper, marker) = crash_armed_service(
-        &typefacts,
-        "SOLID_TYPEFACTS_PANIC_BEFORE_UPDATE",
-        "panic-before-update",
-    );
-    fs::remove_file(&marker).unwrap();
-    let wrapper = wrapper.to_string_lossy().into_owned();
-    let (done_tx, done_rx) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
-        let (mut session, paths) = tracer_fixture_session(&wrapper);
-        let warm = session.analyze().unwrap();
-        fs::write(&marker, b"armed").unwrap();
-        let edited = session.edit(vec![app_edit(&paths)], None);
-        let consumed = !marker.exists();
-        let recovered = session
-            .analyze()
-            .map(|facts| serde_json::to_vec(&facts).unwrap() == serde_json::to_vec(&warm).unwrap());
-        let _ = done_tx.send((edited.map(|_| ()), consumed, recovered));
-    });
-    let (edited, consumed, recovered) = done_rx
-        .recv_timeout(std::time::Duration::from_secs(120))
-        .expect("the client hung after a producer worker panic");
-    assert!(consumed, "the panic marker must have been consumed");
-    let error = edited.expect_err("an edit whose update panicked must not succeed");
-    assert!(error.to_string().contains("producer-panic"), "got: {error}");
-    assert!(
-        recovered.expect("the session must recover by relaunch and replay"),
-        "recovery must replay the pre-edit state"
-    );
-}
-
-/// A producer that panics on every launch never certifies: the edit fails.
-#[cfg(unix)]
-#[test]
-fn a_producer_that_always_panics_never_answers_the_edit() {
+fn panicking_service(
+    typefacts_executable: &str,
+    label: &str,
+) -> (PathBuf, PathBuf, PathBuf, PathBuf) {
     use std::os::unix::fs::PermissionsExt as _;
-    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
-        Ok(value) => value,
-        Err(_) => return,
-    };
-    let directory = temporary_directory("panic-always");
+    let directory = temporary_directory(label);
     let marker = directory.join("panic-marker");
+    let launches = directory.join("launches");
+    let rearm = directory.join("rearm");
     let wrapper = directory.join("solid-typefacts-panicking.sh");
-    // Re-arm on every launch, but only once the program is warm (the marker
-    // appears when the file `armed` exists), so open and the first analyze pass.
-    let armed = directory.join("armed");
     fs::write(
         &wrapper,
         format!(
-            "#!/bin/sh\n[ -e '{armed}' ] && : > '{marker}'\nSOLID_TYPEFACTS_PANIC_BEFORE_UPDATE='{marker}' exec '{typefacts}' \"$@\"\n",
-            armed = armed.display(),
+            "#!/bin/sh\necho launch >> '{launches}'\n[ -e '{rearm}' ] && : > '{marker}'\n\
+             SOLID_TYPEFACTS_PANIC_BEFORE_UPDATE='{marker}' exec '{typefacts_executable}' \"$@\"\n",
+            launches = launches.display(),
+            rearm = rearm.display(),
             marker = marker.display(),
         ),
     )
     .unwrap();
     fs::set_permissions(&wrapper, fs::Permissions::from_mode(0o755)).unwrap();
-    let wrapper = wrapper.to_string_lossy().into_owned();
+    (wrapper, marker, launches, rearm)
+}
+
+#[cfg(unix)]
+fn launch_count(launches: &std::path::Path) -> usize {
+    fs::read_to_string(launches)
+        .map(|text| text.lines().count())
+        .unwrap_or(0)
+}
+
+fn nth_edit(paths: &[PathBuf], version: u64, label: &str) -> SourceChange {
+    SourceChange {
+        path: paths[0].to_string_lossy().into_owned(),
+        version,
+        source: Some(format!(
+            "// {label}\n{}",
+            fs::read_to_string(&paths[0]).unwrap()
+        )),
+        compiler_options: CompilerOptions::default(),
+    }
+}
+
+/// Runs `work` on a thread and fails the test if it does not finish: a client
+/// that hangs on a dead producer is the defect under test.
+#[cfg(unix)]
+fn bounded<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> T {
     let (done_tx, done_rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
-        let (mut session, paths) = tracer_fixture_session(&wrapper);
-        session.analyze().unwrap();
-        fs::write(&armed, b"").unwrap();
-        fs::write(&marker, b"").unwrap();
-        let edited = session.edit(vec![app_edit(&paths)], None);
-        let _ = done_tx.send(edited.map(|_| ()));
+        let _ = done_tx.send(work());
     });
-    let edited = done_rx
+    done_rx
         .recv_timeout(std::time::Duration::from_secs(120))
-        .expect("the client hung after producer worker panics");
+        .expect("the client hung after a producer panic")
+}
+
+/// A panic on the producer's worker thread stops the process (fail-stop hook);
+/// the client's crash path relaunches, replays the earlier accepted edit, and
+/// re-sends the failed one. The facts must equal a session that never crashed.
+#[cfg(unix)]
+#[test]
+fn a_producer_panic_on_a_later_edit_recovers_by_replay() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let (wrapper, marker, launches, _) = panicking_service(&typefacts, "panic-recovers");
+    let wrapper = wrapper.to_string_lossy().into_owned();
+    let (recovered, launched) = bounded({
+        let launches = launches.clone();
+        move || {
+            let (mut session, paths) = tracer_fixture_session(&wrapper);
+            session.analyze().unwrap();
+            session
+                .edit(vec![nth_edit(&paths, 1, "first")], None)
+                .unwrap();
+            assert_eq!(launch_count(&launches), 1, "no relaunch before the panic");
+            fs::write(&marker, b"armed").unwrap();
+            let facts = session
+                .edit(vec![nth_edit(&paths, 2, "second")], None)
+                .unwrap();
+            assert!(!marker.exists(), "the panic marker must have been consumed");
+            (serde_json::to_vec(&facts).unwrap(), launch_count(&launches))
+        }
+    });
+    assert_eq!(launched, 2, "the panic must cost exactly one relaunch");
+    let control = bounded(move || {
+        let (mut session, paths) = tracer_fixture_session(&typefacts);
+        session.analyze().unwrap();
+        session
+            .edit(vec![nth_edit(&paths, 1, "first")], None)
+            .unwrap();
+        let facts = session
+            .edit(vec![nth_edit(&paths, 2, "second")], None)
+            .unwrap();
+        serde_json::to_vec(&facts).unwrap()
+    });
+    assert_eq!(
+        recovered, control,
+        "replayed overlays must give the facts of a session that never crashed"
+    );
+}
+
+/// A producer that panics on every launch never certifies: the edit fails
+/// within the bounded recovery attempts (no facts, so nothing is certified),
+/// and the relaunches stop.
+#[cfg(unix)]
+#[test]
+fn a_producer_that_panics_on_every_launch_fails_the_edit_without_looping() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let (wrapper, marker, launches, rearm) = panicking_service(&typefacts, "panic-always");
+    let wrapper = wrapper.to_string_lossy().into_owned();
+    let (edited, after) = bounded({
+        let launches = launches.clone();
+        move || {
+            let (mut session, paths) = tracer_fixture_session(&wrapper);
+            let warm = session.analyze().unwrap();
+            session
+                .edit(vec![nth_edit(&paths, 1, "first")], None)
+                .unwrap();
+            fs::write(&rearm, b"").unwrap();
+            fs::write(&marker, b"armed").unwrap();
+            let edited = session.edit(vec![nth_edit(&paths, 2, "second")], None);
+            let count = launch_count(&launches);
+            (edited.map(|_| ()), count)
+        }
+    });
     assert!(edited.is_err(), "a panicking producer must not certify");
+    assert!(after > 1, "recovery must have relaunched");
+    assert!(
+        after <= 8,
+        "relaunches must be bounded, got {after} launches"
+    );
 }
 
 /// A generation that asks for no identity attestation reports no counts.

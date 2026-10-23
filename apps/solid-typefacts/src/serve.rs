@@ -9,19 +9,15 @@
 //! * Every request yields exactly one response frame.
 //! * The responder is built, used and dropped on the worker thread, so it need
 //!   not be `Send` (a compiler's thread-local state stays on one thread).
-//! * A panic on any of the three threads ends the process (exit 1); the worker
-//!   first answers the request it was running with a `producer-panic` error and
-//!   leaks the responder. Without that the surviving threads wait forever on a
-//!   client that waits on a dead worker. Panics inside tsrs (rayon `install`,
-//!   `thread::scope`) propagate to the worker and take the same path.
+//! * A panic on any thread ends the process at once ([`crate::fail_stop`]); no
+//!   thread here recovers from one.
 
 use crate::context::Context;
 use crate::frame::{FrameError, read_frame, write_frame_header};
 use crate::trace::SharedTrace;
-use crate::wire::{Incoming, blank_response, decode_request, encode_response, error_response};
+use crate::wire::{Incoming, decode_request, encode_response};
 use std::collections::HashMap;
 use std::io::{Read, Write};
-use std::panic::{self, AssertUnwindSafe};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
@@ -76,10 +72,7 @@ where
     let (events_tx, events_rx) = mpsc::channel::<Event>();
     let (ready_tx, ready_rx) = mpsc::channel::<Result<(), String>>();
 
-    let worker_events = events_tx.clone();
-    let worker = thread::spawn(move || {
-        worker_loop(make, &ready_tx, &jobs_rx, &responses_tx, &worker_events);
-    });
+    let worker = thread::spawn(move || worker_loop(make, &ready_tx, &jobs_rx, &responses_tx));
     match ready_rx.recv() {
         Ok(Ok(())) => {}
         Ok(Err(message)) => {
@@ -96,35 +89,14 @@ where
     let writer_events = events_tx.clone();
     let writer_trace = trace.clone();
     let writer = thread::spawn(move || {
-        let outcome = panic::catch_unwind(AssertUnwindSafe(|| {
-            writer_loop(output, &responses_rx, &writer_events, writer_trace.as_ref())
-        }));
-        outcome.unwrap_or_else(|payload| {
-            let _ = writer_events.send(Event::Fatal(format!(
-                "writer thread panicked: {}",
-                panic_message(payload.as_ref())
-            )));
-            None
-        })
+        writer_loop(output, &responses_rx, &writer_events, writer_trace.as_ref())
     });
 
     // One frame in flight, like Go's unbuffered channel: the reader takes a
     // credit before each read and main returns it when it receives the frame.
     let (credit_tx, credit_rx) = mpsc::channel::<()>();
     let _ = credit_tx.send(());
-    let reader_events = events_tx.clone();
-    thread::spawn(move || {
-        let outcome = panic::catch_unwind(AssertUnwindSafe(|| {
-            reader_loop(input, &credit_rx, &reader_events);
-        }));
-        if let Err(payload) = outcome {
-            let _ = reader_events.send(Event::Fatal(format!(
-                "reader thread panicked: {}",
-                panic_message(payload.as_ref())
-            )));
-        }
-    });
-    drop(events_tx);
+    thread::spawn(move || reader_loop(input, &credit_rx, &events_tx));
 
     let cancels: Cancels = Arc::new(Mutex::new(HashMap::new()));
     let pipeline = Pipeline {
@@ -200,16 +172,9 @@ impl Pipeline {
     /// Waits for the worker and writer to finish; returns the writer's final
     /// flush error, if any.
     fn join(self) -> (Option<String>, Receiver<Event>) {
-        // A panic that escaped the loops' own catch (a responder's drop at
-        // shutdown) is still a failure, never a clean exit.
-        let worker = self.worker.join().err().map(|payload| {
-            format!(
-                "worker thread panicked: {}",
-                panic_message(payload.as_ref())
-            )
-        });
+        let _ = self.worker.join();
         let flush = self.writer.join().unwrap_or(None);
-        (worker.or(flush), self.events)
+        (flush, self.events)
     }
 
     /// Go's `drain`: close the queue, let the pipeline finish, then report a
@@ -234,7 +199,6 @@ fn worker_loop<R, F>(
     ready: &Sender<Result<(), String>>,
     jobs: &Receiver<Job>,
     responses: &Sender<Response>,
-    events: &Sender<Event>,
 ) where
     R: Responder,
     F: FnOnce() -> Result<R, String>,
@@ -250,40 +214,7 @@ fn worker_loop<R, F>(
         }
     };
     for mut job in jobs {
-        let answered = panic::catch_unwind(AssertUnwindSafe(|| {
-            responder.lifecycle(&job.ctx, &job.incoming)
-        }));
-        let mut response = match answered {
-            Ok(response) => response,
-            Err(payload) => {
-                // Fail closed. The compiler's arenas may be half-updated, so
-                // this session never answers again: reply to the request that
-                // panicked, tell the main loop to end the process, and leak
-                // the responder instead of dropping it over that state (a
-                // generation is only ever freed by its sound owner thread, and
-                // the process is about to exit). Queued requests get no
-                // answer; the client sees the exit and relaunches.
-                let message = panic_message(payload.as_ref());
-                let request = &job.incoming.request;
-                let failure = error_response(
-                    blank_response(
-                        request.schema,
-                        request.request_id,
-                        &request.project_id,
-                        request.generation,
-                    ),
-                    "producer-panic",
-                    format!("producer worker thread panicked: {message}"),
-                );
-                std::mem::forget(responder);
-                if let Some(release) = job.release.take() {
-                    release();
-                }
-                let _ = responses.send(failure);
-                let _ = events.send(Event::Fatal(format!("worker thread panicked: {message}")));
-                return;
-            }
-        };
+        let mut response = responder.lifecycle(&job.ctx, &job.incoming);
         // `TSRS_MEM_SPLIT=1`: the thread arenas' size after each request.
         if tsrs_core::memsplit::enabled() {
             tsrs_core::memsplit::report(&format!(
@@ -302,14 +233,6 @@ fn worker_loop<R, F>(
         drop(job);
         let _ = responses.send(response);
     }
-}
-
-fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
-    payload
-        .downcast_ref::<&str>()
-        .map(|message| (*message).to_owned())
-        .or_else(|| payload.downcast_ref::<String>().cloned())
-        .unwrap_or_else(|| "non-string panic payload".to_owned())
 }
 
 fn writer_loop(
