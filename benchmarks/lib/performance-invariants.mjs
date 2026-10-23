@@ -18,7 +18,16 @@
 //   verify-performance`, `scripts/verify.sh` — they are enforced.
 
 export const DEFAULT_CEILINGS = Object.freeze({
-  exportScaling: 2.8,
+  // Deterministic work units of export aggregation when the corpus doubles.
+  // The count is exactly linear on unchanged code (2.00x on the structured
+  // corpus), so 2.2x leaves room only for a corpus-shape change, never noise.
+  exportWorkScaling: 2.2,
+  // Wall time of the same phase, a sanity bound for cost the work counter
+  // does not see (an uncounted inner scan). A quadratic doubles to 4x; the
+  // best-of-nine ratio on the structured corpus measured 1.81-2.02x over five
+  // sets on a loaded machine (the phase takes 1-2 ms there). The widget
+  // corpus's 0.1-0.6 ms phase spread 2.2-3.4x, which is why it is not used.
+  exportTimeScaling: 3.0,
   responseBytesPerSource: 1000,
   cachedIrNs: 50_000,
   firstIrNsPerSource: 175_000,
@@ -29,15 +38,25 @@ export const DEFAULT_CEILINGS = Object.freeze({
   incrementalNs: 400_000_000
 });
 
-// Cold processes per corpus size for the export-scaling ratio. The phase takes
-// 0.1-0.6 ms, so single samples scatter widely (2.2x-3.4x between processes on
-// one tree); the minimum over this many is what the ratio uses.
+// Cold processes per corpus size. First-IR cost and the export-scaling wall
+// time both use the minimum over this many: scheduling slows some samples, a
+// real regression slows every one.
 export const COLD_SAMPLES = 9;
+
+// The export phase needs a corpus that has something to aggregate. Sizes
+// (files) of the "structured" corpus the export-scaling invariant measures.
+export const EXPORT_CORPUS_FILES = Object.freeze({ small: 500, large: 1000 });
 
 export const WALL_TIME_GATES = Object.freeze(["enforce", "report"]);
 
 function exportTime(report) {
   return report.firstRustPipelineBreakdown.reactiveIr.interproceduralExportSummaries.medianNs;
+}
+
+// Work units the phase counted (node visits per discovery round, leaf
+// evaluations, exported properties examined). Identical on every run.
+function exportWork(report) {
+  return report.firstRustPipelineBreakdown.interproceduralExportWork.medianNs;
 }
 
 /**
@@ -47,19 +66,28 @@ function exportTime(report) {
  * one-line summary.
  */
 export function assessPerformance(
-  { small, smallSamples = [small], largeSamples, incremental },
+  { small, largeSamples, exportSmallSamples, exportLargeSamples, incremental },
   { wallTimeGate = "enforce", ceilings = DEFAULT_CEILINGS } = {}
 ) {
   if (!WALL_TIME_GATES.includes(wallTimeGate)) {
     throw new Error(`wall-time gate must be one of ${WALL_TIME_GATES.join(", ")}, got ${JSON.stringify(wallTimeGate)}`);
   }
-  // The export phase is sub-millisecond, so one sample per side made the
-  // ratio jitter by +-0.4x on shared runners, and best of three still crossed
-  // the limit on an unchanged tree. Best of COLD_SAMPLES independent cold
-  // processes on BOTH sides: scheduling slows some samples, a real
-  // super-linear cost slows every large sample.
-  const scaling =
-    Math.min(...largeSamples.map(exportTime)) / Math.max(Math.min(...smallSamples.map(exportTime)), 1);
+  // Export aggregation is measured on the structured corpus, where it takes
+  // milliseconds, in two ways. The work counter is the gate: it is a count,
+  // so noise cannot move it, and it fails on algorithmic super-linearity
+  // exactly. The best-of-N wall-time ratio backs it for cost the counter does
+  // not see. Every sample of a size must report the same count; a differing
+  // count is a nondeterministic analysis, not noise.
+  const workOf = samples => {
+    const counts = [...new Set(samples.map(exportWork))];
+    return counts.length === 1 && Number.isSafeInteger(counts[0]) && counts[0] > 0 ? counts[0] : Number.NaN;
+  };
+  // A side that counted nothing (or disagreed) is NaN, and NaN fails.
+  const smallWork = workOf(exportSmallSamples);
+  const largeWork = workOf(exportLargeSamples);
+  const workScaling = largeWork / smallWork;
+  const timeScaling =
+    Math.min(...exportLargeSamples.map(exportTime)) / Math.max(Math.min(...exportSmallSamples.map(exportTime)), 1);
   const responseBytes = small.firstAnalysisBreakdown.responseBytes.medianNs / small.sourceCount;
   const cachedIr = small.rustPipelineBreakdown.reactiveIrTotal.medianNs;
   const firstIrSamples = largeSamples.map(
@@ -76,7 +104,9 @@ export function assessPerformance(
     value,
     limit,
     unit,
-    status: value > limit ? "violation" : "ok",
+    // NaN (no work counted, or samples that disagree) is a violation: the
+    // comparison is written so that it cannot pass.
+    status: value <= limit ? "ok" : "violation",
     message: describe(value, limit)
   });
   const wallTime = (id, value, limit, unit, describe, extra = {}) => ({
@@ -91,8 +121,13 @@ export function assessPerformance(
   });
 
   const findings = [
-    structural("export-scaling", scaling, ceilings.exportScaling, "x", (value, limit) =>
-      `package contract export aggregation scales ${value.toFixed(2)}x when the corpus doubles (limit ${limit}x)`
+    structural("export-scaling", workScaling, ceilings.exportWorkScaling, "x", (value, limit) =>
+      Number.isNaN(value)
+        ? `package contract export aggregation counted no work or inconsistent work (${smallWork} units at ${EXPORT_CORPUS_FILES.small} files, ${largeWork} at ${EXPORT_CORPUS_FILES.large})`
+        : `package contract export aggregation does ${value.toFixed(2)}x the work when the corpus doubles (limit ${limit}x; ${smallWork} to ${largeWork} units)`
+    ),
+    structural("export-time-scaling", timeScaling, ceilings.exportTimeScaling, "x", (value, limit) =>
+      `package contract export aggregation scales ${value.toFixed(2)}x in time when the corpus doubles (limit ${limit}x)`
     ),
     structural("type-facts-response-bytes", responseBytes, ceilings.responseBytesPerSource, "bytes/source", (value, limit) =>
       `first Type Facts response uses ${value.toFixed(0)} bytes/source (limit ${limit})`
@@ -116,7 +151,7 @@ export function assessPerformance(
     violations,
     reported,
     summary:
-      `export scaling ${scaling.toFixed(2)}x, Type Facts ${responseBytes.toFixed(0)} bytes/source, ` +
+      `export work ${workScaling.toFixed(2)}x, export time ${timeScaling.toFixed(2)}x, Type Facts ${responseBytes.toFixed(0)} bytes/source, ` +
       `cached IR ${cachedIr} ns, best first IR ${firstIrPerSource.toFixed(0)} ns/source ` +
       `(${firstIrSamples.map(sample => sample.toFixed(0)).join(", ")}), incremental ${incrementalNs} ns`
   };

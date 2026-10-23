@@ -631,7 +631,7 @@ pub(super) fn interprocedural_reads(
         .filter(|summary| !summary.is_empty())
         .count();
     let result_reads = phase_started.elapsed();
-    let export_summaries = export_structured_return_obligations(
+    let (export_summaries, export_work) = export_structured_return_obligations(
         context,
         &StructuredReturnInputs {
             nodes: &nodes,
@@ -661,6 +661,7 @@ pub(super) fn interprocedural_reads(
             results_and_exports,
             result_reads,
             export_summaries,
+            export_work,
             graph_reused_files,
             graph_recomputed_files,
             result_reused_files,
@@ -1985,7 +1986,8 @@ fn export_structured_return_obligations(
     context: &InterproceduralContext<'_, '_>,
     inputs: &StructuredReturnInputs<'_>,
     dispatch_obligations: &mut Vec<StaticDefect>,
-) -> Duration {
+) -> (Duration, u64) {
+    let work = AtomicU64::new(0);
     let InterproceduralContext {
         facts,
         accessors,
@@ -2027,6 +2029,7 @@ fn export_structured_return_obligations(
                 summaries,
                 returned,
                 structured_returns: &structured_returns,
+                work: &work,
                 accessors,
                 accessor_declarations: &accessor_declarations,
                 source_kinds,
@@ -2054,6 +2057,7 @@ fn export_structured_return_obligations(
         summaries,
         returned,
         structured_returns: &structured_returns,
+        work: &work,
         accessors,
         accessor_declarations: &accessor_declarations,
         source_kinds,
@@ -2062,6 +2066,7 @@ fn export_structured_return_obligations(
         lookup,
     };
     for node in nodes.iter().filter(|node| node.exported) {
+        work.fetch_add(1, Ordering::Relaxed);
         let Some(file) = lookup.file_by_path(node.path.as_str()) else {
             continue;
         };
@@ -2077,6 +2082,7 @@ fn export_structured_return_obligations(
             }))
             .flat_map(|returned| returned.properties())
         {
+            work.fetch_add(1, Ordering::Relaxed);
             let Some(reason) =
                 structured_discovery.unresolved_shorthand_reason(file, property.value)
             else {
@@ -2098,5 +2104,5 @@ fn export_structured_return_obligations(
             });
         }
     }
-    export_started.elapsed()
+    (export_started.elapsed(), work.into_inner())
 }

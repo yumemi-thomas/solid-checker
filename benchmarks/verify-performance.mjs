@@ -3,8 +3,8 @@
 //
 //   bun benchmarks/verify-performance.mjs [--wall-time-gate enforce|report]
 //
-// Structural invariants (export scaling, Type Facts payload, cached reuse) are
-// always enforced. The wall-time ceilings (fresh Reactive IR per source, the
+// Structural invariants (export scaling by deterministic work count and by time,
+// Type Facts payload, cached reuse) are always enforced. The wall-time ceilings (fresh Reactive IR per source, the
 // one-file incremental edit) are enforced by default — the right mode for a
 // machine you control, `make verify-performance` and `scripts/verify.sh` —
 // and only reported with `--wall-time-gate report` (or
@@ -24,6 +24,7 @@ import { spawnSync } from "node:child_process";
 import {
   COLD_SAMPLES,
   DEFAULT_CEILINGS,
+  EXPORT_CORPUS_FILES,
   WALL_TIME_GATES,
   assessPerformance,
   renderPerformanceFindings
@@ -66,9 +67,10 @@ function run(command, arguments_) {
 }
 
 function measure(files, options = {}) {
-  const corpus = join(directory, options.corpus ?? String(files));
+  const shape = options.shape ?? "widget";
+  const corpus = join(directory, `${shape}-${files}`);
   // Generation is deterministic, so cold samples of one size share a corpus.
-  if (!existsSync(corpus)) run(process.execPath, ["benchmarks/generate-bench-corpus.mjs", String(files), corpus]);
+  if (!existsSync(corpus)) run(process.execPath, ["benchmarks/generate-bench-corpus.mjs", String(files), corpus, shape]);
   return JSON.parse(
     run(benchmark, [
       "--project",
@@ -87,17 +89,25 @@ function measure(files, options = {}) {
 }
 
 try {
-  // Independent cold processes per corpus size; the gates take the best, since
-  // shared scheduling slows one sample while a real regression slows every
-  // one. The export phase is 0.1-0.6 ms, so a ratio of three-sample minima
-  // swung from 2.2x to 3.4x on one tree; best of nine on both sides is stable
-  // (see COLD_SAMPLES in benchmarks/lib/performance-invariants.mjs).
-  const smallSamples = Array.from({ length: COLD_SAMPLES }, () => measure(500));
-  const small = smallSamples[0];
+  // Independent cold processes per corpus size; the first-IR gate takes the
+  // best, since shared scheduling slows one sample while a real regression
+  // slows every one.
+  const small = measure(500);
   const largeSamples = Array.from({ length: COLD_SAMPLES }, () => measure(1000));
   const incremental = measure(1000, { iterations: 10, warmups: 2, edit: "mod0001.tsx" });
+  // Export aggregation is measured on the structured corpus, where the phase
+  // takes milliseconds (on the widget corpus it takes 0.1-0.6 ms and its
+  // ratio spread 2.2x-3.4x on one tree). The gate is the deterministic work
+  // count; the best-of-nine wall-time ratio is a looser backstop. See
+  // benchmarks/lib/performance-invariants.mjs.
+  const exportSmallSamples = Array.from({ length: COLD_SAMPLES }, () =>
+    measure(EXPORT_CORPUS_FILES.small, { shape: "structured" })
+  );
+  const exportLargeSamples = Array.from({ length: COLD_SAMPLES }, () =>
+    measure(EXPORT_CORPUS_FILES.large, { shape: "structured" })
+  );
 
-  const assessment = assessPerformance({ small, smallSamples, largeSamples, incremental }, { wallTimeGate, ceilings });
+  const assessment = assessPerformance({ small, largeSamples, exportSmallSamples, exportLargeSamples, incremental }, { wallTimeGate, ceilings });
   if (process.env.GITHUB_STEP_SUMMARY) {
     appendFileSync(
       process.env.GITHUB_STEP_SUMMARY,
