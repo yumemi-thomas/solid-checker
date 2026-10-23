@@ -551,3 +551,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/owner-mixed-invocation/node_modules/**
 !fixtures/reactive-ir/owner-mixed-invocation/variants/*/node_modules/
 !fixtures/reactive-ir/owner-mixed-invocation/variants/*/node_modules/**
+!fixtures/reactive-ir/accessor-ignores-receiver/node_modules/
+!fixtures/reactive-ir/accessor-ignores-receiver/node_modules/**

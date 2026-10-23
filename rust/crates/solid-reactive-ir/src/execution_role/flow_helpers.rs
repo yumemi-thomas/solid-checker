@@ -398,6 +398,57 @@ pub(super) fn origin_member_ignores_receiver(
     }
 }
 
+/// ADR 0319: whether the `const` `binding` names, at `declaration`, a function
+/// a Solid primitive returned that ignores its receiver: the binding is the
+/// primitive call's own result (`const busy = createMemo(...)`) or a plain
+/// identifier slot of an array pattern destructuring that result in the same
+/// declaration (`const [state, setState] = createSignal(...)`), and the
+/// dialect read that slot as a bound function or an arrow. A held tuple, an
+/// alias, a wrapper call and a defaulted slot are not the result. Premises:
+/// the program replaces neither `Function.prototype.bind`, which the runtime
+/// builds the accessors with, nor the array iteration protocol the pattern
+/// uses (ADR 0349's tripwire).
+fn primitive_result_ignores_receiver(
+    file: &solid_facts::FileFacts,
+    binding: &solid_facts::ast::BindingFact,
+    declaration: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let Some(call) = binding
+        .initializer
+        .and_then(|initializer| file.ast.call_at(file.ast.peel_ts_sugar_span(initializer)))
+    else {
+        return false;
+    };
+    let slot = match binding.shape {
+        solid_facts::ast::BindingShape::Identifier => None,
+        solid_facts::ast::BindingShape::Array => {
+            match binding
+                .array_slots
+                .iter()
+                .position(|slot| slot.as_ref().is_some_and(|slot| slot.span == declaration))
+            {
+                Some(index) if lookup.array_iteration_intact() => Some(index),
+                _ => return false,
+            }
+        }
+        _ => return false,
+    };
+    !call.construct
+        && lookup
+            .primitive_at_call(file, call.span)
+            .is_some_and(|primitive| {
+                lookup
+                    .dialect
+                    .returned_callable_ignores_receiver(primitive, slot)
+            })
+        && !lookup.member_may_be_reassigned_on_builtin("bind")
+        && !lookup.property_may_be_defined_reflectively_as("bind")
+        // ADR 0338's wider tripwire (Object.assign / Reflect.set through a
+        // prototype) guards every other `read.bind` proof; this one too.
+        && !lookup.function_bind_may_be_patched()
+}
+
 /// Whether the value at `value` (in an element written in a component whose
 /// props `enclosing` describes) is one that cannot use a `this` it is called
 /// with; see [`origin_member_ignores_receiver`].
@@ -425,14 +476,15 @@ pub(super) fn value_ignores_receiver(
         if let Some(binding) = file.ast.bindings.iter().find(|binding| {
             binding.immutable && binding.names.iter().any(|name| name.span == declaration)
         }) {
-            return binding.initializer.is_some_and(|initializer| {
-                let initializer = file.ast.peel_ts_sugar_span(initializer);
-                file.ast.functions.iter().any(|function| {
-                    function.span == initializer
-                        && (function.kind == solid_facts::ast::FunctionKind::Arrow
-                            || !function_uses_receiver(file, function))
-                })
-            });
+            return primitive_result_ignores_receiver(file, binding, declaration, lookup)
+                || binding.initializer.is_some_and(|initializer| {
+                    let initializer = file.ast.peel_ts_sugar_span(initializer);
+                    file.ast.functions.iter().any(|function| {
+                        function.span == initializer
+                            && (function.kind == solid_facts::ast::FunctionKind::Arrow
+                                || !function_uses_receiver(file, function))
+                    })
+                });
         }
         // A component's props parameter read as `props.x`: the enclosing
         // element's attribute `x`.

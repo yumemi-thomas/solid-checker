@@ -2459,6 +2459,37 @@ impl Dialect for Solid2 {
             )
     }
 
+    /// ADR 0319, read on the rc.17 `solid-js` and `@solidjs/signals` pair,
+    /// the pair `primitive_in_effect_callback` is true for. Signals'
+    /// `accessor(node)` is `read.bind(null, node)` (`dist/dev.js:2407-2411`;
+    /// `dist/prod/signals.js:69-70`, `dist/observe/signals.js:71-72`);
+    /// `createSignal` returns `[accessor(node), setMemo.bind(null, node)]` or
+    /// `[accessor(node), setSignal.bind(null, node)]` (`dist/dev.js:2412-2422`;
+    /// prod `:75-83`, observe `:77-86`); `createMemo` returns `accessor(...)`
+    /// (`dist/dev.js:2433-2435`); `createStore`'s setter is an arrow,
+    /// `fn => storeSetter(proxy, fn)` or `f => storeSetter(store, f)`
+    /// (`dist/dev.js:8438-8441`, `:5938-5939`, `:6793-6796`). `solid-js`'s
+    /// client wrappers return the core result unchanged on every path,
+    /// hydration included (`dist/solid.dev.js:962-967`, `:980-982`, `:744-829`,
+    /// `:261-333`), and the server build's are arrows (`dist/server.js:515-534`;
+    /// `createMemo`'s `read`, `:628-643`, and its sync form's, `:692`;
+    /// `:1207-1222`; the edge hook's `signal`, `:3101-3112`). A
+    /// bound function calls its target with the bound `this`, and an arrow has
+    /// none. The store itself (slot 0) is no function and is not answered.
+    fn returned_callable_ignores_receiver(
+        &self,
+        primitive: Primitive,
+        slot: Option<usize>,
+    ) -> bool {
+        self.primitive_in_effect_callback
+            && matches!(
+                (primitive, slot),
+                (Primitive::CreateSignal, Some(0 | 1))
+                    | (Primitive::CreateMemo, None)
+                    | (Primitive::CreateStore, Some(1))
+            )
+    }
+
     /// `flush` itself; web's `render`, which ends `createRoot(...)` with
     /// `flush()` on the caller's stack (`@solidjs/web@2.0.0-rc.17`
     /// `dist/web.dev.js:567`, `dist/web.js:417`; rc.13 `dist/web.dev.js:504`,

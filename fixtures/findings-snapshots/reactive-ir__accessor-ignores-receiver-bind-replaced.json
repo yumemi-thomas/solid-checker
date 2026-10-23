@@ -1,0 +1,15 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/accessor-ignores-receiver/variants/bind-replaced/App.tsx",
+      "start": 859,
+      "end": 866,
+      "fixes": 0
+    }
+  ]
+}
