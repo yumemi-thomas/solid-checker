@@ -189,7 +189,8 @@ const codeRules = {
   FLUSH_IN_ACTION: ["flush-in-action"],
   FLUSH_IN_EFFECT_CALLBACK: ["flush-in-effect-callback"],
   // rc.17: a root, memo or deferred memo created with no owner on a createEffect apply's stack (ADR 0362).
-  PRIMITIVE_IN_EFFECT_CALLBACK: ["primitive-in-effect-callback"],
+  // ADR 0362 splits the throw: roots, memos and deferred memos are SC4005; effect constructors stay SC4001.
+  PRIMITIVE_IN_EFFECT_CALLBACK: ["primitive-in-effect-callback", "missing-owner"],
   FLUSH_IN_TRACKED_QUEUE_CALLBACK: ["leaf-owner-forbidden-call"],
   DYNAMIC_STATIC_PROMISE: ["static-dynamic-async-source"],
 };
