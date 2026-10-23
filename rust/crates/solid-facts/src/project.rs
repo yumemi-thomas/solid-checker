@@ -63,6 +63,14 @@ pub struct ProjectFacts {
     /// project's findings. Empty for ordinary analysis.
     #[serde(skip)]
     pub dependency_source_roots: Vec<String>,
+    /// Review of ADR 0368: in a dependency-source program, the project calls
+    /// the analyzed program answers `Recovery` (a call error) and the
+    /// project's own program does not. TypeScript reports no such error on
+    /// the project, so the call is not TypeScript-owned: analysis keeps it as
+    /// an uncertifiable obligation instead of staying silent. Empty for
+    /// ordinary analysis.
+    #[serde(skip)]
+    pub dependency_source_call_errors: Vec<typefacts::Location>,
 }
 
 #[derive(Clone)]
@@ -518,6 +526,7 @@ impl ProjectFacts {
             runtime_resolutions: None,
             runtime_symbol_redirects: HashMap::new(),
             dependency_source_roots: Vec::new(),
+            dependency_source_call_errors: Vec::new(),
         })
     }
 }

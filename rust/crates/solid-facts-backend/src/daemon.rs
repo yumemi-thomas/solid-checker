@@ -1341,6 +1341,32 @@ fn answer(
             state.session.analyze()?
         }
     };
+    // Review of ADR 0368: a call error only the generated program has is not
+    // TypeScript's; the retained original program (current: `resync` ran)
+    // answers whether the project's own program has it too.
+    let facts = match state.dependency.as_mut() {
+        Some(DependencyState {
+            original,
+            prepared:
+                PreparedDependencies {
+                    program: Some(program),
+                    ..
+                },
+            ..
+        }) => {
+            let recovered = dependency_program::recovered_project_calls(&facts, program);
+            let errors =
+                dependency_program::generated_call_errors(recovered, &mut original.typescript)?;
+            if errors.is_empty() {
+                facts
+            } else {
+                let mut owned = (*facts).clone();
+                owned.dependency_source_call_errors = errors;
+                Arc::new(owned)
+            }
+        }
+        _ => facts,
+    };
     // Observe what this program's resolution read, for the next request.
     state.resolution = Some(ResolutionWitness::of(&state.session.resolution_graph()?));
     let directory = state

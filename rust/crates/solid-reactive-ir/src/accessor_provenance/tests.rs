@@ -333,6 +333,7 @@ fn wildcard_target_requires_every_local_identity_input_to_be_distinct() {
             runtime_resolutions: None,
             runtime_symbol_redirects: std::collections::HashMap::default(),
             dependency_source_roots: Vec::new(),
+            dependency_source_call_errors: Vec::new(),
         };
         let entities = crate::EntitySymbols {
             by_path: HashMap::default(),

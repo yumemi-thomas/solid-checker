@@ -1034,6 +1034,7 @@ mod tests {
             runtime_resolutions: None,
             runtime_symbol_redirects: std::collections::HashMap::default(),
             dependency_source_roots: Vec::new(),
+            dependency_source_call_errors: Vec::new(),
         };
         let ast = HashMap::default();
         let names = HashMap::default();

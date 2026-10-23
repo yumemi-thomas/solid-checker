@@ -222,6 +222,24 @@ pub fn run(
     // ADR 0284: bind the selected packages' imports to their runtime files.
     if let Some(program) = &dependency_sources {
         dependency_program::bind(&mut facts, &mut typescript, program)?;
+        // Review of ADR 0368: a call error only the generated program has is
+        // not TypeScript's. The project's own program is reopened only when
+        // the generated one answers a project call `Recovery`.
+        let recovered = dependency_program::recovered_project_calls(&facts, program);
+        if !recovered.is_empty() {
+            let asked = Instant::now();
+            let count = recovered.len();
+            let mut original = sessions.open(&options.project_id)?;
+            facts.dependency_source_call_errors =
+                dependency_program::generated_call_errors(recovered, &mut original)?;
+            if std::env::var_os("SOLID_CHECKER_TIMINGS").is_some() {
+                note(&format!(
+                    "dependency-source call errors: {} of {count} recovered project calls not the project's own ({:?})",
+                    facts.dependency_source_call_errors.len(),
+                    asked.elapsed()
+                ));
+            }
+        }
     }
     let facts_complete = started.elapsed();
     let mut import_identity = ImportIdentityMeasurement::default();

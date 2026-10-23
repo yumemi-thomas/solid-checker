@@ -260,6 +260,70 @@ pub fn bind(
     Ok(())
 }
 
+/// Review of ADR 0368: the project calls `facts` (the dependency-source
+/// program's) answers `Recovery` (a call error), sorted. With
+/// [`generated_call_errors`] they become the ones the project's own program
+/// does not answer `Recovery`.
+///
+/// Only calls in the project's own files are asked: a package file's
+/// findings are not reported. Empty in the common case, where the caller then
+/// opens nothing more.
+#[must_use]
+pub fn recovered_project_calls(
+    facts: &solid_facts::ProjectFacts,
+    program: &PreparedDependencyProgram,
+) -> Vec<typefacts::Location> {
+    let mut recovered = facts
+        .typescript
+        .entities()
+        .filter(|entity| {
+            entity
+                .resolved_call
+                .as_ref()
+                .is_some_and(|call| call.validity == typefacts::ResolvedCallValidity::Recovery)
+                && program
+                    .project_files
+                    .contains(Path::new(entity.location.path.as_ref()))
+        })
+        .map(|entity| entity.location.clone())
+        .collect::<Vec<_>>();
+    recovered.sort_by(|left, right| {
+        (&left.path, left.start_byte, left.end_byte).cmp(&(
+            &right.path,
+            right.start_byte,
+            right.end_byte,
+        ))
+    });
+    recovered.dedup();
+    recovered
+}
+
+/// Review of ADR 0368: of `recovered` ([`recovered_project_calls`]), the
+/// calls the project's own program (`original`) does not answer `Recovery`.
+///
+/// The generated program adds package sources to the project's own files,
+/// and TypeScript's answers can depend on what a program holds and in what
+/// order (a package augmenting a global interface reorders its merged
+/// overloads). Such a call error is not one `tsc` reports on the project, so
+/// it is not TypeScript-owned and analysis must not stay silent on it
+/// (`ProjectFacts::dependency_source_call_errors`). The original program
+/// checks only the files holding these calls.
+pub fn generated_call_errors(
+    recovered: Vec<typefacts::Location>,
+    original: &mut TypeFactsSession,
+) -> Result<Vec<typefacts::Location>, Box<dyn Error>> {
+    if recovered.is_empty() {
+        return Ok(Vec::new());
+    }
+    let validities = original.call_validities(&recovered)?;
+    Ok(recovered
+        .into_iter()
+        .zip(validities)
+        .filter(|(_, validity)| *validity != Some(typefacts::ResolvedCallValidity::Recovery))
+        .map(|(location, _)| location)
+        .collect())
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;

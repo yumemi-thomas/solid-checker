@@ -687,24 +687,45 @@ impl CallRun<'_, '_> {
                 if !is_call_resolution_diagnostic(diagnostic.code) || end < pos {
                     continue;
                 }
+                // The innermost call-like node containing the diagnostic.
+                // A call-like ancestor that does not contain it is passed,
+                // not taken as the end of the walk: in `make()!()` TS2349
+                // spans `make()!`, which the inner call does not contain.
                 let mut node = Some(node_at(file, pos));
-                while let Some(current) = node
-                    && !is_call_like_expression(current)
-                {
+                let mut failed = None;
+                while let Some(current) = node {
+                    if is_call_like_expression(current)
+                        && let (Some(node_pos), Some(node_end)) =
+                            (current.pos().source_offset(), current.end().source_offset())
+                        && node_pos <= pos
+                        && end <= node_end
+                    {
+                        failed = Some((current, node_pos, node_end));
+                        break;
+                    }
                     node = current.parent();
                 }
-                let Some(node) = node else {
+                let Some((call, call_pos, call_end)) = failed else {
                     continue;
                 };
-                let (Some(node_pos), Some(node_end)) =
-                    (node.pos().source_offset(), node.end().source_offset())
-                else {
-                    continue;
-                };
-                if pos < node_pos || end > node_end {
-                    continue;
+                index.insert(call.addr());
+                // TypeScript reports a call's own failure on its callee
+                // (`getDiagnosticSpanForCallNode`; TS2349 on
+                // `node.expression`). A diagnostic spanning exactly a call
+                // that is another call's callee (`make()(1)`, `api.get()(x)`)
+                // can be the enclosing call's, which would otherwise answer
+                // valid although tsc rejects it. Both are marked: tsc's error
+                // spans the whole inner call either way.
+                if skip_trivia(file.text(), call_pos) == pos
+                    && call_end == end
+                    && let Some(parent) = call.parent()
+                    && is_call_like_expression(parent)
+                    && parent
+                        .expression()
+                        .is_some_and(|callee| callee.addr() == call.addr())
+                {
+                    index.insert(parent.addr());
                 }
-                index.insert(node.addr());
             }
             check(self.ctx)?;
             self.caches.diagnostics.insert(file.addr(), index);
