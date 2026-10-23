@@ -10,6 +10,7 @@
 pub mod arena;
 pub mod args;
 pub mod backend;
+pub mod binder_key;
 pub mod closure;
 pub mod constants;
 pub mod context;

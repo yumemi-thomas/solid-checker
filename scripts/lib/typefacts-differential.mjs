@@ -19,6 +19,8 @@ export const UNAVAILABLE_MARKER = /not available in the tsrs backend yet \(migra
 const CASCADE_CODES = new Set(["state-mismatch", "generation-mismatch"]);
 
 const NON_DURABLE_ID = /symbol:\d+:\d+/g;
+/** Every symbol id, hashed or counter (`canonicalIds`). */
+const ANY_ID = /symbol:(?:h:[0-9a-f]+|\d+:\d+)/g;
 const LIB_PATH = /^bundled:\/libs\/|\/lib\.[A-Za-z0-9.]+\.d\.ts$/;
 
 export const CATEGORIES = [
@@ -119,7 +121,12 @@ const libLabel = (row) => `symbol:~lib:${libSymbolName(declarationsOf(row)[0].na
  * An id with no proof in either place is left as it is: a durable id that
  * differs without proof is a difference, not noise.
  */
-export function normalizeTranscript(transcript, evidence = []) {
+export function normalizeTranscript(transcript, evidence = [], { canonicalIds = false } = {}) {
+  // `canonicalIds` renames hashed ids too, by the same content signature as a
+  // counter. For comparing two id schemes (ADR 0366): the spelling of an id is
+  // no longer a fact, the partition of symbols into ids is, and a partition
+  // that differs shows as a value difference in every cell that names it.
+  const idPattern = canonicalIds ? ANY_ID : NON_DURABLE_ID;
   const exchanges = transcript.exchanges.map((exchange) => ({
     ...exchange,
     response: exchange.response ? mapStrings(exchange.response, normalizeBundled) : exchange.response
@@ -158,21 +165,24 @@ export function normalizeTranscript(transcript, evidence = []) {
     }
     for (const entity of response.table?.entities ?? []) {
       if (typeof entity.symbol === "string") {
-        for (const id of entity.symbol.match(NON_DURABLE_ID) ?? []) {
+        for (const id of entity.symbol.match(idPattern) ?? []) {
           if (!signatures.has(id)) noteSignature(id, `use@${locationKey(entity.location)}`);
         }
       }
     }
     forEachString(response, (text) => {
-      for (const id of text.match(NON_DURABLE_ID) ?? []) {
+      for (const id of text.match(idPattern) ?? []) {
         if (!signatures.has(id)) noteSignature(id, `other@${id}`);
       }
     });
   }
   const seen = new Map();
   const renames = new Map();
-  const ordered = [...signatures.entries()].sort(
-    (a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)
+  // Ids sharing a signature (one declaration, several ids) are numbered hashed
+  // before counter, then by id; a counter's own spelling is a visit order.
+  const rank = (id) => (canonicalIds && id.startsWith("symbol:h:") ? 0 : 1);
+  const ordered = [...signatures.entries()].sort((a, b) =>
+    a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : rank(a[0]) - rank(b[0]) || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)
   );
   for (const [id, signature] of ordered) {
     const count = seen.get(signature) ?? 0;
@@ -184,7 +194,7 @@ export function normalizeTranscript(transcript, evidence = []) {
     // Whole-string library ids first (durable hashes included).
     if (libIds.has(out)) return libIds.get(out);
     if (out.includes("symbol:")) {
-      out = out.replace(NON_DURABLE_ID, (id) => renames.get(id) ?? id);
+      out = out.replace(idPattern, (id) => renames.get(id) ?? id);
     }
     return out;
   };

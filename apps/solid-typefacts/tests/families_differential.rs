@@ -6,9 +6,11 @@
 //! Both producers are driven by the client crate's own `Session` over the same
 //! sources and demands. Each project goes through a cold analysis, an `update`
 //! that shifts every span of one file, and an `update` that restores it. Entity
-//! rows are compared field for field after one normalization: non-durable ids
-//! (`symbol:<generation>:<n>`, wherever they appear in a row) are renamed by
-//! first appearance in location order.
+//! rows are compared field for field after one normalization: symbol ids
+//! (hashed or `symbol:<generation>:<n>`, wherever they appear in a row) are renamed by
+//! first appearance in location order. Rows must then be equal with every id
+//! redacted; how many rows partition their symbols into ids differently from Go
+//! (Go's ids follow its claim order, ADR 0366) is counted and not failed.
 //!
 //! * Default: a deterministic subset (every `TSRS_DIFF_STRIDE`-th project, 12
 //!   by default, plus every project that uses `references` or `paths`).
@@ -232,8 +234,10 @@ fn demands_for(files: &[SourceFile]) -> Vec<EntityDemand> {
     demands
 }
 
-/// Renames every non-durable id (`symbol:<digits>:<digits>`) in `text` by first
-/// appearance.
+/// Renames every symbol id in `text` by first appearance: a counter id
+/// (`symbol:<digits>:<digits>`) and a hashed one (`symbol:h:<hex>`). The
+/// spelling of an id is not a fact (ADR 0366: the Go producer's hashed ids
+/// follow its claim order and its lib text); which symbols share an id is.
 fn rename_non_durable(text: &str, names: &mut BTreeMap<String, String>) -> String {
     let mut result = String::with_capacity(text.len());
     let mut rest = text;
@@ -241,6 +245,17 @@ fn rename_non_durable(text: &str, names: &mut BTreeMap<String, String>) -> Strin
         result.push_str(&rest[..at]);
         let tail = &rest[at..];
         let body = &tail["symbol:".len()..];
+        if let Some(hex) = body.strip_prefix("h:") {
+            let digits = hex.bytes().take_while(u8::is_ascii_hexdigit).count();
+            if digits > 0 {
+                let length = "symbol:h:".len() + digits;
+                let id = &tail[..length];
+                let next = format!("id#{}", names.len() + 1);
+                result.push_str(names.entry(id.to_owned()).or_insert(next));
+                rest = &tail[length..];
+                continue;
+            }
+        }
         let generation = body.bytes().take_while(u8::is_ascii_digit).count();
         let after = &body[generation..];
         let number = after.strip_prefix(':').map_or(0, |after| {
@@ -249,7 +264,7 @@ fn rename_non_durable(text: &str, names: &mut BTreeMap<String, String>) -> Strin
         if generation > 0 && number > 0 {
             let length = "symbol:".len() + generation + 1 + number;
             let id = &tail[..length];
-            let next = format!("non-durable#{}", names.len() + 1);
+            let next = format!("id#{}", names.len() + 1);
             result.push_str(names.entry(id.to_owned()).or_insert(next));
             rest = &tail[length..];
         } else {
@@ -288,8 +303,29 @@ fn drop_unique_symbol_counters(text: &str) -> String {
     result
 }
 
+/// `text` with every renamed id (`id#<n>`) replaced by `id`.
+fn redact_ids(text: &str) -> String {
+    let mut result = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(at) = rest.find("id#") {
+        result.push_str(&rest[..at + 2]);
+        let tail = &rest[at + 3..];
+        let digits = tail.bytes().take_while(u8::is_ascii_digit).count();
+        rest = if digits > 0 { &tail[digits..] } else { tail };
+    }
+    result.push_str(rest);
+    result
+}
+
+/// One entity row: its text with ids redacted (what must equal Go's), and
+/// with ids renamed by first appearance (which symbols share an id).
+struct Row {
+    redacted: String,
+    renamed: String,
+}
+
 /// Every entity row of `table` as pretty Debug lines, keyed by span.
-fn rows(table: &FactTable) -> BTreeMap<(String, u64, u64), String> {
+fn rows(table: &FactTable) -> BTreeMap<(String, u64, u64), Row> {
     let mut entities: Vec<_> = table.entities().collect();
     entities.sort_by(|left, right| {
         (
@@ -313,10 +349,16 @@ fn rows(table: &FactTable) -> BTreeMap<(String, u64, u64), String> {
                     entity.location.start_byte,
                     entity.location.end_byte,
                 ),
-                rename_non_durable(
-                    &drop_unique_symbol_counters(&format!("{entity:#?}")),
-                    &mut names,
-                ),
+                {
+                    let renamed = rename_non_durable(
+                        &drop_unique_symbol_counters(&format!("{entity:#?}")),
+                        &mut names,
+                    );
+                    Row {
+                        redacted: redact_ids(&renamed),
+                        renamed,
+                    }
+                },
             )
         })
         .collect()
@@ -456,14 +498,25 @@ fn every_family_equals_go_on_the_corpus() {
                     for (key, go_row) in &go_rows {
                         match rust_rows.get(key) {
                             None => failures.push(format!("{label} [{name}] {key:?}: only in go")),
-                            Some(rust_row) if rust_row != go_row => failures.push(format!(
-                                "{label} [{name}] {}:{}-{}: {}",
-                                key.0.rsplit('/').next().unwrap_or(&key.0),
-                                key.1,
-                                key.2,
-                                changed_lines(go_row, rust_row)
-                            )),
-                            Some(_) => {}
+                            Some(rust_row) if rust_row.redacted != go_row.redacted => {
+                                failures.push(format!(
+                                    "{label} [{name}] {}:{}-{}: {}",
+                                    key.0.rsplit('/').next().unwrap_or(&key.0),
+                                    key.1,
+                                    key.2,
+                                    changed_lines(&go_row.redacted, &rust_row.redacted)
+                                ));
+                            }
+                            Some(rust_row) => {
+                                if rust_row.renamed != go_row.renamed {
+                                    *counts
+                                        .entry(
+                                            "rows whose symbols partition into ids differently (not a failure, ADR 0366)"
+                                                .into(),
+                                        )
+                                        .or_default() += 1;
+                                }
+                            }
                         }
                     }
                     for key in rust_rows.keys().filter(|key| !go_rows.contains_key(*key)) {

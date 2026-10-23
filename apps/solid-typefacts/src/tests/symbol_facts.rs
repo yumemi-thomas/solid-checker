@@ -284,7 +284,6 @@ fn update_drops_durable_identities() {
         project
             .identities()
             .durable_refs()
-            .values()
             .map(|reference| reference.path.clone())
             .collect()
     };

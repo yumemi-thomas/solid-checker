@@ -53,12 +53,15 @@ Generation-scoped opaque identities include their project generation and must
 be reacquired after every successful `Update`. Declaration-backed durable
 identities are minted again after an update: the producer keeps no analysis
 across one (ADR 0364), so an ID held over an update fails closed with
-not-found until a location scan mints it. Module-visible target symbols use a
-canonical declaring-path/name identity; other durable symbols include their
-declaration span. Within one generation the first symbol to claim a declaration
-takes its hash ID and later ones (instantiations, copies) get counters, so
-a table build discards earlier answers, so none are reused inside a generation or across an update. The
-compiler's incremental program is still reused.
+not-found until a location scan mints it. A binder-level symbol's hash ID is
+a pure function of the program (ADR 0366): a checker singleton, a global by
+name, a module export by declaring path and name, else its minimum declaration
+by path and offset, with the checker's private and unique-symbol counters
+stripped from names. Whatever symbol asks first, the ID is the same. A derived
+symbol (an instantiation, a `this`-type or widened copy, a mapped or spread
+property) and any symbol not proven binder-level get counters (`symbol:<gen>:<n>`). A
+table build discards earlier answers, so none are reused inside a generation or
+across an update. The compiler's incremental program is still reused.
 
 ## Native integration pins
 

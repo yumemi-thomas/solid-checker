@@ -337,6 +337,17 @@ pub struct Generation {
     kind: UpdateKind,
 }
 
+/// Test hook (tests/binder_ids.rs, its own process): open programs with tsrs's
+/// canonical checker history instead of typescript-go's. Never set in the
+/// producer.
+static CANONICAL_HISTORY_FOR_TESTS: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+#[doc(hidden)]
+pub fn use_canonical_history_for_tests(canonical: bool) {
+    CANONICAL_HISTORY_FOR_TESTS.store(canonical, std::sync::atomic::Ordering::Relaxed);
+}
+
 fn options_for(
     config: P<ParsedCommandLine>,
     host: Arc<dyn CompilerHost>,
@@ -353,7 +364,9 @@ fn options_for(
     // flag that has to be set before any checker exists, and the same value on
     // every call. Moving to the canonical history is a snapshot-reviewed change
     // for after the Go producer is gone (tsrs `tsrs_core::compat`).
-    tsrs_core::compat::set_go_compatible_history(true);
+    tsrs_core::compat::set_go_compatible_history(
+        !CANONICAL_HISTORY_FOR_TESTS.load(std::sync::atomic::Ordering::Relaxed),
+    );
     // Binding runs in the region of the file it binds (and a file's lazily
     // filled data goes there too) once files have regions of their own
     // (`RegionHost`). A process-wide flag, set before any file is parsed.
