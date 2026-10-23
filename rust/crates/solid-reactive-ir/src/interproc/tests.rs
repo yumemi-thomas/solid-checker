@@ -829,7 +829,7 @@ fn the_runtime_identity_index_answers_what_the_accessor_scan_answered() {
     // Entities per path, in the producer's order. a.ts has two entities that
     // share a start and differ in end; b.ts two at one location with
     // different identities; d.ts the same pair in the reverse order.
-    let rows = vec![
+    let rows = [
         (
             "a.ts",
             vec![
