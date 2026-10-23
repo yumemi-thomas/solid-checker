@@ -792,20 +792,19 @@ fn range_entities_projects_a_real_retained_answer() {
     );
 }
 
-/// The property order of a normalized object-literal union follows the first
-/// literal that mentioned each name across the program (typescript-go's
-/// `undefinedProperties` cache is keyed by name), so the printed text depends on
-/// check history. The producer keeps Go's history: `cols?` takes the declaration
-/// of the first `cols` in the file and sorts before `nodes`. (tsrs's canonical
-/// default would print `nodes` first.)
+/// The property order of a normalized object-literal union is a function of
+/// the program under tsrs's canonical history (ADR 0367). typescript-go keys
+/// `undefinedProperties` by name across the program, so there `cols?` took the
+/// declaration of the first `cols` the checker met and `b` printed
+/// `{ cols?: undefined; nodes: string; }`; the canonical history prints the
+/// literal's own order, whichever literal is checked first.
 #[test]
-fn normalized_object_literal_union_text_follows_gos_check_history() {
+fn normalized_object_literal_union_text_does_not_follow_check_history() {
     let source = "export const a = [{ groups: 'g' }, { cols: 'TEMP' }];\n\
 export const b = [{ nodes: 'r' }, { cols: 'TEMP' }];\n\
 export const c = [{ cols: 'x' }, { nodes: 'r' }];\n";
     let scratch = Scratch::new(&[("tsconfig.json", STRICT_BUNDLER), ("a.ts", source)]);
     let path = scratch.path("a.ts");
-    let mut project = scratch.open();
     let cases = [
         (
             "a",
@@ -813,11 +812,11 @@ export const c = [{ cols: 'x' }, { nodes: 'r' }];\n";
         ),
         (
             "b",
-            "({ cols?: undefined; nodes: string; } | { nodes?: undefined; cols: string; })[]",
+            "({ nodes: string; cols?: undefined; } | { nodes?: undefined; cols: string; })[]",
         ),
         (
             "c",
-            "({ nodes?: undefined; cols: string; } | { cols?: undefined; nodes: string; })[]",
+            "({ cols: string; nodes?: undefined; } | { cols?: undefined; nodes: string; })[]",
         ),
     ];
     let demands: Vec<EntityDemand> = cases
@@ -834,9 +833,21 @@ export const c = [{ cols: 'x' }, { nodes: 'r' }];\n";
             demand
         })
         .collect();
-    let facts = entities(&mut project, &path, &demands);
-    for ((name, want), fact) in cases.iter().zip(&facts) {
-        let got = fact.type_descriptor.as_ref().map(|d| &*d.text);
-        assert_eq!(got, Some(*want), "{name}");
+    // Source order, then `c` (whose literal names `cols` first) asked first on
+    // a fresh checker.
+    for reversed in [false, true] {
+        let mut project = scratch.open();
+        let mut asked = demands.clone();
+        if reversed {
+            asked.reverse();
+        }
+        let mut facts = entities(&mut project, &path, &asked);
+        if reversed {
+            facts.reverse();
+        }
+        for ((name, want), fact) in cases.iter().zip(&facts) {
+            let got = fact.type_descriptor.as_ref().map(|d| &*d.text);
+            assert_eq!(got, Some(*want), "{name}, reversed {reversed}");
+        }
     }
 }

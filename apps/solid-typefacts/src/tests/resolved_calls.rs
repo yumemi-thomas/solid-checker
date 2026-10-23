@@ -16,7 +16,7 @@ use super::project_support::{Scratch, change, entities, find, find_last, loc};
 use crate::backend::ClosureBackend;
 use crate::context::Context;
 use crate::model::{SemanticDemandRun, SemanticDemandRunResult, SemanticScope, durable_symbol_id};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use typefacts::v3::EntityDemand;
 use typefacts::{
     ArgumentMappingReason, ArgumentMappingStatus, CallKind, Callability, ConstructionWitness,
@@ -451,8 +451,9 @@ fn parameter_object_shape_rejects_an_unconstrained_type_parameter() {
 }
 
 /// The shape's required-property names use the wire spelling of an internal
-/// name (Go: `wireSymbolName`, the fix of 692fc7747), and sort after every
-/// ordinary name as Go's `0xFE` marker byte does.
+/// name (Go: `wireSymbolName`, the fix of 692fc7747) without the checker's
+/// unique-symbol counter (ADR 0367), and sort after every ordinary name as
+/// Go's `0xFE` marker byte does.
 #[test]
 fn parameter_object_shape_names_use_the_wire_spelling_of_internal_names() {
     let source = "declare function consume(options: {\n\
@@ -466,11 +467,7 @@ consume(null as never);\n";
     let names: Vec<&str> = properties.iter().map(|(name, _)| name.as_str()).collect();
     assert_eq!(names.len(), 4, "{names:?}");
     assert_eq!(&names[..3], ["alpha", "zeta", "\u{e9}clair"], "{names:?}");
-    assert!(
-        names[3].starts_with("__@iterator@") && !names[3].contains('\u{7f}'),
-        "well-known symbol property = {:?}",
-        names[3]
-    );
+    assert_eq!(names[3], "__@iterator", "well-known symbol property");
 }
 
 /// `TestResolvedCallIdentifiesSelectedOverloadAndMapsArguments`.
@@ -1351,10 +1348,9 @@ export const beta = mapped.run(1);\n";
             demands: &alpha_demands,
         },
     ];
-    let (suppression, seed) = (HashSet::new(), HashMap::new());
+    let suppression = HashSet::new();
     let scope = SemanticScope {
         suppression: &suppression,
-        descriptor_seed: &seed,
     };
     let results = project
         .semantic_demand_runs(&Context::new(), &runs, &scope)

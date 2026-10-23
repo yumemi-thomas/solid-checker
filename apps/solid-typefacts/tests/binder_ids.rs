@@ -1,18 +1,17 @@
 //! Binder-level symbol ids are a pure function of the program (ADR 0366,
 //! STABLE-IDS V1, V2, V5, V8): demand order, file order, checker history and
 //! the process's symbol counters do not change them, and a derived symbol
-//! never receives one. Its own process, because the history tests flip a
-//! process-wide checker flag.
+//! never receives one. Its own process: the private-name test depends on the
+//! process's symbol counters.
 
 use solid_typefacts::context::Context;
 use solid_typefacts::project::Project;
-use solid_typefacts::unsafe_boundary::use_canonical_history_for_tests;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use typefacts::Location;
 
-/// Serialises the tests: they open programs under different history flags.
+/// Serialises the tests: the private-name test counts process-wide symbols.
 static SERIAL: Mutex<()> = Mutex::new(());
 
 const LIB: &str = r#"export interface Box<T> { value: T }
@@ -208,7 +207,6 @@ fn baseline() -> BTreeMap<String, String> {
 #[test]
 fn binder_ids_are_hashes_and_derived_symbols_are_not() {
     let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
-    use_canonical_history_for_tests(false);
     let base = baseline();
     for probe in probes() {
         let id = &base[probe.0];
@@ -237,7 +235,6 @@ fn binder_ids_are_hashes_and_derived_symbols_are_not() {
 #[test]
 fn ids_do_not_depend_on_demand_order() {
     let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
-    use_canonical_history_for_tests(false);
     let base = binder(&baseline());
     let count = probes().len();
     let reversed: Vec<usize> = (0..count).rev().collect();
@@ -253,7 +250,6 @@ fn ids_do_not_depend_on_demand_order() {
 #[test]
 fn ids_do_not_depend_on_file_order() {
     let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
-    use_canonical_history_for_tests(false);
     let base = binder(&baseline());
     let order: Vec<usize> = (0..probes().len()).collect();
     let mut file_orders: Vec<Vec<&str>> = vec![ALL.iter().rev().copied().collect()];
@@ -279,27 +275,18 @@ fn ids_do_not_depend_on_checker_history() {
     let count = probes().len();
     let order: Vec<usize> = (0..count).collect();
     let reversed: Vec<usize> = (0..count).rev().collect();
-    for canonical in [false, true] {
-        use_canonical_history_for_tests(canonical);
-        // Cold, warmed by forcing every probe's type first (instantiations are
-        // created before any id is asked for), and warmed + reversed.
-        for (warm, ask) in [(false, &order), (true, &order), (true, &reversed)] {
-            let fixture = Fixture::new(&ALL, &[]);
-            let got = ids(&mut fixture.open(), &fixture, ask, warm);
-            assert_eq!(
-                binder(&got),
-                base,
-                "canonical history {canonical}, warm {warm}"
-            );
-        }
+    // Cold, warmed by forcing every probe's type first (instantiations are
+    // created before any id is asked for), and warmed + reversed.
+    for (warm, ask) in [(false, &order), (true, &order), (true, &reversed)] {
+        let fixture = Fixture::new(&ALL, &[]);
+        let got = ids(&mut fixture.open(), &fixture, ask, warm);
+        assert_eq!(binder(&got), base, "warm {warm}");
     }
-    use_canonical_history_for_tests(false);
 }
 
 #[test]
 fn private_name_ids_survive_the_checker_counters() {
     let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
-    use_canonical_history_for_tests(false);
     // A class symbol's process-wide id is embedded in its private names'
     // symbol names (`#<classId>@count`). Classes bound before it, in this
     // project and in earlier projects of the process, shift it.

@@ -135,11 +135,23 @@ pub trait ClosureBackend {
         id: &str,
     ) -> Result<Option<Vec<Declaration>>, BackendError>;
 
+    /// Fully checks the demanded files, in the given (path) order, before a
+    /// table answers any of their demands (ADR 0367). Inside a file every
+    /// later answer is then the one tsc's source-order check computes (an
+    /// enclosing call resolved before the calls in its arguments, contextual
+    /// parameter types assigned), whatever order the demands, the batches and
+    /// earlier requests came in. The default does nothing: a backend without
+    /// a checker has no checker history.
+    fn check_demanded_files(&mut self, ctx: &Context, paths: &[&str]) -> Result<(), BackendError> {
+        let _ = (ctx, paths);
+        Ok(())
+    }
+
     /// Resolves canonically ordered per-file runs of demands (Go:
     /// `SemanticDemandRuns`, `tsgo/semantic_runs.go`). Results are
     /// index-aligned with `runs` and with each run's demands. `scope` carries
-    /// the structural-accessor symbols and type descriptors from outside the
-    /// subset, so a recomputed subset matches a whole-batch run.
+    /// the structural-accessor symbols from outside the subset, so a
+    /// recomputed subset matches a whole-batch run.
     fn semantic_demand_runs(
         &mut self,
         ctx: &Context,

@@ -145,7 +145,7 @@ fn assert_script_matches_fresh(
 }
 
 /// One line per entity row, in table order.
-fn describe(table: &typefacts::producer::ProducerTable) -> Vec<String> {
+pub(super) fn describe(table: &typefacts::producer::ProducerTable) -> Vec<String> {
     let mut lines = Vec::new();
     table
         .entities
@@ -808,10 +808,10 @@ fn ids_in(lines: &[String]) -> Vec<std::sync::Arc<str>> {
 /// first appearance, so two tables that name the same partition of symbols
 /// with differently numbered counters compare equal. Declaration-hash ids are
 /// left alone: those must match exactly.
-struct Renamer(std::collections::HashMap<String, usize>);
+pub(super) struct Renamer(pub(super) std::collections::HashMap<String, usize>);
 
 impl Renamer {
-    fn apply(&mut self, text: &str) -> String {
+    pub(super) fn apply(&mut self, text: &str) -> String {
         let mut out = String::with_capacity(text.len());
         let mut rest = text;
         while let Some(at) = rest.find("symbol:") {

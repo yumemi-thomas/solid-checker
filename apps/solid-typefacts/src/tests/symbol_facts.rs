@@ -14,7 +14,7 @@ use super::project_support::{
 use crate::backend::ClosureBackend;
 use crate::context::Context;
 use crate::model::{SemanticDemandRun, SemanticScope, durable_symbol_id};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use typefacts::v3::EntityDemand;
 use typefacts::{ReferenceSpace, SymbolClaim};
 
@@ -96,10 +96,9 @@ fn semantic_demand_runs_reject_a_cross_file_query_location() {
         symbol: true,
         ..EntityDemand::default()
     }];
-    let (suppression, seed) = (HashSet::new(), HashMap::new());
+    let suppression = HashSet::new();
     let scope = SemanticScope {
         suppression: &suppression,
-        descriptor_seed: &seed,
     };
     let error = project
         .semantic_demand_runs(
@@ -185,37 +184,20 @@ fn every_demanded_family_is_answered_and_none_is_counted_unavailable() {
     assert!(facts[1].call_result_domain.is_some());
 }
 
-/// The scope's descriptor seed is compiler-independent, so a seeded
-/// descriptor answers (and contributes its alias declarations as
-/// dependencies) while a suppressed symbol stays absent.
+/// A suppressed structural symbol keeps no descriptor; any other entity's
+/// descriptor is its own location's type.
 #[test]
-fn the_scope_seeds_descriptors_and_suppresses_structural_symbols() {
+fn the_scope_suppresses_structural_symbols() {
     let source = "export const value = 1;\nexport const other = 2;\n";
     let scratch = Scratch::new(&[("tsconfig.json", STRICT), ("a.ts", source)]);
-    let (path, other_path) = (scratch.path("a.ts"), "/elsewhere/types.ts".to_owned());
+    let path = scratch.path("a.ts");
     let mut project = scratch.open();
     let value = find(&path, source, "value");
     let other = find(&path, source, "other");
-    let value_id = project.symbol_at(&Context::new(), &value).unwrap();
     let other_id = project.symbol_at(&Context::new(), &other).unwrap();
-    let descriptor = std::sync::Arc::new(typefacts::TypeDescriptor {
-        text: "Seeded".into(),
-        origin_module: "".into(),
-        alias_declarations: vec![typefacts::Declaration {
-            name: "Seeded".into(),
-            kind: "declaration".into(),
-            location: loc(&other_path, 0, 6),
-        }]
-        .into(),
-    });
-    let seed = HashMap::from([
-        (value_id.clone(), descriptor.clone()),
-        (other_id.clone(), descriptor.clone()),
-    ]);
     let suppression = HashSet::from([other_id]);
     let scope = SemanticScope {
         suppression: &suppression,
-        descriptor_seed: &seed,
     };
     let demands: Vec<EntityDemand> = [&value, &other]
         .into_iter()
@@ -238,15 +220,69 @@ fn the_scope_seeds_descriptors_and_suppresses_structural_symbols() {
         .unwrap();
     let result = &results[0];
     assert_eq!(
-        result.entities[0].type_descriptor.as_deref(),
-        Some(&*descriptor)
+        result.entities[0]
+            .type_descriptor
+            .as_deref()
+            .map(|descriptor| &*descriptor.text),
+        Some("1")
     );
     assert!(
         result.entities[1].type_descriptor.is_none(),
         "a suppressed symbol keeps no descriptor"
     );
-    assert_eq!(result.dependencies, [other_path]);
     assert_eq!(project.unavailable.count("typeDescriptor"), 0);
+}
+
+/// Two references to one symbol with different types at their locations
+/// (a narrowed one and a declared one) keep their own descriptors, in either
+/// demand order: the first one asked no longer answers for the symbol
+/// (ADR 0367).
+#[test]
+fn a_descriptor_depends_on_its_location_only() {
+    let source = "declare const v: string | number;\nexport const a = typeof v === \"string\" ? v : \"\";\nexport const b = v;\n";
+    let scratch = Scratch::new(&[("tsconfig.json", STRICT), ("a.ts", source)]);
+    let path = scratch.path("a.ts");
+    let narrowed = source.find("? v").unwrap() + 2;
+    let declared = source.rfind("= v").unwrap() + 2;
+    let at = |start: usize| EntityDemand {
+        location: loc(&path, start, start + 1),
+        symbol: true,
+        type_descriptor: true,
+        ..EntityDemand::default()
+    };
+    let suppression = HashSet::new();
+    let scope = SemanticScope {
+        suppression: &suppression,
+    };
+    for order in [[narrowed, declared], [declared, narrowed]] {
+        let mut project = scratch.open();
+        let demands: Vec<EntityDemand> = order.iter().map(|&start| at(start)).collect();
+        let results = project
+            .semantic_demand_runs(
+                &Context::new(),
+                &[SemanticDemandRun {
+                    path: &path,
+                    demands: &demands,
+                }],
+                &scope,
+            )
+            .unwrap();
+        let entities = &results[0].entities;
+        assert_eq!(entities[0].symbol, entities[1].symbol, "one symbol");
+        let text = |start: usize| {
+            let index = order.iter().position(|&at| at == start).unwrap();
+            entities[index]
+                .type_descriptor
+                .as_deref()
+                .map(|descriptor| descriptor.text.to_string())
+        };
+        assert_eq!(text(narrowed).as_deref(), Some("string"), "{order:?}");
+        assert_eq!(
+            text(declared).as_deref(),
+            Some("string | number"),
+            "{order:?}"
+        );
+    }
 }
 
 #[test]
@@ -660,4 +696,7 @@ fn wire_symbol_name_only_rewrites_the_internal_prefix() {
     assert_eq!(wire_symbol_name("plain"), "plain");
     assert_eq!(wire_symbol_name("__index"), "__index");
     assert_eq!(wire_symbol_name("a\u{7f}b"), "a\u{7f}b");
+    // ADR 0367: no checker counter reaches the wire.
+    assert_eq!(wire_symbol_name("\u{7f}#4@#add"), "__#@#add");
+    assert_eq!(wire_symbol_name("\u{7f}@iterator@16"), "__@iterator");
 }

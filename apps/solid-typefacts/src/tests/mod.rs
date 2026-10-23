@@ -8,6 +8,7 @@ mod closure_order;
 mod contributions;
 mod entity_projection;
 mod generation;
+mod history_order;
 mod materialize;
 mod module_graph;
 mod project_invalidation;

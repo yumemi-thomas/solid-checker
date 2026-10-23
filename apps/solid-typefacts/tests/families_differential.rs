@@ -10,7 +10,9 @@
 //! (hashed or `symbol:<generation>:<n>`, wherever they appear in a row) are renamed by
 //! first appearance in location order. Rows must then be equal with every id
 //! redacted; how many rows partition their symbols into ids differently from Go
-//! (Go's ids follow its claim order, ADR 0366) is counted and not failed.
+//! (Go's ids follow its claim order, ADR 0366) is counted and not failed, and
+//! so is how many rows carry a different type descriptor of their own (Go
+//! shared a symbol's first descriptor, ADR 0367).
 //!
 //! * Default: a deterministic subset (every `TSRS_DIFF_STRIDE`-th project, 12
 //!   by default, plus every project that uses `references` or `paths`).
@@ -277,15 +279,20 @@ fn rename_non_durable(text: &str, names: &mut BTreeMap<String, String>) -> Strin
 }
 
 /// A well-known symbol property name embeds the checker's unique-symbol type
-/// counter (`__@iterator@88` in one producer, `...@86` in the other): it
-/// follows type creation order, which the two checkers do not share. Drops the
-/// counter, as the differential harness does.
+/// counter (`__@iterator@88` in one producer, `...@86` in the other; library
+/// type names spell the marker `\u{fffd}@`): it follows type creation order,
+/// which the two checkers do not share. Drops the counter, as the differential
+/// harness does; the Rust producer no longer writes it (ADR 0367).
 fn drop_unique_symbol_counters(text: &str) -> String {
+    drop_counters_after(&drop_counters_after(text, "__@"), "\u{fffd}@")
+}
+
+fn drop_counters_after(text: &str, marker: &str) -> String {
     let mut result = String::with_capacity(text.len());
     let mut rest = text;
-    while let Some(at) = rest.find("__@") {
-        result.push_str(&rest[..at + 3]);
-        rest = &rest[at + 3..];
+    while let Some(at) = rest.find(marker) {
+        result.push_str(&rest[..at + marker.len()]);
+        rest = &rest[at + marker.len()..];
         let name = rest
             .bytes()
             .take_while(|byte| byte.is_ascii_alphanumeric() || matches!(*byte, b'_' | b'$'))
@@ -318,10 +325,15 @@ fn redact_ids(text: &str) -> String {
 }
 
 /// One entity row: its text with ids redacted (what must equal Go's), and
-/// with ids renamed by first appearance (which symbols share an id).
+/// with ids renamed by first appearance (which symbols share an id). The
+/// row's own type descriptor is held apart (`descriptor`): Go gave every
+/// entity of a symbol the first descriptor any entity of it was answered with,
+/// the Rust producer answers each location's own type (ADR 0367), so the two
+/// are counted, not required to be equal.
 struct Row {
     redacted: String,
     renamed: String,
+    descriptor: String,
 }
 
 /// Every entity row of `table` as pretty Debug lines, keyed by span.
@@ -350,13 +362,16 @@ fn rows(table: &FactTable) -> BTreeMap<(String, u64, u64), Row> {
                     entity.location.end_byte,
                 ),
                 {
+                    let mut bare = entity.clone();
+                    let descriptor = bare.type_descriptor.take();
                     let renamed = rename_non_durable(
-                        &drop_unique_symbol_counters(&format!("{entity:#?}")),
+                        &drop_unique_symbol_counters(&format!("{bare:#?}")),
                         &mut names,
                     );
                     Row {
                         redacted: redact_ids(&renamed),
                         renamed,
+                        descriptor: format!("{descriptor:?}"),
                     }
                 },
             )
@@ -508,6 +523,14 @@ fn every_family_equals_go_on_the_corpus() {
                                 ));
                             }
                             Some(rust_row) => {
+                                if rust_row.descriptor != go_row.descriptor {
+                                    *counts
+                                        .entry(
+                                            "rows whose own type descriptor differs (not a failure, ADR 0367)"
+                                                .into(),
+                                        )
+                                        .or_default() += 1;
+                                }
                                 if rust_row.renamed != go_row.renamed {
                                     *counts
                                         .entry(

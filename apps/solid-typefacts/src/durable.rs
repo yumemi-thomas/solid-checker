@@ -71,6 +71,21 @@ pub fn normalized_name(name: &str) -> std::borrow::Cow<'_, str> {
     Cow::Borrowed(name)
 }
 
+/// A symbol name as the wire spells it, without the checker's counters
+/// (ADR 0367): a private name keeps its `#` marker (`\u{7f}#@x`, as
+/// [`normalized_name`]) and a unique-symbol name drops `@<digits>`
+/// (`\u{7f}@iterator`, the spelling the differential harness compares).
+#[must_use]
+pub fn display_name(name: &str) -> std::borrow::Cow<'_, str> {
+    use std::borrow::Cow;
+    match normalized_name(name) {
+        Cow::Owned(normal) if normal.starts_with("\u{7f}@") && normal.ends_with('@') => {
+            Cow::Owned(normal[..normal.len() - 1].to_owned())
+        }
+        other => other,
+    }
+}
+
 impl DurableRef {
     /// Go: `durableSymbolRef.id`: `sha256(path 0 start 0 end 0 name)`.
     #[must_use]
@@ -87,7 +102,8 @@ impl DurableRef {
     }
 
     /// Go: `durableSymbolRef.runtimeID`: the same digest as [`Self::id`] over
-    /// the filesystem-resolved declaration path, spelled `runtime:h:`.
+    /// the filesystem-resolved declaration path, spelled `runtime:h:`, with the
+    /// checker's counters left out of the name (ADR 0367).
     #[must_use]
     pub fn runtime_id(&self, path: &str) -> String {
         let mut input = Vec::with_capacity(path.len() + self.name.len() + 32);
@@ -97,7 +113,7 @@ impl DurableRef {
         input.push(0);
         input.extend_from_slice(self.end_byte.to_string().as_bytes());
         input.push(0);
-        input.extend_from_slice(&name_bytes(&self.name));
+        input.extend_from_slice(&name_bytes(&normalized_name(&self.name)));
         let id = hashed_symbol_id(&Sha256::digest(&input));
         format!("runtime:h:{}", &id["symbol:h:".len()..])
     }
@@ -175,6 +191,30 @@ pub fn durable_ref_for_declaration(symbol: P<Symbol>, node: P<Node>) -> Option<D
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// ADR 0367: a runtime identity is not a function of the checker's
+    /// counters either. A well-known-symbol member (`[Symbol.hasInstance]`,
+    /// the symbol at `instanceof`) embeds the id the checker happened to give
+    /// the symbol first.
+    #[test]
+    fn runtime_ids_leave_checker_counters_out() {
+        let at = |name: &str| DurableRef {
+            path: "/lib.d.ts".to_owned(),
+            start_byte: 1,
+            end_byte: 2,
+            name: name.to_owned(),
+        };
+        let path = "/lib.d.ts";
+        assert_eq!(
+            at("\u{7f}@hasInstance@12").runtime_id(path),
+            at("\u{7f}@hasInstance@3401").runtime_id(path)
+        );
+        assert_eq!(
+            at("\u{7f}#4@count").runtime_id(path),
+            at("\u{7f}#9@count").runtime_id(path)
+        );
+        assert_ne!(at("value").runtime_id(path), at("other").runtime_id(path));
+    }
 
     /// ADR 0366: the checker's process counters are not part of a name.
     #[test]

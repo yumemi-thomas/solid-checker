@@ -2,12 +2,10 @@
 //! the symbol-identity helpers of `semantic_retained.go`). The fact types
 //! themselves (`EntityFact`, `SymbolFact`, ...) are the client crate's.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::Arc;
 use typefacts::v3::EntityDemand;
-use typefacts::{
-    EntityFact, Location, PrimitiveValueDomain, SymbolClaim, SymbolFact, TypeDescriptor,
-};
+use typefacts::{EntityFact, Location, PrimitiveValueDomain, SymbolClaim, SymbolFact};
 
 /// A symbol identity (Go: `SymbolID`).
 pub type SymbolId = Arc<str>;
@@ -21,12 +19,12 @@ pub struct SemanticDemandRun<'a> {
 }
 
 /// The batch-wide state that makes a recomputed subset equivalent to resolving
-/// the complete demand closure (Go: `SemanticScope`). `descriptor_seed` is
-/// empty for the suppression-refresh pass, as Go's nil map is.
+/// the complete demand closure (Go: `SemanticScope`). Type descriptors are not
+/// part of it: a descriptor is a function of its demanded location alone
+/// (ADR 0367), never shared from another entity of the same symbol.
 #[derive(Clone, Copy, Debug)]
 pub struct SemanticScope<'a> {
     pub suppression: &'a HashSet<SymbolId>,
-    pub descriptor_seed: &'a HashMap<SymbolId, Arc<TypeDescriptor>>,
 }
 
 /// One input run's aligned semantic answer (Go: `SemanticDemandRunResult`).

@@ -29,7 +29,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use typefacts::producer::{EntityRows, ProducerTable, rust_owned_transport_manifest};
 use typefacts::v3::EntityDemand;
-use typefacts::{AsyncFunctionFact, FileFact, SourceDigest, TypeDescriptor};
+use typefacts::{AsyncFunctionFact, FileFact, SourceDigest};
 
 /// Digests one file's demand run. The hash only ever compares runs within one
 /// process (retained state never crosses processes), so a fixed-key hasher is
@@ -203,6 +203,13 @@ impl DemandClosure {
         let mut table = ProducerTable::new(generation, "semantic-demand");
         table.sources.clone_from(&source_digests);
 
+        // Check-first (ADR 0367): every demanded file is fully checked, in
+        // path order (the groups are path-ordered), before any demand of the
+        // table is answered, so no answer depends on demand, batch or request
+        // order.
+        let demanded: Vec<&str> = groups.iter().map(|group| group.path.as_str()).collect();
+        self.backend.check_demanded_files(ctx, &demanded)?;
+
         // The async runs are rebuilt every generation; a group's run holds only
         // the rows that asked for async.
         let mut async_groups: Vec<(String, Vec<EntityDemand>)> = Vec::new();
@@ -295,7 +302,6 @@ impl DemandClosure {
 
         let started = Instant::now();
         let mut union: HashSet<SymbolId> = HashSet::new();
-        let mut descriptor_seed: HashMap<SymbolId, Arc<TypeDescriptor>> = HashMap::new();
         let mut changed: Vec<usize> = Vec::new();
         for (index, group) in groups.iter_mut().enumerate() {
             let contribution = self.retained.get(&group.path);
@@ -318,30 +324,7 @@ impl DemandClosure {
             if let Some(retained) = contribution
                 && retained.borrow().demand_hash == group.hash
             {
-                {
-                    let contribution = retained.borrow();
-                    union.extend(contribution.structural.iter().cloned());
-                    // Batch-wide first-wins descriptor dedup: descriptors the
-                    // retained files already carry are what a whole-batch run
-                    // would have cached before reaching the recomputed demands.
-                    if let Some(entities) = &contribution.entities {
-                        for entity in entities.iter() {
-                            if !entity.symbol.is_empty()
-                                && let Some(descriptor) = &entity.type_descriptor
-                            {
-                                descriptor_seed
-                                    .entry(entity.symbol.clone())
-                                    .or_insert_with(|| Arc::clone(descriptor));
-                            }
-                        }
-                    } else {
-                        for kept in &contribution.descriptors {
-                            descriptor_seed
-                                .entry(kept.symbol.clone())
-                                .or_insert_with(|| Arc::clone(&kept.descriptor));
-                        }
-                    }
-                }
+                union.extend(retained.borrow().structural.iter().cloned());
                 group.contribution = Some(retained);
                 continue;
             }
@@ -370,7 +353,6 @@ impl DemandClosure {
                 &runs,
                 &SemanticScope {
                     suppression: &union,
-                    descriptor_seed: &descriptor_seed,
                 },
             )?;
             drop(runs);
@@ -442,13 +424,11 @@ impl DemandClosure {
                         demands,
                     })
                     .collect();
-                let no_seed = HashMap::new();
                 let results = self.backend.semantic_demand_runs(
                     ctx,
                     &runs,
                     &SemanticScope {
                         suppression: &union,
-                        descriptor_seed: &no_seed,
                     },
                 )?;
                 drop(runs);

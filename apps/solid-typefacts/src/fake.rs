@@ -39,7 +39,6 @@ use typefacts::{AsyncFunctionFact, Declaration, Location, SourceDigest, SymbolCl
 pub struct ScopeSeen {
     pub paths: Vec<String>,
     pub suppression: std::collections::BTreeSet<String>,
-    pub descriptor_seed: std::collections::BTreeSet<String>,
 }
 
 pub struct FakeBackend {
@@ -270,11 +269,6 @@ impl ClosureBackend for FakeBackend {
         self.scopes_seen.lock().unwrap().push(ScopeSeen {
             paths: runs.iter().map(|run| run.path.to_owned()).collect(),
             suppression: scope.suppression.iter().map(ToString::to_string).collect(),
-            descriptor_seed: scope
-                .descriptor_seed
-                .keys()
-                .map(ToString::to_string)
-                .collect(),
         });
         if let Some(message) = &self.fail_semantic {
             return Err(BackendError(message.clone()));

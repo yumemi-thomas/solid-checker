@@ -816,11 +816,14 @@ fn library_type_name(program: &Program, value: P<Type>) -> Option<String> {
 /// spells the marker U+007F. A Rust `String` cannot hold the raw byte, so the
 /// name is spelled as the client decodes it, which keeps the two producers
 /// indistinguishable on the wire. (The fact is junk either way, no consumer
-/// asks for such a name, and the comparison with the Go producer is exact. When
-/// the Go producer is deleted the right fix is to skip internal names.)
+/// asks for such a name. When the Go producer is deleted the right fix is to
+/// skip internal names.) The checker's counters are left out
+/// (`\u{7f}@iterator@<symbol id>`, ADR 0367): they follow the order the checker
+/// numbered symbols in, which is history.
 pub(crate) fn library_symbol_name(name: &str) -> String {
+    let name = crate::durable::display_name(name);
     match name.strip_prefix('\u{7f}') {
         Some(rest) => format!("\u{fffd}{rest}"),
-        None => name.to_owned(),
+        None => name.into_owned(),
     }
 }

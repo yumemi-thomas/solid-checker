@@ -585,6 +585,27 @@ impl ClosureBackend for Project {
         })
     }
 
+    /// Check-first (ADR 0367): the full check of every demanded file, in path
+    /// order, with no checker lease held (`unsafe_boundary` invariant 7). The
+    /// diagnostics are dropped; the resolved-call fallback asks again for the
+    /// files it needs, which the checker answers without checking twice.
+    fn check_demanded_files(&mut self, ctx: &Context, paths: &[&str]) -> Result<(), BackendError> {
+        check(ctx)?;
+        let generation = self.live()?;
+        let program = generation.program();
+        for path in paths {
+            let Some(file) = absolute(path)
+                .ok()
+                .and_then(|absolute_path| program.get_source_file(&absolute_path))
+            else {
+                continue;
+            };
+            let _ = generation.semantic_diagnostics(file);
+            check(ctx)?;
+        }
+        Ok(())
+    }
+
     /// Go: `SemanticDemandRuns`.
     fn semantic_demand_runs(
         &mut self,
@@ -1125,11 +1146,14 @@ fn declaration_kind(node: tsrs_core::P<Node>) -> &'static str {
 /// which is valid UTF-8 and would reach the wire unnoticed. Every symbol name
 /// the producer writes (declaration names in both evidence sections and the
 /// symbol table, and the required-property names of parameter object shapes
-/// once resolved calls are ported) must go through this.
+/// once resolved calls are ported) must go through this. The checker's
+/// counters are left out (`#<class id>@x`, `@sym@<symbol id>`, ADR 0367):
+/// they follow binding and checking order, not the program.
 pub(crate) fn wire_symbol_name(name: &str) -> String {
+    let name = crate::durable::display_name(name);
     match name.strip_prefix('\u{7f}') {
         Some(rest) => format!("__{rest}"),
-        None => name.to_owned(),
+        None => name.into_owned(),
     }
 }
 
