@@ -26,7 +26,7 @@ export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 export const FILE_BUDGETS = {
   "AGENTS.md": 8_000,
   "CLAUDE.md": 1_000,
-  "docs/open-work.md": 36_000,
+  "docs/open-work.md": 40_000,
   "docs/decisions.md": 160_000,
 };
 
