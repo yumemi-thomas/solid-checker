@@ -2,7 +2,7 @@
 //! by key, and the symbols that must keep counters. Order, history and
 //! file-order independence run end to end in `tests/binder_ids.rs`.
 
-use super::project_support::{SMALL_CONFIG, Scratch, find_last};
+use super::project_support::{SMALL_CONFIG, Scratch, find, find_last};
 use crate::backend::ClosureBackend;
 use crate::context::Context;
 use crate::model::durable_symbol_id;
@@ -117,4 +117,103 @@ fn an_unknown_hash_id_resolves_to_nothing() {
             assert!(env.symbol_for(&unknown).is_none());
         })
         .unwrap();
+}
+
+/// One node declares two symbols: `constructor(public x)` is the parameter `x`
+/// (the constructor's locals) and the property `x` (the class members), and
+/// both share the declaration a `Decl` key hashes. TypeScript keeps them
+/// apart (find-all-references lists both), so the ids must too: the property,
+/// which owns the node, keeps the binder id and the parameter takes a counter.
+/// A module export and its local half (`localSymbol`) are one symbol and keep
+/// sharing an id.
+#[test]
+fn a_parameter_property_and_its_parameter_never_share_an_id() {
+    let source = "export class C {\n  constructor(public x: number) { x }\n  read() { return this.x }\n}\nexport const v = 1\nv\n";
+    let scratch = Scratch::new(&[("tsconfig.json", SMALL_CONFIG), ("a.ts", source)]);
+    let path = scratch.path("a.ts");
+    for parameter_first in [true, false] {
+        let mut project = scratch.open();
+        let ctx = Context::new();
+        let declaration = find(&path, source, "x: number");
+        let parameter_use = find(&path, source, "x }");
+        let property_use = find_last(&path, source, "x }");
+        let (parameter, property) = if parameter_first {
+            let parameter = project.symbol_at(&ctx, &parameter_use).unwrap();
+            (parameter, project.symbol_at(&ctx, &declaration).unwrap())
+        } else {
+            let property = project.symbol_at(&ctx, &declaration).unwrap();
+            (project.symbol_at(&ctx, &parameter_use).unwrap(), property)
+        };
+        assert_ne!(parameter, property, "parameter and property conflated");
+        assert!(property.starts_with("symbol:h:"), "{property}");
+        assert!(!parameter.starts_with("symbol:h:"), "{parameter}");
+        assert_eq!(
+            project.symbol_at(&ctx, &property_use).unwrap(),
+            property,
+            "this.x"
+        );
+        project
+            .with_env(|env, _| {
+                let file = env.program.get_source_file(&path).unwrap();
+                let at = u32::try_from(source.rfind("v\n").unwrap()).unwrap();
+                let export = env
+                    .checker
+                    .get_symbol_at_location_exported(crate::nodes::node_at(file, at))
+                    .unwrap();
+                let local = export.declarations()[0].local_symbol().unwrap();
+                assert_ne!(local.addr(), export.addr());
+                assert_eq!(env.id_for(local), env.id_for(export));
+            })
+            .unwrap();
+    }
+}
+
+/// An `Export` id hashes only (path, name). A module that exports its own
+/// `Box` and augments another module's `Box` holds the minimum declaration of
+/// both (`a.ts` sorts before `lib.ts`), so both export keys spell one id: the
+/// collision check must hand the second one asked a counter, never the first
+/// one's id.
+#[test]
+fn an_augmentation_beside_a_same_named_export_never_shares_its_id() {
+    let lib = "export interface Box<T> { value: T }\n";
+    let aug = "import \"./lib\"\nexport interface Box { own: number }\ndeclare module \"./lib\" {\n  interface Box<T> { extra: T }\n}\n";
+    let main = "import type { Box as LibBox } from \"./lib\"\nimport type { Box as OwnBox } from \"./a\"\nexport type L = LibBox<number>\nexport type O = OwnBox\n";
+    let scratch = Scratch::new(&[
+        ("tsconfig.json", SMALL_CONFIG),
+        ("a.ts", aug),
+        ("lib.ts", lib),
+        ("main.ts", main),
+    ]);
+    let (a, l) = (scratch.path("a.ts"), scratch.path("lib.ts"));
+    for lib_first in [true, false] {
+        let mut project = scratch.open();
+        let ctx = Context::new();
+        let own = find(&a, aug, "Box {");
+        let augmented = find(&l, lib, "Box<T>");
+        let (own_id, lib_id) = if lib_first {
+            let lib_id = project.symbol_at(&ctx, &augmented).unwrap();
+            (project.symbol_at(&ctx, &own).unwrap(), lib_id)
+        } else {
+            let own_id = project.symbol_at(&ctx, &own).unwrap();
+            (own_id, project.symbol_at(&ctx, &augmented).unwrap())
+        };
+        assert_ne!(own_id, lib_id, "lib first {lib_first}");
+        // The collision is real (the case proves something): whichever is
+        // asked second fails closed to a counter. Which one that is depends on
+        // demand order, a known gap in order independence for this corner.
+        assert_eq!(
+            [&own_id, &lib_id]
+                .iter()
+                .filter(|id| id.starts_with("symbol:h:"))
+                .count(),
+            1,
+            "lib first {lib_first}: {own_id} {lib_id}"
+        );
+        let declarations = project.declarations(&ctx, &lib_id).unwrap().unwrap();
+        assert_eq!(
+            declarations.len(),
+            2,
+            "lib first {lib_first}: {declarations:?}"
+        );
+    }
 }

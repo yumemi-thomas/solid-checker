@@ -180,6 +180,25 @@ fn is_global(checker: &Checker, root: P<Symbol>) -> bool {
             .is_some_and(|global| global.addr() == root.addr())
 }
 
+/// Whether every declaration of `root` is bound to `root`: its binder symbol
+/// merges into `root`, or `root` is its module-local half (`localSymbol`, the
+/// same logical symbol as the export). One node can declare two different
+/// symbols, and the second shares the first's declaration-derived key: a
+/// parameter property `constructor(public x)` declares the parameter `x` and
+/// the property `x`, and the node's symbol is the property. The symbol that
+/// does not own its declarations keeps a counter (fail closed), so the
+/// parameter and the property never share an id.
+fn owns_every_declaration(checker: &Checker, root: P<Symbol>) -> bool {
+    root.declarations().iter().all(|declaration| {
+        declaration
+            .symbol()
+            .is_some_and(|binder| merged(checker, binder).addr() == root.addr())
+            || declaration
+                .local_symbol()
+                .is_some_and(|local| local.addr() == root.addr())
+    })
+}
+
 /// The key of `symbol` and the symbol the id resolves to. `exported` answers
 /// whether a declaration reference is a module export of the program (the
 /// scan result, pointer-free so it survives a release).
@@ -196,6 +215,9 @@ pub fn binder_key(
         return Some((Key::Global(root.name().to_owned()), root));
     }
     let reference = minimum_declaration_ref(root)?;
+    if !owns_every_declaration(checker, root) {
+        return None;
+    }
     let key = if exported(&reference) {
         Key::Export(reference)
     } else {
