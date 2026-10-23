@@ -609,7 +609,7 @@ impl ClosureBackend for Project {
         let id: SymbolId = id.into();
         self.with_env(|env, _| {
             let symbol = env.symbol_for(&id)?;
-            let declarations = declarations_for_symbol(symbol);
+            let declarations = id_declarations(env, &id, symbol);
             (!declarations.is_empty()).then_some(declarations)
         })
     }
@@ -795,7 +795,7 @@ impl SymbolEvidence for Project {
                         let original = env.checker.get_aliased_symbol(symbol);
                         fact.alias_target = env.id_for(original);
                     }
-                    fact.declarations = declarations_for_symbol(symbol).into();
+                    fact.declarations = id_declarations(env, &query.id, symbol).into();
                     references.retain_symbol_fact(env, &query.id, symbol, &fact.declarations);
                 }
                 if query.references {
@@ -1234,6 +1234,33 @@ pub(crate) fn wire_symbol_name(name: &str) -> String {
         Some(rest) => format!("__{rest}"),
         None => name.into_owned(),
     }
+}
+
+/// The declarations an id's row reports. A multi-origin property's are its
+/// origins' declarations (ADR 0371), in `(path, start, end)` order: the
+/// properties sharing a `Set` id list them in their constituents' order,
+/// which follows type ids.
+fn id_declarations(
+    env: &Env<'_>,
+    id: &SymbolId,
+    symbol: tsrs_core::P<tsrs_ast::Symbol>,
+) -> Vec<Declaration> {
+    let mut declarations = declarations_for_symbol(symbol);
+    if env.ids.is_set_id(id) {
+        declarations.sort_by(|left, right| {
+            (
+                &left.location.path,
+                left.location.start_byte,
+                left.location.end_byte,
+            )
+                .cmp(&(
+                    &right.location.path,
+                    right.location.start_byte,
+                    right.location.end_byte,
+                ))
+        });
+    }
+    declarations
 }
 
 /// Go: `declarationsForSymbol`.

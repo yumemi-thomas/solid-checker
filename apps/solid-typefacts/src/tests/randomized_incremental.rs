@@ -346,12 +346,17 @@ impl World {
                     ("export async function ", "function"),
                     ("export class ", "class"),
                     ("export interface ", "interface"),
+                    ("export type ", "alias"),
                 ] {
                     if let Some(rest) = line.strip_prefix(keyword) {
                         let name: String =
                             rest.chars().take_while(|c| c.is_alphanumeric()).collect();
                         let generic = rest[name.len()..].starts_with('<');
+                        let member = rest.contains("{ kind: \"");
                         let kind = match (kind, generic) {
+                            ("interface", false) if member => "dmember",
+                            ("alias", true) => "galias",
+                            ("alias", false) => continue,
                             ("function", true) => "gfunction",
                             ("class", true) => "gclass",
                             ("class", false) => "class",
@@ -377,8 +382,14 @@ impl World {
         let selector = if self.plain {
             [0, 1, 2, 3, 4, 99, 99, 99][rng.below(8)]
         } else {
-            rng.below(30)
+            rng.below(36)
         };
+        // Discriminated-union members of other modules (ADR 0371).
+        let members: Vec<String> = exports
+            .iter()
+            .filter(|(_, _, kind)| *kind == "dmember")
+            .map(|(_, name, _)| name.clone())
+            .collect();
         let others: Vec<String> = self
             .module_names()
             .into_iter()
@@ -457,6 +468,30 @@ impl World {
                 "export const {name} = typeof GM{} === \"number\";",
                 rng.below(4)
             ),
+            // Multi-origin properties (ADR 0371): discriminated-union members
+            // and a generic result type, read through unions, intersections
+            // and spreads of them.
+            30 | 31 => format!(
+                "export interface {name} {{ kind: \"{name}\"; tag: {ty}; shared?: string }}"
+            ),
+            32 => format!(
+                "export type {name}<T> = {{ ok: true; value: T }} | {{ ok: false; error: {ty} }};"
+            ),
+            33 if members.len() >= 2 => {
+                let (a, b) = (rng.pick(&members).clone(), rng.pick(&members).clone());
+                let prop = rng.pick(&["kind", "tag", "shared"]);
+                format!("export const {name} = (null as unknown as {a} | {b}).{prop};")
+            }
+            34 if members.len() >= 2 => {
+                let (a, b) = (rng.pick(&members).clone(), rng.pick(&members).clone());
+                format!("export const {name} = (null as unknown as {a} & {b}).shared;")
+            }
+            35 if members.len() >= 2 => {
+                let (a, b) = (rng.pick(&members).clone(), rng.pick(&members).clone());
+                format!(
+                    "export const {name} = ({{ ...(null as unknown as {a}), ...(null as unknown as {b}) }}).shared;"
+                )
+            }
             _ => {
                 // A use of another module's export.
                 let Some((module, target, kind)) =
@@ -595,6 +630,15 @@ fn use_statement(rng: &mut Rng, name: &str, target: &str, kind: &str) -> String 
             rng.below(9)
         ),
         "ginterface" => format!("export const {name}: {target}<string> | undefined = undefined;"),
+        "dmember" => format!(
+            "export const {name} = (null as unknown as {target}).{};",
+            rng.pick(&["kind", "tag", "shared"])
+        ),
+        "galias" => format!(
+            "export const {name} = (null as unknown as {target}<{}>).{};",
+            rng.pick(&["number", "string"]),
+            rng.pick(&["ok", "value", "error"])
+        ),
         "interface" => format!("export const {name}: {target} | undefined = undefined;"),
         _ => match rng.below(4) {
             0 => format!("export const {name} = {{ {target} }};"),

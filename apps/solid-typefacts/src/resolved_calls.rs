@@ -392,7 +392,12 @@ impl CallRun<'_, '_> {
             target = Some(found);
             let id = self.env.id_for(found);
             self.evidence.symbol(&id);
-            if let Some(current) = self.env.symbol_for(&id) {
+            // A binder id names its merged root. A multi-origin property's
+            // `Set` id is shared by the properties of every containing type
+            // with the same origins (ADR 0371): the call keeps its own.
+            if !self.env.ids.is_set_id(&id)
+                && let Some(current) = self.env.symbol_for(&id)
+            {
                 target = Some(current);
             }
             call.target = id;

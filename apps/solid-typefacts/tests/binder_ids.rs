@@ -1,8 +1,9 @@
 //! Binder-level symbol ids are a pure function of the program (ADR 0366,
 //! STABLE-IDS V1, V2, V5, V8): demand order, file order, checker history and
 //! the process's symbol counters do not change them, and a derived symbol
-//! never receives one. Its own process: the private-name test depends on the
-//! process's symbol counters.
+//! never receives one. So are multi-origin properties' `Set` ids (ADR 0371).
+//! Its own process: the private-name test depends on the process's symbol
+//! counters.
 
 use solid_typefacts::context::Context;
 use solid_typefacts::project::Project;
@@ -48,6 +49,45 @@ export const q: Box<string> = make("s")
 export const qv = q.value
 "#;
 
+/// Multi-origin properties (ADR 0371): union, intersection and spread
+/// properties, over interfaces, instantiated aliases and parameter properties.
+const SHAPES: &str = r#"export interface Circle { kind: "circle"; r: number; tag?: string }
+export interface Square { kind: "square"; s: number; tag?: string }
+export interface Circle2 extends Circle { more: number }
+export type Shape = Circle | Square
+export type Res<T> = { ok: true; value: T } | { ok: false; error: string }
+export type L = { a: number }
+export type R = { a: number; b: string }
+export class PA { constructor(public x: number) {} }
+export class PB { constructor(public x: number) {} }
+const k = "c"
+export interface CX { [k]: number }
+export interface CY { [k]: number }
+"#;
+
+const USES: &str = r#"import type { Shape, Circle, Square, Circle2, Res, L, R, PA, PB, CX, CY } from "./shapes"
+declare const s1: Shape
+declare const s2: Circle | Square | Circle2
+declare const r1: Res<number>
+declare const r2: Res<string>
+declare const i: L & R
+declare const u: L | R
+declare const x: { p: number }
+declare const y: { p?: number }
+declare const pab: PA | PB
+declare const cxy: CX | CY
+export const k1 = s1.kind
+export const k2 = s2.kind
+export const t1 = s1.tag
+export const o1 = r1.ok
+export const o2 = r2.ok
+export const ia = i.a
+export const ua = u.a
+export const sp = ({ ...x, ...y }).p
+export const px = pab.x
+export const cc = cxy.c
+"#;
+
 const SCRIPT_A: &str = "interface Merged { a: number }\nconst scriptValue = 1\n";
 const SCRIPT_B: &str = "interface Merged { b: number }\ndeclare const mergedUse: Merged\n";
 
@@ -79,6 +119,8 @@ impl Fixture {
             ("main.ts", MAIN),
             ("sa.ts", SCRIPT_A),
             ("sb.ts", SCRIPT_B),
+            ("shapes.ts", SHAPES),
+            ("uses.ts", USES),
         ]
         .into_iter()
         .chain(extra.iter().copied())
@@ -97,9 +139,18 @@ impl Fixture {
     }
 }
 
-const ALL: [&str; 5] = ["lib.ts", "aug.ts", "main.ts", "sa.ts", "sb.ts"];
+const ALL: [&str; 7] = [
+    "lib.ts",
+    "aug.ts",
+    "main.ts",
+    "sa.ts",
+    "sb.ts",
+    "shapes.ts",
+    "uses.ts",
+];
 
-/// (label, file, source, needle, offset into the needle, binder-level?)
+/// (label, file, source, needle, offset into the needle, hashed?): a
+/// binder-level symbol or a keyed multi-origin property.
 type Probe = (
     &'static str,
     &'static str,
@@ -134,6 +185,20 @@ fn probes() -> Vec<Probe> {
         // Properties read through an instantiation are derived symbols.
         ("b.value", "main.ts", MAIN, "b.value", 2, false),
         ("q.value", "main.ts", MAIN, "q.value", 2, false),
+        // Multi-origin properties (ADR 0371).
+        ("Circle.kind", "shapes.ts", SHAPES, "kind", 0, true),
+        ("s1.kind", "uses.ts", USES, "s1.kind", 3, true),
+        ("s2.kind", "uses.ts", USES, "s2.kind", 3, true),
+        ("s1.tag", "uses.ts", USES, "s1.tag", 3, true),
+        ("r1.ok", "uses.ts", USES, "r1.ok", 3, true),
+        ("r2.ok", "uses.ts", USES, "r2.ok", 3, true),
+        ("i.a", "uses.ts", USES, "i.a", 2, true),
+        ("u.a", "uses.ts", USES, "u.a", 2, true),
+        ("spread.p", "uses.ts", USES, "}).p", 3, true),
+        ("pab.x", "uses.ts", USES, "pab.x", 4, true),
+        ("PA.x", "shapes.ts", SHAPES, "x: number", 0, true),
+        // Its origins are late-bound members, which have no binder key.
+        ("cxy.c", "uses.ts", USES, "cxy.c", 4, false),
     ]
 }
 
@@ -229,6 +294,36 @@ fn binder_ids_are_hashes_and_derived_symbols_are_not() {
     // Library globals are named by their name (one id for the merged symbol).
     for global in ["JSON", "Set", "Array"] {
         assert!(is_hash(&base[global]), "{global}");
+    }
+}
+
+/// ADR 0371: a multi-origin property's id is its combination, name and origin
+/// set. The same origins under another containing type (a union with an
+/// extra constituent that inherits `kind`, another instantiation of `Res`)
+/// are the same property; another name, combination or origin set is not,
+/// and no property shares an id with one of its origins.
+#[test]
+fn multi_origin_properties_are_keyed_by_their_origin_set() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let base = baseline();
+    assert_eq!(base["s1.kind"], base["s2.kind"]);
+    assert_eq!(base["r1.ok"], base["r2.ok"]);
+    let distinct = [
+        "Circle.kind",
+        "s1.kind",
+        "s1.tag",
+        "r1.ok",
+        "i.a",
+        "u.a",
+        "spread.p",
+        "pab.x",
+        "PA.x",
+        "value decl",
+    ];
+    for (n, left) in distinct.iter().enumerate() {
+        for right in &distinct[n + 1..] {
+            assert_ne!(base[*left], base[*right], "{left} and {right} share an id");
+        }
     }
 }
 
