@@ -315,6 +315,34 @@ fn symbols_pack_into_a_full_transition_or_stay_inline() {
 }
 
 #[test]
+fn duplicate_symbol_ids_pack_one_decodable_row() {
+    let mut session = session_over(FakeBackend::default());
+    let first = ask(&mut session, analyze(1, 1, "", vec![demand("/p/a.ts", 1)]));
+    assert!(first.ok, "{:?}", first.error);
+    let id = symbol_id(&Location {
+        path: "/p/a.ts".into(),
+        start_byte: 1,
+        end_byte: 4,
+    })
+    .to_string();
+    let query = |references_only| SymbolQuery {
+        id: id.clone().into(),
+        references: true,
+        references_only,
+    };
+    let mut symbols = request(2, Operation::Symbols, 1);
+    symbols.state_token = "1".to_owned();
+    symbols.symbol_queries = vec![query(false), query(false), query(true)];
+    let packed = ask(&mut session, symbols);
+    assert!(packed.ok, "{:?}", packed.error);
+    // The response must stay decodable and carry the id once.
+    assert!(
+        reencode_table_transition(&packed.table_transition).unwrap() == packed.table_transition
+    );
+    assert_eq!(summary(&packed).symbol_operations, 1);
+}
+
+#[test]
 fn reference_changes_and_release_ride_along_with_analyze() {
     let fake = FakeBackend::default();
     let released = Arc::clone(&fake.released);
