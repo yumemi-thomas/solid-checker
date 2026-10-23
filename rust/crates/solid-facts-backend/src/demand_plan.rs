@@ -1011,6 +1011,18 @@ fn plan_call_demands(
         // from a container carrying that value's nested alias declarations.
         planned.callability = planned.type_descriptor;
         planned.constructability = planned.type_descriptor;
+        // Review of ADR 0368: a callee that is itself a call (`get()(x)`)
+        // answers, at its span, the inner call. The outer call's own fact is
+        // demanded at the whole call, which is what the lookup reads.
+        let nested_callee = file
+            .ast
+            .call_at(file.ast.peel_ts_sugar_span(call.callee))
+            .is_some();
+        if nested_callee && planned.resolved_call {
+            let mut outer = demand(typefacts_location(path, call.span));
+            outer.resolved_call = true;
+            demands.push(outer);
+        }
         demands.push(planned);
         if property != callee {
             let mut member = demand(property).symbol(false);
