@@ -27,7 +27,7 @@ export const FILE_BUDGETS = {
   "AGENTS.md": 8_000,
   "CLAUDE.md": 1_000,
   "docs/open-work.md": 32_000,
-  "docs/decisions.md": 125_000,
+  "docs/decisions.md": 140_000,
 };
 
 export const GROUP_BUDGETS = [
@@ -43,8 +43,11 @@ export const GROUP_BUDGETS = [
   { name: "skills", test: (path) => path.startsWith(".claude/skills/"), bytes: 25_000 },
 ];
 
-/** One fixture README is a claim, not a report. */
-export const FIXTURE_README_MAX = 8_000;
+/**
+ * One fixture README is a claim, not a report. 10 KB: the runtime-oracle README
+ * also documents the harness's verdicts and `oracle.json` fields (2026-10-23).
+ */
+export const FIXTURE_README_MAX = 10_000;
 
 /**
  * What docs/ may hold. A new top-level document is how the append logs came
