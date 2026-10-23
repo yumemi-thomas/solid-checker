@@ -169,7 +169,7 @@ pub(crate) fn find_missing_owners(
                 let Some(Some(targets)) = lookup.spread_handler_targets().get(&key) else {
                     continue;
                 };
-                for (path, span) in targets {
+                for (path, span, _) in targets {
                     let index = nodes_by_path
                         .get(path.as_str())
                         .into_iter()

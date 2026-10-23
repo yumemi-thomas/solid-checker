@@ -1532,6 +1532,16 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether a compiler event handler `onT` runs only for events of type `T`
+    /// (lowercased): a non-delegated one is `addEventListener("t", fn)` on its
+    /// element, a delegated one a property `eventHandler` reads for `e.type`.
+    /// A synchronous dispatch then reaches only the handlers of the types it
+    /// fires. The default says no (a release whose web runtime was not read),
+    /// which makes every dispatch reach every handler.
+    fn event_handler_runs_only_for_its_type(&self) -> bool {
+        false
+    }
+
     /// Whether a statically known string/number in a native `on*` JSX
     /// position is emitted as an attribute instead of installed as a listener.
     /// Solid 1.x's compiler makes that node/value distinction; the shared

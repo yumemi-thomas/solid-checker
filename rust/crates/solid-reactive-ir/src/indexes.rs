@@ -1429,11 +1429,14 @@ impl<'a> SemanticLookup<'a> {
                 if let Some(targets) = targets {
                     let mut targets = targets.iter().collect::<Vec<_>>();
                     targets.sort_unstable();
-                    for (path, span) in targets {
+                    for (path, span, key) in targets {
                         hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
                         hasher.update(path.as_bytes());
                         hasher.update(span.start.to_le_bytes());
                         hasher.update(span.end.to_le_bytes());
+                        // The key is the handler's event type (ADR 0361).
+                        hasher.update(u64::try_from(key.len()).unwrap_or(u64::MAX).to_le_bytes());
+                        hasher.update(key.as_bytes());
                     }
                 }
             }

@@ -86,7 +86,7 @@ pub(crate) fn discover_owner_file(
             let Some(Some(targets)) = lookup.spread_handler_targets().get(&key) else {
                 continue;
             };
-            for (path, span) in targets {
+            for (path, span, _) in targets {
                 edges.push(SymbolicOwnerEdge {
                     source: None,
                     target: OwnerTarget::Function(path.clone(), *span),

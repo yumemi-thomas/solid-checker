@@ -734,7 +734,25 @@ fn collect_argument_spans(dialect: &'static Dialect, file: &FileFacts, spans: &m
 
 fn collect_member_spans(file: &FileFacts, spans: &mut DemandSpans) {
     let symbol_spans = &mut spans.symbol_spans;
+    let type_descriptor_spans = &mut spans.type_descriptor_spans;
     let mut add_symbol = |span, references| add_symbol_span(symbol_spans, span, references);
+    // The computed members called with a key that is not a literal.
+    let literal_keys = file
+        .ast
+        .literal_computed_members
+        .iter()
+        .map(|member| member.span)
+        .collect::<HashSet<_>>();
+    let computed_call_keys = file
+        .ast
+        .calls
+        .iter()
+        .map(|call| file.ast.peel_ts_sugar_span(call.callee))
+        .filter(|callee| {
+            file.ast.computed_members.binary_search(callee).is_ok()
+                && !literal_keys.contains(callee)
+        })
+        .collect::<HashSet<_>>();
     // Member objects are needed to connect reads such as `props.title` and
     // `state.value` to their declarations. Querying only the property token
     // loses that provenance.
@@ -770,6 +788,30 @@ fn collect_member_spans(file: &FileFacts, spans: &mut DemandSpans) {
             .is_some_and(solid_reactive_ir::dispatching_dom_member_on_any_interface)
         {
             add_symbol(member.property, false);
+        }
+        // ADR 0361: an owner-specific member (`showModal`, `reset`, `close`)
+        // invoked as a value, `dialog.showModal.call(dialog)`, runs wherever it
+        // is called; the property's declaration separates a `lib.dom` member
+        // from a project member that shares the spelling.
+        if file
+            .source_text(member.property)
+            .is_some_and(solid_reactive_ir::dispatching_dom_member_on_exact_owner)
+            && file.ast.members.iter().any(|parent| {
+                file.ast.peel_ts_sugar_span(parent.object) == member.span
+                    && file
+                        .source_text(parent.property)
+                        .is_some_and(|name| matches!(name, "call" | "apply" | "bind"))
+            })
+        {
+            add_symbol(member.property, false);
+        }
+        // ADR 0361: a call through a computed key that is not a literal may be
+        // any dispatching member unless the key's type (`number`, `symbol`)
+        // says it names none.
+        if computed_call_keys.contains(&member.span) {
+            let key = file.ast.peel_ts_sugar_span(member.property);
+            add_symbol(key, false);
+            type_descriptor_spans.insert(key);
         }
     }
     for spread in &file.ast.spreads {

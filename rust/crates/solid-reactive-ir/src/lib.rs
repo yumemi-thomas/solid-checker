@@ -41,7 +41,11 @@ mod boundary_defects;
 mod cache;
 mod callback_return;
 mod cleanup;
-pub use cleanup::{dispatching_dom_member_on_any_interface, dispatching_dom_member_spelling};
+mod dispatch_events;
+pub use cleanup::{
+    dispatching_dom_member_on_any_interface, dispatching_dom_member_on_exact_owner,
+    dispatching_dom_member_spelling,
+};
 mod development_feedback;
 mod directives;
 pub use development_feedback::{

@@ -3,10 +3,14 @@
 use super::*;
 
 /// What the spread argument of an intrinsic element hands the element as event
-/// handlers (ADR 0358): the `on…` functions its exact object literal holds, or
-/// `None` when that object cannot be resolved exactly. Keyed by the argument's
-/// span, like [`Targets`].
-pub(crate) type SpreadTargets = HashMap<Location, Option<Vec<(String, Span)>>>;
+/// handlers (ADR 0358): the `on…` functions its exact object literal holds, each
+/// with the key it is held under (its event type, ADR 0361), or `None` when that
+/// object cannot be resolved exactly. Keyed by the argument's span, like
+/// [`Targets`].
+pub(crate) type SpreadTargets = HashMap<Location, Option<Vec<SpreadHandler>>>;
+
+/// A function a spread supplies: its file, its span and the key it is held under.
+pub(crate) type SpreadHandler = (String, Span, String);
 
 /// Whether a JSX element is an intrinsic (lowercase, unqualified) tag, the only
 /// kind a spread can hand event listeners to.
@@ -76,7 +80,7 @@ fn spread_handlers<'a>(
     stability: &MemberStability,
     modules: &ModuleCensus,
     closed: &mut HashMap<(String, Span, SymbolId), bool>,
-) -> Option<Vec<(String, Span)>> {
+) -> Option<Vec<SpreadHandler>> {
     if file.source_text(argument)?.trim_start().starts_with('{') {
         return on_keys(facts, lookup, file, argument, None);
     }
@@ -113,7 +117,7 @@ fn on_keys<'a>(
     owner: &'a FileFacts,
     literal: Span,
     stability: Option<&MemberStability>,
-) -> Option<Vec<(String, Span)>> {
+) -> Option<Vec<SpreadHandler>> {
     let shape = owner
         .ast
         .object_get_shapes
@@ -143,7 +147,7 @@ fn on_keys<'a>(
         if !receiver_inert(target, function) {
             return None;
         }
-        targets.push((target.path.to_string(), function.span));
+        targets.push((target.path.to_string(), function.span, name.to_owned()));
     }
     Some(targets)
 }

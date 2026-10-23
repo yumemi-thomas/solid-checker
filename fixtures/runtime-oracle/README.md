@@ -53,12 +53,13 @@ A static violation no dev diagnostic covers is classified by the observations of
 | --- | --- | --- | --- |
 | `oracle-behaviour-uncalled-accessor` | SC1005 | text: the violation keeps the accessor's source; reflected: its write is `lost`, the called control's is `reflected` | `behaviour-confirmed` |
 | `oracle-behaviour-no-direct-mutation` | SC2003 | text and reflected: the direct write is refused (`Ada`), the setter write shows (`Grace`) | `behaviour-confirmed` |
-| `oracle-behaviour-primitive-in-directive` | SC6001 | window: the apply-phase effect runs again after its element is hidden (2, not 1); the control's setup-phase effect does not | `covered-violation`; behaviour rows confirmed and clean (below) |
-| `oracle-behaviour-jsx-no-duplicate-props` | SC8003 | reflected: five two-source elements each show one `lost` and one `reflected` write; two one-source controls reflect | `static-only` overall: five sites `behaviour-confirmed`; the static site is unobserved (below) |
+| `oracle-behaviour-primitive-in-directive` | SC6001 | window: the apply-phase effect runs again after its element is hidden (2, not 1); the control's does not | `covered-violation`; rows confirmed and clean (below) |
+| `oracle-behaviour-jsx-no-duplicate-props` | SC8003 | reflected: five two-source elements each lose one write; two one-source controls reflect | `static-only` overall: five sites confirmed; the static site is unobserved (below) |
 | `oracle-behaviour-components-return-once` | SC1004 | text: the early return stays on screen after the write (`logged out`) | `covered-violation` (dev `STRICT_READ_UNTRACKED` covers the finding); behaviour rows confirmed and clean |
+| `oracle-dispatch-type-sets` | SC4001 | window: no dispatching-member family fires an event outside the checker's set (ADR 0361) and none fires `scroll` | `covered-violation`; both rows confirmed |
 | `oracle-frame-covered-sc1004` | SC1004 | none: the frame pin (below) | `covered-violation`, empty `staticOnly` |
 
-The `StaticText` site (static `textContent` beside children) has no write to show its loss (its children win, Chrome rc.13), so it stays static-only.
+The `StaticText` site (static `textContent` beside children) has no write to show a loss, so it stays static-only.
 
 The `oracle-behaviour-primitive-in-directive` control's `missing-owner` finding (`App.tsx:18`) was refuted (the runtime disposes the effect when its `Show` branch hides) and removed by ADR 0345: the control is `behaviour-clean`.
 
@@ -67,5 +68,3 @@ The `oracle-behaviour-primitive-in-directive` control's `missing-owner` finding 
 ## Frame attribution
 
 A diagnostic covers a finding when the finding's lines include the diagnostic's site or one of its application frames, and its code claims the finding's rule. The runtime attributes a read to the call that led to it, so the read's own line is a frame, not the site. `oracle-frame-covered-sc1004` pins this: a `components-return-once` finding at a props read (`App.tsx:9`) is a frame of the `STRICT_READ_UNTRACKED` diagnostic sited at `Parent`'s call (`App.tsx:17`), and must not print as `static-only`.
-
-The `identity` and `thrown` observation kinds are implemented, but no committed case uses them yet.

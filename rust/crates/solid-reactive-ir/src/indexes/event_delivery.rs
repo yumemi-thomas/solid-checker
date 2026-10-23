@@ -2,20 +2,40 @@
 //! the handlers it can reach (ADR 0356, 0361).
 
 use super::*;
+use crate::dispatch_events::Fires;
 use solid_facts::ast::ArgumentLiteralFact;
 use solid_facts::compiler::CallbackRoleKind;
 
 /// What the project's synchronous DOM dispatches can reach.
+///
+/// A synchronous dispatch can only run the handlers of the event types it
+/// fires, so each site is a set of types ([`Fires`]); a handler is reached when
+/// its own type is in the union of every site's set. A site the analysis can
+/// join to one element's handlers (the supported `dispatchEvent`) is narrower
+/// and fires no type program-wide.
 #[derive(Default)]
 pub(crate) struct EventDelivery {
     /// Some synchronous dispatch site exists (a call or a reference).
     any_site: bool,
-    /// Some site is not [`supported_site`], or is a dispatch no site models
-    /// ([`unseen_dispatch`]): any handler may be reached.
-    unsupported: bool,
-    /// The handlers of the supported sites, by file: the span of an event
+    /// Some site may fire any type, or is a dispatch no site models
+    /// ([`value_reference_dispatches`]): any handler may be reached.
+    fired_any: bool,
+    /// The lowercase event types the sites fire.
+    fired: HashSet<String>,
+    /// The handlers of the narrowly joined sites, by file: the span of an event
     /// attribute's value, or of a function a spread holder supplies.
     delivered: HashMap<String, HashSet<Span>>,
+    /// The event type of each handler written on an element or supplied by a
+    /// spread holder, by file and span. Built only while no site fires any type.
+    handler_types: HashMap<(String, Span), HandlerTypes>,
+}
+
+/// The types one handler span listens for: the types its attributes and spread
+/// keys name, or unreadable when one cannot be read.
+#[derive(Default)]
+struct HandlerTypes {
+    types: HashSet<String>,
+    unreadable: bool,
 }
 
 impl EventDelivery {
@@ -25,34 +45,310 @@ impl EventDelivery {
             let mut callees = HashSet::default();
             for call in &file.ast.calls {
                 callees.insert(file.ast.peel_ts_sugar_span(call.callee));
-                let Some(handlers) = call_site(lookup, file, call) else {
-                    continue;
-                };
-                delivery.any_site = true;
-                let Some(handlers) = handlers else {
-                    delivery.unsupported = true;
-                    delivery.delivered.clear();
-                    return delivery;
-                };
-                for (path, span) in handlers {
-                    delivery.delivered.entry(path).or_default().insert(span);
+                delivery.visit_call(lookup, file, call);
+                if delivery.fired_any {
+                    return delivery.every_handler();
                 }
             }
             if value_reference_dispatches(lookup, file, &callees) {
                 delivery.any_site = true;
-                delivery.unsupported = true;
-                delivery.delivered.clear();
-                return delivery;
+                return delivery.every_handler();
             }
         }
+        // The type join needs the release's handler grammar; a release whose web
+        // runtime was not read has every dispatch reach every handler.
+        if delivery.any_site && !lookup.dialect.event_handler_runs_only_for_its_type() {
+            return delivery.every_handler();
+        }
+        delivery.read_handler_types(lookup);
         delivery
     }
 
-    fn reaches(&self, path: &str, span: Span) -> bool {
-        self.delivered
-            .get(path)
-            .is_some_and(|spans| spans.contains(&span))
+    /// The state in which any handler may be reached.
+    fn every_handler(mut self) -> Self {
+        self.fired_any = true;
+        self.fired.clear();
+        self.delivered.clear();
+        self
     }
+
+    fn fire(&mut self, fires: Fires) {
+        match fires {
+            Fires::AnyType => self.fired_any = true,
+            Fires::Types(types) => self.fired.extend(types.iter().map(|t| (*t).to_owned())),
+        }
+    }
+
+    /// A `dispatchEvent` of a literal type fires that type; an event whose type
+    /// is not read fires any.
+    fn fire_event_type(&mut self, event_type: Option<&str>) {
+        match event_type {
+            Some(event_type) if event_type.is_ascii() => {
+                self.fired.insert(event_type.to_ascii_lowercase());
+            }
+            _ => self.fired_any = true,
+        }
+    }
+
+    /// A `dispatchEvent` of an inline `lib.dom` event: its type, and with it the
+    /// activation behavior a synthetic `click` runs ([`DispatchedEvent`]).
+    fn fire_dispatched_event(&mut self, event: Option<DispatchedEvent<'_>>) {
+        match event {
+            Some(event) if event.activation => {
+                self.fire(crate::dispatch_events::synthetic_click_fires())
+            }
+            Some(event) => self.fire_event_type(Some(event.event_type)),
+            None => self.fire_event_type(None),
+        }
+    }
+
+    fn visit_call(
+        &mut self,
+        lookup: &SemanticLookup<'_>,
+        file: &FileFacts,
+        call: &solid_facts::ast::CallFact,
+    ) {
+        let resolved = lookup.resolved_callee_call(file, call.callee);
+        if let Some(resolved) = resolved.filter(|resolved| resolved.declaration.is_some()) {
+            // A call whose callee resolves to a declaration is judged by it
+            // (ADR 0329's members dispatch; an exact project method of the same
+            // spelling does not).
+            if crate::runtime_semantics::standard_call_name(resolved)
+                == Some("EventTarget.dispatchEvent")
+            {
+                self.any_site = true;
+                match supported_site(lookup, file, call) {
+                    Some(handlers) => {
+                        for (path, span) in handlers {
+                            self.delivered.entry(path).or_default().insert(span);
+                        }
+                    }
+                    None => self.fire_dispatched_event(dispatched_event_type(lookup, file, call)),
+                }
+                return;
+            }
+            if let Some(fires) = crate::cleanup::resolved_dom_dispatch_fires(resolved) {
+                self.any_site = true;
+                if crate::cleanup::is_dispatch_event_declaration(resolved) {
+                    self.fire_dispatched_event(dispatched_event_type(lookup, file, call));
+                } else {
+                    self.fire(fires);
+                }
+            }
+            return;
+        }
+        self.visit_unresolved_call(lookup, file, call);
+    }
+
+    /// A member call that resolves to no declaration, spelled as one of ADR
+    /// 0329's members, may be any of them on an `any` or unresolved receiver
+    /// (ADR 0361), and fires that member's set. A computed key that is not a
+    /// literal names no member: unless [`computed_key_names_no_member`] proves
+    /// the call is no member call, it may be any, so it fires any type.
+    fn visit_unresolved_call(
+        &mut self,
+        lookup: &SemanticLookup<'_>,
+        file: &FileFacts,
+        call: &solid_facts::ast::CallFact,
+    ) {
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        let name = if file.ast.computed_members.contains(&callee) {
+            let Some(member) = file
+                .ast
+                .literal_computed_members
+                .iter()
+                .find(|member| member.span == callee)
+            else {
+                if !computed_key_names_no_member(lookup, file, call, callee) {
+                    self.any_site = true;
+                    self.fired_any = true;
+                }
+                return;
+            };
+            member.key.as_str()
+        } else {
+            let Some(member) = file.ast.member_at(callee) else {
+                return;
+            };
+            let Some(name) = file.source_text(member.property) else {
+                return;
+            };
+            if !crate::dispatching_dom_member_spelling(name)
+                || !property_dispatches(lookup, file, member.property).unwrap_or(true)
+            {
+                return;
+            }
+            name
+        };
+        if !crate::dispatching_dom_member_spelling(name) {
+            return;
+        }
+        self.any_site = true;
+        if name == "dispatchEvent" {
+            self.fire_dispatched_event(dispatched_event_type(lookup, file, call));
+        } else {
+            for fires in crate::dispatch_events::spelled_member_fires(name) {
+                self.fire(fires);
+            }
+        }
+    }
+
+    /// The type of every handler an intrinsic element's attributes and spread
+    /// holders supply (ADR 0358): the `on`+uppercase attribute's tail, lowercased
+    /// as the compiler names the listener (`name.slice(2).toLowerCase()`), or the
+    /// spread key's.
+    fn read_handler_types(&mut self, lookup: &SemanticLookup<'_>) {
+        if self.fired.is_empty() {
+            return;
+        }
+        for file in lookup.files() {
+            for element in &file.ast.jsx_elements {
+                if !crate::object_members::intrinsic_element(file, element) {
+                    continue;
+                }
+                for attribute in &element.attributes {
+                    if attribute.namespace.is_some() {
+                        continue;
+                    }
+                    let (Some(name), Some(expression)) =
+                        (file.source_text(attribute.name), attribute.expression)
+                    else {
+                        continue;
+                    };
+                    if !lookup.dialect.compiler_lowers_event_attribute(name) {
+                        continue;
+                    }
+                    let expression = file.ast.peel_ts_sugar_span(expression);
+                    let event_type = listener_type(name);
+                    for span in [
+                        expression,
+                        crate::owners::handler_value_span(file, expression),
+                    ] {
+                        self.note_handler(file.path.as_str(), span, event_type.as_deref());
+                    }
+                }
+                for spread in &element.spreads {
+                    let key = crate::location(file.path.shared(), spread.argument);
+                    let Some(Some(targets)) = lookup.spread_handler_targets().get(&key) else {
+                        continue;
+                    };
+                    for (path, span, key) in targets {
+                        self.note_handler(path, *span, listener_type(key).as_deref());
+                    }
+                }
+            }
+        }
+    }
+
+    fn note_handler(&mut self, path: &str, span: Span, event_type: Option<&str>) {
+        let types = self
+            .handler_types
+            .entry((path.to_owned(), span))
+            .or_default();
+        match event_type {
+            Some(event_type) => {
+                types.types.insert(event_type.to_owned());
+            }
+            None => types.unreadable = true,
+        }
+    }
+
+    /// Whether the handler at `span` may be reached: the narrow site delivering
+    /// to it, or a fired type that is one of its own (a handler whose type is
+    /// not read may be any).
+    fn reaches(&self, path: &str, span: Span) -> bool {
+        if self.fired_any
+            || self
+                .delivered
+                .get(path)
+                .is_some_and(|spans| spans.contains(&span))
+        {
+            return true;
+        }
+        if self.fired.is_empty() {
+            return false;
+        }
+        self.handler_types
+            .get(&(path.to_owned(), span))
+            .is_none_or(|handler| {
+                handler.unreadable || handler.types.iter().any(|ty| self.fired.contains(ty))
+            })
+    }
+}
+
+/// Whether a call through a computed key that is not a literal (`target[key]()`)
+/// is provably no call of a named member, so it fires nothing: the key is a
+/// well-known symbol (`x[Symbol.asyncIterator]()`) or typed `number`/`symbol`
+/// (no member of `lib.dom` has a numeric or symbol name), or the callee
+/// resolves to a typed signature (a return type that is not `any`: an untyped
+/// or `any` callee resolves to the `any` signature) that no `lib.dom`
+/// declaration is a target of. Anything else may name `focus`, `click`, ...
+fn computed_key_names_no_member(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    callee: Span,
+) -> bool {
+    let Some(key) = file
+        .ast
+        .members
+        .iter()
+        .find(|member| member.span == callee)
+        .map(|member| file.ast.peel_ts_sugar_span(member.property))
+    else {
+        return false;
+    };
+    if well_known_symbol(lookup, file, key) {
+        return true;
+    }
+    if lookup
+        .entity_at(file.path.as_str(), key)
+        .and_then(|entity| entity.type_descriptor.as_deref())
+        .is_some_and(|descriptor| {
+            matches!(
+                descriptor.text.as_ref(),
+                "number" | "symbol" | "unique symbol" | "bigint"
+            )
+        })
+    {
+        return true;
+    }
+    lookup
+        .resolved_callee_call(file, call.callee)
+        .is_some_and(|resolved| {
+            resolved.validity == ResolvedCallValidity::Valid
+                && resolved.kind == typefacts::CallKind::Call
+                && resolved.declaration.is_none()
+                && resolved.return_type_text.as_ref() != "any"
+                // A missing target set is no evidence (a union or generic key
+                // type, `k: "click" | "focus"`, resolves to no target set).
+                && resolved.targets.as_ref().is_some_and(|targets| {
+                    targets.exhaustive
+                        && !targets
+                            .candidates
+                            .iter()
+                            .any(|candidate| declaration_in_lib_dom(candidate.source_file.as_ref()))
+                })
+        })
+}
+
+/// Whether `key` is `Symbol.<name>` of the unshadowed, unwritten global: a
+/// well-known symbol, which no string-named member is.
+fn well_known_symbol(lookup: &SemanticLookup<'_>, file: &FileFacts, key: Span) -> bool {
+    let Some(member) = file.ast.member_at(key) else {
+        return false;
+    };
+    let object = file.ast.peel_ts_sugar_span(member.object);
+    file.source_text(object) == Some("Symbol")
+        && file.ast.reference_declaration(object).is_none()
+        && !global_identifier_written(lookup.facts, "Symbol")
+}
+
+/// The lowercase listener type the compiler (or a spread's `assignProp`) gives
+/// the attribute or key `name`: `name.slice(2).toLowerCase()`. `None` for a
+/// name this does not read (non-ASCII).
+fn listener_type(name: &str) -> Option<String> {
+    (name.is_ascii() && name.len() > 2).then(|| name[2..].to_ascii_lowercase())
 }
 
 impl SemanticLookup<'_> {
@@ -70,8 +366,9 @@ impl SemanticLookup<'_> {
 
     /// ADR 0361: whether a synchronous dispatch may run the handler written as
     /// `handler` in `file` (an event attribute's value, or a function a
-    /// spread supplies) on its caller's stack, under its owner. True when any
-    /// dispatch is unsupported, or when a supported one delivers to it.
+    /// spread supplies) on its caller's stack, under its owner. True when a
+    /// dispatch may fire any type, when one fires a type the handler listens
+    /// for, or when a narrowly joined one delivers to it.
     pub(crate) fn event_handler_may_run_on_a_dispatcher_stack(
         &self,
         file: &FileFacts,
@@ -79,8 +376,7 @@ impl SemanticLookup<'_> {
     ) -> bool {
         let delivery = self.event_delivery();
         delivery.any_site
-            && (delivery.unsupported
-                || delivery.reaches(file.path.as_str(), file.ast.peel_ts_sugar_span(handler)))
+            && delivery.reaches(file.path.as_str(), file.ast.peel_ts_sugar_span(handler))
     }
 
     /// [`Self::event_handler_may_run_on_a_dispatcher_stack`] for code at `site`
@@ -98,7 +394,7 @@ impl SemanticLookup<'_> {
         if !delivery.any_site {
             return false;
         }
-        if delivery.unsupported {
+        if delivery.fired_any {
             return true;
         }
         let Some(innermost) = file
@@ -126,7 +422,18 @@ impl SemanticLookup<'_> {
     pub(super) fn bind_event_delivery(&self, hasher: &mut Sha256) {
         let delivery = self.event_delivery();
         hasher.update(b"synchronous-event-dispatch\0");
-        hasher.update([u8::from(delivery.any_site), u8::from(delivery.unsupported)]);
+        hasher.update([u8::from(delivery.any_site), u8::from(delivery.fired_any)]);
+        let mut fired = delivery.fired.iter().collect::<Vec<_>>();
+        fired.sort_unstable();
+        hasher.update(b"fired-event-types\0");
+        for event_type in fired {
+            hasher.update(
+                u64::try_from(event_type.len())
+                    .unwrap_or(u64::MAX)
+                    .to_le_bytes(),
+            );
+            hasher.update(event_type.as_bytes());
+        }
         let mut delivered = delivery
             .delivered
             .iter()
@@ -142,53 +449,138 @@ impl SemanticLookup<'_> {
     }
 }
 
-/// What one call is to the dispatch analysis: `None` for a call that cannot
-/// dispatch, `Some(None)` for a dispatch that reaches any handler, and
-/// `Some(Some(handlers))` for a supported `dispatchEvent`.
-///
-/// A call whose callee resolves to a declaration is judged by it (ADR 0329's
-/// members dispatch; an exact project method of the same spelling does not).
-/// A member call that resolves to no declaration, spelled as one of those
-/// members, may be any of them on an `any` or unresolved receiver, so it is
-/// the program-wide fallback (ADR 0361).
-fn call_site(
+/// What an inline event construction passed to `dispatchEvent` fires.
+struct DispatchedEvent<'f> {
+    event_type: &'f str,
+    /// The event is a `click` of a `MouseEvent` (or any other `…Event` that is
+    /// not exactly `Event` or `CustomEvent`): the DOM dispatch algorithm runs
+    /// the target's activation behavior for it (DOM Standard,
+    /// `#concept-event-dispatch`: `isActivationEvent` is "event is a
+    /// `MouseEvent` object and event's `type` attribute is `click`"), which is
+    /// what `click()` runs. Over-approximated to every `…Event` constructor:
+    /// the class hierarchy of the interface is not read.
+    activation: bool,
+}
+
+/// The type a `dispatchEvent` call fires when the event is an inline
+/// construction of a `lib.dom` event with a literal type; `None` for any other
+/// argument (an identifier, a helper, a computed type, a subclass), which may
+/// fire any type. Bubbling and `composed` are irrelevant here: an event runs
+/// only the handlers of its own type.
+fn dispatched_event_type<'f>(
+    lookup: &SemanticLookup<'_>,
+    file: &'f FileFacts,
+    call: &'f solid_facts::ast::CallFact,
+) -> Option<DispatchedEvent<'f>> {
+    let [argument] = call.arguments.as_slice() else {
+        return None;
+    };
+    if argument.spread {
+        return None;
+    }
+    let event = file
+        .ast
+        .call_at(file.ast.peel_ts_sugar_span(argument.span))
+        .filter(|event| event.construct)?;
+    if !is_dom_event_constructor(lookup, file, event, true) {
+        return None;
+    }
+    let event_type = event_literal_type(event)?;
+    let constructor = file.source_text(file.ast.peel_ts_sugar_span(event.callee))?;
+    Some(DispatchedEvent {
+        event_type,
+        activation: event_type.eq_ignore_ascii_case("click")
+            && !matches!(constructor, "Event" | "CustomEvent"),
+    })
+}
+
+/// The string literal first argument of an event construction, whatever its
+/// init: `new Event(T)`, `new CustomEvent(T, init)`.
+fn event_literal_type(event: &solid_facts::ast::CallFact) -> Option<&str> {
+    if event.arguments.iter().any(|argument| argument.spread) || event.arguments.len() > 2 {
+        return None;
+    }
+    match &event.arguments.first()?.literal_value {
+        ArgumentLiteralFact::String(event_type) => Some(event_type.as_str()),
+        _ => None,
+    }
+}
+
+/// Whether `name` is the spelling of a `lib.dom` event constructor: `Event`
+/// itself or an interface of the `…Event` family, each taking its type first.
+fn event_constructor_name(name: &str) -> bool {
+    name == "Event"
+        || (name.ends_with("Event")
+            && name.starts_with(|c: char| c.is_ascii_uppercase())
+            && name.bytes().all(|byte| byte.is_ascii_alphanumeric()))
+}
+
+/// Whether a member that is never called resolves to a `lib.dom` declaration of
+/// a member that dispatches on every interface declaring it (`dispatchEvent`,
+/// `click`, `focus`, ...; the owner-specific ones, `open`, `reset`, `close`, also
+/// name properties and stay unread here): `Reflect.apply(EventTarget.prototype.dispatchEvent, el, [event])`,
+/// `el.dispatchEvent.call(el, event)`, `const send = el.dispatchEvent`. The
+/// value runs wherever it is called, so the dispatch is no site's.
+fn value_reference_dispatches(
     lookup: &SemanticLookup<'_>,
     file: &FileFacts,
-    call: &solid_facts::ast::CallFact,
-) -> Option<Option<Vec<(String, Span)>>> {
-    let resolved = lookup.resolved_callee_call(file, call.callee);
-    if let Some(resolved) = resolved.filter(|resolved| resolved.declaration.is_some()) {
-        return match crate::runtime_semantics::standard_call_name(resolved) {
-            Some("EventTarget.dispatchEvent") => Some(supported_site(lookup, file, call)),
-            _ if crate::cleanup::dispatches_dom_event(resolved) => Some(None),
-            _ => None,
-        };
-    }
-    unseen_dispatch(lookup, file, call.callee).then_some(None)
+    callees: &HashSet<Span>,
+) -> bool {
+    file.ast.members.iter().any(|member| {
+        !callees.contains(&member.span)
+            && !file.ast.computed_members.contains(&member.span)
+            && file
+                .source_text(member.property)
+                .is_some_and(crate::dispatching_dom_member_on_any_interface)
+            && property_dispatches(lookup, file, member.property) == Some(true)
+    }) || owned_member_invoked_as_value(lookup, file, callees)
 }
 
-/// Whether the member `callee` calls is spelled as a synchronously dispatching
-/// `lib.dom` member and does not resolve to a declaration that is not one: an
-/// unresolved receiver (`any`, a failed lookup) keeps the dispatch possible.
-fn unseen_dispatch(lookup: &SemanticLookup<'_>, file: &FileFacts, callee: Span) -> bool {
-    let callee = file.ast.peel_ts_sugar_span(callee);
-    if file.ast.computed_members.contains(&callee) {
-        return file
-            .ast
-            .literal_computed_members
-            .iter()
-            .any(|member| member.span == callee && member_key_dispatches(&member.key));
-    }
-    let Some(member) = file.ast.member_at(callee) else {
-        return false;
+/// Whether a member spelled as an owner-specific dispatching one
+/// (`showModal`, `reset`, `close`, ...) is invoked as a value: the object of a
+/// `.call`/`.apply`/`.bind`, or the function argument of `Reflect.apply`
+/// (`d.showModal.call(d)`). These spellings also name properties and other
+/// interfaces' methods, so a plain read (`d.open`) is no dispatch, but a
+/// value that is called through `Function.prototype` runs the member, whichever
+/// interface owns it. The declaration decides where it resolves (a project
+/// member that shares the spelling does not); an unresolved receiver is read by
+/// the spelling.
+fn owned_member_invoked_as_value(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    callees: &HashSet<Span>,
+) -> bool {
+    let reflect_applied = |member: Span| {
+        file.ast.calls.iter().any(|call| {
+            let callee = file.ast.peel_ts_sugar_span(call.callee);
+            !file.ast.computed_members.contains(&callee)
+                && file.ast.member_at(callee).is_some_and(|callee| {
+                    let object = file.ast.peel_ts_sugar_span(callee.object);
+                    file.source_text(object) == Some("Reflect")
+                        && file.source_text(callee.property) == Some("apply")
+                        && file.ast.reference_declaration(object).is_none()
+                        && !global_identifier_written(lookup.facts, "Reflect")
+                })
+                && call.arguments.first().is_some_and(|argument| {
+                    !argument.spread && file.ast.peel_ts_sugar_span(argument.span) == member
+                })
+        })
     };
-    file.source_text(member.property)
-        .is_some_and(crate::dispatching_dom_member_spelling)
-        && property_dispatches(lookup, file, member.property).unwrap_or(true)
-}
-
-fn member_key_dispatches(key: &str) -> bool {
-    crate::dispatching_dom_member_spelling(key)
+    file.ast.members.iter().any(|member| {
+        !callees.contains(&member.span)
+            && !file.ast.computed_members.contains(&member.span)
+            && file
+                .source_text(member.property)
+                .is_some_and(crate::dispatching_dom_member_on_exact_owner)
+            && property_dispatches(lookup, file, member.property).unwrap_or(true)
+            && (file.ast.members.iter().any(|parent| {
+                file.ast.peel_ts_sugar_span(parent.object) == member.span
+                    && !file.ast.computed_members.contains(&parent.span)
+                    && file
+                        .source_text(parent.property)
+                        .is_some_and(|name| matches!(name, "call" | "apply" | "bind"))
+            }) || reflect_applied(member.span))
+    })
 }
 
 /// Whether the property at `property` (spelled as a dispatching member)
@@ -224,33 +616,12 @@ fn declaration_in_lib_dom(path: &str) -> bool {
         .is_some_and(|name| name == "lib.dom.d.ts" || name == "lib.dom.iterable.d.ts")
 }
 
-/// Whether a member that is never called resolves to a `lib.dom` declaration of
-/// a member that dispatches on every interface declaring it (`dispatchEvent`,
-/// `click`, `focus`, ...; the owner-specific ones, `open`, `reset`, `close`, also
-/// name properties and stay unread here): `Reflect.apply(EventTarget.prototype.dispatchEvent, el, [event])`,
-/// `el.dispatchEvent.call(el, event)`, `const send = el.dispatchEvent`. The
-/// value runs wherever it is called, so the dispatch is no site's.
-fn value_reference_dispatches(
-    lookup: &SemanticLookup<'_>,
-    file: &FileFacts,
-    callees: &HashSet<Span>,
-) -> bool {
-    file.ast.members.iter().any(|member| {
-        !callees.contains(&member.span)
-            && !file.ast.computed_members.contains(&member.span)
-            && file
-                .source_text(member.property)
-                .is_some_and(crate::dispatching_dom_member_on_any_interface)
-            && property_dispatches(lookup, file, member.property) == Some(true)
-    })
-}
-
 /// The handlers one `dispatchEvent` call reaches, when that is provable: the
 /// event is a non-bubbling, non-composed `new Event(T)`/`new CustomEvent(T,
 /// init)` of a type the web runtime does not delegate, dispatched on a local
 /// `const` that is exactly one intrinsic element, so the only listeners it runs
 /// are that element's own `T` handlers, all of which are known. `None` for
-/// anything else (ADR 0361).
+/// anything else (ADR 0361): the call then fires its type program-wide.
 fn supported_site(
     lookup: &SemanticLookup<'_>,
     file: &FileFacts,
@@ -274,7 +645,7 @@ fn supported_site(
         .ast
         .call_at(file.ast.peel_ts_sugar_span(argument.span))
         .filter(|event| event.construct)?;
-    if !is_dom_event_constructor(lookup, file, event) {
+    if !is_dom_event_constructor(lookup, file, event, false) {
         return None;
     }
     let event_type = bubbling_free_event_type(event)?;
@@ -307,7 +678,7 @@ fn supported_site(
     for spread in &element.spreads {
         let key = crate::location(file.path.shared(), spread.argument);
         let targets = lookup.spread_handler_targets().get(&key)?.as_ref()?;
-        handlers.extend(targets.iter().cloned());
+        handlers.extend(targets.iter().map(|(path, span, _)| (path.clone(), *span)));
     }
     Some(handlers)
 }
@@ -350,20 +721,26 @@ fn global_event_target(lookup: &SemanticLookup<'_>, file: &FileFacts, callee: Sp
         })
 }
 
-/// Whether `event` constructs the `lib.dom` global `Event` or `CustomEvent`:
-/// exact resolution to the standard-library declaration of an unshadowed,
-/// unwritten global, never the spelling alone.
+/// Whether `event` constructs a `lib.dom` event global: `Event` or `CustomEvent`
+/// (`any_event` false, the shape the narrow join reads the init of), or any
+/// interface of the `…Event` family (`any_event`, for the type alone). Exact
+/// resolution to the standard-library declaration of an unshadowed, unwritten
+/// global, never the spelling alone.
 fn is_dom_event_constructor(
     lookup: &SemanticLookup<'_>,
     file: &FileFacts,
     event: &solid_facts::ast::CallFact,
+    any_event: bool,
 ) -> bool {
     let callee = file.ast.peel_ts_sugar_span(event.callee);
     let Some(name) = file.source_text(callee) else {
         return false;
     };
-    if !matches!(name, "Event" | "CustomEvent")
-        || file.ast.reference_declaration(callee).is_some()
+    if !(if any_event {
+        event_constructor_name(name)
+    } else {
+        matches!(name, "Event" | "CustomEvent")
+    }) || file.ast.reference_declaration(callee).is_some()
         || global_identifier_written(lookup.facts, name)
     {
         return false;
@@ -605,6 +982,162 @@ mod tests {
     }
 
     #[test]
+    fn a_dispatched_event_type_is_read_whatever_the_init() {
+        // Bubbling and `composed` matter to the narrow join, not to the type.
+        let bubbling = init(&[("bubbles", ArgumentLiteralFact::Boolean(true))]);
+        assert_eq!(
+            event_literal_type(&construct(vec![argument(text("sync")), argument(bubbling)])),
+            Some("sync")
+        );
+        assert_eq!(
+            event_literal_type(&construct(vec![argument(text("sync"))])),
+            Some("sync")
+        );
+        for arguments in [
+            vec![argument(ArgumentLiteralFact::Unknown)],
+            vec![],
+            vec![
+                argument(text("a")),
+                argument(init(&[])),
+                argument(init(&[])),
+            ],
+        ] {
+            assert_eq!(event_literal_type(&construct(arguments)), None);
+        }
+        let mut spread = argument(text("sync"));
+        spread.spread = true;
+        assert_eq!(event_literal_type(&construct(vec![spread])), None);
+    }
+
+    #[test]
+    fn an_event_interface_is_spelled_event_or_ends_in_it() {
+        for name in [
+            "Event",
+            "CustomEvent",
+            "MouseEvent",
+            "FocusEvent",
+            "InputEvent",
+            "PointerEvent",
+        ] {
+            assert!(event_constructor_name(name), "{name}");
+        }
+        for name in [
+            "Request",
+            "event",
+            "Events",
+            "MyEvent$",
+            "XMLHttpRequest",
+            "EventTarget",
+        ] {
+            assert!(!event_constructor_name(name), "{name}");
+        }
+    }
+
+    #[test]
+    fn a_synthetic_click_fires_the_activation_set_but_event_and_custom_event_do_not() {
+        let mut delivery = EventDelivery::default();
+        delivery.fire_dispatched_event(Some(DispatchedEvent {
+            event_type: "click",
+            activation: false,
+        }));
+        assert_eq!(delivery.fired.len(), 1);
+        assert!(delivery.fired.contains("click"));
+        delivery.fire_dispatched_event(Some(DispatchedEvent {
+            event_type: "click",
+            activation: true,
+        }));
+        for fired in [
+            "click",
+            "input",
+            "change",
+            "submit",
+            "beforetoggle",
+            "beforematch",
+        ] {
+            assert!(delivery.fired.contains(fired), "{fired}");
+        }
+        assert!(!delivery.fired_any);
+        delivery.fire_dispatched_event(None);
+        assert!(delivery.fired_any);
+    }
+
+    #[test]
+    fn a_listener_type_is_the_lowercased_tail() {
+        assert_eq!(listener_type("onFocusIn").as_deref(), Some("focusin"));
+        assert_eq!(listener_type("onScroll").as_deref(), Some("scroll"));
+        assert_eq!(listener_type("onÉvent"), None);
+        assert_eq!(listener_type("on"), None);
+    }
+
+    fn delivery(fired: &[&str]) -> EventDelivery {
+        let mut delivery = EventDelivery {
+            any_site: true,
+            ..EventDelivery::default()
+        };
+        delivery.fired.extend(fired.iter().map(|t| (*t).to_owned()));
+        delivery
+    }
+
+    fn handler(delivery: &mut EventDelivery, start: u32, event_type: Option<&str>) {
+        delivery.note_handler("a.tsx", Span::new(start, start + 1), event_type);
+    }
+
+    #[test]
+    fn a_handler_is_reached_when_its_type_is_fired() {
+        let mut delivery = delivery(&["focus", "blur"]);
+        handler(&mut delivery, 1, Some("focus"));
+        handler(&mut delivery, 2, Some("scroll"));
+        handler(&mut delivery, 3, None);
+        // The same function held under two keys listens for both.
+        handler(&mut delivery, 4, Some("scroll"));
+        handler(&mut delivery, 4, Some("blur"));
+        assert!(delivery.reaches("a.tsx", Span::new(1, 2)));
+        assert!(!delivery.reaches("a.tsx", Span::new(2, 3)));
+        // An unreadable type may be any fired one.
+        assert!(delivery.reaches("a.tsx", Span::new(3, 4)));
+        assert!(delivery.reaches("a.tsx", Span::new(4, 5)));
+        // A handler the index never saw is conditional while a type fires.
+        assert!(delivery.reaches("a.tsx", Span::new(9, 10)));
+    }
+
+    #[test]
+    fn a_site_that_fires_no_element_event_reaches_no_handler() {
+        let mut delivery = delivery(&[]);
+        handler(&mut delivery, 1, None);
+        assert!(!delivery.reaches("a.tsx", Span::new(1, 2)));
+        assert!(!delivery.reaches("a.tsx", Span::new(9, 10)));
+        delivery
+            .delivered
+            .entry("a.tsx".into())
+            .or_default()
+            .insert(Span::new(9, 10));
+        assert!(delivery.reaches("a.tsx", Span::new(9, 10)));
+        delivery.fired_any = true;
+        assert!(delivery.reaches("b.tsx", Span::new(0, 1)));
+    }
+
+    #[test]
+    fn firing_accumulates_by_union() {
+        let mut delivery = EventDelivery::default();
+        delivery.fire(Fires::Types(&["focus", "blur"]));
+        delivery.fire(Fires::Types(&["blur", "invalid"]));
+        delivery.fire(Fires::Types(&[]));
+        delivery.fire_event_type(Some("Sync"));
+        assert!(!delivery.fired_any);
+        let mut fired = delivery.fired.iter().cloned().collect::<Vec<_>>();
+        fired.sort();
+        assert_eq!(fired, ["blur", "focus", "invalid", "sync"]);
+        delivery.fire_event_type(None);
+        assert!(delivery.fired_any);
+        let mut other = EventDelivery::default();
+        other.fire_event_type(Some("é"));
+        assert!(other.fired_any);
+        let mut other = EventDelivery::default();
+        other.fire(Fires::AnyType);
+        assert!(other.fired_any);
+    }
+
+    #[test]
     fn a_dispatching_member_is_known_by_its_spelling() {
         for name in [
             "dispatchEvent",
@@ -615,11 +1148,9 @@ mod tests {
             "reset",
         ] {
             assert!(crate::dispatching_dom_member_spelling(name), "{name}");
-            assert!(member_key_dispatches(name), "{name}");
         }
         for name in ["addEventListener", "scrollTo", "value", "dispatch"] {
             assert!(!crate::dispatching_dom_member_spelling(name), "{name}");
-            assert!(!member_key_dispatches(name), "{name}");
         }
     }
 
@@ -631,12 +1162,15 @@ mod tests {
                 "{name}"
             );
         }
-        // `open` and `close` also name properties and other interfaces' methods.
-        for name in ["open", "close", "reset", "send", "show"] {
+        // `open` and `close` also name properties and other interfaces' methods;
+        // a value reference to one counts only when it is invoked through
+        // `.call`/`.apply`/`.bind` or `Reflect.apply`.
+        for name in ["open", "close", "reset", "send", "show", "showModal"] {
             assert!(
                 !crate::dispatching_dom_member_on_any_interface(name),
                 "{name}"
             );
+            assert!(crate::dispatching_dom_member_on_exact_owner(name), "{name}");
         }
     }
 

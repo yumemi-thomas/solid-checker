@@ -1,0 +1,115 @@
+{
+  "note": "Chrome probe of the events each synchronously dispatching member fires, tagged sync (on the member call's stack) or async (a later task): ADR 0361's type sets. The page claims the checker's set per family; an observed synchronous event outside it is `unclaimed`. No family fires `scroll`, so the control handler (App.tsx:172) is never run by a dispatch: its onCleanup is a proven SC4001 violation, and an unclaimed event or a synchronous scroll refutes it. execCommand has no set (AnyType) and is no family: probed once, `insertText` fired `input` and `selectAll` fired `selectstart` synchronously, `copy` and `beforeinput` fired nothing in headless Chrome. A synthetic `MouseEvent`/`PointerEvent` `click` runs the activation behavior (dispatch-mouse-click, dispatch-pointer-click: `input`, `change`), a same-document fragment anchor click fires `beforematch` at a `hidden=until-found` ancestor, and `requestSubmit()` of a `method=dialog` form fires `beforetoggle`. `toggle` and `close` are queued tasks (absent from the synchronous log; probed in a plain page: `requestClose:close@dlg:async`, `toggle@pop:async`), and `change` fires synchronously when a user-edited control loses focus to focus()/blur() (probed with typed input).",
+  "behaviour": [
+    {
+      "rule": "missing-owner",
+      "site": "App.tsx:172",
+      "act": [
+        {
+          "click": "[data-probe=\"click-plain\"]"
+        },
+        {
+          "click": "[data-probe=\"click-checkbox\"]"
+        },
+        {
+          "click": "[data-probe=\"click-label\"]"
+        },
+        {
+          "click": "[data-probe=\"click-submit-valid\"]"
+        },
+        {
+          "click": "[data-probe=\"click-submit-invalid\"]"
+        },
+        {
+          "click": "[data-probe=\"click-reset\"]"
+        },
+        {
+          "click": "[data-probe=\"click-popovertarget\"]"
+        },
+        {
+          "click": "[data-probe=\"click-command-show-modal\"]"
+        },
+        {
+          "click": "[data-probe=\"click-anchor-fragment\"]"
+        },
+        {
+          "click": "[data-probe=\"dispatch-mouse-click\"]"
+        },
+        {
+          "click": "[data-probe=\"dispatch-pointer-click\"]"
+        },
+        {
+          "click": "[data-probe=\"focus\"]"
+        },
+        {
+          "click": "[data-probe=\"blur\"]"
+        },
+        {
+          "click": "[data-probe=\"checkValidity\"]"
+        },
+        {
+          "click": "[data-probe=\"form.checkValidity\"]"
+        },
+        {
+          "click": "[data-probe=\"reportValidity\"]"
+        },
+        {
+          "click": "[data-probe=\"form.reset\"]"
+        },
+        {
+          "click": "[data-probe=\"requestSubmit-valid\"]"
+        },
+        {
+          "click": "[data-probe=\"requestSubmit-invalid\"]"
+        },
+        {
+          "click": "[data-probe=\"requestSubmit-dialog\"]"
+        },
+        {
+          "click": "[data-probe=\"showPopover\"]"
+        },
+        {
+          "click": "[data-probe=\"hidePopover\"]"
+        },
+        {
+          "click": "[data-probe=\"togglePopover\"]"
+        },
+        {
+          "click": "[data-probe=\"dialog.show\"]"
+        },
+        {
+          "click": "[data-probe=\"dialog.close\"]"
+        },
+        {
+          "click": "[data-probe=\"dialog.showModal\"]"
+        },
+        {
+          "click": "[data-probe=\"dialog.requestClose\"]"
+        },
+        {
+          "click": "[data-probe=\"abort\"]"
+        },
+        {
+          "click": "[data-probe=\"xhr\"]"
+        }
+      ],
+      "observe": {
+        "window": "oracleProbe.unclaimed"
+      },
+      "defect": "",
+      "correct": {
+        "pattern": ".+"
+      }
+    },
+    {
+      "rule": "missing-owner",
+      "site": "App.tsx:172",
+      "observe": {
+        "window": "oracleProbe.scrollOnStack"
+      },
+      "act": [],
+      "defect": "no",
+      "correct": "yes"
+    }
+  ]
+}
