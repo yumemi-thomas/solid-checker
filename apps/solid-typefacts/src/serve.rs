@@ -9,6 +9,11 @@
 //! * Every request yields exactly one response frame.
 //! * The responder is built, used and dropped on the worker thread, so it need
 //!   not be `Send` (a compiler's thread-local state stays on one thread).
+//! * A panic on any of the three threads ends the process (exit 1); the worker
+//!   first answers the request it was running with a `producer-panic` error and
+//!   leaks the responder. Without that the surviving threads wait forever on a
+//!   client that waits on a dead worker. Panics inside tsrs (rayon `install`,
+//!   `thread::scope`) propagate to the worker and take the same path.
 
 use crate::context::Context;
 use crate::frame::{FrameError, read_frame, write_frame_header};
