@@ -387,6 +387,11 @@ fn an_incompatible_or_missing_named_reference_fails_rather_than_skips() {
     };
     let current = speaks(typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL);
     let older = speaks(81);
+    let same_compiler = |_: &Path| Ok(());
+    let other_compiler = |_: &Path| Err("built on another tsrs".to_owned());
+    let choose_reference = |explicit, archive, required, handshake: &dyn Fn(&Path) -> _| {
+        choose_reference(explicit, archive, required, handshake, &same_compiler)
+    };
     // Named: incompatible or absent fails.
     assert!(choose_reference(Some(present.clone()), None, false, &older).is_err());
     assert!(choose_reference(Some(missing.clone()), None, false, &current).is_err());
@@ -408,6 +413,17 @@ fn an_incompatible_or_missing_named_reference_fails_rather_than_skips() {
     assert!(choose_reference(None, None, true, &current).is_err());
     assert_eq!(
         choose_reference(None, Some(present.clone()), false, &current),
-        Ok(ReferenceChoice::Use(present))
+        Ok(ReferenceChoice::Use(present.clone()))
     );
+    // Another compiler pin (other lib text): named fails, implicit skips,
+    // required fails.
+    let on_other = |explicit, archive, required| {
+        common::choose_reference(explicit, archive, required, &current, &other_compiler)
+    };
+    assert!(on_other(Some(present.clone()), None, false).is_err());
+    assert!(matches!(
+        on_other(None, Some(present.clone()), false),
+        Ok(ReferenceChoice::Skip(_))
+    ));
+    assert!(on_other(None, Some(present), true).is_err());
 }

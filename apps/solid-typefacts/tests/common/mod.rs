@@ -83,6 +83,12 @@ pub fn frames(mut bytes: &[u8]) -> Vec<Vec<u8>> {
 /// passes vacuously. The implicit archive default is skipped when absent or on
 /// another protocol (the archived Go producer speaks 81), with a SKIPPED line
 /// written past the test harness's output capture so every run shows it.
+///
+/// The reference must also be built on the same compiler pin (same tsrs
+/// rev, read from its `.buildinfo` stamp): another TypeScript means other lib
+/// text, so lib byte offsets and `symbol:h:` ids differ in every row that
+/// touches a library declaration. That is the same policy: named fails,
+/// implicit skips.
 pub fn reference_binary(what: &str) -> Option<std::path::PathBuf> {
     let explicit = std::env::var_os("SOLID_TYPEFACTS_REFERENCE_BIN").map(std::path::PathBuf::from);
     let required =
@@ -92,6 +98,7 @@ pub fn reference_binary(what: &str) -> Option<std::path::PathBuf> {
         archived_reference(),
         required,
         &reference_handshake,
+        &reference_compiler,
     ) {
         Ok(ReferenceChoice::Use(path)) => Some(path),
         Ok(ReferenceChoice::Skip(reason)) => {
@@ -122,6 +129,7 @@ pub fn choose_reference(
     archive: Option<std::path::PathBuf>,
     required: bool,
     handshake: &dyn Fn(&std::path::Path) -> Result<typefacts::v3::Handshake, String>,
+    compiler: &dyn Fn(&std::path::Path) -> Result<(), String>,
 ) -> Result<ReferenceChoice, String> {
     let named = explicit.is_some();
     let Some(path) = explicit.or(archive) else {
@@ -140,7 +148,14 @@ pub fn choose_reference(
     if handshake.protocol == typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
         && handshake.schema_hash == typefacts::v3::TYPE_FACTS_SCHEMA_SHA256
     {
-        return Ok(ReferenceChoice::Use(path));
+        return match compiler(&path) {
+            Ok(()) => Ok(ReferenceChoice::Use(path)),
+            Err(reason) if named => Err(format!(
+                "reference producer at {}: {reason}",
+                path.display()
+            )),
+            Err(reason) => skip_or_fail(required, reason),
+        };
     }
     let reason = format!(
         "reference producer at {} speaks protocol {} (schema {}), this client {}",
@@ -161,6 +176,43 @@ fn skip_or_fail(required: bool, reason: String) -> Result<ReferenceChoice, Strin
         Err(format!("{reason}, and SOLID_TYPEFACTS_REQUIRE_REFERENCE=1"))
     } else {
         Ok(ReferenceChoice::Skip(reason))
+    }
+}
+
+/// The tsrs rev this producer is pinned to (`apps/solid-typefacts/Cargo.toml`).
+fn pinned_tsrs_rev() -> &'static str {
+    let manifest = include_str!("../../Cargo.toml");
+    let after = manifest
+        .split("rev = \"")
+        .nth(1)
+        .expect("a pinned tsrs rev");
+    after.split('"').next().unwrap()
+}
+
+/// Whether the producer at `path` was built on the pinned tsrs rev, as its
+/// `.buildinfo` stamp (scripts/build-typefacts.sh) records.
+fn reference_compiler(path: &std::path::Path) -> Result<(), String> {
+    let mut stamp = path.as_os_str().to_owned();
+    stamp.push(".buildinfo");
+    let stamp = std::path::PathBuf::from(stamp);
+    let text = std::fs::read_to_string(&stamp).map_err(|_| {
+        format!(
+            "no {} stamp, so its compiler pin is unknown",
+            stamp.display()
+        )
+    })?;
+    let rev = text
+        .split("\"tsrsRev\":\"")
+        .nth(1)
+        .and_then(|rest| rest.split('"').next())
+        .unwrap_or("");
+    if rev == pinned_tsrs_rev() {
+        Ok(())
+    } else {
+        Err(format!(
+            "built on tsrs {rev}, not {}: another TypeScript has other lib text and ids",
+            pinned_tsrs_rev()
+        ))
     }
 }
 

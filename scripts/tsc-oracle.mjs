@@ -16,7 +16,7 @@
 //   bun scripts/tsc-oracle.mjs versions [--json]
 //
 // The compiler is TypeScript 7.1, the native `tsc`, driven through its
-// `typescript/unstable/sync` API (scripts/lib/tsc-oracle-api.mjs, run under
+// `typescript/sync` API (scripts/lib/tsc-oracle-api.mjs, run under
 // Node). It is a separate, pinned install (`fixtures/tsc-oracle/packages.json`,
 // `typescript`), never packages/cli's `typescript` 5.9.3. The CLI's
 // `--pretty false` output carries no diagnostic length, and the gate compares
@@ -103,6 +103,25 @@ const lockedIntegrities = (root) => {
 // tarball against the integrity it locked, so a lock that names the pinned
 // integrity for every copy of every audited package is an install of exactly
 // the tarballs the audit record describes.
+/**
+ * Fail-closed check of the native compiler packages: every
+ * `@typescript/typescript-*` the lock resolved must be pinned, and the host's
+ * own platform package must be both pinned and installed, so an unlisted
+ * platform can never run an unpinned compiler.
+ */
+export const nativeCompilerProblems = (pinned, locked, host = `${process.platform}-${process.arch}`) => {
+  const prefix = "@typescript/typescript-";
+  const problems = [];
+  for (const { resolved } of locked) {
+    const name = resolved.slice(0, resolved.lastIndexOf("@"));
+    if (name.startsWith(prefix) && !(name in pinned)) problems.push(`${name}: installed but not pinned`);
+  }
+  const own = `${prefix}${host}`;
+  if (!(own in pinned)) problems.push(`${own}: this host's native compiler package is not pinned`);
+  else if (!locked.some(({ resolved }) => resolved.startsWith(`${own}@`))) problems.push(`${own}: not installed`);
+  return problems;
+};
+
 const assertProvisioned = (dialect) => {
   const spec = dialectSpec(dialect);
   const root = join(ORACLE_ROOT, dialect);
@@ -114,6 +133,7 @@ const assertProvisioned = (dialect) => {
   if (spec.integrity) {
     const locked = lockedIntegrities(root);
     if (!locked) wrong.push(`bun.lock: missing or unreadable, so no installed integrity can be checked`);
+    else if (dialect === TYPESCRIPT_KEY) wrong.push(...nativeCompilerProblems(spec.integrity, locked));
     for (const [name, pinned] of Object.entries(spec.integrity)) {
       if (!locked) break;
       const copies = locked.filter(({ resolved }) => resolved.startsWith(`${name}@`));
