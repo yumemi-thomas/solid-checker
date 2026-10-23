@@ -105,6 +105,37 @@ fn is_intrinsic_spread_argument(
     })
 }
 
+/// The values an object spread's argument may evaluate to, each with whether
+/// it is a branch's: the argument itself or, through parentheses and type
+/// wrappers, both branches of a conditional, the right operand of `&&` and
+/// both operands of `||` and `??` (the left of `&&` is the result only when
+/// falsy, and no props object or store is). A test or a non-result operand is
+/// evaluated, not spread.
+fn spread_argument_values(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    branch: bool,
+    depth: usize,
+    values: &mut Vec<(solid_facts::core::Span, bool)>,
+) {
+    let span = file.ast.peel_ts_sugar_span(span);
+    if depth < VIEW_CALL_DEPTH {
+        if let Some(conditional) = file.ast.conditional_at(span) {
+            spread_argument_values(file, conditional.consequent, true, depth + 1, values);
+            spread_argument_values(file, conditional.alternate, true, depth + 1, values);
+            return;
+        }
+        if let Some(logical) = file.ast.logical_at(span) {
+            if logical.operator != solid_facts::ast::LogicalOperatorKind::And {
+                spread_argument_values(file, logical.left, true, depth + 1, values);
+            }
+            spread_argument_values(file, logical.right, true, depth + 1, values);
+            return;
+        }
+    }
+    values.push((span, branch));
+}
+
 /// The depth a view call's nested view arguments are followed to.
 const VIEW_CALL_DEPTH: usize = 8;
 
@@ -682,6 +713,18 @@ impl LocalAccessContext<'_, '_> {
                 self.lookup
                     .callee_symbol(file, call.callee)
                     .map(SymbolId::from)
+            }))
+            .chain(file.ast.spreads.iter().flat_map(|spread| {
+                let mut values = Vec::new();
+                spread_argument_values(file, spread.argument, false, 0, &mut values);
+                values.into_iter().filter_map(|(value, _)| {
+                    crate::source_discovery::reference_symbol(
+                        file,
+                        value,
+                        self.entities,
+                        self.lookup,
+                    )
+                })
             }))
             .collect()
     }
@@ -2044,108 +2087,167 @@ impl LocalAccessContext<'_, '_> {
         result: &mut LocalAccessResult,
     ) {
         for spread in &file.ast.spreads {
-            let argument = location(file.path.shared(), spread.argument);
-            let inline_root = if !self.entities.get(&argument).is_some_and(|symbol| {
-                self.prop_sources.contains_key(symbol) || self.accessors.contains_key(symbol)
-            }) {
-                self.inline_view_root(file, spread.argument)
-            } else {
-                None
-            };
-            let Some(symbol) = inline_root.as_ref().or(self.entities.get(&argument)) else {
-                continue;
-            };
-            let execution = semantic_execution_role(
-                file,
-                spread.span,
-                allowed,
-                self.entities,
-                self.symbol_names,
-                self.lookup,
-            );
-            if inside_non_component_function(file, spread.span, self.lookup)
-                && named_callback_execution_role(file, spread.span, self.lookup).is_none()
-                && !matches!(
-                    execution,
-                    ExecutionRole::EffectApply | ExecutionRole::UntrackedCallback
-                )
-            {
-                continue;
-            }
-            let source = if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
-                self.accessors.get(symbol)
-            } else {
-                self.prop_sources.get(symbol)
-            };
-            let Some((name, declaration)) = source else {
-                continue;
-            };
-            // A spread unwraps every prop, so it follows the whole-object
-            // caller classification.
-            let mut uncertain = self.uncertain_prop_sources.contains(symbol)
-                || self.lookup.inside_possible_component(file, spread.span);
-            if self.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store)
-                && self.prop_sources.contains_key(symbol)
-            {
-                match self.props_reactivity.object_use(declaration) {
-                    PropUse::Static => continue,
-                    // ADR 0323: a spread of a view (an `omit` or a merge)
-                    // reads the view's keys, not the parameter's: the keys a
-                    // view hides may be the only reactive ones, so the
-                    // parameter's classification proves nothing for it.
-                    PropUse::Reactive => {
-                        if inline_root.is_some()
-                            || self.entities.get(declaration) != Some(symbol)
-                            || !props_root_is_current(
-                                file,
-                                declaration,
-                                symbol,
-                                self.entities,
-                                self.lookup,
-                            )
-                        {
-                            uncertain = true;
-                        }
+            let mut values = Vec::new();
+            spread_argument_values(file, spread.argument, false, 0, &mut values);
+            let mut roots: Vec<(SymbolId, bool, bool)> = Vec::new();
+            for (value, branch) in values {
+                let Some((symbol, inline)) = self.spread_value_root(file, value) else {
+                    continue;
+                };
+                match roots.iter_mut().find(|(known, _, _)| *known == symbol) {
+                    Some(root) => {
+                        root.1 |= inline;
+                        root.2 |= branch;
                     }
-                    PropUse::Unknown => uncertain = true,
+                    None => roots.push((symbol, inline, branch)),
                 }
             }
-            result.reads.push(Arc::new(ReactiveRead {
-                summary_attributed: false,
-                transported: false,
-                kind: if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
-                    "store-path".into()
-                } else {
-                    "component-props".into()
-                },
-                accessor: format!("{name} spread").into(),
-                location: location(file.path.shared(), spread.span),
-                declaration: declaration.clone(),
-                execution,
-                context: read_analysis_context(file, spread.span, execution, self.lookup).into(),
-                via: Arc::from(""),
-                origin: None,
-                origin_context: Arc::from(""),
-                uncertain,
-                missing_jsx_census: missing_jsx_census(file, spread.span, execution),
-                host_callback_timing: host_callback_timing(
-                    file,
-                    spread.span,
-                    execution,
-                    self.lookup,
-                ),
-                project_consumer_non_strict: false,
-                callback_invocation_unproven: false,
-                callee_callback_timing: callee_callback_timing(
-                    file,
-                    spread.span,
-                    execution,
-                    self.lookup,
-                ),
-            }));
-            if counts_as_strict_read_root(file, spread.span, execution, self.lookup) {
-                result.strict_read_obligations += 1;
+            for (symbol, inline, branch) in roots {
+                self.push_spread_read(file, spread, &symbol, inline, branch, allowed, result);
             }
+        }
+    }
+
+    /// The source a spread value is exactly: an identifier whose own binding
+    /// is a props or store source, or an inline `omit`/`merge` view of one
+    /// (`inline`, as is an identifier with no producer entity). A member, a comparison or any other compound span is not
+    /// the object, whatever its first token names, so it has no root here and
+    /// its own reads are analysed where they are written.
+    fn spread_value_root(
+        &self,
+        file: &solid_facts::FileFacts,
+        value: solid_facts::core::Span,
+    ) -> Option<(SymbolId, bool)> {
+        let value = file.ast.peel_ts_sugar_span(value);
+        if file
+            .ast
+            .identifiers
+            .binary_search_by_key(&value, |identifier| identifier.span)
+            .is_ok()
+        {
+            return crate::source_discovery::reference_symbol(
+                file,
+                value,
+                self.entities,
+                self.lookup,
+            )
+            .filter(|symbol| {
+                self.prop_sources.contains_key(symbol) || self.accessors.contains_key(symbol)
+            })
+            .map(|symbol| {
+                // Resolved by binding rather than the producer's entity: as
+                // a view root, so not a proof of the parameter's own reads.
+                let entity = self.entities.get(&location(file.path.shared(), value));
+                let inline = entity != Some(&symbol);
+                (symbol, inline)
+            });
+        }
+        file.ast.call_at(value)?;
+        self.inline_view_root(file, value)
+            .map(|symbol| (symbol, true))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn push_spread_read(
+        &self,
+        file: &solid_facts::FileFacts,
+        spread: &solid_facts::ast::SpreadFact,
+        symbol: &SymbolId,
+        inline: bool,
+        branch: bool,
+        allowed: &[solid_facts::core::Span],
+        result: &mut LocalAccessResult,
+    ) {
+        let execution = semantic_execution_role(
+            file,
+            spread.span,
+            allowed,
+            self.entities,
+            self.symbol_names,
+            self.lookup,
+        );
+        if inside_non_component_function(file, spread.span, self.lookup)
+            && named_callback_execution_role(file, spread.span, self.lookup).is_none()
+            && !matches!(
+                execution,
+                ExecutionRole::EffectApply | ExecutionRole::UntrackedCallback
+            )
+        {
+            return;
+        }
+        let source = if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
+            self.accessors.get(symbol)
+        } else {
+            self.prop_sources.get(symbol)
+        };
+        let Some((name, declaration)) = source else {
+            return;
+        };
+        // A spread unwraps every prop, so it follows the whole-object
+        // caller classification.
+        // A source that is one branch's value (`c ? props : {}`) is spread
+        // only when that branch is taken, and the props root check sees no use
+        // there (no entity is recorded at a branch identifier), while a direct
+        // `{...props}` is an unaccounted use: an obligation, never a proof.
+        let mut uncertain = branch
+            || self.uncertain_prop_sources.contains(symbol)
+            || self.lookup.inside_possible_component(file, spread.span);
+        if self.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store)
+            && self.prop_sources.contains_key(symbol)
+        {
+            match self.props_reactivity.object_use(declaration) {
+                PropUse::Static => return,
+                // ADR 0323: a spread of a view (an `omit` or a merge)
+                // reads the view's keys, not the parameter's: the keys a
+                // view hides may be the only reactive ones, so the
+                // parameter's classification proves nothing for it.
+                PropUse::Reactive => {
+                    if inline
+                        || self.entities.get(declaration) != Some(symbol)
+                        || !props_root_is_current(
+                            file,
+                            declaration,
+                            symbol,
+                            self.entities,
+                            self.lookup,
+                        )
+                    {
+                        uncertain = true;
+                    }
+                }
+                PropUse::Unknown => uncertain = true,
+            }
+        }
+        result.reads.push(Arc::new(ReactiveRead {
+            summary_attributed: false,
+            transported: false,
+            kind: if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
+                "store-path".into()
+            } else {
+                "component-props".into()
+            },
+            accessor: format!("{name} spread").into(),
+            location: location(file.path.shared(), spread.span),
+            declaration: declaration.clone(),
+            execution,
+            context: read_analysis_context(file, spread.span, execution, self.lookup).into(),
+            via: Arc::from(""),
+            origin: None,
+            origin_context: Arc::from(""),
+            uncertain,
+            missing_jsx_census: missing_jsx_census(file, spread.span, execution),
+            host_callback_timing: host_callback_timing(file, spread.span, execution, self.lookup),
+            project_consumer_non_strict: false,
+            callback_invocation_unproven: false,
+            callee_callback_timing: callee_callback_timing(
+                file,
+                spread.span,
+                execution,
+                self.lookup,
+            ),
+        }));
+        if counts_as_strict_read_root(file, spread.span, execution, self.lookup) {
+            result.strict_read_obligations += 1;
         }
     }
 
