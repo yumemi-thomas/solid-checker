@@ -191,6 +191,23 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         StaticDefectKind::ReactiveDispatchUnresolved {
             callee,
             member: None,
+        } if defect
+            .analysis_context
+            .starts_with(crate::FORWARDED_TO_UNDESCRIBED_CALLEE) =>
+        {
+            let inner = &defect.analysis_context[crate::FORWARDED_TO_UNDESCRIBED_CALLEE.len()..];
+            (
+                format!(
+                    "this reactive source is passed to {callee}, whose body may hand it on to {inner}, a callee whose reactive behaviour nothing analyzed describes; whether reads through it stay tracked can be neither proven nor ruled out"
+                ),
+                format!(
+                    "Call {inner} with the source where its behaviour is visible, or make {inner}'s source available to solid-checker (ADR 0370)."
+                ),
+            )
+        }
+        StaticDefectKind::ReactiveDispatchUnresolved {
+            callee,
+            member: None,
         } if defect.analysis_context == crate::PRIMITIVE_VALUE => (
             format!(
                 "Solid primitive {callee} is used as a value here, so the calls that reach it are not followed; the owner, tracking and write rules that apply where it runs are not checked"
@@ -372,6 +389,13 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
             if defect.analysis_context == crate::DEPENDENCY_SOURCE_CALL_ERROR =>
         {
             "TypeScript reports a call error here only in the program that adds package sources, not on the project's own program"
+        }
+        StaticDefectKind::ReactiveDispatchUnresolved { .. }
+            if defect
+                .analysis_context
+                .starts_with(crate::FORWARDED_TO_UNDESCRIBED_CALLEE) =>
+        {
+            "a reference bound to a reactive accessor occupies this argument position of an analyzed function whose parameter may reach a callee no analyzed source or primitive describes"
         }
         StaticDefectKind::ReactiveDispatchUnresolved { .. } => {
             "the call is type-correct, but exact runtime dispatch or equivalent reactive summaries are not proven"

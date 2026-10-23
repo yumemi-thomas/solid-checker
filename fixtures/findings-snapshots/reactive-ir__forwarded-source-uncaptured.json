@@ -1,0 +1,35 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-source-uncaptured/App.tsx",
+      "start": 886,
+      "end": 891,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-source-uncaptured/App.tsx",
+      "start": 905,
+      "end": 910,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-source-uncaptured/App.tsx",
+      "start": 921,
+      "end": 926,
+      "fixes": 0
+    }
+  ]
+}

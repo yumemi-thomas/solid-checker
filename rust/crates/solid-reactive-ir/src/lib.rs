@@ -716,6 +716,13 @@ pub const PRIMITIVE_VALUE: &str = "primitive-value";
 /// (`ProjectFacts::dependency_source_call_errors`).
 pub const DEPENDENCY_SOURCE_CALL_ERROR: &str = "dependency-source-program-call-error";
 
+/// ADR 0370: the `analysis_context` prefix of a dispatch obligation at a
+/// proven source passed to an analyzed function whose parameter may reach
+/// a callee nothing describes; the undescribed callee's text follows the
+/// prefix. Its `callee` is the analyzed function's. Producer:
+/// `upstream_compat/shared_reactivity.rs`; consumer: `projection.rs`.
+pub const FORWARDED_TO_UNDESCRIBED_CALLEE: &str = "forwarded-to-undescribed-callee:";
+
 /// The `analysis_context` of a dispatch obligation at a member call on the
 /// result of a primitive that returns a getter (`createSignal(1).slice(0)`,
 /// ADR 0338): the value it returns has no provenance the analysis can state.

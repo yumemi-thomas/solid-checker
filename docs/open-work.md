@@ -55,7 +55,7 @@ Missing provider (`missing-context-provider`, SC4002, ADR 0352): a context is cl
 SC1002 (`after-await-open`): a handler on a promise held in a variable; a `.then` on a `Promise<T>` not proven native; `Promise.race` of helpers; an async IIFE the computation awaits; `Promise.all(x.map(async …))`; an accessor alias; a destructured or bound loader; router `query` flights; a catch join after statements; `Math.max(count())` after a functional setter. Each fires the runtime warning unproven (ADR 0340, 0349, 0350).
 
 
-Dependency-source summaries (ADR 0368): a package function handing its parameter to a type-correct call of a function value its source does not define (`const fn = api.get(); fn(source)`, `get(): (s) => void`) is certified at the project caller; the same call in project code is SC9011.
+Forwarded sources (ADR 0370) are SC9012 only: dead branches, killed values and no-op wrappers are not pruned, and SC9011 needs proofs of callee currency, the value reaching the call, the call running and the final callee.
 
 Primitive used as a value (`reactive-dispatch-unresolved`, SC9012):
 

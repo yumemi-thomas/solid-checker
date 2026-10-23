@@ -17,6 +17,11 @@ finding, an SC9011 warning fails `--certify` until the boundary is described (or
 the rule is disabled in `rule-options.json`). "Advisory" describes the tone —
 nothing has been proven wrong — not an exemption from the certification gate.
 
+A source passed to an analyzed function (project code or a package analyzed
+from source) is not this finding: when that function may hand its parameter
+on to such a callee, the call is an SC9012 obligation instead
+([reactive-dispatch-unresolved](reactive-dispatch-unresolved.md), ADR 0370).
+
 Only callees imported from a package are reported, at this boundary. Ambient globals (`setTimeout`, `console.log`, an array
 method) are outside this package-import rule; absence of this finding does
 not prove their reactive behavior.

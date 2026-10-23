@@ -669,6 +669,9 @@ pub(super) struct UpstreamCompatContext<'a> {
     /// reactive behaviour nothing in the analysis knows.
     pub(super) prefer_for_enabled: bool,
     pub(super) prefer_show_enabled: bool,
+    /// ADR 0370: analyzed functions' parameters that reach an undescribed
+    /// callee, for `reactive-source-uncaptured` at their callers.
+    pub(super) forwarded_uncaptured: shared_reactivity::ForwardedUncaptured,
 }
 
 /// Runs every upstream-compat rule the dialect's catalog declares over one
@@ -729,7 +732,7 @@ pub(crate) fn check_project(
             None
         }
     });
-    let context = UpstreamCompatContext {
+    let mut context = UpstreamCompatContext {
         dialect: ctx.dialect,
         lookup: ctx.semantic_lookup,
         entities: ctx.entities,
@@ -749,7 +752,10 @@ pub(crate) fn check_project(
         }),
         prefer_for_enabled,
         prefer_show_enabled,
+        forwarded_uncaptured: shared_reactivity::ForwardedUncaptured::default(),
     };
+    context.forwarded_uncaptured =
+        shared_reactivity::ForwardedUncaptured::build(&ctx.facts.files, &context);
     for diagnostics in parallel_file_results(&ctx.facts.files, |file| check_file(file, &context)) {
         draft.static_violations.extend(diagnostics.violations);
         draft.static_defects.extend(diagnostics.defects);
