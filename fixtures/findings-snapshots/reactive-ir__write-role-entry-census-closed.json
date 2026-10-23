@@ -1,0 +1,25 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/write-role-entry-census/variants/closed/App.tsx",
+      "start": 182,
+      "end": 195,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-role-entry-census/variants/closed/App.tsx",
+      "start": 938,
+      "end": 945,
+      "fixes": 0
+    }
+  ]
+}

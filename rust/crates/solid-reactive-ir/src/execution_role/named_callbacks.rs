@@ -13,6 +13,12 @@ use super::*;
 #[derive(Default)]
 pub(crate) struct NamedCallbackRoles {
     pub(super) by_function: HashMap<Span, NamedCallbackRole>,
+    /// The positions that admitted each function: the spans whose role the
+    /// function's [`NamedCallbackRole`] describes. A write role inherited from
+    /// a function's entries counts a reference at one of these as accounted
+    /// for ([`super::write_roles`]); a position that only names the function
+    /// (an unproven callback slot, a result-access one) is not.
+    pub(super) positions: HashMap<Span, Vec<Span>>,
 }
 
 /// The classification a named callback's positions support, in the order
@@ -75,6 +81,15 @@ impl NamedCallbackRoles {
 
     pub(super) fn get(&self, function: Span) -> NamedCallbackRole {
         self.by_function.get(&function).copied().unwrap_or_default()
+    }
+
+    fn admit_at(&mut self, function: Span, position: Span) {
+        self.positions.entry(function).or_default().push(position);
+    }
+
+    /// The positions whose role this function's entry describes.
+    pub(super) fn positions(&self, function: Span) -> &[Span] {
+        self.positions.get(&function).map_or(&[], Vec::as_slice)
     }
 }
 
@@ -194,6 +209,9 @@ pub(crate) fn named_callback_roles(
     }
     let primitives = lookup.primitives(file);
     let mut named = Vec::new();
+    // Which span named each candidate: the argument itself or one of its
+    // options-object properties.
+    let mut named_spans = Vec::new();
     for (call_index, call) in file.ast.calls.iter().enumerate() {
         let direct_primitive = known_primitive(&primitives.calls[call_index]);
         let returned_primitive = direct_primitive
@@ -208,9 +226,17 @@ pub(crate) fn named_callback_roles(
             // The argument itself, plus the callbacks an options object names
             // through its `effect`/`error` properties.
             named.clear();
+            named_spans.clear();
             index.named_at(file, entities, argument.span, &mut named);
+            named_spans.extend(named.iter().map(|candidate| (*candidate, argument.span)));
             for property in &argument.identifier_properties {
+                let before = named.len();
                 index.named_at(file, entities, property.span, &mut named);
+                named_spans.extend(
+                    named[before..]
+                        .iter()
+                        .map(|candidate| (*candidate, property.span)),
+                );
             }
             named.sort_unstable();
             named.dedup();
@@ -229,10 +255,14 @@ pub(crate) fn named_callback_roles(
                 // and therefore cannot be collapsed into this per-function
                 // index.
                 for candidate in index.identity_at(file, entities, argument.span) {
-                    let entry = roles.entry(index.functions[*candidate]);
+                    let function = index.functions[*candidate];
+                    let entry = roles.entry(function);
                     entry.admitted |= tracked || deferred;
                     entry.tracked |= tracked;
                     entry.deferred |= deferred;
+                    if tracked || deferred {
+                        roles.admit_at(function, argument.span);
+                    }
                 }
                 continue;
             }
@@ -265,13 +295,20 @@ pub(crate) fn named_callback_roles(
                     .tracks_reads;
             let deferred = !inherits
                 && callback_runs_outside_tracking(dialect, primitive, argument_index, count);
+            let admits = proven && (untracked || effect_apply || tracked || deferred);
             for candidate in &named {
-                let entry = roles.entry(index.functions[*candidate]);
-                entry.admitted |= proven && (untracked || effect_apply || tracked || deferred);
+                let function = index.functions[*candidate];
+                let entry = roles.entry(function);
+                entry.admitted |= admits;
                 entry.untracked_callback |= proven && untracked;
                 entry.effect_apply |= effect_apply;
                 if effect_apply {
                     entry.effect_apply_primitive = entry.effect_apply_primitive.with(primitive);
+                }
+            }
+            if admits {
+                for (candidate, position) in &named_spans {
+                    roles.admit_at(index.functions[*candidate], *position);
                 }
             }
             // The tracked and deferred arms have always demanded that the whole
@@ -319,9 +356,11 @@ pub(crate) fn named_callback_roles(
             continue;
         }
         for candidate in index.identity_at(file, entities, callback.span) {
-            let entry = roles.entry(index.functions[*candidate]);
+            let function = index.functions[*candidate];
+            let entry = roles.entry(function);
             entry.admitted = true;
             entry.deferred = true;
+            roles.admit_at(function, callback.span);
         }
     }
     for (element_index, element) in file.ast.jsx_elements.iter().enumerate() {
@@ -351,11 +390,27 @@ pub(crate) fn named_callback_roles(
             named.clear();
             index.named_at(file, entities, identifier.span, &mut named);
             for candidate in &named {
-                roles.entry(index.functions[*candidate]).admitted = true;
+                let function = index.functions[*candidate];
+                roles.entry(function).admitted = true;
+                roles.admit_at(function, identifier.span);
             }
         }
     }
     roles
+}
+
+/// The innermost function around `span` that a callback position of its file
+/// names ([`NamedCallbackRoles`]): the function whose role
+/// [`named_callback_execution_role`] reads.
+pub(super) fn named_callback_containing<'f>(
+    file: &'f solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<&'f solid_facts::ast::FunctionFact> {
+    let roles = lookup.named_callback_roles(file);
+    file.ast
+        .functions_body_containing(span)
+        .find(|function| roles.get(function.span).admitted)
 }
 
 pub(crate) fn named_callback_execution_role(
@@ -364,10 +419,7 @@ pub(crate) fn named_callback_execution_role(
     lookup: &SemanticLookup<'_>,
 ) -> Option<ExecutionRole> {
     let roles = lookup.named_callback_roles(file);
-    let callback = file
-        .ast
-        .functions_body_containing(span)
-        .find(|function| roles.get(function.span).admitted)?;
+    let callback = named_callback_containing(file, span, lookup)?;
     let owner = containing_ast_function(&file.ast, span)?;
     if owner.span != callback.span {
         return Some(ExecutionRole::DeferredCallback);
