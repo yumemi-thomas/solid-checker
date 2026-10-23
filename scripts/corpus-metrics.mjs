@@ -28,7 +28,8 @@
 // that classify a violation of this sweep. Unreviewed violations are counted
 // apart and never enter the ratio; an unresolved-review entry is not a
 // decision; an entry whose project ran but whose key is gone is reported as
-// stale. --check-ledger validates the ledger file and exits 1 if malformed.
+// stale, unless its `fixedBy` names the ADR that removed that false positive:
+// then it is counted as fixed, and printed as REGRESSED if it comes back. --check-ledger validates the ledger file and exits 1 if malformed.
 //
 // Confirmed misses, beside it: confirmed-violation entries whose finding this
 // sweep has only as uncertifiable (withheld) or not at all (absent), per rule,
@@ -162,6 +163,8 @@ if (asJson) {
   console.log(reviewLine("  holdout", reviewed.holdout));
   if (reviewed.otherKind) console.log(`ledger entries on non-violation findings (not counted): ${reviewed.otherKind}`);
   for (const key of reviewed.stale) console.log(`  stale ledger entry ${key}`);
+  if (reviewed.fixed.length) console.log(`fixed false positives still absent: ${reviewed.fixed.length}`);
+  for (const key of reviewed.regressed) console.log(`  REGRESSED fixed false positive ${key}`);
   const missLine = (name, bucket) =>
     `${name.padEnd(24)} confirmed misses ${bucket.withheld + bucket.absent} (withheld ${bucket.withheld}, absent ${bucket.absent})  unresolved ${bucket.unresolved}`;
   console.log(`confirmed misses (confirmed-violation entries not proven now; mutants entries ${mutantsPath ? `from ${mutantsPath}` : "not read: no --mutants"})`);

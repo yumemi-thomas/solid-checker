@@ -44,9 +44,9 @@ export function bucketOf(finding) {
 }
 
 export const CONFIRMED_CLASSES = ["confirmed-violation", "adopted-policy-violation"];
-export const LEDGER_CLASSES = [
-  ...CONFIRMED_CLASSES, "valid-for-claim", "essential-unknown", "unresolved-review", "tsc-owned", "compiler-refused",
-];
+/** Adjudicated classes that refute a violation: the ones `fixedBy` may mark. */
+export const REFUTED_CLASSES = ["valid-for-claim", "essential-unknown", "tsc-owned", "compiler-refused"];
+export const LEDGER_CLASSES = [...CONFIRMED_CLASSES, ...REFUTED_CLASSES, "unresolved-review"];
 /**
  * Where an entry's finding came from, and its key's shape. A `corpus-sweep`
  * key is findingKey's. A `mutants` key is a seeded site of scripts/mutants.mjs's
@@ -79,7 +79,7 @@ export function validateLedger(ledger) {
   ledger.entries.forEach((entry, index) => {
     const where = `entries[${index}]`;
     if (entry === null || typeof entry !== "object" || Array.isArray(entry)) return errors.push(`${where} must be an object`);
-    const extra = Object.keys(entry).filter((name) => !["key", "source", "class", "reviewer", "date", "evidence"].includes(name));
+    const extra = Object.keys(entry).filter((name) => !["key", "source", "class", "reviewer", "date", "evidence", "fixedBy"].includes(name));
     if (extra.length) errors.push(`${where} has unknown fields ${extra.join(", ")}`);
     const source = LEDGER_SOURCES[entry.source];
     const parts = typeof entry.key === "string" ? entry.key.split("|") : [];
@@ -95,6 +95,12 @@ export function validateLedger(ledger) {
     }
     if (typeof entry.evidence !== "string" || !entry.evidence.trim() || entry.evidence.includes("\n")) {
       errors.push(`${where}.evidence must be a one-line, non-empty string`);
+    }
+    if (entry.fixedBy !== undefined) {
+      if (typeof entry.fixedBy !== "string" || !/^ADR \d{4}$/.test(entry.fixedBy)) errors.push(`${where}.fixedBy must be "ADR NNNN"`);
+      if (entry.source !== "corpus-sweep" || !REFUTED_CLASSES.includes(entry.class)) {
+        errors.push(`${where}.fixedBy marks a fixed false positive: corpus-sweep, class one of ${REFUTED_CLASSES.join(", ")}`);
+      }
     }
   });
   return errors;
@@ -133,6 +139,9 @@ export function shareBySplit(results, index) {
  * dropped); an entry for a project this sweep did not run is out of scope.
  * Only `corpus-sweep` entries are read. An entry whose finding is present under
  * another kind is not stale: a confirmed one is a miss (confirmedMisses).
+ * An entry with `fixedBy` is a false positive a decision removed: gone, it is
+ * `fixed` rather than stale; reported again as a violation, it is `regressed`
+ * (and counts against precision as before).
  */
 export function reviewedPrecision(results, ledger, index) {
   const entries = ledger.entries.filter((entry) => entry.source === "corpus-sweep");
@@ -167,14 +176,17 @@ export function reviewedPrecision(results, ledger, index) {
       }
     }
   }
-  const stale = entries
-    .filter((entry) => !present.has(entry.key) && ran.has(entry.key.split("|").slice(0, 2).join("|")))
-    .filter((entry) => !located.has(locationKey(entry.key)) && entry.class !== "confirmed-violation")
-    .map((entry) => entry.key);
+  const inScope = (entry) => ran.has(entry.key.split("|").slice(0, 2).join("|"));
+  const gone = entries
+    .filter((entry) => !present.has(entry.key) && inScope(entry))
+    .filter((entry) => !located.has(locationKey(entry.key)) && entry.class !== "confirmed-violation");
+  const stale = gone.filter((entry) => entry.fixedBy === undefined).map((entry) => entry.key);
+  const fixed = gone.filter((entry) => entry.fixedBy !== undefined).map((entry) => `${entry.key} (${entry.fixedBy})`);
+  const regressed = entries.filter((entry) => entry.fixedBy !== undefined && present.has(entry.key)).map((entry) => `${entry.key} (${entry.fixedBy})`);
   const withPrecision = (bucket) => ({ ...bucket, precision: bucket.adjudicated === 0 ? null : bucket.confirmed / bucket.adjudicated });
   return {
     total: withPrecision(total), dev: withPrecision(splits.dev), holdout: withPrecision(splits.holdout),
-    stale, otherKind,
+    stale, fixed, regressed, otherKind,
   };
 }
 

@@ -1,5 +1,5 @@
 {
-  "$comment": "Independent classification of corpus findings (scripts/corpus-metrics.mjs reports reviewed precision and confirmed misses from it). Entries: { key, source, class, reviewer, date, evidence }. source: corpus-sweep (key = app|project|id|kind|path|startByte|endByte, the corpus-sweep-compare key with path relative to the project root) or mutants (key = app|project|file|pos|pattern, a seeded site of scripts/mutants.mjs's report.json, file relative to the app root). class: confirmed-violation | adopted-policy-violation | valid-for-claim | essential-unknown | unresolved-review | tsc-owned | compiler-refused. date = YYYY-MM-DD. evidence = one line: runtime oracle case id, manual probe, or published bytes. Never add an entry for a finding nobody reviewed.",
+  "$comment": "Independent classification of corpus findings (scripts/corpus-metrics.mjs reports reviewed precision and confirmed misses from it). Entries: { key, source, class, reviewer, date, evidence, fixedBy? }. fixedBy = ADR NNNN (the string \"ADR 0375\") on a refuted corpus-sweep entry whose false positive that decision removed: kept as a regression guard, counted as fixed while absent, REGRESSED if reported again. source: corpus-sweep (key = app|project|id|kind|path|startByte|endByte, the corpus-sweep-compare key with path relative to the project root) or mutants (key = app|project|file|pos|pattern, a seeded site of scripts/mutants.mjs's report.json, file relative to the app root). class: confirmed-violation | adopted-policy-violation | valid-for-claim | essential-unknown | unresolved-review | tsc-owned | compiler-refused. date = YYYY-MM-DD. evidence = one line: runtime oracle case id, manual probe, or published bytes. Never add an entry for a finding nobody reviewed.",
   "entries": [
     {
       "key": "compass-ui|apps/ui/tsconfig.json|SC1001|violation|apps/ui/src/components/Bridge.tsx|12543|12550",
@@ -591,7 +591,8 @@
       "class": "valid-for-claim",
       "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
       "date": "2026-10-23",
-      "evidence": "FALSE POSITIVE, FIXED by ADR 0375 (no longer reported; fixture props-spread-argument): the flagged span is the options spread `...(props.queries === undefined ? {} : { registry: props.queries })`, reported as a \"props spread\" read; the route passes only clusterId and the test a plain registry, so the spread reads no getter and the runtime does not warn; oracle adjudication-props-spread-options App.tsx:18 is static-only and behaviour-refuted (ConnectRoute.tsx:103; caller :68)"
+      "evidence": "FALSE POSITIVE, FIXED by ADR 0375 (no longer reported; fixture props-spread-argument): the flagged span is the options spread `...(props.queries === undefined ? {} : { registry: props.queries })`, reported as a \"props spread\" read; the route passes only clusterId and the test a plain registry, so the spread reads no getter and the runtime does not warn; oracle adjudication-props-spread-options App.tsx:18 is static-only and behaviour-refuted (ConnectRoute.tsx:103; caller :68)",
+      "fixedBy": "ADR 0375"
     },
     {
       "key": "kui|frontend/packages/feature-consumers/tsconfig.json|SC1001|violation|frontend/packages/feature-consumers/src/GroupRoute.tsx|4977|4991",
@@ -607,7 +608,8 @@
       "class": "valid-for-claim",
       "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
       "date": "2026-10-23",
-      "evidence": "FALSE POSITIVE, FIXED by ADR 0375 (no longer reported; fixture props-spread-argument): the flagged span is the options spread `...(props.queries === undefined ? {} : { registry: props.queries })`, reported as a \"props spread\" read; the route passes only clusterId and the test a plain registry, so the spread reads no getter and the runtime does not warn; oracle adjudication-props-spread-options App.tsx:18 is static-only and behaviour-refuted (KsqlRoute.tsx:164; caller :121)"
+      "evidence": "FALSE POSITIVE, FIXED by ADR 0375 (no longer reported; fixture props-spread-argument): the flagged span is the options spread `...(props.queries === undefined ? {} : { registry: props.queries })`, reported as a \"props spread\" read; the route passes only clusterId and the test a plain registry, so the spread reads no getter and the runtime does not warn; oracle adjudication-props-spread-options App.tsx:18 is static-only and behaviour-refuted (KsqlRoute.tsx:164; caller :121)",
+      "fixedBy": "ADR 0375"
     },
     {
       "key": "kui|frontend/packages/feature-ksql/tsconfig.json|SC1001|violation|frontend/packages/feature-ksql/src/KsqlRoute.tsx|7295|7362",
@@ -615,7 +617,8 @@
       "class": "valid-for-claim",
       "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
       "date": "2026-10-23",
-      "evidence": "FALSE POSITIVE, FIXED by ADR 0375 (no longer reported; fixture props-spread-argument): the flagged span is the options spread `...(props.queries === undefined ? {} : { registry: props.queries })`, reported as a \"props spread\" read; the route passes only clusterId and the test a plain registry, so the spread reads no getter and the runtime does not warn; oracle adjudication-props-spread-options App.tsx:18 is static-only and behaviour-refuted (KsqlRoute.tsx:170; caller :121)"
+      "evidence": "FALSE POSITIVE, FIXED by ADR 0375 (no longer reported; fixture props-spread-argument): the flagged span is the options spread `...(props.queries === undefined ? {} : { registry: props.queries })`, reported as a \"props spread\" read; the route passes only clusterId and the test a plain registry, so the spread reads no getter and the runtime does not warn; oracle adjudication-props-spread-options App.tsx:18 is static-only and behaviour-refuted (KsqlRoute.tsx:170; caller :121)",
+      "fixedBy": "ADR 0375"
     },
     {
       "key": "kui|frontend/packages/feature-messages/tsconfig.json|SC1001|violation|frontend/packages/feature-messages/src/MessagesRoute.tsx|5814|5825",
@@ -695,7 +698,8 @@
       "class": "valid-for-claim",
       "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
       "date": "2026-10-23",
-      "evidence": "FALSE POSITIVE, FIXED by ADR 0375 (no longer reported; fixture props-spread-argument): the flagged span is the options spread `...(props.queries === undefined ? {} : { registry: props.queries })`, reported as a \"props spread\" read; the route passes only clusterId and the test a plain registry, so the spread reads no getter and the runtime does not warn; oracle adjudication-props-spread-options App.tsx:18 is static-only and behaviour-refuted (ConnectRoute.tsx:103; caller :68)"
+      "evidence": "FALSE POSITIVE, FIXED by ADR 0375 (no longer reported; fixture props-spread-argument): the flagged span is the options spread `...(props.queries === undefined ? {} : { registry: props.queries })`, reported as a \"props spread\" read; the route passes only clusterId and the test a plain registry, so the spread reads no getter and the runtime does not warn; oracle adjudication-props-spread-options App.tsx:18 is static-only and behaviour-refuted (ConnectRoute.tsx:103; caller :68)",
+      "fixedBy": "ADR 0375"
     },
     {
       "key": "kui|frontend/packages/shell/tsconfig.json|SC1001|violation|frontend/packages/feature-consumers/src/GroupRoute.tsx|4977|4991",
@@ -711,7 +715,8 @@
       "class": "valid-for-claim",
       "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
       "date": "2026-10-23",
-      "evidence": "FALSE POSITIVE, FIXED by ADR 0375 (no longer reported; fixture props-spread-argument): the flagged span is the options spread `...(props.queries === undefined ? {} : { registry: props.queries })`, reported as a \"props spread\" read; the route passes only clusterId and the test a plain registry, so the spread reads no getter and the runtime does not warn; oracle adjudication-props-spread-options App.tsx:18 is static-only and behaviour-refuted (KsqlRoute.tsx:164; caller :121)"
+      "evidence": "FALSE POSITIVE, FIXED by ADR 0375 (no longer reported; fixture props-spread-argument): the flagged span is the options spread `...(props.queries === undefined ? {} : { registry: props.queries })`, reported as a \"props spread\" read; the route passes only clusterId and the test a plain registry, so the spread reads no getter and the runtime does not warn; oracle adjudication-props-spread-options App.tsx:18 is static-only and behaviour-refuted (KsqlRoute.tsx:164; caller :121)",
+      "fixedBy": "ADR 0375"
     },
     {
       "key": "kui|frontend/packages/shell/tsconfig.json|SC1001|violation|frontend/packages/feature-ksql/src/KsqlRoute.tsx|7295|7362",
@@ -719,7 +724,8 @@
       "class": "valid-for-claim",
       "reviewer": "claude-opus-5-5 (agent, violation-adjudication)",
       "date": "2026-10-23",
-      "evidence": "FALSE POSITIVE, FIXED by ADR 0375 (no longer reported; fixture props-spread-argument): the flagged span is the options spread `...(props.queries === undefined ? {} : { registry: props.queries })`, reported as a \"props spread\" read; the route passes only clusterId and the test a plain registry, so the spread reads no getter and the runtime does not warn; oracle adjudication-props-spread-options App.tsx:18 is static-only and behaviour-refuted (KsqlRoute.tsx:170; caller :121)"
+      "evidence": "FALSE POSITIVE, FIXED by ADR 0375 (no longer reported; fixture props-spread-argument): the flagged span is the options spread `...(props.queries === undefined ? {} : { registry: props.queries })`, reported as a \"props spread\" read; the route passes only clusterId and the test a plain registry, so the spread reads no getter and the runtime does not warn; oracle adjudication-props-spread-options App.tsx:18 is static-only and behaviour-refuted (KsqlRoute.tsx:170; caller :121)",
+      "fixedBy": "ADR 0375"
     },
     {
       "key": "kui|frontend/packages/shell/tsconfig.json|SC1001|violation|frontend/packages/feature-messages/src/MessagesRoute.tsx|5814|5825",

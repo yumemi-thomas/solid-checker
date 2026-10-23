@@ -160,6 +160,21 @@ test("a ledger entry whose key left a project that ran is stale; one for a proje
   assert.equal(result.total.adjudicated, 0);
 });
 
+test("a fixedBy entry is fixed while its finding is gone, and regressed when it is reported again", () => {
+  const fixedBy = (key) => ({ ...entry(key, "valid-for-claim"), fixedBy: "ADR 0375" });
+  const ledger = { entries: [fixedBy("a|p.json|SC1001|violation|src/gone.tsx|1|2"), fixedBy("a|p.json|SC1001|violation|src/x.tsx|1|2")] };
+  assert.deepEqual(validateLedger(ledger), []);
+  const result = reviewedPrecision(sweepRows, ledger);
+  assert.deepEqual(result.stale, []);
+  assert.deepEqual(result.fixed, ["a|p.json|SC1001|violation|src/gone.tsx|1|2 (ADR 0375)"]);
+  assert.deepEqual(result.regressed, ["a|p.json|SC1001|violation|src/x.tsx|1|2 (ADR 0375)"]);
+  assert.equal(result.total.adjudicated, 1, "a regressed false positive counts against precision again");
+  assert.equal(result.total.confirmed, 0);
+  assert.equal(validateLedger({ entries: [{ ...entry("a|p.json|SC1001|violation|src/x.tsx|1|2"), fixedBy: "ADR 0375" }] }).length, 1,
+    "a confirmed violation cannot be marked fixed");
+  assert.equal(validateLedger({ entries: [{ ...entry("a|p.json|SC1001|violation|src/x.tsx|1|2", "tsc-owned"), fixedBy: "0375" }] }).length, 1);
+});
+
 test("a confirmed violation the sweep has only as uncertifiable, or not at all, is a miss per rule", () => {
   const rows = [{ app: "a", project: "p.json", root: "/c/a", findings: [
     finding("SC1001", "uncertifiable", "/c/a/src/w.tsx"), finding("SC4001", "violation", "/c/a/src/v.tsx"),
