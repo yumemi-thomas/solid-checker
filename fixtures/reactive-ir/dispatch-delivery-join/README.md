@@ -64,6 +64,19 @@ Forwarded callbacks (each variant's `package.json` closes the program, which the
 | `forwarded-override` | the terminal `onScroll` is followed by an unread spread that may replace it (ADR 0364): no terminal, obligations |
 | `forwarded-narrow-site` | a narrow `dispatchEvent(new Event("sync"))` on the element the literal is forwarded to keeps it an obligation; the same forward to another element is a violation |
 
+A dispatch on a provably ownerless stack is no site (ADR 0365; same `Handlers` in each: a click, a focus and a change handler with `onCleanup`, and a click write):
+
+| variant | what it pins |
+| --- | --- |
+| `dispatch-after-await` | `await load(); target.click()` (also inside `try`): nothing fires, every handler keeps its proof |
+| `dispatch-skippable-await` | `if (wait) await load(); target.click()`: the await may be skipped, the `click()` set fires |
+| `dispatch-in-{getter,constructor,jsx,static-block}-after-await` | the `click()` after the `await` is in a getter, a constructor, a JSX child or a static block: not the continuation's own flow, the `click()` set fires (the static block is a deliberate miss) |
+| `dispatch-in-microtask` | `queueMicrotask`, `setTimeout`, `requestAnimationFrame` and `Promise.resolve(0).then` callbacks that dispatch: nothing fires |
+| `dispatch-in-stored-closure` | `queueMicrotask(later)`, a closure the callback stores, a `then` on a parameter typed `Promise<void>`: the focus move fires |
+| `dispatch-in-helper-after-await` | ai-memory-ui's `saveBlob`: a module-local helper every call of which follows a dominating `await`; nothing fires |
+| `dispatch-helper-mixed-callers` | the same helper also called synchronously: the `click()` set fires |
+| `dispatch-owner-restored` | `runWithOwner(owner, () => el.focus())` in a `setTimeout` callback and after an `await`: the focus move fires |
+
 A dispatch on the global `window` or `document` is supported with any argument and an empty delivery set (no element is on the path; `Dialect::global_dispatch_reaches_no_element_handler`). Variants `window-dispatch`, `document-dispatch` (every handler keeps its proof), `shadowed-window` (`window` is a parameter: `{app:ping}`), `shared-handler` (a function that is an element handler and a `window` listener keeps its element's violation; a listener no element names stays conditional).
 
 Stub: rc.17 typings transcribed in `solid-js.d.ts`; the rc.13 and rc.9 variants carry their own `node_modules` package files and reuse the declarations. `check-validity` and `object-handler` merge the extra elements they need through a local `elements.d.ts`.

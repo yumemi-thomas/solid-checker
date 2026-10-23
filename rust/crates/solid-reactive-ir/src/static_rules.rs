@@ -20,6 +20,7 @@ use typefacts::Location;
 
 mod after_await;
 mod native_promise;
+pub(crate) use native_promise::native_promise_in;
 mod pre_await;
 
 /// The static-prepass stage: every prepass rule, in their pipeline order.

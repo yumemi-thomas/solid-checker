@@ -45,11 +45,15 @@ struct HandlerTypes {
 impl EventDelivery {
     fn build(lookup: &SemanticLookup<'_>) -> Self {
         let mut delivery = Self::default();
+        let continuations = crate::owners::AwaitContinuations::new(lookup.facts, lookup);
         for file in lookup.files() {
             let mut callees = HashSet::default();
             for call in &file.ast.calls {
                 callees.insert(file.ast.peel_ts_sugar_span(call.callee));
-                delivery.visit_call(lookup, file, call);
+                // ADR 0365: a dispatch whose own stack has no owner runs its
+                // handlers with none, as the host does: it is no site.
+                let ownerless = || ownerless_dispatch_stack(lookup, &continuations, file, call);
+                delivery.visit_call(lookup, file, call, &ownerless);
                 if delivery.fired_any {
                     return delivery.every_handler();
                 }
@@ -107,11 +111,14 @@ impl EventDelivery {
         }
     }
 
+    /// `ownerless` answers ADR 0365 for the call; it is asked only once the call
+    /// is known to dispatch.
     fn visit_call(
         &mut self,
         lookup: &SemanticLookup<'_>,
         file: &FileFacts,
         call: &solid_facts::ast::CallFact,
+        ownerless: &dyn Fn() -> bool,
     ) {
         let resolved = lookup.resolved_callee_call(file, call.callee);
         if let Some(resolved) = resolved.filter(|resolved| resolved.declaration.is_some()) {
@@ -121,6 +128,9 @@ impl EventDelivery {
             if crate::runtime_semantics::standard_call_name(resolved)
                 == Some("EventTarget.dispatchEvent")
             {
+                if ownerless() {
+                    return;
+                }
                 self.any_site = true;
                 match supported_site(lookup, file, call) {
                     Some((element, handlers)) => {
@@ -137,6 +147,9 @@ impl EventDelivery {
                 return;
             }
             if let Some(fires) = crate::cleanup::resolved_dom_dispatch_fires(resolved) {
+                if ownerless() {
+                    return;
+                }
                 self.any_site = true;
                 if crate::cleanup::is_dispatch_event_declaration(resolved) {
                     self.fire_dispatched_event(dispatched_event_type(lookup, file, call));
@@ -146,7 +159,7 @@ impl EventDelivery {
             }
             return;
         }
-        self.visit_unresolved_call(lookup, file, call);
+        self.visit_unresolved_call(lookup, file, call, ownerless);
     }
 
     /// A member call that resolves to no declaration, spelled as one of ADR
@@ -159,6 +172,7 @@ impl EventDelivery {
         lookup: &SemanticLookup<'_>,
         file: &FileFacts,
         call: &solid_facts::ast::CallFact,
+        ownerless: &dyn Fn() -> bool,
     ) {
         let callee = file.ast.peel_ts_sugar_span(call.callee);
         let name = if file.ast.computed_members.contains(&callee) {
@@ -168,7 +182,7 @@ impl EventDelivery {
                 .iter()
                 .find(|member| member.span == callee)
             else {
-                if !computed_key_names_no_member(lookup, file, call, callee) {
+                if !computed_key_names_no_member(lookup, file, call, callee) && !ownerless() {
                     self.any_site = true;
                     self.fired_any = true;
                 }
@@ -189,7 +203,7 @@ impl EventDelivery {
             }
             name
         };
-        if !crate::dispatching_dom_member_spelling(name) {
+        if !crate::dispatching_dom_member_spelling(name) || ownerless() {
             return;
         }
         self.any_site = true;
@@ -306,6 +320,189 @@ impl EventDelivery {
                 .any(|element| self.delivered_elements.contains(element))
             || terminals.types.iter().any(|ty| self.fired.contains(ty))
     }
+}
+
+/// ADR 0365: whether the dispatch `call` provably runs on a stack no owner is
+/// current on, so the handlers it runs have none, as when the host runs them.
+/// Three shapes, each syntactic and none read off a computed owner context
+/// (that would be circular with the handlers' own contexts):
+///
+/// - the call follows an `await` that dominates it in its own async function
+///   (the producer's `calls_after_await`, ADR 0176: a promise continuation)
+///   and is written directly in that function's flow: the producer also lists
+///   calls in getters, setters, constructors, class bodies and JSX, which run
+///   when they are read, constructed or rendered, not on the continuation;
+/// - it is written directly in a function literal handed to a fresh-stack host
+///   scheduler (`setTimeout`, `queueMicrotask`, `Promise.then`, ...), the
+///   argument [`crate::owners::fresh_stack_scheduler_edges`] gives an unowned
+///   edge; a function the literal calls or stores does not count;
+/// - it is written directly in a module-local function declaration whose every
+///   reference is the callee of a call of the first shape (the closed census
+///   ADR 0319's walk takes for a declaration).
+///
+/// Both premises are the dialect's [`solid_dialect::Dialect::fresh_stack_callback_owner`]
+/// (`AwaitContinuations` and the scheduler edges are empty without it).
+fn ownerless_dispatch_stack(
+    lookup: &SemanticLookup<'_>,
+    continuations: &crate::owners::AwaitContinuations<'_>,
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+) -> bool {
+    if after_dominating_await(continuations, file, call) {
+        return true;
+    }
+    let Some(function) = crate::owners::containing_ast_function(&file.ast, call.span) else {
+        return false;
+    };
+    if !written_directly_in_flow(&file.ast, function, call.span) {
+        return false;
+    }
+    fresh_stack_scheduler_literal(lookup, file, function)
+        || called_only_after_awaits(lookup, continuations, file, function)
+}
+
+/// Whether `span` runs when `function` does, on its stack: written directly in
+/// its body, outside a class body and outside JSX the compiler wraps in a getter.
+fn written_directly_in_flow(
+    ast: &solid_facts::ast::AstFacts,
+    function: &solid_facts::ast::FunctionFact,
+    span: Span,
+) -> bool {
+    crate::owners::written_directly_in(ast, function, span)
+        && !ast
+            .classes
+            .iter()
+            .any(|class| function.span.contains(class.span) && class.span.contains(span))
+        && !ast
+            .jsx_containing(span)
+            .any(|element| function.body.contains(element.span))
+        && !ast
+            .jsx_fragments
+            .iter()
+            .any(|fragment| function.body.contains(*fragment) && fragment.contains(span))
+}
+
+/// Whether `function` is a literal argument a fresh-stack host scheduler runs
+/// from a task or microtask queue with no owner (the owner graph's own edge).
+/// A `then`, `catch` or `finally` handler counts only on a receiver proven to
+/// be a native promise (ADR 0340, 0349): a subclass or a thenable typed
+/// `Promise<T>` may call it on the caller's stack.
+fn fresh_stack_scheduler_literal(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> bool {
+    file.ast
+        .arguments_containing(function.span)
+        .filter(|(call, index)| {
+            file.ast.peel_ts_sugar_span(call.arguments[*index].span) == function.span
+        })
+        .any(|(call, index)| {
+            crate::owners::fresh_stack_scheduler_edges(file, call, lookup)
+                .iter()
+                .any(|edge| {
+                    edge.argument == index && edge.kind == crate::owners::OwnerEdgeKind::Unowned
+                })
+                && (!promise_handler_call(lookup, file, call)
+                    || promise_receiver(file, call).is_some_and(|receiver| {
+                        crate::static_rules::native_promise_in(lookup, file, receiver, 0)
+                    }))
+        })
+}
+
+/// Whether `call` resolves to `Promise.prototype.then`, `catch` or `finally`.
+fn promise_handler_call(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+) -> bool {
+    lookup
+        .resolved_callee_call(file, call.callee)
+        .and_then(crate::runtime_semantics::standard_call_name)
+        .is_some_and(|name| matches!(name, "Promise.then" | "Promise.catch" | "Promise.finally"))
+}
+
+/// The receiver of a member call through a static key.
+fn promise_receiver(file: &FileFacts, call: &solid_facts::ast::CallFact) -> Option<Span> {
+    let callee = file.ast.peel_ts_sugar_span(call.callee);
+    if file.ast.computed_members.contains(&callee) {
+        return None;
+    }
+    file.ast.member_at(callee).map(|member| member.object)
+}
+
+/// Whether `function` is a module-local, unwritten function declaration of a
+/// program with no `eval`, every reference to which is the callee of a call
+/// that follows a dominating `await` ([`crate::owners::AwaitContinuations`]).
+fn called_only_after_awaits(
+    lookup: &SemanticLookup<'_>,
+    continuations: &crate::owners::AwaitContinuations<'_>,
+    file: &FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> bool {
+    if function.kind != solid_facts::ast::FunctionKind::Declaration || function.generator {
+        return false;
+    }
+    let Some(name) = function.name.as_ref() else {
+        return false;
+    };
+    if !crate::execution_role::file_is_module(file)
+        || crate::execution_role::flow_binding_exported(file, name.span)
+        || binding_written(file, name.span)
+        || lookup.files().iter().any(|file| {
+            file.ast
+                .module_hazards
+                .iter()
+                .any(|hazard| hazard.kind == solid_facts::ast::ModuleHazardKind::Eval)
+        })
+    {
+        return false;
+    }
+    let mut references = file
+        .ast
+        .reference_declarations
+        .iter()
+        .filter(|(reference, declaration)| *declaration == name.span && *reference != name.span)
+        .peekable();
+    references.peek().is_some()
+        && references.all(|(reference, _)| {
+            file.ast.calls.iter().any(|call| {
+                !call.construct
+                    && file.ast.peel_ts_sugar_span(call.callee) == *reference
+                    && after_dominating_await(continuations, file, call)
+            })
+        })
+}
+
+/// Whether `call` follows a dominating `await` ([`crate::owners::AwaitContinuations`],
+/// keyed by callee start) on the continuation's own stack. A callee start
+/// another call shares (`a.b(c).d(await e)`: `a.b(c)` runs before the await)
+/// is ambiguous and answers no.
+fn after_dominating_await(
+    continuations: &crate::owners::AwaitContinuations<'_>,
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+) -> bool {
+    continuations.contains(file.path.as_str(), call.callee.start)
+        && file
+            .ast
+            .calls
+            .iter()
+            .filter(|other| other.callee.start == call.callee.start)
+            .count()
+            == 1
+        && written_directly_in_async_flow(&file.ast, call.span)
+}
+
+/// Whether `span` is written directly in the flow of the async function that
+/// contains it. The producer's `calls_after_await` stops at arrows, function
+/// expressions and declarations and methods, but not at getters, setters,
+/// constructors, class field initialisers, static blocks or JSX: code there
+/// runs when it is read, constructed or rendered, on that stack. A getter,
+/// setter or constructor is its own (never async) function here.
+fn written_directly_in_async_flow(ast: &solid_facts::ast::AstFacts, span: Span) -> bool {
+    crate::owners::containing_ast_function(ast, span)
+        .is_some_and(|function| function.r#async && written_directly_in_flow(ast, function, span))
 }
 
 /// Whether a call through a computed key that is not a literal (`target[key]()`)
@@ -1036,6 +1233,49 @@ mod tests {
             result_discarded: false,
             construct: true,
         }
+    }
+
+    /// Whether the `target.click()` call in `source` is written directly in
+    /// the flow of the async function containing it.
+    fn click_in_async_flow(source: &str) -> bool {
+        let ast = solid_facts::ast::extract("test.tsx", source).unwrap();
+        let start = u32::try_from(source.find("target.click()").unwrap()).unwrap();
+        let call = ast
+            .calls
+            .iter()
+            .find(|call| call.callee.start == start)
+            .unwrap();
+        written_directly_in_async_flow(&ast, call.span)
+    }
+
+    #[test]
+    fn a_call_after_an_await_runs_on_the_continuation_only_in_the_async_flow() {
+        let wrap = |body: &str| format!("async function f(target: any) {{ await 0; {body} }}");
+        assert!(click_in_async_flow(&wrap("target.click();")));
+        assert!(click_in_async_flow(&wrap(
+            "if (target) { target.click(); }"
+        )));
+        assert!(click_in_async_flow(
+            "const o = { async m(target: any) { await 0; target.click(); } };"
+        ));
+        for nested in [
+            "const o = { get go() { target.click(); return 1; } };",
+            "const o = { set go(v: number) { target.click(); } };",
+            "const C = class { constructor() { target.click(); } };",
+            "class C { get go() { return target.click(); } }",
+            "class C { field = target.click(); }",
+            "class C { static { target.click(); } }",
+            "return <div>{(target.click(), 'x')}</div>;",
+            "return <div title={target.click()} />;",
+            "return <>{target.click()}</>;",
+            "const g = () => target.click();",
+            "function g(x = target.click()) {}",
+        ] {
+            assert!(!click_in_async_flow(&wrap(nested)), "{nested}");
+        }
+        assert!(!click_in_async_flow(
+            "function f(target: any) { target.click(); }"
+        ));
     }
 
     fn text(value: &str) -> ArgumentLiteralFact {

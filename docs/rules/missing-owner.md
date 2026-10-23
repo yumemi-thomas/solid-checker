@@ -140,7 +140,15 @@ uncertifiable, and so is one on the element a narrow `dispatchEvent` targets.
 A callback whose flow the walk cannot follow to an attribute (a prop stored
 or never put on an element, an attribute a later spread may replace, a helper
 flow) stays uncertifiable while any dispatch exists. No unsupported dispatch
-edge is guessed.
+edge is guessed. A dispatch whose own stack provably has no owner is no site
+(ADR 0365): one after an `await` that dominates it, written directly in its
+async function's flow (not in a getter, constructor, class body or JSX), one
+written directly in a callback literal a host scheduler runs from a task or
+microtask queue (the scheduler list above; a `then` handler only on a promise
+proven native), and one written directly in a module-local helper every call
+of which follows such an `await`. It runs its handlers with no owner, as the
+host does, so their proofs stand. A skippable `await`, a callback the scheduler
+is handed by name, and a closure the callback stores do not count.
 A `window.dispatchEvent(…)` or `document.dispatchEvent(…)` of the unshadowed
 global, whatever the event, reaches no compiler handler: its path
 (`[window]`, `[document, window]`) holds no element, and an element handler is

@@ -448,3 +448,96 @@ fn forwarded_terminal_edits_match_cold() {
     drop(session);
     fs::remove_dir_all(directory).unwrap();
 }
+
+/// ADR 0365: a dispatch on a provably ownerless stack (after a dominating
+/// `await`, in a fresh-stack scheduler's callback, in a helper every call of
+/// which follows one) is no site. The dispatching file is edited between those
+/// and the shapes that still reach the handler; the retained session must
+/// answer what a cold build answers.
+#[test]
+fn ownerless_dispatch_edits_match_cold() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    const APP: &str = "import { onCleanup } from 'solid-js'; export function App() { return <button onClick={() => { onCleanup(() => {}); }} />; }";
+    const SYNC: &str = "export function fire(el: HTMLElement) { el.click(); }";
+    const AFTER: &str = "export async function fire(el: HTMLElement) { await 0; el.click(); }";
+    const SKIPPABLE: &str =
+        "export async function fire(el: HTMLElement, c: boolean) { if (c) await 0; el.click(); }";
+    const MICROTASK: &str =
+        "export function fire(el: HTMLElement) { queueMicrotask(() => el.click()); }";
+    const STORED: &str = "export function fire(el: HTMLElement) { const later = () => el.click(); queueMicrotask(later); }";
+    const THEN_NATIVE: &str =
+        "export function fire(el: HTMLElement) { void Promise.resolve(0).then(() => el.click()); }";
+    const THEN_TYPED: &str = "export function fire(el: HTMLElement, p: Promise<void>) { void p.then(() => el.click()); }";
+    const HELPER: &str = "function save(el: HTMLElement) { el.click(); } export async function fire(el: HTMLElement) { await 0; save(el); }";
+    const HELPER_MIXED: &str = "function save(el: HTMLElement) { el.click(); } export async function fire(el: HTMLElement) { save(el); await 0; save(el); }";
+    let (directory, paths) = project("ownerless-dispatch", &[("App.tsx", APP), ("lib.ts", SYNC)]);
+    let tsconfig = directory
+        .join("tsconfig.json")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let selected = dialect::default_dialect();
+    let typescript = TypeFactsSession::open(&typefacts, &tsconfig, &[]).unwrap();
+    let (mut session, _) =
+        NativeIncrementalSession::open_pipelined(selected, tsconfig, typescript).unwrap();
+    let mut closed_builder = solid_reactive_ir::IncrementalBuilder::default();
+    let mut open_builder = solid_reactive_ir::IncrementalBuilder::default();
+    let start = APP.find("onCleanup(() =>").unwrap() as u64;
+    let mut check = |generation: &str, facts: &solid_facts::ProjectFacts, violation: bool| {
+        for (closed, builder) in [(true, &mut closed_builder), (false, &mut open_builder)] {
+            let retained = warm(builder, facts, selected.vocabulary, closed);
+            let fresh = cold(facts, selected.vocabulary, closed);
+            assert_eq!(retained, fresh, "{generation} closed={closed}");
+            let findings = selected.solve(&retained);
+            assert_eq!(
+                findings,
+                selected.solve(&fresh),
+                "{generation} closed={closed}: findings"
+            );
+            let proven = findings.iter().any(|finding| {
+                finding.id == "SC4001"
+                    && finding.kind == "violation"
+                    && finding.primary_location.path.as_ref() == paths["App.tsx"]
+                    && finding.primary_location.start_byte == start
+            });
+            assert_eq!(
+                proven, violation,
+                "{generation} closed={closed}: {findings:?}"
+            );
+        }
+    };
+    check("sync", &session.analyze().unwrap(), false);
+    for (version, (name, source, violation)) in [
+        ("after await", AFTER, true),
+        ("skippable await", SKIPPABLE, false),
+        ("microtask", MICROTASK, true),
+        ("stored closure", STORED, false),
+        ("then of a native promise", THEN_NATIVE, true),
+        ("then of a typed promise", THEN_TYPED, false),
+        ("helper after await", HELPER, true),
+        ("helper with a synchronous call", HELPER_MIXED, false),
+        ("after await", AFTER, true),
+        ("sync", SYNC, false),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let facts = session
+            .edit(
+                vec![SourceChange {
+                    path: paths["lib.ts"].clone(),
+                    version: version as u64 + 1,
+                    source: Some(source.into()),
+                    compiler_options: CompilerOptions::default(),
+                }],
+                None,
+            )
+            .unwrap();
+        check(name, &facts, violation);
+    }
+    drop(session);
+    fs::remove_dir_all(directory).unwrap();
+}

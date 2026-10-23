@@ -1,0 +1,27 @@
+{
+  "note": "Probe 2026-10-23 for ADR 0365 and ADR 0361 (amended). AfterAwait: an async function the component body starts reads its owner before `await gate` (window.ownerless['before-await'] is 'owned') and, once the scripted `release` click resolves the gate, calls `target.click()` from the continuation: the click handler records getOwner() === null ('unowned'), so a dispatch after a dominating await runs its handlers with no owner, as the host does, and the checker counts it as no site (App.tsx:38 is a proven SC4001 violation). Forwarded: a callback forwarded through a component prop to `onScroll`, beside an `input.focus()` site; the scripted `focus` click runs focus() and no forwarded run is logged, then a `queueMicrotask` callback dispatches `scroll` on the forwarded element (a scheduler callback, no site) and the forwarded handler runs with no owner: the terminal attribute's type is what reaches it (App.tsx:68 is a proven SC4001 violation). A run of the forwarded handler during focus() would log `focus:` first and refute the join. driver.ts's own events reach both handlers too (NO_OWNER_CLEANUP).",
+  "scenario": "constructed-misuse",
+  "requires": [
+    "an async function started in a component body that dispatches click() after awaiting a gate a scripted click resolves",
+    "a component that forwards a prop callback to an intrinsic onScroll, beside a focus() call and a queueMicrotask scroll dispatch"
+  ],
+  "reaches": "window.ownerless['after-await'] and window.ownerless.forwarded, written by the two handlers while the case's own dispatches are on the stack",
+  "behaviour": [
+    {
+      "rule": "missing-owner",
+      "site": "App.tsx:38",
+      "act": [{ "click": "[data-probe=\"release\"]" }],
+      "observe": { "window": "ownerless.after-await" },
+      "defect": "unowned",
+      "correct": "owned"
+    },
+    {
+      "rule": "missing-owner",
+      "site": "App.tsx:68",
+      "act": [{ "click": "[data-probe=\"focus\"]" }, { "click": "[data-probe=\"scroll-microtask\"]" }],
+      "observe": { "window": "ownerless.forwarded" },
+      "defect": "microtask:unowned;",
+      "correct": { "pattern": "^focus:" }
+    }
+  ]
+}
