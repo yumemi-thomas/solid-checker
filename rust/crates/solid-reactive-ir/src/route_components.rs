@@ -16,7 +16,7 @@
 //! `['component']` element, a destructured `component`): read back, the value
 //! can be called by the project, which the census does not see.
 
-use crate::HashSet;
+use crate::{HashMap, HashSet};
 
 use solid_dialect::Dialect;
 use solid_facts::ast::{FunctionKind, ImportKind};
@@ -80,7 +80,13 @@ pub struct RouteInstall {
 
 /// The option values the premises account for, as `(file path, value span)`:
 /// TanStack route options, and `@solidjs/router` route definitions
-/// ([`router_config_values`]). Empty where neither applies.
+/// ([`router_config_values`]). Empty where neither applies. Each value says
+/// whether its router renders it through `Dynamic`: the audited TanStack
+/// releases do (`<Dynamic component={OutComponent()}/>`, rc.6 and rc.9
+/// `dist/source/Match.jsx:181`; pending `:63-83`, not found `:75`, error
+/// `CatchBoundary.jsx:41`), so the body runs under `dynamicCore`'s unlabeled
+/// `untrack` with no strict-read window; `@solidjs/router` renders with
+/// `solid-js`'s `createComponent` (next.41 `dist/routing.js:5`, `:902`).
 ///
 /// `references` answers the compiler's references to the binding named at a
 /// span, as `(path, span)`, or `None` when it knows no symbol there;
@@ -95,16 +101,16 @@ pub fn route_component_values(
     references: &BindingReferences<'_>,
     namespace_exposed: Option<&HashSet<String>>,
     prototype_written: bool,
-) -> HashSet<(String, Span)> {
-    let mut values = tanstack_values(facts, dialect, install);
+) -> HashMap<(String, Span), bool> {
+    let mut values = HashMap::default();
     if !prototype_written {
-        values.extend(router_config_values(
-            facts,
-            dialect,
-            install,
-            references,
-            namespace_exposed,
-        ));
+        for value in router_config_values(facts, dialect, install, references, namespace_exposed) {
+            values.insert(value, false);
+        }
+    }
+    // A value both routers name renders through `Dynamic` somewhere.
+    for value in tanstack_values(facts, dialect, install) {
+        values.insert(value, true);
     }
     values
 }

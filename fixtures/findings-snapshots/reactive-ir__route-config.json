@@ -166,6 +166,16 @@
       "code": "SC1001",
       "kind": "violation",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/route-config/Routes.tsx",
+      "start": 1034,
+      "end": 1041,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/route-config/table.tsx",
       "start": 228,
       "end": 235,

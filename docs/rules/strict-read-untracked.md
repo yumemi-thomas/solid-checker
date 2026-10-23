@@ -87,7 +87,15 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   call; a type in `typeof Row` is no reference at runtime). A read in one that
   is also handed on is **uncertifiable**, even when the tag is reachable, since
   the plain call runs the body in the caller's scope (ADR 0331,
-  `fixtures/reactive-ir/component-identity-escapes`).
+  `fixtures/reactive-ir/component-identity-escapes`). Beside a tag, a use that
+  can only render stays proven: a closed object literal only
+  `<Dynamic component={icons[k]}/>` reads, or a `const` alias only tags name
+  (`fixtures/reactive-ir/component-identity-renders`).
+- **`Dynamic` opens no strict-read window.** rc.17's `dynamicCore` runs the
+  component under `untrack` with no strict-read label, so a read in a component
+  that only `Dynamic` renders (directly, or as a TanStack route component)
+  raises no `STRICT_READ_UNTRACKED` and is **uncertifiable** here; a tag that
+  also renders it opens the window (ADR 0138, 0334).
 - **A named local handler can forward a callback prop.** A project component
   may invoke a callback prop from a synchronous immutable local arrow bound
   only to intrinsic event attributes or exact component props that themselves

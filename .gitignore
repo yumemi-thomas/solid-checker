@@ -216,6 +216,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/forwarded-event-prop/node_modules/**
 !fixtures/reactive-ir/dynamic-string-tag-events/node_modules/
 !fixtures/reactive-ir/dynamic-string-tag-events/node_modules/**
+!fixtures/reactive-ir/component-identity-renders/node_modules/
+!fixtures/reactive-ir/component-identity-renders/node_modules/**
 !fixtures/reactive-ir/use-site-role/node_modules/
 !fixtures/reactive-ir/use-site-role/node_modules/**
 !fixtures/reactive-ir/invocation-flow/node_modules/

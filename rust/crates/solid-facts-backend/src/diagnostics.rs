@@ -479,6 +479,27 @@ impl DiagnosticSession {
                 );
             }
         }
+        // ADR 0138: a proven component only `Dynamic` renders runs with no
+        // strict-read window, so a strict-read claim (SC1001, SC5001) in its
+        // own body is not proven. A read in a helper the body calls is
+        // reported at that call, in the body; a callback a primitive places
+        // (`<For>`'s row, which `mapArray` labels) keeps its own window.
+        for finding in &mut findings {
+            if finding.kind == "violation"
+                && matches!(finding.id.as_str(), "SC1001" | "SC5001")
+                && solid_reactive_ir::site_in_windowless_component(
+                    &program,
+                    finding.primary_location.path.as_ref(),
+                    finding.primary_location.start_byte,
+                    finding.primary_location.end_byte,
+                )
+            {
+                finding.kind = "uncertifiable".into();
+                finding.message.push_str(
+                    "; this code runs in a component only `Dynamic` renders, which calls it with no strict-read window, so the claim is not proven",
+                );
+            }
+        }
         // ADR 0360: a file the compiler refused carries no compiler facts, so
         // nothing about it is proven, and neither is anything a finding
         // elsewhere reaches through it. Its sites are unplaced in the IR; a

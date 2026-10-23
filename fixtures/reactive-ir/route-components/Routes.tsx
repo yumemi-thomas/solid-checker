@@ -74,3 +74,21 @@ function Lost() {
 }
 
 export const router = createRouter({ routeTree: root, defaultNotFoundComponent: Lost });
+
+// Positive: a route component a tag renders as well. Both uses are renders
+// (the census accounts for the route option), so the tag's proof stands and
+// the body read is a violation.
+function Tagged() {
+  const value = count();
+  return <p>{value}</p>;
+}
+
+export const tagged = createRoute({
+  getParentRoute: () => root,
+  path: "/tagged",
+  component: Tagged,
+});
+
+export function TaggedFrame() {
+  return <Tagged />;
+}

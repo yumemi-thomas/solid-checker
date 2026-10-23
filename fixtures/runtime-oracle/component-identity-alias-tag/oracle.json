@@ -1,0 +1,9 @@
+{
+  "note": "ADR 0331 (amended): Aliased is rendered by its tag and by an unexported const alias that only tags name (`<Badge />` is createComponent(Badge, {})), so the strict read in its body warns at runtime and the checker reports it as a violation (fixture reactive-ir/component-identity-renders, Alias.tsx).",
+  "scenario": "constructed-misuse",
+  "requires": [
+    "module-level createSignal read by Aliased",
+    "Aliased rendered by <Aliased /> and by <Badge />, Badge = Aliased referenced nowhere else"
+  ],
+  "reaches": "dev diagnostic STRICT_READ_UNTRACKED at Aliased's body read"
+}

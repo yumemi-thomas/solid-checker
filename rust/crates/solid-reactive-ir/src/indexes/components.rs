@@ -8,6 +8,20 @@ struct ReferenceCensus {
     escapes: bool,
     as_callback: bool,
     as_component_property: bool,
+    /// Some accounted reference is a render `createComponent` makes (a tag,
+    /// a tag-only alias, a `lazy` default, a compound member tag, an
+    /// `@solidjs/router` route), whose body runs in a strict-read window.
+    create_component_render: bool,
+    /// Some accounted reference is a render through `Dynamic` (a dialect
+    /// renderer prop, a TanStack route option), whose body does not.
+    dynamic_render: bool,
+}
+
+impl ReferenceCensus {
+    /// Every render the census accounts for runs through `Dynamic`.
+    fn only_dynamic_renders(&self) -> bool {
+        self.dynamic_render && !self.create_component_render
+    }
 }
 
 /// A value written at a prop spelled `component` is analyzed as a component
@@ -116,6 +130,18 @@ impl<'a> SemanticLookup<'a> {
         &self.component_statuses().0
     }
 
+    /// Proven components every accounted render of which runs through
+    /// `Dynamic` (ADR 0138): rc.17's `dynamicCore` calls the component as
+    /// `untrack(() => component(props))` inside a memo, with no strict-read
+    /// label (`solid-js` `dist/solid.dev.js:1515`, static form `:1541`),
+    /// where `createComponent` passes one (`observedComponent`, `:65`), and
+    /// `untrack` opens the window only for a label (`@solidjs/signals`
+    /// `dist/dev-shared.js:5099-5117`). A strict-read claim in such a body is
+    /// an obligation ([`Self::windowless_component_regions`]).
+    pub(super) fn windowless_component_functions(&self) -> &HashSet<(&'a str, Span)> {
+        &self.component_statuses().2
+    }
+
     /// Functions that would be proven components but for a reference that
     /// enters them some other way. They are analyzed as components, so no
     /// finding is lost, and every violation in their own body is withdrawn to
@@ -128,11 +154,17 @@ impl<'a> SemanticLookup<'a> {
         self.component_functions.get_or_init(|| {
             let mut proven = HashSet::default();
             let mut escaped = HashSet::default();
+            let mut windowless = HashSet::default();
             for file in &self.facts.files {
                 for function in &file.ast.functions {
-                    match self.compute_function_component_status(file, function) {
+                    let (status, only_dynamic) =
+                        self.compute_function_component_status(file, function);
+                    match status {
                         ComponentStatus::Proven => {
                             proven.insert((file.path.as_str(), function.span));
+                            if only_dynamic {
+                                windowless.insert((file.path.as_str(), function.span));
+                            }
                         }
                         // Analyzed as a component, as before; findings in
                         // its own body are obligations (`UndecidedRegion`).
@@ -144,46 +176,56 @@ impl<'a> SemanticLookup<'a> {
                     }
                 }
             }
-            (proven, escaped)
+            (proven, escaped, windowless)
         })
     }
 
     /// `Proven` or `No`, or `Uncertain` when only an escaping reference
-    /// withholds the direct-JSX-return proof.
+    /// withholds the direct-JSX-return proof; and whether every render the
+    /// census accounts for runs through `Dynamic`.
     fn compute_function_component_status(
         &self,
         file: &FileFacts,
         function: &solid_facts::ast::FunctionFact,
-    ) -> ComponentStatus {
+    ) -> (ComponentStatus, bool) {
         // ADR 0334/0335: a function written as an audited router's component
         // value is rendered there, and an anonymous inline value has no other
         // reference (a named function expression has its own name in its
         // body, which can hand it on: `invoke = Inline`).
-        if function.name.is_none() && self.route_component_value(file.path.as_str(), function.span)
+        if function.name.is_none()
+            && let Some(through_dynamic) = self.route_render(file.path.as_str(), function.span)
         {
-            return ComponentStatus::Proven;
+            return (ComponentStatus::Proven, through_dynamic);
         }
         // ADR 0342: an anonymous function stored in a compound component that
         // some JSX member tag renders has no other reference.
         if function.name.is_none() && self.compound_value(file.path.as_str(), function.span) {
-            return ComponentStatus::Proven;
+            return (ComponentStatus::Proven, false);
         }
         let binding_name = crate::owners::component_binding_name(file, function);
-        // ADR 0331: a tag proves identity only when no other reference
-        // escapes. A function a tag renders and some other reference hands on
-        // (`items().map(Row)`, an alias, a plain call) may also run as a plain
-        // call, whose body runs in the caller's scope; it stays analyzed as a
-        // component and its violations become obligations. An exact Component
-        // type does not change that: it says nothing about how the function
-        // is invoked, and `tsc` accepts `items().map(Row)` for it.
+        // ADR 0331: a tag proves identity only when no other reference can
+        // produce a plain call. A function a tag renders and some other
+        // reference hands on (`items().map(Row)`, an alias that is called, a
+        // plain call) may also run as a plain call, whose body runs in the
+        // caller's scope; it stays analyzed as a component and its violations
+        // become obligations. A reference whose every use is a render (an
+        // object value only `<Dynamic component={icons[k]}/>` reads, an alias
+        // only tags name) is no such escape. An exact Component type does not
+        // change that: it says nothing about how the function is invoked, and
+        // `tsc` accepts `items().map(Row)` for it.
         if self
             .jsx_call_site_loading(file.path.as_str(), function.span)
             .any
         {
-            return if !self.reference_census(file, function, binding_name).escapes {
-                ComponentStatus::Proven
+            // A tag is a `createComponent` render, so the body has a
+            // strict-read window whatever else renders it.
+            return if !self
+                .reference_census(file, function, binding_name, true)
+                .escapes
+            {
+                (ComponentStatus::Proven, false)
             } else {
-                ComponentStatus::Uncertain
+                (ComponentStatus::Uncertain, false)
             };
         }
         let directly_contains_jsx = |span: Span| {
@@ -215,12 +257,14 @@ impl<'a> SemanticLookup<'a> {
         let has_component_type = self.project_has_component_type()
             && self.binding_has_component_type(file, binding_name);
         if !directly_returns_jsx {
-            return if !has_component_type {
-                ComponentStatus::No
-            } else if self.reference_census(file, function, binding_name).escapes {
-                ComponentStatus::Uncertain
+            if !has_component_type {
+                return (ComponentStatus::No, false);
+            }
+            let census = self.reference_census(file, function, binding_name, false);
+            return if census.escapes {
+                (ComponentStatus::Uncertain, false)
             } else {
-                ComponentStatus::Proven
+                (ComponentStatus::Proven, census.only_dynamic_renders())
             };
         }
         // Component identity is about the function value itself, not anything
@@ -271,11 +315,14 @@ impl<'a> SemanticLookup<'a> {
                 && direct_function_value(file, operation.span)
                 && !component_value_operation(file, function.span)
         });
+        let census = self.reference_census(file, function, binding_name, false);
+        let only_dynamic = census.only_dynamic_renders();
         let ReferenceCensus {
             escapes: reference_escapes,
             as_callback: referenced_as_callback,
             as_component_property: referenced_as_component_property,
-        } = self.reference_census(file, function, binding_name);
+            ..
+        } = census;
         let hoc_bound = binding_name.is_some()
             && crate::owners::function_binding_name(file, function).is_none();
         let directly_called = !self
@@ -291,11 +338,11 @@ impl<'a> SemanticLookup<'a> {
             && !used_as_render_value
             && (!referenced_as_callback || referenced_as_component_property);
         if (direct_return_proof || has_component_type) && !reference_escapes {
-            ComponentStatus::Proven
+            (ComponentStatus::Proven, only_dynamic)
         } else if direct_return_proof || has_component_type {
-            ComponentStatus::Uncertain
+            (ComponentStatus::Uncertain, false)
         } else {
-            ComponentStatus::No
+            (ComponentStatus::No, false)
         }
     }
 
@@ -320,16 +367,26 @@ impl<'a> SemanticLookup<'a> {
     /// whose aliases its name's references do not enumerate
     /// (`renderers.badge()` is absent from them). Each leaves identity
     /// undecided rather than proven.
+    ///
+    /// For a function a tag renders (`tagged`), two holders are read through
+    /// as well, because every use they allow is a render: a closed object
+    /// literal only a dialect renderer prop reads through its members
+    /// (`<Dynamic component={icons[name]}/>`, ADR 0138's flow), and a `const`
+    /// alias whose every reference is a plain tag ([`Self::tag_only_alias`]).
+    /// A function with no tag keeps ADR 0331's census unchanged.
     fn reference_census(
         &self,
         file: &FileFacts,
         function: &solid_facts::ast::FunctionFact,
         binding_name: Option<&solid_facts::ast::NamedSpan>,
+        tagged: bool,
     ) -> ReferenceCensus {
         let mut census = ReferenceCensus {
             escapes: true,
             as_callback: false,
             as_component_property: false,
+            create_component_render: false,
+            dynamic_render: false,
         };
         let method =
             function.name.is_none() && crate::owners::own_method_name(file, function).is_some();
@@ -371,18 +428,25 @@ impl<'a> SemanticLookup<'a> {
             let component_value = component_value_operation(candidate, span);
             census.as_callback |= callback;
             census.as_component_property |= component_value;
+            let dynamic_prop = self.rendered_by_dialect_prop(candidate, span, tagged);
+            let route = self.route_render(candidate.path.as_str(), span);
+            let created = self.jsx_tag_reference(file, function, candidate, span)
+                || self.lazy_default_value(candidate, function, span)
+                || route == Some(false)
+                || self.compound_value(candidate.path.as_str(), span)
+                || (tagged && self.tag_only_alias(candidate, span));
+            let through_dynamic = dynamic_prop || route == Some(true);
+            census.create_component_render |= created;
+            census.dynamic_render |= through_dynamic;
             census.escapes |= !(callback && !component_value)
-                && !self.rendered_by_dialect_prop(candidate, span)
+                && !through_dynamic
+                && !created
                 && !reference_is_declaration_or_module_surface(candidate, span)
                 && !candidate
                     .ast
                     .type_queries
                     .iter()
-                    .any(|query| query.contains(span))
-                && !self.jsx_tag_reference(file, function, candidate, span)
-                && !self.lazy_default_value(candidate, function, span)
-                && !self.route_component_value(candidate.path.as_str(), span)
-                && !self.compound_value(candidate.path.as_str(), span);
+                    .any(|query| query.contains(span));
         }
         census
     }
@@ -452,10 +516,70 @@ impl<'a> SemanticLookup<'a> {
     }
 
     /// Whether `span` is a value a dialect export renders as a component
-    /// (`<Dynamic component={…}/>`, ADR 0138).
-    fn rendered_by_dialect_prop(&self, candidate: &FileFacts, span: Span) -> bool {
-        self.prop_render_sites_at(candidate.path.as_str(), span)
-            .is_some()
+    /// (`<Dynamic component={…}/>`, ADR 0138). A value that reaches it
+    /// through an object holder's member read counts only for a function a
+    /// tag renders (`tagged`).
+    fn rendered_by_dialect_prop(&self, candidate: &FileFacts, span: Span, tagged: bool) -> bool {
+        self.prop_render_sites()
+            .get(&(candidate.path.as_str(), span))
+            .is_some_and(|(_, through_object)| tagged || !through_object)
+    }
+
+    /// Whether `span` is the whole initializer of `const Alias = F` (through
+    /// TypeScript wrappers) whose every reference is its declaration, a
+    /// reference inside a type query or a plain JSX tag (`<Alias/>`, its
+    /// closing name): `createComponent(Alias, props)` is then the only use
+    /// of the value. The alias is unexported, a single identifier, and its
+    /// module has no direct `eval`, which could read it with no reference; a
+    /// reference in another file, a call, an argument, a member or a dotted
+    /// tag withholds it.
+    fn tag_only_alias(&self, candidate: &FileFacts, span: Span) -> bool {
+        let ast = &*candidate.ast;
+        let Some(binding) = ast.bindings.iter().find(|binding| {
+            binding.immutable
+                && binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding.names.len() == 1
+                && binding
+                    .initializer
+                    .is_some_and(|initializer| ast.peel_ts_sugar_span(initializer) == span)
+        }) else {
+            return false;
+        };
+        let name = binding.names[0].span;
+        let exported = ast.exports.iter().any(|export| {
+            export
+                .specifiers
+                .iter()
+                .chain(export.declarations.iter())
+                .any(|specifier| specifier.local.span == name)
+        });
+        let whole = Span::new(0, u32::try_from(candidate.source.len()).unwrap_or(u32::MAX));
+        if exported || crate::interproc::property_gets::direct_eval_in(candidate, whole) {
+            return false;
+        }
+        let Some(symbol) = self
+            .entities
+            .at(candidate.path.as_str(), name)
+            .and_then(|symbol| self.symbols_by_id().get(symbol.as_str()))
+        else {
+            return false;
+        };
+        symbol.references().all(|reference| {
+            let (Ok(start), Ok(end)) = (
+                u32::try_from(reference.start_byte),
+                u32::try_from(reference.end_byte),
+            ) else {
+                return false;
+            };
+            let use_ = Span::new(start, end);
+            reference.path.as_ref() == candidate.path.as_str()
+                && (use_ == name
+                    || ast.type_queries.iter().any(|query| query.contains(use_))
+                    || ast.jsx_elements.iter().any(|element| {
+                        element.member_property.is_none()
+                            && (element.name.span == use_ || element.closing_name == Some(use_))
+                    }))
+        })
     }
 
     /// Whether the binding's compiler-resolved type is an exact Solid
@@ -534,8 +658,22 @@ impl<'a> SemanticLookup<'a> {
     /// (`untrack(() => …)`) runs in the body's own context and stays in the
     /// region.
     pub(crate) fn undecided_component_regions(&self) -> Vec<crate::UndecidedRegion> {
-        let mut regions = self
-            .escaped_component_functions()
+        self.component_regions(self.escaped_component_functions())
+    }
+
+    /// The bodies of [`Self::windowless_component_functions`], with the same
+    /// carve-outs as [`Self::undecided_component_regions`]: a callback a
+    /// primitive places (an effect's) and a nested tag-rendered component
+    /// open windows of their own.
+    pub(crate) fn windowless_component_regions(&self) -> Vec<crate::UndecidedRegion> {
+        self.component_regions(self.windowless_component_functions())
+    }
+
+    fn component_regions(
+        &self,
+        functions: &HashSet<(&'a str, Span)>,
+    ) -> Vec<crate::UndecidedRegion> {
+        let mut regions = functions
             .iter()
             .filter_map(|(path, span)| {
                 let file = self.file_by_path(path)?;
@@ -702,7 +840,9 @@ impl<'a> SemanticLookup<'a> {
     /// - each holder call is a primitive whose accessor yields only its
     ///   compute ([`solid_dialect::Dialect::accessor_yields_only_its_compute`]).
     pub(crate) fn prop_render_sites_at(&self, path: &str, reference: Span) -> Option<Vec<Span>> {
-        self.prop_render_sites().get(&(path, reference)).cloned()
+        self.prop_render_sites()
+            .get(&(path, reference))
+            .map(|(sites, _)| sites.clone())
     }
 
     fn prop_render_sites(&self) -> &PropRenderSites<'a> {
@@ -716,6 +856,11 @@ impl<'a> SemanticLookup<'a> {
             props.sort_unstable();
             props.dedup();
             let facts: &'a ProjectFacts = self.facts;
+            // A computed read of an object holder (`icons[name]`) can fall
+            // through to an inherited property: an accessor a reflective
+            // prototype write installs would run with the holder as `this`
+            // (ADR 0292's veto, read once and only when needed).
+            let prototype_written = std::cell::OnceCell::new();
             for file in &facts.files {
                 // Only a module that spells a rendering component and its prop
                 // can hold one of these flows; the rest are not parsed again.
@@ -737,10 +882,19 @@ impl<'a> SemanticLookup<'a> {
                         .iter()
                         .all(|call| self.holder_call_is_exact(file, *call))
                         && flow.sites.iter().all(|site| self.renders_prop(file, site))
+                        && (!flow.through_object
+                            || !*prototype_written.get_or_init(|| {
+                                crate::interproc::accessor_provenance::reflective_prototype_write(
+                                    self,
+                                )
+                            }))
                     {
                         map.insert(
                             (file.path.as_str(), flow.reference),
-                            flow.sites.iter().map(|site| site.site).collect(),
+                            (
+                                flow.sites.iter().map(|site| site.site).collect(),
+                                flow.through_object,
+                            ),
                         );
                     }
                 }

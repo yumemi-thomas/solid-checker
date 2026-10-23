@@ -1,0 +1,7 @@
+{
+  "note": "Archive, with no tag, is stored in a closed literal and rendered only by <Dynamic component={icons.archive} />: no strict-read window opens (dynamicCore, rc.17 solid.dev.js:1515), so the body read raises no STRICT_READ_UNTRACKED. With no tag the census keeps the stored reference an escape (ADR 0331), so the read is uncertifiable.",
+  "scenario": "constructed-misuse",
+  "requires": ["module-level createSignal read by Archive", "Archive rendered only through Dynamic, via a map"],
+  "reaches": "the rendered step asserts Archive's element, so the body read ran",
+  "steps": [{ "action": "assert-text", "id": "rendered", "selector": "#rendered", "text": "rendered 0" }]
+}

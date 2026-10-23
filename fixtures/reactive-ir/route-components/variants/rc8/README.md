@@ -1,6 +1,6 @@
 # Audited TanStack router 2.0.0-rc.8 renders route components (ADR 0334)
 
-`Routes.tsx` and `Escapes.tsx` make the same claims as `route-components`'s (a function at `component`, `pendingComponent`, `errorComponent` or `notFoundComponent` of an exact factory import's options literal is rendered, so its body read is `SC1001`; the escapes stay uncertifiable), run against the rc.8 release, and `Routes.tsx` adds the direct `createRootRoute({ component })` the corpus app `sefer` uses.
+`Routes.tsx` and `Escapes.tsx` make the same claims as `route-components`'s (a function at `component`, `pendingComponent`, `errorComponent` or `notFoundComponent` of an exact factory import's options literal is rendered, through `Dynamic`, so its body read is an uncertifiable `SC1001`; the escapes stay uncertifiable), run against the rc.8 release, and `Routes.tsx` adds the direct `createRootRoute({ component })` the corpus app `sefer` uses.
 
 Packages are the published bytes (package READMEs omitted): `@tanstack/solid-router@2.0.0-rc.8` (MIT, `sha512-szioKo5iiBnpYS8oSVinGRCS0PFsk07j/C++u+PNW+J6Kyj0luls6GG5EUulzy7WoG9H3qRpjo7G7Znm0fnfSA==`, digest `f787dd4f…a9de`) and `@tanstack/router-core@1.171.22`, the exact version rc.8 depends on (the same bytes as in `route-components`: `sha512-sitsuRkz4qpTjIAV97S5zFCoeGv0OFd6+VWg3ZcIlQbi5R4NIXfz6ogg51n5w6rvTwSODz/lKWb5dl5tvh2bQw==`, digest `f021f4ec…c1b2`). Solid typings are rc.13, as in `route-components`.
 
