@@ -538,12 +538,12 @@ A compile error (`CompilerProviderError::Refused`) is no failure: the file keeps
 Native `tsc` 7.1 (the current pin: ADR 0374) via `typescript/sync` (Node), pinned apart from `packages/cli`'s 5.9.3. The CLI has no diagnostic length. Owner: `scripts/lib/tsc-oracle-api.mjs`.
 
 <a id="adr-0362"></a>
-## ADR 0362 — The producer's TypeScript is b85298b6a81f (Go pin superseded by ADR 0365)
-The Go producer pinned TypeScript at b85298b6a81f, the commit tsrs ports (d1fd86355). The Go producer is gone; the TypeScript version is whatever the pinned tsrs rev ports (ADR 0365).
+## ADR 0362 — The producer's TypeScript follows the pinned tsrs rev (ADRs 0365, 0374)
+The Go producer's pin (b85298b6a81f) is history.
 
 <a id="adr-0363"></a>
 ## ADR 0363 — Go producer fixes from the Rust port (the Go producer is archived, ADR 0365)
-Fixes found in the Go producer and ported: every wire symbol name goes through one encoder (692fc7747); the reference index never answers a retained or pruned symbol as empty (349fc4c9c); a file entering the program invalidates importers with an unresolved import (3991f6919).
+Fixed in the Go producer and ported: one encoder for wire symbol names; the reference index never answers a retained or pruned symbol as empty; a file entering the program invalidates importers with an unresolved import.
 
 <a id="adr-0364"></a>
 ## ADR 0364 — No retained analysis across updates until instantiation-stable ids and recorded dependencies
@@ -551,11 +551,9 @@ Every update, and every table build within a generation, discards the Type Facts
 
 <a id="adr-0365"></a>
 ## ADR 0365 — The Type Facts producer is Rust on tsrs; the Go producer is deleted
-`apps/solid-typefacts` is a Rust workspace (own `Cargo.lock` and target) over the tsrs checker, pinned to the fork `yumemi-thomas/tsrs@49f5348` (upstream plus one commit exporting two checker functions). It is the only producer, native (`bin/solid-typefacts`, release, fat LTO) and WASM (the `reactor` cdylib in `packages/wasm`). It supersedes the producer part of ADR 0002 and ADR 0362 (TypeScript is now the version the tsrs rev ports, b85298b6a81f); ADR 0361 stands, the oracle being the same release line. Archive: `../sc-worktrees.noindex/tsgo-archive`. The differential harness (`docs/typefacts/differential.md`) compares any two producer binaries, defaulting its reference to the archived Go one.
+`apps/solid-typefacts` is a Rust workspace (own `Cargo.lock` and target) over the tsrs checker, pinned to the fork `yumemi-thomas/tsrs@49f5348` (upstream plus one commit exporting two checker functions). It is the only producer, native (`bin/solid-typefacts`, release, fat LTO) and WASM (the `reactor` cdylib in `packages/wasm`). It supersedes the producer part of ADR 0002 and ADR 0362 (TypeScript is now the version the tsrs rev ports, b85298b6a81f); ADR 0361 stands, the oracle being the same release line. Archive: `../sc-worktrees.noindex/tsgo-archive`; versus Go the corpus sweep is 26.8 vs 52.4 s. The differential harness (`docs/typefacts/differential.md`) compares any two producer binaries, defaulting its reference to the archived Go one.
 
-Versus Go (2cbbbb56b, release): user CPU 0.10-0.28x, corpus sweep 26.8 vs 52.4 s, WASM cold session 2.8 vs 35.7 s.
-
-Accepted trades: an unpublished, pinned fork of a single-vendor compiler; clean native build 76 s vs 27 s and incremental 60 s vs 1 s (fat LTO); CMake for mimalloc and an `unsafe` boundary module for tsrs's arena frees; the 1000-file chain edit cost 180 ms vs 50 ms before ADR 0364 (about 72 ms since ADR 0369); WASM compass-ui incremental updates 24 ms vs 6 ms. Owners: `apps/solid-typefacts`, `scripts/build-typefacts.sh`, `scripts/typefacts-source-identity.mjs`, `packages/wasm/scripts/build-owned.mjs`.
+Accepted trades: an unpublished, pinned fork of a single-vendor compiler; clean native build 76 s vs 27 s and incremental 60 s vs 1 s (fat LTO); CMake for mimalloc and an `unsafe` boundary module for tsrs's arena frees. Owners: `apps/solid-typefacts`, `scripts/build-typefacts.sh`, `scripts/typefacts-source-identity.mjs`, `packages/wasm/scripts/build-owned.mjs`.
 
 <a id="adr-0366"></a>
 ## ADR 0366 — A binder-level symbol's id is a pure function of the program
@@ -592,5 +590,5 @@ A symbol id is canonical (`symbol:h:`, program-pure) or generation-scoped (`symb
 Not built: parallel checkers; reuse of type-derived facts. Ids can be history-independent, types cannot be proven so: a result cut by a guard is cached for every later caller; a detector flagged 12% of corpus files with no soundness argument, 78% with one (docs/open-work.md).
 
 <a id="adr-0374"></a>
-## ADR 0374 — tsrs 3bbcc754 (v0.19.0), TypeScript 7.1.0-beta, and the oracle moved with it
-The producer pins fork `yumemi-thomas/tsrs@e1e9183` (upstream `3bbcc754` plus the same marked export commit; the old `solid-checker` branch stays fetchable). Its TypeScript is `3e9236361fa9` (7.1.0-beta), so the tsc oracle moved in the same change (ADR 0361): `fixtures/tsc-oracle/packages.json` now names typescript 7.1.0-beta, whose gitHead is that commit, with re-verified integrities. The only source adaptation was upstream's Rust renames (`INTERNAL_SYMBOL_NAME_PREFIX`, `ModuleKind::COMMON_JS` and `PRESERVE`). Lib text moved, so lib offsets and `symbol:h:` ids differ; the differential tests compare only against a producer on the same TypeScript. Supersedes the pins named in ADRs 0361, 0362 and 0365.
+## ADR 0374 — tsrs 3bbcc754, TypeScript 7.1.0-beta, and the oracle moved with it
+The producer pins `yumemi-thomas/tsrs@e1e9183` (upstream `3bbcc754`, v0.19.0, plus the export commit). Its TypeScript is `3e9236361fa9`, so the tsc oracle moved with it (ADR 0361): typescript 7.1.0-beta. Lib offsets and `symbol:h:` ids moved, so differential tests take only a reference on the same tsrs rev. Supersedes the pins in ADRs 0361, 0362, 0365.
