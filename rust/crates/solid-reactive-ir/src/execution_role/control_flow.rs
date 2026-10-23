@@ -17,7 +17,9 @@ pub(crate) fn assigned_member_function_contains(
             let Some(member) = file.ast.member_at(assignment.target) else {
                 return false;
             };
-            let Some(object_symbol) = entities.at(file.path.as_str(), member.object) else {
+            // ADR 0376: the object is the parameter only when it is its
+            // identifier (`api.handlers.onInit = …` leads with `api`).
+            let Some(object_symbol) = entities.value_symbol(file, member.object) else {
                 return false;
             };
             let Some(owner) = containing_ast_function(&file.ast, assignment.target) else {

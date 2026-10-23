@@ -435,6 +435,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/dependency-source-object-escape/node_modules/**
 !fixtures/reactive-ir/dependency-source-namespace-import/node_modules/
 !fixtures/reactive-ir/dependency-source-namespace-import/node_modules/**
+!fixtures/reactive-ir/dependency-source-namespace-ghost/node_modules/
+!fixtures/reactive-ir/dependency-source-namespace-ghost/node_modules/**
 !fixtures/reactive-ir/object-member-initialization/node_modules/
 !fixtures/reactive-ir/object-member-initialization/node_modules/**
 !fixtures/reactive-ir/dependency-source-integrity-r2-*/node_modules/

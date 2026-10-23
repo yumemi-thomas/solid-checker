@@ -800,16 +800,22 @@ pub(super) fn passed_expression_is_accessor(
     file: &FileFacts,
     expression: solid_facts::core::Span,
 ) -> bool {
+    // ADR 0376: only an identifier is the accessor; `count.toString` leads
+    // with `count`.
     let expression = file.ast.peel_ts_sugar_span(expression);
-    entities
-        .get(&location(file.path.shared(), expression))
-        .cloned()
-        .or_else(|| {
-            lookup
-                .binding_at_reference(file.path.as_str(), expression)
-                .map(|(_, _, symbol)| symbol)
-        })
-        .is_some_and(|symbol| accessors.contains_key(&symbol))
+    file.ast
+        .identifiers
+        .binary_search_by_key(&expression, |identifier| identifier.span)
+        .is_ok()
+        && entities
+            .get(&location(file.path.shared(), expression))
+            .cloned()
+            .or_else(|| {
+                lookup
+                    .binding_at_reference(file.path.as_str(), expression)
+                    .map(|(_, _, symbol)| symbol)
+            })
+            .is_some_and(|symbol| accessors.contains_key(&symbol))
 }
 
 /// Whether a reference span is an export specifier's local name in the file it
@@ -939,15 +945,26 @@ pub(super) fn classify_passed_expression(
         }
         let root = file.ast.peel_ts_sugar_span(root);
         chain_roots.push(root);
-        let symbol = entities
-            .get(&location(file.path.shared(), root))
-            .cloned()
-            .or_else(|| {
-                // The binder fallback covers plain locals entity facts skip.
-                lookup
-                    .binding_at_reference(file.path.as_str(), root)
-                    .map(|(_, _, symbol)| symbol)
-            });
+        // ADR 0376: only an identifier root names its source. Any other root
+        // (`(store ? a : b).name`) answers with its leading token, so it
+        // decides nothing.
+        let symbol = file
+            .ast
+            .identifiers
+            .binary_search_by_key(&root, |identifier| identifier.span)
+            .is_ok()
+            .then(|| {
+                entities
+                    .get(&location(file.path.shared(), root))
+                    .cloned()
+                    .or_else(|| {
+                        // The binder fallback covers plain locals entity facts skip.
+                        lookup
+                            .binding_at_reference(file.path.as_str(), root)
+                            .map(|(_, _, symbol)| symbol)
+                    })
+            })
+            .flatten();
         match symbol {
             Some(symbol) if source_kinds.get(&symbol) == Some(&ReactiveSourceKind::Store) => {
                 let key = if file.ast.computed_members.binary_search(&head.span).is_ok() {
@@ -1017,7 +1034,8 @@ pub(super) fn classify_passed_expression(
         if inside_nested_or_jsx(call.span) {
             continue;
         }
-        let callee = entities.get(&location(file.path.shared(), call.callee));
+        // ADR 0376: only an identifier callee calls the accessor.
+        let callee = entities.value_symbol(file, call.callee);
         if callee.is_some_and(|symbol| {
             accessors.contains_key(symbol) && runtime_sources.contains(symbol)
         }) {

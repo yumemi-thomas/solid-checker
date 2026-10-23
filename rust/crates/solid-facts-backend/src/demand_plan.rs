@@ -366,9 +366,20 @@ fn collect_return_spans(
     let DemandSpans {
         symbol_spans,
         runtime_value_domain_spans,
+        primitive_value_domain_spans,
+        library_type_spans,
         ..
     } = spans;
     let mut add_symbol = |span, references| add_symbol_span(symbol_spans, span, references);
+    // ADR 0376 review: a returned member is a nested store proxy only when it
+    // is a plain object or array, which its primitive domain and library
+    // types decide. Both are stable for every inhabitant of a type.
+    let mut add_member_value = |returned: &solid_facts::ast::ReturnFact| {
+        if returned.value == solid_facts::ast::ReturnValueKind::Member {
+            primitive_value_domain_spans.insert(returned.span);
+            library_type_spans.insert(returned.span);
+        }
+    };
     // Cleanup classification asks what a returned call *produces*. That is the
     // `callResultDomain` demand, not `runtimeValueDomain`: a call and its callee
     // share a start byte, so a value-domain fact at a call span describes the
@@ -408,6 +419,7 @@ fn collect_return_spans(
             add_symbol(returned.span, false);
             runtime_value_domain_spans.insert(returned.span);
         }
+        add_member_value(returned);
         for value in returned
             .elements()
             .iter()
@@ -450,6 +462,7 @@ fn collect_return_spans(
             add_symbol(returned.span, false);
             runtime_value_domain_spans.insert(returned.span);
         }
+        add_member_value(returned);
     }
     // ADR 0115: a returned conditional's branches, and the elements of a
     // branch that is an array literal, are named by the symbol the generator's

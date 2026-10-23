@@ -1,0 +1,3 @@
+# leading-token-interproc-reads
+
+**Claim (ADR 0376).** Two interprocedural proofs read the symbol of an exact span only. A parameter default's read is an accessor call only when the callee is the accessor's identifier: `text = count.toString()` calls nothing reactive (before: an SC1001 violation through `label`). An argument is the store proxy, hence no getter, only when it is the store's identifier: `run(store === other ? count : count)` hands `run` the accessor (before: certified; now SC9012). Controls: `text = String(count())` and `run(count)` stay SC1001 violations. Owners: `activated_default_reads`, `argument_proven_not_a_getter` in `interproc/result_reads.rs`. Stub: `accessor-value-origin`'s.

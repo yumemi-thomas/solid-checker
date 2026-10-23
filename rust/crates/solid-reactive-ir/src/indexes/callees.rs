@@ -166,8 +166,10 @@ impl<'a> SemanticLookup<'a> {
                     .map(|base| (file, base))
             })
             .or_else(|| {
+                // ADR 0376: only an identifier heritage names its class;
+                // `extends Holder.Base` leads with `Holder`.
                 self.entities
-                    .at(file.path.as_str(), heritage)
+                    .value_symbol(file, heritage)
                     .and_then(|symbol| self.class_for_symbol(symbol))
             });
         base.is_some_and(|(base_file, base)| {
@@ -570,13 +572,11 @@ impl<'a> SemanticLookup<'a> {
                 return vec![symbol];
             }
         }
+        // ADR 0376: a callee that is neither an identifier (answered above)
+        // nor a member names no function: the leading token of `make()(…)`
+        // is `make`, not what it returns.
         let Some(member_property) = member_property else {
-            return self
-                .entities
-                .at(file.path.as_str(), callee)
-                .cloned()
-                .into_iter()
-                .collect();
+            return Vec::new();
         };
         if file.ast.computed_members.binary_search(&callee).is_ok() {
             return Vec::new();

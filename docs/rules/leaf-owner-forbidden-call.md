@@ -78,6 +78,7 @@ or another children-capable scope and read their accessors inside the leaf.
 Remove `flush()` because leaf callbacks already run during settlement, or move
 the write and flush together to the event handler or imperative boundary that
 triggered the work.
+A leaf callback, an adapter's argument, a factory callee, a call inside the leaf and a callback argument a callee runs name a function only as its identifier (ADR 0376): `onSettled(outer.cb)`, `onSettled(factory.bind(null))`, `getFn()()` and `setN(makeUpdater())` are SC9012, not proven through `outer`, `factory`, `getFn` or `makeUpdater`.
 
 ## Related
 

@@ -165,12 +165,15 @@ impl ReactiveReadIndex {
     }
 }
 
+/// The source an identifier at `span` names. Any other expression names none
+/// (ADR 0376): the leading token of `props.make()` is `props`, not the value
+/// the call returns.
 pub(super) fn source_symbol_at<'a>(
     context: &'a UpstreamCompatContext<'_>,
     file: &FileFacts,
     span: Span,
 ) -> Option<&'a crate::SymbolId> {
-    context.entities.at(file.path.as_str(), span).or_else(|| {
+    context.entities.value_symbol(file, span).or_else(|| {
         context
             .source_reference_index
             .get(file.path.as_str())

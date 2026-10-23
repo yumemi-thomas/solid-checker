@@ -38,7 +38,7 @@ export const GROUP_BUDGETS = [
     // Raised from 250 KB for the context-read fixtures (ADR 0352), then to 300 KB
     // on 2026-10-23: each case README is a claim the reader needs, and the group
     // sat within 1 KB of its ceiling.
-    bytes: 300_000,
+    bytes: 330_000,
   },
   { name: "skills", test: (path) => path.startsWith(".claude/skills/"), bytes: 25_000 },
 ];

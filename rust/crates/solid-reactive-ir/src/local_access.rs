@@ -508,7 +508,9 @@ pub(crate) fn argument_proves_non_reactive(
     ) {
         return true;
     }
-    let Some(symbol) = entities.get(&location(file.path.shared(), argument.span)) else {
+    // ADR 0376: only an identifier is the binding; `el && store` leads
+    // with `el`.
+    let Some(symbol) = entities.value_symbol(file, argument.span) else {
         return false;
     };
     if source_kinds.contains_key(symbol.as_str()) {
@@ -887,6 +889,11 @@ impl LocalAccessContext<'_, '_> {
         self.view_hides_key(file, source.span, key, depth + 1)
     }
 
+    fn is_store(&self, symbol: &SymbolId) -> bool {
+        self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store)
+            && self.accessors.contains_key(symbol)
+    }
+
     /// The source an inline `omit` or `merge` view expression reads through to
     /// ([`crate::source_discovery::view_root`]): a props parameter or a store.
     fn inline_view_root(
@@ -899,11 +906,10 @@ impl LocalAccessContext<'_, '_> {
             expression,
             self.entities,
             self.lookup,
-            &|symbol| {
-                self.prop_sources.contains_key(symbol)
-                    || (self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store)
-                        && self.accessors.contains_key(symbol))
-            },
+            (
+                &|symbol| self.prop_sources.contains_key(symbol) || self.is_store(symbol),
+                &|symbol| self.is_store(symbol),
+            ),
             0,
         )
     }
@@ -1753,16 +1759,71 @@ impl LocalAccessContext<'_, '_> {
                 || self.accessors.contains_key(symbol)
                 || self.typed_sources.contains_key(symbol)
         };
-        let inline_root =
-            if binder_symbol.is_none() && !self.entities.get(&object).is_some_and(known_source) {
-                self.inline_view_root(file, member.object)
-            } else {
-                None
-            };
+        // ADR 0376: the receiver names its own symbol only when it is an
+        // identifier. A longer receiver's entity is its leading token's: in
+        // `props.a.b` that is `props`, though the prop read is `props.a`
+        // (reported at the head) and `b` is no prop. Only a store reads
+        // through a chain of static members, its nested proxies, so a
+        // store-rooted chain (`store.a.b`) keeps its root.
+        let direct = if receiver_is_identifier {
+            self.entities.get(&object).cloned()
+        } else {
+            crate::source_discovery::member_chain_identifier_root(file, member.object)
+                .and_then(|root| {
+                    crate::source_discovery::reference_symbol(
+                        file,
+                        root,
+                        self.entities,
+                        self.lookup,
+                    )
+                })
+                .filter(|symbol| {
+                    self.is_store(symbol)
+                        || (!self.prop_sources.contains_key(symbol)
+                            && self
+                                .typed_sources
+                                .get(symbol)
+                                .is_some_and(|typed| typed.kind == ReactiveSourceKind::Store))
+                })
+        };
+        let inline_root = if binder_symbol.is_none() && !direct.as_ref().is_some_and(known_source) {
+            self.inline_view_root(file, member.object)
+        } else {
+            None
+        };
+        // A receiver that may evaluate to the props object or a store without
+        // being it (`(flag ? other : props).b`, `(view && props).b`) reads
+        // through it when that branch is taken: an obligation, never a proof
+        // (as a branch spread, ADR 0375). Its leading token decides nothing.
+        let branch_root = if inline_root.is_none()
+            && direct.is_none()
+            && binder_symbol.is_none()
+            && !receiver_is_identifier
+        {
+            let mut values = Vec::new();
+            spread_argument_values(file, member.object, false, 0, &mut values);
+            values
+                .into_iter()
+                .filter(|(_, branch)| *branch)
+                .find_map(|(value, _)| {
+                    crate::source_discovery::reference_symbol(
+                        file,
+                        value,
+                        self.entities,
+                        self.lookup,
+                    )
+                    .filter(|symbol| {
+                        self.prop_sources.contains_key(symbol) || self.is_store(symbol)
+                    })
+                })
+        } else {
+            None
+        };
         let Some(symbol) = inline_root
             .as_ref()
-            .or(self.entities.get(&object))
+            .or(direct.as_ref())
             .or(binder_symbol.as_ref())
+            .or(branch_root.as_ref())
         else {
             return;
         };
@@ -1857,7 +1918,8 @@ impl LocalAccessContext<'_, '_> {
         // Caller-proven props: a prop every call site passes statically
         // compiles to a plain property — reading it is not a reactive
         // read at all. Unprovable backing stays a proof obligation.
-        let mut uncertain = self.uncertain_prop_sources.contains(symbol)
+        let mut uncertain = branch_root.is_some()
+            || self.uncertain_prop_sources.contains(symbol)
             || self.lookup.inside_possible_component(file, member.span);
         if self.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store)
             && let Some((_, prop_declaration)) = self.prop_sources.get(symbol)
@@ -1866,6 +1928,7 @@ impl LocalAccessContext<'_, '_> {
             // parameter. ADR 0216's classification is for that parameter,
             // not permission to certify a merge view's local head Get.
             let exact_root = inline_root.is_none()
+                && branch_root.is_none()
                 && self.entities.get(prop_declaration) == Some(symbol)
                 && props_root_is_current(
                     file,

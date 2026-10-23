@@ -110,8 +110,10 @@ impl<'a> SemanticLookup<'a> {
                     .map(|base| (file, base))
             })
             .or_else(|| {
+                // ADR 0376: only an identifier heritage names its class;
+                // `extends Holder.Base` leads with `Holder`.
                 self.entities
-                    .at(file.path.as_str(), heritage)
+                    .value_symbol(file, heritage)
                     .and_then(|symbol| self.class_for_symbol(symbol))
             });
         base.is_none_or(|(base_file, base)| {

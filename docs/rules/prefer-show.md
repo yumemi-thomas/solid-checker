@@ -19,6 +19,7 @@ that JSX position.
 Static and once-captured conditions remain clean. So do unknown calls and
 conditions whose only reactive read occurs in the right, consequent, or
 alternate branch; those reads do not make the governing test update.
+A call's member chain proves a reactive prop only when its root is the props identifier: `props.make().ready()` calls what `make` returns (ADR 0376).
 
 ## Why is this bad?
 

@@ -144,8 +144,10 @@ impl<'a> NamedCallbackIndex<'a> {
         }
     }
 
-    /// The functions an exact demanded entity at `span` names -- the whole of a
-    /// bare `createEffect(compute, applyValue)` argument, say.
+    /// The functions the value at `span` is -- the whole of a bare
+    /// `createEffect(compute, applyValue)` argument, say. Only an identifier
+    /// (under TypeScript sugar) is a function's identity: the leading token of
+    /// `makeApply()` or `outer.cb` is not the value (ADR 0376).
     fn identity_at(
         &self,
         file: &solid_facts::FileFacts,
@@ -153,7 +155,7 @@ impl<'a> NamedCallbackIndex<'a> {
         span: Span,
     ) -> &[usize] {
         entities
-            .at(file.path.as_str(), span)
+            .value_symbol(file, span)
             .and_then(|symbol| self.by_symbol.get(symbol.as_str()))
             .map_or(&[], Vec::as_slice)
     }

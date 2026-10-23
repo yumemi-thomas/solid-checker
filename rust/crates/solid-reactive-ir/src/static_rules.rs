@@ -741,6 +741,27 @@ pub(super) fn tracked_store_paths_before_first_suspension(
     paths
 }
 
+/// The root of a chain of static members (`props.a.b` -> `props`) and the
+/// member written on it (`props.a`). Any other object on the way (a call, a
+/// computed member, a parenthesised expression) answers nothing.
+fn plain_member_chain_root<'f>(
+    file: &'f solid_facts::FileFacts,
+    member: &'f solid_facts::ast::MemberFact,
+) -> Option<(Span, &'f solid_facts::ast::MemberFact)> {
+    let mut first = member;
+    for _ in 0..64 {
+        let object = file.ast.peel_ts_sugar_span(first.object);
+        match file.ast.member_at(object) {
+            Some(inner) => first = inner,
+            None => {
+                return crate::owners::is_identifier_span(file, object)
+                    .then_some((first.object, first));
+            }
+        }
+    }
+    None
+}
+
 /// `a.b.c` of a member chain written with plain dots and identifiers.
 fn store_path_text(file: &solid_facts::FileFacts, span: Span) -> Option<String> {
     let text = file.source_text(span)?;
@@ -887,7 +908,7 @@ impl<'t> AsyncComputations<'t> {
                 let Some(symbol) = call
                     .arguments
                     .first()
-                    .and_then(|argument| ctx.entities.at(file.path.as_str(), argument.span))
+                    .and_then(|argument| ctx.entities.value_symbol(file, argument.span))
                 else {
                     continue;
                 };
@@ -943,10 +964,13 @@ fn member_reads_after_await(
         if file.ast.is_plain_assignment_target(member.span) {
             continue;
         }
-        let Some(symbol) = ctx
-            .entities
-            .get(&location(file.path.shared(), member.object))
-        else {
+        // ADR 0376: the chain's root is an identifier reached through static
+        // members only. A chain through a call (`props.load().value`) reads
+        // what the call returns, and its callee member is a read of its own.
+        let Some((root, first)) = plain_member_chain_root(file, member) else {
+            continue;
+        };
+        let Some(symbol) = ctx.entities.value_symbol(file, root) else {
             continue;
         };
         let store = ctx.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store)
@@ -964,7 +988,8 @@ fn member_reads_after_await(
                 pre_await::Tracking::Untracked => (name, false),
             }
         } else if let Some((name, declaration)) = ctx.prop_sources.get(symbol) {
-            let property = file.source_text(member.property).unwrap_or_default();
+            // The prop read is the root's own member: `props.a.b` reads `a`.
+            let property = file.source_text(first.property).unwrap_or_default();
             match ctx.props_reactivity.prop_use(declaration, property) {
                 crate::source_discovery::PropUse::Static => continue,
                 crate::source_discovery::PropUse::Reactive => {

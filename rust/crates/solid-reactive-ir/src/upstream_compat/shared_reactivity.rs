@@ -128,13 +128,8 @@ fn reactive_source_uncaptured(
         {
             continue;
         }
-        if context
-            .entities
-            .at(file.path.as_str(), call.callee)
-            .is_none()
-        {
-            continue;
-        }
+        // No symbol at the callee span is no evidence (ADR 0376): a callee
+        // led by `new` or `(` has none, and the resolved call decides.
         let Some(resolved_call) = context.lookup.resolved_callee_call(file, call.callee) else {
             continue;
         };
@@ -298,14 +293,26 @@ fn expected_function_got_expression(
             // caller classification: a handler prop every call site passes
             // statically is a plain property whose value never changes —
             // installing it once is exactly right and stays silent.
+            // ADR 0376: the root is an identifier, or an accessor call
+            // (`count().onSave`); `props.handlers().onSave` reads no prop
+            // `onSave`.
             let member_symbol = file
                 .ast
                 .member_at(expression)
                 .and_then(|_| member_root(file, expression))
-                .and_then(|root| Some((root, context.entities.at(file.path.as_str(), root)?)));
-            if let Some((root, symbol)) = member_symbol {
+                .and_then(|root| {
+                    if let Some(symbol) = context.entities.value_symbol(file, root) {
+                        return Some((root, symbol, false));
+                    }
+                    let call = file.ast.call_at(file.ast.peel_ts_sugar_span(root))?;
+                    let callee = context.entities.value_symbol(file, call.callee)?;
+                    Some((root, callee, true))
+                });
+            if let Some((root, symbol, called)) = member_symbol {
                 let uncertain = if context.accessors.contains_key(symbol) {
                     Some(false)
+                } else if called {
+                    None
                 } else if let Some((_, declaration)) = context.prop_sources.get(symbol) {
                     if context.uncertain_prop_sources.contains(symbol) {
                         Some(true)

@@ -35,6 +35,7 @@ the rc.17 compiler, which lowers only `on` + an uppercase letter, so it is
 silent. Callable values, `undefined`, `null`, and
 `false` are certified as valid/absent handlers; an array is not guessed because
 it may be Solid's `[handler, data]` representation.
+A member chain is classified by its root only when the root is an identifier or an accessor call (`count().onSave`); `props.handlers().onSave` reads the prop `handlers`, not `onSave` (ADR 0376).
 
 ## Why is this bad?
 

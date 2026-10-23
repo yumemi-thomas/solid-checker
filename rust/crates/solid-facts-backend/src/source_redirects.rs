@@ -207,6 +207,10 @@ pub fn symbol_redirects(
             continue;
         };
         let mut pairs = Vec::new();
+        // The whole spans of namespace members (`X.member`, `<X.Member>`): an
+        // entity there names the member only when its symbol covers the span;
+        // otherwise it is the leading token, the namespace (ADR 0376).
+        let mut whole_members = HashSet::new();
         let imports = importer
             .ast
             .imports
@@ -230,6 +234,12 @@ pub fn symbol_redirects(
                     && binding.kind == solid_facts::ast::ImportKind::Namespace
             }) {
                 if let Some(members) = namespace_static_members(importer, binding.local.span) {
+                    whole_members.extend(
+                        members
+                            .chunks(2)
+                            .filter_map(|pair| pair.get(1))
+                            .map(|(span, _)| *span),
+                    );
                     pairs.extend(members);
                 }
             }
@@ -264,6 +274,9 @@ pub fn symbol_redirects(
             let Some(source) = entity_at(importer, span) else {
                 continue;
             };
+            if whole_members.contains(&span) && !source.symbol_covers_span() {
+                continue;
+            }
             let Ok(Some(target)) = redirected_export_entity(
                 facts,
                 &files_by_path,

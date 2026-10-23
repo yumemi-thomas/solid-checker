@@ -228,9 +228,12 @@ pub(crate) fn returned_binding_reference(
     bindings: &HashSet<SymbolId>,
     references: &HashSet<(String, u64, u64)>,
 ) -> bool {
+    // Only an identifier is the binding: the leading token of `track.toString`
+    // or `<F.X />` names `track` and `F`, whose value is not what runs
+    // (ADR 0376).
     lookup
         .entities()
-        .at(file.path.as_str(), span)
+        .value_symbol(file, span)
         .is_some_and(|symbol| bindings.contains(symbol))
         || references.contains(&(
             file.path.to_string(),

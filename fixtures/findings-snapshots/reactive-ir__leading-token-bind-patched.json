@@ -1,0 +1,15 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leading-token-bind-patched/App.tsx",
+      "start": 870,
+      "end": 882,
+      "fixes": 0
+    }
+  ]
+}
