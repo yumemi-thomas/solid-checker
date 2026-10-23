@@ -19,7 +19,8 @@
 // It is no part of the checked program, so its own dispatch calls are no site. An
 // optional `oracle.json` adds a note, further feedback scenario steps, an
 // `install` corpus app name (relative to the parent of --install), and the
-// case's known open sites (each an unproven clean claim with its reason):
+// case's known open sites (each an unproven clean claim, or a site covered only
+// by an uncertifiable finding, with its reason):
 //   { "note": "what the case pins", "steps": [ ... ],
 //     "open": [{ "code": "NO_OWNER_CLEANUP", "site": "App.tsx:13", "reason": "..." }] }
 // Optional descriptive fields `scenario` (application, api-example or
@@ -586,11 +587,13 @@ async function runCase(id) {
   // A known open site is listed in oracle.json with its reason; it is not a
   // pass, it is debt the gate keeps visible. A listed site that no longer
   // fires is stale and fails too, so a fix updates the list. A behavioural
-  // observation is listed by its `rule` and `site` instead of a `code`.
+  // observation is listed by its `rule` and `site` instead of a `code`. A listed
+  // site the checker covers only with an uncertifiable finding is known-open too:
+  // a confirmed defect whose proof is withheld (scripts/corpus/reviewed-findings.json).
   const open = new Map((spec.open ?? []).filter((entry) => entry.code).map((entry) => [`${entry.code} ${entry.site}`, entry.reason]));
   const openBehaviour = new Map((spec.open ?? []).filter((entry) => entry.rule).map((entry) => [`behaviour ${entry.rule} ${entry.site}`, entry.reason]));
   for (const row of diagnostics) {
-    if (row.verdict === "unproven-clean" && open.has(`${row.code} ${row.file}:${row.line}`)) {
+    if (["unproven-clean", "covered-uncertifiable"].includes(row.verdict) && open.has(`${row.code} ${row.file}:${row.line}`)) {
       row.verdict = "known-open";
       row.reason = open.get(`${row.code} ${row.file}:${row.line}`);
     }

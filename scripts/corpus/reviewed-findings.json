@@ -1,4 +1,221 @@
 {
-  "$comment": "Independent classification of corpus findings (scripts/corpus-metrics.mjs reports reviewed precision from it). Entries: { key, class, reviewer, date, evidence }. key = app|project|id|kind|path|startByte|endByte, the corpus-sweep-compare key with path relative to the project root. class: confirmed-violation | adopted-policy-violation | valid-for-claim | essential-unknown | unresolved-review | tsc-owned | compiler-refused. date = YYYY-MM-DD. evidence = one line: runtime oracle case id, manual probe, or published bytes. Never add an entry for a finding nobody reviewed.",
-  "entries": []
+  "$comment": "Independent classification of corpus findings (scripts/corpus-metrics.mjs reports reviewed precision and confirmed misses from it). Entries: { key, source, class, reviewer, date, evidence }. source: corpus-sweep (key = app|project|id|kind|path|startByte|endByte, the corpus-sweep-compare key with path relative to the project root) or mutants (key = app|project|file|pos|pattern, a seeded site of scripts/mutants.mjs's report.json, file relative to the app root). class: confirmed-violation | adopted-policy-violation | valid-for-claim | essential-unknown | unresolved-review | tsc-owned | compiler-refused. date = YYYY-MM-DD. evidence = one line: runtime oracle case id, manual probe, or published bytes. Never add an entry for a finding nobody reviewed.",
+  "entries": [
+    {
+      "key": "compass-ui|apps/ui/tsconfig.json|SC1001|violation|apps/ui/src/components/Bridge.tsx|12543|12550",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, withheld-sites-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "Bridge (Bridge.tsx:208) is only the `component` of route / (routes.tsx:39), which router next.41 renders by createComponent (dist/index.js:1823; rc.17 observedComponent opens the strict-read window, solid.dev.js:44-66) once mount.tsx:44 boots; no plain call exists; the memo read stops() at :357 is top-level body code; oracle withheld-component-value-reference App.tsx:15 fires STRICT_READ_UNTRACKED"
+    },
+    {
+      "key": "compass-ui|apps/ui/tsconfig.json|SC1001|violation|apps/ui/src/components/Bridge.tsx|12593|12600",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, withheld-sites-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "Bridge (Bridge.tsx:208) is only the `component` of route / (routes.tsx:39), which router next.41 renders by createComponent (dist/index.js:1823; rc.17 observedComponent opens the strict-read window, solid.dev.js:44-66) once mount.tsx:44 boots; no plain call exists; the memo read stops() at :360 is top-level body code; oracle withheld-component-value-reference App.tsx:15 fires STRICT_READ_UNTRACKED"
+    },
+    {
+      "key": "compass-ui|apps/ui/tsconfig.json|SC1001|violation|apps/ui/src/components/Bridge.tsx|12622|12632",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, withheld-sites-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "Bridge (Bridge.tsx:208) is only the `component` of route / (routes.tsx:39), which router next.41 renders by createComponent (dist/index.js:1823; rc.17 observedComponent opens the strict-read window, solid.dev.js:44-66) once mount.tsx:44 boots; no plain call exists; cursorId() at :360 runs in the synchronous .find callback inside the body; oracle withheld-component-value-reference App.tsx:15 fires STRICT_READ_UNTRACKED"
+    },
+    {
+      "key": "compass-ui|apps/ui/tsconfig.json|SC1001|violation|apps/ui/src/components/Bridge.tsx|12658|12663",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, withheld-sites-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "Bridge (Bridge.tsx:208) is only the `component` of route / (routes.tsx:39), which router next.41 renders by createComponent (dist/index.js:1823; rc.17 observedComponent opens the strict-read window, solid.dev.js:44-66) once mount.tsx:44 boots; no plain call exists; the signal read tab() at :361 is top-level body code; oracle withheld-component-value-reference App.tsx:15 fires STRICT_READ_UNTRACKED"
+    },
+    {
+      "key": "error-menu-web|web/tsconfig.json|SC4001|violation|web/src/components/ChangeList.tsx|4134|4143",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, withheld-sites-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "onCleanup at ChangeList.tsx:97 is in a createEffect apply that runs once the ref sets scroller(), from main.tsx:14's module-level render flush or the scheduler, with no owner; src has no flush, action or render in an owned scope, the veto (ADR 0362) is @solidjs/router next.41's own action$1 call (dist/index.js:3969, probe: importing useParams alone withholds it); oracle withheld-flush-veto-effect-cleanup App.tsx:16 fires NO_OWNER_CLEANUP"
+    },
+    {
+      "key": "kui|frontend/packages/feature-messages/tsconfig.json|SC4001|violation|frontend/packages/feature-messages/src/MessagesTab.tsx|9681|9690",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, withheld-sites-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "onCleanup at MessagesTab.tsx:218 is in a createEffect apply (infinite view, more rows, sentinel set) run by the scheduler with no owner; the ADR 0362 veto is testing.ts:30's render inside mount(), called only from test bodies, which are unowned; oracle withheld-flush-veto-effect-cleanup App.tsx:31 fires NO_OWNER_CLEANUP"
+    },
+    {
+      "key": "kui|frontend/packages/shell/tsconfig.json|SC4001|violation|frontend/packages/feature-messages/src/MessagesTab.tsx|9681|9690",
+      "source": "corpus-sweep",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, withheld-sites-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "same site as the feature-messages project; the shell's ADR 0362 veto is shell.test.tsx:62-63 render and flush in test bodies (index.tsx:38's render is module level); oracle withheld-flush-veto-effect-cleanup App.tsx:31 fires NO_OWNER_CLEANUP"
+    },
+    {
+      "key": "ai-memory-ui|tsconfig.app.json|src/components/popover.tsx|4948|P2",
+      "source": "mutants",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, withheld-sites-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "seed 20261019 limit 5 (mutants-final src/components/popover.tsx:128): Trigger's button onClick (Trigger at popover.tsx:117), rendered as PopoverTrigger in audit.tsx:70, :390 and scope-page.tsx:379; the seeded onCleanup is the handler's first statement, and a user event runs the handler with no owner (ADR 0327, 0363); the ADR 0356/0361 veto is anchor.click() at backups.tsx:64 and server-ops.tsx:40 (click type set), a different run; oracle withheld-dispatch-veto-handler-cleanup App.tsx:35"
+    },
+    {
+      "key": "ai-memory-ui|tsconfig.app.json|src/components/shell.tsx|21083|N2",
+      "source": "mutants",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, withheld-sites-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "seed 20261019 limit 5 (mutants-final src/components/shell.tsx:606): toggleCollapsed is onClick={toggleCollapsed} at shell.tsx:684 in the app Shell every screen renders; the seeded onCleanup is the handler's first statement, and a user event runs the handler with no owner (ADR 0327, 0363); the ADR 0356/0361 veto is anchor.click() at backups.tsx:64 (click type set), a different run; oracle withheld-dispatch-veto-handler-cleanup App.tsx:28"
+    },
+    {
+      "key": "ai-memory-ui|tsconfig.app.json|src/components/overview.tsx|6419|N2",
+      "source": "mutants",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, withheld-sites-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "seed 20261019 limit 5 (mutants-final src/components/overview.tsx:171): copy is onClick={copy} at overview.tsx:194 in HandoffCard, rendered when a workspace has a handoff (workspace-detail.tsx:431, overview.tsx:44); the seeded onCleanup is the handler's first statement, and a user event runs the handler with no owner (ADR 0327, 0363); the ADR 0356/0361 veto is anchor.click() at backups.tsx:64 (click type set), a different run; oracle withheld-dispatch-veto-handler-cleanup App.tsx:28"
+    },
+    {
+      "key": "ai-memory-ui|tsconfig.app.json|src/routes/login.tsx|24656|P2",
+      "source": "mutants",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, withheld-sites-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "seed 20261019 limit 5 (mutants-final src/routes/login.tsx:515): the username input's onInput on the login route; the seeded onCleanup is the handler's first statement, and a user event runs the handler with no owner (ADR 0327, 0363); the ADR 0356/0361 veto is anchor.click() (click row fires input) and dialog.focus() at access.tsx:311, a different run; oracle withheld-dispatch-veto-handler-cleanup App.tsx:42"
+    },
+    {
+      "key": "ai-memory-ui|tsconfig.app.json|src/screens/scope-page.tsx|14024|P2",
+      "source": "mutants",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, withheld-sites-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "seed 20261019 limit 5 (mutants-final src/screens/scope-page.tsx:391): the menu button's onClick in PopoverContent (scope-page.tsx:379 trigger), shown after the trigger opens the menu; the seeded onCleanup is the handler's first statement, and a user event runs the handler with no owner (ADR 0327, 0363); the ADR 0356/0361 veto is anchor.click() at backups.tsx:64 (click type set), a different run; oracle withheld-dispatch-veto-handler-cleanup App.tsx:35"
+    },
+    {
+      "key": "ai-memory-ui|tsconfig.app.json|src/components/icons.tsx|1635|P1",
+      "source": "mutants",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, withheld-sites-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "seed 20261019 limit 5 (mutants-final src/components/icons.tsx:53): Archive is rendered by the tag <Archive/> at scope-page.tsx:121 (restore button, shown to a user who can mutate a page) and called plainly as props.item.icon({...}) at shell.tsx:255 inside tracked JSX; the tag run opens the strict-read window and the seeded read warns; the plain call is the ADR 0331 escape; oracle withheld-component-value-reference App.tsx:40"
+    },
+    {
+      "key": "ai-memory-ui|tsconfig.app.json|src/screens/audit.tsx|2260|N2",
+      "source": "mutants",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, withheld-sites-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "seed 20261019 limit 5 (mutants-final src/screens/audit.tsx:60): submit is onSubmit={submit} at audit.tsx:83, the filter form in the audit popover; the seeded onCleanup is the handler's first statement, and a user event runs the handler with no owner (ADR 0327, 0363); the ADR 0356/0361 veto is anchor.click() (click row fires submit), a different run; oracle withheld-dispatch-veto-handler-cleanup App.tsx:24"
+    },
+    {
+      "key": "compass-ui|apps/ui/tsconfig.json|apps/ui/src/components/Bridge.tsx|20418|E1",
+      "source": "mutants",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, withheld-sites-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "seed 20261019 limit 5 (mutants-final apps/ui/src/components/Bridge.tsx:208): Bridge (Bridge.tsx:208) is only the `component` of route / (routes.tsx:39), which router next.41 renders by createComponent (dist/index.js:1823; rc.17 observedComponent opens the strict-read window, solid.dev.js:44-66) once mount.tsx:44 boots; no plain call exists; the seeded mode() read sits before the return; oracle withheld-component-value-reference App.tsx:15"
+    },
+    {
+      "key": "compass-ui|apps/ui/tsconfig.json|apps/ui/src/components/TopicView.tsx|906|P8",
+      "source": "mutants",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, withheld-sites-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "seed 20261019 limit 5 (mutants-final apps/ui/src/components/TopicView.tsx:17): TopicView (TopicView.tsx:17, exact Component) is the component of route /channel/:channelId/topic/:topicId (routes.tsx:41), rendered by router next.41 createComponent (dist/index.js:1823); tests tag it too; the seeded action call runs in the owned body; oracle withheld-component-value-reference App.tsx:102"
+    },
+    {
+      "key": "error-menu-web|web/tsconfig.json|web/src/components/ApiTokensDialog.tsx|8538|P2",
+      "source": "mutants",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, withheld-sites-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "seed 20261019 limit 5 (mutants-final web/src/components/ApiTokensDialog.tsx:229): the expiry select's onChange in ApiTokensDialog; the seeded onCleanup is the handler's first statement, and a user event runs the handler with no owner (ADR 0327, 0363); the ADR 0356/0361 veto is not in src (grep: no click, focus or other dispatch member call), so it comes from analysed dependency source, a different run; oracle withheld-dispatch-veto-handler-cleanup App.tsx:47"
+    },
+    {
+      "key": "every-deck-of-cards|tsconfig.json|src/ExplorerPage.tsx|1172|P8",
+      "source": "mutants",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, withheld-sites-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "seed 20261019 limit 5 (mutants-final src/ExplorerPage.tsx:28): ExplorerPage is rendered by the tag at HomePage.tsx:9, HomePage the component of route / (entry-client.tsx:39); the escape is the test route table ExplorerPage.ui.test.tsx:55; the seeded action call runs in the owned body; oracle withheld-component-value-reference App.tsx:102"
+    },
+    {
+      "key": "jar-hell-web|web/tsconfig.json|web/src/components/Autocomplete.tsx|4420|P2",
+      "source": "mutants",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, withheld-sites-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "seed 20261019 limit 5 (mutants-final web/src/components/Autocomplete.tsx:127): the query input's onInput, typed into by the user; the seeded onCleanup is the handler's first statement, and a user event runs the handler with no owner (ADR 0327, 0363); the ADR 0356/0361 veto is option .click() at Autocomplete.tsx:101-103 (targets an option, click row fires input) and input.focus() at :40, a different run; oracle withheld-dispatch-veto-handler-cleanup App.tsx:42"
+    },
+    {
+      "key": "jar-hell-web|web/tsconfig.json|web/src/components/package/BadgesDialog.tsx|2030|E1",
+      "source": "mutants",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, withheld-sites-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "seed 20261019 limit 5 (mutants-final web/src/components/package/BadgesDialog.tsx:29): BadgesDialog is rendered by the tag at PackageHeader.tsx:85 (PackageView.tsx:20); the escape is the static member BadgesDialog.id (:27, :51, :60); the seeded opened() read (local signal, :32) sits before the return; oracle withheld-component-value-reference App.tsx:56"
+    },
+    {
+      "key": "kui|frontend/packages/feature-connect/tsconfig.json|frontend/packages/feature-connect/src/ConnectorList.tsx|3501|P8",
+      "source": "mutants",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, withheld-sites-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "seed 20261019 limit 5 (mutants-final frontend/packages/feature-connect/src/ConnectorList.tsx:64): ConnectorList is rendered by the tag at ConnectRoute.tsx:219 (shell loads the feature lazily, registry.ts:169); the escapes are the index re-export and connect.stories.tsx:40's meta; the seeded action call runs in the owned body; oracle withheld-component-value-reference App.tsx:102"
+    },
+    {
+      "key": "kui|frontend/packages/feature-consumers/tsconfig.json|frontend/packages/feature-consumers/src/GroupList.tsx|5578|R1",
+      "source": "mutants",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, withheld-sites-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "seed 20261019 limit 5 (mutants-final frontend/packages/feature-consumers/src/GroupList.tsx:117): GroupList is rendered by the tag at ConsumersRoute.tsx:190 with rows={rows()}, a reactive getter (shell registry.ts:108); the escape is the index re-export; the seeded props.rows read is top-level body code; oracle withheld-component-value-reference App.tsx:91"
+    },
+    {
+      "key": "kui|frontend/packages/feature-consumers/tsconfig.json|frontend/packages/feature-consumers/src/ResetWizard.tsx|10934|E1",
+      "source": "mutants",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, withheld-sites-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "seed 20261019 limit 5 (mutants-final frontend/packages/feature-consumers/src/ResetWizard.tsx:112): ResetWizard is rendered by the tag at GroupDetail.tsx:171 (GroupRoute.tsx:14); the escapes are the index re-export and ResetWizard.stories.tsx:17's meta; the seeded open() read (local signal, :113) sits before the return; oracle withheld-component-value-reference App.tsx:56"
+    },
+    {
+      "key": "kui|frontend/packages/feature-schemas/tsconfig.json|frontend/packages/feature-schemas/src/SubjectList.tsx|3132|R1",
+      "source": "mutants",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, withheld-sites-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "seed 20261019 limit 5 (mutants-final frontend/packages/feature-schemas/src/SubjectList.tsx:78): SubjectList is rendered by the tag at SchemasRoute.tsx:261 with search={typed()}, a reactive getter (shell registry.ts:124); the escapes are the index re-export and schemas.stories.tsx:19's meta; the seeded props.search read is top-level body code; oracle withheld-component-value-reference App.tsx:91"
+    },
+    {
+      "key": "kui|frontend/packages/kernel/tsconfig.json|frontend/packages/kernel/src/components/Drawer.tsx|3856|H1",
+      "source": "mutants",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, withheld-sites-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "seed 20261019 limit 5 (mutants-final frontend/packages/kernel/src/components/Drawer.tsx:74): nextId is called at Drawer.tsx:80-81 in Drawer's body; Drawer is rendered by the tag at ProduceDrawer.tsx:107, which MessagesRoute.tsx:559 always renders; the escapes are the index re-export and Drawer.stories.tsx:16's meta; the seeded read runs on Drawer's body stack; oracle withheld-component-value-reference App.tsx:78"
+    },
+    {
+      "key": "pekochan-blog|tsconfig.json|src/components/ui/input-group.tsx|3144|P2",
+      "source": "mutants",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, withheld-sites-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "seed 20261019 limit 5 (mutants-final src/components/ui/input-group.tsx:63): InputGroupAddon's div onClick; the seeded onCleanup is the handler's first statement, and a user event runs the handler with no owner (ADR 0327, 0363); the ADR 0356/0361 veto is not in src: its only dispatch call is input.focus() in this handler (input-group.tsx:67, focus types), so the click-type veto comes from analysed dependency source, a different run; oracle withheld-dispatch-veto-handler-cleanup App.tsx:35"
+    },
+    {
+      "key": "solid-groove|tsconfig.json|src/editor/EditorView.tsx|4458|P1",
+      "source": "mutants",
+      "class": "confirmed-violation",
+      "reviewer": "claude-opus-5-5 (agent, withheld-sites-adjudication)",
+      "date": "2026-10-23",
+      "evidence": "seed 20261019 limit 5 (mutants-final src/editor/EditorView.tsx:102): EditorView is rendered by the tag at Project.tsx:27 (route component, router.tsx:58 lazy); the escape is the test alias EditorViewModule.default (EditorView.test.tsx:165); the seeded read is top-level body code; oracle withheld-component-value-reference App.tsx:40"
+    }
+  ]
 }

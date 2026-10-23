@@ -7,14 +7,15 @@ import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 
 import {
-  bucketOf, findingKey, holdoutIndex, reviewedPrecision, selectRows, shareBySplit, splitOf, validateLedger,
+  bucketOf, confirmedMisses, findingKey, holdoutIndex, mutantSiteKey, reviewedPrecision, selectRows, shareBySplit, splitOf,
+  validateLedger,
 } from "./corpus-lib.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const manifest = JSON.parse(readFileSync(join(here, "corpus/rc17-manifest.json"), "utf8"));
 
 const finding = (id, kind, path, start = 1, end = 2, extra = {}) => ({ id, kind, primaryLocation: { path, startByte: start, endByte: end }, ...extra });
-const entry = (key, cls = "confirmed-violation") => ({ key, class: cls, reviewer: "r", date: "2026-10-23", evidence: "probe" });
+const entry = (key, cls = "confirmed-violation", source = "corpus-sweep") => ({ key, source, class: cls, reviewer: "r", date: "2026-10-23", evidence: "probe" });
 const sweepRows = [
   { app: "a", project: "p.json", root: "/c/a", holdout: false, findings: [
     finding("SC1001", "violation", "/c/a/src/x.tsx"), finding("SC1001", "violation", "/c/a/src/y.tsx"),
@@ -97,6 +98,27 @@ test("an empty ledger is well formed; malformed entries and unknown classes are 
   assert.match(validateLedger({ entries: [{ ...twice, extra: 1 }] }).join(), /unknown fields extra/);
 });
 
+test("every entry names its source, and the key has that source's shape", () => {
+  const mutant = "a|p.json|src/x.tsx|120|P2";
+  assert.deepEqual(validateLedger({ entries: [entry(mutant, "confirmed-violation", "mutants")] }), []);
+  const { source: _, ...bare } = entry("a|p|SC1001|violation|x.tsx|1|2");
+  assert.match(validateLedger({ entries: [bare] }).join(), /source undefined is not one of corpus-sweep, mutants/);
+  assert.match(validateLedger({ entries: [entry(mutant, "confirmed-violation", "seeded")] }).join(), /source "seeded"/);
+  assert.match(validateLedger({ entries: [entry(mutant)] }).join(), /key must be app\|project\|id\|kind/);
+  assert.match(validateLedger({ entries: [entry("a|p|SC1001|violation|x.tsx|1|2", "confirmed-violation", "mutants")] }).join(), /key must be app\|project\|file\|pos\|pattern/);
+  assert.match(validateLedger({ entries: [entry("a|p.json|src/x.tsx|pos|P2", "confirmed-violation", "mutants")] }).join(), /key must be/);
+  assert.match(validateLedger({ entries: [entry("a|p.json|src/x.tsx|120|p2", "confirmed-violation", "mutants")] }).join(), /key must be/);
+  const twice = entry(mutant, "confirmed-violation", "mutants");
+  assert.match(validateLedger({ entries: [twice, twice] }).join(), /listed twice/);
+  assert.equal(mutantSiteKey({ app: "a", project: "p.json", file: "src/x.tsx", pos: 120, pattern: "P2", line: 9 }), mutant);
+});
+
+test("the committed ledger is well formed, and every mutants key has the seeded-site shape", () => {
+  const ledger = JSON.parse(readFileSync(join(here, "corpus/reviewed-findings.json"), "utf8"));
+  assert.deepEqual(validateLedger(ledger), []);
+  for (const item of ledger.entries.filter((row) => row.source === "mutants")) assert.equal(item.key.split("|").length, 5, item.key);
+});
+
 test("reviewed precision counts confirmed over adjudicated; unreviewed and unresolved never enter it", () => {
   const ledger = { entries: [
     entry("a|p.json|SC1001|violation|src/x.tsx|1|2", "adopted-policy-violation"),
@@ -123,14 +145,63 @@ test("an empty ledger gives no precision, and every violation is unreviewed", ()
 
 test("a ledger entry whose key left a project that ran is stale; one for a project not run is not", () => {
   const ledger = { entries: [
-    entry("a|p.json|SC1001|violation|src/gone.tsx|1|2"),
+    entry("a|p.json|SC1001|violation|src/gone.tsx|1|2", "valid-for-claim"),
+    entry("a|p.json|SC1001|violation|src/also-gone.tsx|1|2"),
     entry("other|p.json|SC1001|violation|src/x.tsx|1|2"),
     entry("a|p.json|SC2001|uncertifiable|src/z.tsx|1|2"),
   ] };
   const result = reviewedPrecision(sweepRows, ledger);
-  assert.deepEqual(result.stale, ["a|p.json|SC1001|violation|src/gone.tsx|1|2"]);
+  assert.deepEqual(result.stale, ["a|p.json|SC1001|violation|src/gone.tsx|1|2"], "a gone confirmed violation is an absent miss instead");
+  // z.tsx: a confirmed defect recorded against its uncertifiable finding is a withheld miss too.
+  assert.deepEqual(confirmedMisses(sweepRows, ledger, null).misses.map((miss) => `${miss.key} ${miss.status}`), [
+    "a|p.json|SC1001|violation|src/also-gone.tsx|1|2 absent", "a|p.json|SC2001|uncertifiable|src/z.tsx|1|2 withheld",
+  ]);
   assert.equal(result.otherKind, 1);
   assert.equal(result.total.adjudicated, 0);
+});
+
+test("a confirmed violation the sweep has only as uncertifiable, or not at all, is a miss per rule", () => {
+  const rows = [{ app: "a", project: "p.json", root: "/c/a", findings: [
+    finding("SC1001", "uncertifiable", "/c/a/src/w.tsx"), finding("SC4001", "violation", "/c/a/src/v.tsx"),
+    finding("SC1001", "uncertifiable", "/c/a/src/u.tsx"),
+  ] }];
+  const ledger = { entries: [
+    entry("a|p.json|SC1001|violation|src/w.tsx|1|2"),
+    entry("a|p.json|SC4001|violation|src/v.tsx|1|2"),
+    entry("a|p.json|SC4001|violation|src/gone.tsx|1|2"),
+    entry("a|p.json|SC1001|violation|src/u.tsx|1|2", "unresolved-review"),
+    entry("a|p.json|SC1001|violation|src/t.tsx|1|2", "valid-for-claim"),
+    entry("other|p.json|SC1001|violation|src/w.tsx|1|2"),
+  ] };
+  const result = confirmedMisses(rows, ledger, null);
+  assert.deepEqual(result.byRule, {
+    SC1001: { withheld: 1, absent: 0, unresolved: 1 },
+    SC4001: { withheld: 0, absent: 1, unresolved: 0 },
+  });
+  assert.deepEqual(result.total, { withheld: 1, absent: 1, unresolved: 1 });
+  assert.deepEqual(result.misses.map((miss) => `${miss.rule} ${miss.status}`), ["SC1001 withheld", "SC4001 absent"]);
+  const precision = reviewedPrecision(rows, ledger);
+  assert.deepEqual(precision.stale, ["a|p.json|SC1001|violation|src/t.tsx|1|2"],
+    "a withheld or absent confirmed entry is a miss, not stale; a non-confirmed entry whose finding is gone is stale");
+});
+
+test("mutants entries are read against the seeded report only, and never enter reviewed precision", () => {
+  const site = (pos, classification, extra = {}) => ({ app: "a", project: "p.json", file: "src/x.tsx", pos, pattern: "P2", rule: "missing-owner",
+    classification, findings: [{ id: "SC4001", rule: "missing-owner", kind: classification === "proven" ? "violation" : "uncertifiable" }], ...extra });
+  const report = { sites: [site(1, "uncertifiable"), site(2, "proven"), site(3, "missed", { findings: [] }), site(4, "uncertifiable")] };
+  const ledger = { entries: [
+    entry("a|p.json|src/x.tsx|1|P2", "confirmed-violation", "mutants"),
+    entry("a|p.json|src/x.tsx|2|P2", "confirmed-violation", "mutants"),
+    entry("a|p.json|src/x.tsx|3|P2", "confirmed-violation", "mutants"),
+    entry("a|p.json|src/x.tsx|4|P2", "unresolved-review", "mutants"),
+    entry("a|p.json|src/x.tsx|9|P2", "confirmed-violation", "mutants"),
+  ] };
+  const result = confirmedMisses(sweepRows, ledger, report);
+  assert.deepEqual(result.byRule, { SC4001: { withheld: 1, absent: 0, unresolved: 1 }, "missing-owner": { withheld: 0, absent: 1, unresolved: 0 } });
+  assert.equal(confirmedMisses(sweepRows, ledger, null).misses.length, 0, "no report: no mutants entry is in scope");
+  const precision = reviewedPrecision(sweepRows, ledger);
+  assert.equal(precision.total.adjudicated, 0);
+  assert.deepEqual(precision.stale, []);
 });
 
 test("corpus-metrics --check-ledger passes on the committed ledger and fails on a malformed one", () => {
@@ -153,6 +224,7 @@ test("corpus-metrics prints per-split and reviewed numbers, and compare ignores 
   assert.match(out, /by split \(sweep ran: all\)/);
   assert.match(out, /reviewed precision/);
   assert.match(out, /unreviewed 4/);
+  assert.match(out, /confirmed misses \(confirmed-violation entries not proven now; mutants entries not read: no --mutants\)/);
   const compare = execFileSync(process.execPath, [join(here, "corpus-sweep-compare.mjs"), sweep, sweep], { encoding: "utf8" });
   assert.match(compare, /removed 0/);
 });

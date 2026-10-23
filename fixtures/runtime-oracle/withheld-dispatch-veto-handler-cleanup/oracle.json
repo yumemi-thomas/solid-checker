@@ -1,0 +1,16 @@
+{
+  "note": "Adjudicated withheld sites 2026-10-23 (scripts/corpus/reviewed-findings.json, seeded mutants P2/N2): onCleanup at the top of inline and named compiler event handlers (click, input, change, submit) in a program that also calls anchor.click() in a helper and dialog.focus() in onSettled. ADR 0356/0361 make every handler of those types conditional, so SC4001 is uncertifiable; a host event runs each with no owner (ADR 0327's premise, ADR 0363's event run), and the dev build warns at all five (known-open).",
+  "scenario": "constructed-misuse",
+  "requires": [
+    "a click() call on a detached anchor and a focus() call in the program",
+    "handlers of the click, input, change and submit types on rendered intrinsic elements"
+  ],
+  "reaches": "no step asserts it: driver.ts dispatches click, input, change and submit on every element, and the NO_OWNER_CLEANUP dev diagnostics at the listed sites show each handler ran",
+  "open": [
+    { "code": "NO_OWNER_CLEANUP", "site": "App.tsx:24", "reason": "ai-memory-ui audit.tsx:60 shape (named onSubmit handler); ADR 0361's click() type set withholds the event-owner proof" },
+    { "code": "NO_OWNER_CLEANUP", "site": "App.tsx:28", "reason": "ai-memory-ui shell.tsx:606 shape (named onClick handler); ADR 0361's click() type set withholds the event-owner proof" },
+    { "code": "NO_OWNER_CLEANUP", "site": "App.tsx:35", "reason": "ai-memory-ui popover.tsx:128, scope-page.tsx:391, pekochan-blog input-group.tsx:63 shape (inline onClick); ADR 0361's click() type set withholds the event-owner proof" },
+    { "code": "NO_OWNER_CLEANUP", "site": "App.tsx:42", "reason": "ai-memory-ui login.tsx:515, jar-hell-web Autocomplete.tsx:127 shape (inline onInput); ADR 0361's click() type set (input) withholds the event-owner proof" },
+    { "code": "NO_OWNER_CLEANUP", "site": "App.tsx:47", "reason": "error-menu-web ApiTokensDialog.tsx:229 shape (select onChange); ADR 0361's click() and focus() type sets (change) withhold the event-owner proof" }
+  ]
+}

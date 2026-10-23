@@ -1,0 +1,41 @@
+{
+  "note": "Adjudicated withheld sites 2026-10-23 (scripts/corpus/reviewed-findings.json): components createComponent renders that are also referenced as a value nobody calls plainly (a router route table, an icon map called in tracked JSX beside a tag, a static member, a Storybook meta, a test route table). ADR 0331's mixed-reference rule withholds each body finding; the dev build warns at every one, so each is a confirmed miss (known-open). Control: DynamicControl, whose component Dynamic runs under untrack with no strict-read label (rc.17 solid-js dist/solid.dev.js:1520), stays quiet.",
+  "scenario": "constructed-misuse",
+  "requires": [
+    "@solidjs/router 2.0.0-next.41 in the install (createRouter, defineRoutes, memoryHistory)",
+    "each component rendered by a tag or by the router, and also held as a value"
+  ],
+  "reaches": "no step asserts it: the settle step renders every export; the STRICT_READ_UNTRACKED and ACTION_CALLED_IN_OWNED_SCOPE dev diagnostics at the listed sites show each body ran as a component",
+  "open": [
+    {
+      "code": "STRICT_READ_UNTRACKED",
+      "site": "App.tsx:15",
+      "reason": "compass-ui Bridge.tsx:357-361 shape: an exact Component in a route table the router renders; ADR 0331 counts the table reference as a possible plain call"
+    },
+    {
+      "code": "STRICT_READ_UNTRACKED",
+      "site": "App.tsx:40",
+      "reason": "ai-memory-ui icons.tsx:53 shape: a nav map calls the icon plainly in tracked JSX, a tag renders it; ADR 0331 withholds the tag run's read"
+    },
+    {
+      "code": "STRICT_READ_UNTRACKED",
+      "site": "App.tsx:56",
+      "reason": "jar-hell-web BadgesDialog.tsx:29 shape: a static member write on the component; ADR 0331 counts it as an escape"
+    },
+    {
+      "code": "STRICT_READ_UNTRACKED",
+      "site": "App.tsx:91",
+      "reason": "kui SubjectList.tsx:78 shape: a Storybook meta holds the component, the route passes a reactive prop; ADR 0331 withholds the props read (frame App.tsx:67)"
+    },
+    {
+      "code": "STRICT_READ_UNTRACKED",
+      "site": "App.tsx:78",
+      "reason": "kui Drawer.tsx:74 shape: a helper the body calls reads a signal; the component is exported, held by a Storybook meta and rendered by a tag. The meta withholds the read (frame App.tsx:83): here as a value handed to an unproven consumer, in kui by ADR 0331's census. Exported and tagged alone, it is a violation"
+    },
+    {
+      "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+      "site": "App.tsx:102",
+      "reason": "every-deck-of-cards ExplorerPage.tsx:28 shape: a test route table holds the page, the app renders it by tag; ADR 0331 withholds the action call"
+    }
+  ]
+}

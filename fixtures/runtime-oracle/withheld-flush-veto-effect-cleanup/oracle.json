@@ -1,0 +1,13 @@
+{
+  "note": "Adjudicated withheld sites 2026-10-23 (scripts/corpus/reviewed-findings.json): onCleanup in createEffect applies (error-menu-web ChangeList.tsx:97, kui MessagesTab.tsx:218 shapes) in a program that also flushes in an owned scope (Settle). ADR 0362's flush veto gives the applies the FlushDrained edge, so SC4001 is uncertifiable; the applies run from render's trailing flush and the scheduler with no owner, and the dev build warns at both (known-open). Settle renders last, so nothing of the others is queued when it flushes.",
+  "scenario": "constructed-misuse",
+  "requires": [
+    "a ref-set signal as the effect's compute source, so the apply runs after the ref is assigned",
+    "a flush() call in a component body elsewhere in the program"
+  ],
+  "reaches": "no step asserts it: the NO_OWNER_CLEANUP dev diagnostics at the listed sites show each apply ran with no owner",
+  "open": [
+    { "code": "NO_OWNER_CLEANUP", "site": "App.tsx:16", "reason": "error-menu-web ChangeList.tsx:97 shape; ADR 0362's program-wide flush veto withholds the unowned-apply proof" },
+    { "code": "NO_OWNER_CLEANUP", "site": "App.tsx:31", "reason": "kui MessagesTab.tsx:218 shape; ADR 0362's program-wide flush veto withholds the unowned-apply proof" }
+  ]
+}

@@ -3,7 +3,7 @@
 // and, optionally, a runtime-oracle report:
 //
 //   node scripts/corpus-metrics.mjs <sweep.json> [--oracle <oracle.json>] [--json]
-//     [--manifest <manifest.json>] [--ledger <reviewed-findings.json>]
+//     [--manifest <manifest.json>] [--ledger <reviewed-findings.json>] [--mutants <report.json>]
 //   node scripts/corpus-metrics.mjs --check-ledger [--ledger <reviewed-findings.json>]
 //
 // 1. Unproven clean claims: runtime diagnostics the checker is silent on, from
@@ -29,14 +29,19 @@
 // apart and never enter the ratio; an unresolved-review entry is not a
 // decision; an entry whose project ran but whose key is gone is reported as
 // stale. --check-ledger validates the ledger file and exits 1 if malformed.
+//
+// Confirmed misses, beside it: confirmed-violation entries whose finding this
+// sweep has only as uncertifiable (withheld) or not at all (absent), per rule,
+// with the unresolved-review entries in scope. Entries of source `mutants` are
+// read against the seeded probe's report (scripts/mutants.mjs, --mutants).
 import { readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { bucketOf, decidedShare, holdoutIndex, reviewedPrecision, shareBySplit, validateLedger } from "./corpus-lib.mjs";
+import { bucketOf, confirmedMisses, decidedShare, holdoutIndex, reviewedPrecision, shareBySplit, validateLedger } from "./corpus-lib.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
-const valueOptions = ["--oracle", "--manifest", "--ledger"];
+const valueOptions = ["--oracle", "--manifest", "--ledger", "--mutants"];
 const optionValue = name => (argv.includes(name) ? argv[argv.indexOf(name) + 1] : undefined);
 const ledgerPath = resolve(optionValue("--ledger") ?? join(here, "corpus/reviewed-findings.json"));
 const manifestPath = resolve(optionValue("--manifest") ?? join(here, "corpus/rc17-manifest.json"));
@@ -84,6 +89,8 @@ for (const result of sweep.results) {
 const share = decidedShare;
 const splitShares = shareBySplit(sweep.results, index);
 const reviewed = reviewedPrecision(sweep.results, ledger, index);
+const mutantsPath = optionValue("--mutants");
+const misses = confirmedMisses(sweep.results, ledger, mutantsPath ? JSON.parse(readFileSync(mutantsPath, "utf8")) : null);
 
 let oracle;
 if (oraclePath) {
@@ -107,6 +114,7 @@ const metrics = {
     ["dev", "holdout"].map(name => [name, { ...splitShares[name], decidedShare: share(splitShares[name]) }])
   ),
   reviewed,
+  misses: { mutants: mutantsPath ?? null, ...misses },
   byCategory: Object.fromEntries(
     Object.entries(byCategory).sort().map(([name, bucket]) => [name, { ...bucket, decidedShare: share(bucket) }])
   ),
@@ -143,6 +151,11 @@ if (asJson) {
   console.log(reviewLine("  holdout", reviewed.holdout));
   if (reviewed.otherKind) console.log(`ledger entries on non-violation findings (not counted): ${reviewed.otherKind}`);
   for (const key of reviewed.stale) console.log(`  stale ledger entry ${key}`);
+  const missLine = (name, bucket) =>
+    `${name.padEnd(24)} confirmed misses ${bucket.withheld + bucket.absent} (withheld ${bucket.withheld}, absent ${bucket.absent})  unresolved ${bucket.unresolved}`;
+  console.log(`confirmed misses (confirmed-violation entries not proven now; mutants entries ${mutantsPath ? `from ${mutantsPath}` : "not read: no --mutants"})`);
+  console.log(missLine("total", misses.total));
+  for (const [rule, bucket] of Object.entries(misses.byRule)) console.log(missLine(`  ${rule}`, bucket));
   if (oracle) {
     console.log(`oracle: ${oracle.cases} cases, unproven clean ${oracle.unprovenClean.length}, known open ${oracle.knownOpen.length}, static-only ${oracle.staticOnly.length}`);
     for (const site of oracle.unprovenClean) console.log(`  unproven-clean ${site}`);

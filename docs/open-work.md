@@ -18,6 +18,7 @@ Strict read in a setup body (`strict-read-untracked`, SC1001):
 - `review-opus2-c04-ctor-body` (App.tsx:12): a constructor read, class instantiated in the body.
 - `review-opus3-g06-yield-star-spread-body` (App.tsx:13): a read in a generator reached through `yield*` and spread in the body. Delegation is not followed.
 - `precision-ref-callback-read` (App.tsx:4): a read in an intrinsic `ref` callback runs untracked in the apply phase; the read rule places nothing in the `DirectiveApply` role.
+- `withheld-component-value-reference` (App.tsx:15, :40, :56, :78, :91): a rendered component also held as a value nobody calls (route table, icon map, static member, Storybook meta) is withheld (ADR 0331). Confirmed: compass-ui `Bridge.tsx:357-361`, 9 mutants. `Dynamic` opens no strict-read window (`DynamicControl`).
 
 - `@solid-primitives/utils` helpers over a getter, beyond `access(getter)` and `accessWith(getter)` (ADR 0338): `accessArray([getter])`, `withAccess(getter, fn)`, and `access` reached through another project helper's call hop are undecided, so they stay silent or uncertifiable. An alias (`const alias = count`), a function literal (`access(() => count())`) or a props value is arity-unknown and uncertifiable. A getter passed to a helper that reads its parameter in a hoisted function it calls is silent (fixture `package-access-helper`, `MissedHoistedCallee`).
 
@@ -39,6 +40,10 @@ A root, memo or deferred memo in an effect apply (`primitive-in-effect-callback`
 - A helper with a handler, timer, module-level or exported caller, an alias or an argument use, an apply passed by name or in a `{ effect }` bundle, and a call in a returned cleanup are not claimed, as for SC2008.
 - rc.13 and every unread release are silent: rc.13 has no assertion, so the unowned root runs there, unreported; the SC4001 message for an effect in an apply does not say that rc.17 dev throws.
 
+Action in an owned scope (`action-called-in-owned-scope`, SC2002):
+
+- `withheld-component-value-reference` (App.tsx:102): the same, for an action call in the body (3 mutants).
+
 Async read outside a loading boundary (`async-outside-loading-boundary`, SC5003):
 
 - `r9-b3-childrenasync` (App.tsx:15): an async memo read flows through `children()` into JSX with no `Loading`.
@@ -55,6 +60,8 @@ Missing owner (`missing-owner`, SC4001):
 - `missing-owner` (SC4001), recall lost: an unmodelled callback between leaves (`forEach`, `addEventListener`) misses `NO_OWNER_CLEANUP`; at probe k5 the wrongly coded SC3001 is gone.
 - `missing-owner` (SC4001), recall lost: `onSettled(wrap(() => …))` (`solid2-precision`, `WrappedSettledCleanup`): a bodiless `wrap` is no identity wrapper (ADR 0346), so the cleanup in its literal goes unreported.
 - rc.17, unclaimed: `lazyModule` loader reads/writes; an `onHydrationEnd` write drained by `hydrate` in a root.
+- `withheld-flush-veto-effect-cleanup` (App.tsx:16, :31): an effect apply's `onCleanup` under ADR 0362's flush veto, which test helpers and router next.41's `action$1` (`dist/index.js:3969`) trip. Confirmed: error-menu-web `ChangeList.tsx:97`, kui `MessagesTab.tsx:218`.
+- `withheld-dispatch-veto-handler-cleanup` (App.tsx:24-47): a handler's `onCleanup` under ADR 0361's type sets; a host event runs it unowned. Confirmed: 9 mutants.
 
 Possible owner suspension (ADR 0357): skippable-await cleanups retain SC4001 obligations. Call-argument-specific take/skip proofs are unimplemented; callback delivery outside the model remains open.
 

@@ -2,11 +2,11 @@
 
 Cases for `scripts/runtime-oracle.mjs`: each runs in Chrome on the Solid 2 dev build, and its diagnostics are compared with the checker's verdict at the same site. An unmatched dev diagnostic is an unproven clean claim. Cases run in `../solid-checker-rc17-corpus/apps/helge-dev` (rc.17; `--install` overrides) against the real packages: `*.d.ts` stubs and `node_modules` are not copied, and a case `tsc` rejects is `type-error`. `driver.ts`, loaded after `main.tsx`, outside the tsconfig, sends the events: no dispatch site (ADR 0361).
 
-A case is a directory with an `App.tsx` and no `tsconfig.json`; all exported components render and all elements receive events. Optional `oracle.json`: `note`, `steps`, `programBoundary` (`open` or `closed`), `install` (corpus app with the same Solid version), `open` (known unproven clean sites `{ code, site, reason }`, or `{ rule, site, reason }` for an observation; a site that stops firing is `stale-open`), `behaviour`, and the context fields (below).
+A case is a directory with an `App.tsx` and no `tsconfig.json`; all exported components render and all elements receive events. Optional `oracle.json`: `note`, `steps`, `programBoundary` (`open` or `closed`), `install` (corpus app with the same Solid version), `open` (known unproven clean sites `{ code, site, reason }`, or `{ rule, site, reason }` for an observation; a listed site covered only by an uncertifiable finding is `known-open` too; a site that stops firing, or that a violation covers, is `stale-open`), `behaviour`, and the context fields (below).
 
 Verdicts: `covered-violation` and `covered-uncertifiable` (a finding on the diagnostic's line or frame), `unproven-clean` (exit 1), `known-open`, `no-rule`; `static-only` (a violation with no dev diagnostic and no observation: inspect it before calling it a false positive); `behaviour-confirmed`, `behaviour-refuted`, `behaviour-clean`, `behaviour-unexpected`; collector failures are `harness-error`.
 
-The `c*`, `r*` and `oracle-*` cases are reviewer probes (see each `note`).
+The `c*`, `r*` and `oracle-*` cases are reviewer probes (see each `note`). The `withheld-*` cases reproduce corpus sites adjudicated `confirmed-violation` whose proof is withheld (`scripts/corpus/reviewed-findings.json`).
 
 ## Context fields
 
