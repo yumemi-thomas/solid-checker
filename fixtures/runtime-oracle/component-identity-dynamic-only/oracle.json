@@ -1,0 +1,7 @@
+{
+  "note": "ADR 0138: Panel is rendered only by <Dynamic component={Panel} />. rc.17 dynamicCore calls it as untrack(() => component(props)) inside a memo, with no strict-read label (solid.dev.js:1515; untrack opens the window only for a label, @solidjs/signals dev-shared.js:5099-5117), so the body read raises no STRICT_READ_UNTRACKED. The checker reported an SC1001 violation here before (fd796cd4a, static-only); it is now uncertifiable.",
+  "scenario": "constructed-misuse",
+  "requires": ["module-level createSignal read by Panel", "Panel rendered only through Dynamic"],
+  "reaches": "the rendered step asserts Panel's element, so the body read ran",
+  "steps": [{ "action": "assert-text", "id": "rendered", "selector": "#rendered", "text": "rendered 0" }]
+}

@@ -34,7 +34,14 @@ pub(crate) use intrinsics::mentions_word;
 
 /// Functions by `(path, span)`: the proven components, then the escaped ones
 /// among them ([`SemanticLookup::escaped_component_functions`]).
-pub(super) type ComponentSets<'a> = (HashSet<(&'a str, Span)>, HashSet<(&'a str, Span)>);
+/// Proven components, those of them whose identity is undecided (ADR 0331),
+/// and those every accounted render of which runs through `Dynamic`, which
+/// opens no strict-read window (ADR 0138).
+pub(super) type ComponentSets<'a> = (
+    HashSet<(&'a str, Span)>,
+    HashSet<(&'a str, Span)>,
+    HashSet<(&'a str, Span)>,
+);
 
 /// The JSX tags that render each project function, by `(path, span)` of the
 /// function: the file holding the tag and the element.
@@ -722,8 +729,9 @@ struct FunctionCallSite {
 type BindingsByReference = HashMap<String, HashMap<(u64, u64), BindingResolution>>;
 
 /// Rendering-prop flows by value reference: the render sites each reaches
-/// ([`SemanticLookup::prop_render_sites_at`]).
-type PropRenderSites<'a> = HashMap<(&'a str, Span), Vec<Span>>;
+/// ([`SemanticLookup::prop_render_sites_at`]), and whether the value passes
+/// through an object holder's member read on the way.
+type PropRenderSites<'a> = HashMap<(&'a str, Span), (Vec<Span>, bool)>;
 
 /// One argument a project wrapper forwards into a result-access slot
 /// ([`SemanticLookup::result_access_forwarded_arguments`]).
@@ -780,7 +788,7 @@ pub(super) struct SemanticLookup<'a> {
     objects_assigned_into: OnceLock<bool>,
     router_params: OnceLock<crate::router_params::RouterParamsStatus>,
     /// ADR 0334: the route option values the audited router renders.
-    route_component_values: OnceLock<HashSet<(String, Span)>>,
+    route_component_values: OnceLock<HashMap<(String, Span), bool>>,
     /// ADR 0209: the property names some assignment in the project writes
     /// (`x.name = …`), and which prototypes it writes through (ADR 0314).
     assigned_member_names: OnceLock<AssignedMembers>,
@@ -1846,6 +1854,14 @@ impl<'a> SemanticLookup<'a> {
     /// ADR 0334: whether `span` in `path` is a component value of a route's
     /// options that the audited `@tanstack/solid-router` only renders.
     pub(super) fn route_component_value(&self, path: &str, span: Span) -> bool {
+        self.route_render(path, span).is_some()
+    }
+
+    /// Whether the audited router renders the route component value at
+    /// `span` through `Dynamic` (TanStack), which opens no strict-read window,
+    /// rather than with `createComponent` (`@solidjs/router`); `None` for a
+    /// value no audited router renders.
+    pub(super) fn route_render(&self, path: &str, span: Span) -> Option<bool> {
         self.route_component_values
             .get_or_init(|| {
                 crate::route_components::route_component_values(
@@ -1872,7 +1888,8 @@ impl<'a> SemanticLookup<'a> {
                     crate::interproc::accessor_provenance::reflective_prototype_write(self),
                 )
             })
-            .contains(&(path.to_owned(), span))
+            .get(&(path.to_owned(), span))
+            .copied()
     }
 
     /// The compiler's attested resolution of the project's import specifiers,

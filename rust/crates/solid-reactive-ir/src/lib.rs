@@ -1251,6 +1251,10 @@ pub struct Program {
     /// proven ([`site_in_undecided_component`]).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub undecided_component_regions: Vec<UndecidedRegion>,
+    /// Bodies of proven components that only `Dynamic` renders, where no
+    /// strict-read window opens ([`site_in_windowless_component`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub windowless_component_regions: Vec<UndecidedRegion>,
 }
 
 /// The body of a function analyzed as a component because it returns JSX,
@@ -1271,11 +1275,23 @@ pub struct UndecidedRegion {
 /// Whether the byte range `start..end` of `path` lies in one of `program`'s
 /// [`UndecidedRegion`]s: no violation claimed there is proven.
 pub fn site_in_undecided_component(program: &Program, path: &str, start: u64, end: u64) -> bool {
+    site_in_regions(&program.undecided_component_regions, path, start, end)
+}
+
+/// Whether the byte range `start..end` of `path` lies in the body of a proven
+/// component every render of which runs through `Dynamic` (ADR 0138):
+/// rc.17's `dynamicCore` calls it under `untrack` with no strict-read label,
+/// so the strict-read window a `createComponent` render opens is absent and
+/// no strict-read claim there is proven.
+pub fn site_in_windowless_component(program: &Program, path: &str, start: u64, end: u64) -> bool {
+    site_in_regions(&program.windowless_component_regions, path, start, end)
+}
+
+fn site_in_regions(regions: &[UndecidedRegion], path: &str, start: u64, end: u64) -> bool {
     let within = |location: &Location| {
         location.path.as_ref() == path && location.start_byte <= start && end <= location.end_byte
     };
-    program
-        .undecided_component_regions
+    regions
         .iter()
         .any(|region| within(&region.body) && !region.placed_callbacks.iter().any(within))
 }

@@ -1,0 +1,15 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/component-identity-renders/variants/prototype/Icons.tsx",
+      "start": 510,
+      "end": 517,
+      "fixes": 0
+    }
+  ]
+}

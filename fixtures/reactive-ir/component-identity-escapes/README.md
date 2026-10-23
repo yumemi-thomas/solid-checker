@@ -14,3 +14,4 @@ Solid runs a function as a component only when `createComponent` calls it (a tag
 - `Typed.tsx`: an exact `Component` type never overrides an escaping reference (`tsc` accepts `items().map(Typed)`). Uncertifiable: `Typed` (tag and `map`), `TypedHelperMapped` and `TypedBareMapped` (no JSX return, a helper's element; `map`). Violations: `TypedOnly` (tag), `TypedHelper` (no JSX return, tag), `TypedBare` (no JSX return, no tag; the type and the export prove it).
 - `Types.tsx`: `TypeRef` with `ComponentProps`, `Parameters` and `ReturnType` of `typeof TypeRef` stays a violation (a type query is erased). Uncertifiable: `TypeMapped` (type query plus `map`) and `RuntimeTypeof` (`typeof RuntimeTypeof === "function"` is a value reference).
 - `solid-js.d.ts`: `Show`, `Component`, `ComponentProps` and their helper types are transcribed from rc.17.
+- Uses that can only render (a map only `Dynamic` reads, an alias only tags name) keep a tag's proof: `component-identity-renders`.

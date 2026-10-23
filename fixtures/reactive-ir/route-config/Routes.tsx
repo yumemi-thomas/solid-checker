@@ -27,3 +27,17 @@ export const Router = createRouter({
     { path: "/area", component: Layout, children: [{ path: "/inner", component: Nested }] },
   ],
 });
+
+// Positive: a route component a tag renders as well. Both uses are renders
+// (the census accounts for the route definition), so the tag's proof stands
+// and the body read is a violation.
+function Tagged() {
+  const value = count();
+  return <p>{value}</p>;
+}
+
+export const TaggedRouter = createRouter({ routes: [{ path: "/tagged", component: Tagged }] });
+
+export function TaggedFrame() {
+  return <Tagged />;
+}

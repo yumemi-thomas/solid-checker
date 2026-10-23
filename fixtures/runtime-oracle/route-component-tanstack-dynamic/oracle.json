@@ -1,0 +1,8 @@
+{
+  "note": "ADR 0334: @tanstack/solid-router rc.9 renders a route's component as <Dynamic component={OutComponent()} /> (dist/source/Match.jsx:181), so the body runs under dynamicCore's unlabeled untrack and the read raises no STRICT_READ_UNTRACKED. The checker reported an SC1001 violation here before (fd796cd4a, static-only); it is now uncertifiable.",
+  "install": "ai-memory-ui",
+  "scenario": "constructed-misuse",
+  "requires": ["module-level createSignal read by Home", "Home is the component of the / route under createMemoryHistory"],
+  "reaches": "the home-rendered step asserts Home's element, so the body read ran",
+  "steps": [{ "action": "assert-text", "id": "home-rendered", "selector": "#home", "text": "home 0" }]
+}

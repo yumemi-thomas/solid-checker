@@ -1,0 +1,6 @@
+{
+  "note": "ADR 0138: Listed is rendered only by Dynamic, so its own body has no strict-read window, but the <For> row callback has one of its own: solid-js sets the mapArray name \"<For>\" (rc.17 solid.dev.js:1555) and mapArray wraps the mapper in setStrictRead(options.name) (@solidjs/signals dist/dev.js:3093-3100). The row read warns STRICT_READ_UNTRACKED and stays a violation (the corpus shape: ai-memory-ui graph.tsx, a TanStack route component).",
+  "scenario": "constructed-misuse",
+  "requires": ["module-level createSignal read in a <For> row of a component only Dynamic renders"],
+  "reaches": "dev diagnostic STRICT_READ_UNTRACKED in <For>"
+}

@@ -43,6 +43,11 @@ pub struct ComponentValueFlow {
     /// flow is exact only if each one's accessor hands its compute's result to
     /// nothing but the accessor's own reads.
     pub holder_calls: Vec<Span>,
+    /// Whether the value passes through an object holder's member read
+    /// (`icons[name]`). A computed read can fall through to an inherited
+    /// property, so the caller must also rule out an accessor installed on
+    /// a prototype, which would run with the holder as `this`.
+    pub through_object: bool,
 }
 
 /// A prop of a rendered element whose value a flow reaches.
@@ -79,14 +84,18 @@ pub struct ComponentPropSite {
 /// - `const X = call(() => value)`, read only as `X()`: the call has exactly
 ///   that one argument, a non-async arrow with no parameters and an
 ///   expression body. Whether `call` is a memo is the caller's question
-///   ([`ComponentValueFlow::holder_calls`]).
+///   ([`ComponentValueFlow::holder_calls`]);
+/// - `const X = { key: value, … }`, a closed object literal (every property a
+///   static, non-`__proto__`, unduplicated data key, no spread, getter, setter
+///   or method), read only as a member `X.key` or `X[expression]`, each of
+///   which yields any of its values ([`ComponentValueFlow::through_object`]).
 ///
 /// A holder counts only when every one of its resolved references is such a
 /// read in such a position, none of them writes it, it is not redeclared, and
 /// its declaration is not exported; a holder read anywhere else makes every
 /// reference flowing into it unreported. Anything else a value passes through
-/// -- a parameter, a member read, `let`, a call of anything that is not a
-/// holder -- is not followed: the references inside it are not reported, and
+/// -- a parameter, a member read of anything but an object holder, `let`, a
+/// call of anything that is not a holder -- is not followed: the references inside it are not reported, and
 /// the caller keeps treating them as escaping values.
 #[must_use]
 pub fn component_value_flows(
@@ -135,17 +144,33 @@ pub fn component_value_flows(
             nodes.parent_kind(declaration),
             AstKind::ExportNamedDeclaration(_)
         );
-        let holder = match memo_compute(init) {
-            Some((call, body)) => Holder {
-                value: body,
-                call: Some(call),
-                exported,
-            },
-            None => Holder {
+        let holder = if let Expression::ObjectExpression(object) = init.get_inner_expression() {
+            // An object literal holds its values only when it is closed;
+            // any other literal is no holder, so nothing in it is followed.
+            let Some(values) = closed_object_values(object) else {
+                continue;
+            };
+            Holder {
                 value: init,
                 call: None,
                 exported,
-            },
+                object: Some(values),
+            }
+        } else {
+            match memo_compute(init) {
+                Some((call, body)) => Holder {
+                    value: body,
+                    call: Some(call),
+                    exported,
+                    object: None,
+                },
+                None => Holder {
+                    value: init,
+                    call: None,
+                    exported,
+                    object: None,
+                },
+            }
         };
         holders.insert(symbol, holder);
     }
@@ -202,7 +227,14 @@ pub fn component_value_flows(
         graph.leaves(value, Node::Sink(index));
     }
     for (symbol, holder) in &holders {
-        graph.leaves(holder.value, Node::Holder(*symbol));
+        match &holder.object {
+            Some(values) => {
+                for value in values {
+                    graph.leaves(value, Node::Holder(*symbol));
+                }
+            }
+            None => graph.leaves(holder.value, Node::Holder(*symbol)),
+        }
     }
 
     let mut closures = HashMap::new();
@@ -219,11 +251,13 @@ pub fn component_value_flows(
         if let Some(existing) = flows.iter_mut().find(|flow| flow.reference == reference) {
             merge(&mut existing.sites, reach.sites);
             merge(&mut existing.holder_calls, reach.holder_calls);
+            existing.through_object |= reach.through_object;
         } else {
             flows.push(ComponentValueFlow {
                 reference,
                 sites: reach.sites,
                 holder_calls: reach.holder_calls,
+                through_object: reach.through_object,
             });
         }
     }
@@ -266,6 +300,32 @@ fn memo_compute<'e, 'a>(init: &'e Expression<'a>) -> Option<(Span, &'e Expressio
         return None;
     };
     Some((span(call.span), &statement.expression))
+}
+
+/// The property values of a closed object literal, or `None`: every property
+/// is a data property under a static key that is not `__proto__` (which sets
+/// the prototype) and is written once, with no spread, getter, setter or
+/// method, so reading a member runs no project code and yields one of these
+/// values or an inherited one.
+fn closed_object_values<'e, 'a>(
+    object: &'e ObjectExpression<'a>,
+) -> Option<Vec<&'e Expression<'a>>> {
+    let mut keys = HashSet::new();
+    let mut values = Vec::new();
+    for property in &object.properties {
+        let ObjectPropertyKind::ObjectProperty(property) = property else {
+            return None;
+        };
+        if property.computed || property.method || property.kind != PropertyKind::Init {
+            return None;
+        }
+        let name = property.key.static_name()?;
+        if name == "__proto__" || !keys.insert(name) {
+            return None;
+        }
+        values.push(&property.value);
+    }
+    Some(values)
 }
 
 /// The rendering props of a call `renderer(Component, { … })`.
@@ -343,6 +403,8 @@ struct Holder<'e, 'a> {
     /// The holder call, for a memo holder.
     call: Option<Span>,
     exported: bool,
+    /// The values of an object holder, read only through its members.
+    object: Option<Vec<&'e Expression<'a>>>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -355,6 +417,7 @@ enum Node {
 struct Reach {
     sites: Vec<ComponentPropSite>,
     holder_calls: Vec<Span>,
+    through_object: bool,
 }
 
 struct Graph<'s, 'h, 'e, 'a> {
@@ -405,12 +468,20 @@ impl Graph<'_, '_, '_, '_> {
                     if self
                         .holders
                         .get(&symbol)
-                        .is_some_and(|holder| holder.call.is_none()) =>
+                        .is_some_and(|holder| holder.call.is_none() && holder.object.is_none()) =>
                 {
                     self.read(symbol, identifier.span, node);
                 }
                 _ => self.values.push((identifier.span, node)),
             },
+            // `X.key` and `X[expression]` of an object holder yield one of its
+            // values (or an inherited one, which is no project reference).
+            Expression::StaticMemberExpression(member) => {
+                self.object_read(&member.object, node);
+            }
+            Expression::ComputedMemberExpression(member) => {
+                self.object_read(&member.object, node);
+            }
             Expression::CallExpression(call) if call.arguments.is_empty() => {
                 let Expression::Identifier(callee) = call.callee.get_inner_expression() else {
                     return;
@@ -425,6 +496,20 @@ impl Graph<'_, '_, '_, '_> {
                 }
             }
             _ => {}
+        }
+    }
+
+    fn object_read(&mut self, object: &Expression<'_>, node: Node) {
+        let Expression::Identifier(identifier) = object.get_inner_expression() else {
+            return;
+        };
+        if let Some(symbol) = self.symbol_of(identifier)
+            && self
+                .holders
+                .get(&symbol)
+                .is_some_and(|holder| holder.object.is_some())
+        {
+            self.read(symbol, identifier.span, node);
         }
     }
 
@@ -444,6 +529,7 @@ impl Graph<'_, '_, '_, '_> {
                 return Some(Reach {
                     sites: vec![sinks[index].1.clone()],
                     holder_calls: Vec::new(),
+                    through_object: false,
                 });
             }
             Node::Holder(symbol) => symbol,
@@ -482,7 +568,10 @@ impl Graph<'_, '_, '_, '_> {
         if references != covered.len() {
             return None;
         }
-        let mut reach = Reach::default();
+        let mut reach = Reach {
+            through_object: holder.object.is_some(),
+            ..Reach::default()
+        };
         if let Some(call) = holder.call {
             reach.holder_calls.push(call);
         }
@@ -490,6 +579,7 @@ impl Graph<'_, '_, '_, '_> {
             let consumed = self.closure(*consumer, sinks, memo, active)?;
             merge(&mut reach.sites, consumed.sites);
             merge(&mut reach.holder_calls, consumed.holder_calls);
+            reach.through_object |= consumed.through_object;
         }
         Some(reach)
     }
@@ -598,6 +688,136 @@ mod tests {
             flows(&source),
             vec![("Comp".into(), vec!["Dynamic".into()], 0)]
         );
+    }
+
+    fn object_flows(source: &str) -> Vec<(String, bool)> {
+        component_value_flows(Path::new("m.tsx"), source, &["component"])
+            .expect("the module is analyzable")
+            .into_iter()
+            .map(|flow| {
+                (
+                    source[flow.reference.start as usize..flow.reference.end as usize].to_string(),
+                    flow.through_object,
+                )
+            })
+            .filter(|(reference, _)| reference == "A" || reference == "B")
+            .collect()
+    }
+
+    #[test]
+    fn a_closed_object_read_only_by_renderers_flows() {
+        for (rest, expected) in [
+            // A computed and a static member read, in JSX and the call form.
+            (
+                "const icons = { a: A, b: B };
+export const x = (k) => [<Dynamic component={icons[k]} />, createComponent(Dynamic, { get component() { return icons.a; } })];
+",
+                vec![("A", true), ("B", true)],
+            ),
+            // Shorthand, `as const`, and a `const` alias of a member read.
+            (
+                "const icons = { A, b: B } as const;
+const Picked = (icons)[0];
+export const x = <Dynamic component={Picked} />;
+",
+                vec![("A", true), ("B", true)],
+            ),
+            // A member read through `?:`, beside a direct value.
+            (
+                "const icons = { a: A };
+export const x = (c) => <Dynamic component={c ? icons.a : B} />;
+",
+                vec![("A", true), ("B", false)],
+            ),
+        ] {
+            let source = format!("{HEAD}{rest}");
+            let expected = expected
+                .into_iter()
+                .map(|(name, through)| (name.to_string(), through))
+                .collect::<Vec<_>>();
+            assert_eq!(object_flows(&source), expected, "{rest}");
+        }
+    }
+
+    #[test]
+    fn an_object_holder_with_any_other_use_reports_nothing() {
+        for rest in [
+            // A member called plainly, statically or computed.
+            "const icons = { a: A };
+export const x = (k) => [<Dynamic component={icons[k]} />, icons.a()];
+",
+            "const icons = { a: A };
+export const x = (k) => [<Dynamic component={icons[k]} />, icons[k]()];
+",
+            // Exported, by declaration, specifier or default.
+            "export const icons = { a: A };
+export const x = (k) => <Dynamic component={icons[k]} />;
+",
+            "const icons = { a: A };
+export { icons };
+export const x = (k) => <Dynamic component={icons[k]} />;
+",
+            "const icons = { a: A };
+export default icons;
+export const x = (k) => <Dynamic component={icons[k]} />;
+",
+            // Spread into another object, or handed to a call.
+            "const icons = { a: A };
+export const more = { ...icons };
+export const x = (k) => <Dynamic component={icons[k]} />;
+",
+            "const icons = { a: A };
+keep(icons);
+export const x = (k) => <Dynamic component={icons[k]} />;
+",
+            // Read whole, written, deleted, or read into a holder nothing renders.
+            "const icons = { a: A };
+export const x = <Dynamic component={icons} />;
+",
+            "const icons = { a: A };
+icons.b = B;
+export const x = (k) => <Dynamic component={icons[k]} />;
+",
+            "const icons = { a: A };
+delete icons.a;
+export const x = (k) => <Dynamic component={icons[k]} />;
+",
+            "const icons = { a: A };
+const kept = icons.a;
+export const x = (k) => <Dynamic component={icons[k]} />;
+",
+            // Not a closed literal: a spread, getter, method, computed key,
+            // `__proto__` or a duplicate key.
+            "const icons = { ...base, a: A };
+export const x = (k) => <Dynamic component={icons[k]} />;
+",
+            "const icons = { get a() { return A; } };
+export const x = (k) => <Dynamic component={icons[k]} />;
+",
+            "const icons = { b() { return B; }, a: A };
+export const x = (k) => <Dynamic component={icons[k]} />;
+",
+            "const icons = { [key]: A };
+export const x = (k) => <Dynamic component={icons[k]} />;
+",
+            "const icons = { __proto__: base, a: A };
+export const x = (k) => <Dynamic component={icons[k]} />;
+",
+            "const icons = { a: A, a: B };
+export const x = (k) => <Dynamic component={icons[k]} />;
+",
+            // `let` is not a holder.
+            "let icons = { a: A };
+export const x = (k) => <Dynamic component={icons[k]} />;
+",
+            // An optional member read is not followed.
+            "const icons = { a: A };
+export const x = <Dynamic component={icons?.a} />;
+",
+        ] {
+            let source = format!("{HEAD}{rest}");
+            assert_eq!(object_flows(&source), vec![], "{rest}");
+        }
     }
 
     #[test]

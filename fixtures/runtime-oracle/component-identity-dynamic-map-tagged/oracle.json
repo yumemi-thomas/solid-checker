@@ -1,0 +1,6 @@
+{
+  "note": "ADR 0331 (amended): Archive is rendered by its tag and stored in a closed literal whose only use is a member read `<Dynamic component>` renders, so no use can call it plainly. The tag's createComponent render opens the strict-read window (`observedComponent`, rc.17 solid.dev.js:65), so the body read warns and the checker reports a violation; the Dynamic render alone would not (component-identity-dynamic-map).",
+  "scenario": "constructed-misuse",
+  "requires": ["module-level createSignal read by Archive", "Archive rendered by <Archive /> and by <Dynamic component={icons.archive} />"],
+  "reaches": "dev diagnostic STRICT_READ_UNTRACKED at Archive's body read"
+}
