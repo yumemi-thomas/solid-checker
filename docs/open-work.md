@@ -125,7 +125,6 @@ Known false-positive shapes left open (fire today, wanted gone):
 
 - Type Facts producer (ADR 0365): tsrs is an unpublished fork pinned by rev (a bump re-baselines coverage); builds are slower than Go's and need CMake; WASM memory after open and compass-ui incremental updates are larger.
 - Type Facts retention (ADR 0364): every update discards derived state, so a 1000-file chain edit costs about 180 ms (50 ms before). Follow-up: instantiation-stable symbol ids with recorded dependencies, then retain analysis again (the differential harness compares the two builds).
-- The wire error text `open TS-Go project: ...` names the retired compiler; changing it moves the producer, `packages/wasm` and the wasm-parity expectations together.
 - ESLint adapter: native analyzes the file on disk, while the adapter maps byte offsets onto ESLint's in-memory text. An unsaved buffer, or a later `--fix` pass, places findings wrongly.
 - `feedback run` with an application `vite.config` on `@solidjs/vite-plugin` next.51+ refuses unless `performanceTracks` and `diagnostics` are off: their module scripts run before the collector. The collector default turns both off.
 - WASM adapter: the request carries no package files, so every package import keeps an open SC9005 requirement; package source analysis is native only.
