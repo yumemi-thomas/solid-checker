@@ -132,6 +132,28 @@ write position is never claimed as a violation; it and the matching read
 there (`strict-read-untracked`) are uncertifiable
 (`fixtures/reactive-ir/write-in-deferred-callback`).
 
+A write in a named function takes the role of its entries: the calls the
+checker resolves to it and the callback positions that name it
+(`onClick={reset}`, `createEffect(c, reset)`). One entry in an owned scope
+makes the write a violation, so `reset` named as a click handler and also
+called in the body is reported. A legal role is kept only when those entries
+are all of them (ADR 0378): every other use of the function (handed to a
+component as a prop, stored, aliased, returned in an object, exported from an
+open program, a method) may run it in an owned scope, and an entry the checker
+cannot place does not say where it runs, so the write is **uncertifiable**.
+`<Child run={reset} />`, where `Child` calls `props.run()` in its body, throws
+`REACTIVE_WRITE_IN_OWNED_SCOPE` and is uncertifiable here, not yet a
+violation. In a closed program a function the program only ever delivers as
+an event handler, however it is passed along, stays legal (ADR 0327).
+A `let` binding that is reassigned names more than one function, so its
+positions prove no violation either; a named function expression is entered
+through the binding holding it as well as its own name; a call that renders
+the function again as a component (`<Reset />` inside `Reset`) runs it under
+a new owner. A closure written inside a named handler takes the handler's
+role only when every layer between runs inline (`[x].forEach(fn)`, an IIFE)
+or on a fresh stack (`setTimeout(fn)`); one it stores or hands on is judged
+by its own entries (`fixtures/reactive-ir/write-role-entry-census`).
+
 A package export’s callback requires exact source facts or reviewed dialect
 runtime premises to establish its execution role. Unavailable behavior cannot
 prove an owned-scope write.

@@ -365,23 +365,77 @@ pub(super) fn semantic_write_execution_role_within(
     {
         return unknown;
     }
+    let innermost = crate::owners::containing_ast_function(&file.ast, span);
+    // A permissive role read off the positions that name the function as a
+    // callback (`onClick={reset}`) describes those entries only. Its calls and
+    // every other use of it are entries too, so it is kept only as one entry of
+    // the walk below. For a closure nested in the named callback it says
+    // something only when every layer between them runs inline where it is
+    // written; a closure the callback stores or hands on is entered by its own
+    // entries.
+    let named_callback = (direct != ExecutionRole::Unknown && !direct.reports_disallowed_write())
+        .then(|| named_callback_containing(file, span, lookup))
+        .flatten()
+        .filter(|_| named_callback_execution_role(file, span, lookup) == Some(direct));
+    let named = named_callback.filter(|callback| {
+        innermost.is_some_and(|innermost| runs_inline_within(file, innermost, callback, lookup))
+    });
     // ADR 0331: in a function its calls enter but some unfollowed entry may
     // render, the rendering role is only a possibility. A call that proves a
     // disallowed write still proves it; otherwise no role is proven.
     let possible_render = direct == ExecutionRole::UntrackedRendering
         && innermost_identity_is_possible(file, span, lookup);
-    if direct != ExecutionRole::Unknown && !possible_render {
+    if direct != ExecutionRole::Unknown && named_callback.is_none() && !possible_render {
         return direct;
     }
-    let Some(function) = crate::owners::containing_ast_function(&file.ast, span) else {
+    let Some(innermost) = innermost else {
         return unknown;
     };
+    // ADR 0327: every invocation of the writing function, followed forward
+    // through the closed program, is an event delivery. No other entry exists.
+    if event_only_entries(file, innermost, lookup) {
+        return ExecutionRole::EventCallback;
+    }
+    let function = named.unwrap_or(innermost);
+    // The write is in a closure nested in the named callback: a call of the
+    // callback does not run it, so a disallowed entry proves nothing here.
+    let nested = function.span != innermost.span;
+    // A binding that may hold another function (`let reset = …; reset = …`)
+    // names more than this one at its positions and calls, so none of them is
+    // proof that this function runs in an owned scope.
+    let current = lookup.function_value_is_current(file, function)
+        || function_binding_name(file, function).is_none();
+    // A tracked position (`createMemo(reset)`) runs the callback in an owned
+    // computation, whichever role the other positions name it in.
+    if named.is_some() && !nested && lookup.named_callback_roles(file).get(function.span).tracked {
+        return if current {
+            ExecutionRole::TrackedJsx
+        } else {
+            unknown
+        };
+    }
     let key = (file.path.to_string(), function.span);
     if !visiting.insert(key.clone()) {
         return unknown;
     }
-    let mut imperative = None;
+    let mut imperative = named.map(|_| direct);
+    let mut unplaced = false;
     for (caller_file, callee) in lookup.function_call_sites(file.path.as_str(), function.span) {
+        // A call written directly in a function this walk is already deriving
+        // (the function itself, or one of its callers) runs in that
+        // function's role, which its other entries decide -- when it is a
+        // plain call outside JSX. A JSX render gives the body a fresh
+        // component owner, and JSX the compiler wraps runs in a render
+        // effect: such a re-entry has a role of its own the walk cannot
+        // derive here.
+        if let Some(caller) = crate::owners::containing_ast_function(&caller_file.ast, callee)
+            .filter(|caller| visiting.contains(&(caller_file.path.to_string(), caller.span)))
+        {
+            if !plain_call_outside_jsx(caller_file, caller, callee) {
+                unplaced = true;
+            }
+            continue;
+        }
         let caller_allowed = write_allowed_spans(
             caller_file,
             &allowed_callback_spans(caller_file, lookup),
@@ -399,9 +453,13 @@ pub(super) fn semantic_write_execution_role_within(
         );
         if role.reports_disallowed_write() {
             visiting.remove(&key);
-            return role;
+            return if nested || !current { unknown } else { role };
         }
-        if role != ExecutionRole::Unknown {
+        if role == ExecutionRole::Unknown {
+            // An entry no fact places leaves the function's role unplaced,
+            // whatever its other entries prove.
+            unplaced = true;
+        } else {
             imperative.get_or_insert(role);
         }
     }
@@ -409,7 +467,223 @@ pub(super) fn semantic_write_execution_role_within(
     if possible_render {
         return unknown;
     }
-    imperative.unwrap_or(unknown)
+    let Some(role) = imperative.filter(|_| !unplaced) else {
+        return unknown;
+    };
+    // A permissive role is inherited only from a complete census of the
+    // function's entries: a use the walk did not follow (handed to a child
+    // component, stored, aliased, exported) may run it in an owned scope.
+    if entry_census_complete(file, function, lookup) || event_only_entries(file, function, lookup) {
+        role
+    } else {
+        unknown
+    }
+}
+
+/// Whether every way of entering `function` is one the write-role walk sees: a
+/// call site [`SemanticLookup::function_call_sites`] resolves to it, or a
+/// position of its own file the named-callback index classifies
+/// ([`NamedCallbackRoles::positions`]). Every compiler reference to its
+/// binding must be one of those, its declaration, or inside a type query, and
+/// the census must be bounded at all: a method is entered by member access
+/// through any receiver holding it, and an export by modules this build may
+/// not see (an open program, or a module whose namespace escapes unnamed).
+fn entry_census_complete(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    if function.method_name.is_some() {
+        return false;
+    }
+    let path = file.path.as_str();
+    // A named function expression is entered through the binding holding it
+    // as well as through its own name; with no such binding it is a value
+    // handed wherever it is written.
+    let mut bindings = Vec::new();
+    if function.kind == solid_facts::ast::FunctionKind::Expression
+        && let Some(own) = function.name.as_ref()
+    {
+        let Some(outer) = file
+            .ast
+            .bindings_initializer_containing(function.span)
+            .find(|binding| {
+                binding.shape == solid_facts::ast::BindingShape::Identifier
+                    && binding.initializer.is_some_and(|initializer| {
+                        file.ast.peel_ts_sugar_span(initializer) == function.span
+                    })
+            })
+            .and_then(|binding| binding.names.first())
+        else {
+            return false;
+        };
+        bindings.extend([own, outer]);
+    } else {
+        let Some(binding) = function_binding_name(file, function) else {
+            return false;
+        };
+        bindings.push(binding);
+    }
+    let mut symbols = Vec::new();
+    for binding in &bindings {
+        let Some(symbol) = lookup.entities().at(path, binding.span) else {
+            return false;
+        };
+        let Some(references) = lookup.symbol_references_if_present(symbol.as_str()) else {
+            return false;
+        };
+        symbols.push(references);
+    }
+    if lookup.hands_out_by_name(path, function.span)
+        || (module_exports(file, function, lookup)
+            && (!lookup.program_closed || lookup.escapes_unnamed(path)))
+    {
+        return false;
+    }
+    let accounted: HashSet<(&str, u32, u32)> = lookup
+        .function_call_site_references(path, function.span)
+        .into_iter()
+        .map(|(caller, callee)| (caller.path.as_str(), callee.start, callee.end))
+        .collect();
+    let roles = lookup.named_callback_roles(file);
+    let positions = roles.positions(function.span);
+    symbols.iter().flatten().all(|reference| {
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(reference.start_byte),
+            u32::try_from(reference.end_byte),
+        ) else {
+            return false;
+        };
+        if accounted.contains(&(reference.path.as_ref(), start, end)) {
+            return true;
+        }
+        if reference.path.as_ref() != path {
+            return false;
+        }
+        let at = Span::new(start, end);
+        bindings.iter().any(|binding| at == binding.span)
+            || file.ast.type_queries.iter().any(|query| query.contains(at))
+            || positions.iter().any(|position| {
+                position.contains(at)
+                    && !file
+                        .ast
+                        .functions_within(*position)
+                        .any(|literal| literal.span.contains(at))
+            })
+    })
+}
+
+/// Whether `inner`, nested in `outer`, runs only where `outer`'s role places
+/// it: every function layer between them is an IIFE or an argument a
+/// standard-library call runs inline (`[x].forEach(fn)`), up to the first
+/// layer a reviewed scheduler runs on a fresh stack (`setTimeout(fn)`), which
+/// no owner reaches wherever it was scheduled from.
+fn runs_inline_within(
+    file: &solid_facts::FileFacts,
+    inner: &solid_facts::ast::FunctionFact,
+    outer: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    use crate::runtime_semantics::RuntimeArgumentBehavior;
+    let mut layer = inner;
+    while layer.span != outer.span {
+        if layer.generator || !outer.span.contains(layer.span) {
+            return false;
+        }
+        let iife = file
+            .ast
+            .calls
+            .iter()
+            .any(|call| file.ast.peel_ts_sugar_span(call.callee) == layer.span);
+        let behavior = file
+            .ast
+            .arguments_containing(layer.span)
+            .filter(|(call, index)| {
+                file.ast.peel_ts_sugar_span(call.arguments[*index].span) == layer.span
+            })
+            .find_map(|(call, index)| {
+                let resolved = lookup.resolved_callee_call(file, call.callee)?;
+                resolved
+                    .declaration
+                    .as_ref()
+                    .is_some_and(|declaration| declaration.standard_library)
+                    .then_some(())?;
+                let callability = lookup
+                    .entity_at(file.path.as_str(), call.arguments[index].span)
+                    .and_then(|entity| entity.callability);
+                crate::runtime_semantics::argument_behavior(resolved, callability, index)
+            });
+        match behavior {
+            Some(RuntimeArgumentBehavior::FreshStackCallback) => return true,
+            Some(RuntimeArgumentBehavior::InlineCallback) => {}
+            _ if iife => {}
+            _ => return false,
+        }
+        // The layer's own span is outside its body, so the innermost body
+        // containing it is the enclosing function's.
+        let Some(next) = file.ast.innermost_function_body_containing(layer.span) else {
+            return false;
+        };
+        layer = next;
+    }
+    true
+}
+
+/// Whether the call at `callee` in `caller` is a plain call expression written
+/// outside every JSX element of `caller`'s body.
+fn plain_call_outside_jsx(
+    file: &solid_facts::FileFacts,
+    caller: &solid_facts::ast::FunctionFact,
+    callee: Span,
+) -> bool {
+    file.ast
+        .calls
+        .iter()
+        .any(|call| !call.construct && file.ast.peel_ts_sugar_span(call.callee) == callee)
+        && !file
+            .ast
+            .jsx_containing(callee)
+            .any(|element| caller.body.contains(element.span))
+}
+
+/// Whether the module publishes `function` itself: an export declaration of
+/// it, with no other function between, or Type Facts' export flag on it.
+fn module_exports(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    file.ast.exports.iter().any(|export| {
+        export.span.contains(function.span)
+            && !file.ast.functions.iter().any(|outer| {
+                outer.span != function.span
+                    && export.span.contains(outer.span)
+                    && outer.span.contains(function.span)
+            })
+    }) || lookup
+        .typescript_file(file.path.as_str())
+        .is_some_and(|facts| {
+            facts.functions.iter().any(|candidate| {
+                candidate.exported
+                    && candidate.body.start_byte == u64::from(function.body.start)
+                    && candidate.body.end_byte == u64::from(function.body.end)
+            })
+        })
+}
+
+/// ADR 0327's census: every invocation of the literal, followed forward
+/// through a closed program, is an event delivery, and no synchronous dispatch
+/// can hand a delivery its caller's owner. Such a function runs with no owner
+/// however it is passed around.
+fn event_only_entries(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    !lookup.synchronous_event_dispatch_present()
+        && lookup
+            .event_invoked_literals()
+            .contains(&(file.path.to_string(), function.span))
 }
 
 /// The role of a write its own function may reach only past a suspension,

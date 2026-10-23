@@ -557,3 +557,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/component-alias-entries/node_modules/**
 !fixtures/reactive-ir/component-alias-entries-closed/node_modules/
 !fixtures/reactive-ir/component-alias-entries-closed/node_modules/**
+!fixtures/reactive-ir/write-role-entry-census/node_modules/
+!fixtures/reactive-ir/write-role-entry-census/node_modules/**

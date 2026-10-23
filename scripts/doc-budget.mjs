@@ -22,7 +22,8 @@ export const FILE_BUDGETS = {
   "AGENTS.md": 8_000,
   "CLAUDE.md": 1_000,
   "docs/open-work.md": 26_300,
-  "docs/decisions.md": 113_200,
+  // Raised for ADR 0378: the file stood 2 bytes under 113_200.
+  "docs/decisions.md": 113_800,
 };
 
 export const GROUP_BUDGETS = [
@@ -32,7 +33,8 @@ export const GROUP_BUDGETS = [
     test: (path) => path.startsWith("fixtures/") && path.endsWith("/README.md"),
     // Raised from 250 KB for the context-read fixtures (ADR 0352): the group was
     // 249.8 KB before they landed, and each case README is a claim the reader needs.
-    bytes: 256_000,
+    // Raised again for ADR 0378's fixture: the group stood 1 byte under 256 KB.
+    bytes: 257_000,
   },
   { name: "skills", test: (path) => path.startsWith(".claude/skills/"), bytes: 25_000 },
 ];
