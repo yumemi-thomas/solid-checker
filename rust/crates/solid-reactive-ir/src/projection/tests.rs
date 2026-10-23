@@ -359,6 +359,7 @@ fn a_source_argument_evidence_is_conditional_and_leaves_other_kinds_alone() {
     let uncaptured = defect(StaticDefectKind::ReactiveSourceUncaptured {
         source: "count".into(),
         callee: "observe".into(),
+        through: None,
     });
     assert_eq!(
         static_defect_text(&uncaptured, &terms).evidence,

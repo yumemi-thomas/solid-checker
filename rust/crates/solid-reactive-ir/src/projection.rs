@@ -133,10 +133,19 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
             }
             (message, hint)
         }
-        StaticDefectKind::ReactiveSourceUncaptured { source, callee } => (
-            format!(
-                "the reactive source {source:?} is passed to {callee}, whose reactive behaviour is not described anywhere: it has no body this analysis reads and is not a Solid primitive; whether reads through it stay tracked cannot be certified"
-            ),
+        StaticDefectKind::ReactiveSourceUncaptured {
+            source,
+            callee,
+            through,
+        } => (
+            match through {
+                None => format!(
+                    "the reactive source {source:?} is passed to {callee}, whose reactive behaviour is not described anywhere: it has no body this analysis reads and is not a Solid primitive; whether reads through it stay tracked cannot be certified"
+                ),
+                Some(through) => format!(
+                    "the reactive source {source:?} is passed to {through}, which hands its parameter on to {callee}, whose reactive behaviour is not described anywhere: it has no body this analysis reads and is not a Solid primitive; whether reads through it stay tracked cannot be certified"
+                ),
+            },
             format!(
                 "If {callee} comes from a package, it is not analyzed from source here: {PACKAGE_SOURCE_PREMISE} Otherwise, route the call through a project-local adapter whose body makes invocation or retention explicit."
             ),

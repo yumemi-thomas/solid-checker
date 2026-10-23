@@ -41,11 +41,13 @@ use super::{
     is_lowercase_led, jsx_name_is_type_checked, member_root, source_symbol_at,
     static_string_expression, text,
 };
+use crate::pipeline::parallel_file_results;
 use crate::runtime_semantics::{RuntimeArgumentBehavior, argument_behavior};
 use crate::{
     DirectMutationTarget, ReactiveSourceKind, StaticDefect, StaticDefectKind, known_primitive,
     location,
 };
+use crate::{HashMap, HashSet};
 
 pub(super) fn check_file(
     file: &FileFacts,
@@ -118,96 +120,36 @@ fn reactive_source_uncaptured(
         if !hands_over_a_source(call) {
             continue;
         }
-        // A dialect primitive is described by definition, and a call the
-        // engine resolved into the project has a body it already walked.
-        if known_primitive(&primitives.calls[index]).is_some()
-            || context
-                .lookup
-                .function_called_at(file.path.as_str(), call.callee)
-                .is_some()
-        {
+        // A dialect primitive is described by definition.
+        if known_primitive(&primitives.calls[index]).is_some() {
             continue;
         }
-        if context
-            .entities
-            .at(file.path.as_str(), call.callee)
-            .is_none()
+        // A call the engine resolved into the project has a body it already
+        // walked; that body is reported here only where it hands the
+        // parameter on to an undescribed callee (ADR 0369).
+        if let Some((callee_file, callee)) = context
+            .lookup
+            .function_called_at(file.path.as_str(), call.callee)
         {
+            forwarded_source_uncaptured(file, context, call, (callee_file, callee), defects);
             continue;
         }
-        let Some(resolved_call) = context.lookup.resolved_callee_call(file, call.callee) else {
+        let Some(resolved_call) = undescribed_callee(file, context, call) else {
             continue;
         };
-        if resolved_call.validity != ResolvedCallValidity::Valid {
-            continue;
-        }
-        // A standard-library callee is ambient: it belongs to no package, so
-        // no `solid-reactivity.json` entry could ever describe it and the
-        // finding would demand a fix nobody can apply. This is the exact
-        // compiler fact that replaces the old bare-specifier import test --
-        // which also excluded them, by accident of never reaching them.
-        if resolved_call
-            .declaration
-            .as_ref()
-            .is_some_and(|declaration| declaration.standard_library)
-        {
-            continue;
-        }
         let callee_text = text(file, call.callee);
-        let callee_is_parameter = context
-            .entities
-            .at(file.path.as_str(), call.callee)
-            .is_some_and(|callee_symbol| {
-                file.ast
-                    .functions_body_containing(call.span)
-                    .min_by_key(|function| function.body.end - function.body.start)
-                    .is_some_and(|function| {
-                        function.parameters.iter().any(|parameter| {
-                            parameter.names.iter().any(|name| {
-                                context
-                                    .entities
-                                    .at(file.path.as_str(), name.span)
-                                    .is_some_and(|symbol| symbol == callee_symbol)
-                            })
-                        })
-                    })
-            });
-        // Calling a callback parameter with an accessor does not read or lose
-        // that source inside this helper. The interprocedural summary
-        // records the accessor at the callback argument position, so the
-        // consumer can classify the callback parameter exactly.
-        if callee_is_parameter {
-            continue;
-        }
         for (argument_index, argument) in call.arguments.iter().enumerate() {
-            // Only a bare reference to the source itself. A call, a member
-            // read, or an expression built from one passes a *value*, whose
-            // reactivity was already resolved before the callee saw it.
-            // `entities.at` answers the callee's symbol for a call span, so
-            // the argument's own kind is what enforces this -- without it
-            // `console.log(count())` reads as handing `count` over.
-            if argument.value != ArgumentValueKind::Identifier {
-                continue;
-            }
-            let Some(symbol) = context.entities.at(file.path.as_str(), argument.span) else {
+            let Some(name) = handed_source(file, context, argument) else {
                 continue;
             };
-            let Some((name, _)) = context.accessors.get(symbol) else {
-                continue;
-            };
-            if context.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
+            if !may_invoke_argument(resolved_call, argument_index) {
                 continue;
             }
-            if argument_behavior(resolved_call, Some(Callability::Callable), argument_index)
-                == Some(RuntimeArgumentBehavior::ValueOnly)
-            {
-                continue;
-            }
-            let name = name.as_str();
             defects.push(StaticDefect {
                 kind: StaticDefectKind::ReactiveSourceUncaptured {
                     source: name.to_owned(),
                     callee: callee_text.to_owned(),
+                    through: None,
                 },
                 location: location(file.path.shared(), argument.span),
                 analysis_context: String::new(),
@@ -216,6 +158,345 @@ fn reactive_source_uncaptured(
             });
         }
     }
+}
+
+/// The display name of the proven, non-store reactive source `argument`
+/// names by itself.
+///
+/// Only a bare reference to the source itself. A call, a member read, or an
+/// expression built from one passes a *value*, whose reactivity was already
+/// resolved before the callee saw it. `entities.at` answers the callee's
+/// symbol for a call span, so the argument's own kind is what enforces this
+/// -- without it `console.log(count())` reads as handing `count` over.
+fn handed_source<'c>(
+    file: &FileFacts,
+    context: &'c UpstreamCompatContext<'_>,
+    argument: &solid_facts::ast::ArgumentFact,
+) -> Option<&'c str> {
+    if argument.value != ArgumentValueKind::Identifier {
+        return None;
+    }
+    let symbol = context.entities.at(file.path.as_str(), argument.span)?;
+    let (name, _) = context.accessors.get(symbol)?;
+    if context.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
+        return None;
+    }
+    Some(name.as_str())
+}
+
+/// The resolved call of `call` when its callee is one nothing in the
+/// analysis describes: not a project body (the caller checks), with an exact
+/// entity, a valid compiler-selected signature (invalid/recovery calls stay
+/// TypeScript-owned), not a standard-library declaration, and not a callback
+/// parameter of the enclosing function.
+fn undescribed_callee<'c>(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'c>,
+    call: &solid_facts::ast::CallFact,
+) -> Option<&'c typefacts::ResolvedCall> {
+    let callee_symbol = context.entities.at(file.path.as_str(), call.callee)?;
+    let resolved_call = context.lookup.resolved_callee_call(file, call.callee)?;
+    if resolved_call.validity != ResolvedCallValidity::Valid {
+        return None;
+    }
+    // A standard-library callee is ambient: it belongs to no package, so
+    // no `solid-reactivity.json` entry could ever describe it and the
+    // finding would demand a fix nobody can apply. This is the exact
+    // compiler fact that replaces the old bare-specifier import test --
+    // which also excluded them, by accident of never reaching them.
+    if resolved_call
+        .declaration
+        .as_ref()
+        .is_some_and(|declaration| declaration.standard_library)
+    {
+        return None;
+    }
+    // Calling a callback parameter with an accessor does not read or lose
+    // that source inside this helper. The interprocedural summary
+    // records the accessor at the callback argument position, so the
+    // consumer can classify the callback parameter exactly.
+    let callee_is_parameter = file
+        .ast
+        .functions_body_containing(call.span)
+        .min_by_key(|function| function.body.end - function.body.start)
+        .is_some_and(|function| {
+            function.parameters.iter().any(|parameter| {
+                parameter.names.iter().any(|name| {
+                    context
+                        .entities
+                        .at(file.path.as_str(), name.span)
+                        .is_some_and(|symbol| symbol == callee_symbol)
+                })
+            })
+        });
+    (!callee_is_parameter).then_some(resolved_call)
+}
+
+/// Whether the undescribed callee may invoke a callable at `argument_index`:
+/// an exact compiler-selected `ValueOnly` parameter certifies it does not.
+fn may_invoke_argument(resolved_call: &typefacts::ResolvedCall, argument_index: usize) -> bool {
+    argument_behavior(resolved_call, Some(Callability::Callable), argument_index)
+        != Some(RuntimeArgumentBehavior::ValueOnly)
+}
+
+/// ADR 0369: a proven source passed to an analyzed function (project or
+/// selected package source) whose parameter at that position reaches, as a
+/// bare reference, the argument of an undescribed callee. Written in the
+/// caller, that inner call is this rule's finding; one function in between
+/// must not certify it.
+fn forwarded_source_uncaptured(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    call: &solid_facts::ast::CallFact,
+    (callee_file, callee): (&FileFacts, &solid_facts::ast::FunctionFact),
+    defects: &mut Vec<StaticDefect>,
+) {
+    if context.forwarded_uncaptured.is_empty()
+        || context
+            .lookup
+            .resolved_callee_call(file, call.callee)
+            .is_none_or(|resolved| resolved.validity != ResolvedCallValidity::Valid)
+    {
+        return;
+    }
+    for (argument_index, argument) in call.arguments.iter().enumerate() {
+        let Some(name) = handed_source(file, context, argument) else {
+            continue;
+        };
+        let spread_before = call.arguments[..argument_index]
+            .iter()
+            .any(|argument| argument.spread);
+        let Some(inner) = context.forwarded_uncaptured.reached(
+            callee_file.path.as_str(),
+            callee,
+            (!spread_before).then_some(argument_index),
+        ) else {
+            continue;
+        };
+        defects.push(StaticDefect {
+            kind: StaticDefectKind::ReactiveSourceUncaptured {
+                source: name.to_owned(),
+                callee: inner.to_owned(),
+                through: Some(text(file, call.callee).to_owned()),
+            },
+            location: location(file.path.shared(), argument.span),
+            analysis_context: FORWARDED_PARAMETER.into(),
+            fixes: vec![],
+            uncertain: false,
+        });
+    }
+}
+
+const FORWARDED_PARAMETER: &str = "forwarded-parameter";
+
+/// ADR 0369: the parameters of analyzed functions (project files and
+/// selected package source alike) that reach an undescribed callee.
+///
+/// A parameter is reached when a bare reference to it or to a binding
+/// initialized with it (in the function's body or a closure inside it) is an
+/// argument the rule above would report
+/// if it named a source, or is passed at an exact position to an analyzed
+/// function whose parameter there is reached. Positions after a spread
+/// argument are not exact: any reached parameter of that callee counts.
+#[derive(Default)]
+pub(crate) struct ForwardedUncaptured {
+    /// `(path, function span, parameter position)` to the undescribed
+    /// callee's text, the one at the smallest `(path, start)` site.
+    reached: HashMap<(String, Span, usize), (String, u32, String)>,
+    functions: HashSet<(String, Span)>,
+}
+
+type ParameterKey = (String, Span, usize);
+
+impl ForwardedUncaptured {
+    pub(super) fn is_empty(&self) -> bool {
+        self.reached.is_empty()
+    }
+
+    fn reached(
+        &self,
+        path: &str,
+        function: &solid_facts::ast::FunctionFact,
+        position: Option<usize>,
+    ) -> Option<&str> {
+        let key_path = path.to_owned();
+        if !self.functions.contains(&(key_path.clone(), function.span)) {
+            return None;
+        }
+        match position {
+            Some(position) => self
+                .reached
+                .get(&(key_path, function.span, position))
+                .map(|(_, _, callee)| callee.as_str()),
+            None => (0..function.parameters.len()).find_map(|position| {
+                self.reached
+                    .get(&(key_path.clone(), function.span, position))
+                    .map(|(_, _, callee)| callee.as_str())
+            }),
+        }
+    }
+
+    pub(super) fn build(files: &[FileFacts], context: &UpstreamCompatContext<'_>) -> Self {
+        let mut seeds: Vec<(ParameterKey, (String, u32, String))> = Vec::new();
+        // target parameter -> the parameters forwarded into it
+        let mut forwards: HashMap<ParameterKey, Vec<ParameterKey>> = HashMap::default();
+        for (file_seeds, file_forwards) in
+            parallel_file_results(files, |file| file_parameter_flows(file, context))
+        {
+            seeds.extend(file_seeds);
+            for (target, source) in file_forwards {
+                forwards.entry(target).or_default().push(source);
+            }
+        }
+        let mut reached: HashMap<ParameterKey, (String, u32, String)> = HashMap::default();
+        let mut work = Vec::new();
+        for (key, site) in seeds {
+            let better = reached
+                .get(&key)
+                .is_none_or(|current| (&site.0, site.1) < (&current.0, current.1));
+            if better {
+                reached.insert(key.clone(), site);
+                work.push(key);
+            }
+        }
+        // Monotone: a site only ever moves to a smaller `(path, start)`, so
+        // the fixpoint and its chosen sites are independent of order.
+        while let Some(key) = work.pop() {
+            let site = reached[&key].clone();
+            for source in forwards.get(&key).into_iter().flatten() {
+                let better = reached
+                    .get(source)
+                    .is_none_or(|current| (&site.0, site.1) < (&current.0, current.1));
+                if better {
+                    reached.insert(source.clone(), site.clone());
+                    work.push(source.clone());
+                }
+            }
+        }
+        let functions = reached
+            .keys()
+            .map(|(path, span, _)| (path.clone(), *span))
+            .collect();
+        Self { reached, functions }
+    }
+}
+
+type FileFlows = (
+    Vec<(ParameterKey, (String, u32, String))>,
+    Vec<(ParameterKey, ParameterKey)>,
+);
+
+/// One file's seeds (a parameter handed to an undescribed callee) and
+/// forwards (a parameter handed to an analyzed function's parameter).
+fn file_parameter_flows(file: &FileFacts, context: &UpstreamCompatContext<'_>) -> FileFlows {
+    let mut seeds = Vec::new();
+    let mut forwards = Vec::new();
+    let mut parameters: HashMap<Span, (Span, usize)> = HashMap::default();
+    for function in &file.ast.functions {
+        for (position, parameter) in function.parameters.iter().enumerate() {
+            if parameter.shape != solid_facts::ast::BindingShape::Identifier {
+                continue;
+            }
+            if let [name] = parameter.names.as_slice() {
+                parameters.insert(name.span, (function.span, position));
+            }
+        }
+    }
+    if parameters.is_empty() {
+        return (seeds, forwards);
+    }
+    // A binding initialized with the parameter itself (`const t = source`),
+    // to any depth, holds what the caller passed.
+    loop {
+        let mut added = false;
+        for binding in &file.ast.bindings {
+            let ([name], Some(initializer)) = (
+                binding.names.as_slice(),
+                binding.initializer_identifier.as_ref(),
+            ) else {
+                continue;
+            };
+            if binding.shape != solid_facts::ast::BindingShape::Identifier
+                || parameters.contains_key(&name.span)
+            {
+                continue;
+            }
+            if let Some(&owner) = file
+                .ast
+                .reference_declaration(initializer.span)
+                .and_then(|declaration| parameters.get(&declaration))
+            {
+                parameters.insert(name.span, owner);
+                added = true;
+            }
+        }
+        if !added {
+            break;
+        }
+    }
+    let path = file.path.as_str();
+    let primitives = std::cell::OnceCell::new();
+    for (index, call) in file.ast.calls.iter().enumerate() {
+        let handed = call
+            .arguments
+            .iter()
+            .enumerate()
+            .filter(|(_, argument)| argument.value == ArgumentValueKind::Identifier)
+            .filter_map(|(position, argument)| {
+                let declaration = file.ast.reference_declaration(argument.span)?;
+                parameters
+                    .get(&declaration)
+                    .map(|&(function, parameter)| (position, (function, parameter)))
+            })
+            .collect::<Vec<_>>();
+        if handed.is_empty() {
+            continue;
+        }
+        if known_primitive(
+            &primitives
+                .get_or_init(|| context.lookup.primitives(file))
+                .calls[index],
+        )
+        .is_some()
+        {
+            continue;
+        }
+        let key = |(function, parameter): (Span, usize)| (path.to_owned(), function, parameter);
+        if let Some((callee_file, callee)) = context.lookup.function_called_at(path, call.callee) {
+            for (position, owner) in handed {
+                let spread_before = call.arguments[..position]
+                    .iter()
+                    .any(|argument| argument.spread);
+                let targets = if spread_before {
+                    0..callee.parameters.len()
+                } else if position < callee.parameters.len() {
+                    position..position + 1
+                } else {
+                    0..0
+                };
+                for target in targets {
+                    forwards.push((
+                        (callee_file.path.as_str().to_owned(), callee.span, target),
+                        key(owner),
+                    ));
+                }
+            }
+            continue;
+        }
+        let Some(resolved_call) = undescribed_callee(file, context, call) else {
+            continue;
+        };
+        let callee_text = text(file, call.callee);
+        for (position, owner) in handed {
+            if may_invoke_argument(resolved_call, position) {
+                seeds.push((
+                    key(owner),
+                    (path.to_owned(), call.span.start, callee_text.to_owned()),
+                ));
+            }
+        }
+    }
+    (seeds, forwards)
 }
 
 /// `v1/reactive-handler-frozen` — upstream's

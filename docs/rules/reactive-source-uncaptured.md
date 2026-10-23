@@ -17,6 +17,13 @@ finding, an SC9011 warning fails `--certify` until the boundary is described (or
 the rule is disabled in `rule-options.json`). "Advisory" describes the tone —
 nothing has been proven wrong — not an exemption from the certification gate.
 
+A source passed to an analyzed function (project code or a package analyzed
+from source) is reported at that argument when the function hands its
+parameter, or a binding initialized with it, to such a callee: directly, in a
+closure, or through further analyzed functions (ADR 0369). The message names
+both functions. A destructured parameter or a callback parameter called with
+the source is SC9012 instead.
+
 Only callees imported from a package are reported, at this boundary. Ambient globals (`setTimeout`, `console.log`, an array
 method) are outside this package-import rule; absence of this finding does
 not prove their reactive behavior.
