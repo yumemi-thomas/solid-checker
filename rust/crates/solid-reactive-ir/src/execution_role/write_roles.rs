@@ -365,18 +365,44 @@ pub(super) fn semantic_write_execution_role_within(
     {
         return unknown;
     }
-    if direct != ExecutionRole::Unknown {
+    // A permissive role read off the positions that name the function as a
+    // callback (`onClick={reset}`) describes those entries only. Its calls and
+    // every other use of it are entries too, so it is kept only as one entry of
+    // the walk below.
+    let named = (direct != ExecutionRole::Unknown && !direct.reports_disallowed_write())
+        .then(|| named_callback_containing(file, span, lookup))
+        .flatten()
+        .filter(|_| named_callback_execution_role(file, span, lookup) == Some(direct));
+    if direct != ExecutionRole::Unknown && named.is_none() {
         return direct;
     }
-    let Some(function) = crate::owners::containing_ast_function(&file.ast, span) else {
+    let Some(innermost) = crate::owners::containing_ast_function(&file.ast, span) else {
         return unknown;
     };
+    let function = named.unwrap_or(innermost);
+    // The write is in a closure nested in the named callback: a call of the
+    // callback does not run it, so a disallowed entry proves nothing here.
+    let nested = function.span != innermost.span;
+    // A tracked position (`createMemo(reset)`) runs the callback in an owned
+    // computation, whichever role the other positions name it in.
+    if named.is_some() && !nested && lookup.named_callback_roles(file).get(function.span).tracked {
+        return ExecutionRole::TrackedJsx;
+    }
     let key = (file.path.to_string(), function.span);
     if !visiting.insert(key.clone()) {
         return unknown;
     }
-    let mut imperative = None;
+    let mut imperative = named.map(|_| direct);
+    let mut unplaced = false;
     for (caller_file, callee) in lookup.function_call_sites(file.path.as_str(), function.span) {
+        // A call written directly in a function this walk is already deriving
+        // (the function itself, or one of its callers) runs in that
+        // function's role, which its other entries decide.
+        if crate::owners::containing_ast_function(&caller_file.ast, callee)
+            .is_some_and(|caller| visiting.contains(&(caller_file.path.to_string(), caller.span)))
+        {
+            continue;
+        }
         let caller_allowed = write_allowed_spans(
             caller_file,
             &allowed_callback_spans(caller_file, lookup),
@@ -394,14 +420,133 @@ pub(super) fn semantic_write_execution_role_within(
         );
         if role.reports_disallowed_write() {
             visiting.remove(&key);
-            return role;
+            return if nested { unknown } else { role };
         }
-        if role != ExecutionRole::Unknown {
+        if role == ExecutionRole::Unknown {
+            // An entry no fact places leaves the function's role unplaced,
+            // whatever its other entries prove.
+            unplaced = true;
+        } else {
             imperative.get_or_insert(role);
         }
     }
     visiting.remove(&key);
-    imperative.unwrap_or(unknown)
+    let Some(role) = imperative.filter(|_| !unplaced) else {
+        return unknown;
+    };
+    // A permissive role is inherited only from a complete census of the
+    // function's entries: a use the walk did not follow (handed to a child
+    // component, stored, aliased, exported) may run it in an owned scope.
+    if entry_census_complete(file, function, lookup) || event_only_entries(file, function, lookup) {
+        role
+    } else {
+        unknown
+    }
+}
+
+/// Whether every way of entering `function` is one the write-role walk sees: a
+/// call site [`SemanticLookup::function_call_sites`] resolves to it, or a
+/// position of its own file the named-callback index classifies
+/// ([`NamedCallbackRoles::positions`]). Every compiler reference to its
+/// binding must be one of those, its declaration, or inside a type query, and
+/// the census must be bounded at all: a method is entered by member access
+/// through any receiver holding it, and an export by modules this build may
+/// not see (an open program, or a module whose namespace escapes unnamed).
+fn entry_census_complete(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    if function.method_name.is_some() {
+        return false;
+    }
+    let path = file.path.as_str();
+    let Some(binding) = function_binding_name(file, function) else {
+        return false;
+    };
+    let Some(symbol) = lookup.entities().at(path, binding.span) else {
+        return false;
+    };
+    if lookup.hands_out_by_name(path, function.span)
+        || (module_exports(file, function, lookup)
+            && (!lookup.program_closed || lookup.escapes_unnamed(path)))
+    {
+        return false;
+    }
+    let Some(references) = lookup.symbol_references_if_present(symbol.as_str()) else {
+        return false;
+    };
+    let accounted: HashSet<(&str, u32, u32)> = lookup
+        .function_call_site_references(path, function.span)
+        .into_iter()
+        .map(|(caller, callee)| (caller.path.as_str(), callee.start, callee.end))
+        .collect();
+    let roles = lookup.named_callback_roles(file);
+    let positions = roles.positions(function.span);
+    references.iter().all(|reference| {
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(reference.start_byte),
+            u32::try_from(reference.end_byte),
+        ) else {
+            return false;
+        };
+        if accounted.contains(&(reference.path.as_ref(), start, end)) {
+            return true;
+        }
+        if reference.path.as_ref() != path {
+            return false;
+        }
+        let at = Span::new(start, end);
+        at == binding.span
+            || file.ast.type_queries.iter().any(|query| query.contains(at))
+            || positions.iter().any(|position| {
+                position.contains(at)
+                    && !file
+                        .ast
+                        .functions_within(*position)
+                        .any(|literal| literal.span.contains(at))
+            })
+    })
+}
+
+/// Whether the module publishes `function` itself: an export declaration of
+/// it, with no other function between, or Type Facts' export flag on it.
+fn module_exports(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    file.ast.exports.iter().any(|export| {
+        export.span.contains(function.span)
+            && !file.ast.functions.iter().any(|outer| {
+                outer.span != function.span
+                    && export.span.contains(outer.span)
+                    && outer.span.contains(function.span)
+            })
+    }) || lookup
+        .typescript_file(file.path.as_str())
+        .is_some_and(|facts| {
+            facts.functions.iter().any(|candidate| {
+                candidate.exported
+                    && candidate.body.start_byte == u64::from(function.body.start)
+                    && candidate.body.end_byte == u64::from(function.body.end)
+            })
+        })
+}
+
+/// ADR 0327's census: every invocation of the literal, followed forward
+/// through a closed program, is an event delivery, and no synchronous dispatch
+/// can hand a delivery its caller's owner. Such a function runs with no owner
+/// however it is passed around.
+fn event_only_entries(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    !lookup.synchronous_event_dispatch_present()
+        && lookup
+            .event_invoked_literals()
+            .contains(&(file.path.to_string(), function.span))
 }
 
 /// The role of a write its own function may reach only past a suspension,
