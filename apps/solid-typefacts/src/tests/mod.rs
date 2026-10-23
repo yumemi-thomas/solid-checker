@@ -2,6 +2,7 @@
 //! module names the Go test file it ports. Tests that need the real compiler
 //! (the `*_integration_test.go` files and the corpus tests) belong to S4.
 
+mod binder_ids;
 mod canonical_assembly;
 mod closure_order;
 mod contributions;

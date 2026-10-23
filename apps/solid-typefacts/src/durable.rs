@@ -22,7 +22,7 @@ pub struct DurableRef {
 
 /// Go: `hashedSymbolID`: `symbol:h:` and 24 lowercase hex digits (the first 12
 /// bytes of the digest).
-fn hashed_symbol_id(digest: &[u8]) -> String {
+pub(crate) fn hashed_symbol_id(digest: &[u8]) -> String {
     let mut id = String::with_capacity(9 + 24);
     id.push_str("symbol:h:");
     for byte in &digest[..12] {
@@ -35,7 +35,7 @@ fn hashed_symbol_id(digest: &[u8]) -> String {
 /// a leading `0xFE` byte, which cannot live in a Rust `str`; tsrs spells it
 /// U+007F (`InternalSymbolNamePrefix`). Durable ids persist, so the hash must
 /// see Go's byte.
-fn name_bytes(name: &str) -> Vec<u8> {
+pub(crate) fn name_bytes(name: &str) -> Vec<u8> {
     match name.strip_prefix('\u{7f}') {
         Some(rest) => {
             let mut bytes = Vec::with_capacity(rest.len() + 1);
@@ -45,6 +45,30 @@ fn name_bytes(name: &str) -> Vec<u8> {
         }
         None => name.as_bytes().to_vec(),
     }
+}
+
+/// The symbol name with the checker's process counters removed (ADR 0366): a
+/// private name embeds its class's id (`\u{7f}#<digits>@x`) and a unique-symbol
+/// name embeds the symbol's id (`\u{7f}@name@<digits>`). Both change with the
+/// order the checker numbered classes and symbols, so they cannot be hashed.
+/// Every other name is returned as it is.
+#[must_use]
+pub fn normalized_name(name: &str) -> std::borrow::Cow<'_, str> {
+    use std::borrow::Cow;
+    let digits = |text: &str| !text.is_empty() && text.bytes().all(|byte| byte.is_ascii_digit());
+    if let Some(rest) = name.strip_prefix("\u{7f}#")
+        && let Some(at) = rest.find('@')
+        && digits(&rest[..at])
+    {
+        return Cow::Owned(format!("\u{7f}#{}", &rest[at..]));
+    }
+    if let Some(rest) = name.strip_prefix("\u{7f}@")
+        && let Some(at) = rest.rfind('@')
+        && digits(&rest[at + 1..])
+    {
+        return Cow::Owned(format!("\u{7f}@{}@", &rest[..at]));
+    }
+    Cow::Borrowed(name)
 }
 
 impl DurableRef {
@@ -99,6 +123,36 @@ pub fn durable_ref_for(symbol: P<Symbol>) -> Option<DurableRef> {
     durable_ref_for_declaration(symbol, declaration)
 }
 
+/// A declaration-order-independent reference for a binder-level symbol: the
+/// declaration with the smallest `(path bytes, name start)`, and the
+/// [`normalized_name`]. `None` when the symbol has no declaration or one of
+/// them has no source position (fail closed: a partial set could pick a
+/// different minimum than the full one).
+#[must_use]
+pub fn minimum_declaration_ref(symbol: P<Symbol>) -> Option<DurableRef> {
+    let mut minimum: Option<DurableRef> = None;
+    for declaration in symbol.declarations() {
+        let reference = durable_ref_for_declaration(symbol, *declaration)?;
+        let smaller = minimum.as_ref().is_none_or(|current| {
+            (
+                reference.path.as_bytes(),
+                reference.start_byte,
+                reference.end_byte,
+            ) < (
+                current.path.as_bytes(),
+                current.start_byte,
+                current.end_byte,
+            )
+        });
+        if smaller {
+            minimum = Some(reference);
+        }
+    }
+    let mut minimum = minimum?;
+    minimum.name = normalized_name(symbol.name()).into_owned();
+    Some(minimum)
+}
+
 /// Go: `durableRuntimeRefFor`: the symbol's value declaration.
 #[must_use]
 pub fn durable_runtime_ref_for(symbol: P<Symbol>) -> Option<DurableRef> {
@@ -121,6 +175,24 @@ pub fn durable_ref_for_declaration(symbol: P<Symbol>, node: P<Node>) -> Option<D
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// ADR 0366: the checker's process counters are not part of a name.
+    #[test]
+    fn checker_counters_leave_names() {
+        for (name, want) in [
+            ("\u{7f}#12@count", "\u{7f}#@count"),
+            ("\u{7f}#3@count", "\u{7f}#@count"),
+            ("\u{7f}@sym@4821", "\u{7f}@sym@"),
+            ("\u{7f}@iterator@77", "\u{7f}@iterator@"),
+            ("count", "count"),
+            ("\u{7f}index", "\u{7f}index"),
+            ("\u{7f}#x", "\u{7f}#x"),
+            ("\u{7f}@sym@x", "\u{7f}@sym@x"),
+            ("a@12", "a@12"),
+        ] {
+            assert_eq!(normalized_name(name), want, "{name:?}");
+        }
+    }
 
     /// Go hashes an internal name with its leading 0xFE byte.
     #[test]

@@ -19,7 +19,8 @@
 //   bun scripts/typefacts-differential.mjs record  --out DIR [--reference BIN] [--gate NAME] [--label L] [-- args | command...]
 //   bun scripts/typefacts-differential.mjs replay  DIR [--candidate BIN] [--reference BIN] [--jobs N]
 //   bun scripts/typefacts-differential.mjs compare DIR [--report FILE] [--examples N]
-//        [--allow-list FILE] [--allow-unavailable] [--jobs N]
+//        [--allow-list FILE] [--allow-unavailable] [--jobs N] [--canonical-ids]
+//   compare --canonical-ids renames hashed ids by content too (comparing two id schemes, ADR 0366)
 //   replay also takes --canonicalize-requests (diagnostic: send canonical CBOR key order)
 //   and --no-evidence (skip the declarations pass that proves library-only durable ids)
 //   bun scripts/typefacts-differential.mjs run     DIR [same options]
@@ -104,7 +105,7 @@ export function parseArguments(argv) {
     }
     if (argument.startsWith("--")) {
       const name = argument.slice(2);
-      if (["allow-unavailable", "reuse", "quiet", "canonicalize-requests", "no-evidence"].includes(name)) options[name] = true;
+      if (["allow-unavailable", "reuse", "quiet", "canonicalize-requests", "no-evidence", "canonical-ids"].includes(name)) options[name] = true;
       else {
         options[name] = argv[index + 1];
         if (options[name] === undefined) throw new Error(`${argument} needs a value`);
@@ -334,7 +335,7 @@ function evidenceRows(path) {
 }
 
 /** Compares one recorded session; never throws (a failure is a `transport` result). */
-export async function compareSession(session, tool) {
+export async function compareSession(session, tool, { canonicalIds = false } = {}) {
   const project = projectOf(session);
   const meta = { project, session: relative(ROOT, session) };
   const requests = join(session, "requests.bin");
@@ -357,7 +358,8 @@ export async function compareSession(session, tool) {
   try {
     go = normalizeTranscript(
       await decode(tool, requests, join(session, "responses.bin")),
-      evidenceRows(join(session, "go-evidence.json"))
+      evidenceRows(join(session, "go-evidence.json")),
+      { canonicalIds }
     );
   } catch (error) {
     return failure(`cannot decode the Go transcript: ${error.message}`);
@@ -368,7 +370,8 @@ export async function compareSession(session, tool) {
   try {
     rust = normalizeTranscript(
       await decode(tool, requests, rustPath),
-      evidenceRows(join(session, "rust-evidence.json"))
+      evidenceRows(join(session, "rust-evidence.json")),
+      { canonicalIds }
     );
   } catch (error) {
     return failure(`cannot decode the Rust transcript: ${error.message}`);
@@ -392,7 +395,7 @@ async function compare({ positional, options }) {
   const allowPath = options["allow-list"] ?? DEFAULT_ALLOW_LIST;
   const entries = existsSync(allowPath) ? loadAllowList(allowPath) : [];
   const concurrency = options.jobs ? Number(options.jobs) : gateConcurrency();
-  const per = await mapPool(sessions, (session) => compareSession(session, tool), { concurrency });
+  const per = await mapPool(sessions, (session) => compareSession(session, tool, { canonicalIds: options["canonical-ids"] === true }), { concurrency });
   const results = per.flatMap((entry) => entry.results);
   const allowUsed = applyAllowList(results, entries);
   const failedSessions = per.map((entry) => entry.failed).filter(Boolean);

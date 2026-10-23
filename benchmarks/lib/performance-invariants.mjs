@@ -42,14 +42,18 @@ function exportTime(report) {
  * one-line summary.
  */
 export function assessPerformance(
-  { small, largeSamples, incremental },
+  { small, smallSamples = [small], largeSamples, incremental },
   { wallTimeGate = "enforce", ceilings = DEFAULT_CEILINGS } = {}
 ) {
   if (!WALL_TIME_GATES.includes(wallTimeGate)) {
     throw new Error(`wall-time gate must be one of ${WALL_TIME_GATES.join(", ")}, got ${JSON.stringify(wallTimeGate)}`);
   }
-  const large = largeSamples[0];
-  const scaling = exportTime(large) / Math.max(exportTime(small), 1);
+  // The export phase is sub-millisecond, so one sample per side made the
+  // ratio jitter by +-0.4x on shared runners. Best of the independent cold
+  // processes on BOTH sides: scheduling slows one sample, a real
+  // super-linear cost slows every large sample.
+  const scaling =
+    Math.min(...largeSamples.map(exportTime)) / Math.max(Math.min(...smallSamples.map(exportTime)), 1);
   const responseBytes = small.firstAnalysisBreakdown.responseBytes.medianNs / small.sourceCount;
   const cachedIr = small.rustPipelineBreakdown.reactiveIrTotal.medianNs;
   const firstIrSamples = largeSamples.map(

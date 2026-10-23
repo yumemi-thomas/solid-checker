@@ -351,6 +351,15 @@ fn rows(table: &FactTable, report: &mut Report) -> Rows {
 /// decodable and its `shifted` rows equal Go's first, discarded, attempt
 /// (verified by tracing both producers' entity ids per generation). The
 /// durable columns of these projects still match.
+const ID_SCHEME_COLUMNS: [&str; 6] = [
+    "entity symbol",
+    "symbol alias target",
+    "symbol declarations",
+    "symbol references",
+    "symbol row only in go",
+    "symbol row only in rust",
+];
+
 const GO_REPLAYED: [&str; 1] = ["leaf-scope-host-callbacks"];
 
 #[derive(Default)]
@@ -378,6 +387,19 @@ impl Report {
     }
 
     fn fail(&mut self, category: &str, project: &str, detail: String) {
+        // The id scheme (ADR 0366) changes which symbols share an id and how a
+        // hashed id is spelled; these columns are keyed by id, so they differ
+        // wherever Go's claim-order ids split or merged symbols differently.
+        // Counted by class, not failed: the findings are held by `make
+        // coverage`, and `binder_ids` holds the ids themselves.
+        if ID_SCHEME_COLUMNS.contains(&category) {
+            self.note(
+                &format!("id scheme (ADR 0366): {category}"),
+                project,
+                detail,
+            );
+            return;
+        }
         // Explained, not normalized: see `GO_REPLAYED`.
         if GO_REPLAYED.iter().any(|name| project.contains(name))
             && [
