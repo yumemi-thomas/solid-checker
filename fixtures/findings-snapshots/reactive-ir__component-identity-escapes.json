@@ -57,8 +57,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/component-identity-escapes/MethodAlias.tsx",
-      "start": 460,
-      "end": 467,
+      "start": 458,
+      "end": 465,
       "fixes": 0
     },
     {
@@ -67,8 +67,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/component-identity-escapes/MethodAlias.tsx",
-      "start": 698,
-      "end": 705,
+      "start": 696,
+      "end": 703,
       "fixes": 0
     },
     {

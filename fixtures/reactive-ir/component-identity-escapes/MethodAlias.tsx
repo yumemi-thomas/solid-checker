@@ -5,7 +5,7 @@ const [count] = createSignal(0);
 // Uncertifiable: called plainly in tracked JSX and rendered through an alias
 // (`<Rendered />` runs it as a component: an untracked body read). A method's
 // references are no census of its entries, so the one call it can see proves
-// nothing (ADR 0372: the `renderers.badge` reference stays apart from the
+// nothing (ADR 0372: the `aliased.badge` reference stays apart from the
 // method's declaration).
 const aliased = {
   badge() {
