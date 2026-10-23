@@ -1,11 +1,25 @@
 # Type Facts differential harness
 
-Acceptance tool for the Rust producer (`bin/solid-typefacts-rs`) against the Go
-one (`bin/solid-typefacts`). It records what the checker asked the Go producer,
-replays the same request stream on the Rust producer, decodes both answers with
-the Rust client's own decoder and diffs the rows. Fact families that the Rust
-producer has not implemented show as their own category, so the same report
-tracks progress until it reads all equal.
+Acceptance tool that compares any two Type Facts producer binaries: a
+**reference** and a **candidate**. It records what the checker asked the
+reference, replays the same request stream on the candidate, decodes both
+answers with the Rust client's own decoder and diffs the rows. It was built to
+prove the Rust producer against the Go one (ADR 0365) and stays for comparing
+Rust versions, such as a change of symbol ids.
+
+- Reference: `--reference BIN`, else `SOLID_TYPEFACTS_REFERENCE_BIN`, else the
+  archived Go producer, `$TSGO_ARCHIVE/bin/solid-typefacts-go` (`TSGO_ARCHIVE`
+  defaults to `~/Documents/Github/sc-worktrees.noindex/tsgo-archive`). With none
+  of these present the tool exits 2 and says so.
+- Candidate: `--candidate BIN`, else `SOLID_TYPEFACTS_CANDIDATE_BIN`, else
+  `bin/solid-typefacts` (`--rust` and `--go` are accepted aliases).
+- Names inside transcripts and reports keep their history: the reference side is
+  `go` (`responses.bin`, `go-evidence.json`), the candidate `rust`
+  (`rust-responses.bin`, `rust-evidence.json`), so the archived transcripts and
+  the allow-list stay valid.
+
+To compare two Rust builds, point the reference at the older binary (build it
+from the older commit; `make typefacts-differential` records through it).
 
 Pieces: `scripts/typefacts-differential.mjs` (CLI), `scripts/lib/typefacts-differential.mjs`
 (normalise, diff, report, allow-list; unit-tested without a producer),
@@ -16,10 +30,10 @@ Pieces: `scripts/typefacts-differential.mjs` (CLI), `scripts/lib/typefacts-diffe
 ## Run it
 
 ```
-make typefacts-differential                       # record `coverage` on Go, replay on Rust, report
+make typefacts-differential                       # record `coverage` through the reference, replay on the candidate, report
 make typefacts-differential GATE=ownership-gate   # or tsc-oracle-gate, obligation-audit
 make typefacts-differential DIFFERENTIAL_ARGS="--allow-unavailable --canonicalize-requests"
-make typefacts-e2e                                # `coverage` with the checker on the Rust producer
+make typefacts-e2e                                # `coverage` with the checker on the candidate
 ```
 
 Exit 0 means every cell is equal or allow-listed. `--allow-unavailable` also
@@ -30,7 +44,7 @@ Transcripts, replays and `differential-report.json` live under
 ## Record
 
 `record` runs a gate with `SOLID_TYPEFACTS_BIN` pointed at the proxy, which
-forwards to the Go producer and writes one numbered directory per producer
+forwards to the reference producer and writes one numbered directory per producer
 process: `requests.bin`, `responses.bin` (handshake first), `argv.json`,
 `meta.json`, and `project-config.bin` (the checker's temporary `-project-config`
 file, deleted when the run ends). The proxy asks for `-inline-sources` so source
@@ -52,11 +66,11 @@ release checker for a corpus (the debug one is about 19x slower).
 
 ## Replay and compare
 
-`replay DIR` sends each session's recorded request frames to the Rust producer
+`replay DIR` sends each session's recorded request frames to the candidate
 (same argv, same working directory) and stores `rust-responses.bin` and
 `replay.json`. Two things are rewritten, because each names something one
-producer minted: `stateToken` (each Go token is mapped to the token the Rust
-producer returned for the same exchange) and the ids in a `symbols` request. A
+producer minted: `stateToken` (each reference token is mapped to the token the
+candidate returned for the same exchange) and the ids in a `symbols` request. A
 symbol id belongs to the producer that issued it: `symbol:<generation>:<n>`
 follows its visit order, and the durable id of a library symbol hashes offsets
 in its TypeScript snapshot's lib text. Such an id is replaced by the id the
@@ -68,7 +82,7 @@ themselves are compared as they came. Cancel frames are not replayed.
 Unless `--no-evidence` is given, each producer is also asked, just before the
 recorded `close`, for the declarations of every durable id its own tables
 mention (`rust-evidence.json`, and `go-evidence.json` from a second replay
-against the Go producer; the extra request is not part of any compared
+against the reference; the extra request is not part of any compared
 stream). The recorded streams almost never carry declarations for the symbols
 their entities name, and `compare` needs them to prove a durable id
 library-only (below). `compare DIR` decodes both streams, normalises, diffs and writes the
@@ -135,9 +149,9 @@ findings added and removed. The wrapper also checks `git status` of
 `fixtures/findings-snapshots` before and after. Output:
 `rust/target/differential/e2e/{coverage-moved,summary}.json`.
 
-## Producer-level differentials (cargo tests, Go binary beside the Rust one)
+## Producer-level differentials (cargo tests, a reference binary beside the Rust one)
 
-Under `apps/solid-typefacts-rs/tests/`, each drives both producers through the
+Under `apps/solid-typefacts/tests/`, each drives the reference (`SOLID_TYPEFACTS_REFERENCE_BIN`, default the archived Go producer; the test prints a NOTICE and passes vacuously without one) and the candidate through the
 client `Session` and diffs decoded rows. `TSRS_DIFF_ALL=1` runs every
 `fixtures/**/tsconfig.json` (default: a deterministic subset).
 
@@ -169,3 +183,19 @@ session reports the same cells), so they are not port defects:
 The Rust producer runs tsrs in Go-compatible check history
 (`tsrs_core::compat`): tsrs's canonical default would print a normalized
 object-literal union's properties in a different order than Go does.
+
+## Replaying the archive
+
+The archive (`$TSGO_ARCHIVE`, ADR 0365) holds transcripts of the Go producer's
+answers for `coverage`, `ownership-gate`, `tsc-oracle-gate`, `obligation-audit`
+and `corpus-sweep`. Replay one against the current producer:
+
+```
+A=$TSGO_ARCHIVE
+bun scripts/typefacts-differential.mjs replay $A/transcripts/ownership-gate --candidate bin/solid-typefacts
+bun scripts/typefacts-differential.mjs compare $A/transcripts/ownership-gate --allow-list scripts/typefacts-differential-allowlist.json
+```
+
+Replay writes into the transcript directory, so copy it first to keep the
+archive pristine. The recorded `-project` paths must still exist (the gates
+regenerate them under `rust/target/`).

@@ -1,7 +1,6 @@
-// Drives a Type Facts producer wasm reactor (apps/solid-typefacts reactor_wasip1.go
-// or apps/solid-typefacts-rs's `reactor` feature) directly, under the package's WASI
-// runtime with the host file system preopened at its own paths. The two modules export
-// one ABI; nothing here depends on which built it. This is a test and
+// Drives the Type Facts producer wasm reactor (apps/solid-typefacts's `reactor`
+// feature) directly, under the package's WASI
+// runtime with the host file system preopened at its own paths. This is a test and
 // measurement driver. The shipped host is packages/wasm/owned-host.mjs, which
 // serves the same exports through the owned boundary and a frozen mount.
 import * as nodeFs from "node:fs";

@@ -1,17 +1,23 @@
 #!/usr/bin/env bun
-// Differential harness for the Type Facts producers: record what the checker
-// asked the Go producer, replay the same request stream against the Rust
-// producer, decode both answers with the Rust client decoder and diff the rows.
+// Differential harness for any two Type Facts producer binaries: record what
+// the checker asked a REFERENCE producer, replay the same request stream
+// against a CANDIDATE producer, decode both answers with the Rust client
+// decoder and diff the rows. The reference is --reference BIN, else
+// SOLID_TYPEFACTS_REFERENCE_BIN, else the archived Go producer
+// ($TSGO_ARCHIVE/bin/solid-typefacts-go, see docs/typefacts/differential.md);
+// the candidate is --candidate BIN, else SOLID_TYPEFACTS_CANDIDATE_BIN, else
+// bin/solid-typefacts. (Transcript files and report cells keep the historical
+// names: the reference side is "go"/responses.bin, the candidate "rust".)
 //
 //   record   run a gate (or any command) with every producer session captured
-//   replay   replay each recorded request stream against the Rust producer
+//   replay   replay each recorded request stream against the candidate producer
 //   compare  decode both response streams, normalise, diff, report
 //   run      replay + compare
-//   e2e      `coverage` with the checker on the Rust producer; compare-only
+//   e2e      `coverage` with the checker on the candidate producer; compare-only
 //
-// Usage (see docs/typefacts-differential.md):
-//   bun scripts/typefacts-differential.mjs record  --out DIR [--gate NAME] [--label L] [-- args | command...]
-//   bun scripts/typefacts-differential.mjs replay  DIR [--rust BIN] [--jobs N]
+// Usage (see docs/typefacts/differential.md):
+//   bun scripts/typefacts-differential.mjs record  --out DIR [--reference BIN] [--gate NAME] [--label L] [-- args | command...]
+//   bun scripts/typefacts-differential.mjs replay  DIR [--candidate BIN] [--reference BIN] [--jobs N]
 //   bun scripts/typefacts-differential.mjs compare DIR [--report FILE] [--examples N]
 //        [--allow-list FILE] [--allow-unavailable] [--jobs N]
 //   replay also takes --canonicalize-requests (diagnostic: send canonical CBOR key order)
@@ -44,6 +50,35 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_ALLOW_LIST = join(ROOT, "scripts/typefacts-differential-allowlist.json");
 const PROXY = join(ROOT, "scripts/typefacts-transcript-proxy.mjs");
 const TOOL_PROFILE = "debug";
+
+const ARCHIVED_GO_RELATIVE = "bin/solid-typefacts-go";
+const defaultArchive = () =>
+  process.env.TSGO_ARCHIVE ??
+  join(process.env.HOME ?? "", "Documents/Github/sc-worktrees.noindex/tsgo-archive");
+
+/** The reference producer: --reference (alias --go), env, else the archived Go binary. */
+export function referenceBinary(options, env = process.env) {
+  const path = resolve(
+    options.reference ?? options.go ?? env.SOLID_TYPEFACTS_REFERENCE_BIN ?? join(defaultArchive(), ARCHIVED_GO_RELATIVE)
+  );
+  if (!existsSync(path)) {
+    console.error(
+      `no reference producer at ${path}\n` +
+        "  pass --reference BIN or set SOLID_TYPEFACTS_REFERENCE_BIN to a producer binary, or set TSGO_ARCHIVE\n" +
+        "  to the archived Go producer's directory (the default reference is $TSGO_ARCHIVE/bin/solid-typefacts-go)"
+    );
+    process.exit(2);
+  }
+  return path;
+}
+
+/** The candidate producer: --candidate (alias --rust), env, else bin/solid-typefacts. */
+export function candidateBinary(options, env = process.env) {
+  return requireFile(
+    resolve(options.candidate ?? options.rust ?? env.SOLID_TYPEFACTS_CANDIDATE_BIN ?? join(ROOT, "bin/solid-typefacts")),
+    "run `make build-typefacts`, or pass --candidate BIN"
+  );
+}
 
 /** Gates that can be recorded; each runs with SOLID_TYPEFACTS_BIN at the proxy. */
 export const GATES = {
@@ -153,8 +188,7 @@ export function recordEnvironment({ out, label, target, base = process.env }) {
 
 function record({ options, rest }) {
   if (!options.out) throw new Error("record needs --out DIR");
-  const target = resolve(options.go ?? join(ROOT, "bin/solid-typefacts"));
-  requireFile(target, "run `make build-typefacts` for the Go producer");
+  const target = referenceBinary(options);
   const gate = options.gate ? GATES[options.gate] : null;
   if (options.gate && !gate) throw new Error(`unknown gate ${options.gate}; one of ${Object.keys(GATES)}`);
   let command;
@@ -197,13 +231,15 @@ export function replayArguments(argv, rust, session, { hasConfigCopy = existsSyn
 }
 
 /**
- * The evidence pass for the Go producer: the same recorded requests replayed
- * against it, only to collect its own answer to "declare these ids". Its
- * responses are discarded (the recording is already the Go answer).
+ * The evidence pass for the reference producer: the same recorded requests
+ * replayed against it, only to collect its own answer to "declare these ids".
+ * Its responses are discarded (the recording is already its answer). The
+ * binary is the resolved reference, not the recorded argv[0]: a recording
+ * names whatever sat at bin/solid-typefacts then.
  */
-async function goEvidence(session, { tool, meta }) {
+async function goEvidence(session, { tool, meta, reference }) {
   const argv = readJson(join(session, "argv.json"));
-  writeFileSync(join(session, "argv-go.json"), JSON.stringify(replayArguments(argv, argv[0], session)));
+  writeFileSync(join(session, "argv-go.json"), JSON.stringify(replayArguments(argv, reference, session)));
   await capture(
     tool,
     [
@@ -224,7 +260,7 @@ async function goEvidence(session, { tool, meta }) {
   );
 }
 
-async function replayOne(session, { rust, tool, options }) {
+async function replayOne(session, { rust, reference, tool, options }) {
   const argv = readJson(join(session, "argv.json"));
   writeFileSync(join(session, "argv-rust.json"), JSON.stringify(replayArguments(argv, rust, session)));
   const meta = existsSync(join(session, "meta.json")) ? readJson(join(session, "meta.json")) : {};
@@ -248,7 +284,7 @@ async function replayOne(session, { rust, tool, options }) {
       }
     }
   );
-  if (evidence) await goEvidence(session, { tool, meta });
+  if (evidence) await goEvidence(session, { tool, meta, reference });
   let report;
   try {
     report = JSON.parse(run.stdout.toString());
@@ -261,8 +297,8 @@ async function replayOne(session, { rust, tool, options }) {
 
 async function replay({ positional, options }) {
   const directory = resolve(positional[0] ?? "");
-  const rust = resolve(options.rust ?? process.env.TYPEFACTS_RS_BIN ?? join(ROOT, "bin/solid-typefacts-rs"));
-  requireFile(rust, "run `make build-typefacts-rs` for the Rust producer");
+  const rust = candidateBinary(options);
+  const reference = options["no-evidence"] ? null : referenceBinary(options);
   const tool = requireFile(toolPath(), "run `make build-typefacts-transcript`");
   const sessions = findSessions(directory);
   if (sessions.length === 0) throw new Error(`no recorded sessions under ${directory}`);
@@ -272,10 +308,10 @@ async function replay({ positional, options }) {
   const concurrency = options.jobs ? Number(options.jobs) : gateConcurrency();
   let stopped = 0;
   await mapPool(todo, async (session) => {
-    const report = await replayOne(session, { rust, tool, options });
+    const report = await replayOne(session, { rust, reference, tool, options });
     if (report.stopped) stopped += 1;
   }, { concurrency });
-  console.error(`replayed ${todo.length}/${sessions.length} session(s) against ${rust}; ${stopped} stopped early`);
+  console.error(`replayed ${todo.length}/${sessions.length} session(s) against ${rust} (reference for evidence: ${reference ?? "none"}); ${stopped} stopped early`);
   return 0;
 }
 
@@ -395,8 +431,7 @@ const snapshotState = () =>
  * directory is checked against git before and after as a second guard.
  */
 function e2e({ options }) {
-  const rust = resolve(options.rust ?? process.env.TYPEFACTS_RS_BIN ?? join(ROOT, "bin/solid-typefacts-rs"));
-  requireFile(rust, "run `make build-typefacts-rs` for the Rust producer");
+  const rust = candidateBinary(options);
   const checker = process.env.SOLID_CHECKER_BIN ?? join(ROOT, "rust/target/debug/solid-checker-rust");
   requireFile(checker, "run `make build-checker-debug`");
   const out = resolve(options.out ?? join(ROOT, "rust/target/differential/e2e"));

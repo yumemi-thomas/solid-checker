@@ -47,23 +47,10 @@ repository.
 - Imported revision: `92c53392388518d69ef27220729f5c061479deed`
 - License: MIT
 
-The exact external history was imported into this repository. The Go producer,
-Rust process/session client, schemas, goldens, tests, ADRs, and benchmarks now
-move together here; their original MIT license remains at
+The exact external history was imported into this repository. The producer
+(originally Go, now Rust on tsrs), the Rust process/session client, schemas,
+goldens, tests, ADRs, and benchmarks now move together here; their original MIT license remains at
 `apps/solid-typefacts/LICENSE`.
-
-## tsgolint and TypeScript-Go
-
-- tsgolint revision: `c3269c01a0c894a31330e1b4c3bd4edc6eb7694b`
-- TypeScript (Go implementation, `github.com/microsoft/TypeScript/tsc`)
-  revision: `b85298b6a81f` (pseudo-version
-  `v0.0.0-20260929230140-b85298b6a81f`)
-- Resolution: root `go.mod`, `go.sum`, and all nine shim modules
-- Licenses: MIT
-
-The tsgolint-derived TypeScript-Go shim modules are vendored under `shims/` and
-retain their MIT license at `shims/LICENSE`. TypeScript-Go itself remains a
-pinned Go module dependency and is not copied into this repository.
 
 ## tsrs
 
@@ -77,7 +64,7 @@ pinned Go module dependency and is not copied into this repository.
   Microsoft Corporation, also Apache-2.0; its `NOTICE` carries TypeScript's
   third-party notices and the bundled `lib.*.d.ts` files)
 
-The Rust Type Facts producer in `apps/solid-typefacts-rs` consumes the tsrs
+The Rust Type Facts producer in `apps/solid-typefacts` consumes the tsrs
 compiler crates (`tsrs_core`, `tsrs_ast`, `tsrs_scanner`, `tsrs_checker`,
 `tsrs_compiler`, `tsrs_tsoptions`, `tsrs_vfs`) as pinned Cargo git
 dependencies in that workspace only. The fork is upstream plus one marked

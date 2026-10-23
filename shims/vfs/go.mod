@@ -1,5 +1,0 @@
-module github.com/microsoft/TypeScript/tsc/shim/vfs
-
-go 1.27
-
-require github.com/microsoft/TypeScript/tsc v0.0.0-20260929230140-b85298b6a81f

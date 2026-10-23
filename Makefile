@@ -16,43 +16,39 @@ CARGO_TEST_RUNNER ?= test
 PROBE_NODE ?= $(shell node -e 'process.stdout.write(require("fs").realpathSync(process.execPath))')
 export SOLID_CHECKER_PROBE_NODE = $(PROBE_NODE)
 
-.PHONY: build build-typefacts build-typefacts-rs build-typefacts-transcript typefacts-differential typefacts-e2e test-typefacts-rs build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-package-rs build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit wasm-parity clean clean-verify
+.PHONY: build build-typefacts test-typefacts build-typefacts-transcript typefacts-differential typefacts-e2e build-rust build-checker-debug build-checker-release build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit wasm-parity clean clean-verify
 
 build: build-rust
 
-# The local producer and Rust client share one source-manifest identity; the
-# startup handshake rejects any build-id, protocol, or schema mismatch.
+# The Type Facts producer (apps/solid-typefacts, on tsrs; ADR 0365) and the Rust
+# client share one source-manifest identity; the startup handshake rejects any
+# build-id, protocol, or schema mismatch. The producer is its own Cargo
+# workspace, lockfile and target directory (it needs tsrs optimised even in dev
+# profile), built in release mode and copied to bin/solid-typefacts.
 build-typefacts:
 	TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" scripts/build-typefacts.sh
 
-# The Rust Type Facts producer (migration slice S1), built beside the Go one
-# and never selected by default: bin/solid-typefacts stays the Go binary, and
-# scripts/build-typefacts.sh does not build this. Its own Cargo workspace,
-# lockfile and target directory keep it out of rust/target. Point a test or
-# gate at it with SOLID_TYPEFACTS_BIN / TYPEFACTS_TEST_BIN=bin/solid-typefacts-rs.
-build-typefacts-rs:
-	mkdir -p bin
-	TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) build --release --locked \
-	  --manifest-path apps/solid-typefacts-rs/Cargo.toml --bin solid-typefacts
-	cp apps/solid-typefacts-rs/target/release/solid-typefacts bin/solid-typefacts-rs
+# fmt, clippy (native and the wasm32-wasip1 reactor) and the tests of the
+# producer workspace. Its differential tests compare against a reference
+# producer when one is available (SOLID_TYPEFACTS_REFERENCE_BIN, default the
+# archived Go producer; docs/typefacts/differential.md) and skip otherwise.
+test-typefacts: build-typefacts
+	cargo +$(RUST_TOOLCHAIN) fmt --manifest-path apps/solid-typefacts/Cargo.toml -- --check
+	TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) clippy --manifest-path apps/solid-typefacts/Cargo.toml --all-targets -- -D warnings
+	TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) clippy --manifest-path apps/solid-typefacts/Cargo.toml --target wasm32-wasip1 --features reactor --lib -- -D warnings
+	TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) test --manifest-path apps/solid-typefacts/Cargo.toml
 
-# fmt, clippy and tests of the Rust producer workspace; the differential tests
-# compare against bin/solid-typefacts, so build it first.
-test-typefacts-rs: build-typefacts
-	cargo +$(RUST_TOOLCHAIN) fmt --manifest-path apps/solid-typefacts-rs/Cargo.toml -- --check
-	TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) clippy --manifest-path apps/solid-typefacts-rs/Cargo.toml --all-targets -- -D warnings
-	TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) clippy --manifest-path apps/solid-typefacts-rs/Cargo.toml --target wasm32-wasip1 --features reactor --lib -- -D warnings
-	TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) test --manifest-path apps/solid-typefacts-rs/Cargo.toml
-
-# Differential harness for the two producers (migration slice S5; see
-# docs/typefacts-differential.md). The transcript tool decodes and replays
-# recorded protocol streams with the Rust client's own decoder; it lives behind
-# the typefacts crate's `transcript` feature, which the checker never enables.
-#   make typefacts-differential                      record `coverage` against Go, replay on Rust, diff
+# Differential harness for any two producer binaries (docs/typefacts/differential.md).
+# The transcript tool decodes and replays recorded protocol streams with the
+# Rust client's own decoder; it lives behind the typefacts crate's `transcript`
+# feature, which the checker never enables. The REFERENCE records (default: the
+# archived Go producer, or SOLID_TYPEFACTS_REFERENCE_BIN / TSGO_ARCHIVE); the
+# CANDIDATE (default bin/solid-typefacts) replays.
+#   make typefacts-differential                      record `coverage` through the reference, replay on the candidate, diff
 #   make typefacts-differential GATE=ownership-gate  any of coverage, ownership-gate, tsc-oracle-gate,
 #                                                    obligation-audit (corpus-sweep: record by hand)
 #   make typefacts-differential DIFFERENTIAL_ARGS=--allow-unavailable
-#   make typefacts-e2e                               `coverage` on the Rust producer, compare-only
+#   make typefacts-e2e                               `coverage` with the checker on the candidate, compare-only
 GATE ?= coverage
 TYPEFACTS_TRANSCRIPTS ?= $(CURDIR)/rust/target/differential/transcripts
 DIFFERENTIAL_ARGS ?=
@@ -60,12 +56,12 @@ build-typefacts-transcript:
 	TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) build --manifest-path $(RUST_MANIFEST) \
 	  -p typefacts --features transcript --bin typefacts-transcript
 
-typefacts-differential: build-typefacts build-typefacts-rs build-typefacts-transcript build-checker-debug
+typefacts-differential: build-typefacts build-typefacts-transcript build-checker-debug
 	rm -rf "$(TYPEFACTS_TRANSCRIPTS)/$(GATE)"
 	$(BUN) scripts/typefacts-differential.mjs record --gate $(GATE) --out "$(TYPEFACTS_TRANSCRIPTS)"
 	$(BUN) scripts/typefacts-differential.mjs run "$(TYPEFACTS_TRANSCRIPTS)/$(GATE)" $(DIFFERENTIAL_ARGS)
 
-typefacts-e2e: build-typefacts-rs build-checker-debug
+typefacts-e2e: build-typefacts build-checker-debug
 	$(BUN) scripts/typefacts-differential.mjs e2e
 
 build-rust: build-typefacts
@@ -90,26 +86,18 @@ package: build-typefacts
 	SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" $(BUN) scripts/package-rust.mjs --output dist/solid-checker
 
 # The WASM package (packages/wasm): the Node-API module behind checkSync and
-# planSync, then the owned check's two reactors (scripts/build-owned.mjs). The
+# planSync, then the owned check's two reactors (scripts/build-owned.mjs; the
+# producer's is apps/solid-typefacts built as a wasm32-wasip1 cdylib). The
 # Cargo builds run one after the other, with the native build's pins.
 build-wasm-package: build-typefacts
 	SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" $(BUN) run --cwd packages/wasm build
 
-# The same package with the Rust producer reactor (migration slice S6) in place
-# of the Go one. Any WASM target takes it the same way:
-#   make wasm-parity SOLID_TYPEFACTS_REACTOR=rust
-# and the packages/wasm tests run on whichever producer owned/ holds.
-build-wasm-package-rs: build-typefacts
-	SOLID_TYPEFACTS_REACTOR=rust SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" $(BUN) run --cwd packages/wasm build
-
 # The WASM parity gate's path-semantics control guests (S3a): a Rust program
-# making raw WASI path calls, and a Go program making os calls. Neither is part
-# of the rust/ workspace or the producer's source identity.
+# making raw WASI path calls and std calls. It is not part of the rust/
+# workspace or the producer's source identity.
 build-wasm-parity-guests:
 	cargo +$(RUST_TOOLCHAIN) build --locked --manifest-path scripts/wasm-parity/guests/path-control/Cargo.toml \
 	  --target wasm32-wasip1 --release --target-dir rust/target/wasm-parity-guests
-	GOOS=wasip1 GOARCH=wasm GOTOOLCHAIN=local go build -trimpath \
-	  -o rust/target/wasm-parity-guests/path-control-go.wasm ./scripts/wasm-parity/guests/path-control-go
 
 # The owned check, packed and installed in isolation, against the native
 # ordinary check (scripts/wasm-parity.mjs). The

@@ -613,8 +613,18 @@ fn a_requested_daemon_for_the_default_is_one_shot_and_a_hostless_check_keeps_its
 /// failed on. The request after it must still answer them. This is a base
 /// daemon case; the dependency-source failure case is one-shot and lives in
 /// `dependency_fresh_native_process.rs`.
+///
+/// The failure is the producer dying before it answers the analyze that
+/// follows the edit (`SOLID_TYPEFACTS_CRASH_BEFORE_ANALYZE`), again in the
+/// replacement the session recovers with, so the recovery gives up. No
+/// producer's text decoding can change that: the daemon has read and
+/// fingerprinted `App.tsx` by then. (An edited module file makes the daemon's
+/// resolution witness stale, so the refresh is a rebuild that analyzes anew.)
+#[cfg(unix)]
 #[test]
 fn an_aborted_refresh_does_not_consume_its_edits() {
+    use std::os::unix::fs::PermissionsExt;
+
     let Ok(typefacts) = std::env::var("SOLID_TYPEFACTS_BIN") else {
         return;
     };
@@ -622,32 +632,42 @@ fn an_aborted_refresh_does_not_consume_its_edits() {
         let selection: &[&str] = &[];
         let tag = "aborted-base".to_owned();
         let scratch = Scratch::new("dependency-source", &tag);
-        // A second project file, after `App.tsx` in the order a refresh
-        // reads them.
-        fs::write(scratch.path("Zed.tsx"), "export {};\n").unwrap();
-        let before = check(&typefacts, &scratch.project, selection, true);
-        let warm = check(&typefacts, &scratch.project, selection, true);
+        let marker = scratch.root.join("crash-before-analyze");
+        let arm = scratch.root.join("crash-every-spawn");
+        let wrapper = scratch.root.join("solid-typefacts-crashing.sh");
+        fs::write(
+            &wrapper,
+            format!(
+                "#!/bin/sh\nif [ -e '{arm}' ]; then : > '{marker}'; fi\n\
+                 SOLID_TYPEFACTS_CRASH_BEFORE_ANALYZE='{marker}' exec '{typefacts}' \"$@\"\n",
+                arm = arm.display(),
+                marker = marker.display()
+            ),
+        )
+        .unwrap();
+        fs::set_permissions(&wrapper, fs::Permissions::from_mode(0o755)).unwrap();
+        let wrapper = wrapper.to_string_lossy().into_owned();
+        let before = check(&wrapper, &scratch.project, selection, true);
+        let warm = check(&wrapper, &scratch.project, selection, true);
         assert_eq!(warm.cache_hit(), Some(true), "{tag}");
         edit(
             &scratch.path("App.tsx"),
             "const label = useLabel(name);",
             "const label = useLabelMemo(name);",
         );
-        // Broken in place, so no directory stamp moves: the dependency's
-        // manifest, which preparation reads after both programs took the
-        // edit, or a project file the refresh reads after `App.tsx` and
-        // refuses as not UTF-8.
-        let broken = scratch.path("Zed.tsx");
-        let original = fs::read(&broken).unwrap();
-        fs::write(&broken, b"export {};\n// \xff\xfe\n").unwrap();
-        let failed = command(&typefacts, &scratch.project, selection, true)
+        // Armed only now, so the crash hits the analyze after the edit, and
+        // every replacement producer arms itself the same way.
+        fs::write(&arm, b"armed").unwrap();
+        fs::write(&marker, b"armed").unwrap();
+        let failed = command(&wrapper, &scratch.project, selection, true)
             .output()
             .unwrap();
         let stderr = String::from_utf8_lossy(&failed.stderr);
         assert!(stderr.contains("daemon unavailable"), "{tag}: {stderr}");
-        fs::write(&broken, &original).unwrap();
-        let recovered = check(&typefacts, &scratch.project, selection, true);
-        let fresh = check(&typefacts, &scratch.project, selection, false);
+        fs::remove_file(&arm).unwrap();
+        let _ = fs::remove_file(&marker);
+        let recovered = check(&wrapper, &scratch.project, selection, true);
+        let fresh = check(&wrapper, &scratch.project, selection, false);
         assert_same(&recovered, &fresh, &tag);
         assert_ne!(
             before.json()["findings"],

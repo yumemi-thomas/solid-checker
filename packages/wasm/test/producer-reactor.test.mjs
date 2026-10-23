@@ -1,9 +1,7 @@
 // The Type Facts producer reactor, driven directly under Node's WASI with the
 // host file system preopened at its own paths (scripts/lib/typefacts-reactor.mjs).
-// It runs against whichever producer `owned/` holds (the Go reactor, or the
-// Rust one built with SOLID_TYPEFACTS_REACTOR=rust; TYPEFACTS_REACTOR_WASM
-// names another module), so every assertion is a
-// fact both must produce. The shipped path, through the owned boundary and a
+// It runs against the producer `owned/` holds (TYPEFACTS_REACTOR_WASM names
+// another module). The shipped path, through the owned boundary and a
 // frozen mount, is covered by owned-worker-core.test.mjs and the parity gate.
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
@@ -167,8 +165,8 @@ function churn(instance, name, updates) {
 
 test("freeing generations on wasm: updates and rebuilds keep linear memory bounded", () => {
   const updates = 300;
-  // Observed about 156 MiB for the Rust reactor (80 MiB of it the shadow
-  // stack) and 85 MiB for Go; without freeing the Rust one reaches gigabytes.
+  // Observed about 156 MiB for the reactor (80 MiB of it the shadow
+  // stack); without freeing the Rust one reaches gigabytes.
   const mebibytes = churn(reactor, "memory", updates);
   assert.ok(mebibytes < 200, `linear memory is ${mebibytes} MiB after ${updates} updates`);
 }, 120_000);
@@ -186,8 +184,7 @@ test("the high-water mark is flat: five times the updates add no memory", () => 
 
 test("freed generations are never read: the same churn with TSRS_ARENA_POISON=1", async () => {
   // The Rust reactor then fills freed arena memory and never reuses it, so a
-  // read of freed memory returns poison instead of a stale answer; the Go
-  // reactor ignores the variable.
+  // read of freed memory returns poison instead of a stale answer.
   const poisoned = await loadReactor(wasm, { env: { TSRS_ARENA_POISON: "1" } });
   churn(poisoned, "poisoned", 60);
 }, 120_000);

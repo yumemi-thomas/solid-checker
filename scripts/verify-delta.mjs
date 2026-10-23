@@ -58,7 +58,7 @@ export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 const TOOLCHAIN = "+1.99.1";
 const MANIFEST = "rust/Cargo.toml";
-const TYPEFACTS_RS_MANIFEST = "apps/solid-typefacts-rs/Cargo.toml";
+const TYPEFACTS_MANIFEST = "apps/solid-typefacts/Cargo.toml";
 const DEBUG_CHECKER = "rust/target/debug/solid-checker-rust";
 const TYPEFACTS = "bin/solid-typefacts";
 
@@ -141,22 +141,26 @@ export const CHECKS = {
       "--all-targets", "--no-default-features", "--features", "dialect-v2",
     ],
   },
-  "typefacts-rs": {
+  "typefacts": {
     why:
-      "the Rust Type Facts producer is its own Cargo workspace (own lockfile and target), so the rust/ " +
-      "fmt and clippy checks never see it; its process tests also compare against bin/solid-typefacts",
+      "the Type Facts producer is its own Cargo workspace (own lockfile and target), so the rust/ " +
+      "fmt and clippy checks never see it; its differential tests skip unless a reference producer is available",
     commands: [
-      ["cargo", TOOLCHAIN, "fmt", "--manifest-path", TYPEFACTS_RS_MANIFEST, "--", "--check"],
+      ["cargo", TOOLCHAIN, "fmt", "--manifest-path", TYPEFACTS_MANIFEST, "--", "--check"],
       [
-        "cargo", TOOLCHAIN, "clippy", "--manifest-path", TYPEFACTS_RS_MANIFEST, "--all-targets",
+        "cargo", TOOLCHAIN, "clippy", "--manifest-path", TYPEFACTS_MANIFEST, "--all-targets",
         "--", "-D", "warnings",
       ],
-      ["cargo", TOOLCHAIN, "test", "--manifest-path", TYPEFACTS_RS_MANIFEST],
+      [
+        "cargo", TOOLCHAIN, "clippy", "--manifest-path", TYPEFACTS_MANIFEST, "--target", "wasm32-wasip1",
+        "--features", "reactor", "--lib", "--", "-D", "warnings",
+      ],
+      ["cargo", TOOLCHAIN, "test", "--manifest-path", TYPEFACTS_MANIFEST],
     ],
   },
   "differential-harness": {
     why:
-      "the Type Facts differential harness (recorded Go transcripts replayed on the Rust producer) " +
+      "the Type Facts differential harness (recorded transcripts of a reference producer replayed on a candidate) " +
       "is test tooling: its JS normalisation and diff logic, and the transcript decoder it shells out to",
     commands: [
       [
@@ -203,7 +207,7 @@ export const ROWS = [
   // crate) select `wasm-compile` and never the WASM package build or parity:
   // parity compares two builds of one analysis, so an edit confined to the
   // analysis moves both identically. Every other rust/ row, and anything
-  // under packages/wasm, solid-checker-wasm, typefacts, apps/, shims/ or
+  // under packages/wasm, solid-checker-wasm, typefacts, apps/ or
   // scripts/wasm-parity*, keeps its own answer; `make verify` is the authority.
   {
     prefix: "rust/crates/solid-facts/",
@@ -241,10 +245,23 @@ export const ROWS = [
     owner: "fixtures or expected findings",
     checks: ["coverage", "ownership-gate"],
   },
+  // The producer is the default (ADR 0365): a source change can move any fact,
+  // so it also selects the fixture gates and the WASM parity gate that runs the
+  // same code as a reactor. Its tests and testdata only feed its own tests.
   {
-    prefix: "apps/solid-typefacts-rs/",
-    owner: "the Rust Type Facts producer (separate workspace; not yet the default)",
-    checks: ["typefacts-rs"],
+    prefix: "apps/solid-typefacts/",
+    owner: "the Type Facts producer (separate workspace; the default producer)",
+    checks: ["typefacts", "coverage", "ownership-gate", "wasm-parity"],
+  },
+  {
+    prefix: "apps/solid-typefacts/tests/",
+    owner: "the Type Facts producer's tests",
+    checks: ["typefacts"],
+  },
+  {
+    prefix: "apps/solid-typefacts/testdata/",
+    owner: "the Type Facts producer's test projects",
+    checks: ["typefacts"],
   },
   // The differential harness's own files, one exact path each. Neighbours
   // (scripts/coverage.mjs, the proxy, the Makefile, the typefacts crate's
@@ -330,8 +347,8 @@ export function planFor(paths) {
     // and everything after it should run against that binary.
     ...["facts-lib", "ir-lib", "backend-process", "dialects-process"].filter((id) => selected.has(id)),
     ...["coverage", "ownership-gate"].filter((id) => selected.has(id)),
-    // Separate workspace; its differential tests read the Go producer built above.
-    ...["typefacts-rs"].filter((id) => selected.has(id)),
+    // Separate workspace; its tests drive the producer built above.
+    ...["typefacts"].filter((id) => selected.has(id)),
     ...["differential-harness"].filter((id) => selected.has(id)),
     // Before the WASM package's own tests: its Make target builds the package
     // (owned artifacts included) that those tests load on a fresh tree.

@@ -31,8 +31,9 @@ and docs/decisions.md (live decisions by ADR number).
 4. **Seams.** solid-facts owns syntax and facts; solid-facts-backend owns
    orchestration and the process boundary; solid-reactive-ir owns indexes,
    interprocedural analysis, and proof obligations; solid-dialect owns the
-   dialect interface; rust/dialects/solid-v2 owns Solid 2 vocabulary and rules.
-   Never pass TypeScript-Go or Oxc nodes across fact interfaces. Put
+   dialect interface; rust/dialects/solid-v2 owns Solid 2 vocabulary and rules;
+   apps/solid-typefacts is the one Type Facts producer (Rust, on tsrs).
+   Never pass tsrs or Oxc nodes across fact interfaces. Put
    version-specific behavior behind a `Dialect` question; a `Version` match must
    stay exhaustive. Do not grow one monolithic reactivity rule.
 5. **Ported code is retained behavior.** `solid-reactive-ir/src/upstream_compat/`
@@ -68,6 +69,7 @@ and docs/decisions.md (live decisions by ADR number).
 
 - Iterate on one Rust test: `make test-focused TEST=<filter> TEST_PACKAGE=<crate>`
   (library tests only).
+- Producer workspace (apps/solid-typefacts, own lockfile and target): `make test-typefacts`.
 - Process tests: `cargo +1.99.1 test --manifest-path rust/Cargo.toml -p solid-facts-backend --test <name>`.
   `.cargo/config.toml` points them at `bin/solid-typefacts` and sets the build
   ids, so bare `cargo` and `make` share one build.

@@ -50,9 +50,10 @@ test("a failed command does not run the next command in its suite", async () => 
 }));
 
 test("nextest still runs doctests sequentially with inherited certification pins", () => {
-  const env = { SOLID_CHECKER_EXPECT_PROBE_PINS: "1", GOMAXPROCS: "2", RUST_TEST_THREADS: "3" };
-  const [go, rust] = verificationJobs("nextest", env);
-  assert.equal(go.env.GOMAXPROCS, "2");
+  const env = { SOLID_CHECKER_EXPECT_PROBE_PINS: "1", RUST_TEST_THREADS: "3" };
+  const [typefacts, rust] = verificationJobs("nextest", env);
+  assert.equal(typefacts.env.RUST_TEST_THREADS, "3");
+  assert.deepEqual(typefacts.commands[0].slice(0, 3), ["cargo", "+1.99.1", "test"]);
   assert.equal(rust.env.RUST_TEST_THREADS, "3");
   assert.equal(rust.env.SOLID_CHECKER_EXPECT_PROBE_PINS, "1");
   assert.equal(rust.commands.length, 2);

@@ -744,7 +744,7 @@ const fn is_false(value: &bool) -> bool {
 // encodes an absent optional string) and packs rows as varints. Both
 // executables ship in build-ID lockstep, so no runtime negotiation exists.
 // Element order mirrors the Go `toarray` structs in
-// internal/typefacts/protocolv3_compact.go.
+// internal/typefacts/protocolv3_compact.go (retired Go producer).
 //
 // An analyze response carries at most one opaque table-transition frame.
 

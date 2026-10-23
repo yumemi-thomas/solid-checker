@@ -1,6 +1,6 @@
 {
   "about": "Pinned results for the S3a path-semantics controls (scripts/wasm-parity/path-semantics.mjs). Every row's owned result must equal host POSIX (computed live under Node over the same disk tree) except the overrides below, each with its reason. oldLayerFails lists every row the pinned upstream @tybys/wasm-util layer must get wrong (the repaired rows); every other old-layer row must equal the owned expectation; oldLayerNotRun rows never terminate there.",
-  "rowCount": 261,
+  "rowCount": 257,
   "overrides": {
     "dirfd:file=f:stat:x": {
       "errno": 76,
@@ -17,11 +17,6 @@
       "detail": "",
       "reason": "Unchanged upstream ABI: fd_fdstat_set_flags is ENOSYS, as the producer observes on every call."
     },
-    "go:go-stat:linkdir/../sibling.txt": {
-      "errno": 44,
-      "detail": "",
-      "reason": "Go guest limitation: syscall/fs_wasip1.go appendCleanPath removes `..` lexically before any WASI call, so os.Stat asks for <root>/sibling.txt; no host layer can make this physical."
-    },
     "mutation:7:unlink:f/": {
       "errno": 0,
       "detail": "check=missing",
@@ -34,7 +29,6 @@
     "dirfd:dir=linkdir:open:../sibling.txt",
     "dirfd:dir=linkdir:stat:../sibling.txt",
     "dirfd:dir=linkdir:stat:x.txt",
-    "go:go-readlink:longlink",
     "mutation:0:mkdir:real/inner/../newdir",
     "mutation:10:open:filelink",
     "mutation:11:open:dangling",

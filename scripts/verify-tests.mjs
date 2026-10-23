@@ -8,8 +8,10 @@ export function verificationJobs(runner, env = process.env) {
   const common = ["--manifest-path", "rust/Cargo.toml", "--workspace"];
   const profile = env.SOLID_CHECKER_CARGO_PROFILE || "verify";
   return [
-    { name: "go-test-race", commands: [["go", "test", "-race", "./apps/solid-typefacts/..."]],
-      env: { ...env, GOMAXPROCS: env.GOMAXPROCS || "4" } },
+    // The Type Facts producer (apps/solid-typefacts) is its own Cargo workspace
+    // and target directory, so it runs beside the checker workspace's tests.
+    { name: "typefacts-test", commands: [[...cargo, "test", "--manifest-path", "apps/solid-typefacts/Cargo.toml", "--locked"]],
+      env: { ...env, RUST_TEST_THREADS: env.RUST_TEST_THREADS || "8" } },
     { name: "test-workspace", commands: runner === "nextest" ? [
       [...cargo, "nextest", "run", "--config-file", "scripts/nextest.toml", "--profile", "verify", "--cargo-profile", profile, ...common],
       [...cargo, "test", "--profile", profile, ...common, "--doc"],

@@ -38,7 +38,7 @@ A deterministic transport frame that establishes a Type Facts table or transform
 _Avoid_: Payload, packed delta
 
 **Configured source descriptor**:
-A Type Facts session source entry that names a canonical disk path for local hydration, while edited or virtual sources remain inline. Generation source hashes still prove that Rust and TypeScript-Go analyzed identical content.
+A Type Facts session source entry that names a canonical disk path for local hydration, while edited or virtual sources remain inline. Generation source hashes still prove that Rust and tsrs analyzed identical content.
 _Avoid_: Path-only source, source shortcut
 
 **Semantic lookup**:

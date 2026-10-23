@@ -28,8 +28,7 @@ function nativePackageRoot() {
 function findRepository(start) {
   let directory = resolve(start);
   for (;;) {
-    // `go.mod` used to mark the root; the producer moved to its own
-    // repository, so the Rust workspace plus the Makefile identify it now.
+    // The Rust workspace plus the Makefile identify the repository root.
     if (
       existsSync(join(directory, "Makefile")) &&
       existsSync(join(directory, "rust", "Cargo.toml"))

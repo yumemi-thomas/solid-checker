@@ -13,7 +13,7 @@ workspace = true
 # The producer side of the wire: the table-transition encoder, the producer-side
 # fact table, and the safe wrapper over the transition arena's F_NOCACHE call.
 # The checker never enables it; the Rust Type Facts producer
-# (apps/solid-typefacts-rs) does. The dev-dependency below turns it on for this
+# (apps/solid-typefacts) does. The dev-dependency below turns it on for this
 # crate's own tests, so `cargo test --workspace` and `clippy --all-targets`
 # cover the encoder without a feature flag.
 producer = []

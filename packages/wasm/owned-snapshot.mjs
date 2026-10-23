@@ -80,8 +80,8 @@ export class OwnedInputFault extends Error {
 
 // wasm-util's `FileControlFlag` values (Linux numbering), not the host's.
 // The access mode (O_WRONLY 1, O_RDWR 2) is not a write: wasm-util derives it
-// from the rights a guest requests, and the Go producer's read-only opens
-// carry FD_FILESTAT_SET_SIZE, so they arrive as O_RDWR. The host file is only
+// from the rights a guest requests, and the retired Go producer's read-only opens
+// carried FD_FILESTAT_SET_SIZE, so they arrive as O_RDWR. The host file is only
 // ever opened O_RDONLY, and every write through the descriptor faults. The
 // flags that change the file at open are refused before any host access.
 const O_ACCMODE = 3;

@@ -54,8 +54,8 @@ host-supplied Type Facts. It is available on Node and Bun only, with no
 browser entry. One worker thread runs two WebAssembly reactors over one
 filesystem — an in-memory copy of the project (`mount`) or a host directory
 read on demand (`directory`):
-- the canonical Type Facts producer, the same Go source as the native
-  `solid-typefacts` built for `wasip1`;
+- the canonical Type Facts producer, the same Rust source (on tsrs) as the
+  native `solid-typefacts`, built as a `wasm32-wasip1` reactor;
 - the checker.
 
 The package ships both in `owned/`, with a manifest of their digests. No
@@ -228,8 +228,7 @@ wasm32's 4 GiB is the inferred limit.
 LICENSE, UPSTREAM.json and `owned.patch`). Its path imports resolve paths
 physically, as the host does: symlinks per component, `..` from the directory
 actually reached. The upstream runtime's lexical `..` handling sent paths such
-as `src/../lib/x.js` to the wrong file. Go's own guest-side lexical `..`
-cleaning in the producer is not something a host layer can change.
+as `src/../lib/x.js` to the wrong file.
 
 **Tested:**
 - Node 24.11.1 and Bun 1.4.0 on macOS arm64, through `make wasm-parity`

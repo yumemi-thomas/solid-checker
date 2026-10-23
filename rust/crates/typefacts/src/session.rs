@@ -1528,7 +1528,7 @@ impl Session {
         Ok(returned)
     }
 
-    /// Closes Rust-owned symbol reachability through the one batched TSGo
+    /// Closes Rust-owned symbol reachability through the one batched tsrs
     /// oracle operation. Rows cross the process seam exactly once per phase
     /// and are retained only in Rust.
     fn close_symbols(

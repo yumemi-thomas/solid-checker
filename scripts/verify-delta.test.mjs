@@ -46,7 +46,9 @@ test("each table row claims its own owner's paths", () => {
     ["rust/crates/solid-facts-backend/src/diagnostics.rs", ["backend-process", "coverage"]],
     ["fixtures/reactive-ir/store-flow/App.tsx", ["coverage", "ownership-gate"]],
     ["fixtures/findings-snapshots/engine__oxlint-conformance.json", ["coverage", "ownership-gate"]],
-    ["apps/solid-typefacts-rs/src/session.rs", ["typefacts-rs"]],
+    ["apps/solid-typefacts/src/session.rs", ["typefacts", "coverage", "ownership-gate", "wasm-parity"]],
+    ["apps/solid-typefacts/tests/process.rs", ["typefacts"]],
+    ["apps/solid-typefacts/testdata/forms/tsconfig.json", ["typefacts"]],
     ["packages/cli/lib/rules-solid-v2.json", ["bun-test-cli"]],
     ["packages/wasm/src/index.ts", ["bun-test-wasm", "wasm-parity"]],
   ];
@@ -331,7 +333,7 @@ test("a producer that is not built from the local manifest escalates", () => {
   const expected = {
     format: 1,
     sourceDigest: "e2f7ac5ce2784f9e4f5bc53f4e100040f6fce3d4".padEnd(64, "0"),
-    toolchain: "go-test",
+    toolchain: "rustc-test",
     buildId: "dev",
   };
 

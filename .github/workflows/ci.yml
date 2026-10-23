@@ -19,6 +19,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.99.1
         with:
           components: clippy,rustfmt
+          # The producer's reactor clippy (make test-typefacts).
+          targets: wasm32-wasip1
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust
@@ -35,12 +37,12 @@ jobs:
       # target. This restores it, and the stamp it carries is what makes the
       # `make` dependencies no-ops.
       - uses: ./.github/actions/typefacts
-      - run: test -z "$(gofmt -l apps/solid-typefacts shims)"
-      - run: go vet ./apps/solid-typefacts/...
-      # The invocation transcript suite cross-checks validity against the
-      # repository-pinned published TypeScript compiler.
+      # The producer's own workspace: fmt, clippy (native and the wasm32-wasip1
+      # reactor) and tests. The invocation transcript suite cross-checks
+      # validity against the repository-pinned published TypeScript compiler,
+      # which needs node (preinstalled on the runner) and packages/cli installed.
       - run: bun install --cwd packages/cli --ignore-scripts --no-progress --frozen-lockfile
-      - run: go test -race ./apps/solid-typefacts/...
+      - run: make test-typefacts
       - run: cargo fmt --manifest-path rust/Cargo.toml --all -- --check
       - run: cargo clippy --manifest-path rust/Cargo.toml --workspace --all-targets
       - name: Check single-dialect composition builds
@@ -156,17 +158,16 @@ jobs:
       # needs its own copy of the target's std.
       - run: rustup target add wasm32-wasip1-threads wasm32-wasip1 --toolchain 1.99.1
       # The owned check's producer reactor is the Type Facts producer built
-      # for wasip1 (packages/wasm/scripts/build-owned.mjs).
-      - uses: actions/setup-go@v5
-        with:
-          go-version: stable
-          cache-dependency-path: go.sum
+      # for wasm32-wasip1 (packages/wasm/scripts/build-owned.mjs); its own Cargo
+      # workspace needs its own cache.
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.0
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: rust
+          workspaces: |
+            rust
+            apps/solid-typefacts
           # publish-npm.yml restores this default-branch entry. Without an
           # explicit key the action includes the different CI/release job names.
           shared-key: release-wasm

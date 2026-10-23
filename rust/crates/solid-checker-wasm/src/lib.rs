@@ -139,7 +139,7 @@ impl TypeFactsProvider for PlanningTypeFacts {
 /// Prototype seam for a self-contained browser host.
 ///
 /// It runs the in-process syntax and Solid compiler passes and returns the
-/// exact semantic demands a browser-side TypeScript-Go reactor must answer.
+/// exact semantic demands a browser-side tsrs reactor must answer.
 #[cfg(feature = "napi-host")]
 #[napi]
 pub fn plan_sync(request_json: String) -> napi::Result<String> {

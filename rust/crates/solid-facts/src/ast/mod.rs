@@ -2,7 +2,7 @@
 //!
 //! This crate is intentionally checker-independent and regex-free. It parses
 //! original source once and exports finite, deterministic tables. Consumers
-//! join these spans with TypeScript-Go semantic facts; Oxc nodes never escape.
+//! join these spans with tsrs semantic facts; Oxc nodes never escape.
 //!
 //! Module map (files under `src/ast/`):
 //!

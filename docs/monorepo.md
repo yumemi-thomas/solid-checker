@@ -17,7 +17,7 @@ Physical colocation does not merge module interfaces:
 - `rust/crates/solid-facts-backend` orchestrates certification.
 - `rust/crates/solid-facts` owns syntax and normalized fact-domain integration.
 - `rust/crates/typefacts` owns the Rust Type Facts process/session interface.
-- `apps/solid-typefacts` and its private packages own TypeScript-Go facts.
+- `apps/solid-typefacts` and its private packages own tsrs facts.
 - `rust/crates/solid-dialect` owns the Solid vocabulary seam every language
   version answers through. One dialect ships; the seam is what the next major
   re-enters by (ADR 0110).
@@ -28,7 +28,7 @@ Physical colocation does not merge module interfaces:
 - `rust/crates/solid-reactive-ir` composes facts and owns proof obligations.
 
 Oxc and compiler facts stay in-process. Type Facts stays behind its versioned
-process/session interface. Neither compiler AST nodes nor TypeScript-Go objects
+process/session interface. Neither compiler AST nodes nor tsrs objects
 cross these seams.
 
 ## Solid 2 compiler policy
@@ -86,9 +86,7 @@ The external
 imported at `92c53392388518d69ef27220729f5c061479deed`. Its active layout is:
 
 ```text
-go.mod / go.sum
-apps/solid-typefacts/
-shims/
+apps/solid-typefacts/        (Rust, its own Cargo workspace; was Go until ADR 0365)
 rust/crates/typefacts/
 schema/typefacts-*.json
 docs/typefacts/
@@ -99,14 +97,14 @@ The source move is behavior-neutral. Before a new demand or protocol change:
 
 - replay the same request transcripts through external and imported builds;
 - compare encoded and decoded semantic results;
-- run every Go, Rust, retained-session, cancellation, restart, stale-generation,
+- run every producer, client, retained-session, cancellation, restart, stale-generation,
   memory, and performance test;
 - prove checker findings are unchanged;
 - keep the local path dependency and producer build atomic.
 
 `scripts/build-typefacts.sh` builds local source. Its cache
-stamp is a manifest digest over the producer, client, shims, schemas, dependency
-pins, relevant toolchain identity, and build id. The startup handshake compares
+stamp is a manifest digest over the producer, client, schemas, Cargo.lock, the tsrs
+revision, `rustc -vV`, and build id. The startup handshake compares
 protocol version, schema digest, and build identity. Codec limits are validated
 from the local language-neutral schema and bound by the source-manifest stamp;
 adding a separate wire-level codec digest is a deferred protocol change.

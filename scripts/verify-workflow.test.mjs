@@ -8,7 +8,7 @@ const verify = read("scripts/verify.sh");
 test("verification shares one build environment across every compilation before checking test targets", () => {
   const pins = verify.indexOf("step certification-pins");
   const preflight = verify.indexOf("step clippy");
-  const tests = verify.indexOf("step go-rust-tests");
+  const tests = verify.indexOf("step rust-tests");
   assert.ok(pins > verify.indexOf("step build-typefacts"));
   assert.ok(preflight > pins);
   assert.ok(tests > preflight);

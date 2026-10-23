@@ -1,14 +1,16 @@
 # Contributing
 
-The checker and CLI are Rust, and the repository-owned TypeScript-Go producer
-lives under `apps/solid-typefacts`. `scripts/build-typefacts.sh` builds it from
-local source. Keep the fact boundary explicit: Oxc owns syntax, the Solid
-compiler owns execution semantics, and TypeScript-Go owns checker facts.
+The checker and CLI are Rust, and the repository-owned Type Facts producer
+(Rust, on the tsrs TypeScript checker) lives under `apps/solid-typefacts`, its
+own Cargo workspace. `scripts/build-typefacts.sh` builds it from local source. Keep the fact boundary explicit: Oxc owns syntax, the Solid
+compiler owns execution semantics, and tsrs owns checker facts.
 
 ## Prerequisites
 
-- Go 1.26 or newer (to build and test the local Type Facts producer)
-- Rust 1.99.1 with `rustfmt` and `clippy`
+- Rust 1.99.1 with `rustfmt` and `clippy`, and the `wasm32-wasip1` target (the
+  Type Facts producer and its WASM reactor)
+- CMake (the producer's mimalloc allocator)
+- Node.js (the `tsc` oracle and the runtime resolver run it)
 - Bun 1.4.0 (published packages remain compatible with Node.js)
 - `jq`
 
@@ -53,14 +55,15 @@ make test-focused TEST=<existing-test-name> TEST_PACKAGE=solid-reactive-ir
 Use an exact existing positive or negative test for the owning crate; the driver
 refuses an empty selection and supplies the current Type Facts pins.
 
-Type Facts changes must keep the Go producer, Rust client, schemas, fixtures and
+Type Facts changes must keep the producer, Rust client, schemas, fixtures and
 checker consumer green in one change; producer/client protocol changes land
 atomically. Solid 2 compiler execution facts come from the pinned semantic-only
 Solid fork, the only compiler fork this build carries (ADR 0110).
 
 `make verify` keeps its Rust artifacts in `rust/target/verify` (no debug
-symbols, no incremental cache) and runs the Go race suite and the Rust suite
-concurrently with one Cargo process. Logs and a timing summary land in
+symbols, no incremental cache) and runs the producer's suite
+(`apps/solid-typefacts`, its own target directory) and the checker's Rust suite
+concurrently, one Cargo process per target directory. Logs and a timing summary land in
 `rust/target/verify-logs/run-*`. `SOLID_CHECKER_VERIFY_PARALLEL=0` runs the two
 sequentially on a constrained machine; `SOLID_CHECKER_RUST_TEST_RUNNER=nextest`
 swaps the Rust runner and writes per-test durations to
@@ -101,7 +104,7 @@ affect a proof must produce `uncertifiable`. Package-source fixtures preserve
 published runtime and declaration bytes and record exact versions and integrity.
 
 Do not infer JSX execution behavior from transformed output. Do not expose
-TypeScript-Go or Oxc nodes across fact-domain interfaces.
+tsrs or Oxc nodes across fact-domain interfaces.
 
 ## Releases
 
@@ -116,4 +119,4 @@ each of them (this repository, `.github/workflows/publish-npm.yml`, environment
 The Solid 2 compiler remains an exact semantic-only fork dependency. Type Facts
 is owned here; its external repository is import provenance, not an active
 dependency or PR target. Follow [the monorepo policy](docs/monorepo.md). Oxc and
-TypeScript-Go remain pinned dependencies.
+tsrs remain pinned dependencies.

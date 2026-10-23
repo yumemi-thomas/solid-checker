@@ -11,7 +11,7 @@ Retired numbers (their subsystems are gone; see the archive tag; ranges inclusiv
 
 <a id="adr-0002"></a>
 ## ADR 0002 — Type Facts lives in this repository
-The Go Type Facts producer and the Rust process/session client are part of this repository and keep their versioned process seam. A semantic fact is added, produced, consumed and measured in one change. TypeScript-Go internals never cross into Reactive IR: consumers see the wire facts only. Owners: apps/solid-typefacts, rust/crates/typefacts, schema/.
+The Type Facts producer (Rust, on tsrs; Go until ADR 0365) and the Rust process/session client are part of this repository and keep their versioned process seam. A semantic fact is added, produced, consumed and measured in one change. Compiler internals never cross into Reactive IR: consumers see the wire facts only. Owners: apps/solid-typefacts, rust/crates/typefacts, schema/.
 
 <a id="adr-0003"></a>
 ## ADR 0003 — The Solid 2 compiler follows `solidjs/solid` next
@@ -435,7 +435,7 @@ A function referenced as the `component` of an object-literal route definition w
 
 <a id="adr-0336"></a>
 ## ADR 0336 — A shorthand property is a reference of its value
-`{ value }` names the property it declares and reads the binding `value`, so the Type Facts reference index records a shorthand's name under `GetShorthandAssignmentValueSymbol` too. Otherwise every census that needs all references of a binding (ADR 0331's component identity, ADR 0335's router instance and route tables) misses an object holding the value: `const holder = { Chip }; holder.Chip()` (a false SC1001, fixture `component-identity-escapes`, `Stored.tsx`). Owner: `scan` in `apps/solid-typefacts/internal/typefacts/tsgo/references.go` (`TestShorthandPropertyIsAReferenceOfItsValue`).
+`{ value }` names the property it declares and reads the binding `value`, so the Type Facts reference index records a shorthand's name under `GetShorthandAssignmentValueSymbol` too. Otherwise every census that needs all references of a binding (ADR 0331's component identity, ADR 0335's router instance and route tables) misses an object holding the value: `const holder = { Chip }; holder.Chip()` (a false SC1001, fixture `component-identity-escapes`, `Stored.tsx`). Owner: the reference scan in `apps/solid-typefacts/src/references.rs` (`shorthand_property_is_a_reference_of_its_value`).
 
 <a id="adr-0337"></a>
 ## ADR 0337 — A view, a const alias or a DOM spread does not invalidate the props root
@@ -538,13 +538,21 @@ A compile error (`CompilerProviderError::Refused`) is no failure: the file keeps
 Native `tsc` 7.1.0-dev.20260930.4 via `typescript/unstable/sync` (Node), pinned apart from `packages/cli`'s 5.9.3 (gitHead 9adc871ff47f: one commit past b85298b6a81f, identical `tsc/`). The CLI has no diagnostic length. Owner: `scripts/lib/tsc-oracle-api.mjs`.
 
 <a id="adr-0362"></a>
-## ADR 0362 — The Go producer pins TypeScript at b85298b6a81f, Go 1.27
-`github.com/microsoft/TypeScript/tsc`, the commit tsrs ports. `proxy.golang.org` times out on it, so a cold cache fetches from GitHub. Commit d1fd86355.
+## ADR 0362 — The producer's TypeScript is b85298b6a81f (Go pin superseded by ADR 0365)
+The Go producer pinned `github.com/microsoft/TypeScript/tsc` at b85298b6a81f (Go 1.27), the commit tsrs ports; commit d1fd86355. The Go producer is gone; the TypeScript version is now whatever the pinned tsrs rev ports (ADR 0365).
 
 <a id="adr-0363"></a>
-## ADR 0363 — Go producer fixes from the Rust port
+## ADR 0363 — Go producer fixes from the Rust port (the Go producer is archived, ADR 0365)
 `go-symbol-name-0xfe` (692fc7747): every wire symbol name goes through `wireSymbolName`. `go-reference-index-retained` (349fc4c9c): the reference index never answers a retained or pruned symbol as empty. `go-stale-type-descriptor` (3991f6919): a file entering the program invalidates importers with an unresolved import.
 
 <a id="adr-0364"></a>
 ## ADR 0364 — No retained analysis across updates until instantiation-stable ids and recorded dependencies
-Every update, and every table build within a generation, discards the Go Type Facts producer's derived state: retained contributions, async facts, the source-fact memo, reference-index entries, symbol and identity maps. The transport names every path, so the client compares replacement rows with its own by value. Only the compiler's incremental program survives. Closes five staleness causes: claim-order ids, tsconfig changes, a stale type descriptor, stale reference space after a referencing file is deleted, and runtimeIdentity hashing another file's span with no recorded dependency. A table depends on the program and its demands, not on earlier tables' claim order. It returns with instantiation-stable ids and recorded dependencies. Owners: `closure.go` (`Update`, `discardDerivedStateLocked`), `tsgo/project.go`.
+Every update, and every table build within a generation, discards the Go Type Facts producer's derived state: retained contributions, async facts, the source-fact memo, reference-index entries, symbol and identity maps. The transport names every path, so the client compares replacement rows with its own by value. Only the compiler's incremental program survives. Closes five staleness causes: claim-order ids, tsconfig changes, a stale type descriptor, stale reference space after a referencing file is deleted, and runtimeIdentity hashing another file's span with no recorded dependency. A table depends on the program and its demands, not on earlier tables' claim order. It returns with instantiation-stable ids and recorded dependencies. Owners: `apps/solid-typefacts/src/closure.rs` (`update`, `discard_derived_state`), `src/project.rs`.
+
+<a id="adr-0365"></a>
+## ADR 0365 — The Type Facts producer is Rust on tsrs; the Go producer is deleted
+`apps/solid-typefacts` is a Rust workspace (own `Cargo.lock` and target) over the tsrs checker, pinned to the fork `yumemi-thomas/tsrs@49f5348` (upstream `oxc-project/tsrs@467182f` plus one commit exporting two checker functions). It is the only producer, native (`bin/solid-typefacts`, release, fat LTO) and WASM (the `reactor` cdylib in `packages/wasm`); `SOLID_TYPEFACTS_REACTOR` is refused. The Go producer, `go.mod`, the tsgolint shims and every Go toolchain step are deleted. It supersedes the producer part of ADR 0002 and ADR 0362 (TypeScript is now the version the tsrs rev ports, b85298b6a81f); ADR 0361 stands, the oracle being the same release line. Archive: `../sc-worktrees.noindex/tsgo-archive` (the last Go and Rust binaries, WASM modules, recorded differential transcripts; README has the rerun commands). The differential harness (`docs/typefacts/differential.md`) compares any two producer binaries, defaulting its reference to the archived Go one.
+
+Measured at 2cbbbb56b, release, vs Go (`rust/target/perf-final/report.md`): error-menu-web producer session 711 ms vs 5991 ms; app-game 2302 vs 4286 ms; Rust user CPU 0.10-0.28x of Go; corpus sweep 26.8 vs 52.4 s (jobs 4), coverage 1.72 vs 2.82 s; solid-groove 202 edits peak RSS 664 vs 1071 MiB; WASM cold session 2.8 vs 35.7 s and module 12.7 vs 33.9 MiB. 426/426 coverage unchanged.
+
+Accepted trades: an unpublished, pinned fork of a single-vendor compiler (a producer builds only with network access to it; bumps are snapshot-review events); clean native build 76 s vs 27 s and incremental 60 s vs 1 s (fat LTO); CMake for mimalloc and an `unsafe` boundary module for tsrs's arena frees; the 1000-file chain edit costs 180 ms vs 50 ms before ADR 0364, until instantiation-stable ids and recorded dependencies let analysis be retained again; WASM compass-ui incremental updates 24 ms vs 6 ms. The wire error text `open TS-Go project: ...` is kept byte for byte (checked by wasm-parity). Owners: `apps/solid-typefacts`, `scripts/build-typefacts.sh`, `scripts/typefacts-source-identity.mjs`, `packages/wasm/scripts/build-owned.mjs`.

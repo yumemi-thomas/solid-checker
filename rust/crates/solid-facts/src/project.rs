@@ -1,5 +1,5 @@
 //! Coherent fact generation assembled from Oxc structure, Solid compiler
-//! execution semantics, and TypeScript-Go checker semantics.
+//! execution semantics, and tsrs checker semantics.
 
 use crate::ast::AstFacts;
 use crate::compiler::ExecutionMap;

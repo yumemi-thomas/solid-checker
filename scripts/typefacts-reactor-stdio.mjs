@@ -1,6 +1,6 @@
 #!/usr/bin/env -S node --no-warnings
 // The Type Facts stdio service, served by a producer wasm reactor. It lets the
-// differential harness (scripts/typefacts-differential.mjs replay --rust ...)
+// differential harness (scripts/typefacts-differential.mjs replay --candidate ...)
 // and anything else that spawns a producer drive the wasip1 reactor with the
 // recorded request streams: same flags, same startup handshake, one response
 // frame per request frame.
@@ -9,11 +9,11 @@
 //     typefacts-reactor-stdio.mjs -project /abs/tsconfig.json [-project-config FILE]
 //
 // Differential run against the Rust reactor (build it with
-// `make build-wasm-package-rs`; the wasm is packages/wasm/owned/solid-typefacts.wasm):
+// `make build-wasm-package`; the wasm is packages/wasm/owned/solid-typefacts.wasm):
 //   make build-typefacts build-typefacts-transcript build-checker-debug
 //   bun scripts/typefacts-differential.mjs record --gate coverage --out rust/target/differential/transcripts
 //   bun scripts/typefacts-differential.mjs run rust/target/differential/transcripts/coverage \
-//     --rust "$PWD/scripts/typefacts-reactor-stdio.mjs"
+//     --candidate "$PWD/scripts/typefacts-reactor-stdio.mjs"
 // The module is read from TYPEFACTS_REACTOR_WASM, an absolute path.
 //
 // Flags the reactor has no use for are accepted and ignored: -schema,

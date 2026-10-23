@@ -1,12 +1,12 @@
 # Type Facts module
 
-The Type Facts module consists of the local Go producer under
-`apps/solid-typefacts` and the Rust process/session client under
-`rust/crates/typefacts`. Its versioned process protocol is the seam between the
+The Type Facts module consists of the local Rust producer under
+`apps/solid-typefacts` (on the tsrs TypeScript checker; ADR 0365) and the Rust
+process/session client under `rust/crates/typefacts`. Its versioned process protocol is the seam between the
 certification engine and native TypeScript analysis.
 Its interface exposes only opaque identities and original
-source facts. TypeScript AST nodes, checker types, symbols, programs, and shim
-terminology stay inside the `tsgo` adapter.
+source facts. TypeScript AST nodes, checker types, symbols, and programs
+stay inside the producer's tsrs backend.
 
 ## Current behavior
 
@@ -39,7 +39,7 @@ terminology stay inside the `tsgo` adapter.
   reachable path. Branches, loops, `try`/`catch`/`finally`, concise expressions,
   imported callbacks, and local alias chains are handled conservatively; nested
   function calls are excluded. This keeps async classification and SC1002 flow
-  facts inside the tsgo adapter.
+  facts inside the producer's tsrs backend.
 - Apply monotonically versioned in-memory file overlays, incrementally update a
   single existing source file when safe, and report the changed files plus
   their transitive importers without writing editor contents to disk.
@@ -62,24 +62,33 @@ compiler's incremental program is still reused.
 
 ## Native integration pins
 
-- tsgolint: `c3269c01a0c894a31330e1b4c3bd4edc6eb7694b`
-- TypeScript (Go implementation, `github.com/microsoft/TypeScript/tsc`):
-  `v0.0.0-20260929230140-b85298b6a81f`, commit
-  `b85298b6a81f772d080b0455de0ca9d744cd6fd6` (TypeScript 7.1.0-dev), the commit
-  tsrs ports. The Go port left `microsoft/typescript-go` (closed; last commit
-  2026-08-20) for the `tsc/` module of `microsoft/TypeScript`; the module path
-  and every shim module path changed with it. It requires Go 1.27 (`go 1.27`
-  in every go.mod; built and tested with go1.27.3). Targets that set
-  `GOTOOLCHAIN=local` (the WASM builds) need Go 1.27 installed.
-- A cold module cache fetches this module directly from GitHub
-  (`GOPROXY=direct`): proxy.golang.org times out on this commit's subdirectory
-  module every time, though it serves `@latest`. `go.sum` records the hash, so
-  the pin stays reproducible; the default proxy list falls back to direct on
-  its own.
+- tsrs: the fork `https://github.com/yumemi-thomas/tsrs` at
+  `49f534856809ad8d5a596123f02175ba01675c8d`, every tsrs crate pinned to that
+  one `rev` in `apps/solid-typefacts/Cargo.toml` (and so in its `Cargo.lock`).
+  Upstream `oxc-project/tsrs@467182f` plus one marked commit that exports
+  `is_untyped_function_call` and `get_reduced_apparent_type`; it changes no
+  behavior. The fork is unpublished: a producer builds only with network access
+  to it.
+- TypeScript: commit `b85298b6a81f772d080b0455de0ca9d744cd6fd6`
+  (`7.1.0-dev.20260929`), the commit tsrs ports. The `tsc` oracle runs the same
+  release line (ADR 0361).
+- Toolchain: Rust 1.99.1 (`apps/solid-typefacts/rust-toolchain.toml`), CMake for
+  the native allocator (mimalloc), and the `wasm32-wasip1` target for the
+  reactor.
+- Producer identity (`scripts/typefacts-source-identity.mjs`): a digest over the
+  producer and client sources, schemas, `Cargo.lock` and the build script, plus
+  the tsrs rev, `rustc -vV` and the build id. It stamps `bin/solid-typefacts`
+  (`.buildinfo`), keys the CI cache and is recorded in the WASM manifest. The
+  native binary is `cargo build --release` of that workspace; the WASM reactor
+  is its library built as a `wasm32-wasip1` cdylib
+  (`packages/wasm/scripts/build-owned.mjs`).
+- The retired Go producer (TypeScript-Go, `go.mod`, the tsgolint shims) is
+  archived outside the repository; ADR 0365 records where, and
+  [differential.md](typefacts/differential.md) how to compare against it.
 
-All unstable shim modules are replaced from the same tsgolint pseudo-version in
-the root `go.mod`. No `go:linkname` or native compiler type is allowed outside
-`apps/solid-typefacts/internal/typefacts/tsgo` and its pinned dependencies.
+No `unsafe` code is allowed outside the producer's single `unsafe_boundary`
+module (tsrs frees memory through unsafe calls; the producer copies results out
+before disposal).
 
 `AffectedSet` starts from the union of the old and updated resolved-module
 graphs. For a single accepted external-module edit, diagnostic-free forced
@@ -90,14 +99,11 @@ spans, so an implementation edit above an export can retain importer facts.
 Any failed safety gate retains the transitive reverse-import set. This keeps
 removed or redirected imports, inferred exported-type changes, global/module
 augmentation, diagnostics, and ambiguous export changes conservative. A
-single accepted, non-deleted source edit uses TypeScript-Go's
+single accepted, non-deleted source edit uses tsrs's
 `Program.UpdateProgram`; its structural checks fall back to a new program for
 import-graph changes. Added or deleted files, `tsconfig` edits, and multi-file
 batches explicitly rebuild the complete program. Both paths remain behind the
 same transactional interface.
-
-The retained shim surface and evidence-based removal sequence are documented in
-[tsgolint-extraction.md](tsgolint-extraction.md).
 
 ## Hardening evidence
 
@@ -110,5 +116,5 @@ async returns; await dominance; nested callback exclusion; and conservative
 affected-file sets. Reference-index coverage verifies imported
 aliases, deterministic source ordering, and invalidation after an overlay
 update.
-Separate audits enforce the reviewed shim import allowlist and the single
-tsgolint revision pin.
+The tsrs revision is one `rev` across all its crates, enforced by the identity
+script.

@@ -6,39 +6,23 @@ SOLID_CHECKER_REPO ?= $(REPOSITORY_ROOT)
 MEMORY_PROJECT ?= /tmp/bench-corpus-5k/tsconfig.json
 MEMORY_EDIT ?= /tmp/bench-corpus-5k/mod4383.tsx
 MEMORY_MAX_PHYSICAL_MIB ?= 1200
-MEMORY_GOCACHE ?= /tmp/solid-ts-facts-memory-go-cache
 SOLID_CHECKER_BIN ?= $(SOLID_CHECKER_REPO)/rust/target/release/solid-checker-rust
 SOLID_CHECKER_SESSION_BENCH ?= $(SOLID_CHECKER_REPO)/rust/target/release/solid-checker-session-bench
 
-.PHONY: build test test-go test-rust fmt vet benchmark-memory benchmark-memory-5k
+.PHONY: build test fmt clippy benchmark-memory-5k
 
 build:
 	TYPEFACTS_BUILD_ID="$(TYPEFACTS_BUILD_ID)" "$(REPOSITORY_ROOT)/scripts/build-typefacts.sh" "$(TYPEFACTS_BIN)"
 
-test: fmt vet test-go test-rust
-
 fmt:
-	cd "$(REPOSITORY_ROOT)" && test -z "$$(gofmt -l apps/solid-typefacts shims)"
-	cargo +$(RUST_TOOLCHAIN) fmt --manifest-path "$(REPOSITORY_ROOT)/rust/Cargo.toml" --all -- --check
+	cargo +$(RUST_TOOLCHAIN) fmt -- --check
 
-vet:
-	cd "$(REPOSITORY_ROOT)" && go vet ./apps/solid-typefacts/...
-	cargo +$(RUST_TOOLCHAIN) clippy --manifest-path "$(REPOSITORY_ROOT)/rust/Cargo.toml" -p typefacts --all-targets -- -D warnings
+clippy:
+	TYPEFACTS_BUILD_ID="$(TYPEFACTS_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) clippy --all-targets -- -D warnings
+	TYPEFACTS_BUILD_ID="$(TYPEFACTS_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) clippy --target wasm32-wasip1 --features reactor --lib -- -D warnings
 
-test-go:
-	cd "$(REPOSITORY_ROOT)" && go test -race ./apps/solid-typefacts/...
-
-test-rust: build
-	TYPEFACTS_TEST_BIN="$(TYPEFACTS_BIN)" TYPEFACTS_BUILD_ID="$(TYPEFACTS_BUILD_ID)" \
-		cargo +$(RUST_TOOLCHAIN) test --manifest-path "$(REPOSITORY_ROOT)/rust/Cargo.toml" -p typefacts
-
-# Fast, repository-owned structural and latency gates. The symbol-set test
-# catches the exact-growth regression that accounted for most cold allocation.
-benchmark-memory:
-	cd "$(REPOSITORY_ROOT)" && GOCACHE="$(MEMORY_GOCACHE)" go test ./apps/solid-typefacts/internal/typefacts -run '^Test(SymbolHandleSetGrowsGeometricallyDuringColdInterning|RetainedContributionSharesCanonicalEntityBacking|PreparedContributionTakesAndCompactsEntityBacking|SparseMaterializationLeavesSymbolClosureToClient|SessionTransfersExpandedRowsAndKeepsSparseIncrementalProof|StreamedWireTransitionIsByteIdentical|SemanticTableRetainsOnlySourceDigests|RetainedDemandStoreOwnsCompactRunsWithoutExpandedRows|SemanticMaterializationReleasesExpandedCompactDemands|CompactDemandsRoundTrip|GeneratedCorpusProducesSparseEntityRows|RetainedSparseMaterializationAtScaleMatchesFreshMaterialization)$$'
-	cd "$(REPOSITORY_ROOT)" && GOCACHE="$(MEMORY_GOCACHE)" go test ./apps/solid-typefacts/internal/typefacts -run '^$$' \
-		-bench 'Benchmark(ColdSymbolHandleSetMemory|FullTableAnalyzeAtScale|AnalyzeAfterLeafEditAtScale)$$' \
-		-benchmem -count=5
+test: fmt clippy build
+	TYPEFACTS_TEST_BIN="$(TYPEFACTS_BIN)" TYPEFACTS_BUILD_ID="$(TYPEFACTS_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) test
 
 # Exact Solid Checker corpus gate. Override the paths when the checker checkout
 # or generated corpus lives elsewhere.

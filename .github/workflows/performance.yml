@@ -93,9 +93,29 @@ jobs:
         if: steps.base-runtime.outputs.cache-hit != 'true'
         run: git worktree add /tmp/perf-base "${{ steps.base.outputs.sha }}"
 
-      # Build from whichever ownership model the base commit used. This branch's
-      # first merge base predates repatriation and therefore still carries the
-      # legacy revision-pinned builder; later bases build local source.
+      # Build from whichever producer the base commit used. The Type Facts
+      # producer was Go until ADR 0365, so the first pull request after the
+      # switch has a merge base whose build-typefacts.sh runs `go build`. Go is
+      # installed only when the base checkout carries a go.mod, at the version
+      # its go.mod declares; a Rust-era base needs nothing here.
+      - id: base-go
+        name: Detect a Go-era merge base
+        if: steps.base-runtime.outputs.cache-hit != 'true'
+        run: |
+          if [ -f /tmp/perf-base/go.mod ]; then
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+            echo "version=$(awk '$1 == "go" { print $2; exit }' /tmp/perf-base/go.mod)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Go for a Go-era merge base
+        if: steps.base-go.outputs.needed == 'true'
+        uses: actions/setup-go@v5
+        with:
+          # Read from the base's go.mod above: setup-go joins go-version-file
+          # onto the workspace, so a path into /tmp would not resolve.
+          go-version: ${{ steps.base-go.outputs.version }}
+          cache: false
+
       - name: Build the merge-base Type Facts producer
         if: steps.base-runtime.outputs.cache-hit != 'true'
         run: |

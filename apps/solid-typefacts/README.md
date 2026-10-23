@@ -3,7 +3,9 @@
 Type Facts provides compiler-independent semantic facts about a configured
 TypeScript project. This repository owns both sides of the protocol:
 
-- `apps/solid-typefacts` is the TypeScript-Go producer.
+- `apps/solid-typefacts` is the producer: Rust on the tsrs TypeScript checker
+  (ADR 0365), its own Cargo workspace; it also builds as the `wasm32-wasip1`
+  reactor behind `packages/wasm`.
 - `rust/crates/typefacts` is the Rust model, deterministic-CBOR codec, and retained
   session client.
 - `schema/typefacts-*` contains the active lifecycle schema and codec limits.
@@ -65,8 +67,13 @@ assert_eq!(answer.transcripts.len(), 1);
 ## Development
 
 ```sh
-make test
+make test        # fmt, clippy (native and the wasm reactor), tests of this workspace
+make build       # bin/solid-typefacts, through scripts/build-typefacts.sh
 ```
+
+The differential tests in `tests/` compare against a reference producer when
+`SOLID_TYPEFACTS_REFERENCE_BIN` (default: the archived Go producer) is present
+and skip otherwise; see `docs/typefacts/differential.md`.
 
 The imported design history is in git (tag `docs-archive-2026-10-19`); repository
 integration and release ownership now belong to solid-checker.

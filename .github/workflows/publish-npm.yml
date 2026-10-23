@@ -100,17 +100,16 @@ jobs:
       # the build resolves its toolchain through rust-toolchain.toml, which
       # needs its own copy of the target's std.
       - run: rustup target add wasm32-wasip1-threads wasm32-wasip1 --toolchain 1.99.1
-      # The owned check's producer reactor (packages/wasm/scripts/build-owned.mjs).
-      - uses: actions/setup-go@v5
-        with:
-          go-version: stable
-          cache-dependency-path: go.sum
+      # The owned check's producer reactor (packages/wasm/scripts/build-owned.mjs)
+      # is the Type Facts producer built for wasm32-wasip1.
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.0
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: rust
+          workspaces: |
+            rust
+            apps/solid-typefacts
           # Same reasoning as the native build: a tag's cache scope has no
           # readers, so restore from main's explicitly shared WASM key and do
           # not write.
