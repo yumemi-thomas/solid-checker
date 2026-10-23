@@ -133,19 +133,10 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
             }
             (message, hint)
         }
-        StaticDefectKind::ReactiveSourceUncaptured {
-            source,
-            callee,
-            through,
-        } => (
-            match through {
-                None => format!(
-                    "the reactive source {source:?} is passed to {callee}, whose reactive behaviour is not described anywhere: it has no body this analysis reads and is not a Solid primitive; whether reads through it stay tracked cannot be certified"
-                ),
-                Some(through) => format!(
-                    "the reactive source {source:?} is passed to {through}, which hands its parameter on to {callee}, whose reactive behaviour is not described anywhere: it has no body this analysis reads and is not a Solid primitive; whether reads through it stay tracked cannot be certified"
-                ),
-            },
+        StaticDefectKind::ReactiveSourceUncaptured { source, callee } => (
+            format!(
+                "the reactive source {source:?} is passed to {callee}, whose reactive behaviour is not described anywhere: it has no body this analysis reads and is not a Solid primitive; whether reads through it stay tracked cannot be certified"
+            ),
             format!(
                 "If {callee} comes from a package, it is not analyzed from source here: {PACKAGE_SOURCE_PREMISE} Otherwise, route the call through a project-local adapter whose body makes invocation or retention explicit."
             ),
@@ -197,6 +188,23 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
             ),
             "Packages analyzed from source change what TypeScript sees (for example a package's global augmentation merged into a project interface); make the project's declaration unambiguous, or rename it apart from the package's.".into(),
         ),
+        StaticDefectKind::ReactiveDispatchUnresolved {
+            callee,
+            member: None,
+        } if defect
+            .analysis_context
+            .starts_with(crate::FORWARDED_TO_UNDESCRIBED_CALLEE) =>
+        {
+            let inner = &defect.analysis_context[crate::FORWARDED_TO_UNDESCRIBED_CALLEE.len()..];
+            (
+                format!(
+                    "this reactive source is passed to {callee}, whose body may hand it on to {inner}, a callee whose reactive behaviour nothing analyzed describes; whether reads through it stay tracked can be neither proven nor ruled out"
+                ),
+                format!(
+                    "Call {inner} with the source where its behaviour is visible, or make {inner}'s source available to solid-checker (ADR 0370)."
+                ),
+            )
+        }
         StaticDefectKind::ReactiveDispatchUnresolved {
             callee,
             member: None,
@@ -381,6 +389,13 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
             if defect.analysis_context == crate::DEPENDENCY_SOURCE_CALL_ERROR =>
         {
             "TypeScript reports a call error here only in the program that adds package sources, not on the project's own program"
+        }
+        StaticDefectKind::ReactiveDispatchUnresolved { .. }
+            if defect
+                .analysis_context
+                .starts_with(crate::FORWARDED_TO_UNDESCRIBED_CALLEE) =>
+        {
+            "a reference bound to a reactive accessor occupies this argument position of an analyzed function whose parameter may reach a callee no analyzed source or primitive describes"
         }
         StaticDefectKind::ReactiveDispatchUnresolved { .. } => {
             "the call is type-correct, but exact runtime dispatch or equivalent reactive summaries are not proven"

@@ -110,7 +110,9 @@ fn reactive_source_uncaptured(
                         context.accessors.contains_key(symbol)
                             && context.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store)
                     })
-        })
+        }) || (!context.forwarded_uncaptured.is_empty()
+            && apply_array(file, call)
+                .is_some_and(|array| sources_within(file, context, array.span).next().is_some()))
     };
     if !file.ast.calls.iter().any(hands_over_a_source) {
         return;
@@ -125,13 +127,10 @@ fn reactive_source_uncaptured(
             continue;
         }
         // A call the engine resolved into the project has a body it already
-        // walked; that body is reported here only where it hands the
+        // walked; that body is reported here only where it may hand the
         // parameter on to an undescribed callee (ADR 0370).
-        if let Some((callee_file, callee)) = context
-            .lookup
-            .function_called_at(file.path.as_str(), call.callee)
-        {
-            forwarded_source_uncaptured(file, context, call, (callee_file, callee), defects);
+        if let Some(target) = caller_target(file, context, call) {
+            forwarded_source_uncaptured(file, context, call, target, defects);
             continue;
         }
         let Some(resolved_call) = undescribed_callee(file, context, call) else {
@@ -149,7 +148,6 @@ fn reactive_source_uncaptured(
                 kind: StaticDefectKind::ReactiveSourceUncaptured {
                     source: name.to_owned(),
                     callee: callee_text.to_owned(),
-                    through: None,
                 },
                 location: location(file.path.shared(), argument.span),
                 analysis_context: String::new(),
@@ -239,69 +237,267 @@ fn may_invoke_argument(resolved_call: &typefacts::ResolvedCall, argument_index: 
         != Some(RuntimeArgumentBehavior::ValueOnly)
 }
 
+/// The position a rest parameter's tail fills: no argument index names it.
+const REST: usize = usize::MAX;
+
+/// An analyzed function a call enters, and how its arguments reach it.
+#[derive(Clone, Copy)]
+struct Entry<'a> {
+    file: &'a FileFacts,
+    function: &'a solid_facts::ast::FunctionFact,
+    /// How the call's arguments map onto the function's parameters.
+    transport: Transport,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Transport {
+    /// `f(a, b)`: argument `i` is parameter `i`.
+    Direct,
+    /// `f.call(thisArg, a, b)`: argument `i + 1` is parameter `i`.
+    Call,
+    /// `f.apply(thisArg, array)`: the array's elements are the arguments,
+    /// and which element fills which parameter is not followed.
+    Apply,
+}
+
+/// `f.call` / `f.apply` on a function the analysis has a body for, with the
+/// standard library's `Function.prototype` method selected for the member.
+fn bound_method_entry<'a>(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'a>,
+    call: &solid_facts::ast::CallFact,
+) -> Option<Entry<'a>> {
+    let callee = file.ast.peel_ts_sugar_span(call.callee);
+    if file.ast.computed_members.binary_search(&callee).is_ok() {
+        return None;
+    }
+    let member = file.ast.member_at(callee)?;
+    let transport = match file.source_text(member.property)? {
+        "call" => Transport::Call,
+        "apply" => Transport::Apply,
+        _ => return None,
+    };
+    let resolved = context.lookup.resolved_callee_call(file, call.callee)?;
+    if !resolved
+        .declaration
+        .as_ref()
+        .is_some_and(|declaration| declaration.standard_library)
+    {
+        return None;
+    }
+    let (target_file, function) = context.lookup.function_called_at(
+        file.path.as_str(),
+        file.ast.peel_ts_sugar_span(member.object),
+    )?;
+    Some(Entry {
+        file: target_file,
+        function,
+        transport,
+    })
+}
+
+/// The analyzed function a caller's call enters, as the SC9011 rule decides
+/// it: the identifier callee's function, or `.call`/`.apply` of one. A
+/// member callee stays the rule's own question.
+fn caller_target<'a>(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'a>,
+    call: &solid_facts::ast::CallFact,
+) -> Option<Entry<'a>> {
+    if let Some((target_file, function)) = context
+        .lookup
+        .function_called_at(file.path.as_str(), call.callee)
+    {
+        return Some(Entry {
+            file: target_file,
+            function,
+            transport: Transport::Direct,
+        });
+    }
+    bound_method_entry(file, context, call)
+}
+
+/// The analyzed function a call inside a summarized body enters: as
+/// [`caller_target`], plus an exact object member (ADR 0299).
+fn body_target<'a>(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'a>,
+    call: &solid_facts::ast::CallFact,
+) -> Option<Entry<'a>> {
+    caller_target(file, context, call).or_else(|| {
+        crate::execution_role::project_callee_at_parameter(file, call, 0, context.lookup)
+            .filter(|(_, _, exact)| *exact)
+            .map(|(target_file, function, _)| Entry {
+                file: target_file,
+                function,
+                transport: Transport::Direct,
+            })
+    })
+}
+
+/// The parameter positions of `entry`'s function that argument `index` of
+/// `call` may fill. A spread before it (or the argument's own spread) adds
+/// zero or more elements, so the position is at least the count of plain
+/// arguments before it and otherwise unknown; a position past the declared
+/// parameters fills the rest parameter.
+fn reached_positions(
+    call: &solid_facts::ast::CallFact,
+    entry: &Entry<'_>,
+    index: usize,
+) -> Vec<usize> {
+    let declared = entry.function.parameters.len();
+    let rest = entry.function.rest_parameter;
+    let first = match entry.transport {
+        Transport::Direct => 0,
+        Transport::Call => 1,
+        Transport::Apply => {
+            if index != 1 {
+                return Vec::new();
+            }
+            let mut all = (0..declared).collect::<Vec<_>>();
+            if rest {
+                all.push(REST);
+            }
+            return all;
+        }
+    };
+    if index < first {
+        return Vec::new();
+    }
+    let before = &call.arguments[first..index];
+    let plain_before = before.iter().filter(|argument| !argument.spread).count();
+    let spread = call.arguments[index].spread || before.iter().any(|argument| argument.spread);
+    let mut positions = if spread {
+        (plain_before..declared).collect::<Vec<_>>()
+    } else if plain_before < declared {
+        vec![plain_before]
+    } else {
+        Vec::new()
+    };
+    if rest && (spread || plain_before >= declared) {
+        positions.push(REST);
+    }
+    positions
+}
+
+/// The array literal `f.apply(thisArg, [ ... ])` spreads into `f`.
+fn apply_array<'f>(
+    file: &'f FileFacts,
+    call: &'f solid_facts::ast::CallFact,
+) -> Option<&'f solid_facts::ast::ArgumentFact> {
+    let callee = file.ast.peel_ts_sugar_span(call.callee);
+    let member = file.ast.member_at(callee)?;
+    (file.source_text(member.property) == Some("apply"))
+        .then(|| call.arguments.get(1))
+        .flatten()
+}
+
+/// The proven, non-store sources referenced inside `span`.
+fn sources_within<'c>(
+    file: &'c FileFacts,
+    context: &'c UpstreamCompatContext<'_>,
+    span: Span,
+) -> impl Iterator<Item = &'c str> + 'c {
+    file.ast
+        .identifiers
+        .iter()
+        .filter(move |identifier| {
+            identifier.role == IdentifierRole::Reference && span.contains(identifier.span)
+        })
+        .filter_map(move |identifier| {
+            let symbol = source_symbol_at(context, file, identifier.span)?;
+            let (name, _) = context.accessors.get(symbol)?;
+            (context.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store))
+                .then_some(name.as_str())
+        })
+}
+
 /// ADR 0370: a proven source passed to an analyzed function (project or
-/// selected package source) whose parameter at that position reaches, as a
-/// bare reference, the argument of an undescribed callee. Written in the
-/// caller, that inner call is this rule's finding; one function in between
-/// must not certify it.
+/// selected package source) at a position whose parameter may reach the
+/// argument of an undescribed callee. Nothing proves the function reaches
+/// that call, with this value, whenever it runs, so the result is an
+/// obligation (SC9012), never a violation or a silent clean.
 fn forwarded_source_uncaptured(
     file: &FileFacts,
     context: &UpstreamCompatContext<'_>,
     call: &solid_facts::ast::CallFact,
-    (callee_file, callee): (&FileFacts, &solid_facts::ast::FunctionFact),
+    entry: Entry<'_>,
     defects: &mut Vec<StaticDefect>,
 ) {
+    // A call TypeScript rejects is TypeScript's to report.
     if context.forwarded_uncaptured.is_empty()
         || context
             .lookup
             .resolved_callee_call(file, call.callee)
-            .is_none_or(|resolved| resolved.validity != ResolvedCallValidity::Valid)
+            .is_some_and(|resolved| resolved.validity == ResolvedCallValidity::Recovery)
     {
         return;
     }
-    for (argument_index, argument) in call.arguments.iter().enumerate() {
-        let Some(name) = handed_source(file, context, argument) else {
-            continue;
+    let callee_text = match entry.transport {
+        Transport::Direct => text(file, call.callee),
+        Transport::Call | Transport::Apply => file
+            .ast
+            .member_at(file.ast.peel_ts_sugar_span(call.callee))
+            .map_or_else(
+                || text(file, call.callee),
+                |member| text(file, member.object),
+            ),
+    };
+    for (index, argument) in call.arguments.iter().enumerate() {
+        let handed = if entry.transport == Transport::Apply {
+            (index == 1)
+                .then(|| sources_within(file, context, argument.span).next())
+                .flatten()
+        } else if argument.spread {
+            None
+        } else {
+            handed_source(file, context, argument)
         };
-        let spread_before = call.arguments[..argument_index]
-            .iter()
-            .any(|argument| argument.spread);
-        let Some(inner) = context.forwarded_uncaptured.reached(
-            callee_file.path.as_str(),
-            callee,
-            (!spread_before).then_some(argument_index),
-        ) else {
+        if handed.is_none() {
+            continue;
+        }
+        let Some(inner) = reached_positions(call, &entry, index)
+            .into_iter()
+            .find_map(|position| {
+                context.forwarded_uncaptured.reached(
+                    entry.file.path.as_str(),
+                    entry.function.span,
+                    position,
+                )
+            })
+        else {
             continue;
         };
         defects.push(StaticDefect {
-            kind: StaticDefectKind::ReactiveSourceUncaptured {
-                source: name.to_owned(),
-                callee: inner.to_owned(),
-                through: Some(text(file, call.callee).to_owned()),
+            kind: StaticDefectKind::ReactiveDispatchUnresolved {
+                callee: callee_text.to_owned(),
+                member: None,
             },
             location: location(file.path.shared(), argument.span),
-            analysis_context: FORWARDED_PARAMETER.into(),
+            analysis_context: format!("{}{inner}", crate::FORWARDED_TO_UNDESCRIBED_CALLEE),
             fixes: vec![],
-            uncertain: false,
+            uncertain: true,
         });
     }
 }
 
-const FORWARDED_PARAMETER: &str = "forwarded-parameter";
-
-/// ADR 0370: the parameters of analyzed functions (project files and
-/// selected package source alike) that reach an undescribed callee.
+/// ADR 0370: the parameter positions of analyzed functions (project files
+/// and selected package source alike) that may reach an undescribed callee.
 ///
-/// A parameter is reached when a bare reference to it or to a binding
-/// initialized with it (in the function's body or a closure inside it) is an
-/// argument the rule above would report
-/// if it named a source, or is passed at an exact position to an analyzed
-/// function whose parameter there is reached. Positions after a spread
-/// argument are not exact: any reached parameter of that callee counts.
+/// A position is reached when a value it binds may be an argument the rule
+/// above would report if it named a source: a bare reference to the
+/// parameter or to a binding initialized with it, an element or spread of a
+/// rest parameter or of `arguments`, anywhere in the function (a closure, a
+/// default, a branch: none is proven to run or not), or an argument at a
+/// position of a further analyzed function that is reached (through
+/// `.call`/`.apply`, and from a spread onwards at every later position).
+/// Writes to the parameter are not followed: the value may still be the
+/// caller's. Being reached proves nothing runs; it only withholds
+/// certification.
 #[derive(Default)]
 pub(crate) struct ForwardedUncaptured {
-    /// `(path, function span, parameter position)` to the undescribed
-    /// callee's text, the one at the smallest `(path, start)` site.
+    /// `(path, function span, position)` to the undescribed callee's text,
+    /// the one at the smallest `(path, start)` site.
     reached: HashMap<(String, Span, usize), (String, u32, String)>,
     functions: HashSet<(String, Span)>,
 }
@@ -313,32 +509,19 @@ impl ForwardedUncaptured {
         self.reached.is_empty()
     }
 
-    fn reached(
-        &self,
-        path: &str,
-        function: &solid_facts::ast::FunctionFact,
-        position: Option<usize>,
-    ) -> Option<&str> {
+    fn reached(&self, path: &str, function: Span, position: usize) -> Option<&str> {
         let key_path = path.to_owned();
-        if !self.functions.contains(&(key_path.clone(), function.span)) {
+        if !self.functions.contains(&(key_path.clone(), function)) {
             return None;
         }
-        match position {
-            Some(position) => self
-                .reached
-                .get(&(key_path, function.span, position))
-                .map(|(_, _, callee)| callee.as_str()),
-            None => (0..function.parameters.len()).find_map(|position| {
-                self.reached
-                    .get(&(key_path.clone(), function.span, position))
-                    .map(|(_, _, callee)| callee.as_str())
-            }),
-        }
+        self.reached
+            .get(&(key_path, function, position))
+            .map(|(_, _, callee)| callee.as_str())
     }
 
     pub(super) fn build(files: &[FileFacts], context: &UpstreamCompatContext<'_>) -> Self {
         let mut seeds: Vec<(ParameterKey, (String, u32, String))> = Vec::new();
-        // target parameter -> the parameters forwarded into it
+        // target position -> the positions forwarded into it
         let mut forwards: HashMap<ParameterKey, Vec<ParameterKey>> = HashMap::default();
         for (file_seeds, file_forwards) in
             parallel_file_results(files, |file| file_parameter_flows(file, context))
@@ -386,27 +569,47 @@ type FileFlows = (
     Vec<(ParameterKey, ParameterKey)>,
 );
 
-/// One file's seeds (a parameter handed to an undescribed callee) and
-/// forwards (a parameter handed to an analyzed function's parameter).
+/// One file's seeds (a position handed to an undescribed callee) and
+/// forwards (a position handed to an analyzed function's position).
 fn file_parameter_flows(file: &FileFacts, context: &UpstreamCompatContext<'_>) -> FileFlows {
     let mut seeds = Vec::new();
     let mut forwards = Vec::new();
-    let mut parameters: HashMap<Span, (Span, usize)> = HashMap::default();
+    // Declaration span -> the (function, position) pairs its value may be.
+    let mut parameters: HashMap<Span, Vec<(Span, usize)>> = HashMap::default();
     for function in &file.ast.functions {
         for (position, parameter) in function.parameters.iter().enumerate() {
             if parameter.shape != solid_facts::ast::BindingShape::Identifier {
                 continue;
             }
             if let [name] = parameter.names.as_slice() {
-                parameters.insert(name.span, (function.span, position));
+                parameters
+                    .entry(name.span)
+                    .or_default()
+                    .push((function.span, position));
             }
         }
+        for name in &function.rest_parameter_names {
+            parameters
+                .entry(name.span)
+                .or_default()
+                .push((function.span, REST));
+        }
     }
-    if parameters.is_empty() {
+    let has_arguments_object = file
+        .ast
+        .identifiers
+        .iter()
+        .any(|identifier| file.source_text(identifier.span) == Some("arguments"));
+    let has_rest = file
+        .ast
+        .functions
+        .iter()
+        .any(|function| !function.rest_parameter_names.is_empty());
+    if parameters.is_empty() && !has_arguments_object {
         return (seeds, forwards);
     }
     // A binding initialized with the parameter itself (`const t = source`),
-    // to any depth, holds what the caller passed.
+    // to any depth, may hold what the caller passed.
     loop {
         let mut added = false;
         for binding in &file.ast.bindings {
@@ -421,12 +624,13 @@ fn file_parameter_flows(file: &FileFacts, context: &UpstreamCompatContext<'_>) -
             {
                 continue;
             }
-            if let Some(&owner) = file
+            if let Some(owners) = file
                 .ast
                 .reference_declaration(initializer.span)
                 .and_then(|declaration| parameters.get(&declaration))
+                .cloned()
             {
-                parameters.insert(name.span, owner);
+                parameters.insert(name.span, owners);
                 added = true;
             }
         }
@@ -434,6 +638,74 @@ fn file_parameter_flows(file: &FileFacts, context: &UpstreamCompatContext<'_>) -
             break;
         }
     }
+    // `arguments` names every position of the nearest non-arrow function.
+    let arguments_owner = |span: Span| {
+        file.ast
+            .functions
+            .iter()
+            .filter(|function| {
+                function.kind != solid_facts::ast::FunctionKind::Arrow
+                    && function.body.contains(span)
+            })
+            .min_by_key(|function| function.body.end - function.body.start)
+            .map(|function| {
+                let mut owners = (0..function.parameters.len())
+                    .map(|position| (function.span, position))
+                    .collect::<Vec<_>>();
+                owners.push((function.span, REST));
+                owners
+            })
+    };
+    // The positions an argument's value may come from: a bare reference to a
+    // parameter (or its alias), or any reference to a rest parameter or to
+    // `arguments` inside it (an element, a spread).
+    let owners_of = |argument: &solid_facts::ast::ArgumentFact| {
+        let mut owners = Vec::new();
+        if argument.value == ArgumentValueKind::Identifier
+            && !argument.spread
+            && let Some(found) = file
+                .ast
+                .reference_declaration(argument.span)
+                .and_then(|declaration| parameters.get(&declaration))
+        {
+            owners.extend(
+                found
+                    .iter()
+                    .copied()
+                    .filter(|(_, position)| *position != REST),
+            );
+        }
+        // Only a file with a rest parameter or `arguments` has such a transport.
+        let transports = if has_rest || has_arguments_object {
+            file.ast.identifiers.as_slice()
+        } else {
+            &[]
+        };
+        for identifier in transports.iter().filter(|identifier| {
+            identifier.role == IdentifierRole::Reference && argument.span.contains(identifier.span)
+        }) {
+            if let Some(found) = file
+                .ast
+                .reference_declaration(identifier.span)
+                .and_then(|declaration| parameters.get(&declaration))
+            {
+                owners.extend(
+                    found
+                        .iter()
+                        .copied()
+                        .filter(|(_, position)| *position == REST),
+                );
+            } else if file.source_text(identifier.span) == Some("arguments")
+                && file.ast.reference_declaration(identifier.span).is_none()
+                && let Some(found) = arguments_owner(identifier.span)
+            {
+                owners.extend(found);
+            }
+        }
+        owners.sort_unstable();
+        owners.dedup();
+        owners
+    };
     let path = file.path.as_str();
     let primitives = std::cell::OnceCell::new();
     for (index, call) in file.ast.calls.iter().enumerate() {
@@ -441,13 +713,8 @@ fn file_parameter_flows(file: &FileFacts, context: &UpstreamCompatContext<'_>) -
             .arguments
             .iter()
             .enumerate()
-            .filter(|(_, argument)| argument.value == ArgumentValueKind::Identifier)
-            .filter_map(|(position, argument)| {
-                let declaration = file.ast.reference_declaration(argument.span)?;
-                parameters
-                    .get(&declaration)
-                    .map(|&(function, parameter)| (position, (function, parameter)))
-            })
+            .map(|(position, argument)| (position, owners_of(argument)))
+            .filter(|(_, owners)| !owners.is_empty())
             .collect::<Vec<_>>();
         if handed.is_empty() {
             continue;
@@ -461,24 +728,20 @@ fn file_parameter_flows(file: &FileFacts, context: &UpstreamCompatContext<'_>) -
         {
             continue;
         }
-        let key = |(function, parameter): (Span, usize)| (path.to_owned(), function, parameter);
-        if let Some((callee_file, callee)) = context.lookup.function_called_at(path, call.callee) {
-            for (position, owner) in handed {
-                let spread_before = call.arguments[..position]
-                    .iter()
-                    .any(|argument| argument.spread);
-                let targets = if spread_before {
-                    0..callee.parameters.len()
-                } else if position < callee.parameters.len() {
-                    position..position + 1
-                } else {
-                    0..0
-                };
-                for target in targets {
-                    forwards.push((
-                        (callee_file.path.as_str().to_owned(), callee.span, target),
-                        key(owner),
-                    ));
+        let key = |(function, position): (Span, usize)| (path.to_owned(), function, position);
+        if let Some(entry) = body_target(file, context, call) {
+            for (position, owners) in handed {
+                for target in reached_positions(call, &entry, position) {
+                    for &owner in &owners {
+                        forwards.push((
+                            (
+                                entry.file.path.as_str().to_owned(),
+                                entry.function.span,
+                                target,
+                            ),
+                            key(owner),
+                        ));
+                    }
                 }
             }
             continue;
@@ -487,8 +750,17 @@ fn file_parameter_flows(file: &FileFacts, context: &UpstreamCompatContext<'_>) -
             continue;
         };
         let callee_text = text(file, call.callee);
-        for (position, owner) in handed {
-            if may_invoke_argument(resolved_call, position) {
+        for (position, owners) in handed {
+            let argument = &call.arguments[position];
+            // Only a bare value's position has a compiler-selected parameter
+            // that can prove it is never invoked.
+            if !argument.spread
+                && argument.value == ArgumentValueKind::Identifier
+                && !may_invoke_argument(resolved_call, position)
+            {
+                continue;
+            }
+            for owner in owners {
                 seeds.push((
                     key(owner),
                     (path.to_owned(), call.span.start, callee_text.to_owned()),

@@ -2,33 +2,33 @@
   "status": "uncertifiable",
   "findings": [
     {
-      "rule": "reactive-source-uncaptured",
-      "code": "SC9011",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-source-uncaptured/App.tsx",
-      "start": 872,
-      "end": 877,
+      "start": 886,
+      "end": 891,
       "fixes": 0
     },
     {
-      "rule": "reactive-source-uncaptured",
-      "code": "SC9011",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-source-uncaptured/App.tsx",
-      "start": 891,
-      "end": 896,
+      "start": 905,
+      "end": 910,
       "fixes": 0
     },
     {
-      "rule": "reactive-source-uncaptured",
-      "code": "SC9011",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-source-uncaptured/App.tsx",
-      "start": 907,
-      "end": 912,
+      "start": 921,
+      "end": 926,
       "fixes": 0
     }
   ]

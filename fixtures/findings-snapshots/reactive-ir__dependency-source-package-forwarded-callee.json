@@ -2,8 +2,8 @@
   "status": "uncertifiable",
   "findings": [
     {
-      "rule": "reactive-source-uncaptured",
-      "code": "SC9011",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dependency-source-package-forwarded-callee/App.tsx",
@@ -12,8 +12,8 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-source-uncaptured",
-      "code": "SC9011",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dependency-source-package-forwarded-callee/App.tsx",
@@ -22,8 +22,8 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-source-uncaptured",
-      "code": "SC9011",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dependency-source-package-forwarded-callee/App.tsx",
@@ -32,8 +32,8 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-source-uncaptured",
-      "code": "SC9011",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dependency-source-package-forwarded-callee/App.tsx",
@@ -42,8 +42,8 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-source-uncaptured",
-      "code": "SC9011",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dependency-source-package-forwarded-callee/App.tsx",
@@ -52,8 +52,8 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-source-uncaptured",
-      "code": "SC9011",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dependency-source-package-forwarded-callee/App.tsx",
@@ -62,8 +62,8 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-source-uncaptured",
-      "code": "SC9011",
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dependency-source-package-forwarded-callee/App.tsx",

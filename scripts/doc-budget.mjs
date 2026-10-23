@@ -22,7 +22,7 @@ export const FILE_BUDGETS = {
   "AGENTS.md": 8_000,
   "CLAUDE.md": 1_000,
   "docs/open-work.md": 26_000,
-  "docs/decisions.md": 110_300,
+  "docs/decisions.md": 110_400,
 };
 
 export const GROUP_BUDGETS = [
@@ -32,7 +32,7 @@ export const GROUP_BUDGETS = [
     test: (path) => path.startsWith("fixtures/") && path.endsWith("/README.md"),
     // Raised from 250 KB for the context-read fixtures (ADR 0352): the group was
     // 249.8 KB before they landed, and each case README is a claim the reader needs.
-    bytes: 255_600,
+    bytes: 256_000,
   },
   { name: "skills", test: (path) => path.startsWith(".claude/skills/"), bytes: 25_000 },
 ];

@@ -365,6 +365,10 @@ packages/wasm/owned/
 !fixtures/reactive-ir/dependency-source-package-forwarded-exact/node_modules/**
 !fixtures/reactive-ir/forwarded-source-uncaptured/node_modules/
 !fixtures/reactive-ir/forwarded-source-uncaptured/node_modules/**
+!fixtures/reactive-ir/forwarded-source-unproven/node_modules/
+!fixtures/reactive-ir/forwarded-source-unproven/node_modules/**
+!fixtures/reactive-ir/forwarded-source-transports/node_modules/
+!fixtures/reactive-ir/forwarded-source-transports/node_modules/**
 !fixtures/reactive-ir/dependency-source-nested-project-call-error/node_modules/
 !fixtures/reactive-ir/dependency-source-nested-project-call-error/node_modules/**
 !fixtures/reactive-ir/dependency-source-package-argument-error/node_modules/

@@ -2,7 +2,7 @@ import { createSignal } from "solid-js";
 import { aliased, chained, destructured, later, reexported, returned, run, tools } from "dep-run";
 
 // Every call hands `count` to a package function that passes it on to a
-// function value no analyzed source defines: SC9011 at each argument.
+// function value no analyzed source defines: SC9012 at each argument.
 export function Panel() {
   const [count] = createSignal(1);
   run(count);

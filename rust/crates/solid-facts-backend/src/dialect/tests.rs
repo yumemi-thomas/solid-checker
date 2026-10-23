@@ -40,7 +40,6 @@ fn catalog_prose_program() -> Program {
         StaticDefectKind::ReactiveSourceUncaptured {
             source: "sampleAccessor".into(),
             callee: "sampleCallee".into(),
-            through: None,
         },
         StaticDefectKind::ReactiveHandlerRead {
             attribute: "onClick".into(),

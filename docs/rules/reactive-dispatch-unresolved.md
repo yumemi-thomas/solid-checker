@@ -34,6 +34,14 @@ reactivity analysis but cannot be established. Covered forms include:
   bare/path-mapped, or global binding that cannot be joined exactly; and
 - a callback that runs whenever the call's **returned object is read**, which
   is rc.9's `omit(props, predicate)`. See below.
+- a proven source passed to an analyzed function (also through `.call` or
+  `.apply`) whose parameter at that position may reach a callee
+  `reactive-source-uncaptured` would report: a reference to the parameter or
+  a binding initialized with it, a rest element or spread, or `arguments`,
+  anywhere in its body or through further analyzed functions
+  (`forwarded-to-undescribed-callee:<callee>`, ADR 0370). Neither the callee's
+  current value, the value reaching the call, the call running nor the final
+  callee is proven, so this is never a violation.
 
 ### Local helpers and invocation context
 
