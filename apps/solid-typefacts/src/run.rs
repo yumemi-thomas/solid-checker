@@ -37,6 +37,9 @@ pub fn run_stdio(args: &[String]) -> Result<(), String> {
 pub struct CrashMarkers {
     pub before_update: String,
     pub before_analyze: String,
+    /// As the crash markers, but the worker thread panics instead of exiting.
+    pub panic_before_update: String,
+    pub panic_before_analyze: String,
 }
 
 impl CrashMarkers {
@@ -50,6 +53,8 @@ impl CrashMarkers {
         Self {
             before_update: read("SOLID_TYPEFACTS_CRASH_BEFORE_UPDATE"),
             before_analyze: read("SOLID_TYPEFACTS_CRASH_BEFORE_ANALYZE"),
+            panic_before_update: read("SOLID_TYPEFACTS_PANIC_BEFORE_UPDATE"),
+            panic_before_analyze: read("SOLID_TYPEFACTS_PANIC_BEFORE_ANALYZE"),
         }
     }
 }
@@ -159,8 +164,14 @@ pub struct LifecycleResponder {
 impl Responder for LifecycleResponder {
     fn lifecycle(&mut self, ctx: &Context, incoming: &Incoming) -> Response {
         match incoming.operation() {
-            Some(Operation::Update) => crash_on_marker(&self.crash.before_update),
-            Some(Operation::Analyze) => crash_on_marker(&self.crash.before_analyze),
+            Some(Operation::Update) => {
+                crash_on_marker(&self.crash.before_update);
+                panic_on_marker(&self.crash.panic_before_update);
+            }
+            Some(Operation::Analyze) => {
+                crash_on_marker(&self.crash.before_analyze);
+                panic_on_marker(&self.crash.panic_before_analyze);
+            }
             _ => {}
         }
         let started = Instant::now();
@@ -210,5 +221,13 @@ impl LifecycleResponder {
 fn crash_on_marker(path: &str) {
     if !path.is_empty() && std::fs::remove_file(path).is_ok() {
         std::process::exit(1);
+    }
+}
+
+/// Panics the calling (worker) thread when `path` names an existing marker
+/// file, consuming the marker.
+fn panic_on_marker(path: &str) {
+    if !path.is_empty() && std::fs::remove_file(path).is_ok() {
+        panic!("injected worker panic");
     }
 }

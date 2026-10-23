@@ -24,6 +24,8 @@ fn run_with(binary: &Path, env: &[(&str, &str)], args: &[&str], stdin: &[u8]) ->
         .env_remove("SOLID_TYPEFACTS_TIMINGS")
         .env_remove("SOLID_TYPEFACTS_CRASH_BEFORE_UPDATE")
         .env_remove("SOLID_TYPEFACTS_CRASH_BEFORE_ANALYZE")
+        .env_remove("SOLID_TYPEFACTS_PANIC_BEFORE_UPDATE")
+        .env_remove("SOLID_TYPEFACTS_PANIC_BEFORE_ANALYZE")
         .envs(env.iter().copied())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -126,6 +128,59 @@ fn crash_hook_fires_once_per_marker_and_consumes_it() {
     );
     assert_eq!(outcome.code, Some(0));
     assert!(marker.exists());
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+/// A panic on the worker thread must end the process, not leave the reader
+/// blocked on stdin with nobody to answer. The bound is the test's own: a hung
+/// producer never closes its stdout.
+#[test]
+fn a_worker_panic_answers_with_an_error_and_exits_nonzero() {
+    let directory =
+        std::env::temp_dir().join(format!("solid-typefacts-rs-panic-{}", std::process::id()));
+    std::fs::create_dir_all(&directory).unwrap();
+    let marker = directory.join("marker");
+    std::fs::write(&marker, "").unwrap();
+    let marker_text = marker.to_string_lossy().into_owned();
+
+    let mut command = Command::new(fake());
+    command
+        .args(["-project", PROJECT])
+        .env("SOLID_TYPEFACTS_PANIC_BEFORE_UPDATE", &marker_text)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = command.spawn().unwrap();
+    // Keep stdin open: a producer that only exits on EOF would hang here.
+    let mut input = child.stdin.take().unwrap();
+    input.write_all(&script()).unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    let status = loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            break status;
+        }
+        if std::time::Instant::now() > deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("producer still alive 20s after a worker panic");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    };
+    drop(input);
+    let output = child.wait_with_output().unwrap();
+    assert!(!marker.exists());
+    assert_eq!(status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("injected worker panic"), "{stderr}");
+    let responses = decode_all(&output.stdout);
+    // The open was answered; the update got an internal error, never ok.
+    assert_eq!(responses.len(), 2, "{responses:?}");
+    assert!(responses[0].ok);
+    assert!(!responses[1].ok);
+    assert_eq!(
+        responses[1].error.as_ref().map(|error| error.code.as_str()),
+        Some("producer-panic")
+    );
     let _ = std::fs::remove_dir_all(&directory);
 }
 

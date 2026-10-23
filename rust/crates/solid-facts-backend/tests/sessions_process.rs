@@ -2032,6 +2032,90 @@ fn edit_recovers_when_the_service_dies_between_update_and_analyze() {
     );
 }
 
+/// A panic on the producer's worker thread (not a clean exit, as above) must
+/// reach the client as an error, within a bound, never as a hang or a result.
+/// The producer answers the panicking request with a `producer-panic` error and
+/// exits; the next call finds a dead process and recovers by relaunch and replay.
+#[cfg(unix)]
+#[test]
+fn a_worker_panic_during_the_update_fails_the_edit_and_the_session_recovers() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let (wrapper, marker) = crash_armed_service(
+        &typefacts,
+        "SOLID_TYPEFACTS_PANIC_BEFORE_UPDATE",
+        "panic-before-update",
+    );
+    fs::remove_file(&marker).unwrap();
+    let wrapper = wrapper.to_string_lossy().into_owned();
+    let (done_tx, done_rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let (mut session, paths) = tracer_fixture_session(&wrapper);
+        let warm = session.analyze().unwrap();
+        fs::write(&marker, b"armed").unwrap();
+        let edited = session.edit(vec![app_edit(&paths)], None);
+        let consumed = !marker.exists();
+        let recovered = session
+            .analyze()
+            .map(|facts| serde_json::to_vec(&facts).unwrap() == serde_json::to_vec(&warm).unwrap());
+        let _ = done_tx.send((edited.map(|_| ()), consumed, recovered));
+    });
+    let (edited, consumed, recovered) = done_rx
+        .recv_timeout(std::time::Duration::from_secs(120))
+        .expect("the client hung after a producer worker panic");
+    assert!(consumed, "the panic marker must have been consumed");
+    let error = edited.expect_err("an edit whose update panicked must not succeed");
+    assert!(error.to_string().contains("producer-panic"), "got: {error}");
+    assert_eq!(
+        recovered.expect("the session must recover by relaunch and replay"),
+        true,
+        "recovery must replay the pre-edit state"
+    );
+}
+
+/// A producer that panics on every launch never certifies: the edit fails.
+#[cfg(unix)]
+#[test]
+fn a_producer_that_always_panics_never_answers_the_edit() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let directory = temporary_directory("panic-always");
+    let marker = directory.join("panic-marker");
+    let wrapper = directory.join("solid-typefacts-panicking.sh");
+    // Re-arm on every launch, but only once the program is warm (the marker
+    // appears when the file `armed` exists), so open and the first analyze pass.
+    let armed = directory.join("armed");
+    fs::write(
+        &wrapper,
+        format!(
+            "#!/bin/sh\n[ -e '{armed}' ] && : > '{marker}'\nSOLID_TYPEFACTS_PANIC_BEFORE_UPDATE='{marker}' exec '{typefacts}' \"$@\"\n",
+            armed = armed.display(),
+            marker = marker.display(),
+        ),
+    )
+    .unwrap();
+    fs::set_permissions(&wrapper, fs::Permissions::from_mode(0o755)).unwrap();
+    let wrapper = wrapper.to_string_lossy().into_owned();
+    let (done_tx, done_rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let (mut session, paths) = tracer_fixture_session(&wrapper);
+        session.analyze().unwrap();
+        fs::write(&armed, b"").unwrap();
+        fs::write(&marker, b"").unwrap();
+        let edited = session.edit(vec![app_edit(&paths)], None);
+        let _ = done_tx.send(edited.map(|_| ()));
+    });
+    let edited = done_rx
+        .recv_timeout(std::time::Duration::from_secs(120))
+        .expect("the client hung after producer worker panics");
+    assert!(edited.is_err(), "a panicking producer must not certify");
+}
+
 /// A generation that asks for no identity attestation reports no counts.
 ///
 /// The measurement is per generation, and a retained session keeps the last
