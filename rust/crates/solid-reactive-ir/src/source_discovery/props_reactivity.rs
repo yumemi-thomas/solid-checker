@@ -435,17 +435,17 @@ pub(super) fn classify_one_component(
     if references.is_empty() && !lookup.component_never_rendered(file, function) {
         escapes = true;
     }
-    // Each group: the references, the name they spell, and the declaration a
-    // reference may be. The binding's references inside the function are its
-    // own (recursion); the inner name's are all inside it, so each must be
-    // the declaration or a resolved tag (a self-render): the inner name
-    // handed out as a value escapes. A missing inner list is no census.
+    // Each group: the references and the name they spell, with the declaration
+    // that may be one of them. Any other reference, inside the function or
+    // not, must be a resolved tag (a self-render counts, its attributes join
+    // the census): a component that hands itself out from its own body
+    // (`registry.push(Card)`) reaches callers no tag shows. A named function
+    // expression adds its inner name (ADR 0377); a missing list is no census.
     let mut groups = vec![(
         references,
         name.and_then(|name| file.source_text(name.span))
             .unwrap_or_default(),
         name.map(|name| name.span),
-        true,
     )];
     if let Some(inner) = outer.and(function.name.as_ref()) {
         match entities
@@ -456,51 +456,55 @@ pub(super) fn classify_one_component(
                 references,
                 file.source_text(inner.span).unwrap_or_default(),
                 Some(inner.span),
-                false,
             )),
             None => escapes = true,
         }
     }
-    for (references, name_text, declaration, inside_is_own) in &groups {
-    for reference in references {
-        let (Ok(start), Ok(end)) = (
-            u32::try_from(reference.start_byte),
-            u32::try_from(reference.end_byte),
-        ) else {
-            escapes = true;
-            continue;
-        };
-        let span = Span::new(start, end);
-        let own_declaration = *reference.path == *file.path.as_str()
-            && ((*inside_is_own && function.span.contains(span)) || *declaration == Some(span));
-        if own_declaration {
-            continue;
-        }
-        let jsx_use = component_uses.iter().any(|(file_index, element_index)| {
-            let use_file = &facts.files[*file_index];
-            let element = &use_file.ast.jsx_elements[*element_index];
-            *reference.path == *use_file.path.as_str()
-                && (element.name.span == span
-                    || (element.span.contains(span)
-                        && use_file.source_text(span) == Some(*name_text)))
-        });
-        if !jsx_use {
-            // Passed as a value, aliased, or re-exported: this hands the
-            // component to callers that cannot be seen. It does not unwrite
-            // the JSX call sites that can.
-            //
-            // An export specifier is the one reference a closed program
-            // disposes of: `export { Card }` reaches an importer only if an
-            // importer exists, and a closed program says none does outside the
-            // files analyzed here -- where every importer's use is itself a
-            // reference in this list. Aliasing and passing as a value still
-            // escape under a closed program, because the analyzer still does
-            // not know what the receiver does with the component.
-            if !(closed && reference_is_export_specifier(facts, span, reference.path.as_ref())) {
+    for (references, name_text, declaration) in &groups {
+        for reference in references {
+            let (Ok(start), Ok(end)) = (
+                u32::try_from(reference.start_byte),
+                u32::try_from(reference.end_byte),
+            ) else {
                 escapes = true;
+                continue;
+            };
+            let span = Span::new(start, end);
+            let own_declaration =
+                *reference.path == *file.path.as_str() && *declaration == Some(span);
+            if own_declaration {
+                continue;
+            }
+            let jsx_use = component_uses.iter().any(|(file_index, element_index)| {
+                let use_file = &facts.files[*file_index];
+                let element = &use_file.ast.jsx_elements[*element_index];
+                // The opening or closing tag name only (a member tag's
+                // property, `<ns.Card>`): a reference in the element's own
+                // attributes or children (`<Card self={Card} />`) is a value.
+                *reference.path == *use_file.path.as_str()
+                    && (element.name.span == span
+                        || ((element.name.span.contains(span)
+                            || element.closing_name.is_some_and(|name| name.contains(span)))
+                            && use_file.source_text(span) == Some(*name_text)))
+            });
+            if !jsx_use {
+                // Passed as a value, aliased, or re-exported: this hands the
+                // component to callers that cannot be seen. It does not unwrite
+                // the JSX call sites that can.
+                //
+                // An export specifier is the one reference a closed program
+                // disposes of: `export { Card }` reaches an importer only if an
+                // importer exists, and a closed program says none does outside the
+                // files analyzed here -- where every importer's use is itself a
+                // reference in this list. Aliasing and passing as a value still
+                // escape under a closed program, because the analyzer still does
+                // not know what the receiver does with the component.
+                if !(closed && reference_is_export_specifier(facts, span, reference.path.as_ref()))
+                {
+                    escapes = true;
+                }
             }
         }
-    }
     }
     let mut reactive = BTreeSet::new();
     let mut unresolved = BTreeSet::new();

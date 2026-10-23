@@ -32,8 +32,7 @@ export const UnusedArrow = (props: CardProps) => {
   return <div onClick={props.onPick}>{label}</div>;
 };
 
-// Kept: a named function expression's own name is visible only inside it,
-// so its references say nothing about the outer `const`.
+// A named function expression is censused through its `const` (ADR 0377).
 export const UnusedNamed = function UnusedNamed(props: CardProps) {
   const label = props.label;
   return <div onClick={props.onPick}>{label}</div>;

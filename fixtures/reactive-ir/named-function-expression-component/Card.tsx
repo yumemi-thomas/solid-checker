@@ -22,8 +22,9 @@ const Renamed = function Inner(props: CardProps) {
   return <div>{label}</div>;
 };
 
-// Kept: a self-render through the inner name passes a reactive label, so the
-// prop is reactive although the outer tag passes a string.
+// A self-render through the inner name is a tag too: it passes a reactive
+// label (depth 1 renders it), so the read is a proven violation although the
+// outer tag passes a string.
 const Tree = function Tree(props: CardProps & { depth: number }) {
   const label = props.label;
   const [depth] = createSignal(props.depth);
@@ -37,6 +38,28 @@ const Handed = function Handed(props: CardProps) {
   const label = props.label;
   return <div>{label}</div>;
 };
+
+// Kept, the same hole for a declaration and an arrow: a component that hands
+// itself out from its own body reaches callers no tag shows.
+function SelfDecl(props: CardProps) {
+  registry.push(SelfDecl);
+  const label = props.label;
+  return <div>{label}</div>;
+}
+const SelfArrow = (props: CardProps) => {
+  registry.push(SelfArrow);
+  const label = props.label;
+  return <div>{label}</div>;
+};
+
+// Kept: a reference in a tag's own attribute is a value, not the tag (it
+// spells the name, but only the opening and closing names render).
+function SelfAttr(props: CardProps & { self?: (props: CardProps) => unknown }) {
+  const label = props.label;
+  const [title] = createSignal("t");
+  const Self = props.self;
+  return <div>{label}{Self ? <Self label={title()} /> : null}</div>;
+}
 
 // Kept: a `let` may be reassigned; only a `const` names the function.
 let Mutable = function Mutable(props: CardProps) {
@@ -54,6 +77,9 @@ export function Screen() {
       <Tree label="z" depth={1} />
       <Handed label="w" />
       <Mutable label="v" />
+      <SelfDecl label="u" />
+      <SelfArrow label="s" />
+      <SelfAttr label="r" self={SelfAttr}></SelfAttr>
     </>
   );
 }
