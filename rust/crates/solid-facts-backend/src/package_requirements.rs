@@ -72,11 +72,14 @@ fn namespace_import_redirected(
             };
             // Each reference names its member at two spans (the property and
             // the whole member, or a tag's property and name); one of them must
-            // carry an entity a redirect binds.
+            // carry an entity a redirect binds. At the whole span only a
+            // covering symbol is the member: the leading token is the namespace
+            // (ADR 0376).
             members.chunks(2).all(|pair| {
-                pair.iter().any(|(span, _)| {
+                pair.iter().enumerate().any(|(index, (span, _))| {
                     entities
                         .get(&(u64::from(span.start), u64::from(span.end)))
+                        .filter(|entity| index == 0 || entity.symbol_covers_span())
                         .is_some_and(|entity| {
                             facts.runtime_symbol_redirects.contains_key(
                                 &crate::source_redirects::canonical_symbol(

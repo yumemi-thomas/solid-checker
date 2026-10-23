@@ -161,9 +161,10 @@ pub(super) fn leaf_owner_operations_for_file(
             let callback_span = file.ast.peel_ts_sugar_span(region);
             // Preserve the identifier path's existing diagnostic anchor: the
             // owner receives the identifier itself, while the forbidden body
-            // is only evidence for that operation.
+            // is only evidence for that operation. Only an identifier is the
+            // callback: `outer.cb`'s leading token names `outer` (ADR 0376).
             let exact_callback = entities
-                .at(file.path.as_str(), callback_span)
+                .value_symbol(file, region)
                 .and_then(|symbol| lookup.function_for_symbol(symbol));
             if let Some((callback_file, callback)) = exact_callback {
                 let mut kinds = Vec::new();
@@ -381,10 +382,12 @@ fn callback_argument_function<'a>(
         .call_at(raw_argument)
         .or_else(|| file.ast.call_at(argument))
     else {
-        let symbol = lookup.entities().at(file.path.as_str(), argument)?;
+        // ADR 0376: only an identifier is the callback, and only an
+        // identifier callee is the factory (`factory.bind(null)` is not).
+        let symbol = lookup.entities().value_symbol(file, argument)?;
         return lookup.function_for_symbol(symbol);
     };
-    let symbol = lookup.entities().at(file.path.as_str(), call.callee)?;
+    let symbol = lookup.entities().value_symbol(file, call.callee)?;
     let (factory_file, factory) = lookup.function_for_symbol(symbol)?;
     if lookup
         .resolved_callee_call(file, call.callee)
@@ -836,11 +839,9 @@ fn helper_forbidden_operations(
             resolution, call_file, call, resolved, kinds, visited, depth, guaranteed,
         );
     }
-    let Some(symbol) = lookup
-        .entities()
-        .at(call_file.path.as_str(), callee)
-        .or_else(|| lookup.entities().at(call_file.path.as_str(), call.callee))
-    else {
+    // ADR 0376: only an identifier callee names the function it runs; the
+    // leading token of `getFn()()` is `getFn`, not the function it returns.
+    let Some(symbol) = lookup.entities().value_symbol(call_file, call.callee) else {
         return false;
     };
     if resolution.setter_symbols.contains(symbol) {
@@ -1345,9 +1346,11 @@ fn argument_body_operations(
         );
     }
     let lookup = resolution.lookup;
+    // ADR 0376: only an identifier argument is the function the callee runs;
+    // `makeUpdater()` is what it returns.
     let Some((function_file, function)) = lookup
         .entities()
-        .at(file.path.as_str(), file.ast.peel_ts_sugar_span(argument))
+        .value_symbol(file, argument)
         .and_then(|symbol| lookup.function_for_symbol(symbol))
         .filter(|(function_file, function)| {
             lookup.function_value_is_current(function_file, function)

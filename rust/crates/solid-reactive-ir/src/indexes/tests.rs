@@ -866,3 +866,85 @@ fn a_later_attribute_or_spread_may_replace_an_event_key() {
         "onClick"
     ));
 }
+
+/// ADR 0376: an entity at a compound span names its leading token. Only an
+/// identifier (under TypeScript sugar) answers `value_symbol`; every other
+/// expression shape answers nothing, whatever its first token names.
+#[test]
+fn value_symbol_answers_only_for_an_identifier() {
+    let source = "declare const a: any, b: any, c: any; \
+        const v1 = a(); const v2 = a.b; const v3 = a ? b : c; const v4 = a && b; \
+        const v5 = a as any; const v6 = a!; const v7 = a; const v8 = a.b.c;";
+    let facts = project(source);
+    let file = &facts.files[0];
+    let compound = ["a()", "a.b", "a ? b : c", "a && b", "a.b.c"];
+    let mut leading = HashMap::<(u64, u64), SymbolId>::default();
+    for text in compound {
+        let span = span_of(source, text, 0);
+        leading.insert(
+            (u64::from(span.start), u64::from(span.end)),
+            SymbolId::from("a"),
+        );
+    }
+    for text in ["a as any", "a!"] {
+        let span = span_of(source, text, 0);
+        leading.insert(
+            (u64::from(span.start), u64::from(span.end)),
+            SymbolId::from("a"),
+        );
+    }
+    let plain = span_of(source, "= a;", 0);
+    let plain = Span::new(plain.start + 2, plain.end - 1);
+    leading.insert(
+        (u64::from(plain.start), u64::from(plain.end)),
+        SymbolId::from("a"),
+    );
+    let entities = EntitySymbols {
+        by_path: HashMap::from_iter([(PATH.to_string(), leading)]),
+        exact_by_path: HashMap::default(),
+    };
+    for text in compound {
+        let span = span_of(source, text, 0);
+        assert_eq!(
+            entities.at(PATH, span).map(SymbolId::as_str),
+            Some("a"),
+            "{text}"
+        );
+        assert_eq!(entities.value_symbol(file, span), None, "{text}");
+    }
+    for text in ["a as any", "a!"] {
+        let span = span_of(source, text, 0);
+        assert_eq!(
+            entities.value_symbol(file, span).map(SymbolId::as_str),
+            Some("a"),
+            "{text}"
+        );
+    }
+    assert_eq!(
+        entities.value_symbol(file, plain).map(SymbolId::as_str),
+        Some("a")
+    );
+}
+
+/// ADR 0376: a member chain's root is an identifier reached through members
+/// only; a call or a parenthesised expression on the way roots nothing.
+#[test]
+fn member_chain_identifier_root_walks_members_only() {
+    let source = "declare const s: any, f: any, c: any; \
+        const v1 = s.items[0].name; const v2 = s.a!.b; const v3 = f().x; \
+        const v4 = (c ? s : f).x; const v5 = s.a;";
+    let facts = project(source);
+    let file = &facts.files[0];
+    for (text, root) in [
+        ("s.items[0].name", Some("s")),
+        ("s.a!.b", Some("s")),
+        ("s.a;", Some("s")),
+        ("f().x", None),
+        ("(c ? s : f).x", None),
+    ] {
+        let span = span_of(source, text.trim_end_matches(';'), 0);
+        let found = crate::source_discovery::member_chain_identifier_root(file, span)
+            .and_then(|root| file.source_text(root));
+        assert_eq!(found, root, "{text}");
+    }
+}

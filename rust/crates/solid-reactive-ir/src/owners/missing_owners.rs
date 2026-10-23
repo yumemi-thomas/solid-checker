@@ -579,44 +579,39 @@ pub(crate) fn find_missing_owners(
     (requirements, settled_gates)
 }
 
-/// The function symbol a call runs, for an owner edge. An entity at a member
-/// callee's composite span can name its receiver (`f.reset()`, `f.bind(…)`
-/// carry `f`'s symbol), and such a call does not run the receiver
-/// (ADR 0290 review round 1): it gets no edge, unless the member is the
-/// standard library's `call` or `apply`, which run it before they return.
+/// The function symbol a call runs, for an owner edge: an identifier callee's
+/// own symbol, or the identifier receiver of the standard library's `call` or
+/// `apply`, which run it before they return. Any other callee names no value
+/// through its leading token (ADR 0376): `f.reset()`, `f.bind(…)` and
+/// `f.child.call(…)` do not run `f` (ADR 0290 review round 1), and `f()()`
+/// runs what `f` returns.
 pub(super) fn call_edge_symbol<'e>(
     file: &solid_facts::FileFacts,
     call: &solid_facts::ast::CallFact,
     entities: &'e EntitySymbols,
     lookup: &SemanticLookup<'_>,
 ) -> Option<&'e SymbolId> {
-    let symbol = entities.get(&location(file.path.shared(), call.callee))?;
     let callee = file.ast.peel_ts_sugar_span(call.callee);
-    let receiver = file
-        .ast
-        .member_at(callee)
-        .map(|member| file.ast.peel_ts_sugar_span(member.object));
-    if receiver
-        .is_some_and(|object| entities.get(&location(file.path.shared(), object)) == Some(symbol))
-    {
-        let invokes_receiver = lookup
-            .resolved_callee_call(file, call.callee)
-            .and_then(|resolved| resolved.declaration.as_ref())
-            .is_some_and(|declaration| {
-                declaration.standard_library
-                    && matches!(
-                        declaration.qualified_name.as_ref(),
-                        "Function.call"
-                            | "Function.apply"
-                            | "CallableFunction.call"
-                            | "CallableFunction.apply"
-                            | "NewableFunction.call"
-                            | "NewableFunction.apply"
-                    )
-            });
-        return invokes_receiver.then_some(symbol);
-    }
-    Some(symbol)
+    let Some(member) = file.ast.member_at(callee) else {
+        return entities.value_symbol(file, call.callee);
+    };
+    let receiver = entities.value_symbol(file, member.object)?;
+    let invokes_receiver = lookup
+        .resolved_callee_call(file, call.callee)
+        .and_then(|resolved| resolved.declaration.as_ref())
+        .is_some_and(|declaration| {
+            declaration.standard_library
+                && matches!(
+                    declaration.qualified_name.as_ref(),
+                    "Function.call"
+                        | "Function.apply"
+                        | "CallableFunction.call"
+                        | "CallableFunction.apply"
+                        | "NewableFunction.call"
+                        | "NewableFunction.apply"
+                )
+        });
+    invokes_receiver.then_some(receiver)
 }
 
 /// ADR 0290: report an owner requirement located in a package analyzed as

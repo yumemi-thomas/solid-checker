@@ -723,10 +723,14 @@ fn discover_effect_store_parameters(ctx: &StageContext<'_>, tables: &mut SourceT
                             .is_some_and(|owner| owner.span == compute.span)
                 })
             });
+            // ADR 0376: the returned value is the store when it is the store's
+            // identifier or a chain of static members rooted at it (a nested
+            // proxy); any other expression only leads with that identifier
+            // (`store.open ? "yes" : "no"`).
             let Some(source_symbol) = returned
                 .and_then(|returned| {
-                    entities
-                        .get(&location(file.path.shared(), returned.span))
+                    super::member_chain_identifier_root(file, returned.span)
+                        .and_then(|root| entities.value_symbol(file, root))
                         .or_else(|| {
                             (returned.value == solid_facts::ast::ReturnValueKind::Identifier)
                                 .then_some(returned.span)
@@ -893,15 +897,16 @@ fn resolve_store_view_aliases(ctx: &StageContext<'_>, tables: &mut SourceTables)
                 let Some(initializer) = binding.call_initializer else {
                     continue;
                 };
+                let is_store = |symbol: &SymbolId| {
+                    source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store)
+                        && accessors.contains_key(symbol)
+                };
                 let Some(root) = view_root(
                     file,
                     initializer,
                     entities,
                     semantic_lookup,
-                    &|symbol| {
-                        source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store)
-                            && accessors.contains_key(symbol)
-                    },
+                    (&is_store, &is_store),
                     0,
                 ) else {
                     continue;
@@ -1012,7 +1017,7 @@ fn propagate_prop_sources(ctx: &StageContext<'_>, tables: &mut SourceTables) {
                             initializer,
                             entities,
                             semantic_lookup,
-                            &|symbol| prop_sources.contains_key(symbol),
+                            (&|symbol| prop_sources.contains_key(symbol), &|_| false),
                             0,
                         )?;
                         prop_sources

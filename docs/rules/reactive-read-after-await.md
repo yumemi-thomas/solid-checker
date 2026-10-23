@@ -292,6 +292,7 @@ own synchronous computation and compose the two.
 
 - **Each shape only adds reports.** A mistake in one shape can only add a false positive, so each has a runtime-oracle case: `after-await-settlement`, `after-await-tracked`, `after-await-disposed` and `after-await-owner` pin the reports. The other `after-await-*` cases (`after-await-quiet`, `after-await-possible`, `after-await-promises`, `after-await-adopted`) pin the silent shapes and the reads the checker leaves uncertifiable.
 - **Not modeled:** `race` and `any` of helpers, a promise held in a variable and handled later, member helpers outside a closed literal (a class, a spread or exported object; ADR 0351), an async IIFE the computation awaits, a `Promise.all` over a `.map` result (not an array literal), an accessor alias, and props already tracked. The open items are in `docs/open-work.md`.
+- **Exact spans.** The computation is the argument's identifier, and a prop read after the await is rooted at the props identifier through static members, keyed by the root's own member (ADR 0376): `createMemo(f.sync)` does not run `f`, and `props.load().value` reads no prop `value`.
 
 ## Related
 

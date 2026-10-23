@@ -1341,9 +1341,9 @@ fn activated_default_reads(
                 .iter()
                 .filter(|candidate| evaluated_here(candidate.span))
             {
-                let Some(accessor) =
-                    entities.get(&location(callee_file.path.shared(), read_call.callee))
-                else {
+                // ADR 0376: only an identifier callee calls the accessor;
+                // `count.toString()` names `count` by its leading token.
+                let Some(accessor) = entities.value_symbol(callee_file, read_call.callee) else {
                     continue;
                 };
                 if source_kinds.get(accessor.as_str()) != Some(&ReactiveSourceKind::Accessor)
@@ -2373,9 +2373,10 @@ fn argument_proven_not_a_getter(
     // getter (`createStore({ value: get })`, then `store.value`), and a view
     // alias of such a read is recorded as a store too. Only the proxy itself
     // settles it: not a member read, and not a binding initialized by one.
-    if let Some(symbol) = entities.get(&location(file.path.shared(), argument.span))
+    // The argument is the proxy only when it is an identifier (ADR 0376):
+    // `store === o ? count : count` leads with `store`.
+    if let Some(symbol) = entities.value_symbol(file, argument.span)
         && source_kinds.get(symbol.as_str()) == Some(&ReactiveSourceKind::Store)
-        && file.ast.member_at(argument.span).is_none()
         && !argument.binding_declaration.is_some_and(|declaration| {
             file.ast.bindings.iter().any(|binding| {
                 binding.names.iter().any(|name| name.span == declaration)

@@ -5,6 +5,8 @@ use super::*;
 /// The symbol an identifier reference names. Type Facts keeps no entity at an
 /// identifier under a TypeScript wrapper (`(props as P)`, `props!`), so the
 /// binder and the declaration the reference resolves to answer in its place.
+/// Any other expression names nothing (ADR 0376): every one of these lookups
+/// answers a compound span with its leading token.
 pub(crate) fn reference_symbol(
     file: &FileFacts,
     span: solid_facts::core::Span,
@@ -12,6 +14,10 @@ pub(crate) fn reference_symbol(
     lookup: &SemanticLookup<'_>,
 ) -> Option<SymbolId> {
     let span = file.ast.peel_ts_sugar_span(span);
+    file.ast
+        .identifiers
+        .binary_search_by_key(&span, |identifier| identifier.span)
+        .ok()?;
     entities
         .get(&location(file.path.shared(), span))
         .cloned()
@@ -31,17 +37,25 @@ pub(crate) fn reference_symbol(
         })
 }
 
+/// Whether a symbol is a source of the kind a caller asks about.
+pub(crate) type SourceTest<'a> = &'a dyn Fn(&SymbolId) -> bool;
+
 /// ADR 0323 (review round 10): the source symbol an `omit` or `merge` view
 /// expression reads through to: the expression itself when it names a source,
 /// else the view call's first argument (`omit`) or first resolvable argument
 /// (`merge`), however deeply the views nest. Inline views and bound ones are
 /// the same expression. A spread argument leaves the source unknown.
+///
+/// A source is an identifier, or for `is_chain_source` (stores, whose members
+/// are nested proxies) a chain of static members rooted at one
+/// (`merge(store.items[0], …)`). Any other argument roots nothing, whatever
+/// its leading token names (ADR 0376): `store.open ? a : b` is `a` or `b`.
 pub(crate) fn view_root(
     file: &FileFacts,
     expression: solid_facts::core::Span,
     entities: &EntitySymbols,
     lookup: &SemanticLookup<'_>,
-    is_source: &dyn Fn(&SymbolId) -> bool,
+    (is_source, is_chain_source): (SourceTest<'_>, SourceTest<'_>),
     depth: usize,
 ) -> Option<SymbolId> {
     if depth > 8 {
@@ -53,13 +67,25 @@ pub(crate) fn view_root(
     {
         return Some(symbol);
     }
+    if file.ast.member_at(expression).is_some() {
+        return member_chain_identifier_root(file, expression)
+            .and_then(|root| reference_symbol(file, root, entities, lookup))
+            .filter(|symbol| is_chain_source(symbol));
+    }
     let call = file.ast.call_at(expression)?;
     let primitive = lookup.primitive_at_call(file, call.span)?;
     if lookup.dialect.splits_props(primitive) {
         // A spread among the hidden keys hides nothing nameable; the source is
         // still the first argument, which a spread cannot be.
         let first = call.arguments.first().filter(|first| !first.spread)?;
-        return view_root(file, first.span, entities, lookup, is_source, depth + 1);
+        return view_root(
+            file,
+            first.span,
+            entities,
+            lookup,
+            (is_source, is_chain_source),
+            depth + 1,
+        );
     }
     if !lookup.dialect.merges_props_reactivity(primitive) {
         return None;
@@ -68,8 +94,39 @@ pub(crate) fn view_root(
         if argument.spread {
             return None;
         }
-        view_root(file, argument.span, entities, lookup, is_source, depth + 1)
+        view_root(
+            file,
+            argument.span,
+            entities,
+            lookup,
+            (is_source, is_chain_source),
+            depth + 1,
+        )
     })
+}
+
+/// The identifier a chain of members starts at (`store.items[0]` ->
+/// `store`), through TypeScript wrappers; `None` when the chain bottoms out
+/// at anything else (a call, a parenthesised expression).
+pub(crate) fn member_chain_identifier_root(
+    file: &FileFacts,
+    span: solid_facts::core::Span,
+) -> Option<solid_facts::core::Span> {
+    let mut current = file.ast.peel_ts_sugar_span(span);
+    for _ in 0..64 {
+        match file.ast.member_at(current) {
+            Some(member) => current = file.ast.peel_ts_sugar_span(member.object),
+            None => {
+                return file
+                    .ast
+                    .identifiers
+                    .binary_search_by_key(&current, |identifier| identifier.span)
+                    .is_ok()
+                    .then_some(current);
+            }
+        }
+    }
+    None
 }
 
 /// ADR 0294: a binding or member typed with a dialect source alias

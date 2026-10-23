@@ -52,10 +52,10 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
       "path": "fixtures/reactive-ir/leaf-scope-host-timing/App.tsx",
       "start": 2411,
       "end": 2434,

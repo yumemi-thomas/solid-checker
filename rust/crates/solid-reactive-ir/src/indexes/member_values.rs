@@ -81,7 +81,8 @@ impl<'a> SemanticLookup<'a> {
         symbols: &mut Vec<SymbolId>,
     ) {
         let object = file.ast.peel_ts_sugar_span(object);
-        let Some(receiver_symbol) = self.entities.at(file.path.as_str(), object) else {
+        // ADR 0376: only an identifier receiver is the parameter.
+        let Some(receiver_symbol) = self.entities.value_symbol(file, object) else {
             return;
         };
         let Some(function) = file
@@ -342,7 +343,8 @@ impl<'a> SemanticLookup<'a> {
             return Some(both);
         }
 
-        let direct_symbol = self.entities.at(file.path.as_str(), object);
+        // ADR 0376: only an identifier object names its binding.
+        let direct_symbol = self.entities.value_symbol(file, object);
         let identifier_reference = direct_symbol.is_none()
             && file.ast.identifiers.iter().any(|identifier| {
                 identifier.span == object

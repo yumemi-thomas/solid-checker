@@ -267,7 +267,9 @@ pub(crate) fn discover_file_sources(
         let Some(call) = ast_index.call_by_span(initializer) else {
             continue;
         };
-        let symbol = entities.at(file.path.as_str(), name);
+        // ADR 0376: a slot is the binding only when it is an identifier
+        // (`[box.get, box.set] = createSignal()` leads with `box`).
+        let symbol = entities.value_symbol(file, name);
         let primitive = crate::call_primitive_name_cached(
             lookup,
             file,
@@ -321,7 +323,7 @@ pub(crate) fn discover_file_sources(
             .source_owned_write
             .push((symbol.clone(), call.owned_write_option));
         if let Some(setter) = assignment.array_slots.get(1).and_then(|slot| *slot)
-            && let Some(setter_symbol) = entities.at(file.path.as_str(), setter)
+            && let Some(setter_symbol) = entities.value_symbol(file, setter)
         {
             result.setters.push((
                 setter_symbol.clone(),

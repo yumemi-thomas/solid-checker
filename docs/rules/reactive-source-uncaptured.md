@@ -40,6 +40,7 @@ valid is TypeScript's to report; this evidence says nothing about it, so the
 finding can appear beside a TypeScript error on the same call. That
 co-occurrence is tracked as open item B5 in
 [precision-backlog.md](../precision-backlog.md).
+A callee span that names no symbol (`new Registry().register(count)`, `(c ? a : b).register(count)`) is decided by its resolved call, not dropped (ADR 0376).
 
 ## How to fix
 

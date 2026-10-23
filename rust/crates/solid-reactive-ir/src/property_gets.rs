@@ -168,10 +168,9 @@ fn getter_reads(
             unresolved = true;
             continue;
         }
-        let Some(symbol) = context
-            .entities
-            .get(&location(context.file.path.shared(), call.callee))
-        else {
+        // ADR 0376: only an identifier callee calls the accessor;
+        // `s.toString()` names `s` by its leading token.
+        let Some(symbol) = context.entities.value_symbol(context.file, call.callee) else {
             unresolved = true;
             continue;
         };
