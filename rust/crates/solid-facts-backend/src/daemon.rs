@@ -1341,9 +1341,8 @@ fn answer(
             state.session.analyze()?
         }
     };
-    // Review of ADR 0368: a call error only the generated program has is not
-    // TypeScript's; the retained original program (current: `resync` ran)
-    // answers whether the project's own program has it too.
+    // Review of ADR 0368: a project call's validity is the project's own
+    // program's (the retained original, current: `resync` ran).
     let facts = match state.dependency.as_mut() {
         Some(DependencyState {
             original,
@@ -1354,14 +1353,18 @@ fn answer(
                 },
             ..
         }) => {
-            let recovered = dependency_program::recovered_project_calls(&facts, program);
-            let errors =
-                dependency_program::generated_call_errors(recovered, &mut original.typescript)?;
-            if errors.is_empty() {
+            let calls = dependency_program::project_calls(&facts, program);
+            let own = if calls.is_empty() {
+                Vec::new()
+            } else {
+                original.typescript.call_validities(&calls)?
+            };
+            let validity = dependency_program::project_call_validity(&facts, calls, own);
+            if validity.is_empty() {
                 facts
             } else {
                 let mut owned = (*facts).clone();
-                owned.dependency_source_call_errors = errors;
+                validity.apply(&mut owned);
                 Arc::new(owned)
             }
         }

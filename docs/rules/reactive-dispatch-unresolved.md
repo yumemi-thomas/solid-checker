@@ -162,7 +162,8 @@ only an unresolved reactivity property that TypeScript types do not express.
 analyzed from source, a call error only that program has (a package's global
 augmentation reorders a project interface's overloads) is not TypeScript's
 on the project, and the call keeps an obligation with analysis context
-`dependency-source-program-call-error` (ADR 0368).
+`dependency-source-program-call-error` (ADR 0368). Conversely a call `tsc`
+rejects on the project stays silent even where that program accepts it.
 
 ## How to fix
 

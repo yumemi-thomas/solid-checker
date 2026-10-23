@@ -260,68 +260,132 @@ pub fn bind(
     Ok(())
 }
 
-/// Review of ADR 0368: the project calls `facts` (the dependency-source
-/// program's) answers `Recovery` (a call error), sorted. With
-/// [`generated_call_errors`] they become the ones the project's own program
-/// does not answer `Recovery`.
-///
-/// Only calls in the project's own files are asked: a package file's
-/// findings are not reported. Empty in the common case, where the caller then
-/// opens nothing more.
+/// Review of ADR 0368: whether TypeScript owns an error at a project call is
+/// a fact about the project's own program, not the dependency-source one.
+/// The generated program adds package sources to the project's files, and
+/// TypeScript's answers can depend on what a program holds and in what order
+/// (a package augmenting a global interface reorders the merged overloads):
+/// it can reject a call `tsc` accepts on the project, and accept one `tsc`
+/// rejects. The generated program supplies package behaviour; a project
+/// call's validity comes from the project's own program.
+#[derive(Debug, Default)]
+pub struct ProjectCallValidity {
+    /// Project calls the generated program answers as errors and the
+    /// project's own program does not, or answers nothing for: not
+    /// TypeScript's, so uncertifiable (`ProjectFacts::dependency_source_call_errors`).
+    pub generated_errors: Vec<typefacts::Location>,
+    /// Per path, the entities with every project call the project's own
+    /// program answers `Recovery` marked `Recovery`: TypeScript reports
+    /// those, and the checker stays silent on them (invariant 1).
+    pub tsc_owned: HashMap<String, Vec<typefacts::EntityFact>>,
+    /// How many project calls were asked.
+    pub asked: usize,
+}
+
+impl ProjectCallValidity {
+    /// Whether applying this changes nothing.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.generated_errors.is_empty() && self.tsc_owned.is_empty()
+    }
+
+    /// Takes the project's own validity into `facts`.
+    pub fn apply(self, facts: &mut solid_facts::ProjectFacts) {
+        facts.dependency_source_call_errors = self.generated_errors;
+        if !self.tsc_owned.is_empty() {
+            facts.typescript = facts
+                .typescript
+                .clone()
+                .with_entity_overrides(self.tsc_owned);
+        }
+    }
+}
+
+/// The resolved calls in the project's own files of `facts` (the
+/// dependency-source program's), sorted: what [`project_call_validity`]
+/// asks the project's own program about.
 #[must_use]
-pub fn recovered_project_calls(
+pub fn project_calls(
     facts: &solid_facts::ProjectFacts,
     program: &PreparedDependencyProgram,
 ) -> Vec<typefacts::Location> {
-    let mut recovered = facts
+    let mut calls = facts
         .typescript
         .entities()
         .filter(|entity| {
-            entity
-                .resolved_call
-                .as_ref()
-                .is_some_and(|call| call.validity == typefacts::ResolvedCallValidity::Recovery)
+            entity.resolved_call.is_some()
                 && program
                     .project_files
                     .contains(Path::new(entity.location.path.as_ref()))
         })
         .map(|entity| entity.location.clone())
         .collect::<Vec<_>>();
-    recovered.sort_by(|left, right| {
+    calls.sort_by(|left, right| {
         (&left.path, left.start_byte, left.end_byte).cmp(&(
             &right.path,
             right.start_byte,
             right.end_byte,
         ))
     });
-    recovered.dedup();
-    recovered
+    calls.dedup();
+    calls
 }
 
-/// Review of ADR 0368: of `recovered` ([`recovered_project_calls`]), the
-/// calls the project's own program (`original`) does not answer `Recovery`.
-///
-/// The generated program adds package sources to the project's own files,
-/// and TypeScript's answers can depend on what a program holds and in what
-/// order (a package augmenting a global interface reorders its merged
-/// overloads). Such a call error is not one `tsc` reports on the project, so
-/// it is not TypeScript-owned and analysis must not stay silent on it
-/// (`ProjectFacts::dependency_source_call_errors`). The original program
-/// checks only the files holding these calls.
-pub fn generated_call_errors(
-    recovered: Vec<typefacts::Location>,
-    original: &mut TypeFactsSession,
-) -> Result<Vec<typefacts::Location>, Box<dyn Error>> {
-    if recovered.is_empty() {
-        return Ok(Vec::new());
+/// [`ProjectCallValidity`] for `facts` (the dependency-source program's):
+/// `calls` ([`project_calls`]) and `own`, the validity the project's own
+/// program answers for each (`TypeFactsSession::call_validities`).
+#[must_use]
+pub fn project_call_validity(
+    facts: &solid_facts::ProjectFacts,
+    calls: Vec<typefacts::Location>,
+    own: Vec<Option<typefacts::ResolvedCallValidity>>,
+) -> ProjectCallValidity {
+    use typefacts::ResolvedCallValidity::Recovery;
+    let mut answer = ProjectCallValidity {
+        asked: calls.len(),
+        ..ProjectCallValidity::default()
+    };
+    let own = calls.into_iter().zip(own).collect::<HashMap<_, _>>();
+    let mut paths = own
+        .keys()
+        .map(|location| location.path.clone())
+        .collect::<Vec<_>>();
+    paths.sort();
+    paths.dedup();
+    for path in paths {
+        let entities = facts.typescript.entities_for_path(&path);
+        let mut replaced = false;
+        let mut patched = entities.to_vec();
+        for entity in &mut patched {
+            let Some(call) = entity.resolved_call.as_mut() else {
+                continue;
+            };
+            let Some(own) = own.get(&entity.location) else {
+                continue;
+            };
+            match (call.validity, *own) {
+                (Recovery, Some(Recovery)) => {}
+                (Recovery, _) | (_, None) => answer.generated_errors.push(entity.location.clone()),
+                (_, Some(Recovery)) => {
+                    std::sync::Arc::make_mut(call).validity = Recovery;
+                    replaced = true;
+                }
+                _ => {}
+            }
+        }
+        if replaced {
+            answer.tsc_owned.insert(path.to_string(), patched);
+        }
     }
-    let validities = original.call_validities(&recovered)?;
-    Ok(recovered
-        .into_iter()
-        .zip(validities)
-        .filter(|(_, validity)| *validity != Some(typefacts::ResolvedCallValidity::Recovery))
-        .map(|(location, _)| location)
-        .collect())
+    answer.generated_errors.sort_by(|left, right| {
+        (&left.path, left.start_byte, left.end_byte).cmp(&(
+            &right.path,
+            right.start_byte,
+            right.end_byte,
+        ))
+    });
+    answer.generated_errors.dedup();
+    answer
 }
 
 #[cfg(test)]
