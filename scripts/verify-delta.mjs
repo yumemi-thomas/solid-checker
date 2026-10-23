@@ -56,8 +56,9 @@ import { certificationEnvironment } from "./lib/certification-environment.mjs";
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-const TOOLCHAIN = "+1.97";
+const TOOLCHAIN = "+1.99.1";
 const MANIFEST = "rust/Cargo.toml";
+const TYPEFACTS_MANIFEST = "apps/solid-typefacts/Cargo.toml";
 const DEBUG_CHECKER = "rust/target/debug/solid-checker-rust";
 const TYPEFACTS = "bin/solid-typefacts";
 
@@ -140,6 +141,35 @@ export const CHECKS = {
       "--all-targets", "--no-default-features", "--features", "dialect-v2",
     ],
   },
+  "typefacts": {
+    why:
+      "the Type Facts producer is its own Cargo workspace (own lockfile and target), so the rust/ " +
+      "fmt and clippy checks never see it; its differential tests skip unless a reference producer is available",
+    commands: [
+      ["cargo", TOOLCHAIN, "fmt", "--manifest-path", TYPEFACTS_MANIFEST, "--", "--check"],
+      [
+        "cargo", TOOLCHAIN, "clippy", "--manifest-path", TYPEFACTS_MANIFEST, "--all-targets",
+        "--", "-D", "warnings",
+      ],
+      [
+        "cargo", TOOLCHAIN, "clippy", "--manifest-path", TYPEFACTS_MANIFEST, "--target", "wasm32-wasip1",
+        "--features", "reactor", "--lib", "--", "-D", "warnings",
+      ],
+      ["cargo", TOOLCHAIN, "test", "--manifest-path", TYPEFACTS_MANIFEST],
+    ],
+  },
+  "differential-harness": {
+    why:
+      "the Type Facts differential harness (recorded transcripts of a reference producer replayed on a candidate) " +
+      "is test tooling: its JS normalisation and diff logic, and the transcript decoder it shells out to",
+    commands: [
+      [
+        "bun", "packages/cli/node_modules/vitest/vitest.mjs", "run",
+        "--config", "packages/cli/vitest.config.mjs", "scripts/typefacts-differential.test.mjs",
+      ],
+      ["cargo", TOOLCHAIN, "test", "--manifest-path", MANIFEST, "-p", "typefacts", "--lib", "transcript"],
+    ],
+  },
   // The universal handoff set, appended to every plan.
   "fmt-check": {
     command: ["cargo", TOOLCHAIN, "fmt", "--manifest-path", MANIFEST, "--all", "--", "--check"],
@@ -177,7 +207,7 @@ export const ROWS = [
   // crate) select `wasm-compile` and never the WASM package build or parity:
   // parity compares two builds of one analysis, so an edit confined to the
   // analysis moves both identically. Every other rust/ row, and anything
-  // under packages/wasm, solid-checker-wasm, typefacts, apps/, shims/ or
+  // under packages/wasm, solid-checker-wasm, typefacts, apps/ or
   // scripts/wasm-parity*, keeps its own answer; `make verify` is the authority.
   {
     prefix: "rust/crates/solid-facts/",
@@ -215,6 +245,39 @@ export const ROWS = [
     owner: "fixtures or expected findings",
     checks: ["coverage", "ownership-gate"],
   },
+  // The producer is the default (ADR 0365): a source change can move any fact,
+  // so it also selects the fixture gates and the WASM parity gate that runs the
+  // same code as a reactor. Its tests and testdata only feed its own tests.
+  {
+    prefix: "apps/solid-typefacts/",
+    owner: "the Type Facts producer (separate workspace; the default producer)",
+    checks: ["typefacts", "coverage", "ownership-gate", "wasm-parity"],
+  },
+  {
+    prefix: "apps/solid-typefacts/tests/",
+    owner: "the Type Facts producer's tests",
+    checks: ["typefacts"],
+  },
+  {
+    prefix: "apps/solid-typefacts/testdata/",
+    owner: "the Type Facts producer's test projects",
+    checks: ["typefacts"],
+  },
+  // The differential harness's own files, one exact path each. Neighbours
+  // (scripts/coverage.mjs, the proxy, the Makefile, the typefacts crate's
+  // manifest and lib.rs) stay unmapped on purpose: they feed other answers too.
+  ...[
+    "scripts/typefacts-differential.mjs",
+    "scripts/typefacts-differential.test.mjs",
+    "scripts/lib/typefacts-differential.mjs",
+    "scripts/typefacts-differential-allowlist.json",
+    "rust/crates/typefacts/src/transcript.rs",
+    "rust/crates/typefacts/src/bin/typefacts-transcript.rs",
+  ].map((prefix) => ({
+    prefix,
+    owner: "the Type Facts differential harness (test tooling; not read by the checker)",
+    checks: ["differential-harness"],
+  })),
   { prefix: "packages/cli/", owner: "packages/cli", checks: ["bun-test-cli"] },
   { prefix: "packages/wasm/", owner: "packages/wasm", checks: ["bun-test-wasm", "wasm-parity"] },
   // Prose that no build, test, or gate reads: the universal set only. Only
@@ -224,6 +287,7 @@ export const ROWS = [
   ...[
     "docs/adr/",
     "docs/typefacts/adr/",
+    "docs/typefacts/differential.md",
     "docs/precision-backlog.md",
     "docs/decisions.md",
     "docs/open-work.md",
@@ -283,6 +347,9 @@ export function planFor(paths) {
     // and everything after it should run against that binary.
     ...["facts-lib", "ir-lib", "backend-process", "dialects-process"].filter((id) => selected.has(id)),
     ...["coverage", "ownership-gate"].filter((id) => selected.has(id)),
+    // Separate workspace; its tests drive the producer built above.
+    ...["typefacts"].filter((id) => selected.has(id)),
+    ...["differential-harness"].filter((id) => selected.has(id)),
     // Before the WASM package's own tests: its Make target builds the package
     // (owned artifacts included) that those tests load on a fresh tree.
     ...["wasm-parity"].filter((id) => selected.has(id)),

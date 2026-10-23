@@ -116,7 +116,7 @@ export function mutationRows() {
   ].map((row, index) => ({ ...base, ...row, id: `mutation:${index}:${row.op}:${row.path}` }));
 }
 
-/** Guest-stdlib rows: Rust std (through wasi-libc) and Go os, by absolute path. */
+/** Guest-stdlib rows: Rust std (through wasi-libc), by absolute path. */
 export function stdlibRows(root) {
   return {
     rust: [
@@ -124,10 +124,6 @@ export function stdlibRows(root) {
       ["std-readlink", "longlink"], ["std-canon", "linkdir/../sibling.txt"],
     // Concatenated, never path.join: join would clean the `..` away lexically.
     ].map(([op, path]) => ({ id: `rust:${op}:${path}`, op, dirfd: "pre", lookup: 0, oflags: 0, fdflags: 0, write: 0, buflen: 0, path: `${root}/${path}` })),
-    go: [
-      ["go-stat", "linkdir/../sibling.txt"], ["go-stat", "a/b/c/d/e/../../../c/d/file.txt"],
-      ["go-lstat", "chain1"], ["go-readlink", "longlink"],
-    ].map(([op, path]) => ({ id: `go:${op}:${path}`, op, path: `${root}/${path}` })),
   };
 }
 
@@ -141,7 +137,6 @@ export const oldLayerRuns = row => !row.path.includes("loop1");
 
 export function guestArgument(row, root) {
   const relativeTo = path => `${root.slice(1)}/${path}`;
-  if (row.op.startsWith("go-")) return `${row.id}|${row.op}|${row.path}`;
   if (row.op.startsWith("std-")) return [row.id, row.op, "pre", 0, 0, 0, 0, row.path, 0].join("|");
   const dirfd = row.dirfd === "pre" ? "pre" : `${row.dirfd.split("=")[0]}=${relativeTo(row.dirfd.split("=")[1])}`;
   const path = row.dirfd === "pre" && row.op !== "setflags" && row.op !== "readdir" ? relativeTo(row.path) : row.path;
@@ -200,17 +195,12 @@ export function hostRow(row, root) {
       case "std-readlink": return { errno: 0, detail: `len=${readlinkSync(row.path, { encoding: "buffer" }).length}` };
       // The OS realpath(3): Node's JavaScript realpathSync cleans `..` first.
       case "std-canon": return { errno: 0, detail: realpathSync.native(row.path) };
-      case "go-stat": case "go-lstat": {
-        const stat = row.op === "go-stat" ? statSync(row.path) : lstatSync(row.path);
-        return { errno: 0, detail: `dir=${stat.isDirectory()} link=${stat.isSymbolicLink()}` };
-      }
-      case "go-readlink": return { errno: 0, detail: `len=${readlinkSync(row.path).length}` };
       default: return { errno: "host:unsupported", detail: "" };
     }
   } catch (error) {
     // A failed readlink leaves the caller's buffer and its sentinels alone.
     if (row.op === "readlink") return { errno: errnoOf(error), detail: "before=true after=true" };
-    if (row.op === "stat" || row.op.startsWith("std-") || row.op.startsWith("go-")) return { errno: errnoOf(error), detail: "" };
+    if (row.op === "stat" || row.op.startsWith("std-")) return { errno: errnoOf(error), detail: "" };
     return { errno: errnoOf(error), detail: check().trim() };
   }
 }

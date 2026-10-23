@@ -1,7 +1,7 @@
 //! Cross-language codec conformance.
 //!
-//! Both fixtures are produced by Go (see
-//! internal/typefacts/protocolv3_golden_test.go) and decoded here through the
+//! Both fixtures are produced by the retired Go producer (see
+//! internal/typefacts/protocolv3_golden_test.go at 2cbbbb56b) and decoded here through the
 //! deterministic-CBOR validator. Re-encoding must reproduce the file byte for
 //! byte, so any drift in field names, canonical map ordering, or optional-field
 //! omission between the two implementations fails this test.

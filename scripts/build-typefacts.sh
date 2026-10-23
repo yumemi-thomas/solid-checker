@@ -4,8 +4,11 @@
 # The producer and the `typefacts` client verify each other on startup: the
 # handshake compares protocol version, schema digest, and build id, and a
 # mismatch is a hard failure. The adjacent stamp binds the ignored binary to a
-# digest over the local producer, client, shims, schemas, Go module graph, and
-# TypeScript-Go pin, plus the linked build id.
+# digest over the producer sources, the client crate, schemas, Cargo.lock (which
+# pins tsrs to an exact revision), the tsrs revision, and `rustc -vV`, plus the
+# linked build id. The producer is a separate Cargo workspace
+# (apps/solid-typefacts, release profile, fat LTO) with its own target
+# directory; the result is copied to bin/.
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
@@ -40,7 +43,13 @@ mkdir -p "$(dirname -- "$output")"
 temporary="$output.tmp.$$"
 temporary_stamp="$stamp.tmp.$$"
 trap 'rm -f "$temporary" "$temporary_stamp"' EXIT HUP INT TERM
-( cd "$root" && go build -ldflags "-X main.buildID=$build_id" -o "$temporary" ./apps/solid-typefacts )
+toolchain=$(sed -n 's/^channel *= *"\([^"]*\)".*/\1/p' "$root/apps/solid-typefacts/rust-toolchain.toml")
+(
+  cd "$root/apps/solid-typefacts"
+  TYPEFACTS_BUILD_ID="$build_id" RUSTUP_TOOLCHAIN="${RUSTUP_TOOLCHAIN:-$toolchain}" \
+    cargo build --release --locked --bin solid-typefacts
+)
+cp "$root/apps/solid-typefacts/target/release/solid-typefacts" "$temporary"
 printf '%s' "$identity" > "$temporary_stamp"
 mv "$temporary" "$output"
 mv "$temporary_stamp" "$stamp"

@@ -9,14 +9,21 @@ import { fileURLToPath } from "node:url";
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const IDENTITY_FORMAT = 1;
 
+// The Rust producer (apps/solid-typefacts, on tsrs): its own sources, manifest,
+// lockfile (which pins every crate, tsrs included, to an exact revision) and
+// toolchain pin, the client crate it shares the wire types and codec with, the
+// workspace manifest that crate inherits from, and the schemas. Tests,
+// testdata and `target/` are not inputs of the binary.
 const roots = [
-  "apps/solid-typefacts",
-  "rust/crates/typefacts",
-  "shims",
+  "apps/solid-typefacts/src",
+  "rust/crates/typefacts/src",
 ];
 const files = [
-  "go.mod",
-  "go.sum",
+  "apps/solid-typefacts/Cargo.toml",
+  "apps/solid-typefacts/Cargo.lock",
+  "apps/solid-typefacts/rust-toolchain.toml",
+  "rust/crates/typefacts/Cargo.toml",
+  "rust/Cargo.toml",
   "schema/typefacts-v1.schema.json",
   "schema/typefacts-codec-limits.json",
   "scripts/build-typefacts.sh",
@@ -26,6 +33,7 @@ const files = [
 function collect(path, result) {
   const stat = lstatSync(path);
   if (stat.isDirectory()) {
+    if (path.endsWith("/target")) return;
     for (const entry of readdirSync(path).sort()) collect(join(path, entry), result);
     return;
   }
@@ -55,10 +63,32 @@ export function sourceDigest(root = ROOT) {
   return hash.digest("hex");
 }
 
+/** The tsrs revision the producer is pinned to: one rev across every tsrs crate. */
+export function tsrsRevision(root = ROOT) {
+  const manifest = readFileSync(resolve(root, "apps/solid-typefacts/Cargo.toml"), "utf8");
+  const revisions = new Set([...manifest.matchAll(/tsrs_\w+\s*=\s*\{[^}]*\brev\s*=\s*"([0-9a-f]{40})"/g)].map(match => match[1]));
+  if (revisions.size !== 1) throw new Error(`apps/solid-typefacts/Cargo.toml must pin every tsrs crate to one rev, found ${[...revisions].join(", ") || "none"}`);
+  return [...revisions][0];
+}
+
+/** `rustc -vV` of the pinned toolchain; TYPEFACTS_TOOLCHAIN_IDENTITY overrides it (tests). */
+function toolchainIdentity(root) {
+  if (process.env.TYPEFACTS_TOOLCHAIN_IDENTITY) return process.env.TYPEFACTS_TOOLCHAIN_IDENTITY;
+  const pin = /channel\s*=\s*"([^"]+)"/.exec(readFileSync(resolve(root, "apps/solid-typefacts/rust-toolchain.toml"), "utf8"))?.[1];
+  return execFileSync("rustc", ["-vV"], {
+    encoding: "utf8",
+    env: { ...process.env, RUSTUP_TOOLCHAIN: process.env.RUSTUP_TOOLCHAIN || pin },
+  }).trim();
+}
+
 export function identity(buildId = process.env.TYPEFACTS_BUILD_ID || "dev", root = ROOT) {
-  const toolchain = process.env.TYPEFACTS_TOOLCHAIN_IDENTITY ||
-    execFileSync("go", ["version"], { encoding: "utf8" }).trim();
-  return { format: IDENTITY_FORMAT, sourceDigest: sourceDigest(root), toolchain, buildId };
+  return {
+    format: IDENTITY_FORMAT,
+    sourceDigest: sourceDigest(root),
+    tsrsRev: tsrsRevision(root),
+    toolchain: toolchainIdentity(root),
+    buildId,
+  };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

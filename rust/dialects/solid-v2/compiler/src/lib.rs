@@ -4,6 +4,7 @@
 //! Nothing outside this crate speaks the compiler's own types. A Solid 1.x
 //! dialect plugs in the same way: its own crate wrapping its own compiler
 //! behind the same trait.
+#![forbid(unsafe_code)]
 
 use solid_facts::compiler::{
     AnalysisRequest, CompilerExecutionCardinality, CompilerExecutionDisposition,

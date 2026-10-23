@@ -85,7 +85,7 @@ Absence means not proven a tuple, never "not a tuple".
 `EntityDemand.callability` produces `EntityFact.callability`:
 `callable`, `untypedCallable`, `nonCallable`, `mixed`, or `unknown`.
 
-The TypeScript-Go adapter obtains the expression type with
+The tsrs adapter obtains the expression type with
 `Checker.GetTypeAtLocation`, distributes real union constituents with
 `Type.Distributed`, and asks `Checker.GetSignaturesOfType` for
 `SignatureKindCall`. Construct signatures do not count. `any`, `unknown`,
@@ -186,13 +186,12 @@ that family.
 ## Runtime value domain
 
 `EntityDemand.runtimeValueDomain` produces
-`EntityFact.runtimeValueDomain: *RuntimeValueDomain` in Go and
-`Option<RuntimeValueDomain>` in Rust. The fact has four booleans:
+`Option<RuntimeValueDomain>` (`*RuntimeValueDomain` in the retired Go producer). The fact has four booleans:
 
 - `mayBeCallable`: at least one possible value has a TypeScript call signature.
 - `mayBeUndefined`: at least one possible value is `undefined`.
 - `mayBeOther`: at least one possible value is neither callable nor undefined.
-- `unknown`: TypeScript-Go exposed a dynamic, unresolved, circular, or recovery
+- `unknown`: tsrs exposed a dynamic, unresolved, circular, or recovery
   domain that cannot be exhaustively classified.
 
 The checker adapter recursively ORs the classifications of actual union
@@ -203,7 +202,7 @@ intersections. `TypeFlagsUndefined` is undefined, and a remaining intersection
 that the checker proves assignable to its canonical undefined type is also
 undefined. Every other known, inhabited type is `other`.
 
-For an instantiable type, the adapter follows TypeScript-Go's resolved generic
+For an instantiable type, the adapter follows tsrs's resolved generic
 constraint before classifying it. Thus `T extends (() => void) | undefined`
 has the same closed domain as its constraint, while an unconstrained `T` is
 unknown. `never` is the known empty domain: all four fields are false. `any`,
@@ -402,7 +401,7 @@ results.
 `EntityDemand.symbol` produces exactly one of three outcomes at the demanded
 location:
 
-- `EntityFact.symbol` is non-empty when TypeScript-Go resolves a symbol;
+- `EntityFact.symbol` is non-empty when tsrs resolves a symbol;
 - `EntityFact.symbolUnresolved` is true when the source node exists and
   `Checker.GetSymbolAtLocation` explicitly returns no symbol;
 - both fields are empty when the producer could not inspect the source node.
@@ -560,7 +559,7 @@ The active lifecycle schema is V1 and the active Wire table model is v19. The
 answers belong to the open program generation rather than to a retained fact
 table. The packed transition framing remains version 1. Handshake protocol 4
 adds the exact overload count beside the selected overload ordinal in invocation
-transcripts. Go and Rust pin that protocol, the same schema digest, and the same
+transcripts. Producer and client pin that protocol, the same schema digest, and the same
 build identity, so mismatched producer/client versions fail during startup.
 
 Policy-2 package certification uses a stricter client path than ordinary

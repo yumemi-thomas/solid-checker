@@ -19,7 +19,7 @@ const result = spawnSync("napi", args, {
   cwd: new URL("..", import.meta.url),
   env: {
     ...process.env,
-    RUSTUP_TOOLCHAIN: "1.97"
+    RUSTUP_TOOLCHAIN: "1.99.1"
   },
   stdio: "inherit"
 });

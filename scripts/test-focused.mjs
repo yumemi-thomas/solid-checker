@@ -9,7 +9,7 @@ export function focusedTestArguments({ TEST, TEST_EXACT = "0", TEST_PACKAGE = "s
   if (!TEST?.trim() || TEST.startsWith("-")) throw new Error("set TEST to a nonempty Rust test name or filter");
   if (!["0", "1"].includes(TEST_EXACT)) throw new Error("TEST_EXACT must be 0 or 1");
   if (!TEST_PACKAGE || TEST_PACKAGE.startsWith("-")) throw new Error("TEST_PACKAGE must name a Rust package");
-  return ["+1.97", "test", "--manifest-path", "rust/Cargo.toml", "-p", TEST_PACKAGE,
+  return ["+1.99.1", "test", "--manifest-path", "rust/Cargo.toml", "-p", TEST_PACKAGE,
     "--lib", TEST, "--", ...(TEST_EXACT === "1" ? ["--exact"] : [])];
 }
 

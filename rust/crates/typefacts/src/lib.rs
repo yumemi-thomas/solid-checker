@@ -11,9 +11,15 @@ use std::num::NonZeroU32;
 use std::sync::Arc;
 use thiserror::Error;
 
+#[cfg(feature = "producer")]
+pub mod producer;
 mod retained_table;
 mod session;
 mod shared_transition_arena;
+#[cfg(feature = "transcript")]
+pub mod transcript;
+#[cfg(target_os = "macos")]
+mod unsafe_boundary;
 pub mod v3;
 
 pub use retained_table::{FactTable, Symbol};
@@ -85,8 +91,8 @@ pub struct Location {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Declaration {
-    pub name: Arc<str>,
     pub kind: Arc<str>,
+    pub name: Arc<str>,
     pub location: Location,
 }
 
@@ -665,6 +671,31 @@ impl TupleShape {
     }
 }
 
+#[cfg(feature = "producer")]
+impl TupleShape {
+    /// The producer's constructor (Go: the `TupleShape` literal): element zero's
+    /// callability is always stated, `Unknown` when the tuple has no slot.
+    ///
+    /// # Errors
+    ///
+    /// A fixed length or exact length that does not fit the compact form.
+    pub fn for_producer(
+        fixed_length: u32,
+        has_rest: bool,
+        element_zero: Callability,
+        element_zero_min_parameters: u32,
+        exact_length: Option<u32>,
+    ) -> Result<Self, String> {
+        Self::try_new(
+            fixed_length,
+            has_rest,
+            Some(element_zero),
+            element_zero_min_parameters,
+            exact_length,
+        )
+    }
+}
+
 impl Default for TupleShape {
     fn default() -> Self {
         Self::try_new(0, false, None, 0, None).expect("empty tuple shape is representable")
@@ -1002,12 +1033,12 @@ pub struct EntityFact {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SymbolFact {
     pub id: Arc<str>,
+    #[serde(default, skip_serializing_if = "is_empty_slice")]
+    pub references: Arc<[Location]>,
     #[serde(default, skip_serializing_if = "str::is_empty")]
     pub alias_target: Arc<str>,
     #[serde(default, skip_serializing_if = "is_empty_slice")]
     pub declarations: Arc<[Declaration]>,
-    #[serde(default, skip_serializing_if = "is_empty_slice")]
-    pub references: Arc<[Location]>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -1108,6 +1139,26 @@ pub fn encode<T: Serialize>(value: &T) -> Result<Vec<u8>, TypeFactsError> {
         .map_err(|error| TypeFactsError::Codec(error.to_string()))?;
     enforce_limit(encoded.len())?;
     Ok(encoded)
+}
+
+/// [`encode`] without the generic value round trip, for types whose fields
+/// are declared in core deterministic key order (the v3 `Response`).
+///
+/// The value is serialized straight to bytes and the bytes are checked with
+/// the same validator [`decode`] applies: shortest-form heads, definite
+/// lengths and map keys in core deterministic order. Deterministic CBOR has
+/// exactly one encoding of a value, so bytes that pass are the bytes
+/// [`encode`] returns; anything that does not pass (a type whose declaration
+/// order is not canonical) takes the canonicalizing path.
+pub fn encode_direct<T: Serialize>(value: &T) -> Result<Vec<u8>, TypeFactsError> {
+    let mut encoded = Vec::new();
+    if ciborium::into_writer(value, &mut encoded).is_ok()
+        && encoded.len() <= MAX_MESSAGE_BYTES
+        && validate_deterministic_cbor(&encoded).is_ok()
+    {
+        return Ok(encoded);
+    }
+    encode(value)
 }
 
 /// Encodes a request for the already authenticated local v3 sidecar.
@@ -1426,20 +1477,20 @@ pub struct ModuleFact {
     /// reached through a symlink this is the realpath, matching
     /// [`ModuleImportFact::resolved_path`].
     pub path: Arc<str>,
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub declaration_file: bool,
     #[serde(default, skip_serializing_if = "module_format_is_unknown")]
     pub format: ModuleFormat,
-    /// The compiler's input-to-declaration-output pairing, and `None` whenever
-    /// no configured project reference covers this file — which is almost
-    /// always. See [`ProjectReferenceMapping`].
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub project_reference: Option<ProjectReferenceMapping>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub declaration_file: bool,
     /// Other paths the program resolved to this same file because they are the
     /// same `name@version` installed in more than one place. The compiler's own
     /// duplicate-install record, never a path similarity.
     #[serde(default, skip_serializing_if = "is_empty_slice")]
     pub redirect_targets: Arc<[Arc<str>]>,
+    /// The compiler's input-to-declaration-output pairing, and `None` whenever
+    /// no configured project reference covers this file — which is almost
+    /// always. See [`ProjectReferenceMapping`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_reference: Option<ProjectReferenceMapping>,
 }
 
 /// What the compiler's resolver recorded about the shape of one resolution.
@@ -1477,11 +1528,11 @@ pub enum ModuleResolution {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PackageIdentity {
-    pub manifest_path: Arc<str>,
     #[serde(default, skip_serializing_if = "str::is_empty")]
     pub name: Arc<str>,
     #[serde(default, skip_serializing_if = "str::is_empty")]
     pub version: Arc<str>,
+    pub manifest_path: Arc<str>,
 }
 
 /// The package identity the *resolver* itself recorded while resolving one
@@ -1518,16 +1569,31 @@ pub struct ResolverPackageId {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ModuleImportFact {
-    /// The string-literal span, with `path` naming the importing file.
-    pub specifier: Location,
     /// The specifier as written, after string-literal unescaping.
     pub text: Arc<str>,
-    pub resolution: ModuleResolution,
-    /// The file the resolver selected. When resolution walked a symlink this is
-    /// the realpath. Empty exactly when `resolution` is
-    /// [`ModuleResolution::Unresolved`].
+    /// The owning package of `resolved_path`, present only when the request
+    /// asked for package identities.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub package: Option<PackageIdentity>,
+    /// The extension the resolver selected (`.ts`, `.d.ts`, `.js`, `.json`, …).
+    /// How a consumer sees that a specifier landed on a declaration file.
     #[serde(default, skip_serializing_if = "str::is_empty")]
-    pub resolved_path: Arc<str>,
+    pub extension: Arc<str>,
+    /// The string-literal span, with `path` naming the importing file.
+    pub specifier: Location,
+    pub resolution: ModuleResolution,
+    /// The path the resolver had reached before taking its realpath.
+    ///
+    /// TypeScript populates it only when the two differ and only for a
+    /// non-relative resolution under `node_modules` with `preserveSymlinks`
+    /// off — exactly the pnpm and workspace-link shape — so an empty value
+    /// means the resolver saw no divergence, not that none was looked for.
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub symlink_path: Arc<str>,
+    /// The specifier named a TypeScript extension outright rather than having
+    /// one substituted.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub ts_extension: bool,
     /// The file the program actually parses in place of `resolved_path`,
     /// populated only when the two differ.
     ///
@@ -1539,22 +1605,6 @@ pub struct ModuleImportFact {
     /// beside it, so an empty value is the usual and honest answer.
     #[serde(default, skip_serializing_if = "str::is_empty")]
     pub included_path: Arc<str>,
-    /// The path the resolver had reached before taking its realpath.
-    ///
-    /// TypeScript populates it only when the two differ and only for a
-    /// non-relative resolution under `node_modules` with `preserveSymlinks`
-    /// off — exactly the pnpm and workspace-link shape — so an empty value
-    /// means the resolver saw no divergence, not that none was looked for.
-    #[serde(default, skip_serializing_if = "str::is_empty")]
-    pub symlink_path: Arc<str>,
-    /// The extension the resolver selected (`.ts`, `.d.ts`, `.js`, `.json`, …).
-    /// How a consumer sees that a specifier landed on a declaration file.
-    #[serde(default, skip_serializing_if = "str::is_empty")]
-    pub extension: Arc<str>,
-    /// The specifier named a TypeScript extension outright rather than having
-    /// one substituted.
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub ts_extension: bool,
     /// The configured `paths` key the compiler's own pattern matcher selects
     /// for `text`, under the compiler's eligibility rule (`paths` is non-empty
     /// and the specifier is not relative) and its longest-prefix tie-break.
@@ -1569,10 +1619,11 @@ pub struct ModuleImportFact {
     /// `node_modules` is not the installed package of that name.
     #[serde(default, skip_serializing_if = "str::is_empty")]
     pub paths_pattern: Arc<str>,
-    /// The owning package of `resolved_path`, present only when the request
-    /// asked for package identities.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub package: Option<PackageIdentity>,
+    /// The file the resolver selected. When resolution walked a symlink this is
+    /// the realpath. Empty exactly when `resolution` is
+    /// [`ModuleResolution::Unresolved`].
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub resolved_path: Arc<str>,
     /// The identity the resolver itself recorded, present only when the request
     /// asked for package identities and the resolver read a manifest during
     /// this resolution.

@@ -108,13 +108,10 @@ summarize() {
 }
 
 step fmt-check
-cargo +1.97 fmt --manifest-path "$rust_manifest" --all -- --check
+cargo +1.99.1 fmt --manifest-path "$rust_manifest" --all -- --check
 
-step go-fmt-check
-test -z "$(gofmt -l apps/solid-typefacts shims)"
-
-step go-vet
-go vet ./apps/solid-typefacts/...
+step typefacts-fmt-check
+cargo +1.99.1 fmt --manifest-path apps/solid-typefacts/Cargo.toml -- --check
 
 step bun-install
 bun install --cwd packages/cli --ignore-scripts --no-progress --frozen-lockfile
@@ -147,8 +144,15 @@ SOLID_CHECKER_CARGO_PROFILE="$cargo_profile"
 export SOLID_CHECKER_BUILD_ID TYPEFACTS_BUILD_ID SOLID_CHECKER_CARGO_PROFILE
 
 step clippy
-cargo +1.97 clippy --profile "$cargo_profile" \
+cargo +1.99.1 clippy --profile "$cargo_profile" \
   --manifest-path "$rust_manifest" --workspace --all-targets -- -D warnings
+
+# The Type Facts producer is its own Cargo workspace (tsrs optimised even in the
+# dev profile, its own target directory): native, and the wasm32-wasip1 reactor.
+step typefacts-clippy
+cargo +1.99.1 clippy --manifest-path apps/solid-typefacts/Cargo.toml --locked --all-targets -- -D warnings
+cargo +1.99.1 clippy --manifest-path apps/solid-typefacts/Cargo.toml --locked \
+  --target wasm32-wasip1 --features reactor --lib -- -D warnings
 
 # One dialect ships (ADR 0110), so `--no-default-features --features dialect-v2`
 # is the default build and a separate arm would compile the same configuration
@@ -163,7 +167,7 @@ step oracle-provision
 bun scripts/tsc-oracle.mjs provision --dialect all
 
 # The assignments are inside the function rather than prefixed onto the call:
-step go-rust-tests
+step rust-tests
 TYPEFACTS_TEST_BIN="$PWD/bin/solid-typefacts" SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" \
   node scripts/verify-tests.mjs "$rust_test_runner" &
 tests_pid=$!
@@ -179,7 +183,7 @@ trap - INT TERM HUP
 test "$tests_status" -eq 0
 
 step build-checker
-cargo +1.97 build --profile "$cargo_profile" --manifest-path "$rust_manifest" \
+cargo +1.99.1 build --profile "$cargo_profile" --manifest-path "$rust_manifest" \
   -p solid-facts-backend --bin solid-checker-rust
 
 step coverage
@@ -199,23 +203,21 @@ SOLID_CHECKER_BIN="$checker_bin" \
 step build-wasm-package
 bun install --cwd packages/wasm --ignore-scripts --no-progress --frozen-lockfile
 bun run --cwd packages/wasm build
-cargo +1.97 build --locked --manifest-path scripts/wasm-parity/guests/path-control/Cargo.toml \
+cargo +1.99.1 build --locked --manifest-path scripts/wasm-parity/guests/path-control/Cargo.toml \
   --target wasm32-wasip1 --release --target-dir rust/target/wasm-parity-guests
-GOOS=wasip1 GOARCH=wasm GOTOOLCHAIN=local go build -trimpath \
-  -o rust/target/wasm-parity-guests/path-control-go.wasm ./scripts/wasm-parity/guests/path-control-go
 
 step wasm-parity
 wasm_parity_scratch=$(mktemp -d "${TMPDIR:-/tmp}/sc-wasm-parity.XXXXXX")
 mkdir -p "$wasm_parity_scratch/n2-tmp"
 TMPDIR="$wasm_parity_scratch/n2-tmp" TYPEFACTS_BRIDGE_FRAMES="$wasm_parity_scratch/update-frames" \
   TYPEFACTS_TEST_BIN="$PWD/bin/solid-typefacts" \
-  cargo +1.97 test --profile "$cargo_profile" --manifest-path "$rust_manifest" \
+  cargo +1.99.1 test --profile "$cargo_profile" --manifest-path "$rust_manifest" \
   -p typefacts --test bridge_process -- --exact bridged_answers_equal_process_answers
 SOLID_CHECKER_BIN="$checker_bin" SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" \
   bun scripts/wasm-parity.mjs --scratch "$wasm_parity_scratch" --update-frames "$wasm_parity_scratch/update-frames"
 
 step build-session-bench
-cargo +1.97 build --release --manifest-path "$rust_manifest" \
+cargo +1.99.1 build --release --manifest-path "$rust_manifest" \
   -p solid-facts-backend --bin solid-checker-session-bench
 
 # Absolute wall-time thresholds: this step must have the machine to itself, so

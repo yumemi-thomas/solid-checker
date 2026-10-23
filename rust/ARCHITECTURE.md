@@ -272,7 +272,7 @@ mention runs after its declarator.
 - **Covering symbol.** A typefacts entity names the symbol at its demanded span's
   first byte. That symbol is the value's only when it covers the whole span:
   `symbol_covers_span` (`rust/crates/typefacts/src/lib.rs`), set by
-  `symbolSpanCovers` in `apps/solid-typefacts/internal/typefacts/tsgo/semantic_runs.go`,
+  `symbol_span_covers` in `apps/solid-typefacts/src/nodes.rs`,
   carried by Type Facts wire schema v21 (handshake protocol 80). `EntitySymbols::exact`
   (`rust/crates/solid-reactive-ir/src/indexes.rs`) answers only for covering
   entities. `EntitySymbols::value_symbol` peels TypeScript wrappers and, when the

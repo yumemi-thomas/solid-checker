@@ -23,7 +23,13 @@ napi-build = { path = "crates/napi-build-host-aware" }
 edition = "2024"
 license = "MIT"
 publish = false
-rust-version = "1.97"
+rust-version = "1.99.1"
+
+# Unsafe code is denied everywhere. A crate with a real FFI boundary confines it
+# to one `unsafe_boundary` module carrying `#[allow(unsafe_code)]`; every other
+# crate root also says `#![forbid(unsafe_code)]`.
+[workspace.lints.rust]
+unsafe_code = "deny"
 
 [workspace.dependencies]
 rustc-hash = "2.1.3"

@@ -38,6 +38,15 @@ const run = promisify(execFile);
 const root = resolve(import.meta.dirname, "..");
 const snapshots = join(root, "fixtures", "findings-snapshots");
 const update = process.argv.includes("--update");
+// End-to-end differential mode (scripts/typefacts-e2e.mjs): compare only, write
+// a machine-readable account of every moved snapshot, and survive a checker
+// that fails outright (an unfinished producer does). It must never write a
+// snapshot, so it refuses --update.
+const reportPath = process.env.SOLID_COVERAGE_REPORT;
+if (reportPath && update) {
+  console.error("SOLID_COVERAGE_REPORT is compare-only; refusing --update");
+  process.exit(2);
+}
 
 /** Prefers a packaged binary, falls back to the debug build cargo leaves behind. */
 function locate(variable, ...candidates) {
@@ -291,6 +300,22 @@ function runtimeArguments(tsconfig) {
 }
 
 async function analyze(tsconfig, keepWording) {
+  if (!reportPath) return analyzeUnguarded(tsconfig, keepWording);
+  try {
+    return await analyzeUnguarded(tsconfig, keepWording);
+  } catch (error) {
+    return {
+      status: "checker-failed",
+      findings: [],
+      failure: {
+        exitCode: error.code ?? null,
+        stderr: String(error.stderr ?? error.message).trim().slice(0, 600)
+      }
+    };
+  }
+}
+
+async function analyzeUnguarded(tsconfig, keepWording) {
   const { stdout: output } = await run(
     checker,
     [
@@ -404,6 +429,28 @@ const computed = await mapPool(
 // needs no cache awareness and a mismatch still fails on a warm cache.
 let changed = 0;
 let total = 0;
+const moved = [];
+/** What moved in one snapshot, as sets of finding keys. */
+function movedEntry(id, expectedText, value) {
+  const expected = JSON.parse(expectedText);
+  const key = (finding) => JSON.stringify(finding);
+  const was = new Set(expected.findings.map(key));
+  const now = new Set(value.findings.map(key));
+  let state = "moved";
+  if (value.status === "checker-failed") state = "checker-failed";
+  else if (expectedText === `${JSON.stringify(value, null, 2)}\n`) state = "unchanged";
+  return {
+    project: id,
+    state,
+    statusWas: expected.status,
+    statusNow: value.status,
+    findingsWas: expected.findings.length,
+    findingsNow: value.findings.length,
+    removed: expected.findings.filter((finding) => !now.has(key(finding))).slice(0, 10),
+    added: value.findings.filter((finding) => !was.has(key(finding))).slice(0, 10),
+    failure: value.failure
+  };
+}
 for (const [index, project] of projects.entries()) {
   const file = join(snapshots, `${project.id.replace("/", "__")}.json`);
   const actual = `${JSON.stringify(computed[index].value, null, 2)}\n`;
@@ -419,6 +466,7 @@ for (const [index, project] of projects.entries()) {
     continue;
   }
   const expected = readFileSync(file, "utf8");
+  if (reportPath) moved.push(movedEntry(project.id, expected, computed[index].value));
   if (expected !== actual) {
     console.error(`findings moved: ${project.id}`);
     const expectedLines = expected.split("\n");
@@ -456,6 +504,15 @@ for (const entry of readdirSync(snapshots)) {
   }
 }
 
+if (reportPath) {
+  const states = {};
+  for (const entry of moved) states[entry.state] = (states[entry.state] ?? 0) + 1;
+  writeFileSync(
+    reportPath,
+    `${JSON.stringify({ version: 1, projects: moved.length, states, moved }, null, 2)}\n`
+  );
+  console.log(`snapshot report: ${reportPath}`);
+}
 const verb = update ? "recorded" : "compared";
 console.log(`${verb} ${projects.length} fixture projects, ${total} findings`);
 console.log(`${cache.summary()}; concurrency ${concurrency}`);

@@ -2,8 +2,10 @@ name: TypeFacts producer
 description: >
   Restores, or else builds, the repository-owned Type Facts producer.
 
-# The cache key binds all local Type Facts sources, schemas, shims, dependency
-# pins, the declared Go toolchain, build id, and destination path.
+# The producer is Rust on tsrs (apps/solid-typefacts, its own Cargo workspace).
+# The cache key binds its sources, schemas, Cargo.lock (every crate and the tsrs
+# revision), the rustc identity, build id, and destination path. Callers install
+# the Rust toolchain first (dtolnay/rust-toolchain@1.99.1).
 inputs:
   build-id:
     description: >
@@ -20,11 +22,6 @@ inputs:
       Tree holding the local Type Facts source and build script. Defaults to the
       checkout; the performance workflow points it at a merge-base worktree.
     default: .
-  go-version:
-    description: >
-      Toolchain used for local Type Facts builds and tests. It is part of the
-      cache key and source-manifest identity.
-    default: stable
   cache:
     description: Whether to cache the built binary.
     default: "true"
@@ -32,11 +29,27 @@ inputs:
 runs:
   using: composite
   steps:
-    - id: setup-go
-      uses: actions/setup-go@v5
+    # mimalloc (the producer's native allocator) builds with CMake. Hosted
+    # runners ship it; install it only where it is missing.
+    - shell: bash
+      run: |
+        if ! command -v cmake >/dev/null 2>&1; then
+          case "$RUNNER_OS" in
+            Linux) sudo apt-get update && sudo apt-get install -y cmake ;;
+            macOS) brew install cmake ;;
+            Windows) choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System' -y ;;
+          esac
+        fi
+        cmake --version
+
+    # Dependency builds (tsrs is ~80 crates) for a cache miss. A pull request
+    # reads main's entry and does not write its own.
+    - uses: Swatinem/rust-cache@v2
+      if: inputs.cache == 'true'
       with:
-        go-version: ${{ inputs.go-version }}
-        cache-dependency-path: ${{ inputs.working-directory }}/go.sum
+        workspaces: ${{ inputs.working-directory }}/apps/solid-typefacts
+        shared-key: typefacts-producer
+        save-if: ${{ github.ref == 'refs/heads/main' }}
 
     - id: identity
       shell: bash
@@ -44,6 +57,7 @@ runs:
       run: |
         digest=$(node scripts/typefacts-source-identity.mjs --digest --build-id "${{ inputs.build-id }}")
         echo "digest=$digest" >> "$GITHUB_OUTPUT"
+        rustc_id=$(rustc -vV | (sha256sum 2>/dev/null || shasum -a 256) | cut -c1-16)
         # A cache entry archives the paths it was saved from, so two callers
         # wanting the same binary at two different paths -- the performance
         # workflow wants one in the checkout and one in a merge-base worktree --
@@ -51,7 +65,7 @@ runs:
         # the first.
         location=$(printf '%s/%s' "${{ inputs.working-directory }}" "${{ inputs.output }}" |
           tr -c 'A-Za-z0-9._-' '-')
-        echo "key=typefacts-${{ runner.os }}-${{ runner.arch }}-go-${{ steps.setup-go.outputs.go-version }}-$digest-${{ inputs.build-id }}-$location" >> "$GITHUB_OUTPUT"
+        echo "key=typefacts-${{ runner.os }}-${{ runner.arch }}-rustc-$rustc_id-$digest-${{ inputs.build-id }}-$location" >> "$GITHUB_OUTPUT"
 
     # Cache paths resolve against the workspace, not against working-directory,
     # so this composes both for the repository checkout and for the performance

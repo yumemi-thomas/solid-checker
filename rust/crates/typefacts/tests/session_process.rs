@@ -277,7 +277,7 @@ fn explicit_unresolved_symbols_survive_the_process_seam() {
 #[test]
 fn exhaustive_call_target_sets_survive_full_delta_and_reuse_responses() {
     let project = repository_root()
-        .join("apps/solid-typefacts/internal/typefacts/testdata/call-targets/tsconfig.json")
+        .join("apps/solid-typefacts/testdata/call-targets/tsconfig.json")
         .canonicalize()
         .unwrap();
     let path = project.parent().unwrap().join("dispatch.ts");
@@ -382,7 +382,7 @@ fn exhaustive_call_target_sets_survive_full_delta_and_reuse_responses() {
 #[test]
 fn runtime_value_domain_survives_full_delta_and_reuse_responses() {
     let project = repository_root()
-        .join("apps/solid-typefacts/internal/typefacts/testdata/runtime-value-domain/tsconfig.json")
+        .join("apps/solid-typefacts/testdata/runtime-value-domain/tsconfig.json")
         .canonicalize()
         .unwrap();
     let path = project.parent().unwrap().join("domains.ts");
@@ -555,7 +555,7 @@ fn v13_domains_and_exact_tuple_lengths_survive_full_delta_and_reuse_responses() 
 #[test]
 fn call_result_domain_survives_the_process_seam() {
     let project = repository_root()
-        .join("apps/solid-typefacts/internal/typefacts/testdata/call-result-domain/tsconfig.json")
+        .join("apps/solid-typefacts/testdata/call-result-domain/tsconfig.json")
         .canonicalize()
         .unwrap();
     let path = project.parent().unwrap().join("calls.ts");
@@ -888,7 +888,7 @@ fn untyped_callability_crosses_the_wire_for_a_function_typed_export() {
     // A readable signature still answers `callable`; the frozen value's meaning
     // did not move.
     assert_eq!(rows[2].callability, Some(Callability::Callable));
-    // This is the tuple-specific tag-4 path end to end: the Go producer derives
+    // This is the tuple-specific tag-4 path end to end: the producer derives
     // and encodes elementZero as untypedCallable, then the Rust client decodes
     // it into TupleShape's packed arm and reads it back out.
     let tuple = rows[3].tuple_shape.expect("tuple shape");
@@ -1335,27 +1335,25 @@ fn module_graph_reports_both_paths_of_a_symlinked_package() {
 /// understood protocol.
 #[test]
 fn a_producer_that_differs_on_any_handshake_field_is_refused() {
-    let output = repository_root()
-        .join("target/typefacts-test")
-        .join(if cfg!(windows) {
-            "solid-typefacts-mismatched.exe"
-        } else {
-            "solid-typefacts-mismatched"
-        });
-    fs::create_dir_all(output.parent().unwrap()).unwrap();
-    let status = Command::new("go")
+    // The build id is compiled into both sides, so the mismatched producer is
+    // the same source built with another TYPEFACTS_BUILD_ID, in its own target
+    // directory so the shared one is not invalidated by the env change.
+    let target = repository_root().join("target/typefacts-test/mismatched-build");
+    let status = Command::new("cargo")
         .current_dir(repository_root())
-        .args([
-            "build",
-            "-ldflags",
-            "-X main.buildID=not-the-clients-build",
-            "-o",
-        ])
-        .arg(&output)
-        .arg("./apps/solid-typefacts")
+        .env("TYPEFACTS_BUILD_ID", "not-the-clients-build")
+        .args(["build", "--locked", "--manifest-path"])
+        .arg("apps/solid-typefacts/Cargo.toml")
+        .args(["--bin", "solid-typefacts", "--target-dir"])
+        .arg(&target)
         .status()
-        .expect("run go build for the mismatched producer");
+        .expect("run cargo build for the mismatched producer");
     assert!(status.success());
+    let output = target.join("debug").join(if cfg!(windows) {
+        "solid-typefacts.exe"
+    } else {
+        "solid-typefacts"
+    });
 
     let opened = Session::open(
         Producer::at(&output),
@@ -1375,7 +1373,6 @@ fn a_producer_that_differs_on_any_handshake_field_is_refused() {
     // moved with this protocol addition.
     assert!(message.contains(&typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL.to_string()));
     assert!(message.contains(typefacts::v3::TYPE_FACTS_SCHEMA_SHA256));
-    let _ = fs::remove_file(&output);
 }
 
 fn repository_root() -> PathBuf {
@@ -1389,31 +1386,17 @@ fn producer() -> PathBuf {
             if let Some(path) = std::env::var_os("TYPEFACTS_TEST_BIN") {
                 return PathBuf::from(path);
             }
-            let output = repository_root()
-                .join("target/typefacts-test")
-                .join(if cfg!(windows) {
-                    "solid-typefacts.exe"
-                } else {
-                    "solid-typefacts"
-                });
-            fs::create_dir_all(output.parent().unwrap()).unwrap();
-            let ldflags = format!("-X main.buildID={}", typefacts::v3::TYPE_FACTS_BUILD_ID);
-            let status = Command::new("go")
-                .current_dir(repository_root())
-                .args(["build", "-ldflags", &ldflags, "-o"])
-                .arg(&output)
-                .arg("./apps/solid-typefacts")
-                .status()
-                .expect("run go build for the session process test");
-            assert!(status.success(), "build the Type Facts test producer");
-            output
+            panic!(
+                "set TYPEFACTS_TEST_BIN to a built producer (`make build-typefacts`; \
+                 .cargo/config.toml does this for the repository's own cargo runs)"
+            );
         })
         .clone()
 }
 
 fn project() -> PathBuf {
     repository_root()
-        .join("apps/solid-typefacts/internal/typefacts/testdata/aliased-import/tsconfig.json")
+        .join("apps/solid-typefacts/testdata/aliased-import/tsconfig.json")
         .canonicalize()
         .unwrap()
 }

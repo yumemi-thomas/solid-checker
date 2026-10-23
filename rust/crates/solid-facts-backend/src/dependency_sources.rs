@@ -1162,7 +1162,7 @@ pub fn without_unredirected_packages(
     selection.roots.retain(|root| !removed.contains(root));
     selection.files.retain(|file| !inside(file));
     selection.resolutions.retain(|resolution| {
-        !inside(&resolution.target) && !resolution.importer.as_deref().is_some_and(&inside)
+        !inside(&resolution.target) && !resolution.importer.as_deref().is_some_and(inside)
     });
     selection.package_names.retain(|name| !names.contains(name));
     (!selection.roots.is_empty()).then_some(selection)

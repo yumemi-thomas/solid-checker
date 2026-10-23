@@ -1,5 +1,5 @@
 //! Rust-led orchestration of Oxc AST facts, Solid execution facts, and
-//! TypeScript-Go semantic facts.
+//! tsrs semantic facts.
 
 #[cfg(not(feature = "dialect-v2"))]
 compile_error!("solid-facts-backend requires at least one dialect feature");
@@ -407,7 +407,7 @@ impl TypeFactsProvider for TypeFactsSession {
 }
 
 /// A retained editor session with both Oxc and the Solid compiler running
-/// in-process. TypeScript-Go is the only process boundary.
+/// in-process. tsrs is the only process boundary.
 pub struct NativeIncrementalSession {
     dialect: &'static Dialect,
     project_id: String,
@@ -1846,7 +1846,7 @@ fn structural_functions(file: &FileFacts) -> Vec<typefacts::SourceFunction> {
             body: typefacts::Location {
                 path: file.path.to_string().into(),
                 start_byte: u64::from(function.body.start),
-                // TS-Go reports a block body without the closing brace, while
+                // tsrs reports a block body without the closing brace, while
                 // expression bodies use their exact expression span.
                 end_byte: u64::from(if function.expression_body {
                     function.body.end

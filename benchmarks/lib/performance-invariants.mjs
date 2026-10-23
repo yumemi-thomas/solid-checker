@@ -22,7 +22,11 @@ export const DEFAULT_CEILINGS = Object.freeze({
   responseBytesPerSource: 1000,
   cachedIrNs: 50_000,
   firstIrNsPerSource: 175_000,
-  incrementalNs: 100_000_000
+  // 400 ms: ADR 0364 turned retention across updates off, so a one-file edit
+  // recomputes all 1000 files. Median of 11 runs on the generated corpus:
+  // 212 ms (207-223), up from 48 ms (47-52) with retention; the ceiling is
+  // about 1.9x the new median. It was 100 ms. Lower it when retention returns.
+  incrementalNs: 400_000_000
 });
 
 export const WALL_TIME_GATES = Object.freeze(["enforce", "report"]);

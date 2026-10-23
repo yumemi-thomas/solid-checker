@@ -193,17 +193,16 @@ install.
   - trailing slashes, in the request and in stored link targets;
   - a pnpm-like store inside the tree.
 
-  Two control guests (`guests/path-control`, raw WASI calls in Rust;
-  `guests/path-control-go`, Go `os` calls) run 261 rows over its mounted
-  copy. The rows cover every repaired operation crossed with the lookup
+  One control guest (`guests/path-control`, raw WASI calls and Rust std in
+  Rust) runs its rows over the mounted copy. The rows cover every repaired operation crossed with the lookup
   flags, dirfds (preopen, opened directory, file, closed), mutation flags
   (`CREAT`/`EXCL`/`TRUNC`/`APPEND`, mkdir/rmdir/unlink), readlink buffers
-  (0, 1, len−1, len, len+16 with sentinels) and Rust std and Go stdlib rows.
+  (0, 1, len−1, len, len+16 with sentinels) and Rust std rows.
 - **The reference:** `path-host.mjs` computes host POSIX on the same tree,
   always under Node.
-- **What must hold:** every owned row equals the host, except the five
+- **What must hold:** every owned row equals the host, except the four
   overrides pinned with reasons in `path-expectations.json` (WASI-level
-  ENOTCAPABLE and EBADF, unchanged ENOSYS, Go's guest lexical cleaning, the
+  ENOTCAPABLE and EBADF, unchanged ENOSYS, the
   retained final-slash drop). The upstream runtime must fail exactly the
   pinned repaired rows and match the rest.
 - **The fixture:** `dotdot-fixture` and `dotdot-missing` run the

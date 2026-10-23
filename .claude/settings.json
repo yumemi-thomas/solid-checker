@@ -19,9 +19,9 @@
       "Bash(bun run --cwd packages/cli test)",
       "Bash(bun run --cwd packages/wasm test)",
       "Bash(jq empty schema/typefacts-v1.schema.json schema/typefacts-codec-limits.json)",
-      "Bash(cargo +1.97 fmt:*)",
-      "Bash(cargo +1.97 clippy:*)",
-      "Bash(cargo +1.97 test:*)"
+      "Bash(cargo +1.99.1 fmt:*)",
+      "Bash(cargo +1.99.1 clippy:*)",
+      "Bash(cargo +1.99.1 test:*)"
     ],
     "deny": [
       "Bash(git reset --hard:*)",

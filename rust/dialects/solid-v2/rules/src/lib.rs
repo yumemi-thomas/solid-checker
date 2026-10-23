@@ -7,6 +7,7 @@
 //! `Loading`, `onSettled`, `flush`, actions, and split effects. The remaining
 //! rules cover 2.0-only runtime behavior: async computations, action/refresh
 //! writes, returned cleanup, and scheduler restrictions.
+#![forbid(unsafe_code)]
 
 mod rules;
 

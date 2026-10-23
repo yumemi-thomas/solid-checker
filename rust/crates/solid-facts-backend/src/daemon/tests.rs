@@ -199,6 +199,24 @@ fn a_dependency_source_domain_is_its_own_daemon() {
     assert_eq!(domain("a"), domain("a"));
 }
 
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[test]
+fn the_running_executable_has_a_loaded_identity() {
+    let identity = super::loaded_implementation_identity().unwrap();
+    let digest = identity
+        .strip_prefix(if cfg!(target_os = "macos") {
+            "macho-uuid:"
+        } else {
+            "sha256:"
+        })
+        .unwrap();
+    assert!(digest.bytes().all(|byte| byte.is_ascii_hexdigit()));
+    assert_eq!(
+        digest.len(),
+        if cfg!(target_os = "macos") { 32 } else { 64 }
+    );
+}
+
 #[test]
 fn loaded_macho_identity_requires_one_complete_build_uuid() {
     let mut command = Vec::new();

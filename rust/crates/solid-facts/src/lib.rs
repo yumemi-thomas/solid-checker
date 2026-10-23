@@ -7,6 +7,7 @@
 //! holds the compiler's own answer for where each import specifier resolves;
 //! the crate root joins the domains with Type Facts into per-file and
 //! per-project facts.
+#![forbid(unsafe_code)]
 
 pub mod ast;
 pub mod compiler;

@@ -31,18 +31,10 @@ fn producer() -> PathBuf {
             if let Some(path) = std::env::var_os("TYPEFACTS_TEST_BIN") {
                 return PathBuf::from(path);
             }
-            let output = repository_root().join("target/typefacts-test/solid-typefacts");
-            fs::create_dir_all(output.parent().unwrap()).unwrap();
-            let ldflags = format!("-X main.buildID={}", typefacts::v3::TYPE_FACTS_BUILD_ID);
-            let status = Command::new("go")
-                .current_dir(repository_root())
-                .args(["build", "-ldflags", &ldflags, "-o"])
-                .arg(&output)
-                .arg("./apps/solid-typefacts")
-                .status()
-                .expect("run go build for the bridge process test");
-            assert!(status.success(), "go build failed");
-            output
+            panic!(
+                "set TYPEFACTS_TEST_BIN to a built producer (`make build-typefacts`; \
+                 .cargo/config.toml does this for the repository's own cargo runs)"
+            );
         })
         .clone()
 }
@@ -533,7 +525,7 @@ fn declared_names(path: &str, source: &[u8]) -> Vec<EntityDemand> {
 #[test]
 fn bridged_answers_equal_process_answers_over_fixtures() {
     for relative in [
-        "apps/solid-typefacts/prototypes/typefacts-reactor/testdata/forms/tsconfig.json",
+        "apps/solid-typefacts/testdata/forms/tsconfig.json",
         "fixtures/reactive-ir/dependency-source-program/tsconfig.json",
     ] {
         let project = repository_root().join(relative).canonicalize().unwrap();

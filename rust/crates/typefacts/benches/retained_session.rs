@@ -1,4 +1,4 @@
-//! Retained-session edit benchmark against the real Go producer.
+//! Retained-session edit benchmark against the real producer.
 //!
 //! This measures what an editor pays per keystroke-scale edit on a large project:
 //! one accepted update, the caller's own local work, and one analysis of ~1,000
@@ -38,7 +38,6 @@ use std::{
     fs,
     hint::black_box,
     path::PathBuf,
-    process::Command,
     sync::OnceLock,
     time::{Duration, Instant},
 };
@@ -67,24 +66,10 @@ fn producer() -> PathBuf {
             if let Some(path) = std::env::var_os("TYPEFACTS_TEST_BIN") {
                 return PathBuf::from(path);
             }
-            let output = repository_root()
-                .join("target/typefacts-bench")
-                .join(if cfg!(windows) {
-                    "solid-typefacts.exe"
-                } else {
-                    "solid-typefacts"
-                });
-            fs::create_dir_all(output.parent().unwrap()).unwrap();
-            let ldflags = format!("-X main.buildID={}", typefacts::v3::TYPE_FACTS_BUILD_ID);
-            let status = Command::new("go")
-                .current_dir(repository_root())
-                .args(["build", "-ldflags", &ldflags, "-o"])
-                .arg(&output)
-                .arg("./apps/solid-typefacts")
-                .status()
-                .expect("run go build for the retained-session benchmark");
-            assert!(status.success(), "build the Type Facts benchmark producer");
-            output
+            panic!(
+                "set TYPEFACTS_TEST_BIN to a built producer (`make build-typefacts`; \
+                 .cargo/config.toml does this for the repository's own cargo runs)"
+            );
         })
         .clone()
 }

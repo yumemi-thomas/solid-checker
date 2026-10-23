@@ -529,7 +529,7 @@ const guestBuild = join(repositoryRoot, "rust/target/wasm-parity-guests");
 const pathCases = join(scratch, "paths");
 mkdirSync(join(pathCases, "guests"), { recursive: true });
 const guests = {};
-for (const [name, built] of [["rust", join(guestBuild, "wasm32-wasip1/release/path-control.wasm")], ["go", join(guestBuild, "path-control-go.wasm")]]) {
+for (const [name, built] of [["rust", join(guestBuild, "wasm32-wasip1/release/path-control.wasm")]]) {
   if (!existsSync(built)) fail(`${built} is missing; build it first (make wasm-parity)`);
   guests[name] = join(pathCases, "guests", `${name}.wasm`);
   copyFileSync(built, guests[name]);
@@ -543,7 +543,7 @@ const pathStdlib = pathSemantics.stdlibRows(pathRoot);
 const hostRequest = join(pathCases, "host-request.json");
 writeFileSync(hostRequest, `${JSON.stringify({
   root: pathRoot,
-  rows: [...pathSemantics.rows(), ...pathStdlib.rust, ...pathStdlib.go],
+  rows: [...pathSemantics.rows(), ...pathStdlib.rust],
   mutations: pathMutations.map(({ row, hostRoot }) => ({ row, root: hostRoot })),
 })}\n`);
 const hostRun = run(nodePath, [join(gateFiles, "path-host.mjs"), hostRequest, join(pathCases, "host.json")]);

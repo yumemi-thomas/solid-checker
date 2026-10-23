@@ -267,7 +267,7 @@ fn runtime_declaration(call: &ResolvedCall) -> Option<&typefacts::ResolvedDeclar
 /// redeclares it with a narrower event map (`HTMLElement.addEventListener`,
 /// `Document.addEventListener`, ...). The producer's
 /// `defaultLibraryMemberInvokers` table already relies on the fact audited at
-/// the pinned typescript-go revision: every declaration of that name in the
+/// the pinned tsrs revision's TypeScript: every declaration of that name in the
 /// bundled default library is the same `EventTarget` registration whose
 /// argument 1 is the listener. That fact is used here for one purpose only,
 /// to withhold a claim about *when* the listener runs; it does not widen the

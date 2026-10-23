@@ -12,9 +12,9 @@ Fact ownership is deliberately split:
   source structure from one Oxc AST walk; `compiler` owns Solid compiler
   execution roles (`ExecutionMap`) and the `CompilerFactsProvider` seam; the
   crate root validates and joins the domains without exposing either Oxc or
-  TypeScript-Go nodes;
+  tsrs nodes;
 - `crates/typefacts`: checker-derived facts and the retained producer session;
-  the paired Go producer lives at `../apps/solid-typefacts`;
+  the paired Rust producer (on tsrs) lives at `../apps/solid-typefacts`;
 - `crates/solid-facts-backend`: orchestration, retained caches, certification
   snapshots, dependency source, and the CLI;
 - `crates/solid-dialect`: the Solid vocabulary seam — the version-specific
@@ -31,7 +31,7 @@ Fact ownership is deliberately split:
 
 The AST package contains no regular expressions. TypeScript facts contain no
 syntax-discovery fallback. Both choices are architectural constraints: Oxc owns
-structure and TypeScript-Go owns checker semantics.
+structure and tsrs owns checker semantics.
 
 The production Rust path has one live seam: Rust to the `solid-typefacts`
 producer. Oxc AST facts and Solid compiler facts run in-process, the latter via
@@ -48,7 +48,7 @@ The integration tests launch the real producer on the tracer fixture and join
 its output with the in-process Oxc and compiler facts.
 
 The Rust-led path sends Oxc-derived identifier locations as authoritative
-closure seeds. When those seeds are present, the Go closure builder bypasses
+closure seeds. When those seeds are present, the producer's closure builder bypasses
 its legacy regular-expression discovery. Oxc parsing is bounded by
 `available_parallelism`; output is restored to source order before joining.
 AST facts are cached by path and source hash, and compiler facts by path,
@@ -62,7 +62,7 @@ changed/deleted paths; unchanged file facts survive and output remains sorted.
 loads the Oxc Solid compiler as an in-process Rust crate, and uses
 the sibling `solid-typefacts` executable automatically; `SOLID_TYPEFACTS_BIN`
 or `--typefacts` can override it.
-TypeScript-Go supplies the configured project source set, so tsconfig
+tsrs supplies the configured project source set, so tsconfig
 include/exclude and project resolution are authoritative rather than
 reimplemented by a directory walk.
 
@@ -93,9 +93,9 @@ Implemented rule slices are:
   `no-owner-settled-cleanup`, using a fixed-point owner-context graph across
   components, roots, helpers, effect phases, events, and leaf owners;
 - `pending-async-untracked-read`, `pending-async-forbidden-scope`, and
-  `async-outside-loading-boundary`, with TS-Go async-result provenance and Oxc
+  `async-outside-loading-boundary`, with tsrs async-result provenance and Oxc
   JSX dominance through aliased boundaries, components, and boundary wrappers;
-- `reactive-read-after-await`, using TS-Go's dominance-proven
+- `reactive-read-after-await`, using tsrs's dominance-proven
   `callsAfterAwait` facts rather than source-order guesses;
 - component props reads, aliases, Solid `merge`, and
   `no-destructure`, plus `components-return-once` for
@@ -111,9 +111,9 @@ the project's resolved `solid-js` version;
 `--dialect` overrides it.
 
 Oxc discovers bindings, options, calls, callback nesting, and function graphs;
-TS-Go joins canonical symbols across imports; ExecutionMap classifies tracked
+tsrs joins canonical symbols across imports; ExecutionMap classifies tracked
 JSX and compiler-managed callbacks. Cleanup return shapes come directly from
-Oxc expression kinds; TS-Go resolves locally or remotely declared functions
+Oxc expression kinds; tsrs resolves locally or remotely declared functions
 and call return types. Function summaries are instantiated once per owned
 root and at rendering call sites. The fixed-point summaries cover cross-file
 helpers, callback parameters, generics and overload implementations, recursive
@@ -122,14 +122,14 @@ multiplicity through cycles.
 
 ```sh
 SOLID_TYPEFACTS_BIN=bin/solid-typefacts \
-cargo +1.97 run --manifest-path rust/Cargo.toml --bin solid-checker-rust -- \
+cargo +1.99.1 run --manifest-path rust/Cargo.toml --bin solid-checker-rust -- \
   --format json --certify \
   --project fixtures/reactive-ir/tracer/tsconfig.json
 ```
 
 Set `SOLID_CHECKER_TIMINGS=1` to emit nanosecond stage timings on stderr. Oxc AST
 and Solid compiler facts are produced in parallel per source; deterministic
-source order is restored before the TS-Go closure is joined.
+source order is restored before the tsrs closure is joined.
 
 `make package` creates one install tree containing `solid-checker` and the
 matching `solid-typefacts` helper plus a checksum manifest. CI builds and smoke-tests that layout on Darwin and Linux

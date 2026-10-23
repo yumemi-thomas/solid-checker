@@ -1048,7 +1048,7 @@
        "ownership": "typescript-owned",
        "diagnostics": [
         {
-         "code": "TS2345",
+         "code": "TS2741",
          "span": {
           "marker": "{}"
          }
@@ -1058,7 +1058,8 @@
      }
     ],
     "absent": []
-   }
+   },
+   "note": "TypeScript 5.9.3 reported TS2345 here; 7.1 reports TS2741 for a missing required property, same error and span, so the rule stays tsc-redundant (ADR 0361)."
   },
   {
    "id": "affects-keys-on-accessor/typescript-owned/001",

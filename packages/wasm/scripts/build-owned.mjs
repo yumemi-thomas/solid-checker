@@ -1,7 +1,9 @@
 // Builds the owned check's two reactors into owned/ and writes their manifest
 // (P5 S2): the checker as `solid-checker-wasm` for wasm32-wasip1 with the
-// `reactor` feature, and the Type Facts producer as a GOOS=wasip1 c-shared
-// reactor, linked with the same build id so the startup handshake agrees.
+// `reactor` feature, and the Type Facts producer (apps/solid-typefacts, on
+// tsrs) as a wasm32-wasip1 cdylib exporting the reactor ABI, linked with the
+// same build id so the startup handshake agrees. The Go reactor is gone
+// (ADR 0365); SOLID_TYPEFACTS_REACTOR is refused rather than ignored.
 //
 // The two builds run one after the other. Certification and probe pins are
 // whatever the calling environment sets -- `make build-wasm-owned` supplies
@@ -18,6 +20,12 @@ import { fileURLToPath } from "node:url";
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repositoryRoot = resolve(packageRoot, "../..");
 const buildId = process.env.SOLID_CHECKER_BUILD_ID || "dev";
+if (process.env.SOLID_TYPEFACTS_REACTOR) {
+  throw new Error(
+    `build-owned: SOLID_TYPEFACTS_REACTOR is ${JSON.stringify(process.env.SOLID_TYPEFACTS_REACTOR)}; ` +
+      "the Rust reactor is the only producer (ADR 0365), unset the variable",
+  );
+}
 const staging = join(repositoryRoot, "rust/target/wasm-owned");
 const owned = join(packageRoot, "owned");
 mkdirSync(staging, { recursive: true });
@@ -36,7 +44,7 @@ function read(command, args, options) {
   return result.stdout.trim();
 }
 
-const rustEnvironment = { ...process.env, RUSTUP_TOOLCHAIN: "1.97", SOLID_CHECKER_BUILD_ID: buildId, TYPEFACTS_BUILD_ID: buildId };
+const rustEnvironment = { ...process.env, RUSTUP_TOOLCHAIN: "1.99.1", SOLID_CHECKER_BUILD_ID: buildId, TYPEFACTS_BUILD_ID: buildId };
 run("cargo", [
   "build", "--manifest-path", join(repositoryRoot, "rust/Cargo.toml"),
   "-p", "solid-checker-wasm", "--target", "wasm32-wasip1",
@@ -44,14 +52,18 @@ run("cargo", [
 ], { cwd: repositoryRoot, env: rustEnvironment });
 const checkerBuilt = join(repositoryRoot, "rust/target/wasm32-wasip1/release/solid_checker_wasm.wasm");
 
-const goEnvironment = { ...process.env, GOOS: "wasip1", GOARCH: "wasm", GOTOOLCHAIN: process.env.GOTOOLCHAIN || "local" };
-const producerBuilt = join(staging, "solid-typefacts.wasm");
-run("go", [
-  "build", "-trimpath", "-buildmode=c-shared",
-  `-ldflags=-s -w -X main.buildID=${buildId}`,
-  "-o", `${producerBuilt}.partial`, "./apps/solid-typefacts",
-], { cwd: repositoryRoot, env: goEnvironment });
-renameSync(`${producerBuilt}.partial`, producerBuilt);
+const producerBuilt = join(staging, "solid-typefacts-rust.wasm");
+const producerManifest = join(repositoryRoot, "apps/solid-typefacts/Cargo.toml");
+// The crate's library is an rlib for the native binaries and tests; the module
+// is that library alone compiled as a cdylib, so release LTO applies to it. The
+// 80 MiB shadow stack is tsrs's own wasm setting (its notes/wasm-build.md).
+run("cargo", [
+  "rustc", "--manifest-path", producerManifest, "--lib", "--crate-type", "cdylib",
+  "--target", "wasm32-wasip1", "--release", "--features", "reactor", "--locked",
+  // --wrap: see wasi_import_stubs in the producer's unsafe_boundary.rs.
+  "--", "-C", "link-arg=-zstack-size=83886080", "-C", "link-arg=--wrap=__imported_wasi_snapshot_preview1_fd_filestat_set_times",
+], { cwd: repositoryRoot, env: rustEnvironment });
+copyFileSync(join(repositoryRoot, "apps/solid-typefacts/target/wasm32-wasip1/release/solid_typefacts.wasm"), producerBuilt);
 
 const artifact = (source, file, details) => {
   const bytes = readFileSync(source);
@@ -62,18 +74,19 @@ const artifact = (source, file, details) => {
 const manifest = {
   format: 1,
   buildId,
-  producerSource: JSON.parse(read("node", [join(repositoryRoot, "scripts/typefacts-source-identity.mjs"), "--build-id", buildId], {
-    cwd: repositoryRoot,
-  })),
+  producerSource: JSON.parse(read("node", [
+    join(repositoryRoot, "scripts/typefacts-source-identity.mjs"), "--build-id", buildId,
+  ], { cwd: repositoryRoot, env: rustEnvironment })),
   artifacts: {
     checker: artifact(checkerBuilt, "solid-checker.wasm", {
       crate: "solid-checker-wasm", target: "wasm32-wasip1", features: ["reactor", "dialect-v2"], profile: "release",
     }),
-    producer: artifact(producerBuilt, "solid-typefacts.wasm", { package: "./apps/solid-typefacts", goos: "wasip1", goarch: "wasm" }),
+    producer: artifact(producerBuilt, "solid-typefacts.wasm", {
+      package: "./apps/solid-typefacts", crate: "solid-typefacts", target: "wasm32-wasip1", features: ["reactor"], profile: "release",
+    }),
   },
   toolchains: {
     rustc: read("rustc", ["-vV"], { env: rustEnvironment }),
-    go: read("go", ["version"], { env: goEnvironment }),
   },
 };
 writeFileSync(join(owned, "manifest.json.partial"), `${JSON.stringify(manifest, null, 2)}\n`);

@@ -34,6 +34,7 @@
 //! | `findings`, `projection` | The finding model and its projection onto dialect rule catalogs. |
 //! | `upstream_compat` | Retained eslint-plugin-solid 0.14.5 heuristics (see AGENTS.md before editing). |
 //! | `development_feedback`, `timings` | Executed-feedback models and the stage-timing contract. |
+#![forbid(unsafe_code)]
 
 mod argument_values;
 mod attribution;

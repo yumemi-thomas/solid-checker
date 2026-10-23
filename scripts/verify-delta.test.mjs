@@ -46,6 +46,9 @@ test("each table row claims its own owner's paths", () => {
     ["rust/crates/solid-facts-backend/src/diagnostics.rs", ["backend-process", "coverage"]],
     ["fixtures/reactive-ir/store-flow/App.tsx", ["coverage", "ownership-gate"]],
     ["fixtures/findings-snapshots/engine__oxlint-conformance.json", ["coverage", "ownership-gate"]],
+    ["apps/solid-typefacts/src/session.rs", ["typefacts", "coverage", "ownership-gate", "wasm-parity"]],
+    ["apps/solid-typefacts/tests/process.rs", ["typefacts"]],
+    ["apps/solid-typefacts/testdata/forms/tsconfig.json", ["typefacts"]],
     ["packages/cli/lib/rules-solid-v2.json", ["bun-test-cli"]],
     ["packages/wasm/src/index.ts", ["bun-test-wasm", "wasm-parity"]],
   ];
@@ -330,7 +333,7 @@ test("a producer that is not built from the local manifest escalates", () => {
   const expected = {
     format: 1,
     sourceDigest: "e2f7ac5ce2784f9e4f5bc53f4e100040f6fce3d4".padEnd(64, "0"),
-    toolchain: "go-test",
+    toolchain: "rustc-test",
     buildId: "dev",
   };
 
@@ -359,5 +362,19 @@ test("the caveats name the input classes the basis cannot see at all", () => {
   const text = BASIS_CAVEATS.join(" ");
   for (const named of ["bin/solid-typefacts", "rust/target", "node_modules/solid-js", "coverage"]) {
     assert.ok(text.includes(named), `the caveats must name ${named}`);
+  }
+});
+
+test("the differential harness's own files select its tests; its neighbours stay unmapped", () => {
+  const plan = planFor(["scripts/typefacts-differential.mjs", "rust/crates/typefacts/src/transcript.rs"]);
+  assert.equal(plan.full, false);
+  assert.ok(plan.checks.includes("differential-harness"));
+  assert.ok(!plan.checks.includes("coverage"));
+  for (const path of [
+    "scripts/typefacts-transcript-proxy.mjs",
+    "rust/crates/typefacts/src/lib.rs",
+    "rust/crates/typefacts/Cargo.toml",
+  ]) {
+    assert.equal(planFor([path]).full, true, `${path} must fail closed`);
   }
 });

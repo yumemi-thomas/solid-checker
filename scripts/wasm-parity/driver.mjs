@@ -348,7 +348,6 @@ for (const item of plan.a2.mount) record(item.name, await once(item.root, item.r
   const { memfs } = await import("@napi-rs/wasm-runtime/fs");
   const { root, guests, mutations } = plan.pathSemantics;
   const rust = new WebAssembly.Module(readFileSync(guests.rust));
-  const go = new WebAssembly.Module(readFileSync(guests.go));
   const lookups = semantics.rows();
   const stdlib = semantics.stdlibRows(root);
   const layers = {};
@@ -358,7 +357,7 @@ for (const item of plan.a2.mount) record(item.name, await once(item.root, item.r
       rowArguments: list.map(row => semantics.guestArgument(row, tree)),
     });
     const runnable = list => (label === "old" ? list.filter(semantics.oldLayerRuns) : list);
-    const results = { ...run(rust, runnable([...lookups, ...stdlib.rust]), root), ...run(go, stdlib.go, root) };
+    const results = run(rust, runnable([...lookups, ...stdlib.rust]), root);
     for (const { row, root: copy } of mutations) Object.assign(results, run(rust, [row], copy, { [row.id]: `${copy}/${row.check}` }));
     layers[label] = results;
   }

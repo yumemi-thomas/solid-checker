@@ -16,9 +16,11 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.0
-      - uses: dtolnay/rust-toolchain@1.97
+      - uses: dtolnay/rust-toolchain@1.99.1
         with:
           components: clippy,rustfmt
+          # The producer's reactor clippy (make test-typefacts).
+          targets: wasm32-wasip1
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust
@@ -35,18 +37,18 @@ jobs:
       # target. This restores it, and the stamp it carries is what makes the
       # `make` dependencies no-ops.
       - uses: ./.github/actions/typefacts
-      - run: test -z "$(gofmt -l apps/solid-typefacts shims)"
-      - run: go vet ./apps/solid-typefacts/...
-      # The invocation transcript suite cross-checks validity against the
-      # repository-pinned published TypeScript compiler.
+      # The producer's own workspace: fmt, clippy (native and the wasm32-wasip1
+      # reactor) and tests. The invocation transcript suite cross-checks
+      # validity against the repository-pinned published TypeScript compiler,
+      # which needs node (preinstalled on the runner) and packages/cli installed.
       - run: bun install --cwd packages/cli --ignore-scripts --no-progress --frozen-lockfile
-      - run: go test -race ./apps/solid-typefacts/...
+      - run: make test-typefacts
       - run: cargo fmt --manifest-path rust/Cargo.toml --all -- --check
       - run: cargo clippy --manifest-path rust/Cargo.toml --workspace --all-targets
       - name: Check single-dialect composition builds
         run: |
-          cargo +1.97 check --manifest-path rust/Cargo.toml -p solid-facts-backend --all-targets --no-default-features --features dialect-v2
-          cargo +1.97 check --manifest-path rust/Cargo.toml -p solid-checker-wasm --all-targets --no-default-features --features dialect-v2
+          cargo +1.99.1 check --manifest-path rust/Cargo.toml -p solid-facts-backend --all-targets --no-default-features --features dialect-v2
+          cargo +1.99.1 check --manifest-path rust/Cargo.toml -p solid-checker-wasm --all-targets --no-default-features --features dialect-v2
       - run: make test-rust
       # The two fixture gates: "no finding moved" over every fixture project,
       # and product-owned semantic/TypeScript ownership over every retained
@@ -91,7 +93,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.0
-      - uses: dtolnay/rust-toolchain@1.97
+      - uses: dtolnay/rust-toolchain@1.99.1
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust
@@ -148,25 +150,24 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.97
+      - uses: dtolnay/rust-toolchain@1.99.1
         with:
           targets: wasm32-wasip1-threads, wasm32-wasip1
       # The action's targets input covers only the toolchain it installs;
       # the build resolves its toolchain through rust-toolchain.toml, which
       # needs its own copy of the target's std.
-      - run: rustup target add wasm32-wasip1-threads wasm32-wasip1 --toolchain 1.97
+      - run: rustup target add wasm32-wasip1-threads wasm32-wasip1 --toolchain 1.99.1
       # The owned check's producer reactor is the Type Facts producer built
-      # for wasip1 (packages/wasm/scripts/build-owned.mjs).
-      - uses: actions/setup-go@v5
-        with:
-          go-version: stable
-          cache-dependency-path: go.sum
+      # for wasm32-wasip1 (packages/wasm/scripts/build-owned.mjs); its own Cargo
+      # workspace needs its own cache.
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.0
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: rust
+          workspaces: |
+            rust
+            apps/solid-typefacts
           # publish-npm.yml restores this default-branch entry. Without an
           # explicit key the action includes the different CI/release job names.
           shared-key: release-wasm
@@ -192,6 +193,9 @@ jobs:
       # through packages/cli. `make test-cli` installs it too, but that runs
       # after this step.
       - run: bun install --cwd packages/cli --ignore-scripts --no-progress --frozen-lockfile
+      # The oracle's TypeScript 7.1 (ADR 0361) installs apart from packages/cli;
+      # tsc-oracle.test.mjs drives it.
+      - run: bun scripts/tsc-oracle.mjs provision --dialect typescript
       - run: bun packages/cli/node_modules/vitest/vitest.mjs run --config packages/cli/vitest.config.mjs scripts/*.test.mjs
       - run: jq empty schema/*.json
       - run: make test-cli

@@ -6,14 +6,38 @@ license.workspace = true
 publish.workspace = true
 rust-version.workspace = true
 
+[lints]
+workspace = true
+
+[features]
+# The producer side of the wire: the table-transition encoder, the producer-side
+# fact table, and the safe wrapper over the transition arena's F_NOCACHE call.
+# The checker never enables it; the Rust Type Facts producer
+# (apps/solid-typefacts) does. The dev-dependency below turns it on for this
+# crate's own tests, so `cargo test --workspace` and `clippy --all-targets`
+# cover the encoder without a feature flag.
+producer = []
+# Recorded-transcript decoding and replay for the Type Facts differential
+# harness (scripts/typefacts-differential.mjs). Never linked by the checker.
+transcript = ["dep:serde_json"]
+
+[[bin]]
+name = "typefacts-transcript"
+path = "src/bin/typefacts-transcript.rs"
+required-features = ["transcript"]
+
 [[bench]]
 name = "retained_session"
 harness = false
+
+[dev-dependencies]
+typefacts = { path = ".", features = ["producer", "transcript"] }
 
 [dependencies]
 ciborium.workspace = true
 serde.workspace = true
 serde_bytes.workspace = true
+serde_json = { workspace = true, optional = true }
 sha2.workspace = true
 thiserror.workspace = true
 

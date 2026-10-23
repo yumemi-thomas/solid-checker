@@ -47,22 +47,32 @@ repository.
 - Imported revision: `92c53392388518d69ef27220729f5c061479deed`
 - License: MIT
 
-The exact external history was imported into this repository. The Go producer,
-Rust process/session client, schemas, goldens, tests, ADRs, and benchmarks now
-move together here; their original MIT license remains at
+The exact external history was imported into this repository. The producer
+(originally Go, now Rust on tsrs), the Rust process/session client, schemas,
+goldens, tests, ADRs, and benchmarks now move together here; their original MIT license remains at
 `apps/solid-typefacts/LICENSE`.
 
-## tsgolint and TypeScript-Go
+## tsrs
 
-- tsgolint revision: `c3269c01a0c894a31330e1b4c3bd4edc6eb7694b`
-- TypeScript-Go revision: `8d29e62f3585` (pseudo-version
-  `v0.0.0-20260724234109-8d29e62f3585`)
-- Resolution: root `go.mod`, `go.sum`, and all nine shim modules
-- Licenses: MIT
+- Upstream: https://github.com/oxc-project/tsrs
+- Upstream revision: `467182f2402b140897e8a02d7a25699db0e79e2a` (v0.18.0)
+- Consumed fork: https://github.com/yumemi-thomas/tsrs
+- Pinned revision: `49f534856809ad8d5a596123f02175ba01675c8d`
+- TypeScript commit it ports: `b85298b6a81f` (microsoft/TypeScript,
+  `7.1.0-dev.20260929`)
+- License: Apache-2.0 (tsrs is a derivative work of TypeScript, Copyright (c)
+  Microsoft Corporation, also Apache-2.0; its `NOTICE` carries TypeScript's
+  third-party notices and the bundled `lib.*.d.ts` files)
 
-The tsgolint-derived TypeScript-Go shim modules are vendored under `shims/` and
-retain their MIT license at `shims/LICENSE`. TypeScript-Go itself remains a
-pinned Go module dependency and is not copied into this repository.
+The Rust Type Facts producer in `apps/solid-typefacts` consumes the tsrs
+compiler crates (`tsrs_core`, `tsrs_ast`, `tsrs_scanner`, `tsrs_checker`,
+`tsrs_compiler`, `tsrs_tsoptions`, `tsrs_vfs`) as pinned Cargo git
+dependencies in that workspace only. The fork is upstream plus one marked
+commit that exports two checker functions (`is_untyped_function_call` and
+`get_reduced_apparent_type`, in `crates/tsrs_checker/src/solid_checker_exports.rs`);
+it changes no behavior. tsrs is not copied into this repository. A producer
+binary embeds the TypeScript library declaration files, so the Apache-2.0
+terms and the tsrs `NOTICE` apply to a distributed producer.
 
 ## Solid Primitives
 

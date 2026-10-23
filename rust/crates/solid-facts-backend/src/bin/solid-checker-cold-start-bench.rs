@@ -87,7 +87,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         serde_json::to_string_pretty(&serde_json::json!({
             "schemaVersion": 1,
             "benchmark": "fresh-process-cold-start",
-            "coldStartDefinition": "A new Rust checker and TypeScript-Go sidecar process per sample. Only the first observed sample may include cold executable/filesystem pages; later samples are process-cold with warm OS caches.",
+            "coldStartDefinition": "A new Rust checker and tsrs sidecar process per sample. Only the first observed sample may include cold executable/filesystem pages; later samples are process-cold with warm OS caches.",
             "project": project,
             "checker": checker,
             "typefacts": typefacts,

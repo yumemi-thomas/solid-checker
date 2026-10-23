@@ -139,7 +139,7 @@ impl TypeFactsProvider for PlanningTypeFacts {
 /// Prototype seam for a self-contained browser host.
 ///
 /// It runs the in-process syntax and Solid compiler passes and returns the
-/// exact semantic demands a browser-side TypeScript-Go reactor must answer.
+/// exact semantic demands a browser-side tsrs reactor must answer.
 #[cfg(feature = "napi-host")]
 #[napi]
 pub fn plan_sync(request_json: String) -> napi::Result<String> {
@@ -302,6 +302,8 @@ mod tests {
     }
 }
 
+mod unsafe_boundary;
+
 #[cfg(feature = "reactor")]
 static REACTOR_INPUT: Mutex<Vec<u8>> = Mutex::new(Vec::new());
 
@@ -310,8 +312,7 @@ static REACTOR_OUTPUT: Mutex<Vec<u8>> = Mutex::new(Vec::new());
 
 /// Allocate the request buffer used by the process-free WASI reactor.
 #[cfg(feature = "reactor")]
-#[unsafe(no_mangle)]
-pub extern "C" fn allocate_input(size: u32) -> u32 {
+fn reactor_allocate_input(size: u32) -> u32 {
     let mut input = REACTOR_INPUT.lock().expect("reactor input lock poisoned");
     input.resize(size as usize, 0);
     input.as_mut_ptr() as u32
@@ -339,15 +340,13 @@ fn run_reactor(operation: fn(&str) -> Result<String, Box<dyn std::error::Error>>
 
 /// Plan the exact Type Facts demands for the encoded source request.
 #[cfg(feature = "reactor")]
-#[unsafe(no_mangle)]
-pub extern "C" fn run_plan() -> u32 {
+fn reactor_run_plan() -> u32 {
     run_reactor(plan)
 }
 
 /// Analyze the encoded source and Type Facts request.
 #[cfg(feature = "reactor")]
-#[unsafe(no_mangle)]
-pub extern "C" fn run_check() -> u32 {
+fn reactor_run_check() -> u32 {
     run_reactor(check)
 }
 
@@ -356,8 +355,7 @@ pub extern "C" fn run_check() -> u32 {
 /// modules reading the same mounted project tree. No package document is
 /// consumed.
 #[cfg(all(feature = "reactor", target_family = "wasm"))]
-#[unsafe(no_mangle)]
-pub extern "C" fn run_owned_check() -> u32 {
+fn reactor_run_owned_check() -> u32 {
     run_reactor(owned::check)
 }
 
@@ -437,8 +435,7 @@ mod canonical_project_tests {
 }
 
 #[cfg(feature = "reactor")]
-#[unsafe(no_mangle)]
-pub extern "C" fn output_pointer() -> u32 {
+fn reactor_output_pointer() -> u32 {
     REACTOR_OUTPUT
         .lock()
         .expect("reactor output lock poisoned")
@@ -446,8 +443,7 @@ pub extern "C" fn output_pointer() -> u32 {
 }
 
 #[cfg(feature = "reactor")]
-#[unsafe(no_mangle)]
-pub extern "C" fn output_length() -> u32 {
+fn reactor_output_length() -> u32 {
     REACTOR_OUTPUT
         .lock()
         .expect("reactor output lock poisoned")
@@ -486,22 +482,12 @@ mod owned {
         dependency_sources::PreparedDependencyProgram,
     };
 
-    #[link(wasm_import_module = "solid_typefacts")]
-    unsafe extern "C" {
-        fn open(envelope: *const u8, length: u32, handle: *mut u32) -> u32;
-        fn handshake(handle: u32) -> u32;
-        fn exchange(handle: u32, frame: *const u8, length: u32) -> u32;
-        fn result_length(handle: u32) -> u32;
-        fn copy_result(handle: u32, destination: *mut u8, capacity: u32) -> u32;
-        fn close(handle: u32) -> u32;
-    }
+    use crate::unsafe_boundary::host;
 
     fn take_result(handle: u32) -> Result<Vec<u8>, String> {
-        // SAFETY: the host writes at most `capacity` bytes into the buffer it
-        // is handed, during this call only.
-        let length = unsafe { result_length(handle) };
+        let length = host::pending_result_length(handle);
         let mut buffer = vec![0_u8; length as usize];
-        let status = unsafe { copy_result(handle, buffer.as_mut_ptr(), length) };
+        let status = host::copy_pending_result(handle, &mut buffer)?;
         if status != 0 {
             return Err(format!("host could not copy the result of handle {handle}"));
         }
@@ -525,24 +511,19 @@ mod owned {
 
     impl typefacts::FrameBridge for HostBridge {
         fn handshake(&mut self) -> Result<Vec<u8>, String> {
-            // SAFETY: a plain call into the host; no memory is shared.
-            let status = unsafe { handshake(self.handle) };
+            let status = host::start(self.handle);
             answer(self.handle, status)
         }
 
         fn exchange(&mut self, request: &[u8]) -> Result<Vec<u8>, String> {
-            let length = u32::try_from(request.len()).map_err(|_| "request frame too large")?;
-            // SAFETY: the host reads `length` bytes at `request` during this
-            // call only.
-            let status = unsafe { exchange(self.handle, request.as_ptr(), length) };
+            let status = host::send_frame(self.handle, request)?;
             answer(self.handle, status)
         }
 
         fn close(&mut self) {
             if !self.closed {
                 self.closed = true;
-                // SAFETY: a plain call into the host.
-                unsafe { close(self.handle) };
+                host::close_program(self.handle);
             }
         }
     }
@@ -561,11 +542,7 @@ mod owned {
             config: Option<&[u8]>,
         ) -> Result<TypeFactsSession, Box<dyn Error>> {
             let envelope = typefacts::owned_open_envelope(project_id, config)?;
-            let length = u32::try_from(envelope.len()).map_err(|_| "open envelope too large")?;
-            let mut handle = 0_u32;
-            // SAFETY: the host reads `length` bytes at `envelope` and writes
-            // four bytes at `handle`, during this call only.
-            let status = unsafe { open(envelope.as_ptr(), length, &raw mut handle) };
+            let (status, handle) = host::open_program(&envelope)?;
             if status != 0 {
                 return Err(answer(0, status)
                     .err()

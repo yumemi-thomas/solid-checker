@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 
 import { openGateCache } from "./lib/gate-cache.mjs";
 import { DIALECTS } from "./lib/tsc-oracle-case.mjs";
-import { oracleCompilerOptions, oracleProject, runOracle } from "./tsc-oracle.mjs";
+import { oracleCompilerOptions, oracleProject, oracleTypescriptTree, runOracle } from "./tsc-oracle.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const CASES_PATH = join(ROOT, "fixtures/ownership-cases/cases.json");
@@ -106,7 +106,7 @@ const ownershipCache = openGateCache({
 const ownershipOracleCache = openGateCache({
   gate: "ownership-safe-fix-oracle",
   scriptPath: fileURLToPath(import.meta.url),
-  trees: [...oracleRoots, join(ROOT, "packages/cli/node_modules/typescript")],
+  trees: [...oracleRoots, oracleTypescriptTree()],
 });
 
 const manifest = JSON.parse(readFileSync(CASES_PATH, "utf8"));

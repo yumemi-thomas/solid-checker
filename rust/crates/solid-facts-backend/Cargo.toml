@@ -8,6 +8,9 @@ rust-version.workspace = true
 autobins = false
 autotests = false
 
+[lints]
+workspace = true
+
 [features]
 default = ["dialect-v2"]
 dialect-v2 = ["dep:solid-v2-compiler", "dep:solid-v2-rules"]

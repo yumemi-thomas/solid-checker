@@ -33,8 +33,6 @@
     "build": "bun ./scripts/build.mjs --release && bun ./scripts/build-owned.mjs",
     "build:debug": "bun ./scripts/build.mjs",
     "build:owned": "bun ./scripts/build-owned.mjs",
-    "prototype:self-contained": "bun ./prototypes/self-contained.mjs",
-    "prototype:module-graph": "bun ./prototypes/module-graph-equivalence.mjs",
     "test": "bun ./node_modules/vitest/vitest.mjs run --config vitest.config.mjs test/*.test.mjs"
   },
   "napi": {
