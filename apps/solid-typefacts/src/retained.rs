@@ -1,12 +1,14 @@
 //! The materializer of the demand closure (Go: `semantic_retained.go`).
 //!
-//! This producer reuses no answer across an update or across a change of the
-//! demand set: every table begins by discarding what earlier analysis left
-//! (`DemandClosure::discard_derived_state`), so each file is resolved against
-//! the compiler, in canonical order, and ids are claimed as a fresh program
-//! claims them. The retained-contribution store below is still filled and read
-//! back by the shared machinery, but it is empty whenever a table starts. Reuse
-//! comes back with instantiation-stable ids and recorded dependencies.
+//! This producer reuses no demand contribution across an update or across a
+//! change of the demand set: every table begins by discarding what earlier
+//! analysis left (`DemandClosure::discard_derived_state`), so each file is
+//! resolved against the compiler, in canonical order, and ids are minted as a
+//! fresh program mints them. The retained-contribution store below is still
+//! filled and read back by the shared machinery, but it is empty whenever a
+//! table starts. Only binder-level answers (reference spans, entity symbols
+//! and symbol declarations resolved without types) are reused, by the backend,
+//! under recorded dependencies (ADR 0369).
 //!
 //! A contribution carries the structural-accessor union that descriptor
 //! suppression needs; recomputed files always run under the exact current
@@ -207,8 +209,14 @@ impl DemandClosure {
         // path order (the groups are path-ordered), before any demand of the
         // table is answered, so no answer depends on demand, batch or request
         // order.
+        // Reuse counts are this table's own (ADR 0369).
+        let _ = self.backend.binder_retention();
         let demanded: Vec<&str> = groups.iter().map(|group| group.path.as_str()).collect();
+        let started = Instant::now();
         self.backend.check_demanded_files(ctx, &demanded)?;
+        if let Some(trace) = &self.trace {
+            trace.stage("analyze-check-first", started.elapsed());
+        }
 
         // The async runs are rebuilt every generation; a group's run holds only
         // the rows that asked for async.
@@ -452,6 +460,14 @@ impl DemandClosure {
         }
         retention.retained_files = groups.len().saturating_sub(changed.len());
         retention.recomputed_files = changed.len();
+        let binder = self.backend.binder_retention();
+        if let Some(trace) = &self.trace {
+            trace.stage("analyze-references", binder.build);
+        }
+        retention.cached_reference_facts = binder.reused_reference_files;
+        retention.recomputed_references = binder.scanned_reference_files;
+        retention.cached_symbol_facts = binder.reused_symbols;
+        retention.recomputed_symbol_facts = binder.resolved_symbols;
         stages.demand = started.elapsed();
 
         let started = Instant::now();

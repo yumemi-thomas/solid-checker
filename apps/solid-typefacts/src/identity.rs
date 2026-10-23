@@ -78,7 +78,7 @@ pub struct Identities {
     symbols_by_id: HashMap<SymbolId, P<Symbol>>,
     /// Go: `durableRefs`. Maps a binder id back to its key so the symbol can be
     /// re-resolved lazily after a release.
-    keys: HashMap<SymbolId, Key>,
+    keys: HashMap<SymbolId, Arc<Key>>,
     /// The module-visible symbols' declaration references (Go:
     /// `exportedIdentitiesByRef`): pointer-free, so it also answers after a
     /// release.
@@ -87,9 +87,12 @@ pub struct Identities {
     /// bundled-lib names, so durable re-resolution of lib-declared symbols
     /// falls back to this index.
     files_by_name: Option<HashMap<String, P<SourceFile>>>,
-    /// Go: `runtimePaths`. Filesystem-resolved declaration paths for one
-    /// generation (symlinks followed), dropped with the other path caches on
-    /// release and on every accepted update.
+    /// Go: `runtimePaths`. Filesystem-resolved declaration paths (symlinks
+    /// followed). A path's resolution is a file-system fact, not a checker
+    /// one, so it is kept for as long as the program chain trusts the file
+    /// system: across releases and parse-reusing updates, which reuse every
+    /// other file and its module resolutions as read, and dropped by any
+    /// rebuild, which reads the file system again (`Realpath`, ADR 0369).
     runtime_paths: HashMap<String, String>,
     /// Write sites per declaring file (by file address), built on first use by
     /// `runtime_facts`. Holds node and symbol addresses: generation-scoped like
@@ -103,6 +106,8 @@ pub struct Env<'a> {
     pub checker: &'a mut CheckerLease,
     pub program: &'static Program,
     pub ids: &'a mut Identities,
+    /// Digests of the program inputs retained answers depend on (ADR 0369).
+    pub inputs: &'a mut crate::inputs::ProgramInputs,
 }
 
 fn same_symbol(left: P<Symbol>, right: P<Symbol>) -> bool {
@@ -120,7 +125,7 @@ impl Identities {
 
     /// The declaration references of the binder ids held (tests).
     pub fn durable_refs(&self) -> impl Iterator<Item = &DurableRef> {
-        self.keys.values().filter_map(Key::reference)
+        self.keys.values().filter_map(|key| key.reference())
     }
 
     /// Whether any checker-owned map holds an entry (tests).
@@ -134,6 +139,26 @@ impl Identities {
         &self.exported_by_ref
     }
 
+    /// The key a binder id was minted from in this generation.
+    #[must_use]
+    pub(crate) fn key_of_id(&self, id: &SymbolId) -> Option<&Arc<Key>> {
+        self.keys.get(id)
+    }
+
+    /// Makes a retained binder id answerable in this generation without
+    /// minting it: `symbol_for` re-resolves it lazily through its key, as it
+    /// does for an id minted before a release. `false` when the id already
+    /// names another key (a collision): the caller must not reuse it.
+    pub(crate) fn register_key(&mut self, id: &SymbolId, key: &Arc<Key>) -> bool {
+        match self.keys.get(id) {
+            Some(held) => held == key,
+            None => {
+                self.keys.insert(Arc::clone(id), Arc::clone(key));
+                true
+            }
+        }
+    }
+
     /// Go: `ReleaseAnalysisState`'s identity half, and the rebase policy's:
     /// drops every pointer-keyed map. Durable refs and the by-ref index are
     /// the rehydration boundary and stay.
@@ -141,14 +166,20 @@ impl Identities {
         self.ids_by_symbol.clear();
         self.symbols_by_id.clear();
         self.files_by_name = None;
-        self.runtime_paths.clear();
         self.write_indexes.clear();
         self.next_symbol = 0;
+    }
+
+    /// The program chain was rebuilt: every file and module resolution was
+    /// read again, so resolved runtime paths are too.
+    pub fn forget_runtime_paths(&mut self) {
+        self.runtime_paths.clear();
     }
 
     /// Go: `Close`.
     pub fn close(&mut self) {
         self.release_pointers();
+        self.runtime_paths.clear();
         self.keys.clear();
         self.exported_by_ref.clear();
     }
@@ -162,8 +193,10 @@ impl Identities {
     /// derived from the preceding generation survives: the claims and the
     /// durable references restart empty, and the exported identities are
     /// collected again from the candidate program, so an id minted before the
-    /// update fails closed until the new generation mints it. (The exports the
-    /// update already derived, `current`, only feed its cutoff decisions.)
+    /// update fails closed until the new generation mints it, or a retained
+    /// binder-level answer holding it proves its dependencies and registers its
+    /// key (ADR 0369). (The exports the update already derived, `current`, only
+    /// feed its cutoff decisions.)
     pub fn after_update(
         &mut self,
         generation: u64,
@@ -176,7 +209,6 @@ impl Identities {
         self.ids_by_symbol.clear();
         self.symbols_by_id.clear();
         self.files_by_name = None;
-        self.runtime_paths.clear();
         self.write_indexes.clear();
         self.next_symbol = 0;
         self.keys.clear();
@@ -252,8 +284,11 @@ impl Env<'_> {
             let id: SymbolId = Arc::from(key.id().as_str());
             // Two keys spelling one id (a 96-bit collision) would conflate two
             // symbols: the later one fails closed to a counter.
-            if self.ids.keys.get(&id).is_none_or(|held| *held == key) {
-                self.ids.keys.entry(Arc::clone(&id)).or_insert(key);
+            if self.ids.keys.get(&id).is_none_or(|held| **held == key) {
+                self.ids
+                    .keys
+                    .entry(Arc::clone(&id))
+                    .or_insert_with(|| Arc::new(key));
                 self.ids
                     .symbols_by_id
                     .entry(Arc::clone(&id))
@@ -296,14 +331,14 @@ impl Env<'_> {
         if let Some(symbol) = self.ids.symbols_by_id.get(id) {
             return Some(*symbol);
         }
-        let key = self.ids.keys.get(id)?.clone();
-        let candidate = match &key {
+        let key = Arc::clone(self.ids.keys.get(id)?);
+        let candidate = match &*key {
             Key::Decl(reference) | Key::Export(reference) => self.symbol_at_reference(reference)?,
             Key::Global(name) => global_symbol(self.checker, name)?,
             Key::Intrinsic(which) => intrinsic_symbol(self.checker, *which),
         };
         let (found, root) = self.key_of(candidate)?;
-        if found != key {
+        if found != *key {
             return None;
         }
         self.ids.ids_by_symbol.insert(root.addr(), Arc::clone(id));

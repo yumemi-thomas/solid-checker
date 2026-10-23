@@ -228,6 +228,11 @@ pub trait ClosureBackend {
     /// Drops checker-expanded query state after a cold materialization
     /// (Go: `ReleaseAnalysisState`).
     fn release_analysis_state(&mut self) {}
+
+    /// How much binder-level work was reused since the last call (ADR 0369).
+    fn binder_retention(&mut self) -> crate::references::BinderRetention {
+        crate::references::BinderRetention::default()
+    }
 }
 
 /// Symbol-level evidence for the `symbols` operation and for `analyze`'s

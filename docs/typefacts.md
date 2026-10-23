@@ -51,17 +51,23 @@ stay inside the producer's tsrs backend.
 
 Generation-scoped opaque identities include their project generation and must
 be reacquired after every successful `Update`. Declaration-backed durable
-identities are minted again after an update: the producer keeps no analysis
-across one (ADR 0364), so an ID held over an update fails closed with
-not-found until a location scan mints it. A binder-level symbol's hash ID is
+identities are minted again after an update, or answered again by a retained
+binder-level answer that holds them (ADR 0369); any other ID held over an
+update fails closed with not-found until a location scan mints it. A
+binder-level symbol's hash ID is
 a pure function of the program (ADR 0366): a checker singleton, a global by
 name, a module export by declaring path and name, else its minimum declaration
 by path and offset, with the checker's private and unique-symbol counters
 stripped from names. Whatever symbol asks first, the ID is the same. A derived
 symbol (an instantiation, a `this`-type or widened copy, a mapped or spread
 property) and any symbol not proven binder-level get counters (`symbol:<gen>:<n>`). A
-table build discards earlier answers, so none are reused inside a generation or
-across an update. The compiler's incremental program is still reused.
+table build discards every type-derived answer, so none is reused inside a
+generation or across an update (ADR 0364). Answers the checker gives by scope
+lookup alone are kept with the digests they read (file text, the exports scan,
+the global scope, the options) and reused while those are unchanged: each
+file's binder-resolved reference spans, entity symbols at binder-resolved
+positions and binder-level symbols' declarations (ADR 0369). The compiler's
+incremental program is still reused.
 
 ## Native integration pins
 
