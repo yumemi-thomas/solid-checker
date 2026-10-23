@@ -162,6 +162,8 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   reaching its module, no `eval` or `import.meta.glob` anywhere) has no call
   site at all, so its props are static and its reads are not reported
   (ADR 0373, `fixtures/reactive-ir/never-rendered-component`).
+  A named function expression a `const` initializes is censused through that
+  `const` (ADR 0377, `fixtures/reactive-ir/named-function-expression-component`).
 
 ## Why is this bad?
 

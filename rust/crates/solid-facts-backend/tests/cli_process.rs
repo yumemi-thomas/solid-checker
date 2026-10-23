@@ -12,12 +12,18 @@ fn argv_invocation_ignores_stdin_request() {
         .stderr(Stdio::piped())
         .spawn()
         .expect("spawn Rust CLI with argv and stdin");
-    child
+    // An argv invocation may print help and exit before the write lands: the
+    // closed pipe is that outcome, not a failure. The status and stdout
+    // assertions below still decide the test.
+    match child
         .stdin
         .take()
         .expect("write stdin payload")
         .write_all(b"this is deliberately not a JSON request")
-        .expect("write invalid stdin request");
+    {
+        Err(error) if error.kind() == std::io::ErrorKind::BrokenPipe => {}
+        result => result.expect("write invalid stdin request"),
+    }
     let output = child.wait_with_output().expect("wait for Rust CLI help");
     assert!(
         output.status.success(),

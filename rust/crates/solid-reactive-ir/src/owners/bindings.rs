@@ -275,6 +275,37 @@ pub fn function_binding_name<'a>(
         })
 }
 
+/// The `const` a named function expression is the whole initializer of
+/// (`const X = function X(props) {}`, ADR 0377). The expression's own name is
+/// bound only inside it, so the `const` is the binding callers reach it by.
+/// `None` for any other function, a method, or a `let`.
+pub(crate) fn named_expression_binding_name<'a>(
+    file: &'a solid_facts::FileFacts,
+    function: &'a solid_facts::ast::FunctionFact,
+) -> Option<&'a solid_facts::ast::NamedSpan> {
+    if function.kind != solid_facts::ast::FunctionKind::Expression
+        || function.name.is_none()
+        || own_method_name(file, function).is_some()
+    {
+        return None;
+    }
+    file.ast
+        .bindings_initializer_containing(function.span)
+        .find(|binding| {
+            binding.immutable
+                && binding.initializer_function
+                && binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding.names.len() == 1
+                && binding.initializer.is_some_and(|initializer| {
+                    file.ast
+                        .functions_within(initializer)
+                        .max_by_key(|candidate| candidate.span.end - candidate.span.start)
+                        .is_some_and(|candidate| candidate.span == function.span)
+                })
+        })
+        .and_then(|binding| binding.names.first())
+}
+
 /// The method name of a function that *is* an object or class method. The
 /// facts walker gives every non-arrow function nested anywhere in a method's
 /// body that method's name too (`{ m() { register(function () {}) } }`); the

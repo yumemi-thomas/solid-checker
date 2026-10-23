@@ -170,8 +170,14 @@ impl<'a> SemanticLookup<'a> {
         {
             return false;
         }
+        // A named function expression's own name is bound only inside it:
+        // its `const` is the binding (ADR 0377), and every use of the inner
+        // name lies inside the function.
         let binding = match function.kind {
             solid_facts::ast::FunctionKind::Declaration => function.name.as_ref(),
+            solid_facts::ast::FunctionKind::Expression if function.name.is_some() => {
+                crate::owners::named_expression_binding_name(file, function)
+            }
             _ if function.name.is_none()
                 && crate::owners::own_method_name(file, function).is_none() =>
             {

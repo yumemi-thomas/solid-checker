@@ -389,7 +389,12 @@ pub(super) fn classify_one_component(
 ) -> (PropsReactivity, ForwardedProps, Vec<SpreadForward>) {
     use solid_facts::core::Span;
     let mut forwarded = ForwardedProps::new();
-    let name = crate::owners::component_binding_name(file, function).or(function.name.as_ref());
+    // A named function expression is reached through its `const` (ADR 0377);
+    // its own name, bound only inside it, is walked below as well.
+    let outer = crate::owners::named_expression_binding_name(file, function);
+    let name = outer
+        .or_else(|| crate::owners::component_binding_name(file, function))
+        .or(function.name.as_ref());
     let Some(symbol) = name.and_then(|name| entities.get(&location(file.path.shared(), name.span)))
     else {
         // An anonymous component value (a HOC argument, say) has no symbol to
@@ -430,10 +435,34 @@ pub(super) fn classify_one_component(
     if references.is_empty() && !lookup.component_never_rendered(file, function) {
         escapes = true;
     }
-    let name_text = name
-        .and_then(|name| file.source_text(name.span))
-        .unwrap_or_default();
-    for reference in &references {
+    // Each group: the references, the name they spell, and the declaration a
+    // reference may be. The binding's references inside the function are its
+    // own (recursion); the inner name's are all inside it, so each must be
+    // the declaration or a resolved tag (a self-render): the inner name
+    // handed out as a value escapes. A missing inner list is no census.
+    let mut groups = vec![(
+        references,
+        name.and_then(|name| file.source_text(name.span))
+            .unwrap_or_default(),
+        name.map(|name| name.span),
+        true,
+    )];
+    if let Some(inner) = outer.and(function.name.as_ref()) {
+        match entities
+            .get(&location(file.path.shared(), inner.span))
+            .and_then(|symbol| lookup.symbol_references_if_present(symbol.as_str()))
+        {
+            Some(references) => groups.push((
+                references,
+                file.source_text(inner.span).unwrap_or_default(),
+                Some(inner.span),
+                false,
+            )),
+            None => escapes = true,
+        }
+    }
+    for (references, name_text, declaration, inside_is_own) in &groups {
+    for reference in references {
         let (Ok(start), Ok(end)) = (
             u32::try_from(reference.start_byte),
             u32::try_from(reference.end_byte),
@@ -443,7 +472,7 @@ pub(super) fn classify_one_component(
         };
         let span = Span::new(start, end);
         let own_declaration = *reference.path == *file.path.as_str()
-            && (function.span.contains(span) || name.is_some_and(|name| name.span == span));
+            && ((*inside_is_own && function.span.contains(span)) || *declaration == Some(span));
         if own_declaration {
             continue;
         }
@@ -453,7 +482,7 @@ pub(super) fn classify_one_component(
             *reference.path == *use_file.path.as_str()
                 && (element.name.span == span
                     || (element.span.contains(span)
-                        && use_file.source_text(span) == Some(name_text)))
+                        && use_file.source_text(span) == Some(*name_text)))
         });
         if !jsx_use {
             // Passed as a value, aliased, or re-exported: this hands the
@@ -471,6 +500,7 @@ pub(super) fn classify_one_component(
                 escapes = true;
             }
         }
+    }
     }
     let mut reactive = BTreeSet::new();
     let mut unresolved = BTreeSet::new();
