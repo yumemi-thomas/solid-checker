@@ -9,7 +9,10 @@
 use crate::{HashMap, HashSet};
 use std::{
     collections::BTreeMap,
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
     time::{Duration, Instant},
 };
 
@@ -326,6 +329,7 @@ pub(super) struct InterproceduralTimings {
     pub(super) results_and_exports: Duration,
     pub(super) result_reads: Duration,
     pub(super) export_summaries: Duration,
+    pub(super) export_work: u64,
     pub(super) graph_reused_files: u64,
     pub(super) graph_recomputed_files: u64,
     pub(super) result_reused_files: u64,

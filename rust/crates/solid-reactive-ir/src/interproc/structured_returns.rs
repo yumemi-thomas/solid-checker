@@ -10,6 +10,10 @@ pub(super) struct StructuredReturnDiscovery<'a, 'facts> {
     pub(super) summaries: &'a [SummaryReads],
     pub(super) returned: &'a [SummaryReads],
     pub(super) structured_returns: &'a [Option<ReturnSummary>],
+    /// Deterministic work units, one per node visited in a
+    /// discovery round, per `leaf` evaluation, and per exported node and
+    /// returned property examined for an unresolved shorthand.
+    pub(super) work: &'a AtomicU64,
     pub(super) accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
     /// The accessor declared at each `(path, start, end)`: the first in the
     /// iteration order of `accessors` (see [`accessor_declarations`]).
@@ -915,6 +919,7 @@ impl StructuredReturnDiscovery<'_, '_> {
         fallback_label: &str,
         depth: usize,
     ) -> Option<ReturnSummary> {
+        self.work.fetch_add(1, Ordering::Relaxed);
         if depth == 0 {
             return None;
         }
@@ -1133,6 +1138,7 @@ pub(super) fn discover_structured_returns(
     discovery: &StructuredReturnDiscovery<'_, '_>,
 ) -> Vec<Option<ReturnSummary>> {
     parallel_slice_results(discovery.nodes, |node| {
+        discovery.work.fetch_add(1, Ordering::Relaxed);
         let file = discovery.lookup.file_by_path(node.path.as_str())?;
         let function = file.ast.function_at(node.span)?;
         let returned = function
