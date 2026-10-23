@@ -389,12 +389,25 @@ pub fn project_call_validity(
 }
 
 /// Review of ADR 0368: a selected package whose own source holds a call
-/// TypeScript rejects (`Recovery`). `tsc` on the project never checks that
-/// source, so no error the user sees owns it, and every pass leaves a
-/// `Recovery` call to TypeScript: the package's behaviour there is unproven.
-/// Each such package is refused for its project importers, which keeps an
-/// open requirement (SC9005) at every import of it instead of a silent
-/// clean.
+/// TypeScript rejects (`Recovery`) with no callee it runs. `tsc` on the
+/// project never checks that source, so no error the user sees owns it.
+///
+/// What a `Recovery` fact carries (resolved_calls.rs `resolve_one`): the
+/// callee's symbol as `target` (empty when the checker resolved the call to
+/// its unknown signature: the callee is not callable), no declaration, no
+/// union targets, and every argument mapping unresolved
+/// (`RecoverySignature`). Analysis reads a resolved call's declaration,
+/// argument mappings and callback positions only from `Valid` calls, so none
+/// of those is read off a recovered call, in a package or not; what follows
+/// such a call is the callee's own symbol in the call graph, as for any
+/// call. With a target, the call runs that callee whatever its argument
+/// types (`createComponent(Context, props)`, `Solid.useContext(ctx)`
+/// against published typings): only assignability failed and the behaviour
+/// model stands. Without one (`const fn = api.get(); fn(source)` with
+/// `get(): number`), what the call runs is unknown and the package is
+/// refused for its project importers: an open requirement (SC9005) at every
+/// import of it instead of a silent clean. The boundary records refusals per
+/// import of an installed root; there is no per-export refusal to narrow to.
 #[must_use]
 pub fn package_call_errors(
     facts: &solid_facts::ProjectFacts,
@@ -402,11 +415,14 @@ pub fn package_call_errors(
 ) -> Vec<crate::dependency_sources::SourceRefusal> {
     let mut first = BTreeMap::<PathBuf, &typefacts::Location>::new();
     for entity in facts.typescript.entities() {
-        if !entity
+        let Some(call) = entity
             .resolved_call
-            .as_ref()
-            .is_some_and(|call| call.validity == typefacts::ResolvedCallValidity::Recovery)
-        {
+            .as_deref()
+            .filter(|call| call.validity == typefacts::ResolvedCallValidity::Recovery)
+        else {
+            continue;
+        };
+        if call.targets.is_none() && !call.target.is_empty() {
             continue;
         }
         let path = Path::new(entity.location.path.as_ref());
@@ -429,7 +445,7 @@ pub fn package_call_errors(
             name: crate::dependency_sources::package_name_of_root(&root)
                 .unwrap_or_else(|| root.to_string_lossy().into_owned()),
             detail: format!(
-                "TypeScript rejects a call in the package's own source ({} at byte {}), which no project tsc error owns, so its behaviour is unproven",
+                "TypeScript rejects a call in the package's own source whose callee is not callable ({} at byte {}), so what it runs is unknown",
                 location.path, location.start_byte
             ),
             root: Some(root),

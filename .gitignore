@@ -361,6 +361,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/dependency-source-package-call-error/node_modules/**
 !fixtures/reactive-ir/dependency-source-nested-project-call-error/node_modules/
 !fixtures/reactive-ir/dependency-source-nested-project-call-error/node_modules/**
+!fixtures/reactive-ir/dependency-source-package-argument-error/node_modules/
+!fixtures/reactive-ir/dependency-source-package-argument-error/node_modules/**
 !fixtures/reactive-ir/dependency-source-program/node_modules/
 !fixtures/reactive-ir/dependency-source-program/node_modules/**
 !fixtures/reactive-ir/dependency-source-program/legacy/node_modules/

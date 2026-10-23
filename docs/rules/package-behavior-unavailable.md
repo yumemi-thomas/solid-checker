@@ -8,8 +8,8 @@ The former name `package-contract-incomplete` is still accepted as an alias in
 Dependency source selection requires a declared runtime target and build under
 the Vite and Solid plugin premises. Unsupported source selection, unavailable
 files, unresolved callback behavior and source-edge refusals keep the exact
-package obligation open, and so does selected source holding a call
-TypeScript rejects, which no project `tsc` run checks (ADR 0368). Missing
+package obligation open, and so does selected source holding a call to a
+value that is not callable, which no project `tsc` run checks (ADR 0368). Missing
 module/type errors belong to TypeScript.
 
 Provide analyzable runtime source and the correct host configuration where

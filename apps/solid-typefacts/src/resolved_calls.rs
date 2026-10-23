@@ -400,6 +400,17 @@ impl CallRun<'_, '_> {
 
         let (validity, callee_type) = self.validity_and_callee_type(node, signature, target)?;
         call.validity = validity;
+        // ADR 0368 review: a failed call the checker resolved to its unknown
+        // signature (the callee is not callable: TS2349, `const fn = get();
+        // fn(x)` with `get(): number`) has no callee it would run. Its
+        // `target` stays empty: the callee's symbol is not what the call
+        // runs. A recovery that kept a real signature (only an argument
+        // failed) keeps its target.
+        if validity != ResolvedCallValidity::Valid
+            && signature.addr() == self.env.checker.get_unknown_signature().addr()
+        {
+            call.target = "".into();
+        }
         let return_type = self
             .env
             .checker

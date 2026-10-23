@@ -1740,3 +1740,27 @@ export {};\n";
         ResolvedCallValidity::Recovery
     );
 }
+
+/// ADR 0368 review: a failed call whose callee is not callable (the checker's
+/// unknown signature) has no target; one where only an argument failed keeps
+/// the callee it runs.
+#[test]
+fn a_failed_call_keeps_a_target_only_when_its_callee_is_callable() {
+    let source = "declare function make(): number;\n\
+declare function takesNumber(value: number): void;\n\
+const fn = make();\n\
+fn(1);\n\
+takesNumber(\"wrong\");\n";
+    let scratch = single("calls.ts", source);
+    let calls = resolved(
+        &scratch,
+        "calls.ts",
+        source,
+        &["fn(1)", "takesNumber(\"wrong\")"],
+        false,
+    );
+    assert_eq!(calls[0].validity, ResolvedCallValidity::Recovery);
+    assert!(calls[0].target.is_empty(), "{:?}", calls[0].target);
+    assert_eq!(calls[1].validity, ResolvedCallValidity::Recovery);
+    assert!(!calls[1].target.is_empty());
+}
