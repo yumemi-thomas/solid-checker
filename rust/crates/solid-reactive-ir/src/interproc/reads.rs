@@ -2017,6 +2017,15 @@ fn export_structured_return_obligations(
                 })
     });
     let accessor_declarations = structured_returns::accessor_declarations(accessors);
+    let accessors_by_identity =
+        structured_returns::accessors_by_runtime_identity(accessors, |location| {
+            facts
+                .typescript
+                .entities_for_path(location.path.as_ref())
+                .iter()
+                .find(|entity| entity.location == *location)
+                .map(|entity| entity.runtime_identity.as_ref())
+        });
     if has_structured_return_seed {
         for _ in 0..=nodes.len() {
             let discovered = discover_structured_returns(&StructuredReturnDiscovery {
@@ -2029,6 +2038,7 @@ fn export_structured_return_obligations(
                 structured_returns: &structured_returns,
                 accessors,
                 accessor_declarations: &accessor_declarations,
+                accessors_by_identity: &accessors_by_identity,
                 source_kinds,
                 entities,
                 symbol_names,
@@ -2056,6 +2066,7 @@ fn export_structured_return_obligations(
         structured_returns: &structured_returns,
         accessors,
         accessor_declarations: &accessor_declarations,
+        accessors_by_identity: &accessors_by_identity,
         source_kinds,
         entities,
         symbol_names,

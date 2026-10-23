@@ -14,6 +14,10 @@ pub(super) struct StructuredReturnDiscovery<'a, 'facts> {
     /// The accessor declared at each `(path, start, end)`: the first in the
     /// iteration order of `accessors` (see [`accessor_declarations`]).
     pub(super) accessor_declarations: &'a AccessorDeclarations<'a>,
+    /// The accessor whose declaring entity has each non-empty runtime identity:
+    /// the first in the iteration order of `accessors` (see
+    /// [`accessors_by_runtime_identity`]).
+    pub(super) accessors_by_identity: &'a AccessorsByIdentity<'a>,
     pub(super) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
     pub(super) entities: &'a EntitySymbols,
     pub(super) symbol_names: &'a HashMap<SymbolId, SymbolId>,
@@ -41,6 +45,28 @@ pub(super) fn accessor_declarations(
         }
     }
     declarations
+}
+
+/// The accessors by the runtime identity of their declaring entity.
+pub(super) type AccessorsByIdentity<'a> = HashMap<&'a str, &'a SymbolId>;
+
+/// Indexes `accessors` by runtime identity, once per analysis. Several
+/// accessors may share an identity (a re-export or alias declares the same
+/// runtime value); the first in `accessors`' iteration order wins, as the
+/// per-lookup scan this replaces returned. `identity_at` answers the runtime
+/// identity of the entity at a location (`None`: no entity there). An empty
+/// identity proves nothing and is never indexed.
+pub(super) fn accessors_by_runtime_identity<'a>(
+    accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
+    identity_at: impl Fn(&Location) -> Option<&'a str>,
+) -> AccessorsByIdentity<'a> {
+    let mut by_identity = AccessorsByIdentity::default();
+    for (symbol, (_, location)) in accessors {
+        if let Some(identity) = identity_at(location).filter(|identity| !identity.is_empty()) {
+            by_identity.entry(identity).or_insert(symbol);
+        }
+    }
+    by_identity
 }
 
 impl StructuredReturnDiscovery<'_, '_> {
@@ -673,12 +699,9 @@ impl StructuredReturnDiscovery<'_, '_> {
         let mut visiting = HashSet::default();
         let (target_path, target) =
             self.resolve_export_binding(sibling.path.as_str(), imported, &mut visiting)?;
-        self.accessors.iter().find_map(|(symbol, (_, location))| {
-            (location.path.as_ref() == target_path
-                && u32::try_from(location.start_byte).ok()? == target.start
-                && u32::try_from(location.end_byte).ok()? == target.end)
-                .then_some(symbol)
-        })
+        self.accessor_declarations
+            .get(&(target_path.as_str(), target.start, target.end))
+            .copied()
     }
 
     fn accessor_with_same_runtime_identity(
@@ -694,11 +717,7 @@ impl StructuredReturnDiscovery<'_, '_> {
         if identity.is_empty() {
             return None;
         }
-        self.accessors.iter().find_map(|(symbol, (_, location))| {
-            self.entity_at_location(location)
-                .is_some_and(|entity| entity.runtime_identity.as_ref() == identity)
-                .then_some(symbol)
-        })
+        self.accessors_by_identity.get(identity).copied()
     }
 
     fn imported_binding_has_project_source_declaration(
@@ -753,14 +772,6 @@ impl StructuredReturnDiscovery<'_, '_> {
         false
     }
 
-    fn entity_at_location(&self, location: &Location) -> Option<&typefacts::EntityFact> {
-        self.facts
-            .typescript
-            .entities_for_path(location.path.as_ref())
-            .iter()
-            .find(|entity| entity.location == *location)
-    }
-
     /// The project file a plain relative import specifier resolves to, by
     /// textual normalization against the analyzed file set — never the
     /// filesystem, so a file outside the project cannot resolve. `None` for
@@ -779,8 +790,9 @@ impl StructuredReturnDiscovery<'_, '_> {
         from: &solid_facts::FileFacts,
         module: &str,
     ) -> Option<&solid_facts::FileFacts> {
-        let paths = self.lookup.files().iter().map(|file| file.path.as_str());
-        let path = solid_facts::resolve_relative_module_path(from.path.as_str(), module, paths)?;
+        let path = self
+            .lookup
+            .relative_module_path(from.path.as_str(), module)?;
         self.lookup.file_by_path(path)
     }
 

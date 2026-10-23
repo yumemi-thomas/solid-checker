@@ -782,3 +782,75 @@ fn dependency_users_are_reference_counted() {
     assert!(users.is_empty());
     assert!(states.is_empty());
 }
+
+fn accessor_at(path: &str, start: u64, end: u64) -> (SymbolId, (SymbolId, Location)) {
+    let symbol: SymbolId = format!("{path}:{start}").as_str().into();
+    (
+        symbol.clone(),
+        (
+            symbol,
+            Location {
+                path: Arc::from(path),
+                start_byte: start,
+                end_byte: end,
+            },
+        ),
+    )
+}
+
+/// The per-lookup scan the identity index replaces.
+fn scan_by_identity<'a>(
+    accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
+    identities: &HashMap<(String, u64), &str>,
+    identity: &str,
+) -> Option<&'a SymbolId> {
+    accessors.iter().find_map(|(symbol, (_, location))| {
+        identities
+            .get(&(location.path.to_string(), location.start_byte))
+            .is_some_and(|candidate| *candidate == identity)
+            .then_some(symbol)
+    })
+}
+
+#[test]
+fn the_runtime_identity_index_answers_what_the_accessor_scan_answered() {
+    // Several accessors share "v:a" (an original, a re-export, an alias); one
+    // has an empty identity; one has no entity; "v:c" is unique.
+    let accessors: HashMap<SymbolId, (SymbolId, Location)> = [
+        accessor_at("a.ts", 10, 14),
+        accessor_at("b.ts", 10, 14),
+        accessor_at("c.ts", 3, 9),
+        accessor_at("d.ts", 20, 24),
+        accessor_at("e.ts", 1, 2),
+        accessor_at("f.ts", 5, 8),
+    ]
+    .into_iter()
+    .collect();
+    let identities: HashMap<(String, u64), &str> = [
+        (("a.ts".to_string(), 10), "v:a"),
+        (("b.ts".to_string(), 10), "v:a"),
+        (("c.ts".to_string(), 3), "v:c"),
+        (("d.ts".to_string(), 20), "v:a"),
+        (("e.ts".to_string(), 1), ""),
+    ]
+    .into_iter()
+    .collect();
+    let index = super::structured_returns::accessors_by_runtime_identity(&accessors, |location| {
+        identities
+            .get(&(location.path.to_string(), location.start_byte))
+            .copied()
+    });
+    for identity in ["v:a", "v:c", "v:missing"] {
+        assert_eq!(
+            index.get(identity).copied(),
+            scan_by_identity(&accessors, &identities, identity),
+            "{identity}"
+        );
+    }
+    // Several accessors share "v:a": the scan's winner (first in iteration
+    // order) is the index's.
+    assert!(index.contains_key("v:a"));
+    // An empty identity proves nothing and is never indexed.
+    assert!(!index.contains_key(""));
+    assert_eq!(index.len(), 2);
+}
