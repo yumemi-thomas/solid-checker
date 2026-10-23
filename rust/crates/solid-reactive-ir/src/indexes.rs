@@ -757,6 +757,23 @@ pub(super) struct ResultAccessForwarded {
     pub(super) primitive: solid_dialect::Primitive,
 }
 
+/// The entity at each exact `(path, start_byte, end_byte)`: the first in
+/// `entities`' order when several share one location.
+pub(crate) fn first_entity_by_location<'a>(
+    entities: impl Iterator<Item = &'a EntityFact>,
+) -> HashMap<(&'a str, u64, u64), &'a EntityFact> {
+    let mut map = HashMap::default();
+    for entity in entities {
+        map.entry((
+            entity.location.path.as_ref(),
+            entity.location.start_byte,
+            entity.location.end_byte,
+        ))
+        .or_insert(entity);
+    }
+    map
+}
+
 /// Lazy project-wide lookups that replace repeated whole-project scans.
 ///
 /// Every map is built at most once per build, on first use, in the exact

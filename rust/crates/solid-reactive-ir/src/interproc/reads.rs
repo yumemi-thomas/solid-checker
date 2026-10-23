@@ -2017,15 +2017,8 @@ fn export_structured_return_obligations(
                 })
     });
     let accessor_declarations = structured_returns::accessor_declarations(accessors);
-    let accessors_by_identity =
-        structured_returns::accessors_by_runtime_identity(accessors, |location| {
-            facts
-                .typescript
-                .entities_for_path(location.path.as_ref())
-                .iter()
-                .find(|entity| entity.location == *location)
-                .map(|entity| entity.runtime_identity.as_ref())
-        });
+    let accessors_by_identity = std::sync::OnceLock::new();
+    let module_exports = std::sync::OnceLock::new();
     if has_structured_return_seed {
         for _ in 0..=nodes.len() {
             let discovered = discover_structured_returns(&StructuredReturnDiscovery {
@@ -2039,6 +2032,7 @@ fn export_structured_return_obligations(
                 accessors,
                 accessor_declarations: &accessor_declarations,
                 accessors_by_identity: &accessors_by_identity,
+                module_exports: &module_exports,
                 source_kinds,
                 entities,
                 symbol_names,
@@ -2067,11 +2061,13 @@ fn export_structured_return_obligations(
         accessors,
         accessor_declarations: &accessor_declarations,
         accessors_by_identity: &accessors_by_identity,
+        module_exports: &module_exports,
         source_kinds,
         entities,
         symbol_names,
         lookup,
     };
+    let mut returns_by_owner: HashMap<&str, HashMap<Span, Vec<usize>>> = HashMap::default();
     for node in nodes.iter().filter(|node| node.exported) {
         let Some(file) = lookup.file_by_path(node.path.as_str()) else {
             continue;
@@ -2079,13 +2075,30 @@ fn export_structured_return_obligations(
         let Some(function) = file.ast.function_at(node.span) else {
             continue;
         };
+        // The returns each function owns, in source order, grouped once per
+        // file: filtering every return of the file per exported function was
+        // quadratic in a module with many functions.
+        let owned_returns = returns_by_owner
+            .entry(file.path.as_str())
+            .or_insert_with(|| {
+                let mut owned: HashMap<Span, Vec<usize>> = HashMap::default();
+                for (index, returned) in file.ast.returns.iter().enumerate() {
+                    if let Some(owner) = containing_ast_function(&file.ast, returned.span) {
+                        owned.entry(owner.span).or_default().push(index);
+                    }
+                }
+                owned
+            });
         for property in function
             .expression_return
             .iter()
-            .chain(file.ast.returns.iter().filter(|returned| {
-                containing_ast_function(&file.ast, returned.span)
-                    .is_some_and(|owner| owner.span == function.span)
-            }))
+            .chain(
+                owned_returns
+                    .get(&function.span)
+                    .into_iter()
+                    .flatten()
+                    .map(|index| &file.ast.returns[*index]),
+            )
             .flat_map(|returned| returned.properties())
         {
             let Some(reason) =
