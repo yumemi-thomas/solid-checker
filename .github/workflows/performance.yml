@@ -62,7 +62,8 @@ jobs:
           path: |
             /tmp/perf-runtime/${{ steps.base.outputs.sha }}/bench
             /tmp/perf-runtime/${{ steps.base.outputs.sha }}/solid-typefacts
-          key: perf-runtime-${{ runner.os }}-${{ runner.arch }}-${{ steps.base.outputs.sha }}
+            /tmp/perf-runtime/${{ steps.base.outputs.sha }}/producer
+          key: perf-runtime-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.base.outputs.sha }}
 
       - name: Build the benchmark runtime
         run: |
@@ -168,7 +169,8 @@ jobs:
           path: |
             /tmp/perf-runtime/${{ github.sha }}/bench
             /tmp/perf-runtime/${{ github.sha }}/solid-typefacts
-          key: perf-runtime-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
+            /tmp/perf-runtime/${{ github.sha }}/producer
+          key: perf-runtime-v2-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
 
       - name: Prepare the deterministic corpus
         run: |
