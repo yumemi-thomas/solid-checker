@@ -592,5 +592,5 @@ A symbol id is canonical (`symbol:h:`, program-pure) or generation-scoped (`symb
 Not built: parallel checkers; reuse of type-derived facts. Ids can be history-independent, types cannot be proven so: a result cut by a guard is cached for every later caller; a detector flagged 12% of corpus files with no soundness argument, 78% with one (docs/open-work.md).
 
 <a id="adr-0378"></a>
-## ADR 0378 — A write's permissive role needs all of its function's entries
-A write no fact places takes the role of its function's resolved call sites and naming callback positions. One owned-scope entry is a violation (uncertifiable for a closure nested in the function). An unplaced entry, or any other reference to the binding (a prop, a store, an alias; a method; an export of an open program or of an escaping namespace), leaves it uncertifiable unless ADR 0327's walk proves the function event-only. Owners: `execution_role/write_roles.rs`, `named_callbacks.rs`.
+## ADR 0378 — A write's legal role needs all of its function's entries
+An event-only proof (ADR 0327) decides first. Else an unplaced write takes its function's call sites' and naming positions' role (a nested closure: its own, unless each layer between runs inline or on a fresh stack). An owned-scope entry is a violation if the binding holds only it. An unplaced entry, a recursive JSX render, or other reference to the binding or a named expression's outer one (prop, store, alias, method, open or escaping export): uncertifiable. Owner: `execution_role/write_roles.rs`.

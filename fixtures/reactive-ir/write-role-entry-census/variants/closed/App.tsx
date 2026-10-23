@@ -46,3 +46,20 @@ export const resetTotal = () => setTotal(0);
 export function ExportedHelper() {
   return <button onClick={() => resetTotal()}>{total()}</button>;
 }
+
+// Clean: `run` reaches only `Button`'s click handler, so its call of `reset`
+// is an event delivery, as is the inline handler's; ADR 0327's walk proves
+// every invocation of `reset` an event.
+export function ForwardedThroughHelper() {
+  const [n, setN] = createSignal(0);
+  const reset = () => {
+    setN(1);
+  };
+  const run = () => reset();
+  return (
+    <>
+      <Button onPress={run} />
+      <button onClick={() => reset()}>{n()}</button>
+    </>
+  );
+}
