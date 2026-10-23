@@ -265,9 +265,9 @@ fn handler_member_and_spread_edits_match_cold() {
     fs::remove_dir_all(directory).unwrap();
 }
 
-/// ADR 0361: a supported dispatch withholds the ownerless proof only from the
-/// handlers it delivers to, and a remote handler's finding follows the
-/// dispatching file's edits. Retained and fresh builds agree on each.
+/// ADR 0361: a dispatch withholds the ownerless proof only from the handlers it
+/// delivers to or whose event type it fires, and a remote handler's finding
+/// follows the dispatching file's edits. Retained and fresh builds agree on each.
 #[test]
 fn supported_dispatch_edits_match_cold() {
     let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
@@ -281,6 +281,7 @@ fn supported_dispatch_edits_match_cold() {
     const BUBBLES: &str = "import { handlers } from './lib'; export function App() { const el = (<div />) as HTMLDivElement; el.dispatchEvent(new Event('scroll', { bubbles: true })); return <p {...handlers} />; }";
     const DELEGATED: &str = "import { handlers } from './lib'; export function App() { const el = (<div />) as HTMLDivElement; el.dispatchEvent(new Event('click')); return <p {...handlers} />; }";
     const ESCAPES: &str = "import { handlers } from './lib'; export function App() { const el = (<div />) as HTMLDivElement; el.dispatchEvent(new Event('scroll')); return <p {...handlers}>{el}</p>; }";
+    const UNREAD: &str = "import { handlers } from './lib'; export function App() { const el = (<div />) as HTMLDivElement; const event: Event = new Event('click'); el.dispatchEvent(event); return <p {...handlers} />; }";
     const SHADOWED: &str = "import { handlers } from './lib'; class Event { constructor(readonly type: string) {} } export function App() { const el = (<div />) as HTMLDivElement; el.dispatchEvent(new Event('scroll') as unknown as globalThis.Event); return <p {...handlers} />; }";
     let (directory, paths) = project(
         "supported-dispatch",
@@ -327,7 +328,11 @@ fn supported_dispatch_edits_match_cold() {
         ("another element", ELSEWHERE, true),
         ("bubbling", BUBBLES, false),
         ("another element", ELSEWHERE, true),
-        ("delegated type", DELEGATED, false),
+        // A `click` dispatch fires only `click`: the `onScroll` handler is not
+        // reached by type (ADR 0361), whatever the delegation of `click`.
+        ("delegated type", DELEGATED, true),
+        // An event the dispatch does not construct inline may be any type.
+        ("event of unread type", UNREAD, false),
         ("escaping receiver", ESCAPES, false),
         ("shadowed constructor", SHADOWED, false),
         ("another element", ELSEWHERE, true),

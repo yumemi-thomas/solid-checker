@@ -16,10 +16,11 @@ explicitly exempts leaf imperative scopes.
 
 A handler a synchronous dispatch may reach runs on the dispatcher's stack, under
 its owner (ADR 0356), so a write there is an uncertifiable obligation, not a
-proven legal one. Only the handlers a supported dispatch delivers to, or every
-handler once any dispatch is unsupported, are affected (ADR 0361,
-`missing-owner.md`); a handler no dispatch can reach is ownerless and its write
-is legal.
+proven legal one. Only the handlers whose event type some dispatch in the
+program fires (a `focus()` fires `onFocus` and `onBlur` handlers; any dispatch
+of an unknown type fires every type), or that a supported element-specific
+`dispatchEvent` delivers to, are affected (ADR 0361, `missing-owner.md`); a
+handler no dispatch can reach is ownerless and its write is legal.
 
 A `createRenderEffect` apply callback is only partly such a scope. Its first run
 happens before `createRenderEffect` returns, under the caller's owner, so a

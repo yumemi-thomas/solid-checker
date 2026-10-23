@@ -103,34 +103,43 @@ spread's last definition wins, so `h.onClick` may never be the handler; ADR 0364
 Inside a `createRoot` the callback creates, the claim is quiet: the root owns it on
 every run (ADR 0363).
 
-JSX event placement alone does not prove an ownerless invocation. With a
-visible call selecting the standard-library `EventTarget.dispatchEvent` or
-`HTMLElement.click` declaration, handlers may run on their caller's owned stack
-(ADR 0356). A dispatch is joined to its handlers only when it is an
-`EventTarget.dispatchEvent` of an inline non-bubbling, non-composed
-`new Event(T)`/`new CustomEvent(T, init)` with a literal `T` the web release
-does not delegate, on a function-local `const` that is one intrinsic element
-read only through members (ADR 0361). Then only that element's `T` handlers,
-and the handlers of its exact spreads, stay uncertifiable; every other handler
-keeps its ownerless proof. Any other dispatch (`click()`, a bubbling or
-delegated event, a parameter, `ref` or escaping receiver, an element with an
-unresolved spread) keeps event-owner proofs uncertifiable across the program,
-as does a handler no element names (a forwarded prop, a literal nested in a
-handler, a helper flow) while any dispatch exists. So does a dispatch the
-analysis cannot see as a supported call: any other ADR 0329 member that fires
-an event synchronously (`checkValidity()`, `focus()`, `requestSubmit()`, a
-cast `(b as HTMLButtonElement).click()`), a member call on an `any` or
-unresolved receiver spelled like one of them (an exactly resolved project
-method of that spelling is no dispatch), and `dispatchEvent`, `click` or
-`focus` taken as a value (`Reflect.apply(EventTarget.prototype.dispatchEvent,
-…)`, `el.dispatchEvent.call(…)`). No unsupported dispatch edge is guessed.
+JSX event placement alone does not prove an ownerless invocation. A visible
+synchronous DOM dispatch runs the handlers of the event types it fires on its
+caller's owned stack (ADR 0356, 0361), so such a handler stays uncertifiable:
+every ADR 0329 member is a set of event types (`focus()` fires `focus`,
+`focusin`, `blur`, `focusout`, `change`; `checkValidity()` fires `invalid`;
+`click()` its activation events; `abort()` fires at no element), and
+`dispatchEvent(new CustomEvent("sync"))` fires `sync`, on any receiver (a
+`click` of a `MouseEvent`, `PointerEvent` or any `…Event` but `Event` and
+`CustomEvent` is an activation event and fires `click()`'s set). An
+element handler is reached when its own `on`+uppercase type is in the union of
+the sets of every dispatch in the program, so a `focus()` call leaves `onFocus`
+and `onBlur` handlers uncertifiable and an `onClick` or `onScroll` handler keeps
+its ownerless proof. A dispatch whose type is unknown may fire any: an event
+argument that is not an inline `new …Event("T")`, `Reflect.apply`/`.call`/an
+alias of a dispatching member, a computed key that is not a literal and
+not provably no member (`target[name]()` on an untyped callee or with a union
+or generic key type; an index typed `number`, a well-known symbol and a typed
+callee with a known `lib.dom`-free target set are no member call), an
+owner-specific member (`showModal`, `reset`) used through `.call`/`.apply`/`.bind`,
+`Document.execCommand`. A member call spelled like an ADR
+0329 member on an `any` or unresolved receiver fires that spelling's set (an
+exactly resolved project method of that spelling is no dispatch). Bubbling and
+the receiver do not matter to the type question. A web release whose runtime was
+not read lets every dispatch reach every handler. One shape is narrower: a
+`dispatchEvent` of an inline non-bubbling, non-composed `new Event(T)`/`new
+CustomEvent(T, init)` with a literal `T` the web release does not delegate, on a
+function-local `const` that is one intrinsic element read only through members,
+reaches only that element's `T` handlers and its exact spreads' handlers, and
+fires no type program-wide. A handler no element names (a forwarded prop, a
+literal nested in a handler, a helper flow) stays uncertifiable while any
+dispatch exists. No unsupported dispatch edge is guessed.
 A `window.dispatchEvent(…)` or `document.dispatchEvent(…)` of the unshadowed
 global, whatever the event, reaches no compiler handler: its path
 (`[window]`, `[document, window]`) holds no element, and an element handler is
 a listener on its element or a property the delegated walk finds from
-`e.target` (web rc.13 and rc.17). It joins nothing and withholds nothing, so
-the corpus's `window.dispatchEvent(new CustomEvent(…))` no longer conditions
-every handler; a callback registered with `window.addEventListener` stays
+`e.target` (web rc.13 and rc.17). It joins nothing and withholds nothing; a
+callback registered with `window.addEventListener` stays
 conditional (ADR 0319), and a function that is also an element handler keeps the
 violation its element's own events prove.
 An object handler (`onScroll={{ handleEvent, capture: true }}`) can be a
@@ -143,7 +152,7 @@ rc.13, spread keys beginning with `on` and containing no colon install
 listeners, including lowercase keys; on the audited rc.17 only `on` followed by
 an uppercase letter does, and `onclick` is an attribute. Unknown holders, getters, generators and
 unaudited web spread keys retain internal obligations. These placements obey
-the synchronous-dispatch veto above; no unresolved target proves a violation.
+the synchronous-dispatch rule above; no unresolved target proves a violation.
 
 Package owner requirements must come from exact analyzed source or dialect
 runtime premises. A call proved to allocate without an owner is a violation;

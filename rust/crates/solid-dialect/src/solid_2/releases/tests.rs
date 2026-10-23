@@ -1130,6 +1130,19 @@ fn delegated_event_types_follow_the_read_web_release() {
     assert!(Solid2::CONSERVATIVE.event_type_is_delegated("scroll"));
 }
 
+/// ADR 0361: a handler runs only for events of its own type on the web releases
+/// whose listener names and `eventHandler` were read.
+#[test]
+fn a_handler_runs_only_for_its_own_type_on_the_read_web_releases() {
+    for web in [Release::Read(13), Release::Read(RC17)] {
+        let read = vocabulary_for(Release::Read(RC17), Release::Read(RC17), web);
+        assert!(read.event_handler_runs_only_for_its_type());
+    }
+    let unread = vocabulary_for(Release::Read(RC17), Release::Read(RC17), Release::Read(9));
+    assert!(!unread.event_handler_runs_only_for_its_type());
+    assert!(!Solid2::CONSERVATIVE.event_handler_runs_only_for_its_type());
+}
+
 /// ADR 0361: a `window` or `document` dispatch reaches no element handler on
 /// the web releases whose `addEvent` and `eventHandler` were read.
 #[test]

@@ -404,6 +404,17 @@ impl Dialect for Solid2 {
             releases::SpreadEventKeys::AnyOn | releases::SpreadEventKeys::OnUppercase => true,
         }
     }
+    fn event_handler_runs_only_for_its_type(&self) -> bool {
+        // The web releases whose `addEvent`, `assignProp` and `eventHandler`
+        // were read (rc.13 `dist/web.dev.js:714-739`, `:1825-1890`; rc.17
+        // `:806-831`, `:1943-1948`, `:1969-2032`): the listener's name is
+        // `prop.slice(2).toLowerCase()`, a delegated handler is stored under
+        // `$$` + that name and found from `e.type`.
+        match self.spread_event_keys {
+            releases::SpreadEventKeys::Unaudited => false,
+            releases::SpreadEventKeys::AnyOn | releases::SpreadEventKeys::OnUppercase => true,
+        }
+    }
     fn spread_key_is_event(&self, key: &str) -> Option<bool> {
         match self.spread_event_keys {
             releases::SpreadEventKeys::Unaudited => None,

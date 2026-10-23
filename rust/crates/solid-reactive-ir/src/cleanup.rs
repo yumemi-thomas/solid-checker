@@ -1026,11 +1026,31 @@ const SCRIPT_FREE_DOM_MEMBERS: &[&str] = &[
 /// Whether `resolved` is a `lib.dom` global (`dispatchEvent(…)`,
 /// `focus()`) that dispatches an event synchronously (ADR 0329).
 pub(crate) fn dispatches_dom_event(resolved: &typefacts::ResolvedCall) -> bool {
+    resolved_dom_dispatch_fires(resolved).is_some()
+}
+
+/// The event types the `lib.dom` member `resolved` selects fires (ADR 0361),
+/// or `None` when it is no dispatching `lib.dom` declaration.
+pub(crate) fn resolved_dom_dispatch_fires(
+    resolved: &typefacts::ResolvedCall,
+) -> Option<crate::dispatch_events::Fires> {
+    let declaration = resolved.declaration.as_ref()?;
+    std::path::Path::new(declaration.source_file.as_ref())
+        .file_name()
+        .is_some_and(|name| name == "lib.dom.d.ts" || name == "lib.dom.iterable.d.ts")
+        .then(|| dom_dispatch_fires(declaration.qualified_name.as_ref()))
+        .flatten()
+}
+
+/// Whether `resolved` selects a `lib.dom` `dispatchEvent`, whose event the
+/// argument names (ADR 0361).
+pub(crate) fn is_dispatch_event_declaration(resolved: &typefacts::ResolvedCall) -> bool {
     resolved.declaration.as_ref().is_some_and(|declaration| {
-        std::path::Path::new(declaration.source_file.as_ref())
-            .file_name()
-            .is_some_and(|name| name == "lib.dom.d.ts" || name == "lib.dom.iterable.d.ts")
-            && synchronously_dispatching_dom_member(declaration.qualified_name.as_ref())
+        declaration
+            .qualified_name
+            .rsplit('.')
+            .next()
+            .is_some_and(|member| member == "dispatchEvent")
     })
 }
 
@@ -1048,56 +1068,35 @@ pub(crate) fn dispatches_dom_event(resolved: &typefacts::ResolvedCall) -> bool {
 /// `lib.dom` also declares `dispatchEvent`, `focus` and `blur` as globals for
 /// `window`.
 fn synchronously_dispatching_dom_member(qualified_name: &str) -> bool {
+    dom_dispatch_fires(qualified_name).is_some()
+}
+
+/// The event types the `lib.dom` member `qualified_name` fires (ADR 0361's
+/// table, `dispatch_events.rs`), or `None` when it dispatches nothing.
+pub(crate) fn dom_dispatch_fires(qualified_name: &str) -> Option<crate::dispatch_events::Fires> {
     let (owner, member) = qualified_name
         .rsplit_once('.')
         .unwrap_or(("", qualified_name));
-    DISPATCHING_DOM_MEMBER_NAMES.contains(&member)
-        || DISPATCHING_DOM_OWNED_MEMBERS.contains(&(owner, member))
+    crate::dispatch_events::member_fires(owner, member)
 }
-
-/// ADR 0329: members that dispatch on any `lib.dom` interface declaring them.
-const DISPATCHING_DOM_MEMBER_NAMES: &[&str] = &[
-    "focus",
-    "blur",
-    "click",
-    "dispatchEvent",
-    "checkValidity",
-    "reportValidity",
-];
-
-/// ADR 0329: members whose name other `lib.dom` members share, by exact owner.
-const DISPATCHING_DOM_OWNED_MEMBERS: &[(&str, &str)] = &[
-    ("HTMLFormElement", "reset"),
-    ("HTMLFormElement", "requestSubmit"),
-    ("HTMLElement", "showPopover"),
-    ("HTMLElement", "hidePopover"),
-    ("HTMLElement", "togglePopover"),
-    ("HTMLDialogElement", "show"),
-    ("HTMLDialogElement", "showModal"),
-    ("HTMLDialogElement", "close"),
-    ("HTMLDialogElement", "requestClose"),
-    ("AbortController", "abort"),
-    ("XMLHttpRequest", "open"),
-    ("XMLHttpRequest", "abort"),
-    ("XMLHttpRequest", "send"),
-    ("FileReader", "abort"),
-    ("Document", "execCommand"),
-];
 
 /// Whether `name` is a member that dispatches on every `lib.dom` interface
 /// declaring it, so the spelling alone says a `lib.dom` declaration of it does.
 pub fn dispatching_dom_member_on_any_interface(name: &str) -> bool {
-    DISPATCHING_DOM_MEMBER_NAMES.contains(&name)
+    crate::dispatch_events::dispatches_on_any_interface(name)
+}
+
+/// Whether `name` is a member that dispatches only on its exact owner (its
+/// spelling is shared with non-dispatching members).
+pub fn dispatching_dom_member_on_exact_owner(name: &str) -> bool {
+    crate::dispatch_events::dispatches_on_exact_owner(name)
 }
 
 /// Whether a member written `name` may be one of ADR 0329's synchronously
 /// dispatching `lib.dom` members: a spelling, for a reference whose owner is
 /// not read (a superset of the exact declarations).
 pub fn dispatching_dom_member_spelling(name: &str) -> bool {
-    DISPATCHING_DOM_MEMBER_NAMES.contains(&name)
-        || DISPATCHING_DOM_OWNED_MEMBERS
-            .iter()
-            .any(|(_, member)| *member == name)
+    crate::dispatch_events::dispatching_spelling(name)
 }
 
 /// Whether the exact `lib.dom` declaration `qualified_name` names a member of
@@ -1911,7 +1910,6 @@ mod script_free_dom_tests {
 #[cfg(test)]
 mod dispatching_member_tests {
     use super::{
-        DISPATCHING_DOM_MEMBER_NAMES, DISPATCHING_DOM_OWNED_MEMBERS,
         dispatching_dom_member_on_any_interface, dispatching_dom_member_spelling,
         synchronously_dispatching_dom_member,
     };
@@ -1919,14 +1917,26 @@ mod dispatching_member_tests {
     /// The spellings are derived from the exact table, never a second list.
     #[test]
     fn the_spelled_members_are_exactly_the_audited_ones() {
-        for name in DISPATCHING_DOM_MEMBER_NAMES {
+        for name in [
+            "focus",
+            "blur",
+            "click",
+            "dispatchEvent",
+            "checkValidity",
+            "reportValidity",
+        ] {
             assert!(synchronously_dispatching_dom_member(&format!(
                 "Anything.{name}"
             )));
             assert!(dispatching_dom_member_spelling(name));
             assert!(dispatching_dom_member_on_any_interface(name));
         }
-        for (owner, member) in DISPATCHING_DOM_OWNED_MEMBERS {
+        for (owner, member) in [
+            ("HTMLFormElement", "reset"),
+            ("HTMLDialogElement", "showModal"),
+            ("AbortController", "abort"),
+            ("Document", "execCommand"),
+        ] {
             assert!(synchronously_dispatching_dom_member(&format!(
                 "{owner}.{member}"
             )));
