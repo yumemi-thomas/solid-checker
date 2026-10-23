@@ -1,0 +1,9 @@
+# read-after-await-builtin-member
+
+A member read that is the callee of a call proven to be the global built-in itself and inert (`Promise.resolve()`: `direct_builtin` and an audited row, ADR 0349) runs no getter of that name, so the pre-await scan does not take a same-named function elsewhere in the program for it. A plain member read keeps the name guess.
+
+`node_modules/@solidjs/fake-deferred` is not a published package. It is analysed from source (`.solid-checker/runtime.json`), and its `index.js` is `createDeferredPromise` from `@solidjs/vite-plugin@3.0.0-next.38` `dist/esm/index.mjs:1106-1121`, byte for byte (`sha512-6XiolrrjNcw3g+EZyxrh/ifGNJ3zk+zePQ61jRs5YuXwmcSQENN7dNE0X0beb3wow/UoZyRUtxaRkhVNPGKgiQ==`): an object method `resolve(value)` whose body calls the opaque local `let resolve`. On the rc.17 corpus that package reaches the program through `astro-solid-next` (pekochan-blog, inferay). The path rule ADR 0365 replaced named that local Solid's `resolve`, so the method looked inert and the seeded P7 mutant (`await Promise.resolve(); return read();`) was proven for a wrong reason. Under exact identity the local is opaque, the `.resolve` getter guess reached the method, and the mutant became uncertifiable.
+
+`solid-js` (`types/`, `package.json`) and `@solidjs/signals` (`dist/types/`, `package.json`) are the published `2.0.0-rc.17` bytes (`sha512-ym3x2kzC+vzgD9VNqhqExn3qWzkrpJco3vane0wTFHCVPS9HBXI3GgSp+ieZ1h72zcb2z27PXFSbMsi8Ot+Hxw==`, `sha512-GXXWBlJsiZeBCTw3a941Y/HVBYfwupCfctPnwNjFJV+u3tZnRe/SL+NeStI1247zfxlvkH4p9PWzdZK/yX1I1Q==`): `createMemo` and `createSignal` are imported aliased, as the mutant imports them, through `types/index.d.ts`'s re-export of `./client/hydration.js`. The `@solidjs/web` stub and `jsx.d.ts` are `read-after-await-premise`'s.
+
+`App.tsx`: `Input` is a violation; `PlainRead` (a `void Promise.resolve;` read before the same await) is uncertifiable. Under the path rule both were violations.

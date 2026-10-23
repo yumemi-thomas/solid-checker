@@ -175,7 +175,10 @@ it reads a signal the program only ever writes with numeric literals and the
 compiler types as a number (ADR 0350); the call's own evaluation is judged on
 its own. A standard call that is not an
 inert row is opaque, never a project member of the same property name
-(`stats.max` beside `Math.max`). A handler on a
+(`stats.max` beside `Math.max`). The callee of an inert row runs no getter
+either: `Promise.resolve()`'s `.resolve` read is the built-in's own property, so
+a package's method `resolve` is not a candidate for it, while a plain
+`Promise.resolve` read keeps the getter guess. A handler on a
 native receiver is inert, and `Promise.all`, `allSettled`, `race` and `any` over an
 array literal of native promises and primitives are inert while the
 array-iteration premise holds (ADR 0349). Other handlers and combinators are
