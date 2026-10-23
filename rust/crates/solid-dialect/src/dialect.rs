@@ -205,15 +205,16 @@ pub trait Dialect: Sync {
     ///
     /// Not specifiers and not a superset of [`Dialect::modules`]: this names
     /// the archives in which a dialect-spelled declaration is the primitive's
-    /// own implementation rather than a consumer's import of it. Primitive
-    /// identity is granted by declaration *path*
-    /// (`solid-reactive-ir`'s `declaration_path_is_solid_package`), which is
-    /// correct for a consumer — TypeScript resolved the symbol into the
-    /// package — and wrong inside these archives, where every local
-    /// `createSignal`/`createTrackedEffect` becomes a "primitive call".
+    /// own implementation rather than a consumer's import of it. A
+    /// declaration has primitive identity only as one of these packages'
+    /// declared exports (`solid-reactive-ir`'s `solid_primitive_declaration`,
+    /// ADR 0365): another `@solidjs/*` package's same-named local is an
+    /// ordinary binding.
     ///
-    /// Callback summaries consult this to withhold the domains that
-    /// recognition would otherwise fabricate. No diagnostic reads it.
+    /// These archives are also never analysed as dependency source, where
+    /// every local `createSignal`/`createTrackedEffect` would become a
+    /// "primitive call", and callback summaries consult this to withhold the
+    /// domains that recognition would otherwise fabricate.
     fn primitive_defining_packages(&self) -> &'static [&'static str];
 
     /// The npm scopes whose packages belong to this dialect's ecosystem, each

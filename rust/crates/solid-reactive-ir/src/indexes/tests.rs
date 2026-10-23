@@ -758,6 +758,8 @@ fn a_renderer_declaration_must_sit_in_a_dialect_package() {
         "/p/node_modules/solid-js/types/client/component.d.ts",
         "/p/node_modules/@solidjs/web/types/client.d.ts",
         r"C:\p\node_modules\@solidjs\web\types\client.d.ts",
+        "/p/node_modules/.pnpm/solid-js@2.0.0-rc.17/node_modules/solid-js/types/index.d.ts",
+        "/p/node_modules/@solidjs/router/node_modules/@solidjs/web/types/client.d.ts",
     ] {
         assert!(declared_in_package(inside, &packages), "{inside}");
     }
@@ -766,6 +768,9 @@ fn a_renderer_declaration_must_sit_in_a_dialect_package() {
         "/p/node_modules/@solidjs/router/dist/index.d.ts",
         "/p/node_modules/web/solid.d.ts",
         "/p/node_modules/not-@solidjs/web/index.d.ts",
+        "/p/node_modules/@solidjs/fake-tools/index.d.ts",
+        "/p/node_modules/solid-js/node_modules/helper/index.d.ts",
+        "/p/vendor/solid-js/types/index.d.ts",
     ] {
         assert!(!declared_in_package(outside, &packages), "{outside}");
     }

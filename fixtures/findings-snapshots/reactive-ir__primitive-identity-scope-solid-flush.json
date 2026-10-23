@@ -1,0 +1,15 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC4005",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/primitive-identity-scope/variants/solid-flush/App.ts",
+      "start": 443,
+      "end": 453,
+      "fixes": 0
+    }
+  ]
+}
