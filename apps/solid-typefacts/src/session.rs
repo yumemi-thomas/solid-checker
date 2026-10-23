@@ -326,6 +326,7 @@ impl Session {
                         response.modules = inventory.modules;
                         response.module_imports = inventory.imports;
                         response.unknown_import_paths = inventory.unknown_import_paths;
+                        response.unmapped_roots = inventory.unmapped_roots;
                     }
                     Err(error) => {
                         if let Some(reason) = ctx.err() {

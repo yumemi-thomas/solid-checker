@@ -272,6 +272,7 @@ export function cellsOf(response) {
   }
   addSet(cells, "affected", response.affected ?? []);
   addSet(cells, "unknownImportPaths", response.unknownImportPaths ?? []);
+  addSet(cells, "unmappedRoots", response.unmappedRoots ?? []);
   addSet(cells, "changedReferenceSymbols", response.changedReferenceSymbols ?? []);
   for (const source of response.sources ?? []) {
     addRow(cells, "sources", source.path, withoutKey(source, "path"), { path: source.path });

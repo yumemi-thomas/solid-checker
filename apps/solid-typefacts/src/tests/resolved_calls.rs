@@ -1678,3 +1678,89 @@ fn call_resolution_diagnostic_codes_match_the_compiler() {
         );
     }
 }
+
+/// Review of ADR 0368: TypeScript reports a call whose callee is not callable
+/// on the callee (TS2349). When the callee is itself a call, the diagnostic
+/// spans exactly that inner call; attributing it only to the inner call left
+/// the failing outer call `Valid` (returning `any`) although tsc rejects it.
+#[test]
+fn a_failure_reported_on_a_callee_call_marks_the_enclosing_call() {
+    let source = "declare function make(): number;\n\
+declare function makeFn(): (value: number) => void;\n\
+make()(1);\n\
+make()!(1);\n\
+makeFn()(1);\n";
+    let scratch = single("calls.ts", source);
+    let calls = resolved(
+        &scratch,
+        "calls.ts",
+        source,
+        &["make()(1)", "make()!(1)", "makeFn()(1)"],
+        false,
+    );
+    let validity = calls.iter().map(|call| call.validity).collect::<Vec<_>>();
+    use ResolvedCallValidity::{Recovery, Valid};
+    assert_eq!(validity, [Recovery, Recovery, Valid]);
+    // The inner call itself is proven valid without its diagnostics.
+    let inner = resolved(&scratch, "calls.ts", source, &["make()"], true);
+    assert_eq!(inner[0].validity, Valid);
+}
+
+/// Review of ADR 0368, on tsrs: a package source listed after the project's
+/// own root and augmenting its global interface reorders the merged
+/// overloads, so the generated program (project first, package last) reports
+/// TS2349 at `api.get()(count)` that the project's own program does not.
+/// The call answers `Recovery` there and `Valid` in the project's program.
+#[test]
+fn a_package_root_after_the_project_root_can_fail_a_project_call() {
+    let main = "declare global { interface API { get(): (x: () => number) => void } }\n\
+declare const api: API;\n\
+const count = () => 1;\n\
+api.get()(count);\n\
+export {};\n";
+    let package = "declare global { interface API { get(): number } }\nexport const thing = 1;\n";
+    let validity = |files: &str| {
+        let config = format!(
+            r#"{{"compilerOptions":{{"strict":true,"module":"esnext","moduleResolution":"bundler","target":"esnext","allowJs":true,"checkJs":false}},"files":{files}}}"#
+        );
+        let scratch = Scratch::new(&[
+            ("tsconfig.json", &config),
+            ("main.ts", main),
+            ("node_modules/pkg/src/index.ts", package),
+        ]);
+        resolved(&scratch, "main.ts", main, &["api.get()(count)"], false)[0].validity
+    };
+    assert_eq!(validity(r#"["main.ts"]"#), ResolvedCallValidity::Valid);
+    assert_eq!(
+        validity(r#"["node_modules/pkg/src/index.ts","main.ts"]"#),
+        ResolvedCallValidity::Valid
+    );
+    assert_eq!(
+        validity(r#"["main.ts","node_modules/pkg/src/index.ts"]"#),
+        ResolvedCallValidity::Recovery
+    );
+}
+
+/// ADR 0368 review: a failed call whose callee is not callable (the checker's
+/// unknown signature) has no target; one where only an argument failed keeps
+/// the callee it runs.
+#[test]
+fn a_failed_call_keeps_a_target_only_when_its_callee_is_callable() {
+    let source = "declare function make(): number;\n\
+declare function takesNumber(value: number): void;\n\
+const fn = make();\n\
+fn(1);\n\
+takesNumber(\"wrong\");\n";
+    let scratch = single("calls.ts", source);
+    let calls = resolved(
+        &scratch,
+        "calls.ts",
+        source,
+        &["fn(1)", "takesNumber(\"wrong\")"],
+        false,
+    );
+    assert_eq!(calls[0].validity, ResolvedCallValidity::Recovery);
+    assert!(calls[0].target.is_empty(), "{:?}", calls[0].target);
+    assert_eq!(calls[1].validity, ResolvedCallValidity::Recovery);
+    assert!(!calls[1].target.is_empty());
+}

@@ -582,6 +582,9 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
             facts,
             semantic_lookup,
         ));
+    for defect in dependency_source_call_error_defects(facts) {
+        draft.push_defect(defect);
+    }
     draft.discard_deleted_static_diagnostics(facts);
     crate::effect_execution::gate_diagnostics(semantic_lookup, &mut draft);
     crate::attribution::discharge_closed_program_export_dispatch(
@@ -597,6 +600,56 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     clock.finish(&mut build_timings, ReactiveIrStage::FinalOrdering);
     build_timings.total = total_started.elapsed();
     Ok((program, build_timings))
+}
+
+/// Review of ADR 0368: a project call the dependency-source program answers
+/// as a call error (`Recovery`) and the project's own program does not
+/// (`ProjectFacts::dependency_source_call_errors`). Every pass leaves a
+/// `Recovery` call to TypeScript, which here reports nothing: the call stays
+/// an uncertifiable dispatch obligation (SC9012), never a silent skip.
+fn dependency_source_call_error_defects(facts: &ProjectFacts) -> Vec<StaticDefect> {
+    facts
+        .dependency_source_call_errors
+        .iter()
+        .map(|location| {
+            let span = match (
+                u32::try_from(location.start_byte),
+                u32::try_from(location.end_byte),
+            ) {
+                (Ok(start), Ok(end)) => Some(Span::new(start, end)),
+                _ => None,
+            };
+            let file = facts
+                .files
+                .iter()
+                .find(|file| file.path.as_str() == location.path.as_ref());
+            let call = file.zip(span).and_then(|(file, span)| {
+                file.ast
+                    .calls
+                    .iter()
+                    .find(|call| call.span == span || call.callee == span)
+                    .map(|call| (file, call))
+            });
+            let (callee, location) = match call {
+                Some((file, call)) => (
+                    call.static_callee(&file.source)
+                        .map_or_else(|| "dynamic call".to_owned(), str::to_owned),
+                    crate::location(file.path.shared(), call.callee),
+                ),
+                None => ("dynamic call".to_owned(), location.clone()),
+            };
+            StaticDefect {
+                kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
+                    callee,
+                    member: None,
+                },
+                location,
+                analysis_context: crate::DEPENDENCY_SOURCE_CALL_ERROR.into(),
+                fixes: vec![],
+                uncertain: true,
+            }
+        })
+        .collect()
 }
 
 pub(crate) fn parallel_file_results<R, F>(files: &[FileFacts], analyze: F) -> Vec<R>

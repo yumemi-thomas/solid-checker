@@ -82,6 +82,69 @@ fn module_facts_carry_the_configured_root_order() {
     );
 }
 
+/// Review of ADR 0368: an extensionless `files` entry is a root too. The
+/// loader loads `main.ts` for `"main"`; looking the configured name up
+/// verbatim found no file and left both roots unplaced (path order).
+#[test]
+fn extensionless_configured_roots_keep_their_positions() {
+    let scratch = Scratch::new(&[
+        (
+            "tsconfig.json",
+            r#"{"compilerOptions":{"module":"esnext","moduleResolution":"bundler","target":"esnext"},"files":["main","app"]}"#,
+        ),
+        ("main.ts", "export const main = 1;\n"),
+        ("app.tsx", "export const app = 1;\n"),
+    ]);
+    let mut project = scratch.open();
+    let inventory = graph(&mut project, &ModuleGraphRequest::default());
+    let root = |name: &str| module_by_path(&inventory, &scratch.path(name)).root;
+    assert_eq!(root("main.ts"), Some(0));
+    assert_eq!(root("app.tsx"), Some(1));
+    assert!(inventory.unmapped_roots.is_empty());
+}
+
+/// Review of ADR 0368: a root the program loads through a project-reference
+/// redirect (a referenced project's declaration output, replaced by its
+/// input) keeps its position on the file the program holds.
+#[test]
+fn a_redirected_project_reference_root_keeps_its_position() {
+    let scratch = Scratch::new(&[
+        (
+            "tsconfig.json",
+            r#"{
+  "compilerOptions": { "strict": true, "module": "esnext", "target": "esnext", "moduleResolution": "bundler" },
+  "files": ["app/index.ts", "lib/dist/channel.d.ts"],
+  "references": [{ "path": "./lib" }]
+}"#,
+        ),
+        (
+            "lib/tsconfig.json",
+            r#"{
+  "compilerOptions": {
+    "strict": true, "module": "esnext", "target": "esnext", "moduleResolution": "bundler",
+    "composite": true, "declaration": true, "outDir": "./dist", "rootDir": "./src"
+  },
+  "include": ["src/**/*.ts"]
+}"#,
+        ),
+        (
+            "lib/src/channel.ts",
+            "export function channelFor() { return 1; }\n",
+        ),
+        (
+            "lib/dist/channel.d.ts",
+            "export declare function channelFor(): number;\n",
+        ),
+        ("app/index.ts", "export const app = 1;\n"),
+    ]);
+    let mut project = scratch.open();
+    let inventory = graph(&mut project, &ModuleGraphRequest::default());
+    let root = |name: &str| module_by_path(&inventory, &scratch.path(name)).root;
+    assert_eq!(root("app/index.ts"), Some(0));
+    assert_eq!(root("lib/src/channel.ts"), Some(1));
+    assert!(inventory.unmapped_roots.is_empty());
+}
+
 #[test]
 fn module_inventory_reports_every_included_file() {
     let scratch = Scratch::new(&[

@@ -55,6 +55,8 @@ Missing provider (`missing-context-provider`, SC4002, ADR 0352): a context is cl
 SC1002 (`after-await-open`): a handler on a promise held in a variable; a `.then` on a `Promise<T>` not proven native; `Promise.race` of helpers; an async IIFE the computation awaits; `Promise.all(x.map(async …))`; an accessor alias; a destructured or bound loader; router `query` flights; a catch join after statements; `Math.max(count())` after a functional setter. Each fires the runtime warning unproven (ADR 0340, 0349, 0350).
 
 
+Dependency-source summaries (ADR 0368): a package function handing its parameter to a type-correct call of a function value its source does not define (`const fn = api.get(); fn(source)`, `get(): (s) => void`) is certified at the project caller; the same call in project code is SC9011.
+
 Primitive used as a value (`reactive-dispatch-unresolved`, SC9012):
 
 - Found only through a named or namespace import. Not followed: a stored or aliased namespace object (`const NS = Solid; NS.createEffect(…)`), a namespace import of a project barrel, a computed member (`S["createEffect"]`), an `import S = require(…)` member. Fix: a census where every TypeFacts reference of a primitive's symbol that is not a primitive callee is an obligation. No corpus site has these shapes.

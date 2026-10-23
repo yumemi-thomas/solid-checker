@@ -34,6 +34,7 @@ use std::path::{Path, PathBuf};
 use sha2::{Digest, Sha256};
 
 use crate::SourceFile;
+use crate::dependency_program::ProgramModules;
 use crate::host_constants::{Ordered, find_package_root, split_bare_specifier};
 use solid_reactive_ir::package_boundary::{BindingForm, SelectionFailure, UnanalyzableReason};
 
@@ -348,7 +349,7 @@ pub fn prepare_program(
     selection: &[String],
     host: &Host,
     project_sources: &[SourceFile],
-    program_modules: &[PathBuf],
+    program_modules: &ProgramModules,
     excluded: &BTreeSet<String>,
     ecosystem_scopes: &[&str],
     refusal: CompilerRefusal<'_>,
@@ -357,20 +358,33 @@ pub fn prepare_program(
     // Configured sources omit declaration files, and an ambient `declare
     // module` stub is part of the project's program too: take every file the
     // program holds outside `node_modules`, in `program_modules` order (its
-    // roots in TypeScript's order first, ADR 0368).
+    // roots in TypeScript's order first, ADR 0368). A configured root is
+    // listed wherever it lives (review of ADR 0368): `files` may name a
+    // package's global declarations no import reaches, and the generated
+    // `files` replaces the project's. Such a root is listed only; it is not a
+    // project file whose imports select packages.
+    let in_node_modules = |path: &Path| {
+        path.components()
+            .any(|component| component.as_os_str() == "node_modules")
+    };
     let mut project_order = Vec::new();
+    let mut listed = BTreeSet::new();
     let mut project_files = BTreeSet::new();
-    for path in program_modules.iter().cloned().chain(
+    for path in &program_modules.roots {
+        if path.is_file() && listed.insert(path.clone()) {
+            project_order.push(path.clone());
+            if !in_node_modules(path) {
+                project_files.insert(path.clone());
+            }
+        }
+    }
+    for path in program_modules.others.iter().cloned().chain(
         project_sources
             .iter()
             .map(|source| PathBuf::from(&source.path)),
     ) {
-        if path.is_file()
-            && !path
-                .components()
-                .any(|component| component.as_os_str() == "node_modules")
-            && project_files.insert(path.clone())
-        {
+        if path.is_file() && !in_node_modules(&path) && listed.insert(path.clone()) {
+            project_files.insert(path.clone());
             project_order.push(path);
         }
     }
@@ -459,6 +473,28 @@ pub fn prepare_program(
     else {
         return Ok(None);
     };
+    // Review of ADR 0368: a configured root the producer could not place
+    // leaves the root order unknown, and a program listing the project's
+    // roots in another order can type the project's own calls differently.
+    // Refuse rather than take path order for it.
+    if !program_modules.unmapped_roots.is_empty() {
+        let detail = format!(
+            "the project's root order is unknown: configured roots the program holds no file for ({})",
+            program_modules.unmapped_roots.join(", ")
+        );
+        notes.lines.push(format!(
+            "solid-checker: note: packages are not analyzed from source: {detail}; their behaviour stays uncertifiable"
+        ));
+        for name in &selection.package_names {
+            notes.refuse(
+                name,
+                None,
+                UnanalyzableReason::ProgramPreparationUnavailable,
+                detail.clone(),
+            );
+        }
+        return Ok(None);
+    }
     let document = program_document(tsconfig, &project_order, &selection.files)?;
     Ok(Some(PreparedDependencyProgram {
         tsconfig: tsconfig.to_path_buf(),
@@ -733,7 +769,7 @@ pub fn prepare_all(
 }
 
 /// The `name` a package directory's manifest declares.
-fn package_name_of_root(root: &Path) -> Option<String> {
+pub(crate) fn package_name_of_root(root: &Path) -> Option<String> {
     let manifest = fs::read(root.join("package.json")).ok()?;
     let manifest = serde_json::from_slice::<Ordered>(&manifest).ok()?;
     manifest.get("name")?.as_str().map(str::to_owned)

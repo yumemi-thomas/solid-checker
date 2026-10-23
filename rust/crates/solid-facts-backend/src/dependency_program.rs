@@ -73,26 +73,64 @@ pub fn prepare(
     ))
 }
 
-/// Every file the open program holds: its configured root files in
-/// TypeScript's own root order, then every other file by path. The order is
-/// the generated program's root order (ADR 0368): TypeScript orders a
-/// program's files by its roots and its answers can depend on that order, so
-/// a project root listed after a package file can give a type error `tsc`
-/// never reports.
-pub fn program_modules(original: &mut TypeFactsSession) -> Result<Vec<PathBuf>, Box<dyn Error>> {
-    let graph = original.module_graph(&typefacts::ModuleGraphDemand::default())?;
-    Ok(in_root_order(&graph.modules))
+/// Every file the open program holds, in the generated program's root order
+/// (ADR 0368): TypeScript orders a program's files by its roots and its
+/// answers can depend on that order, so a project root listed after a package
+/// file can give a type error `tsc` never reports.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ProgramModules {
+    /// The configured root files, in TypeScript's own root order
+    /// (`ModuleFact.root`), wherever they live: a root under `node_modules`
+    /// is the project's root all the same.
+    pub roots: Vec<PathBuf>,
+    /// Every other file, by path.
+    pub others: Vec<PathBuf>,
+    /// Configured roots the producer could not place (`ModuleGraph::unmapped_roots`):
+    /// the root order is then unknown, and preparation refuses rather than
+    /// take path order for it.
+    pub unmapped_roots: Vec<String>,
 }
 
-/// `modules` (ordered by path): the roots by their position, then the rest
-/// in the order given.
-fn in_root_order(modules: &[typefacts::ModuleFact]) -> Vec<PathBuf> {
-    let mut modules = modules.iter().collect::<Vec<_>>();
-    modules.sort_by_key(|module| module.root.map_or((1, 0), |root| (0, root)));
-    modules
-        .into_iter()
-        .map(|module| PathBuf::from(module.path.as_ref()))
-        .collect()
+impl ProgramModules {
+    /// Every file, roots first.
+    pub fn iter(&self) -> impl Iterator<Item = &PathBuf> {
+        self.roots.iter().chain(&self.others)
+    }
+}
+
+/// The open program's [`ProgramModules`].
+pub fn program_modules(original: &mut TypeFactsSession) -> Result<ProgramModules, Box<dyn Error>> {
+    let graph = original.module_graph(&typefacts::ModuleGraphDemand::default())?;
+    Ok(in_root_order(&graph))
+}
+
+/// `graph.modules` (ordered by path) split into the roots by their position
+/// and the rest in the order given.
+fn in_root_order(graph: &typefacts::ModuleGraph) -> ProgramModules {
+    let mut roots = graph
+        .modules
+        .iter()
+        .filter_map(|module| {
+            module
+                .root
+                .map(|root| (root, PathBuf::from(module.path.as_ref())))
+        })
+        .collect::<Vec<_>>();
+    roots.sort_by_key(|(root, _)| *root);
+    ProgramModules {
+        roots: roots.into_iter().map(|(_, path)| path).collect(),
+        others: graph
+            .modules
+            .iter()
+            .filter(|module| module.root.is_none())
+            .map(|module| PathBuf::from(module.path.as_ref()))
+            .collect(),
+        unmapped_roots: graph
+            .unmapped_roots
+            .iter()
+            .map(|root| root.to_string())
+            .collect(),
+    }
 }
 
 /// [`prepare`] from an inventory the caller already holds.
@@ -102,7 +140,7 @@ pub fn prepare_from(
     host: &Host,
     dialect: &'static Dialect,
     sources: &[SourceFile],
-    modules: &[PathBuf],
+    modules: &ProgramModules,
 ) -> Preparation {
     let excluded = dialect
         .vocabulary
@@ -222,6 +260,200 @@ pub fn bind(
     Ok(())
 }
 
+/// Review of ADR 0368: whether TypeScript owns an error at a project call is
+/// a fact about the project's own program, not the dependency-source one.
+/// The generated program adds package sources to the project's files, and
+/// TypeScript's answers can depend on what a program holds and in what order
+/// (a package augmenting a global interface reorders the merged overloads):
+/// it can reject a call `tsc` accepts on the project, and accept one `tsc`
+/// rejects. The generated program supplies package behaviour; a project
+/// call's validity comes from the project's own program.
+#[derive(Debug, Default)]
+pub struct ProjectCallValidity {
+    /// Project calls the generated program answers as errors and the
+    /// project's own program does not, or answers nothing for: not
+    /// TypeScript's, so uncertifiable (`ProjectFacts::dependency_source_call_errors`).
+    pub generated_errors: Vec<typefacts::Location>,
+    /// Per path, the entities with every project call the project's own
+    /// program answers `Recovery` marked `Recovery`: TypeScript reports
+    /// those, and the checker stays silent on them (invariant 1).
+    pub tsc_owned: HashMap<String, Vec<typefacts::EntityFact>>,
+    /// How many project calls were asked.
+    pub asked: usize,
+}
+
+impl ProjectCallValidity {
+    /// Whether applying this changes nothing.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.generated_errors.is_empty() && self.tsc_owned.is_empty()
+    }
+
+    /// Takes the project's own validity into `facts`.
+    pub fn apply(self, facts: &mut solid_facts::ProjectFacts) {
+        facts.dependency_source_call_errors = self.generated_errors;
+        if !self.tsc_owned.is_empty() {
+            facts.typescript = facts
+                .typescript
+                .clone()
+                .with_entity_overrides(self.tsc_owned);
+        }
+    }
+}
+
+/// The resolved calls in the project's own files of `facts` (the
+/// dependency-source program's), sorted: what [`project_call_validity`]
+/// asks the project's own program about.
+#[must_use]
+pub fn project_calls(
+    facts: &solid_facts::ProjectFacts,
+    program: &PreparedDependencyProgram,
+) -> Vec<typefacts::Location> {
+    let mut calls = facts
+        .typescript
+        .entities()
+        .filter(|entity| {
+            entity.resolved_call.is_some()
+                && program
+                    .project_files
+                    .contains(Path::new(entity.location.path.as_ref()))
+        })
+        .map(|entity| entity.location.clone())
+        .collect::<Vec<_>>();
+    calls.sort_by(|left, right| {
+        (&left.path, left.start_byte, left.end_byte).cmp(&(
+            &right.path,
+            right.start_byte,
+            right.end_byte,
+        ))
+    });
+    calls.dedup();
+    calls
+}
+
+/// [`ProjectCallValidity`] for `facts` (the dependency-source program's):
+/// `calls` ([`project_calls`]) and `own`, the validity the project's own
+/// program answers for each (`TypeFactsSession::call_validities`).
+#[must_use]
+pub fn project_call_validity(
+    facts: &solid_facts::ProjectFacts,
+    calls: Vec<typefacts::Location>,
+    own: Vec<Option<typefacts::ResolvedCallValidity>>,
+) -> ProjectCallValidity {
+    use typefacts::ResolvedCallValidity::Recovery;
+    let mut answer = ProjectCallValidity {
+        asked: calls.len(),
+        ..ProjectCallValidity::default()
+    };
+    let own = calls.into_iter().zip(own).collect::<HashMap<_, _>>();
+    let mut paths = own
+        .keys()
+        .map(|location| location.path.clone())
+        .collect::<Vec<_>>();
+    paths.sort();
+    paths.dedup();
+    for path in paths {
+        let entities = facts.typescript.entities_for_path(&path);
+        let mut replaced = false;
+        let mut patched = entities.to_vec();
+        for entity in &mut patched {
+            let Some(call) = entity.resolved_call.as_mut() else {
+                continue;
+            };
+            let Some(own) = own.get(&entity.location) else {
+                continue;
+            };
+            match (call.validity, *own) {
+                (Recovery, Some(Recovery)) => {}
+                (Recovery, _) | (_, None) => answer.generated_errors.push(entity.location.clone()),
+                (_, Some(Recovery)) => {
+                    std::sync::Arc::make_mut(call).validity = Recovery;
+                    replaced = true;
+                }
+                _ => {}
+            }
+        }
+        if replaced {
+            answer.tsc_owned.insert(path.to_string(), patched);
+        }
+    }
+    answer.generated_errors.sort_by(|left, right| {
+        (&left.path, left.start_byte, left.end_byte).cmp(&(
+            &right.path,
+            right.start_byte,
+            right.end_byte,
+        ))
+    });
+    answer.generated_errors.dedup();
+    answer
+}
+
+/// Review of ADR 0368: a selected package whose own source holds a call
+/// TypeScript rejects (`Recovery`) with no callee it runs. `tsc` on the
+/// project never checks that source, so no error the user sees owns it.
+///
+/// What a `Recovery` fact carries (resolved_calls.rs `resolve_one`): the
+/// callee's symbol as `target` (empty when the checker resolved the call to
+/// its unknown signature: the callee is not callable), no declaration, no
+/// union targets, and every argument mapping unresolved
+/// (`RecoverySignature`). Analysis reads a resolved call's declaration,
+/// argument mappings and callback positions only from `Valid` calls, so none
+/// of those is read off a recovered call, in a package or not; what follows
+/// such a call is the callee's own symbol in the call graph, as for any
+/// call. With a target, the call runs that callee whatever its argument
+/// types (`createComponent(Context, props)`, `Solid.useContext(ctx)`
+/// against published typings): only assignability failed and the behaviour
+/// model stands. Without one (`const fn = api.get(); fn(source)` with
+/// `get(): number`), what the call runs is unknown and the package is
+/// refused for its project importers: an open requirement (SC9005) at every
+/// import of it instead of a silent clean. The boundary records refusals per
+/// import of an installed root; there is no per-export refusal to narrow to.
+#[must_use]
+pub fn package_call_errors(
+    facts: &solid_facts::ProjectFacts,
+    program: &PreparedDependencyProgram,
+) -> Vec<crate::dependency_sources::SourceRefusal> {
+    let mut first = BTreeMap::<PathBuf, &typefacts::Location>::new();
+    for entity in facts.typescript.entities() {
+        let Some(call) = entity
+            .resolved_call
+            .as_deref()
+            .filter(|call| call.validity == typefacts::ResolvedCallValidity::Recovery)
+        else {
+            continue;
+        };
+        if call.targets.is_none() && !call.target.is_empty() {
+            continue;
+        }
+        let path = Path::new(entity.location.path.as_ref());
+        if let Some(root) = program
+            .selection
+            .roots
+            .iter()
+            .filter(|root| path.starts_with(root))
+            .max_by_key(|root| root.as_os_str().len())
+        {
+            let held = first.entry(root.clone()).or_insert(&entity.location);
+            if (&entity.location.path, entity.location.start_byte) < (&held.path, held.start_byte) {
+                *held = &entity.location;
+            }
+        }
+    }
+    first
+        .into_iter()
+        .map(|(root, location)| crate::dependency_sources::SourceRefusal {
+            name: crate::dependency_sources::package_name_of_root(&root)
+                .unwrap_or_else(|| root.to_string_lossy().into_owned()),
+            detail: format!(
+                "TypeScript rejects a call in the package's own source whose callee is not callable ({} at byte {}), so what it runs is unknown",
+                location.path, location.start_byte
+            ),
+            root: Some(root),
+            kind: solid_reactive_ir::package_boundary::UnanalyzableReason::ClosureUnavailable,
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
@@ -240,21 +472,31 @@ mod tests {
     /// ADR 0368: TypeScript's root order first, not path order.
     #[test]
     fn roots_come_first_in_typescript_order() {
-        let modules = [
-            module("/p/node_modules/pkg/index.d.ts", None),
-            module("/p/src/app.tsx", Some(1)),
-            module("/p/src/main.tsx", Some(0)),
-            module("/p/src/shared.ts", None),
-        ];
+        let graph = typefacts::ModuleGraph {
+            modules: vec![
+                module("/p/node_modules/pkg/globals.d.ts", Some(2)),
+                module("/p/node_modules/pkg/index.d.ts", None),
+                module("/p/src/app.tsx", Some(1)),
+                module("/p/src/main.tsx", Some(0)),
+                module("/p/src/shared.ts", None),
+            ],
+            unmapped_roots: vec!["/p/src/lost".into()],
+            ..typefacts::ModuleGraph::default()
+        };
+        let modules = super::in_root_order(&graph);
         assert_eq!(
-            super::in_root_order(&modules),
+            modules.roots,
             [
                 "/p/src/main.tsx",
                 "/p/src/app.tsx",
-                "/p/node_modules/pkg/index.d.ts",
-                "/p/src/shared.ts",
+                "/p/node_modules/pkg/globals.d.ts",
             ]
             .map(PathBuf::from)
         );
+        assert_eq!(
+            modules.others,
+            ["/p/node_modules/pkg/index.d.ts", "/p/src/shared.ts"].map(PathBuf::from)
+        );
+        assert_eq!(modules.unmapped_roots, ["/p/src/lost"]);
     }
 }

@@ -381,6 +381,7 @@ fn session_answers_the_module_graph_without_touching_retained_state() {
             resolver_package: None,
         }],
         unknown_import_paths: vec!["/project/absent.ts".into()],
+        unmapped_roots: Vec::new(),
     });
     let demands = Arc::clone(&backend.module_demands);
     let mut session = session_over(backend);

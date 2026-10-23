@@ -220,6 +220,24 @@ fn external_package_boundary_with(
                 .dependency_source_root(&import.resolved_path)
                 .is_some()
             {
+                // Review of ADR 0368: selected source refused after analysis
+                // (a call TypeScript rejects in the package's own source)
+                // answers nothing for its importers.
+                let unproven = refusals
+                    .iter()
+                    .filter(|refusal| {
+                        refusal.root.as_deref().is_some_and(|root| {
+                            Path::new(import.resolved_path.as_ref()).starts_with(root)
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                if !unproven.is_empty() {
+                    for refusal in unproven {
+                        record(refusal.kind, &refusal.detail);
+                    }
+                    boundary.require_legacy(key);
+                    continue;
+                }
                 if !namespace_import(facts, importer, &import.text)
                     || namespace_import_redirected(facts, importer, &import.text)
                 {

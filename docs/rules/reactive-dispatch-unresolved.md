@@ -158,6 +158,12 @@ warning severity means that no runtime defect has been proven; its
 The rule requires a call that TypeScript facts mark valid. An invalid call is
 TypeScript's diagnostic and does not also receive SC9012. The finding asserts
 only an unresolved reactivity property that TypeScript types do not express.
+"Invalid" means invalid in the project's own program: when packages are
+analyzed from source, a call error only that program has (a package's global
+augmentation reorders a project interface's overloads) is not TypeScript's
+on the project, and the call keeps an obligation with analysis context
+`dependency-source-program-call-error` (ADR 0368). Conversely a call `tsc`
+rejects on the project stays silent even where that program accepts it.
 
 ## How to fix
 

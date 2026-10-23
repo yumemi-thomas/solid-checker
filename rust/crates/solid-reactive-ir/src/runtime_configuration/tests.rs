@@ -150,6 +150,7 @@ fn lookup_project(source: &str, declaration_path: &str, start: u64, end: u64) ->
         runtime_resolutions: None,
         runtime_symbol_redirects: std::collections::HashMap::new(),
         dependency_source_roots: Vec::new(),
+        dependency_source_call_errors: Vec::new(),
     }
 }
 
@@ -274,6 +275,7 @@ fn a_process_free_project_without_resolution_evidence_keeps_the_premise() {
         runtime_resolutions: None,
         runtime_symbol_redirects: std::collections::HashMap::new(),
         dependency_source_roots: Vec::new(),
+        dependency_source_call_errors: Vec::new(),
     };
     assert_eq!(
         scan(&facts, &solid_dialect::Solid2),

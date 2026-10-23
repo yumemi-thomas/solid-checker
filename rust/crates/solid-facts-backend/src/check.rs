@@ -94,6 +94,9 @@ pub struct OpenedProgram {
     /// The program the session opened: the project, or the combined program's
     /// logical path beside it.
     pub project_id: String,
+    /// With dependency sources, the project's own program, kept open: a
+    /// project call's validity is its answer (review of ADR 0368).
+    pub original: Option<TypeFactsSession>,
 }
 
 /// Opens the program a check analyzes (ADR 0284): the project's own, or, when
@@ -116,6 +119,7 @@ pub fn open_program(
             dependency_sources: None,
             source_refusals: Vec::new(),
             project_id: options.project_id.clone(),
+            original: None,
         });
     };
     let mut configured = sessions.open(&options.project_id)?;
@@ -126,17 +130,18 @@ pub fn open_program(
         options.dialect,
         &mut configured,
     )?;
-    drop(configured);
     for line in &notes.lines {
         note(line);
     }
     let source_refusals = notes.refusals;
     let Some(program) = prepared? else {
+        // The project's own program is the analyzed one: no second session.
         return Ok(OpenedProgram {
-            typescript: sessions.open(&options.project_id)?,
+            typescript: configured,
             dependency_sources: None,
             source_refusals,
             project_id: options.project_id.clone(),
+            original: None,
         });
     };
     match sessions.open_generated(&program)? {
@@ -145,6 +150,7 @@ pub fn open_program(
             dependency_sources: Some(program),
             source_refusals,
             project_id,
+            original: Some(configured),
         }),
         // Review round 1 of ADR 0297: the default adds no write requirement an
         // analysis without dependency sources did not have.
@@ -154,10 +160,11 @@ pub fn open_program(
                  default: {error}; their behaviour stays uncertifiable"
             ));
             Ok(OpenedProgram {
-                typescript: sessions.open(&options.project_id)?,
+                typescript: configured,
                 dependency_sources: None,
                 source_refusals,
                 project_id: options.project_id.clone(),
+                original: None,
             })
         }
         Err(error) => Err(error.into()),
@@ -174,8 +181,9 @@ pub fn run(
     let OpenedProgram {
         mut typescript,
         dependency_sources,
-        source_refusals,
+        mut source_refusals,
         project_id,
+        mut original,
     } = open_program(options, sessions, note)?;
     let sidecar_spawn = started.elapsed();
     let mut sources_bytes = 0;
@@ -222,6 +230,39 @@ pub fn run(
     // ADR 0284: bind the selected packages' imports to their runtime files.
     if let Some(program) = &dependency_sources {
         dependency_program::bind(&mut facts, &mut typescript, program)?;
+        // Review of ADR 0368: a project call's validity is the project's own
+        // program's; a package whose own source has a call error is unproven.
+        let asked = Instant::now();
+        let calls = dependency_program::project_calls(&facts, program);
+        // The project's own program is closed once it has answered.
+        let own = match original.take() {
+            _ if calls.is_empty() => Vec::new(),
+            Some(mut original) => original.call_validities(&calls)?,
+            None => sessions
+                .open(&options.project_id)?
+                .call_validities(&calls)?,
+        };
+        let validity = dependency_program::project_call_validity(&facts, calls, own);
+        if std::env::var_os("SOLID_CHECKER_TIMINGS").is_some() {
+            note(&format!(
+                "dependency-source project calls: {} asked, {} generated-only errors, {} tsc-owned paths ({:?})",
+                validity.asked,
+                validity.generated_errors.len(),
+                validity.tsc_owned.len(),
+                asked.elapsed()
+            ));
+        }
+        validity.apply(&mut facts);
+        let package_errors = dependency_program::package_call_errors(&facts, program);
+        if std::env::var_os("SOLID_CHECKER_TIMINGS").is_some() {
+            for refusal in &package_errors {
+                note(&format!(
+                    "dependency-source package refused: {}: {}",
+                    refusal.name, refusal.detail
+                ));
+            }
+        }
+        source_refusals.extend(package_errors);
     }
     let facts_complete = started.elapsed();
     let mut import_identity = ImportIdentityMeasurement::default();

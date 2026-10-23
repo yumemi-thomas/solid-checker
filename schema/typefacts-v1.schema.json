@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$comment": "Handshake protocol 82 adds moduleFact.root, a file's position among the configuration's root files (ADR 0368). Handshake protocol 81 carries Wire table schema v22, which keeps the rows of v21 under a new number so a v21 table from another build is refused. Handshake protocol 80 carries Wire table schema v21: an entity's symbol may be flagged symbolCoversSpan, which says it names the whole demanded span. A symbol without the flag names a token inside the span (the callee of a call, the object of a member) and does not describe its value. Handshake protocol 78 removes the certification reads `invocations` and `export-values`, their request fields (`invocationDemands`, `exportValueDemands`, `hostConstants`) and response fields (transcripts and envelopes), and every definition only they used. Handshake protocol 77 (ADR 0172) adds exhaustive fresh literal return structures and body-end reachability. Absent facts remain open. Handshake protocol 40 binds original parameter roots at exact opening-prefix reads. Protocol 39 adds affirmative unwritten parameter bindings for whole-slot identity, not concrete shape. Protocol 38 spells complete union premises and binds each constituent identity. Protocol 37 permits an exact anonymous local callable census only when its compiler symbol independently declares that node. Protocol 36 added localLiteralResult. Consumers still bind runtime identity and execution separately.",
+  "$comment": "Handshake protocol 83 adds the modules answer's unmappedRoots (ADR 0368). Handshake protocol 82 adds moduleFact.root, a file's position among the configuration's root files (ADR 0368). Handshake protocol 81 carries Wire table schema v22, which keeps the rows of v21 under a new number so a v21 table from another build is refused. Handshake protocol 80 carries Wire table schema v21: an entity's symbol may be flagged symbolCoversSpan, which says it names the whole demanded span. A symbol without the flag names a token inside the span (the callee of a call, the object of a member) and does not describe its value. Handshake protocol 78 removes the certification reads `invocations` and `export-values`, their request fields (`invocationDemands`, `exportValueDemands`, `hostConstants`) and response fields (transcripts and envelopes), and every definition only they used. Handshake protocol 77 (ADR 0172) adds exhaustive fresh literal return structures and body-end reachability. Absent facts remain open. Handshake protocol 40 binds original parameter roots at exact opening-prefix reads. Protocol 39 adds affirmative unwritten parameter bindings for whole-slot identity, not concrete shape. Protocol 38 spells complete union premises and binds each constituent identity. Protocol 37 permits an exact anonymous local callable census only when its compiler symbol independently declares that node. Protocol 36 added localLiteralResult. Consumers still bind runtime identity and execution separately.",
   "$id": "https://solid-checker.dev/schema/typefacts-v1.schema.json",
   "title": "TypeFactsSchema v1 (latest semantic vocabulary)",
   "description": "Length-prefixed deterministic-CBOR request and response frames exchanged with solid-typefacts. Field names are the CBOR map keys. Optional fields are omitted, never null. The current handshake protocol and Wire table schema are the constants in apps/solid-typefacts/internal/typefacts/protocolv3.go; the per-protocol changelog this description once carried lives in the git history of this file.",
@@ -238,7 +238,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["schema", "requestId", "projectId", "generation", "ok"],
-      "description": "Analyze carries at most one opaque tableTransition. The transition proves its base project, generation, and state token and selects full or delta mode internally. An absent transition reuses the retained table. The modules operation instead carries modules, moduleImports, and unknownImportPaths as plain rows: the resolved module graph is a property of the accepted program rather than of a demand set, so it takes no part in retained table identity.",
+      "description": "Analyze carries at most one opaque tableTransition. The transition proves its base project, generation, and state token and selects full or delta mode internally. An absent transition reuses the retained table. The modules operation instead carries modules, moduleImports, unknownImportPaths, and unmappedRoots as plain rows: the resolved module graph is a property of the accepted program rather than of a demand set, so it takes no part in retained table identity.",
       "properties": {
         "schema": { "const": 1 },
         "requestId": { "type": "integer", "minimum": 1 },
@@ -290,6 +290,12 @@
           "type": "array",
           "maxItems": 1000000,
           "description": "Requested import paths the program does not hold, ordered by path. Reported rather than dropped so a caller can tell a file with no imports from a file that was never analyzed.",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "unmappedRoots": {
+          "type": "array",
+          "maxItems": 1000000,
+          "description": "Configured root files the program holds no file for although TypeScript's root lookup finds one. They have no moduleFact.root position, so a consumer of root order fails closed.",
           "items": { "type": "string", "minLength": 1 }
         },
         "timings": { "$ref": "#/$defs/timings" },

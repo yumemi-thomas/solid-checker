@@ -138,6 +138,7 @@ fn diagnostic_session_reuses_the_complete_result() {
         runtime_resolutions: None,
         runtime_symbol_redirects: Default::default(),
         dependency_source_roots: Vec::new(),
+        dependency_source_call_errors: Vec::new(),
     };
     let mut session = DiagnosticSession::default();
 
@@ -185,6 +186,7 @@ fn diagnostic_session_keys_retention_on_requested_enablement() {
         runtime_resolutions: None,
         runtime_symbol_redirects: Default::default(),
         dependency_source_roots: Vec::new(),
+        dependency_source_call_errors: Vec::new(),
     };
     let mut session = DiagnosticSession::default();
 

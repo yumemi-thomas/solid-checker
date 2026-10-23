@@ -1703,6 +1703,11 @@ pub struct ModuleGraph {
     /// imports nothing" from "this file was never analyzed". A non-empty value
     /// means the answer is scoped to less than what was asked for.
     pub unknown_import_paths: Vec<Arc<str>>,
+    /// Configured roots the program holds no file for although TypeScript's
+    /// root lookup finds one. Such a root has no [`ModuleFact::root`]
+    /// position; a consumer of root order fails closed rather than take
+    /// path order for it (ADR 0368).
+    pub unmapped_roots: Vec<Arc<str>>,
 }
 
 impl ModuleGraph {
