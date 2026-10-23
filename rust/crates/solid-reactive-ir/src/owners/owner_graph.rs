@@ -49,13 +49,15 @@ pub(super) fn owner_node(
         && name.is_some()
         && lookup.program_closed;
     let mut seed_context = compiler_owner_context(file, function.body);
+    // ADR 0361: a handler written on an element is conditional only where a
+    // synchronous dispatch may reach it; one a helper's flow proves an event
+    // invocation is joined to no site (`dispatch_uncertain`).
     let dispatch_uncertain = lookup.synchronous_event_dispatch_present();
-    if dispatch_uncertain
-        && file.compiler.callback_roles.iter().any(|callback| {
-            callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
-                && callback.span.contains(function.body)
-        })
-    {
+    if file.compiler.callback_roles.iter().any(|callback| {
+        callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
+            && callback.span.contains(function.body)
+            && lookup.event_handler_may_run_on_a_dispatcher_stack(file, callback.span)
+    }) {
         seed_context = (seed_context & !OWNER_CONTEXT_PROVEN_UNOWNED)
             | OWNER_CONTEXT_OWNED
             | OWNER_CONTEXT_UNOWNED;

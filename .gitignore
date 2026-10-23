@@ -101,6 +101,10 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/primitive-in-effect-callback/node_modules/**
 !fixtures/reactive-ir/primitive-in-effect-callback-rc13/node_modules/
 !fixtures/reactive-ir/primitive-in-effect-callback-rc13/node_modules/**
+!fixtures/reactive-ir/dispatch-delivery-join/node_modules/
+!fixtures/reactive-ir/dispatch-delivery-join/node_modules/**
+!fixtures/reactive-ir/dispatch-delivery-join/variants/*/node_modules/
+!fixtures/reactive-ir/dispatch-delivery-join/variants/*/node_modules/**
 !fixtures/reactive-ir/rc17-dispatch-as-interaction/node_modules/
 !fixtures/reactive-ir/rc17-dispatch-as-interaction/node_modules/**
 !fixtures/reactive-ir/rc17-callback-exports-mixed/node_modules/

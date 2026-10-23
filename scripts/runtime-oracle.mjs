@@ -12,9 +12,11 @@
 //
 // A case is a directory holding an `App.tsx` and its other source files. Every
 // exported function whose name starts with a capital is rendered as a
-// component in its own root. The entry then drives the page itself: two passes
-// dispatch a fixed set of DOM events on every element (the second reaches
-// elements the first one revealed), so a case needs no per-site steps. An
+// component in its own root. A second module, `driver.ts`, which `index.html`
+// loads after the entry and the tsconfig does not list, then drives the page:
+// two passes dispatch a fixed set of DOM events on every element (the second
+// reaches elements the first one revealed), so a case needs no per-site steps.
+// It is no part of the checked program, so its own dispatch calls are no site. An
 // optional `oracle.json` adds a note, further feedback scenario steps, an
 // `install` corpus app name (relative to the parent of --install), and the
 // case's known open sites (each an unproven clean claim with its reason):
@@ -94,7 +96,9 @@ const compilerOptions = {
   jsxImportSource: "@solidjs/web", lib: ["ES2022", "DOM", "DOM.Iterable"], types: [],
   skipLibCheck: true, strict: true, noEmit: true,
 };
-const mainSource = (observations) => `${observations.length ? 'import { flush } from "solid-js";\n' : ""}import { render } from "@solidjs/web";
+// The program under test: it renders the exported components and nothing else. The tsconfig lists it and
+// the case's own files, so the checker analyzes exactly these.
+const mainSource = `import { render } from "@solidjs/web";
 import * as mod from "./App";
 
 // Each exported component is rendered as a component, so Solid creates it the
@@ -116,6 +120,11 @@ for (const [name, value] of Object.entries(mod as Record<string, unknown>)) {
     setTimeout(() => { throw error; });
   }
 }
+`;
+// The event driver, a second module that `index.html` loads after `main.tsx`. It is not in the tsconfig's
+// `files`: it runs after the page's pause with no owner and is no part of the program under test, so its
+// own `dispatchEvent` and `click` calls are no dispatch site the checker sees (ADR 0361).
+const driverSource = (observations) => `${observations.length ? 'import { flush } from "solid-js";\n' : ""}const root = document.getElementById("root")!;
 
 ${behaviourProbe(observations)}// Drive every handler: bubbling events on every element, two passes apart.
 const events: Array<[string, (type: string) => Event]> = [
@@ -146,7 +155,7 @@ ${observations.length ? "  await behave();\n" : ""}  await pause(200);
 }
 void exercise();
 `;
-const html = `<!doctype html><html><head><meta charset="utf-8"></head><body><div id="root"></div><p id="ready">running</p><script type="module" src="/main.tsx"></script></body></html>\n`;
+const html = `<!doctype html><html><head><meta charset="utf-8"></head><body><div id="root"></div><p id="ready">running</p><script type="module" src="/main.tsx"></script><script type="module" src="/driver.ts"></script></body></html>\n`;
 // The checker rules that claim each runtime diagnostic code. A code no rule
 // claims (REACTIVITY_HALTED, an uncaught error's consequence) is reported as
 // `no-rule`, never as a missing finding.
@@ -480,7 +489,8 @@ async function runCase(id) {
   assert(files.includes("App.tsx"), `${id}: no App.tsx`);
   const observations = behaviourSpec(id, spec, source, files);
   for (const file of files) cpSync(join(source, file), join(dir, file));
-  writeFileSync(join(dir, "main.tsx"), mainSource(observations));
+  writeFileSync(join(dir, "main.tsx"), mainSource);
+  writeFileSync(join(dir, "driver.ts"), driverSource(observations));
   writeFileSync(join(dir, "index.html"), html);
   writeFileSync(join(dir, "scenario.json"), JSON.stringify({ schemaVersion: 1, steps: [settle, ...(observations.length ? [probeStep] : []), ...(spec.steps ?? [])] }));
   writeFileSync(join(dir, "tsconfig.json"), JSON.stringify({ compilerOptions, files: ["main.tsx", ...files] }, null, 2));

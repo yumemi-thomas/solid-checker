@@ -347,6 +347,36 @@ pub(crate) const RELEASE_GATED_NAMES: &[&str] = &[
     "onHydrationEnd",
 ];
 
+/// `DelegatedEvents` of `@solidjs/web` on rc.13 and rc.17, identical
+/// (`dist/web.dev.js:36` in both): the types whose compiled handler is stored
+/// on the node (`addEvent`'s `delegate` arm, `:806-815`) and run from the
+/// container listener, which also decides whether `@solidjs/web` wraps the
+/// call. The compiler's own copy is `packages/web/src/constants.ts:50-72`.
+const DELEGATED_EVENTS: &[&str] = &[
+    "beforeinput",
+    "click",
+    "dblclick",
+    "contextmenu",
+    "focusin",
+    "focusout",
+    "input",
+    "keydown",
+    "keyup",
+    "mousedown",
+    "mousemove",
+    "mouseout",
+    "mouseover",
+    "mouseup",
+    "pointerdown",
+    "pointermove",
+    "pointerout",
+    "pointerover",
+    "pointerup",
+    "touchend",
+    "touchmove",
+    "touchstart",
+];
+
 impl Dialect for Solid2 {
     fn compiler_lowers_event_attribute(&self, name: &str) -> bool {
         // The pinned rc.17 compiler's `is_event_name`
@@ -354,6 +384,25 @@ impl Dialect for Solid2 {
         // by an ASCII uppercase letter. `onclick` and `on-foo` are attributes.
         let bytes = name.as_bytes();
         bytes.len() > 2 && bytes.starts_with(b"on") && bytes[2].is_ascii_uppercase()
+    }
+    fn event_type_is_delegated(&self, event: &str) -> bool {
+        match self.spread_event_keys {
+            // The same web releases whose `assignProp` was read answer
+            // `DelegatedEvents`; no other release was read for it.
+            releases::SpreadEventKeys::Unaudited => true,
+            releases::SpreadEventKeys::AnyOn | releases::SpreadEventKeys::OnUppercase => {
+                DELEGATED_EVENTS.contains(&event)
+            }
+        }
+    }
+    fn global_dispatch_reaches_no_element_handler(&self) -> bool {
+        // The web releases whose `addEvent` and `eventHandler` were read (rc.13
+        // `dist/web.dev.js:714-739`, `:1825-1890`; rc.17 `:806-831`,
+        // `:1969-2032`): the same structure in both.
+        match self.spread_event_keys {
+            releases::SpreadEventKeys::Unaudited => false,
+            releases::SpreadEventKeys::AnyOn | releases::SpreadEventKeys::OnUppercase => true,
+        }
     }
     fn spread_key_is_event(&self, key: &str) -> Option<bool> {
         match self.spread_event_keys {

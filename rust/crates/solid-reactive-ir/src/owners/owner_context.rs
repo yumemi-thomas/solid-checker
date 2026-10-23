@@ -281,10 +281,17 @@ pub(crate) const fn owner_edge_context(kind: OwnerEdgeKind, source: u8) -> u8 {
     }
 }
 
-pub(super) fn event_owner_edge(lookup: &SemanticLookup<'_>, generator: bool) -> OwnerEdgeKind {
+/// The edge from the host to the handler written as `handler` in `file` (an
+/// event attribute's value, or a function a spread supplies; ADR 0361).
+pub(super) fn event_owner_edge(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    handler: solid_facts::core::Span,
+    generator: bool,
+) -> OwnerEdgeKind {
     if generator {
         OwnerEdgeKind::MayBeUnowned
-    } else if lookup.synchronous_event_dispatch_present() {
+    } else if lookup.event_handler_may_run_on_a_dispatcher_stack(file, handler) {
         OwnerEdgeKind::Conditional
     } else {
         OwnerEdgeKind::Unowned

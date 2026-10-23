@@ -770,7 +770,8 @@ pub(super) struct SemanticLookup<'a> {
     invocation_flow_answers: OnceLock<HashMap<(String, Span), crate::ExecutionRole>>,
     /// The literals whose every invocation is a host event dispatch.
     event_invoked_literals: OnceLock<HashSet<(String, Span)>>,
-    synchronous_event_dispatch: OnceLock<bool>,
+    /// ADR 0361: what the project's synchronous DOM dispatches can reach.
+    event_delivery: OnceLock<event_delivery::EventDelivery>,
     /// ADR 0362: whether a call may run `flush` from an owned scope.
     flush_may_run_applies_owned: OnceLock<bool>,
     /// ADR 0320: whether some call may copy keys into an existing object.
@@ -1002,7 +1003,7 @@ impl<'a> SemanticLookup<'a> {
             identity_wrappers: OnceLock::new(),
             invocation_flow_answers: OnceLock::new(),
             event_invoked_literals: OnceLock::new(),
-            synchronous_event_dispatch: OnceLock::new(),
+            event_delivery: OnceLock::new(),
             flush_may_run_applies_owned: OnceLock::new(),
             objects_assigned_into: OnceLock::new(),
             router_params: OnceLock::new(),
@@ -1454,8 +1455,7 @@ impl<'a> SemanticLookup<'a> {
                 hasher.update(path.as_bytes());
                 hasher.update(file.source_hash.as_str().as_bytes());
             }
-            hasher.update(b"synchronous-event-dispatch\0");
-            hasher.update([u8::from(self.synchronous_event_dispatch_present())]);
+            self.bind_event_delivery(&mut hasher);
             // ADR 0362: a call anywhere that may run `flush` from an owned
             // scope moves the apply owner proofs of every other file.
             hasher.update(b"flush-may-run-applies-owned\0");

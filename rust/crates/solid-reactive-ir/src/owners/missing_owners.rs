@@ -152,7 +152,7 @@ pub(crate) fn find_missing_owners(
                     solid_facts::compiler::CallbackRoleKind::DirectiveApply => {
                         OwnerEdgeKind::RefApplied
                     }
-                    _ => event_owner_edge(lookup, nodes[index].generator),
+                    _ => event_owner_edge(lookup, file, callback.span, nodes[index].generator),
                 };
                 contexts[index] |=
                     owner_edge_context(kind, OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED);
@@ -178,7 +178,12 @@ pub(crate) fn find_missing_owners(
                         .find(|index| nodes[*index].span == *span);
                     if let Some(index) = index {
                         contexts[index] |= owner_edge_context(
-                            event_owner_edge(lookup, nodes[index].generator),
+                            event_owner_edge(
+                                lookup,
+                                lookup.file_by_path(path).unwrap_or(file),
+                                *span,
+                                nodes[index].generator,
+                            ),
                             OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED,
                         );
                     }

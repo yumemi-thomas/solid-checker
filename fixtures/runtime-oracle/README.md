@@ -1,6 +1,6 @@
 # runtime-oracle
 
-Cases for `scripts/runtime-oracle.mjs`: each runs in Chrome on the Solid 2 dev build, and its diagnostics are compared with the checker's verdict at the same site. An unmatched dev diagnostic is an unproven clean claim. Cases run in `../solid-checker-rc17-corpus/apps/helge-dev` (rc.17; `--install` overrides) against the real packages: `*.d.ts` stubs and `node_modules` are not copied, and a case `tsc` rejects is `type-error`.
+Cases for `scripts/runtime-oracle.mjs`: each runs in Chrome on the Solid 2 dev build, and its diagnostics are compared with the checker's verdict at the same site. An unmatched dev diagnostic is an unproven clean claim. Cases run in `../solid-checker-rc17-corpus/apps/helge-dev` (rc.17; `--install` overrides) against the real packages: `*.d.ts` stubs and `node_modules` are not copied, and a case `tsc` rejects is `type-error`. `driver.ts`, loaded after `main.tsx`, outside the tsconfig, sends the events: no dispatch site (ADR 0361).
 
 A case is a directory with an `App.tsx` and no `tsconfig.json`; all exported components render and all elements receive events. Optional `oracle.json`: `note`, `steps`, `programBoundary` (`open` or `closed`), `install` (corpus app with the same Solid version), `open` (known unproven clean sites `{ code, site, reason }`, or `{ rule, site, reason }` for an observation; a site that stops firing is `stale-open`), and `behaviour` (below).
 
@@ -58,9 +58,9 @@ A static violation no dev diagnostic covers is classified by the observations of
 | `oracle-behaviour-components-return-once` | SC1004 | text: the early return stays on screen after the write (`logged out`) | `covered-violation` (dev `STRICT_READ_UNTRACKED` covers the finding); behaviour rows confirmed and clean |
 | `oracle-frame-covered-sc1004` | SC1004 | none: the frame pin (below) | `covered-violation`, empty `staticOnly` |
 
-The `StaticText` site (static `textContent` beside children) has no write to show its loss: its children win (checked in Chrome on rc.13), and a reflected observation there would read as a false candidate, so it stays static-only.
+The `StaticText` site (static `textContent` beside children) has no write to show its loss (its children win, Chrome rc.13), so it stays static-only.
 
-The `oracle-behaviour-primitive-in-directive` control's `missing-owner` finding (`App.tsx:18`) was refuted by observation: the runtime disposes the effect when its `Show` branch hides. ADR 0345 removed it: the control is `behaviour-clean` and no row is refuted.
+The `oracle-behaviour-primitive-in-directive` control's `missing-owner` finding (`App.tsx:18`) was refuted (the runtime disposes the effect when its `Show` branch hides) and removed by ADR 0345: the control is `behaviour-clean`.
 
 `NO_OWNER_EFFECT` is also claimed by `primitive-in-directive-application`, whose page names that warning.
 

@@ -263,3 +263,90 @@ fn handler_member_and_spread_edits_match_cold() {
     drop(session);
     fs::remove_dir_all(directory).unwrap();
 }
+
+/// ADR 0361: a supported dispatch withholds the ownerless proof only from the
+/// handlers it delivers to, and a remote handler's finding follows the
+/// dispatching file's edits. Retained and fresh builds agree on each.
+#[test]
+fn supported_dispatch_edits_match_cold() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    const LIB: &str = "import { onCleanup } from 'solid-js'; export const handlers = { onScroll: () => { onCleanup(() => {}); } };";
+    const NONE: &str =
+        "import { handlers } from './lib'; export function App() { return <div {...handlers} />; }";
+    const DELIVERED: &str = "import { handlers } from './lib'; export function App() { const el = (<div {...handlers} />) as HTMLDivElement; el.dispatchEvent(new Event('scroll')); return <p />; }";
+    const ELSEWHERE: &str = "import { handlers } from './lib'; export function App() { const el = (<div />) as HTMLDivElement; el.dispatchEvent(new Event('scroll')); return <p {...handlers} />; }";
+    const BUBBLES: &str = "import { handlers } from './lib'; export function App() { const el = (<div />) as HTMLDivElement; el.dispatchEvent(new Event('scroll', { bubbles: true })); return <p {...handlers} />; }";
+    const DELEGATED: &str = "import { handlers } from './lib'; export function App() { const el = (<div />) as HTMLDivElement; el.dispatchEvent(new Event('click')); return <p {...handlers} />; }";
+    const ESCAPES: &str = "import { handlers } from './lib'; export function App() { const el = (<div />) as HTMLDivElement; el.dispatchEvent(new Event('scroll')); return <p {...handlers}>{el}</p>; }";
+    const SHADOWED: &str = "import { handlers } from './lib'; class Event { constructor(readonly type: string) {} } export function App() { const el = (<div />) as HTMLDivElement; el.dispatchEvent(new Event('scroll') as unknown as globalThis.Event); return <p {...handlers} />; }";
+    let (directory, paths) = project(
+        "supported-dispatch",
+        &[("App.tsx", DELIVERED), ("lib.ts", LIB)],
+    );
+    let tsconfig = directory
+        .join("tsconfig.json")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let selected = dialect::default_dialect();
+    let typescript = TypeFactsSession::open(&typefacts, &tsconfig, &[]).unwrap();
+    let (mut session, _) =
+        NativeIncrementalSession::open_pipelined(selected, tsconfig, typescript).unwrap();
+    let mut closed_builder = solid_reactive_ir::IncrementalBuilder::default();
+    let mut open_builder = solid_reactive_ir::IncrementalBuilder::default();
+    let mut check = |generation: &str, facts: &solid_facts::ProjectFacts, violation: bool| {
+        for (closed, builder) in [(true, &mut closed_builder), (false, &mut open_builder)] {
+            let retained = warm(builder, facts, selected.vocabulary, closed);
+            let fresh = cold(facts, selected.vocabulary, closed);
+            assert_eq!(retained, fresh, "{generation} closed={closed}");
+            let findings = selected.solve(&retained);
+            assert_eq!(
+                findings,
+                selected.solve(&fresh),
+                "{generation} closed={closed}: findings"
+            );
+            let proven = findings.iter().any(|finding| {
+                finding.id == "SC4001"
+                    && finding.kind == "violation"
+                    && finding.primary_location.path.as_ref() == paths["lib.ts"]
+            });
+            assert_eq!(
+                proven, violation,
+                "{generation} closed={closed}: {findings:?}"
+            );
+        }
+    };
+    check("delivered", &session.analyze().unwrap(), false);
+    for (version, (name, source, violation)) in [
+        ("no dispatch", NONE, true),
+        ("delivered", DELIVERED, false),
+        ("another element", ELSEWHERE, true),
+        ("bubbling", BUBBLES, false),
+        ("another element", ELSEWHERE, true),
+        ("delegated type", DELEGATED, false),
+        ("escaping receiver", ESCAPES, false),
+        ("shadowed constructor", SHADOWED, false),
+        ("another element", ELSEWHERE, true),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let facts = session
+            .edit(
+                vec![SourceChange {
+                    path: paths["App.tsx"].clone(),
+                    version: version as u64 + 1,
+                    source: Some(source.into()),
+                    compiler_options: CompilerOptions::default(),
+                }],
+                None,
+            )
+            .unwrap();
+        check(name, &facts, violation);
+    }
+    drop(session);
+    fs::remove_dir_all(directory).unwrap();
+}

@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "jsx": "preserve",
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true
+  },
+  "files": [
+    "App.tsx",
+    "elements.d.ts",
+    "../../solid-js.d.ts"
+  ]
+}

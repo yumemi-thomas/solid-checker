@@ -1,0 +1,3 @@
+{
+  "note": "Precision probe 2026-10-23 (ADR 0361): a dispatch on window or document reaches no element handler (its event path holds no element), so it withholds no proof. The click handler runs from the harness with no owner and its onCleanup is a proven SC4001 violation (NO_OWNER_CLEANUP). The window listener runs on the component body's stack under its owner: the dev build warns nothing, and the checker reports nothing for it (a callback registered with addEventListener stays conditional). Counterpart: precision-dispatch-unrelated-handler, a dispatch on a local element."
+}

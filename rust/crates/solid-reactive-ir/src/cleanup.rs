@@ -1025,7 +1025,7 @@ const SCRIPT_FREE_DOM_MEMBERS: &[&str] = &[
 
 /// Whether `resolved` is a `lib.dom` global (`dispatchEvent(…)`,
 /// `focus()`) that dispatches an event synchronously (ADR 0329).
-fn dispatches_dom_event(resolved: &typefacts::ResolvedCall) -> bool {
+pub(crate) fn dispatches_dom_event(resolved: &typefacts::ResolvedCall) -> bool {
     resolved.declaration.as_ref().is_some_and(|declaration| {
         std::path::Path::new(declaration.source_file.as_ref())
             .file_name()
@@ -1051,25 +1051,53 @@ fn synchronously_dispatching_dom_member(qualified_name: &str) -> bool {
     let (owner, member) = qualified_name
         .rsplit_once('.')
         .unwrap_or(("", qualified_name));
-    matches!(
-        member,
-        "focus" | "blur" | "click" | "dispatchEvent" | "checkValidity" | "reportValidity"
-    ) || matches!(
-        (owner, member),
-        ("HTMLFormElement", "reset" | "requestSubmit")
-            | (
-                "HTMLElement",
-                "showPopover" | "hidePopover" | "togglePopover"
-            )
-            | (
-                "HTMLDialogElement",
-                "show" | "showModal" | "close" | "requestClose"
-            )
-            | ("AbortController", "abort")
-            | ("XMLHttpRequest", "open" | "abort" | "send")
-            | ("FileReader", "abort")
-            | ("Document", "execCommand")
-    )
+    DISPATCHING_DOM_MEMBER_NAMES.contains(&member)
+        || DISPATCHING_DOM_OWNED_MEMBERS.contains(&(owner, member))
+}
+
+/// ADR 0329: members that dispatch on any `lib.dom` interface declaring them.
+const DISPATCHING_DOM_MEMBER_NAMES: &[&str] = &[
+    "focus",
+    "blur",
+    "click",
+    "dispatchEvent",
+    "checkValidity",
+    "reportValidity",
+];
+
+/// ADR 0329: members whose name other `lib.dom` members share, by exact owner.
+const DISPATCHING_DOM_OWNED_MEMBERS: &[(&str, &str)] = &[
+    ("HTMLFormElement", "reset"),
+    ("HTMLFormElement", "requestSubmit"),
+    ("HTMLElement", "showPopover"),
+    ("HTMLElement", "hidePopover"),
+    ("HTMLElement", "togglePopover"),
+    ("HTMLDialogElement", "show"),
+    ("HTMLDialogElement", "showModal"),
+    ("HTMLDialogElement", "close"),
+    ("HTMLDialogElement", "requestClose"),
+    ("AbortController", "abort"),
+    ("XMLHttpRequest", "open"),
+    ("XMLHttpRequest", "abort"),
+    ("XMLHttpRequest", "send"),
+    ("FileReader", "abort"),
+    ("Document", "execCommand"),
+];
+
+/// Whether `name` is a member that dispatches on every `lib.dom` interface
+/// declaring it, so the spelling alone says a `lib.dom` declaration of it does.
+pub fn dispatching_dom_member_on_any_interface(name: &str) -> bool {
+    DISPATCHING_DOM_MEMBER_NAMES.contains(&name)
+}
+
+/// Whether a member written `name` may be one of ADR 0329's synchronously
+/// dispatching `lib.dom` members: a spelling, for a reference whose owner is
+/// not read (a superset of the exact declarations).
+pub fn dispatching_dom_member_spelling(name: &str) -> bool {
+    DISPATCHING_DOM_MEMBER_NAMES.contains(&name)
+        || DISPATCHING_DOM_OWNED_MEMBERS
+            .iter()
+            .any(|(_, member)| *member == name)
 }
 
 /// Whether the exact `lib.dom` declaration `qualified_name` names a member of
@@ -1876,6 +1904,36 @@ mod script_free_dom_tests {
             "a.b.addEventListener",
         ] {
             assert!(!script_free_dom_member(refused), "{refused}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod dispatching_member_tests {
+    use super::{
+        DISPATCHING_DOM_MEMBER_NAMES, DISPATCHING_DOM_OWNED_MEMBERS,
+        dispatching_dom_member_on_any_interface, dispatching_dom_member_spelling,
+        synchronously_dispatching_dom_member,
+    };
+
+    /// The spellings are derived from the exact table, never a second list.
+    #[test]
+    fn the_spelled_members_are_exactly_the_audited_ones() {
+        for name in DISPATCHING_DOM_MEMBER_NAMES {
+            assert!(synchronously_dispatching_dom_member(&format!(
+                "Anything.{name}"
+            )));
+            assert!(dispatching_dom_member_spelling(name));
+            assert!(dispatching_dom_member_on_any_interface(name));
+        }
+        for (owner, member) in DISPATCHING_DOM_OWNED_MEMBERS {
+            assert!(synchronously_dispatching_dom_member(&format!(
+                "{owner}.{member}"
+            )));
+            assert!(!synchronously_dispatching_dom_member(&format!(
+                "Other.{member}"
+            )));
+            assert!(dispatching_dom_member_spelling(member));
         }
     }
 }

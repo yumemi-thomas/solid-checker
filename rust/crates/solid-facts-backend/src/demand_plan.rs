@@ -761,6 +761,16 @@ fn collect_member_spans(file: &FileFacts, spans: &mut DemandSpans) {
         if file.ast.calls.iter().any(|call| call.span == member.object) {
             add_symbol(member.property, false);
         }
+        // ADR 0361: a reference to a synchronously dispatching `lib.dom` member
+        // that is not a call (`Reflect.apply(EventTarget.prototype.dispatchEvent,
+        // …)`, `el.dispatchEvent.call(…)`) is a dispatch no site models; only
+        // the property's declaration says whether it is one.
+        if file
+            .source_text(member.property)
+            .is_some_and(solid_reactive_ir::dispatching_dom_member_on_any_interface)
+        {
+            add_symbol(member.property, false);
+        }
     }
     for spread in &file.ast.spreads {
         add_symbol(spread.argument, false);
