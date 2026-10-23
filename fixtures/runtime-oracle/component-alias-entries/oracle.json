@@ -1,0 +1,3 @@
+{
+  "note": "ADR 0331: a function called in tracked JSX and rendered through a const alias runs its body as a component on the render entry (STRICT_READ_UNTRACKED at Plain's read); an alias only called in tracked JSX stays clean"
+}

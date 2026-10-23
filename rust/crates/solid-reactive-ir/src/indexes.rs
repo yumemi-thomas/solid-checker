@@ -31,8 +31,6 @@ mod member_values;
 mod primitive_proof;
 pub(crate) use intrinsics::mentions_word;
 
-/// Functions by `(path, span)`: the proven components, then the escaped ones
-/// among them ([`SemanticLookup::escaped_component_functions`]).
 /// What every reflective definer spelling in the project says about the key
 /// it defines: `any` when some spelling may define any name, otherwise only
 /// the names in `sole_keys`.
@@ -53,7 +51,15 @@ pub(super) type ReturnedInvocationSites = std::sync::Mutex<
     HashMap<(String, Span), std::sync::Arc<Vec<crate::owners::ReturnedCallbackInvocationSite>>>,
 >;
 
-pub(super) type ComponentSets<'a> = (HashSet<(&'a str, Span)>, HashSet<(&'a str, Span)>);
+/// Functions by `(path, span)`: the proven components, the escaped ones among
+/// them ([`SemanticLookup::escaped_component_functions`]), and the called
+/// functions that may also be rendered
+/// ([`SemanticLookup::possible_component_functions`]).
+pub(super) type ComponentSets<'a> = (
+    HashSet<(&'a str, Span)>,
+    HashSet<(&'a str, Span)>,
+    HashSet<(&'a str, Span)>,
+);
 
 /// Whether the reference at `span` is the declaration that introduces a
 /// binding or the import/export surface that forwards it. Neither is a runtime
@@ -1304,6 +1310,12 @@ impl<'a> SemanticLookup<'a> {
                 .copied()
                 .collect::<Vec<_>>();
             escaped_keys.sort_unstable();
+            let mut possible_keys = self
+                .possible_component_functions()
+                .iter()
+                .copied()
+                .collect::<Vec<_>>();
+            possible_keys.sort_unstable();
             let mut hasher = Sha256::new();
             hasher.update(b"components\0");
             // ADR 0282: a mutation in another file can withdraw the tuple
@@ -1505,6 +1517,13 @@ impl<'a> SemanticLookup<'a> {
             }
             hasher.update(b"escaped-components\0");
             for (path, span) in escaped_keys {
+                hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
+                hasher.update(path.as_bytes());
+                hasher.update(span.start.to_le_bytes());
+                hasher.update(span.end.to_le_bytes());
+            }
+            hasher.update(b"possible-components\0");
+            for (path, span) in possible_keys {
                 hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
                 hasher.update(path.as_bytes());
                 hasher.update(span.start.to_le_bytes());

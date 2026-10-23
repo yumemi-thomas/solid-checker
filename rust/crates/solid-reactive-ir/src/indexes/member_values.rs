@@ -784,7 +784,7 @@ impl<'a> SemanticLookup<'a> {
         Some(found)
     }
 
-    fn binding_for_symbol(
+    pub(super) fn binding_for_symbol(
         &self,
         symbol: &str,
     ) -> Option<(&'a FileFacts, &'a solid_facts::ast::BindingFact)> {
