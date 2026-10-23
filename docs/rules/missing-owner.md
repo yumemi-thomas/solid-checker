@@ -28,8 +28,16 @@ scope, and detached callbacks. Exported functions with unseen callers, nullable
 `runWithOwner` values, unresolved component identity, and unresolved runtime
 allocation paths are uncertifiable rather than proven violations.
 
-The apply callback of `createEffect(compute, apply)` is always a detached
-callback: the runtime queues it, and it runs from the flush with no owner. The
+The apply callback of `createEffect(compute, apply)` is a detached callback:
+the runtime queues it, and it runs from the flush, which does not reset the
+ambient owner, so it has no owner **unless the program may call `flush` from an
+owned scope** (a `flush()`, `render()`, `hydrate()` or `action(...)` anywhere
+but a module-level statement or an apply, or a call spelled `flush` with no
+exact callee). Then the queued apply runs under that caller's owner, and the
+apply is owned on some runs: an operation in it is uncertifiable, not a
+violation, even inside a `createRoot` region (ADR 0362, the same program-wide
+check as [primitive-in-effect-callback](primitive-in-effect-callback.md#when-the-program-may-flush-from-an-owned-scope);
+the message is the first-run-only one, `later_run_unowned`). The
 apply callback of `createRenderEffect(compute, apply)` is not. Its first run
 happens before `createRenderEffect` returns, under the caller's owner, and only
 its later runs come from the flush with no owner. An operation in that callback
@@ -45,11 +53,17 @@ callback written inside it that runs with no owner on every run -- a
 `createEffect` apply, an ownerless event handler, a `createReaction` invalidation, a
 `runWithOwner(null, fn)` callback -- is not owned by it, so an operation there
 inside a `createRoot` callback is the same proven violation it is inside a
-component, and an `onSettled` there is out-of-band. A root created inside such
-a callback, or a compiled JSX child, which the render effect the compiler
-generates for it owns, answers for what it contains. On rc.17 dev a root,
-memo or effect created directly in an effect apply throws
-`PRIMITIVE_IN_EFFECT_CALLBACK` before it runs; no rule claims that throw yet.
+component, and an `onSettled` there is out-of-band. A compiled JSX
+child, which the render effect the compiler generates for it owns, answers for
+what it contains. A root, memo or effect created directly in an effect apply
+does not: on rc.13 the root runs and nothing owns it, and on rc.17 dev the
+create call throws `PRIMITIVE_IN_EFFECT_CALLBACK` before it runs (the
+production build leaks it), unless a flush from an owned scope drains the
+apply under that owner (above). The effect constructors are this rule's claim
+(`NO_OWNER_EFFECT`; on rc.17 dev the same effect also throws, which its message
+does not say). A root, memo and deferred memo there are
+[primitive-in-effect-callback](primitive-in-effect-callback.md)'s (SC4005,
+rc.17 only), so the two rules never report one call (ADR 0362).
 
 A callback handed directly to a host scheduler that runs it from a task or
 microtask queue -- `setTimeout`, `setInterval`, `queueMicrotask`,

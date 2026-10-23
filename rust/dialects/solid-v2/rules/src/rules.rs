@@ -32,6 +32,7 @@ pub enum Rule {
     LeafOwnerForbiddenCall,
     MissingOwner,
     MissingContextProvider,
+    PrimitiveInEffectCallback,
     PendingAsyncUnsuspendableRead,
     AsyncOutsideLoadingBoundary,
     PrimitiveInDirectiveApplication,
@@ -76,7 +77,7 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 34] = [
+    pub const ALL: [Self; 35] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::UncalledAccessor,
@@ -96,6 +97,7 @@ impl Rule {
         Self::LeafOwnerForbiddenCall,
         Self::MissingOwner,
         Self::MissingContextProvider,
+        Self::PrimitiveInEffectCallback,
         Self::PendingAsyncUnsuspendableRead,
         Self::AsyncOutsideLoadingBoundary,
         Self::PrimitiveInDirectiveApplication,
@@ -181,6 +183,17 @@ impl Rule {
             // throws `ContextNotFoundError` in the dev and production builds, a
             // crash at the read, so it is an error like SC2006's dev throw.
             Self::MissingContextProvider => ("SC4002", "missing-context-provider", "error", false),
+            // ADR 0362: on rc.17 a root, memo or deferred memo created with no
+            // owner on a createEffect apply's stack throws
+            // `PRIMITIVE_IN_EFFECT_CALLBACK` in dev
+            // (`@solidjs/signals@2.0.0-rc.17` `dist/dev-shared.js:3947-3957`)
+            // and is a computation that belongs to nobody in production: an
+            // error, the family's dev-throw severity. SC4003 and SC4004 name
+            // retired variants of SC4001 in the oracle's records, so the next
+            // code in the family that no record uses is SC4005.
+            Self::PrimitiveInEffectCallback => {
+                ("SC4005", "primitive-in-effect-callback", "error", false)
+            }
             // Leaf-owner reads override this family default to warning so the
             // merged rule preserves the runtime-mirroring severity split.
             Self::PendingAsyncUnsuspendableRead => {
@@ -342,6 +355,7 @@ mod tests {
             ("SC2005", "until-in-tracked-scope"),
             ("SC2006", "flush-in-action"),
             ("SC2008", "flush-in-effect-callback"),
+            ("SC4005", "primitive-in-effect-callback"),
             ("SC2007", "static-dynamic-async-source"),
             ("SC7002", "sync-computation-received-async"),
             ("SC7005", "http-response-after-flush"),
@@ -407,6 +421,10 @@ mod tests {
         // flush() in an effect's apply callback is a no-op the dev build warns
         // about (FLUSH_IN_EFFECT_CALLBACK, severity "warn", rc.13 signals).
         assert_eq!(Rule::FlushInEffectCallback.metadata().severity, "warning");
+        // A root, memo or deferred memo created with no owner in an effect's
+        // apply callback throws PRIMITIVE_IN_EFFECT_CALLBACK (rc.17 signals
+        // dev bundle, dist/dev-shared.js:3947-3957).
+        assert_eq!(Rule::PrimitiveInEffectCallback.metadata().severity, "error");
         // A promise-valued static dynamic() source is a dev *throw*
         // ("dynamic(): a static source must resolve synchronously, not to a
         // promise", rc.9 web.dev.js and server.dev.js).

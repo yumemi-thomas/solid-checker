@@ -1,0 +1,3 @@
+# primitive-in-effect-callback-rc13
+
+The rc.13 twin of `primitive-in-effect-callback`: the same source on `2.0.0-rc.13` stubs (`createDeferred` aside, which rc.13 does not export). `@solidjs/signals@2.0.0-rc.13` has no `assertNotInEffectCallback` and no `PRIMITIVE_IN_EFFECT_CALLBACK` code (0 hits in `dist/`), so a root or memo created in an effect apply runs there and SC4005 is silent everywhere: the dialect answers `throws_inside_effect_phase` only for the rc.17 `solid-js` and `@solidjs/signals` pair. SC4001's findings (`onCleanup` and the effect constructors in an apply) are unchanged; the project is not the audited triple, so SC9014 accompanies them.

@@ -1,0 +1,3 @@
+{
+  "note": "rc.17 PRIMITIVE_IN_EFFECT_CALLBACK (SC4005): a root, memo and deferred memo created with no owner on a createEffect apply's stack throw in dev (directly and through a project helper); control: the same memo under runWithOwner(owner, …) with the component's owner runs"
+}

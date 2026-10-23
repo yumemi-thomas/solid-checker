@@ -1,0 +1,29 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC4005",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/variants/flush-in-root-body/App.ts",
+      "start": 879,
+      "end": 889,
+      "fixes": 0,
+      "message": "createMemo() is called directly in the apply callback of a createEffect; it runs with no owner inside the effect phase only if the queue is drained from a flush with no owner, and the program also calls flush(), render(), hydrate() or an action from code that may run under an owner, which would run the apply under that owner, so whether the computation belongs to nobody cannot be proven either way",
+      "hint": "Create it in the effect's compute function or in the component body, or parent it explicitly: capture the owner (`const owner = getOwner()`) outside the effect and create it inside `runWithOwner(owner, () => …)`."
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/primitive-in-effect-callback/variants/flush-in-root-body/App.ts",
+      "start": 904,
+      "end": 913,
+      "fixes": 0,
+      "message": "onCleanup is called without a reactive owner; no scope's disposal can trigger it, so this cleanup function will never run; the enclosing callback is owned only on its first run and runs with no owner on any later run, so solid-checker cannot prove every execution has an owner",
+      "hint": "Call onCleanup inside a component or computation, or create the surrounding scope with createRoot so disposal exists. For one-time setup with teardown, use onSettled with a returned cleanup in a component. Create owned work in the effect's compute, or keep the apply callback free of primitives and cleanups that a later run would leave detached."
+    }
+  ]
+}

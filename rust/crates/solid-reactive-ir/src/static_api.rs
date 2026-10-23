@@ -65,7 +65,61 @@ pub(super) struct StaticApiContext<'a> {
     pub(super) package_instances: &'a crate::PackageInstanceEvidence,
 }
 
+/// Where a call sits relative to the apply callback that runs it, for a
+/// message: project helpers it is reached through, and inline callbacks
+/// (`forEach`, `untrack`, an immediately invoked function) it is written in.
+fn effect_phase_position(origin: &crate::effect_phase::EffectPhaseOrigin) -> String {
+    let inline = match origin.inline_layers {
+        0 => String::new(),
+        1 => ", through an inline callback".to_owned(),
+        layers => format!(", through {layers} nested inline callbacks"),
+    };
+    match (origin.helper_calls, origin.inline_layers) {
+        (0, 0) => "directly in the apply callback of a createEffect".to_owned(),
+        (0, 1) => {
+            "in an inline callback written in the apply callback of a createEffect".to_owned()
+        }
+        (0, layers) => format!(
+            "in {layers} nested inline callbacks written in the apply callback of a createEffect"
+        ),
+        (1, _) => format!(
+            "in a function that the apply callback of a createEffect in {} calls{inline}",
+            origin.path
+        ),
+        (calls, _) => format!(
+            "in a function reached through {calls} calls from the apply callback of a createEffect in {}{inline}",
+            origin.path
+        ),
+    }
+}
+
 impl StaticApiContext<'_> {
+    /// The effect call whose apply provably runs `call` on its stack, when
+    /// the call's own declaration is in an installed package (the queue and
+    /// the owner it needs are that package's, `effect_phase`).
+    fn effect_phase_origin(
+        &self,
+        file: &FileFacts,
+        call: &solid_facts::ast::CallFact,
+        stack: crate::effect_phase::Stack,
+    ) -> Option<crate::effect_phase::EffectPhaseOrigin> {
+        let root = self
+            .lookup
+            .resolved_callee_call(file, call.callee)
+            .and_then(|resolved| resolved.declaration.as_ref())
+            .and_then(|declaration| {
+                crate::effect_phase::package_root(declaration.location.path.as_ref())
+            })?;
+        crate::effect_phase::effect_phase_origin(
+            file,
+            call.span,
+            &root,
+            self.package_instances,
+            self.lookup,
+            stack,
+        )
+    }
+
     pub(super) fn check_file(&self, file: &FileFacts) -> StaticDirectiveFileResult {
         let mut result = StaticDirectiveFileResult {
             defects: Vec::new(),
@@ -323,32 +377,10 @@ impl StaticApiContext<'_> {
             if let Some(kind) = kind
                 && self.client_build
                 && dialect.warns_inside_effect_phase(kind)
-                && let Some(root) = self
-                    .lookup
-                    .resolved_callee_call(file, call.callee)
-                    .and_then(|resolved| resolved.declaration.as_ref())
-                    .and_then(|declaration| {
-                        crate::effect_phase::package_root(declaration.location.path.as_ref())
-                    })
-                && let Some(origin) = crate::effect_phase::effect_phase_origin(
-                    file,
-                    call.span,
-                    &root,
-                    self.package_instances,
-                    self.lookup,
-                )
+                && let Some(origin) =
+                    self.effect_phase_origin(file, call, crate::effect_phase::Stack::Flush)
             {
-                let reached = match origin.helper_calls {
-                    0 => "directly in the apply callback of a createEffect".to_owned(),
-                    1 => format!(
-                        "in a function that the apply callback of a createEffect in {} calls",
-                        origin.path
-                    ),
-                    calls => format!(
-                        "in a function reached through {calls} calls from the apply callback of a createEffect in {}",
-                        origin.path
-                    ),
-                };
+                let reached = effect_phase_position(&origin);
                 result.violations.push(StaticViolation {
                     id: "SC2008".into(),
                     rule: "flush-in-effect-callback".into(),
@@ -360,6 +392,50 @@ impl StaticApiContext<'_> {
                     analysis_context: String::new(),
                     fixes: vec![],
                     uncertain: false,
+                });
+            }
+            // SC4005: a root, memo or deferred memo created with no owner on
+            // a user effect's apply stack. The apply runs from the flush with
+            // no ambient owner, so whenever the call runs it creates a
+            // computation that belongs to nobody: rc.17's dev build throws
+            // `PRIMITIVE_IN_EFFECT_CALLBACK` before it is created
+            // (`assertNotInEffectCallback`, `dist/dev-shared.js:3947-3957`),
+            // except after a nested synchronous render effect lowered the
+            // marker (`dist/dev.js:2024`), and the production build creates
+            // it and never disposes it. The effect constructors are SC4001's
+            // (`NO_OWNER_EFFECT`), so the dialect answers for none of them.
+            // The climb stops at `runWithOwner` and `createRoot`
+            // (`Stack::Ownerless`); the position proof is `effect_phase`'s.
+            if let Some(kind) = kind
+                && self.client_build
+                && dialect.throws_inside_effect_phase(kind)
+                && let Some(origin) =
+                    self.effect_phase_origin(file, call, crate::effect_phase::Stack::Ownerless)
+            {
+                let reached = effect_phase_position(&origin);
+                // ADR 0362: a `flush()` the program may call from an owned
+                // scope runs the queued apply under that owner, where the
+                // primitive is created owned and nothing throws. The call is
+                // then an obligation, not a violation.
+                let flush_owned = self.lookup.flush_may_run_applies_owned();
+                let message = if flush_owned {
+                    format!(
+                        "{primitive}() is called {reached}; it runs with no owner inside the effect phase only if the queue is drained from a flush with no owner, and the program also calls flush(), render(), hydrate() or an action from code that may run under an owner, which would run the apply under that owner, so whether the computation belongs to nobody cannot be proven either way"
+                    )
+                } else {
+                    format!(
+                        "{primitive}() is called {reached}; whenever it runs, it runs with no owner inside the effect phase, where the installed @solidjs/signals throws PRIMITIVE_IN_EFFECT_CALLBACK in dev before the computation is created, and the production build creates one that belongs to nobody and is never disposed"
+                    )
+                };
+                result.violations.push(StaticViolation {
+                    id: "SC4005".into(),
+                    rule: "primitive-in-effect-callback".into(),
+                    message,
+                    hint: "Create it in the effect's compute function or in the component body, or parent it explicitly: capture the owner (`const owner = getOwner()`) outside the effect and create it inside `runWithOwner(owner, () => …)`.".into(),
+                    location: location(file.path.shared(), call.callee),
+                    analysis_context: String::new(),
+                    fixes: vec![],
+                    uncertain: flush_owned,
                 });
             }
             let Some(kind @ (Primitive::Refresh | Primitive::Affects)) = kind else {

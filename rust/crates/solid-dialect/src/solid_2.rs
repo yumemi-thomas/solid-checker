@@ -162,6 +162,16 @@ pub struct Solid2 {
     /// `solid-js`'s client `createDeferred` is signals', and the hydration drain
     /// `onHydrationEnd` waits for is reached from web's `hydrate`.
     rc17_callback_exports: bool,
+    /// ADR 0362, from `solid-js` and `@solidjs/signals` together: whether a
+    /// root, memo or deferred memo created with no owner from an effect phase
+    /// throws `PRIMITIVE_IN_EFFECT_CALLBACK` in dev
+    /// ([`Dialect::throws_inside_effect_phase`]). rc.17's `createOwner` and
+    /// `setupComputedNode` both call `assertNotInEffectCallback()`
+    /// (`@solidjs/signals` `dist/dev-shared.js:1496`, `:4927`); rc.13 and the
+    /// earlier read releases have no such code. `true` only when `solid-js`
+    /// and `@solidjs/signals` both resolve to rc.17, whose bytes were read;
+    /// every other release, unread and unresolved included, keeps `false`.
+    primitive_in_effect_callback: bool,
 }
 
 impl Solid2 {
@@ -2370,6 +2380,50 @@ impl Dialect for Solid2 {
     /// rc.0 has neither (`Solid2::flush_in_effect_callback`).
     fn warns_inside_effect_phase(&self, primitive: Primitive) -> bool {
         self.flush_in_effect_callback && primitive == Primitive::Flush
+    }
+
+    /// `createRoot` reaches `createOwner` (`@solidjs/signals@2.0.0-rc.17`
+    /// `dist/dev-shared.js:1537-1538`, assertion at `:1496`); `createMemo`
+    /// and `createDeferred` reach `computed` (`dist/dev.js:2433-2434`,
+    /// `:8897-8898`), whose `setupComputedNode` asserts at `dist/dev-shared.js:4927`
+    /// before the node is linked or run, `lazy` or not. `solid-js`'s client
+    /// wrappers (hydration included) end in those same functions
+    /// (`dist/solid.dev.js:752-809`, `:884-885`, `:962-988`). The effect
+    /// constructors reach the same assertion but are the owner-requirement
+    /// `Effect` role, so SC4001 claims them and this does not.
+    fn throws_inside_effect_phase(&self, primitive: Primitive) -> bool {
+        self.primitive_in_effect_callback
+            && matches!(
+                primitive,
+                Primitive::CreateRoot | Primitive::CreateMemo | Primitive::CreateDeferred
+            )
+    }
+
+    /// `flush` itself; web's `render`, which ends `createRoot(...)` with
+    /// `flush()` on the caller's stack (`@solidjs/web@2.0.0-rc.17`
+    /// `dist/web.dev.js:567`, `dist/web.js:417`; rc.13 `dist/web.dev.js:504`,
+    /// `dist/web.js:418`), and `hydrate`, which reaches that `render` on its
+    /// synchronous paths (rc.17 `dist/web.dev.js:1644`, `:1732`; the other
+    /// paths run it later from a promise or listener, which a withholding may
+    /// include); and `action`, whose invocation runs `inTransaction(...)`, an
+    /// `if (actionDepth === 0) flush()` after the slice
+    /// (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:1462`), from the invoker's
+    /// stack for a synchronous `yield`, and whose invocation cannot be placed
+    /// from the `action(...)` call that creates it. Every release answers the
+    /// same: rc.13 and rc.17 were read, any other release is conservatively
+    /// taken to reach `flush` too.
+    fn may_flush_on_callers_stack(&self, primitive: Primitive) -> bool {
+        matches!(
+            primitive,
+            Primitive::Flush | Primitive::Render | Primitive::Hydrate | Primitive::Action
+        )
+    }
+
+    /// `flush`, `render` and `hydrate` flush inside the call; `action(...)`
+    /// only builds the wrapper, whose invocations flush
+    /// (`@solidjs/signals@2.0.0-rc.17` `dist/dev.js:1535-1545`, `:1455-1465`).
+    fn flush_runs_during_call(&self, primitive: Primitive) -> bool {
+        primitive != Primitive::Action
     }
 
     /// `createSignal` and `createOptimistic` both return

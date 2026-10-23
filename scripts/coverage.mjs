@@ -138,6 +138,11 @@ if (stubProblems.length > 0) {
  * `rust/crates/solid-reactive-ir/src/findings.rs` instead.
  */
 const KEEPS_WORDING = new Set([
+  // SC4005's message says whether the call is directly in the apply, in an
+  // inline callback of it, or in a helper, and what a program-wide flush
+  // veto withholds (ADR 0362).
+  "reactive-ir/primitive-in-effect-callback-inline-callback-message",
+  "reactive-ir/primitive-in-effect-callback-flush-in-root-body",
   "reactive-ir/dialect-solid-2",
   "reactive-ir/jsx-census-gap-solid-2",
   "reactive-ir/jsx-void-child-divergence-solid-2",

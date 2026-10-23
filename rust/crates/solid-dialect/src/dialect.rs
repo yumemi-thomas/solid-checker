@@ -998,6 +998,47 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether creating a `primitive` with **no ambient owner** while an effect
+    /// phase is running ([`Dialect::callback_runs_in_effect_phase`]) is the
+    /// release's `PRIMITIVE_IN_EFFECT_CALLBACK` throw (ADR 0362).
+    ///
+    /// A release's answer: `@solidjs/signals@2.0.0-rc.17`'s `createOwner` and
+    /// `setupComputedNode` both open with `assertNotInEffectCallback()`, which
+    /// throws while the effect-callback marker is up and the context is null.
+    /// Only the primitives that reach one of the two and are not an
+    /// owner-requirement role ([`Dialect::owner_requirement_role`] already
+    /// claims the effect constructors) answer `true`. An earlier release has no
+    /// such code, and an unread or unresolved one states nothing. The default
+    /// is `false`.
+    fn throws_inside_effect_phase(&self, primitive: Primitive) -> bool {
+        let _ = primitive;
+        false
+    }
+
+    /// Whether a call of `primitive` may run `flush` synchronously on its
+    /// caller's stack (ADR 0362), so the effect applies it drains run under the
+    /// **caller's** owner, not none.
+    ///
+    /// An answer of `true` is a withholding, never a claim: the queue draining
+    /// does not reset the ambient owner, so a call from an owned scope (a
+    /// `createRoot` body, a component body) runs the queued applies owned.
+    /// `false` must mean the primitive is proven not to reach `flush` on the
+    /// caller's stack. The default is the dialect's `flush` alone.
+    fn may_flush_on_callers_stack(&self, primitive: Primitive) -> bool {
+        primitive == Primitive::Flush
+    }
+
+    /// Whether the `flush` a `primitive` that [`Dialect::may_flush_on_callers_stack`]
+    /// reaches happens **during the call itself** (`flush()`, `render(...)`),
+    /// so the call's own position says whose owner is current. `false` where
+    /// the flush belongs to a later invocation of what the call returns (an
+    /// action wrapper), which the call's position does not place (ADR 0362).
+    /// The default is `true`.
+    fn flush_runs_during_call(&self, primitive: Primitive) -> bool {
+        let _ = primitive;
+        true
+    }
+
     /// Whether a call of `primitive` returns a **tuple** whose first slot
     /// carries the reactive value.
     ///

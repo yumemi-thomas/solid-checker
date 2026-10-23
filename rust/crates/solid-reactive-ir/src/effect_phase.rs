@@ -32,6 +32,14 @@
 //! project barrels at most): a call imported through another package's
 //! `exports` conditions is not claimed.
 //!
+//! A second claim reads the same stack with a stricter climb (ADR 0362): code
+//! that creates a root, memo or deferred memo needs the *ambient owner* to be
+//! none, so [`Stack::Ownerless`] climbs only the layers that leave it none (an
+//! `untrack` callback, an inline standard-library callback, an immediately
+//! invoked function, an exactly called project function). A `createRoot` or
+//! `runWithOwner` callback is not climbed: the first throws before its
+//! callback runs, the second installs the owner it is handed.
+//!
 //! Anything else answers `None`: an unresolved callee, a callback handed to a
 //! timer, listener or promise, a generator (calling one runs none of its body),
 //! a method, a parameter initializer, an instance field initializer, a call
@@ -40,6 +48,7 @@
 
 use crate::{HashMap, HashSet};
 
+use solid_dialect::Primitive;
 use solid_facts::FileFacts;
 use solid_facts::ast::{ArgumentValueKind, FunctionFact};
 use solid_facts::core::Span;
@@ -74,6 +83,58 @@ pub(crate) struct EffectPhaseOrigin {
     pub(crate) path: String,
     /// Project functions the walk entered through a call, outermost last.
     pub(crate) helper_calls: usize,
+    /// Inline callbacks and immediately invoked functions between the span
+    /// and the apply (or the helper it ends in): `[1].forEach(() => …)`,
+    /// `untrack(() => …)`, `(() => …)()`.
+    pub(crate) inline_layers: usize,
+}
+
+/// The layers a walk has climbed, counted apart so a message can say which.
+#[derive(Clone, Copy, Debug, Default)]
+struct Depth {
+    helpers: usize,
+    inline: usize,
+}
+
+impl Depth {
+    const fn helper(self) -> Self {
+        Self {
+            helpers: self.helpers + 1,
+            ..self
+        }
+    }
+
+    const fn inline(self) -> Self {
+        Self {
+            inline: self.inline + 1,
+            ..self
+        }
+    }
+}
+
+/// Which callback layers a proof may climb through on its way to the apply.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum Stack {
+    /// ADR 0341: any callback the dialect runs during its call. A `flush` is
+    /// a no-op wherever on the apply's stack it sits.
+    Flush,
+    /// ADR 0362: only layers that leave the ambient owner none. A computation
+    /// created below a `runWithOwner` has that owner, and one created in a
+    /// `createRoot` callback is never reached (the root throws first).
+    Ownerless,
+}
+
+impl Stack {
+    /// Whether a callback the dialect runs during `primitive`'s call keeps the
+    /// proof going: any of them for [`Stack::Flush`], only `untrack`'s for
+    /// [`Stack::Ownerless`], since `runWithOwner` installs its owner and
+    /// `createRoot` throws before it runs its callback.
+    fn climbs(self, primitive: Primitive) -> bool {
+        match self {
+            Self::Flush => true,
+            Self::Ownerless => primitive == Primitive::Untrack,
+        }
+    }
 }
 
 /// The effect call whose apply callback provably runs the code at `span`
@@ -84,8 +145,10 @@ pub(crate) fn effect_phase_origin(
     package_root: &str,
     instances: &crate::PackageInstanceEvidence,
     lookup: &SemanticLookup<'_>,
+    stack: Stack,
 ) -> Option<EffectPhaseOrigin> {
     let mut walk = Walk {
+        stack,
         lookup,
         package_root,
         flush_instance: "",
@@ -99,10 +162,11 @@ pub(crate) fn effect_phase_origin(
     let flush_call = file.ast.calls.iter().find(|call| call.span == span)?;
     let flush_instance = walk.instance_of(file, flush_call.callee)?;
     walk.flush_instance = flush_instance;
-    walk.layer(file, span, 0)
+    walk.layer(file, span, Depth::default())
 }
 
 struct Walk<'l, 'a> {
+    stack: Stack,
     lookup: &'l SemanticLookup<'a>,
     /// The package instance the starting call's declaration is in: the effect
     /// call must resolve to the same one, or its queue is not the one running.
@@ -119,13 +183,8 @@ struct Walk<'l, 'a> {
 }
 
 impl<'l, 'a> Walk<'l, 'a> {
-    fn layer(
-        &mut self,
-        file: &FileFacts,
-        span: Span,
-        helper_calls: usize,
-    ) -> Option<EffectPhaseOrigin> {
-        if helper_calls > MAX_LAYERS || inside_instance_field(file, span) {
+    fn layer(&mut self, file: &FileFacts, span: Span, depth: Depth) -> Option<EffectPhaseOrigin> {
+        if depth.helpers > MAX_LAYERS || inside_instance_field(file, span) {
             return None;
         }
         // Module scope: nothing around the span runs it.
@@ -145,12 +204,12 @@ impl<'l, 'a> Walk<'l, 'a> {
             return None;
         }
         if let Some((call, index)) = argument_position(file, literal) {
-            return self.argument_layer(file, call, index, helper_calls);
+            return self.argument_layer(file, call, index, depth);
         }
         if let Some(call) = iife_call(file, literal) {
-            return self.layer(file, call.span, helper_calls);
+            return self.layer(file, call.span, depth.inline());
         }
-        self.named_layer(file, literal, helper_calls)
+        self.named_layer(file, literal, depth)
     }
 
     /// `literal` is written as an argument of `call`.
@@ -159,7 +218,7 @@ impl<'l, 'a> Walk<'l, 'a> {
         file: &FileFacts,
         call: &solid_facts::ast::CallFact,
         index: usize,
-        helper_calls: usize,
+        depth: Depth,
     ) -> Option<EffectPhaseOrigin> {
         let dialect = self.lookup.dialect;
         if call.construct
@@ -178,11 +237,14 @@ impl<'l, 'a> Walk<'l, 'a> {
                     .same_package_instance(file, call)
                     .then(|| EffectPhaseOrigin {
                         path: file.path.to_string(),
-                        helper_calls,
+                        helper_calls: depth.helpers,
+                        inline_layers: depth.inline,
                     });
             }
-            return if dialect.synchronous_callback_slot(primitive, index, call.arguments.len()) {
-                self.layer(file, call.span, helper_calls)
+            let climbs = dialect.synchronous_callback_slot(primitive, index, call.arguments.len())
+                && self.stack.climbs(primitive);
+            return if climbs {
+                self.layer(file, call.span, depth.inline())
             } else {
                 None
             };
@@ -206,7 +268,7 @@ impl<'l, 'a> Walk<'l, 'a> {
             crate::runtime_semantics::argument_behavior(resolved, callability, index),
             Some(crate::runtime_semantics::RuntimeArgumentBehavior::InlineCallback)
         )
-        .then(|| self.layer(file, call.span, helper_calls))
+        .then(|| self.layer(file, call.span, depth.inline()))
         .flatten()
     }
 
@@ -220,13 +282,23 @@ impl<'l, 'a> Walk<'l, 'a> {
         file: &FileFacts,
         call: &solid_facts::ast::CallFact,
     ) -> bool {
-        self.instance_of(file, call.callee) == Some(self.flush_instance)
-            && self
-                .lookup
-                .resolved_callee_call(file, call.callee)
-                .and_then(|resolved| resolved.declaration.as_ref())
-                .and_then(|declaration| package_root(declaration.location.path.as_ref()))
-                .is_some_and(|root| root == self.package_root)
+        if self.instance_of(file, call.callee) != Some(self.flush_instance) {
+            return false;
+        }
+        let root = self
+            .lookup
+            .resolved_callee_call(file, call.callee)
+            .and_then(|resolved| resolved.declaration.as_ref())
+            .and_then(|declaration| package_root(declaration.location.path.as_ref()));
+        match self.stack {
+            Stack::Flush => root.is_some_and(|root| root == self.package_root),
+            // The module-global marker and context are the installed copy's
+            // alone, and the import chain already tied both calls to one
+            // `solid-js` copy at runtime. Their declarations need not share a
+            // directory: `createMemo` is declared by `solid-js` itself and
+            // `createEffect` is a `typeof` of `@solidjs/signals`' declaration.
+            Stack::Ownerless => root.is_some(),
+        }
     }
 
     /// The installed `solid-js` the file that imports the function `callee`
@@ -426,7 +498,7 @@ impl<'l, 'a> Walk<'l, 'a> {
         &mut self,
         file: &FileFacts,
         literal: &FunctionFact,
-        helper_calls: usize,
+        depth: Depth,
     ) -> Option<EffectPhaseOrigin> {
         let binding = function_binding_name(file, literal)?;
         if !self.lookup.function_value_is_current(file, literal)
@@ -493,7 +565,7 @@ impl<'l, 'a> Walk<'l, 'a> {
                 },
             );
             let origin = exact
-                .then(|| self.layer(caller, call.span, helper_calls + 1))
+                .then(|| self.layer(caller, call.span, depth.helper()))
                 .flatten();
             match origin {
                 Some(origin) => {
@@ -633,7 +705,30 @@ pub(crate) fn package_root(path: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::package_root;
+    use solid_dialect::Primitive;
+
+    use super::{Stack, package_root};
+
+    #[test]
+    fn the_ownerless_stack_climbs_only_what_leaves_the_owner_none() {
+        for primitive in [
+            Primitive::Untrack,
+            Primitive::RunWithOwner,
+            Primitive::CreateRoot,
+            Primitive::Flush,
+        ] {
+            assert!(Stack::Flush.climbs(primitive), "{primitive:?}");
+        }
+        assert!(Stack::Ownerless.climbs(Primitive::Untrack));
+        for primitive in [
+            Primitive::RunWithOwner,
+            Primitive::CreateRoot,
+            Primitive::CreateMemo,
+            Primitive::Flush,
+        ] {
+            assert!(!Stack::Ownerless.climbs(primitive), "{primitive:?}");
+        }
+    }
 
     #[test]
     fn a_package_root_is_the_nearest_node_modules_package_directory() {
