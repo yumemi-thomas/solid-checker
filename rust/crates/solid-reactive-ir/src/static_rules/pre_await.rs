@@ -385,11 +385,22 @@ impl<'f, 'a> PreAwait<'f, 'a> {
         }) {
             reads.opaque = true;
         }
+        // The callee of a call proven to be the global built-in itself and
+        // inert (`Promise.resolve()`, [`Self::inert_builtin`]) reads that
+        // built-in's own property: the premise that proves the call proves no
+        // project getter of the name runs there.
+        let builtin_callees = file
+            .ast
+            .calls_within(region)
+            .filter(|call| !skipped(call.span) && self.inert_builtin(file, call))
+            .map(|call| file.ast.peel_ts_sugar_span(call.callee))
+            .collect::<HashSet<_>>();
         // A plain member read may run a getter of that name.
         for member in &file.ast.members {
             if !region.contains(member.span)
                 || skipped(member.span)
                 || file.ast.computed_members.contains(&member.span)
+                || builtin_callees.contains(&member.span)
             {
                 continue;
             }
@@ -519,7 +530,7 @@ impl<'f, 'a> PreAwait<'f, 'a> {
                     .map(|member| member.object);
                 return !receiver.is_some_and(|receiver| native_promise(ctx, file, receiver, 0));
             }
-            if direct_builtin(file, call, name) && self.inert_row(file, name, call) {
+            if self.inert_builtin(file, call) {
                 return false;
             }
             // The declaration names the built-in, so a project member that
@@ -682,6 +693,19 @@ impl<'f, 'a> PreAwait<'f, 'a> {
                 operand.contains(*suspension)
                     && containing_ast_function(&file.ast, *suspension).map(|function| function.span)
                         == owner
+            })
+    }
+
+    /// Whether `call` is a standard-library built-in itself
+    /// ([`direct_builtin`]) under an audited inert row ([`Self::inert_row`]):
+    /// it runs no code registered elsewhere.
+    fn inert_builtin(&self, file: &FileFacts, call: &CallFact) -> bool {
+        self.ctx
+            .semantic_lookup
+            .resolved_callee_call(file, call.callee)
+            .and_then(standard_call_name)
+            .is_some_and(|name| {
+                direct_builtin(file, call, name) && self.inert_row(file, name, call)
             })
     }
 

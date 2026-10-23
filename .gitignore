@@ -101,6 +101,10 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/primitive-in-effect-callback/node_modules/**
 !fixtures/reactive-ir/primitive-in-effect-callback-rc13/node_modules/
 !fixtures/reactive-ir/primitive-in-effect-callback-rc13/node_modules/**
+!fixtures/reactive-ir/primitive-identity-scope/node_modules/
+!fixtures/reactive-ir/primitive-identity-scope/node_modules/**
+!fixtures/reactive-ir/primitive-identity-scope/variants/meta-use-head/node_modules/
+!fixtures/reactive-ir/primitive-identity-scope/variants/meta-use-head/node_modules/**
 !fixtures/reactive-ir/dispatch-delivery-join/node_modules/
 !fixtures/reactive-ir/dispatch-delivery-join/node_modules/**
 !fixtures/reactive-ir/dispatch-delivery-join/variants/*/node_modules/
@@ -457,6 +461,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/read-after-await-purity/node_modules/**
 !fixtures/reactive-ir/read-after-await-premise/node_modules/
 !fixtures/reactive-ir/read-after-await-premise/node_modules/**
+!fixtures/reactive-ir/read-after-await-builtin-member/node_modules/
+!fixtures/reactive-ir/read-after-await-builtin-member/node_modules/**
 !fixtures/reactive-ir/mixed-role-flow/node_modules/
 !fixtures/reactive-ir/mixed-role-flow/node_modules/**
 !fixtures/reactive-ir/root-window-reads/node_modules/

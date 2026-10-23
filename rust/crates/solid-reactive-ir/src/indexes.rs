@@ -900,15 +900,19 @@ fn member_at(file: &FileFacts, span: Span) -> Option<&solid_facts::ast::MemberFa
         .map(|index| &file.ast.members[index])
 }
 
-/// Whether `path` lies inside an installation of one of `packages`: its
-/// components contain the package name as consecutive directory names
-/// (`solid-js`, or `@solidjs` then `web`). Exact components, never a
-/// substring, so `my-solid-js-tools/` and `@solidjs/router/` are neither.
-fn declared_in_package(path: &str, packages: &[&str]) -> bool {
-    let components = path.split(['/', '\\']).collect::<Vec<_>>();
-    packages.iter().any(|package| {
-        let name = package.split('/').collect::<Vec<_>>();
-        components.windows(name.len()).any(|window| window == name)
+/// Whether `path` is a file of an installed copy of one of `packages`: the
+/// package directory after the path's last `node_modules/` (scope included)
+/// is exactly one of them, the directory `import "<package>"` resolves to.
+/// Exact components, never a substring, so `my-solid-js-tools/` and
+/// `@solidjs/router/` are neither; and a package installed inside another's
+/// `node_modules` is the nested one, so `solid-js/node_modules/x/` is `x`
+/// (ADR 0365). A file outside every `node_modules` belongs to none.
+pub(crate) fn declared_in_package(path: &str, packages: &[&str]) -> bool {
+    let path = path.replace('\\', "/");
+    crate::effect_phase::package_root(&path).is_some_and(|root| {
+        let marker = "node_modules/";
+        root.rfind(marker)
+            .is_some_and(|at| packages.contains(&&root[at + marker.len()..]))
     })
 }
 
