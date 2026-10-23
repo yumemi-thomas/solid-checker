@@ -166,6 +166,7 @@ impl BuildTimings {
         self.interprocedural_graph_recomputed_files = timings.graph_recomputed_files;
         self.interprocedural_result_reused_files = timings.result_reused_files;
         self.interprocedural_result_recomputed_files = timings.result_recomputed_files;
+        self.interprocedural_export_work = timings.export_work;
     }
 
     /// Copies the owner stage's own timing breakdown.

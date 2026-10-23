@@ -1172,19 +1172,9 @@ impl<'a> SemanticLookup<'a> {
         })
     }
 
-    pub(super) fn entities_by_location(&self) -> &HashMap<(&'a str, u64, u64), &'a EntityFact> {
-        self.entities_by_location.get_or_init(|| {
-            let mut map = HashMap::default();
-            for entity in self.facts.typescript.entities() {
-                map.entry((
-                    entity.location.path.as_ref(),
-                    entity.location.start_byte,
-                    entity.location.end_byte,
-                ))
-                .or_insert(entity);
-            }
-            map
-        })
+    pub(crate) fn entities_by_location(&self) -> &HashMap<(&'a str, u64, u64), &'a EntityFact> {
+        self.entities_by_location
+            .get_or_init(|| super::first_entity_by_location(self.facts.typescript.entities()))
     }
 }
 
