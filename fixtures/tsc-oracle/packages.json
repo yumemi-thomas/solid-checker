@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "note": "Exact published package versions the tsc oracle compiles against: the audited release, the triple the checker's AUDITED_INSTALLATION (rust/crates/solid-dialect/src/solid_2/releases.rs) names, so the checker half of every case runs with no SC9014 notice and the gate refuses one if they drift apart. `integrity` pins each tarball to the SRI digest recorded under `audit`; provisioning refuses a lockfile that installed anything else. A newer release must be reviewed, never silently substituted -- the oracle verifies every installed version against `expect`, and every locked integrity against `integrity`, and refuses to run on a mismatch. The archives the negative rows quote are a separate install (scripts/audited-archives.mjs), so this pin can move without moving them.",
   "typescript": {
-    "note": "The compiler the oracle asks, separate from packages/cli's runtime `typescript` 5.9.3 (a syntax-only dependency of the feedback scripts). TypeScript 7.1 native `tsc`, driven through `typescript/sync` under Node (scripts/lib/tsc-oracle-api.mjs). It is the TypeScript the Type Facts producer uses: tsrs's [workspace.metadata.typescript] pins github.com/microsoft/TypeScript at 3e9236361fa97a9e6c685f4833ac457ae2d8c50a, the gitHead of this npm release. The seven platform packages are pinned too, so every host installs pinned bytes. Move this pin only with the producer's TypeScript revision.",
+    "note": "The compiler the oracle asks, separate from packages/cli's runtime `typescript` 5.9.3 (a syntax-only dependency of the feedback scripts). TypeScript 7.1 native `tsc`, driven through `typescript/sync` under Node (scripts/lib/tsc-oracle-api.mjs). It is the TypeScript the Type Facts producer uses: tsrs's [workspace.metadata.typescript] pins github.com/microsoft/TypeScript at 3e9236361fa97a9e6c685f4833ac457ae2d8c50a, the gitHead of this npm release. All 21 native platform packages are pinned too, so every host installs pinned bytes. Move this pin only with the producer's TypeScript revision.",
     "install": [
       "typescript@7.1.0-beta"
     ],
@@ -12,13 +12,27 @@
     "integrityVersion": "7.1.0-beta",
     "integrity": {
       "typescript": "sha512-cjWjZAJDsmZzsNC5GwHNlW0YPM65jZa5oR0KyQcYX3KSVIfTvtBq//vewISyatKk4OLi5grZjHhIVE9fdrw1UQ==",
-      "@typescript/typescript-win32-x64": "sha512-UKcHvbybY2tDTvFW2b1vwiAvDlIRooo69lh8CXWVhOQejcvpM5+IgbiFW9EIwR5Wi5X/v+BdN7gdWbigBuJ3rw==",
-      "@typescript/typescript-win32-arm64": "sha512-lJbo71IEOfL7ZZIZnArRaOLqjn9BAfoSzyUQn0aSjfSpDZL4ru0afUsdBfo6PQEjD6ssdmi0n/RwaPADX6bsvQ==",
-      "@typescript/typescript-linux-x64": "sha512-kcD51ihf+pnI5KT4uQQYG04OpwznaZYBlIQhDhl8fflFd27NktxXsUeguxZyvUMyWfum7IF2bBS6Jv7ox0AgFQ==",
+      "@typescript/typescript-aix-ppc64": "sha512-DXDG+jIWxBHGdoO70tcHON33rCnSzsEZj9P13oyf/r/KEGIo6awsdSNVNjAw0uMwEpqRu75IrgCcW58YcVkZHg==",
+      "@typescript/typescript-android-arm64": "sha512-UZx6PxoQavuvaVTrSf3aw0Oy/J/uJpRylipA0kzc038jMvZXh0UtE8vnQp20FqtdgD5bhXZ0aJrRJyoTSUO58Q==",
+      "@typescript/typescript-darwin-arm64": "sha512-q7mxblcyX0E7hXsY4k+Q6KWKK5mGmfVq+BDesdTgRVgjodk27aIxER77Zyj9+TgSTlCje8F7+JM6f6hl2BuNdw==",
+      "@typescript/typescript-darwin-x64": "sha512-D5EYqG5Wm/guw9+0j8+Mn1Jbr/gfS/VtFTuoH8PJtFbcqeDaQGMulc7SW8q51QG6Y3wGOGX3nbsTOw6fIKWWAA==",
+      "@typescript/typescript-freebsd-arm64": "sha512-9A0XX0tcnH9qPdolSKKzSjTb93dlB0UEcAJbHYEsrFX2fkFNSum9+dvkQQJ9vLc+7vxHetDPujq9Qe6wx+Xhow==",
+      "@typescript/typescript-freebsd-x64": "sha512-EDf/dBHfY0TxX3NmUTek0hbffeyZlh3+ls6WQW3ICB8vYxwYLFnzg7wkgEUvl9eRlpiJ/nmc2S8arPMzINJ7rg==",
       "@typescript/typescript-linux-arm": "sha512-AvN9HmzOQh46G4312ooSgMHhbB7DtnLwg8D9mo324X49B7weMwtJrBG1MxT9IyI8kzDd7YRtW+1hWGun7WG7Qw==",
       "@typescript/typescript-linux-arm64": "sha512-hNqQBgQ5b5oGqN76QqbAU6CwYhJZ6iOcWc2kPTUs2OentgpxZktETziH6KIyRFJPaiBncognwn2ZLu3DNhHiWw==",
-      "@typescript/typescript-darwin-x64": "sha512-D5EYqG5Wm/guw9+0j8+Mn1Jbr/gfS/VtFTuoH8PJtFbcqeDaQGMulc7SW8q51QG6Y3wGOGX3nbsTOw6fIKWWAA==",
-      "@typescript/typescript-darwin-arm64": "sha512-q7mxblcyX0E7hXsY4k+Q6KWKK5mGmfVq+BDesdTgRVgjodk27aIxER77Zyj9+TgSTlCje8F7+JM6f6hl2BuNdw=="
+      "@typescript/typescript-linux-loong64": "sha512-xbUustlBrFflt2pNEyG5ye+d4WGPc/rfr2xK29MXeobPSw297JqwuKRrvbKM5o3fE/eUM/c+urVm6jQ3IaMVTw==",
+      "@typescript/typescript-linux-mips64el": "sha512-fS4/G7/0bXZ3NSq3nBMAXyg65I3tO4S7j08VNQ2g1aNC/qq79gE7Qne1BNjVsjMFfHBVBFjQYoTQCjmVU2iFlg==",
+      "@typescript/typescript-linux-ppc64": "sha512-0upCCxYPX8X6gOwkvfv+Ee7/ufyy7k97mTrGE0e5BxLlnUEa+w+rtgnv2dsKcxFdwdeZYVlZKCqgN/xCBV08+A==",
+      "@typescript/typescript-linux-riscv64": "sha512-0jKU9YRgOPRgiy5V/UWv37kB53PaTpIbwGCbbOMUPPAkrjVRNOIAJaz7Wa7s3H7mdDebX1LopUEPEJR+7Xa7zg==",
+      "@typescript/typescript-linux-s390x": "sha512-j+d04s2kxaPQh6DLPb01sknAQfzsrdSZy15jBRHyLEZoaaQ19dVjbFRlkNVvYwUG7ZdP8+y5b/7RmPxdtHUKdQ==",
+      "@typescript/typescript-linux-x64": "sha512-kcD51ihf+pnI5KT4uQQYG04OpwznaZYBlIQhDhl8fflFd27NktxXsUeguxZyvUMyWfum7IF2bBS6Jv7ox0AgFQ==",
+      "@typescript/typescript-netbsd-arm64": "sha512-8W85YyoGK+rgGoSU9jJQUpELbrKcZcbdJk2jPNQ6UKDKI7ryPlPFTrV2jCE5RQuv4Tt96hMDTc33s4YfRrLFBA==",
+      "@typescript/typescript-netbsd-x64": "sha512-iGsTE0ve2PG0AcyZinwAR0LnGEZhu/y4dceS0hZsYCaKdYETvQtvtlNWlmYKempsBr6C7Il7dMXHVk+VFm9u0g==",
+      "@typescript/typescript-openbsd-arm64": "sha512-Z2FERdHB9fAKI+KGqdWn04O7uNlnB+VYiEm6INE1aZuzzLNd3KBqQ6IpKUJF2ny4GigGU6nVu75XD9tAUODPng==",
+      "@typescript/typescript-openbsd-x64": "sha512-NVG3qeyCq/rJEOhaRjR3LsWgjrjo5vJW25omVLeHAVnpKIG4pE4cenwwKGR06DiJ1s0QTOymcJeKXMEpsiNBVg==",
+      "@typescript/typescript-sunos-x64": "sha512-ovAdoWXEn2B5/fyWG69pLU3FWmQwPWOjQV5TFbcxtpnOv+R3g8ySGHl1NYRq7Lb/GYdFDvaGcZ+SiU7iKuiMsA==",
+      "@typescript/typescript-win32-arm64": "sha512-lJbo71IEOfL7ZZIZnArRaOLqjn9BAfoSzyUQn0aSjfSpDZL4ru0afUsdBfo6PQEjD6ssdmi0n/RwaPADX6bsvQ==",
+      "@typescript/typescript-win32-x64": "sha512-UKcHvbybY2tDTvFW2b1vwiAvDlIRooo69lh8CXWVhOQejcvpM5+IgbiFW9EIwR5Wi5X/v+BdN7gdWbigBuJ3rw=="
     },
     "gitHead": "3e9236361fa97a9e6c685f4833ac457ae2d8c50a",
     "producerRevision": "3e9236361fa97a9e6c685f4833ac457ae2d8c50a"
