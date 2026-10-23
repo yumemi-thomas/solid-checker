@@ -101,7 +101,6 @@ fn nested_member_callee_edits_refresh_unchanged_callers() {
         assert_eq!(has_obligation(&retained), expected, "generation {version}");
         assert!(warm.last_build_timings().source_files_reused > 0);
     }
-    drop(warm);
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -195,7 +194,6 @@ fn native_scheduler_writes_refresh_retained_eager_read_summaries() {
         assert_eq!(retained, cold, "generation {version}");
         assert!(warm.last_build_timings().source_files_reused > 0);
     }
-    drop(warm);
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -295,7 +293,6 @@ fn augmented_timer_writes_in_another_file_refresh_retained_facts() {
         assert_eq!(retained, cold, "generation {version}");
         assert!(warm.last_build_timings().source_files_reused > 0);
     }
-    drop(warm);
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -396,7 +393,6 @@ fn leaf_source_target_edits_match_cold_analysis() {
         assert_eq!(operations(&retained), expected);
         assert_eq!(retained, cold, "version {version}");
     }
-    drop(warm);
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -510,7 +506,6 @@ fn routed_callback_consumer_edits_refresh_retained_dispatch_contexts() {
             "consumer-only edit {version} must refresh callback and dispatch proofs"
         );
     }
-    drop(warm);
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -630,7 +625,6 @@ fn returned_anonymous_member_caller_edit_matches_cold_analysis() {
         retained_reverted, fresh_reverted,
         "returning to the inert member must remove the read in retained and cold IR"
     );
-    drop(warm);
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -2157,7 +2151,7 @@ fn a_producer_that_panics_on_every_launch_fails_the_edit_without_looping() {
         let launches = launches.clone();
         move || {
             let (mut session, paths) = tracer_fixture_session(&wrapper);
-            let warm = session.analyze().unwrap();
+            session.analyze().unwrap();
             session
                 .edit(vec![nth_edit(&paths, 1, "first")], None)
                 .unwrap();
