@@ -257,3 +257,70 @@ func TestAsyncFunctionsAtCrossFileDeclarationInScriptFiles(t *testing.T) {
 	}
 	t.Logf("async demands in use-alpha.ts produced %d fact(s) declared in %v", len(foreign), foreign)
 }
+
+// ADR 0369: calls_after_await lists the calls on the continuation. Code that
+// runs on a stack of its own -- an accessor when read, a constructor and an
+// instance field initializer at `new`, JSX where the compiler's getters and
+// render effects run it -- is not listed. Evaluating a class runs its
+// heritage, computed keys, static field initializers and static blocks, so
+// those are on the continuation when the class is reached after the await.
+func TestCallsAfterAwaitAreTheCallsOnTheContinuation(t *testing.T) {
+	cases := []struct {
+		name   string
+		body   string
+		listed bool
+	}{
+		{"straight line", "mark();", true},
+		{"object getter", "const o = { get go() { mark(); return 1; } }; void o;", false},
+		{"object setter", "const o = { set go(v: number) { mark(); } }; void o;", false},
+		{"class getter", "class C { get go() { return mark(); } } void C;", false},
+		{"class setter", "class C { set go(v: number) { mark(); } } void C;", false},
+		{"constructor", "const C = class { constructor() { mark(); } }; void C;", false},
+		{"constructor parameter default", "class C { constructor(x = mark()) { void x; } } void C;", false},
+		{"instance field", "class C { field = mark(); } void C;", false},
+		{"auto-accessor field", "class C { accessor field = mark(); } void C;", false},
+		{"jsx child", "return <div>{mark()}</div>;", false},
+		{"jsx attribute", "return <div title={mark()} />;", false},
+		{"jsx spread", "return <div {...mark()} />;", false},
+		{"jsx fragment", "return <>{mark()}</>;", false},
+		{"static block", "class C { static { mark(); } } void C;", true},
+		{"static field", "const C = class { static field = mark(); }; void C;", true},
+		{"computed instance field key", "class C { [mark()] = 1; } void C;", true},
+		{"heritage", "class C extends (mark(), Object) {} void C;", true},
+	}
+	root := t.TempDir()
+	writeProjectFile(t, root, "tsconfig.json", `{"compilerOptions":{"strict":true,"target":"ES2022","jsx":"preserve"},"include":["*.tsx"]}`)
+	var source strings.Builder
+	source.WriteString("declare function mark(): any;\ndeclare namespace JSX { interface IntrinsicElements { div: any } }\n")
+	for index, test := range cases {
+		source.WriteString("export async function after" + string(rune('A'+index)) + "() {\n  await Promise.resolve();\n  " + test.body + "\n}\n")
+		source.WriteString("export async function before" + string(rune('A'+index)) + "() {\n  " + test.body + "\n  await Promise.resolve();\n}\n")
+	}
+	text := source.String()
+	path := filepath.Join(root, "flow.tsx")
+	writeProjectFile(t, root, "flow.tsx", text)
+	project := openProject(t, root)
+	facts, err := project.(typefacts.AsyncFunctionDiscoverer).SourceAsyncFunctions(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed := map[string]bool{}
+	for _, fact := range facts {
+		header := text[fact.Expression.StartByte:]
+		name := header[len("export async function "):strings.Index(header, "(")]
+		for _, call := range fact.CallsAfterAwait {
+			if text[call.StartByte:call.EndByte] == "mark" {
+				listed[name] = true
+			}
+		}
+	}
+	for index, test := range cases {
+		suffix := string(rune('A' + index))
+		if listed["after"+suffix] != test.listed {
+			t.Errorf("%s after the await: listed %v, want %v", test.name, listed["after"+suffix], test.listed)
+		}
+		if listed["before"+suffix] {
+			t.Errorf("%s before the await: listed", test.name)
+		}
+	}
+}

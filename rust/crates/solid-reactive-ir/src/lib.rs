@@ -105,6 +105,39 @@ pub fn site_in_instance_field(
 ) -> bool {
     execution_role::inside_instance_field(file, span)
 }
+/// ADR 0369: the producer's `calls_after_await` entries that are not on the
+/// continuation of their async function by the consumers' test
+/// ([`owners::written_directly_in_async_flow`]), or that name a file the
+/// facts do not hold. The fact's contract makes this empty; every consumer
+/// drops such an entry, and the process tests hold the producer to it.
+#[must_use]
+pub fn calls_after_await_off_continuation(
+    facts: &solid_facts::ProjectFacts,
+) -> Vec<typefacts::Location> {
+    facts
+        .typescript
+        .files()
+        .flat_map(|file| file.async_functions.iter())
+        .flat_map(|function| function.calls_after_await.iter())
+        .filter(|call| {
+            let on_continuation = facts
+                .files
+                .iter()
+                .find(|file| file.path.as_str() == &*call.path)
+                .zip(u32::try_from(call.start_byte).ok())
+                .zip(u32::try_from(call.end_byte).ok())
+                .is_some_and(|((file, start), end)| {
+                    owners::written_directly_in_async_flow(
+                        &file.ast,
+                        solid_facts::core::Span::new(start, end),
+                    )
+                });
+            !on_continuation
+        })
+        .cloned()
+        .collect()
+}
+
 pub use pipeline::{AnalysisInputs, build, build_with_analysis_inputs_measured};
 
 pub use upstream_compat::rule_options::{RuleOptions, RuleOverride};

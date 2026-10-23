@@ -47,7 +47,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V21: u64 = 21;
 /// is refused, so the merged line's transitions carry 22.
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V22: u64 = 22;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:6d2154ba04be45cdd241d78d3b94a32d0ec5c57ce264fe97e1b3ed979e3d0bfd";
+    "sha256:0bb6be6e988245df9aecc441cba92f8a5e93ea7622499ed29dc9d7d8920e5f88";
 /// 17 says that an empty uncensused-form census includes the reviewed
 /// ECMAScript case `value == null` / `value != null`: an exact null literal
 /// takes the loose-equality nullish arm and does not invoke a coercion hook on
@@ -455,7 +455,9 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 // Protocol 79 carries the independent default-library binding in Wire v20.
 // Protocol 80 carries the span-covering symbol flag in Wire v21.
 // Protocol 81 carries Wire v22, which keeps v21's rows under a new number.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 81;
+// Protocol 82 (ADR 0369) keeps Wire v22 and narrows `calls_after_await` to
+// the calls on the continuation.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 82;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

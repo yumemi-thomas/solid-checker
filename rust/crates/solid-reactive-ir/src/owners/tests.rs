@@ -8,6 +8,7 @@ use super::{
     returned_arrow_function, root_owned_at, seed_contexts, seed_unnamed_hand_outs,
     settle_eager_owners, written_directly_in_async_flow,
 };
+use crate::owners::deferred_after_own_await;
 use solid_facts::ast;
 use solid_facts::compiler::{
     COMPILER_FACTS_PROTOCOL, ExecutionMap, OwnershipRegion, OwnershipRegionKind,
@@ -592,13 +593,22 @@ fn a_call_after_an_await_runs_on_the_continuation_only_in_the_async_flow() {
     assert!(click_in_async_flow(
         "const o = { async m(target: any) { await 0; target.click(); } };"
     ));
+    // ADR 0369: evaluating the class runs these, on the continuation.
+    for evaluated in [
+        "class C { static { target.click(); } }",
+        "const C = class { static field = target.click(); };",
+        "class C { [target.click()] = 1; }",
+        "class C extends (target.click(), Object) {}",
+    ] {
+        assert!(click_in_async_flow(&wrap(evaluated)), "{evaluated}");
+    }
     for nested in [
         "const o = { get go() { target.click(); return 1; } };",
         "const o = { set go(v: number) { target.click(); } };",
         "const C = class { constructor() { target.click(); } };",
         "class C { get go() { return target.click(); } }",
         "class C { field = target.click(); }",
-        "class C { static { target.click(); } }",
+        "class C { accessor field = target.click(); }",
         "return <div>{(target.click(), 'x')}</div>;",
         "return <div title={target.click()} />;",
         "return <>{target.click()}</>;",
@@ -609,5 +619,65 @@ fn a_call_after_an_await_runs_on_the_continuation_only_in_the_async_flow() {
     }
     assert!(!click_in_async_flow(
         "function f(target: any) { target.click(); }"
+    ));
+}
+
+/// Whether the `target.click()` call in `source` is code an async function
+/// writes in a getter, setter, constructor, instance field or JSX after its
+/// own await.
+fn click_deferred_after_await(source: &str) -> bool {
+    let compiler = ExecutionMap {
+        compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
+        source_hash: SourceHash::of(source),
+        semantic_model: Default::default(),
+        tracked_regions: vec![],
+        untracked_regions: vec![],
+        discarded_regions: vec![],
+        ownership_regions: vec![],
+        callback_roles: vec![],
+        jsx_operations: vec![],
+    };
+    let file = owner_context_file(source, compiler);
+    let start = u32::try_from(source.find("target.click()").unwrap()).unwrap();
+    let callee = file
+        .ast
+        .calls
+        .iter()
+        .find(|call| call.callee.start == start)
+        .unwrap()
+        .callee;
+    deferred_after_own_await(&file, callee).is_some()
+}
+
+#[test]
+fn deferred_code_after_an_own_await_is_an_obligation_not_the_continuation() {
+    let after = |body: &str| format!("async function f(target: any) {{ await 0; {body} }}");
+    let before = |body: &str| format!("async function f(target: any) {{ {body} await 0; }}");
+    for deferred in [
+        "const o = { get go() { target.click(); return 1; } };",
+        "const o = { set go(v: number) { target.click(); } };",
+        "const C = class { constructor() { target.click(); } };",
+        "class C { get go() { return target.click(); } }",
+        "class C { field = target.click(); }",
+        "return <div>{(target.click(), 'x')}</div>;",
+        "return <>{target.click()}</>;",
+    ] {
+        assert!(click_deferred_after_await(&after(deferred)), "{deferred}");
+        assert!(
+            !click_deferred_after_await(&before(deferred)),
+            "before: {deferred}"
+        );
+    }
+    for other in [
+        "target.click();",
+        "class C { static { target.click(); } }",
+        "const g = () => target.click();",
+        "const o = { m() { target.click(); } };",
+        "const o = { get go() { return () => target.click(); } };",
+    ] {
+        assert!(!click_deferred_after_await(&after(other)), "{other}");
+    }
+    assert!(!click_deferred_after_await(
+        "function f(target: any) { const o = { get go() { target.click(); return 1; } }; }"
     ));
 }

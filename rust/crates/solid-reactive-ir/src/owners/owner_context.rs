@@ -331,13 +331,12 @@ pub(super) fn spread_key_edge(
 ///
 /// The positions are the producer's `calls_after_await` dominance fact (the
 /// same one `reactive-read-after-await` proves reads with): branches, `&&`,
-/// `try`/`catch`, loops and `switch` merge conservatively, and an arrow,
-/// function or method is never scanned, so a callback handed to `runWithOwner`
-/// after the `await` is not one of them. The producer does scan getters,
-/// setters, constructors, class bodies and JSX, which run when read,
-/// constructed or rendered, on the continuation or later: a listed call there
-/// ([`written_directly_in_async_flow`] answers no) is not proven unowned; it
-/// may be, so it is an obligation ([`Self::nested_context`]).
+/// `try`/`catch`, loops and `switch` merge conservatively, and code that runs
+/// on a stack of its own is never scanned (ADR 0369): an arrow, function,
+/// method, getter, setter or constructor, an instance field initializer, or
+/// JSX. So a callback handed to `runWithOwner` after the `await` is not one of
+/// them. A listed call [`written_directly_in_async_flow`] refuses breaks that
+/// contract and proves nothing.
 /// A call written directly in the flow runs from a promise continuation,
 /// on an otherwise empty stack. Whether an owner is current there is the
 /// dialect's fresh-stack answer, the same one host schedulers get
@@ -346,14 +345,11 @@ pub(super) fn spread_key_edge(
 /// answer [`solid_dialect::CallbackOwner::None`].
 pub(crate) struct AwaitContinuations<'a> {
     pub(super) starts: HashMap<&'a str, HashSet<u64>>,
-    /// Listed calls written in a getter, setter, constructor, class body or JSX.
-    nested: HashMap<&'a str, HashSet<u64>>,
 }
 
 impl<'a> AwaitContinuations<'a> {
     pub(crate) fn new(facts: &'a ProjectFacts, lookup: &SemanticLookup<'_>) -> Self {
         let mut starts = HashMap::<&'a str, HashSet<u64>>::default();
-        let mut nested = HashMap::<&'a str, HashSet<u64>>::default();
         if lookup.dialect.fresh_stack_callback_owner() == Some(solid_dialect::CallbackOwner::None) {
             for file in facts.typescript.files() {
                 for function in file.async_functions.iter() {
@@ -369,18 +365,16 @@ impl<'a> AwaitContinuations<'a> {
                                 written_directly_in_async_flow(&file.ast, Span::new(start, end))
                             });
                         if on_continuation {
-                            &mut starts
-                        } else {
-                            &mut nested
+                            starts
+                                .entry(call.path.as_ref())
+                                .or_default()
+                                .insert(call.start_byte);
                         }
-                        .entry(call.path.as_ref())
-                        .or_default()
-                        .insert(call.start_byte);
                     }
                 }
             }
         }
-        Self { starts, nested }
+        Self { starts }
     }
 
     /// Whether the call whose callee starts at `start` runs after an `await`.
@@ -389,25 +383,27 @@ impl<'a> AwaitContinuations<'a> {
             .get(path)
             .is_some_and(|starts| starts.contains(&u64::from(start)))
     }
+}
 
-    /// The owner context of an operation the producer lists after an `await`
-    /// although it is written in a nested getter, setter, constructor, class
-    /// body or JSX: it may run on the continuation (a getter read there) or
-    /// wherever it is read, constructed or rendered. Possibly unowned, never
-    /// proven, even where nothing places the nested code (context zero).
-    pub(super) fn nested_context(&self, path: &str, start: u32, context: u16) -> Option<u16> {
-        self.nested
-            .get(path)
-            .is_some_and(|starts| starts.contains(&u64::from(start)))
-            .then(|| {
-                let source = if context == 0 {
-                    OWNER_CONTEXT_UNOWNED
-                } else {
-                    context
-                };
-                owner_edge_context(OwnerEdgeKind::MayResumeUnowned, source)
-            })
-    }
+/// The owner context of an operation an async function writes in a getter,
+/// setter, constructor, instance field initializer or JSX after one of its own
+/// awaits ([`crate::owners::deferred_after_own_await`]): it may run on the
+/// continuation (a getter read there) or wherever it is read, constructed or
+/// rendered. Possibly unowned, never proven, even where nothing places the
+/// nested code (context zero).
+pub(super) fn deferred_continuation_context(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    context: u16,
+) -> Option<u16> {
+    crate::owners::deferred_after_own_await(file, span).map(|_| {
+        let source = if context == 0 {
+            OWNER_CONTEXT_UNOWNED
+        } else {
+            context
+        };
+        owner_edge_context(OwnerEdgeKind::MayResumeUnowned, source)
+    })
 }
 
 /// The owner context of an operation that runs after an `await`

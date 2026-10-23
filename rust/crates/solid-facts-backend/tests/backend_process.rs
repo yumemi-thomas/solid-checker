@@ -7,6 +7,8 @@ mod process_support;
 
 #[path = "accessor_provenance_process.rs"]
 mod accessor_provenance_process;
+#[path = "async_flow_contract_process.rs"]
+mod async_flow_contract_process;
 
 #[path = "callback_props_reads_process.rs"]
 mod callback_props_reads_process;

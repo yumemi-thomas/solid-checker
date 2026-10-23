@@ -1,10 +1,10 @@
 import { createMemo, createSignal, createStore } from "solid-js";
 
-// The producer lists every call after a dominating await that is not in an
-// arrow, function or method, so also those in a getter, a class body or JSX.
-// Those run when the getter is read, the class constructed or the JSX
-// rendered (under its render effect), on the continuation or not: a read
-// there is uncertifiable, not a proven SC1002. The straight-line reads stay
+// ADR 0369: the producer lists the calls after a dominating await that run
+// on the continuation, so none in a getter, an instance field or JSX: those
+// run when the getter is read, the class constructed or the JSX rendered
+// (under its render effect), on the continuation or not. A read there is
+// an obligation, by syntax, not a proven SC1002. Straight-line reads stay
 // violations.
 
 const pause = () => new Promise<void>((done) => setTimeout(done, 20));

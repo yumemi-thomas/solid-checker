@@ -294,8 +294,7 @@ pub(crate) fn find_missing_owners(
                     )
                 ))
             .then(|| {
-                continuations
-                    .nested_context(file.path.as_str(), call.callee.start, context)
+                deferred_continuation_context(file, call.callee, context)
                     .or_else(|| possible_await_continuation_context(file, call.callee, context))
             })
             .flatten();

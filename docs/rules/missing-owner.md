@@ -13,8 +13,10 @@ A `useContext(context)` read with no owner is the `context-read` operation (ADR
 owner walk places it as it places an effect: an ownerless event handler, a timer callback,
 module scope, code after an `await`, or a `runWithOwner(null)` callback is
 unowned. After an `await` that means code written directly in the async
-function: one in a getter, setter, constructor, class body or JSX child there
-runs when read, constructed or rendered, and is uncertifiable. A package hook that reads a context is followed through its source, and
+function or in a static block or static field initializer of a class it
+evaluates there (ADR 0369): one in a getter, setter, constructor, instance field
+initializer or JSX child runs when read, constructed or rendered, and is
+uncertifiable. A package hook that reads a context is followed through its source, and
 the finding sits at the project call that runs it, as for any package owner
 requirement (ADR 0290). A context with no provider throws `ContextNotFoundError`
 instead, which is [missing-context-provider](missing-context-provider.md)'s claim,
@@ -144,7 +146,7 @@ or never put on an element, an attribute a later spread may replace, a helper
 flow) stays uncertifiable while any dispatch exists. No unsupported dispatch
 edge is guessed. A dispatch whose own stack provably has no owner is no site
 (ADR 0366): one after an `await` that dominates it, written directly in its
-async function's flow (not in a getter, constructor, class body or JSX), one
+async function's flow (not in a getter, constructor, instance field or JSX), one
 written directly in a callback literal a host scheduler runs from a task or
 microtask queue (the scheduler list above; a `then` handler only on a promise
 proven native), and one written directly in a module-local helper every call

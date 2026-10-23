@@ -37,9 +37,12 @@ terminology stay inside the `tsgo` adapter.
 - Optionally enumerate function expressions and declarations with checker-backed
   async return capability and AST-derived calls dominated by `await` on every
   reachable path. Branches, loops, `try`/`catch`/`finally`, concise expressions,
-  imported callbacks, and local alias chains are handled conservatively; nested
-  function calls are excluded. This keeps async classification and SC1002 flow
-  facts inside the tsgo adapter.
+  imported callbacks, and local alias chains are handled conservatively. Only
+  calls on the continuation are listed (ADR 0369): none in a nested function,
+  method, getter, setter, constructor, instance field initializer or JSX; a
+  class's static blocks and static field initializers run where it is
+  evaluated. This keeps async classification and SC1002 flow facts inside the
+  tsgo adapter.
 - Apply monotonically versioned in-memory file overlays, incrementally update a
   single existing source file when safe, and report the changed files plus
   their transitive importers without writing editor contents to disk.

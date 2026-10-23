@@ -248,6 +248,11 @@ const KindJsxSelfClosingElement = ast.KindJsxSelfClosingElement
 const KindMinusToken = ast.KindMinusToken
 const KindPlusToken = ast.KindPlusToken
 const KindPropertySignature = ast.KindPropertySignature
+const KindConstructor = ast.KindConstructor
+const KindGetAccessor = ast.KindGetAccessor
+const KindSetAccessor = ast.KindSetAccessor
+const KindJsxElement = ast.KindJsxElement
+const KindJsxFragment = ast.KindJsxFragment
 
 // KindFirstNode is the compiler's own boundary between tokens — trivia,
 // literals, punctuation, identifiers, and keywords — and the node kinds above
@@ -271,6 +276,7 @@ const InternalSymbolNamePrefix = ast.InternalSymbolNamePrefix
 const ModifierFlagsAsync = ast.ModifierFlagsAsync
 const ModifierFlagsExport = ast.ModifierFlagsExport
 const ModifierFlagsReadonly = ast.ModifierFlagsReadonly
+const ModifierFlagsStatic = ast.ModifierFlagsStatic
 
 type Node = ast.Node
 type SourceFile = ast.SourceFile

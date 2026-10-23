@@ -70,7 +70,8 @@ A dispatch on a provably ownerless stack is no site (ADR 0366; same `Handlers` i
 | --- | --- |
 | `dispatch-after-await` | `await load(); target.click()` (also inside `try`): nothing fires, every handler keeps its proof |
 | `dispatch-skippable-await` | `if (wait) await load(); target.click()`: the await may be skipped, the `click()` set fires |
-| `dispatch-in-{getter,constructor,jsx,static-block}-after-await` | the `click()` after the `await` is in a getter, a constructor, a JSX child or a static block: not the continuation's own flow, the `click()` set fires (the static block is a deliberate miss) |
+| `dispatch-in-{getter,constructor,jsx,instance-field}-after-await` | the `click()` after the `await` is in a getter, a constructor, a JSX child or an instance field initializer: not on the continuation (ADR 0369), the `click()` set fires |
+| `dispatch-in-{static-block,static-field}-after-await` | the `click()` is in a static block or static field initializer of a class evaluated after the `await`: on the continuation, an ownerless stack like `dispatch-after-await` |
 | `dispatch-in-microtask` | `queueMicrotask`, `setTimeout`, `requestAnimationFrame` and `Promise.resolve(0).then` callbacks that dispatch: nothing fires |
 | `dispatch-in-stored-closure` | `queueMicrotask(later)`, a closure the callback stores, a `then` on a parameter typed `Promise<void>`: the focus move fires |
 | `dispatch-in-helper-after-await` | ai-memory-ui's `saveBlob`: a module-local helper every call of which follows a dominating `await`; nothing fires |

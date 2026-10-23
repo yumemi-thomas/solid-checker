@@ -26,8 +26,10 @@ only on some paths (`await load(); return byUser(posts)`) is
 this call is not proven.
 
 Both proofs exclude nested closures by default. A read in a getter, setter,
-constructor, class body or JSX child written after the await runs when it is
-read, constructed or rendered, maybe not on the continuation: uncertifiable. The continuation reaches code
+constructor, instance field initializer or JSX child written after the await
+runs when it is read, constructed or rendered, maybe not on the continuation:
+uncertifiable. A class's static blocks and static field initializers run where
+the class is evaluated, on the continuation (ADR 0369). The continuation reaches code
 past the awaiting function's body only where the execution model proves it runs
 there, and the reads in it are then reported with the same two proofs:
 
